@@ -48,6 +48,23 @@
 |---|---|---|
 | L1 | Multi-LLM pro Agent konfigurierbar | Ollama + Claude API + OpenAI + weitere |
 | L2 | Graceful Degradation ohne GPU | Cloud-only Mode wenn kein GPU |
+| L3 | litellm als LLM-Adapter | Einheitliches Interface, kein eigener Adapter-Layer |
+
+## Tech-Stack
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| T1 | Core Runtime: Python + FastAPI | Gleich wie AgentLink, bestes LLM-Ökosystem, Systemd-tauglich |
+| T2 | Webkonsole: TypeScript + React (Vite) | Bewährt, shadcn/ui, TypeScript bereits vorhanden |
+| T3 | Matrix-Client: matrix-nio (Python) | Async, passt zum Core, kein extra Service |
+| T4 | Monorepo | core/ + console/ + docs/ + installer/ + prompts/ |
+
+## Kollaboration
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| K1 | Till = Anwender-/Produktschicht | Vision, UX, Features, Zielgruppe |
+| K2 | Claude = Systemebene | Technische Entscheidungen eigenständig |
 
 ## Von OpenClaw übernehmen
 
@@ -59,4 +76,4 @@
 | O4 | Agenten-Config + Berechtigungen | Übersichtlicher gestalten |
 
 ---
-*Zuletzt aktualisiert: Session 1 — 19. März 2026*
+*Zuletzt aktualisiert: Session 2 — 19. März 2026*
