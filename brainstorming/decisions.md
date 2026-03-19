@@ -31,6 +31,8 @@
 | A2 | Conduit als Matrix-Homeserver | Single binary, RocksDB, kein Postgres |
 | A3 | AgentLink bleibt State-Layer | Bereits validiert, wird erweitert nicht ersetzt |
 | A4 | 5-Schichten-Modell | Client → Management → Bus → Runtime → LLM |
+| A5 | Web-Chat-UI ist Matrix-Client (matrix-js-sdk) | Kein Gateway-Service nötig, direkt gegen Conduit |
+| A6 | Element-Zugriff out-of-the-box | Admin verbindet sich mit AgentOS-Conduit, joinst Room |
 
 ## Agenten-Modell
 
@@ -41,7 +43,7 @@
 | AG3 | Hybride Persistenz | Core permanent, Task-Agenten ephemeral |
 | AG4 | Soul + QMD Skills | Von OpenClaw übernehmen |
 | AG5 | Projektverwaltung mit Agenten-Zuweisung | Explizit, kein Magic-Routing |
-| AG6 | Task-Agenten sind kein Typ in /agents/ | Ephemeral, on-demand vom Boss gespawnt, kein eigenes Verzeichnis |
+| AG6 | Task-Agenten sind kein Typ in /agents/ | Ephemeral, on-demand vom Boss gespawnt |
 
 ## Agent-Konfigurationsformat
 
@@ -64,7 +66,16 @@
 | PR2 | agents.boss + agents.workers Liste | Explizite Zuweisung, kein Magic-Routing |
 | PR3 | matrix.room in project.yaml | AgentOS legt Room beim Erstellen an |
 | PR4 | system.user = proj_<name> | Linux-User wird automatisch erstellt |
-| PR5 | Webkonsole und direktes Dateisystem-Editieren beide unterstützt | Dual-Interface, Hot-Reload übernimmt Änderungen |
+| PR5 | Webkonsole und direktes Dateisystem-Editieren beide unterstützt | Dual-Interface, Hot-Reload |
+| PR6 | chat.show_swarm konfigurierbar | false = nur Boss-Antworten, true = voller Swarm-Dialog |
+
+## Webkonsole-Struktur
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| W1 | Admin-Bereich: REST API gegen AgentOS Core | Agenten, Projekte, System, User, LLM-Config |
+| W2 | Chat-Bereich: matrix-js-sdk direkt gegen Conduit | Pro Projekt ein Tab, kein Proxy |
+| W3 | AgentOS-User = Matrix-Account auf Conduit | Ein Account, zwei Zugangswege (Web + Element) |
 
 ## LLM-Anbindung
 
@@ -81,9 +92,10 @@
 |---|---|---|
 | T1 | Core Runtime: Python + FastAPI | Gleich wie AgentLink, bestes LLM-Ökosystem, Systemd-tauglich |
 | T2 | Webkonsole: TypeScript + React (Vite) | Bewährt, shadcn/ui, TypeScript bereits vorhanden |
-| T3 | Matrix-Client: matrix-nio (Python) | Async, passt zum Core, kein extra Service |
+| T3 | Matrix-Client Agenten: matrix-nio (Python) | Async, passt zum Core, kein extra Service |
 | T4 | Monorepo | core/ + console/ + docs/ + installer/ + prompts/ |
 | T5 | Filesystem-Watcher: Python watchdog | Hot-Reload für /agents/ und /projects/ |
+| T6 | Matrix-Client Web-UI: matrix-js-sdk | Direkte Verbindung zu Conduit aus dem Browser |
 
 ## Kollaboration
 
@@ -100,7 +112,7 @@
 | O2 | Sitzungskonzept | Unverändert übernehmen |
 | O3 | Kanäle | → Matrix-Rooms |
 | O4 | Agenten-Config + Berechtigungen | Übersichtlicher gestalten |
-| O5 | QMD-Skills | Übernehmen, Format noch zu klären (Session 4) |
+| O5 | QMD-Skills | Übernehmen, Format noch zu klären (Session 5) |
 
 ---
-*Zuletzt aktualisiert: Session 3 — 19. März 2026*
+*Zuletzt aktualisiert: Session 4 — 19. März 2026*
