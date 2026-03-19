@@ -5,6 +5,20 @@
 
 ---
 
+## Session-Roadmap
+
+| Session | Thema | Status |
+|---|---|---|
+| 1 | Vision, Produkt, Agenten-Modell | ✓ abgeschlossen |
+| 2 | Tech-Stack | ✓ abgeschlossen |
+| 3 | Agent-Config-Format, Projekt-Config-Format | ✓ abgeschlossen |
+| 4 | User-Flow & Webkonsole | ✓ abgeschlossen |
+| 5 | GPU & Installer-Flow | offen |
+| 6 | QMD-Format, Tool-Format | offen |
+| 7 | Monetarisierung & Editions | offen |
+
+---
+
 ## Produkt
 
 | # | Entscheidung | Begründung |
@@ -54,8 +68,8 @@
 | C3 | agent.yaml: id, type, identity, llm, skills, tools, permissions, heartbeat | Vollständige Selbstbeschreibung |
 | C4 | Kein matrix.rooms in agent.yaml | Rooms sind Projekt-Sache, nicht Agent-Sache |
 | C5 | soul.md als eigene Datei | Persönlichkeit getrennt von Konfiguration |
-| C6 | skills/ als QMD-Dateien | Von OpenClaw übernommen |
-| C7 | tools/ als YAML-Definitionen | Was darf der Agent aufrufen |
+| C6 | skills/ als QMD-Dateien | Von OpenClaw übernehmen, Format → Session 6 |
+| C7 | tools/ als YAML-Definitionen | Was darf der Agent aufrufen, Format → Session 6 |
 | C8 | Type: specialist oder boss | Nur zwei Typen im /agents/ Verzeichnis |
 
 ## Projekt-Konfigurationsformat
@@ -67,7 +81,7 @@
 | PR3 | matrix.room in project.yaml | AgentOS legt Room beim Erstellen an |
 | PR4 | system.user = proj_<name> | Linux-User wird automatisch erstellt |
 | PR5 | Webkonsole und direktes Dateisystem-Editieren beide unterstützt | Dual-Interface, Hot-Reload |
-| PR6 | chat.show_swarm konfigurierbar | false = nur Boss-Antworten, true = voller Swarm-Dialog |
+| PR6 | chat.show_swarm konfigurierbar | false = nur Boss-Antworten (Endkunden), true = voller Swarm-Dialog (Power-User) |
 
 ## Webkonsole-Struktur
 
@@ -112,7 +126,7 @@
 | O2 | Sitzungskonzept | Unverändert übernehmen |
 | O3 | Kanäle | → Matrix-Rooms |
 | O4 | Agenten-Config + Berechtigungen | Übersichtlicher gestalten |
-| O5 | QMD-Skills | Übernehmen, Format noch zu klären (Session 5) |
+| O5 | QMD-Skills + Tool-Format | Übernehmen & anpassen → Session 6 |
 
 ---
-*Zuletzt aktualisiert: Session 4 — 19. März 2026*
+*Zuletzt aktualisiert: Session 4 Review — 19. März 2026*
