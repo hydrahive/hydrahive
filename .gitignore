@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+console/dist/
+console/.vite/
+*.tsbuildinfo
+
+# Umgebung
+.env
+.env.local
+*.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OctopOS Runtime
+/agents/
+/projects/
+*.log
