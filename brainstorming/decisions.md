@@ -13,7 +13,7 @@
 | 2 | Tech-Stack | ✓ abgeschlossen |
 | 3 | Agent-Config-Format, Projekt-Config-Format | ✓ abgeschlossen |
 | 4 | User-Flow & Webkonsole | ✓ abgeschlossen |
-| 5 | GPU & Installer-Flow | offen |
+| 5 | GPU & Installer-Flow | ✓ abgeschlossen |
 | 6 | QMD-Format, Tool-Format | offen |
 | 7 | Monetarisierung & Editions | offen |
 
@@ -99,6 +99,27 @@
 | L2 | Graceful Degradation ohne GPU | Cloud-only Mode wenn kein GPU |
 | L3 | litellm als LLM-Adapter | Einheitliches Interface, kein eigener Adapter-Layer |
 | L4 | llm.fallback in agent.yaml | Fallback-Provider wenn primärer nicht verfügbar |
+| L5 | Default-Modell Full: llama3.1:8b (Q4) | GTX 1080 8GB VRAM, ~4.7GB, gute Allround-Qualität |
+| L6 | Boss-Agent bevorzugt Claude API | Reasoning-Qualität wichtiger als Kosten |
+
+## Installer
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| IN1 | Einzelner curl-Befehl | Maximale Einfachheit für Onboarding |
+| IN2 | Automatische GPU-Erkennung via nvidia-smi | Kein manuelles Profil wählen nötig |
+| IN3 | Unterstützte OS: Debian 12, Ubuntu 22.04+ | Klare Basis, andere werden abgelehnt mit Hinweis |
+| IN4 | Idempotent | Mehrfaches Ausführen ohne Schaden möglich |
+| IN5 | Setup-Wizard nach Installation | Browser öffnet auf Port 443, Admin-User anlegen |
+
+## Systemd-Services
+
+| # | Service | Profil | Beschreibung |
+|---|---|---|---|
+| S1 | agentos-core | Lite + Full | Python FastAPI Core + Orchestrator |
+| S2 | agentos-conduit | Lite + Full | Matrix-Homeserver |
+| S3 | agentos-console | Lite + Full | Web-Console via nginx |
+| S4 | ollama | Full only | Lokale LLM-Inference |
 
 ## Tech-Stack
 
@@ -129,4 +150,4 @@
 | O5 | QMD-Skills + Tool-Format | Übernehmen & anpassen → Session 6 |
 
 ---
-*Zuletzt aktualisiert: Session 4 Review — 19. März 2026*
+*Zuletzt aktualisiert: Session 5 — 19. März 2026*
