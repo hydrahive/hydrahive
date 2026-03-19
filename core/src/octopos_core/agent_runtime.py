@@ -130,6 +130,26 @@ class AgentRuntime:
         await self._spawn(config, ttl=TASK_AGENT_TTL)
         return config.id
 
+    async def attach_matrix_client(self, agent_id: str, matrix_client: object) -> None:
+        """
+        Matrix-Client an laufenden Agenten hängen und Task neu starten.
+        Wird nach dem Provisioning oder beim Core-Start aufgerufen wenn
+        ein Projekt bereits einen konfigurierten Matrix-Room hat.
+        """
+        handle = self._handles.get(agent_id)
+        if not handle:
+            logger.warning("attach_matrix_client: Agent '%s' nicht gefunden", agent_id)
+            return
+        # Laufenden Heartbeat-Task stoppen
+        await self._cancel_handle(handle)
+        handle.matrix_client = matrix_client
+        handle.status = AgentStatus.STARTING
+        # Mit Matrix-Client neu starten
+        coro = self._run_agent(handle, ttl=None)
+        handle.task = asyncio.create_task(coro, name=f"agent-{agent_id}")
+        self._handles[agent_id] = handle
+        logger.info("Matrix-Client an Agent %s angehängt, Task neu gestartet", agent_id)
+
     def heartbeat(self, agent_id: str) -> None:
         """Vom Agent-Loop oder REST-Endpoint aufgerufen um Liveness zu melden."""
         if handle := self._handles.get(agent_id):
