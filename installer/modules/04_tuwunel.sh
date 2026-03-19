@@ -94,7 +94,11 @@ if [ -f "$TUWUNEL_CONFIG" ]; then
 else
   EXISTING_TOKEN=""
 fi
-REG_TOKEN="${EXISTING_TOKEN:-$(openssl rand -hex 16)}"
+# Placeholder oder leer -> frischen Token generieren
+if echo "$EXISTING_TOKEN" | grep -qiE "change|example|placeholder|your|^$"; then
+  EXISTING_TOKEN=""
+fi
+REG_TOKEN="${EXISTING_TOKEN:-$(openssl rand -hex 32)}"
 
 cat > "$TUWUNEL_CONFIG" << TOML
 [global]
@@ -152,10 +156,17 @@ else
   success "conduwuit gestartet"
 fi
 
-# Health-Check
-sleep 3
-if curl -sf "http://127.0.0.1:6167/_matrix/client/versions" &>/dev/null; then
-  success "conduwuit antwortet auf http://127.0.0.1:6167"
-else
-  warn "conduwuit antwortet noch nicht — pruefe: journalctl -u octopos-conduwuit -n 30"
+# Health-Check — Retry-Loop (3x mit 3s Pause)
+HEALTH_OK=0
+for i in 1 2 3; do
+  sleep 3
+  if curl -sf "http://127.0.0.1:6167/_matrix/client/versions" &>/dev/null; then
+    success "conduwuit antwortet auf http://127.0.0.1:6167"
+    HEALTH_OK=1
+    break
+  fi
+  info "Warte auf conduwuit... ($i/3)"
+done
+if [ "$HEALTH_OK" -eq 0 ]; then
+  warn "conduwuit antwortet nicht — pruefe: journalctl -u octopos-conduwuit -n 30"
 fi
