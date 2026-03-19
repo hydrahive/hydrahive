@@ -1,5 +1,5 @@
 """
-main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8)
+main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11)
 
 FastAPI-App mit Lifespan-Management:
 - AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager + Orchestrator
@@ -8,6 +8,7 @@ FastAPI-App mit Lifespan-Management:
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from .agent_runtime import AgentRuntime
 from .orchestrator import Orchestrator
 from .project_config import ProjectConfig
 from .project_loader import ProjectLoader
+from .provisioner import Provisioner, get_admin_access_token
 from .session_manager import MessageRole, SessionManager
 
 logging.basicConfig(
@@ -29,20 +31,41 @@ logger = logging.getLogger(__name__)
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
-discovery     = AgentDiscovery(AGENTS_DIR)
-runtime       = AgentRuntime()
-projects      = ProjectLoader(PROJECTS_DIR)
-sessions      = SessionManager(PROJECTS_DIR)
-orchestrator  = Orchestrator(discovery, runtime, sessions)
+CRED_FILE   = "/etc/octopos/admin_credentials"
+
+discovery    = AgentDiscovery(AGENTS_DIR)
+runtime      = AgentRuntime()
+projects     = ProjectLoader(PROJECTS_DIR)
+sessions     = SessionManager(PROJECTS_DIR)
+orchestrator = Orchestrator(discovery, runtime, sessions)
+provisioner: Provisioner | None = None   # initialisiert im Lifespan
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global provisioner
     logger.info("OctopOS Core startet...")
     discovery.start()
     projects.start()
     sessions.start()
     await runtime.start(list(discovery.agents.values()))
+
+    # Admin-Token für Matrix-Operationen holen
+    try:
+        cred_lines = {}
+        for line in open(CRED_FILE).read().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                cred_lines[k.strip()] = v.strip()
+        admin_pass   = cred_lines.get("matrix_admin_password", "")
+        server_name  = _read_server_name()
+        access_token = await get_admin_access_token(admin_pass, server_name)
+        provisioner  = Provisioner(access_token, server_name)
+        logger.info("Matrix Admin-Token geladen (server: %s)", server_name)
+    except Exception as e:
+        logger.warning("Matrix Admin-Token konnte nicht geladen werden: %s", e)
+        provisioner = Provisioner("", "octopos-devmaster")
+
     logger.info("OctopOS Core bereit")
     yield
     logger.info("OctopOS Core faehrt herunter...")
@@ -50,6 +73,16 @@ async def lifespan(app: FastAPI):
     projects.stop()
     discovery.stop()
     logger.info("OctopOS Core gestoppt")
+
+
+def _read_server_name(toml_path: str = "/etc/conduwuit/conduwuit.toml") -> str:
+    try:
+        for line in open(toml_path).read().splitlines():
+            if line.strip().startswith("server_name"):
+                return line.split("=", 1)[1].strip().strip('"')
+    except OSError:
+        pass
+    return "octopos-devmaster"
 
 
 app = FastAPI(
@@ -275,6 +308,70 @@ async def send_message(project_id: str, req: IncomingMessage):
         "session_id":    session.id if session else None,
         "message_count": len(session.messages) if session else 0,
     }
+
+
+# ================================================================== Provisioning
+
+@app.post("/projects/{project_id}/provision")
+async def provision_project(project_id: str):
+    """
+    Projekt provisionieren: Linux-User + Samba-Share + Matrix-Room.
+    Idempotent — kann mehrfach aufgerufen werden.
+    """
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+    if provisioner is None:
+        raise HTTPException(503, "Provisioner nicht initialisiert")
+
+    result = await provisioner.provision(cfg)
+
+    # project.yaml mit Matrix-Room-ID aktualisieren wenn angelegt
+    if result.matrix_room and not cfg.matrix.room:
+        _update_project_matrix_room(project_id, result.matrix_room)
+
+    return {
+        "project_id":  result.project_id,
+        "linux_user":  result.linux_user,
+        "files_dir":   result.files_dir,
+        "samba_share": result.samba_share,
+        "matrix_room": result.matrix_room,
+        "warnings":    result.warnings,
+        "ok":          result.ok,
+    }
+
+
+@app.delete("/projects/{project_id}/provision")
+async def deprovision_project(project_id: str):
+    """Projekt-Ressourcen entfernen (User, Samba-Share)."""
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+    if provisioner is None:
+        raise HTTPException(503, "Provisioner nicht initialisiert")
+
+    warnings = await provisioner.deprovision(cfg)
+    return {"project_id": project_id, "deprovisioned": True, "warnings": warnings}
+
+
+def _update_project_matrix_room(project_id: str, room_id: str) -> None:
+    """Matrix-Room-ID in project.yaml zurückschreiben."""
+    import re
+    project_yaml = Path(PROJECTS_DIR) / project_id / "project.yaml"
+    if not project_yaml.exists():
+        return
+    try:
+        content = project_yaml.read_text(encoding="utf-8")
+        # room: "" → room: "!xyz:server"
+        updated = re.sub(
+            r"(room:\s*)\"\"",
+            f'\\1"{room_id}"',
+            content,
+        )
+        if updated != content:
+            project_yaml.write_text(updated, encoding="utf-8")
+    except OSError as e:
+        logger.warning("project.yaml konnte nicht aktualisiert werden: %s", e)
 
 
 # ================================================================== Status
