@@ -1,18 +1,18 @@
-# Modul 04 — Tuwunel (conduwuit) Matrix Homeserver (#41)
+# Modul 04 — conduwuit Matrix Homeserver (#41)
 TUWUNEL_USER="conduwuit"
 TUWUNEL_DIR="/var/lib/conduwuit"
 TUWUNEL_CONFIG="/etc/conduwuit/conduwuit.toml"
 TUWUNEL_BIN="/usr/local/bin/conduwuit"
 
-info "Installiere Tuwunel (conduwuit)..."
+info "Installiere conduwuit..."
 
-# Idempotenz: schon installiert?
+# Idempotenz: Binary schon vorhanden?
 if [ -f "$TUWUNEL_BIN" ]; then
-  INSTALLED=$("$TUWUNEL_BIN" --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "")
-  success "conduwuit $INSTALLED bereits installiert — pruefe auf Update..."
+  INSTALLED=$("$TUWUNEL_BIN" --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "?")
+  info "conduwuit $INSTALLED bereits installiert — pruefe auf Update..."
 fi
 
-# Aktuelles Release via GitHub API ermitteln
+# Aktuelles Release via GitHub API
 info "Suche aktuelles conduwuit Release..."
 RELEASE_INFO=$(curl -sL "https://api.github.com/repos/girlbossceo/conduwuit/releases/latest")
 RELEASE_TAG=$(echo "$RELEASE_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))")
@@ -33,8 +33,8 @@ for a in d.get('assets',[]):
         break
 ")
 
-# Fallback: statisches Binary wenn kein .deb
 if [ -z "$DEB_URL" ]; then
+  # Fallback: statisches Binary
   info "Kein .deb gefunden, versuche statisches Binary..."
   BIN_URL=$(echo "$RELEASE_INFO" | python3 -c "
 import sys,json
@@ -54,15 +54,20 @@ for a in d.get('assets',[]):
   curl -sL --fail "$BIN_URL" -o "$TUWUNEL_BIN.tmp"
   chmod +x "$TUWUNEL_BIN.tmp"
   mv "$TUWUNEL_BIN.tmp" "$TUWUNEL_BIN"
-  success "conduwuit Binary installiert: $TUWUNEL_BIN"
+  success "conduwuit Binary installiert"
 else
   info "Lade .deb: $DEB_URL"
   curl -sL --fail "$DEB_URL" -o /tmp/conduwuit.deb
   DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/conduwuit.deb
   rm -f /tmp/conduwuit.deb
-  # dpkg legt Binary unter /usr/bin/conduwuit ab — Symlink fuer einheitlichen Pfad
-  if [ ! -f "$TUWUNEL_BIN" ] && [ -f "/usr/bin/conduwuit" ]; then
-    ln -sf /usr/bin/conduwuit "$TUWUNEL_BIN"
+  # .deb legt Binary nach /usr/sbin/conduwuit — einheitlicher Symlink
+  if [ ! -f "$TUWUNEL_BIN" ]; then
+    for candidate in /usr/sbin/conduwuit /usr/bin/conduwuit; do
+      if [ -f "$candidate" ]; then
+        ln -sf "$candidate" "$TUWUNEL_BIN"
+        break
+      fi
+    done
   fi
   success "conduwuit $RELEASE_TAG via .deb installiert"
 fi
@@ -82,31 +87,33 @@ chown -R "$TUWUNEL_USER:$TUWUNEL_USER" "$TUWUNEL_DIR"
 # Hostname ermitteln
 SERVER_NAME=$(hostname -f 2>/dev/null || hostname)
 
-# Config schreiben (nur wenn noch nicht vorhanden)
-if [ ! -f "$TUWUNEL_CONFIG" ]; then
-  REG_TOKEN=$(openssl rand -hex 16)
-  cat > "$TUWUNEL_CONFIG" << TOML
+# Config IMMER schreiben — .deb legt unbefuelltes Template an, das wir ueberschreiben muessen
+# Registration-Token nur neu generieren wenn noch keiner vorhanden
+if [ -f "$TUWUNEL_CONFIG" ]; then
+  EXISTING_TOKEN=$(grep '^registration_token' "$TUWUNEL_CONFIG" | grep -oP '"\K[^"]+' || echo "")
+else
+  EXISTING_TOKEN=""
+fi
+REG_TOKEN="${EXISTING_TOKEN:-$(openssl rand -hex 16)}"
+
+cat > "$TUWUNEL_CONFIG" << TOML
 [global]
 server_name = "${SERVER_NAME}"
 database_path = "${TUWUNEL_DIR}/rocksdb"
 port = 6167
 address = "127.0.0.1"
 
-# Nur lokale Registrierung mit Token
 allow_registration = true
 registration_token = "${REG_TOKEN}"
 
-# Keine Federation — internes OctopOS-Netz
 allow_federation = false
 
 log = "warn,conduwuit=info"
 TOML
-  chown "$TUWUNEL_USER:$TUWUNEL_USER" "$TUWUNEL_CONFIG"
-  success "conduwuit Konfiguration geschrieben: $TUWUNEL_CONFIG"
-  info "Registration-Token: $REG_TOKEN (wird im Setup-Wizard gespeichert)"
-else
-  success "conduwuit Konfiguration bereits vorhanden"
-fi
+
+chown "$TUWUNEL_USER:$TUWUNEL_USER" "$TUWUNEL_CONFIG"
+success "conduwuit Konfiguration geschrieben (server_name: $SERVER_NAME)"
+info "Registration-Token: $REG_TOKEN"
 
 # Systemd-Unit schreiben
 cat > /etc/systemd/system/octopos-conduwuit.service << UNIT
