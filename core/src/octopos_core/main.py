@@ -1,5 +1,5 @@
 """
-main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11)
+main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11, #12)
 
 FastAPI-App mit Lifespan-Management:
 - AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager + Orchestrator
@@ -197,6 +197,96 @@ def project_agents(project_id: str):
         for agent_id in cfg.all_agents
     }
 
+
+
+
+class CreateProjectRequest(BaseModel):
+    id:          str
+    name:        str
+    description: str = ""
+    boss:        str
+    workers:     list[str] = []
+    samba:       bool = True
+    nfs:         bool = False
+    show_swarm:  bool = False
+
+
+@app.post("/projects", status_code=201)
+async def create_project(req: CreateProjectRequest):
+    """
+    Neues Projekt anlegen — alles in einem Schritt:
+    1. Verzeichnis + project.yaml schreiben
+    2. Provisionieren (Linux-User, Samba-Share, Matrix-Room)
+    Das ist der Endpoint den die Webkonsole aufruft.
+    """
+    import re
+    import asyncio as _asyncio
+    import yaml as _yaml
+
+    if not re.match(r"^[a-z0-9_-]+$", req.id):
+        raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
+
+    if projects.get(req.id):
+        raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
+
+    if not discovery.get(req.boss):
+        raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht in Discovery")
+
+    project_dir = Path(PROJECTS_DIR) / req.id
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    project_data = {
+        "id": req.id, "version": "1.0.0",
+        "identity": {"name": req.name, "description": req.description},
+        "agents":   {"boss": req.boss, "workers": req.workers},
+        "matrix":   {"room": ""},
+        "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
+        "system":   {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
+        "chat":     {"show_swarm": req.show_swarm},
+    }
+    yaml_path = project_dir / "project.yaml"
+    yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+    logger.info("project.yaml geschrieben: %s", yaml_path)
+
+    await _asyncio.sleep(0.3)
+
+    cfg = projects.get(req.id) or projects.register(project_dir)
+    if cfg is None:
+        raise HTTPException(500, "Projekt konnte nach Anlage nicht geladen werden")
+
+    if provisioner is None:
+        raise HTTPException(503, "Provisioner nicht initialisiert")
+
+    result = await provisioner.provision(cfg)
+    if result.matrix_room and not cfg.matrix.room:
+        _update_project_matrix_room(req.id, result.matrix_room)
+
+    return {
+        "created": True, "project_id": req.id,
+        "linux_user": result.linux_user, "files_dir": result.files_dir,
+        "samba_share": result.samba_share, "matrix_room": result.matrix_room,
+        "warnings": result.warnings, "ok": result.ok,
+    }
+
+
+@app.delete("/projects/{project_id}")
+async def delete_project(project_id: str, remove_files: bool = False):
+    """Projekt loeschen: Deprovisionieren + project.yaml entfernen."""
+    import shutil as _shutil
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+    if provisioner is None:
+        raise HTTPException(503, "Provisioner nicht initialisiert")
+    warnings = await provisioner.deprovision(cfg)
+    project_dir = Path(PROJECTS_DIR) / project_id
+    if remove_files and project_dir.exists():
+        _shutil.rmtree(project_dir)
+    else:
+        yaml_path = project_dir / "project.yaml"
+        if yaml_path.exists():
+            yaml_path.unlink()
+    return {"deleted": project_id, "files_removed": remove_files, "warnings": warnings}
 
 # ================================================================== Sessions
 
