@@ -471,6 +471,65 @@ class HttpRequestTool(BaseTool):
             return {"error": f"Request fehlgeschlagen: {e}"}
 
 
+
+class SpawnAgentTool(BaseTool):
+    """
+    Boss-Agent spawnt einen Task-Agenten on-demand. (#21)
+    Der gespawnte Agent erbt den Projekt-Kontext und erledigt einen Task.
+    """
+
+    @property
+    def id(self) -> str:   return "spawn_agent"
+    @property
+    def name(self) -> str: return "Task-Agent spawnen"
+    @property
+    def description(self) -> str:
+        return (
+            "Spawnt einen spezialisierten Task-Agenten fuer eine einmalige Aufgabe. "
+            "Der Agent wird nach Abschluss automatisch beendet. "
+            "Nutze dies fuer komplexe Teilaufgaben die einen eigenen Kontext benoetigen."
+        )
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["spawn_agents"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type":        "string",
+                    "description": "ID des zu spawnenden Agenten aus dem Agent-Pool",
+                },
+                "task": {
+                    "type":        "string",
+                    "description": "Aufgabe die der gespawnte Agent erledigen soll",
+                },
+                "context": {
+                    "type":        "string",
+                    "description": "Kontext und Daten die der Agent benoetigt",
+                },
+            },
+            "required": ["agent_id", "task"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        agent_id_to_spawn: str, task: str, context: str = "",  # type: ignore[override]
+    ) -> dict:
+        """
+        Wird vom Orchestrator abgefangen und an AgentRuntime.spawn_task_agent() weitergeleitet.
+        Stub gibt Intention zurueck — Orchestrator uebernimmt die echte Ausfuehrung.
+        """
+        return {
+            "spawning":  agent_id_to_spawn,
+            "task":      task,
+            "context":   context,
+            "initiated_by": agent_id,
+            "project":   project_id,
+        }
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -479,3 +538,5 @@ registry.register(FileReadTool())
 registry.register(FileWriteTool())
 registry.register(WebSearchTool())
 registry.register(HttpRequestTool())
+registry.register(SpawnAgentTool())
+
