@@ -100,24 +100,14 @@ class Orchestrator:
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
             return f"[Fehler] LLM nicht erreichbar: {e}"
 
-        # 7. Tool-Calls verarbeiten (dispatch_task → Worker spawnen)
-        final_response = response
+        # 7. Tool-Calls verarbeiten (Agentic Loop mit max. 5 Runden)
+        final_response = response.choices[0].message.content or ""
         tool_calls = getattr(response.choices[0].message, "tool_calls", None)
 
         if tool_calls:
-            dispatches = self._parse_dispatch_calls(tool_calls)
-            if dispatches:
-                results = await self._dispatch_parallel(
-                    project_cfg, dispatches, context=content
-                )
-                # Ergebnisse an Boss zurückgeben für Final-Antwort
-                final_response = await self._synthesize(
-                    boss_cfg, messages, tool_calls, results
-                )
-            else:
-                final_response = response.choices[0].message.content or ""
-        else:
-            final_response = response.choices[0].message.content or ""
+            final_response = await self._tool_loop(
+                boss_cfg, project_id, project_cfg, messages, response
+            )
 
         # 8. Antwort in Session speichern
         self._sessions.append(
@@ -178,6 +168,98 @@ class Orchestrator:
             kwargs["tool_choice"] = "auto"
 
         return await litellm.acompletion(**kwargs)
+
+    async def _tool_loop(
+        self,
+        boss_cfg:    AgentConfig,
+        project_id:  str,
+        project_cfg: ProjectConfig,
+        messages:    list[dict],
+        response,
+        max_rounds:  int = 5,
+    ) -> str:
+        """
+        Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
+        Dispatch-Tasks werden parallel ausgeführt, andere Tools sequentiell.
+        Max. max_rounds Runden um Endlosschleifen zu vermeiden.
+        """
+        boss_tools = self._reg.tools_for_agent(boss_cfg.tools)
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+        current_messages = list(messages)
+
+        for _round in range(max_rounds):
+            tool_calls = getattr(response.choices[0].message, "tool_calls", None)
+            if not tool_calls:
+                return response.choices[0].message.content or ""
+
+            # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
+            if _round == max_rounds - 1:
+                logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
+                try:
+                    final = await self._llm_call(boss_cfg, current_messages, tools=None)
+                    return final.choices[0].message.content or ""
+                except Exception as e:
+                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}"
+
+            # Assistant-Message mit Tool-Calls in History aufnehmen
+            current_messages.append({
+                "role": "assistant",
+                "tool_calls": [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tool_calls
+                ],
+            })
+
+            # dispatch_task separat → paralleles Worker-Dispatch
+            dispatch_tcs = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
+            other_tcs    = [tc for tc in tool_calls if tc.function.name != "dispatch_task"]
+
+            tool_results: dict[str, str] = {}  # call_id → content
+
+            if dispatch_tcs:
+                dispatches = self._parse_dispatch_calls(dispatch_tcs)
+                results = await self._dispatch_parallel(project_cfg, dispatches, context="")
+                for res in results:
+                    call_id = next(
+                        (tc.id for tc in dispatch_tcs
+                         if json.loads(tc.function.arguments).get("worker_id") == res.worker_id),
+                        "unknown"
+                    )
+                    content = res.result if res.success else f"[Fehler] {res.error}"
+                    tool_results[call_id] = content
+
+            for tc in other_tcs:
+                tool = self._reg.get(tc.function.name)
+                if tool is None:
+                    tool_results[tc.id] = f"[Fehler] Unbekanntes Tool: {tc.function.name}"
+                    continue
+                try:
+                    args = json.loads(tc.function.arguments)
+                    result = await tool.execute(
+                        agent_id=boss_cfg.id, project_id=project_id, **args
+                    )
+                    tool_results[tc.id] = json.dumps(result, ensure_ascii=False)
+                except Exception as e:
+                    logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
+                    tool_results[tc.id] = f"[Fehler] {e}"
+
+            # Tool-Results in Messages einbauen
+            for tc in tool_calls:
+                current_messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.id,
+                    "content":      tool_results.get(tc.id, ""),
+                })
+
+            # Nächste LLM-Runde
+            try:
+                response = await self._llm_call(boss_cfg, current_messages, litellm_tools)
+            except Exception as e:
+                logger.error("LLM-Fehler in Tool-Loop: %s", e)
+                return f"[Fehler] LLM nicht erreichbar: {e}"
+
+        return response.choices[0].message.content or ""
 
     def _parse_dispatch_calls(self, tool_calls: list) -> list[dict]:
         """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls."""
