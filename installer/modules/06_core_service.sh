@@ -14,8 +14,8 @@ OCTOPOS_USER="octopos"
 info "Installiere octopos-core..."
 
 # --- Verzeichnisse ---
-mkdir -p "${CORE_DIR}/src/octopos_core" /agents /etc/octopos
-chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${OCTOPOS_DIR}" /agents
+mkdir -p "${CORE_DIR}/src/octopos_core" /agents /projects /etc/octopos
+chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${OCTOPOS_DIR}" /agents /projects
 
 # --- Python-Venv einrichten (idempotent) ---
 if [ ! -f "${VENV_DIR}/bin/activate" ]; then
