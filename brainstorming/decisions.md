@@ -117,8 +117,10 @@
 | L2 | Graceful Degradation ohne GPU | Cloud-only Mode wenn kein GPU |
 | L3 | litellm als LLM-Adapter | Einheitliches Interface, kein eigener Adapter-Layer |
 | L4 | llm.fallback in agent.yaml | Fallback-Provider wenn primärer nicht verfügbar |
-| L5 | Default-Modell Full: llama3.1:8b (Q4) | GTX 1080 8GB VRAM, ~4.7GB, gute Allround-Qualität |
-| L6 | Boss-Agent bevorzugt Claude API | Reasoning-Qualität wichtiger als Kosten |
+| L5 | Default-Modell Full: llama3.1:8b (Q4) | Specialist-Agenten, ~4.7GB VRAM |
+| L6 | Task-Agenten: llama3.2:3b (Q4) | ~2GB VRAM, schnell für ephemere Tasks |
+| L7 | Boss-Agent lokal: mistral-nemo:12b (Q4) | 11GB VRAM erlaubt ~7GB Modell, stärkeres Reasoning ohne API-Kosten |
+| L8 | Boss-Fallback: Claude API | Nur wenn lokales Modell nicht verfügbar oder unzureichend |
 
 ## Installer
 
@@ -126,7 +128,7 @@
 |---|---|---|
 | IN1 | Einzelner curl-Befehl | Maximale Einfachheit für Onboarding |
 | IN2 | Automatische GPU-Erkennung via nvidia-smi | Kein manuelles Profil wählen nötig |
-| IN3 | Unterstützte OS: Debian 12, Ubuntu 22.04+ | Klare Basis, andere werden abgelehnt mit Hinweis |
+| IN3 | Unterstützte OS: Debian 12, Ubuntu 22.04+, Ubuntu 24.04 LTS | Klare Basis, andere werden abgelehnt mit Hinweis |
 | IN4 | Idempotent | Mehrfaches Ausführen ohne Schaden möglich |
 | IN5 | Setup-Wizard nach Installation | Browser öffnet auf Port 443, Admin-User anlegen |
 
@@ -168,4 +170,4 @@
 | O5 | QMD-Skills | Übernommen & erweitert: scope, triggers, priority |
 
 ---
-*Zuletzt aktualisiert: Session 6 — 19. März 2026*
+*Zuletzt aktualisiert: Session 6 + DevMaster Setup — 19. März 2026*
