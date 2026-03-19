@@ -32,16 +32,22 @@ if [ "$EUID" -ne 0 ]; then
   error "Bitte als root ausfuehren: sudo bash install.sh"
 fi
 
-# Module sourcing — gemeinsamer Kontext, PROFILE etc. vererbt sich
+# --- Phase 1: Fundament ---
+echo -e "${BLUE}--- Phase 1: Fundament ---${NC}"
 source "${MODULES_DIR}/01_os_check.sh"
 source "${MODULES_DIR}/02_gpu_detect.sh"
 source "${MODULES_DIR}/03_dependencies.sh"
 source "${MODULES_DIR}/04_tuwunel.sh"
+source "${MODULES_DIR}/05_admin_account.sh"
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     Phase 1 Fundament abgeschlossen  ║${NC}"
+echo -e "${GREEN}║     Phase 1 abgeschlossen            ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
 echo ""
-info "Profil:   $PROFILE"
-info "Naechster Schritt: #42 Admin-Account anlegen"
+info "Profil:        $PROFILE"
+info "Matrix:        http://127.0.0.1:6167"
+info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
+info "Credentials:   /etc/octopos/admin_credentials"
+echo ""
+info "Naechste Phase: Core Runtime (#2, #3, #4...)"
