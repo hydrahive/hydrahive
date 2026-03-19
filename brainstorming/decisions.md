@@ -14,7 +14,7 @@
 | 3 | Agent-Config-Format, Projekt-Config-Format | ✓ abgeschlossen |
 | 4 | User-Flow & Webkonsole | ✓ abgeschlossen |
 | 5 | GPU & Installer-Flow | ✓ abgeschlossen |
-| 6 | QMD-Format, Tool-Format | offen |
+| 6 | QMD-Format, Tool-Format | ✓ abgeschlossen |
 | 7 | Monetarisierung & Editions | offen |
 
 ---
@@ -68,8 +68,6 @@
 | C3 | agent.yaml: id, type, identity, llm, skills, tools, permissions, heartbeat | Vollständige Selbstbeschreibung |
 | C4 | Kein matrix.rooms in agent.yaml | Rooms sind Projekt-Sache, nicht Agent-Sache |
 | C5 | soul.md als eigene Datei | Persönlichkeit getrennt von Konfiguration |
-| C6 | skills/ als QMD-Dateien | Von OpenClaw übernehmen, Format → Session 6 |
-| C7 | tools/ als YAML-Definitionen | Was darf der Agent aufrufen, Format → Session 6 |
 | C8 | Type: specialist oder boss | Nur zwei Typen im /agents/ Verzeichnis |
 
 ## Projekt-Konfigurationsformat
@@ -81,7 +79,27 @@
 | PR3 | matrix.room in project.yaml | AgentOS legt Room beim Erstellen an |
 | PR4 | system.user = proj_<name> | Linux-User wird automatisch erstellt |
 | PR5 | Webkonsole und direktes Dateisystem-Editieren beide unterstützt | Dual-Interface, Hot-Reload |
-| PR6 | chat.show_swarm konfigurierbar | false = nur Boss-Antworten (Endkunden), true = voller Swarm-Dialog (Power-User) |
+| PR6 | chat.show_swarm konfigurierbar | false = nur Boss-Antworten, true = voller Swarm-Dialog |
+
+## QMD-Format (Skills)
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| QM1 | QMD-Frontmatter: skill, version, scope, triggers, priority | Vollständige Metadaten pro Skill-Datei |
+| QM2 | scope: always \| on-demand | always = immer geladen, on-demand = nur bei Trigger-Match |
+| QM3 | on-demand: Keyword-Matching, kein ML | Core entscheidet vor dem LLM-Call, spart Token |
+| QM4 | priority: Ladereihenfolge bei mehreren Matches | Niedrigere Zahl = höhere Priorität |
+
+## Tool-System
+
+| # | Entscheidung | Begründung |
+|---|---|---|
+| TL1 | Zentrales Tool-Registry im Core (core/tools/) | Kein Code im Agent-Verzeichnis, keine Sicherheitsprobleme |
+| TL2 | BaseTool Interface: id, name, description, permissions_required, parameters, execute() | Einheitliches Interface für alle Tools |
+| TL3 | parameters = Function-Calling-Schema direkt für litellm | Kein Übersetzungsschritt nötig |
+| TL4 | Schnittmenge: agent.yaml ∩ Registry ∩ permissions = was LLM sieht | Defense in Depth, drei unabhängige Filter |
+| TL5 | Tool nicht in Registry = existiert nicht | Egal was in agent.yaml steht |
+| TL6 | Webkonsole zeigt Tool-Übersicht | Agent anlegen = aus Liste wählen, kein Freitext |
 
 ## Webkonsole-Struktur
 
@@ -147,7 +165,7 @@
 | O2 | Sitzungskonzept | Unverändert übernehmen |
 | O3 | Kanäle | → Matrix-Rooms |
 | O4 | Agenten-Config + Berechtigungen | Übersichtlicher gestalten |
-| O5 | QMD-Skills + Tool-Format | Übernehmen & anpassen → Session 6 |
+| O5 | QMD-Skills | Übernommen & erweitert: scope, triggers, priority |
 
 ---
-*Zuletzt aktualisiert: Session 5 — 19. März 2026*
+*Zuletzt aktualisiert: Session 6 — 19. März 2026*
