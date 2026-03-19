@@ -1,16 +1,20 @@
 """
-agent_runtime.py — Agent-Lifecycle: Start / Stop / Restart (#4)
+agent_runtime.py — Agent-Lifecycle: Start / Stop / Restart + Heartbeat (#4, #5)
 
 Verwaltet laufende Agenten-Prozesse:
 - Core-Agenten (boss, specialist): permanent, starten beim Boot
 - Task-Agenten: ephemeral, on-demand vom Boss gespawnt
 
-Jeder Agent läuft als eigener asyncio-Task der eine Endlosschleife
-(think → act → heartbeat) ausführt. Bei Heartbeat-Timeout: automatischer Restart.
+Heartbeat-Konfiguration kommt aus agent.yaml:
+  heartbeat:
+    interval: 30s     # wie oft der Agent pingen soll
+    timeout: 90s      # nach wie vielen Sekunden Restart
+    on_failure: restart | stop | alert
 """
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -20,31 +24,77 @@ from .agent_config import AgentConfig
 logger = logging.getLogger(__name__)
 
 CORE_TYPES = {"boss", "specialist"}
-HEARTBEAT_TIMEOUT = 60.0   # Sekunden bis Restart
-TASK_AGENT_TTL    = 300.0  # Max-Laufzeit Task-Agent in Sekunden
+
+# Defaults falls agent.yaml keinen heartbeat-Block hat
+DEFAULT_INTERVAL = 30.0
+DEFAULT_TIMEOUT  = 90.0
+DEFAULT_ON_FAILURE = "restart"
+
+TASK_AGENT_TTL = 300.0  # Max-Laufzeit Task-Agent in Sekunden
+WATCHDOG_TICK  = 10.0   # Wie oft der Watchdog prueft
+
+
+def _parse_duration(value: str | int | float, default: float) -> float:
+    """
+    Parst Zeitangaben aus YAML:
+      "30s" -> 30.0
+      "2m"  -> 120.0
+      "1h"  -> 3600.0
+      42    -> 42.0
+    """
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    value = str(value).strip()
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([smh]?)", value)
+    if not match:
+        logger.warning("Unbekanntes Zeitformat: %r — verwende Default %.0fs", value, default)
+        return default
+    num = float(match.group(1))
+    unit = match.group(2)
+    return num * {"s": 1, "m": 60, "h": 3600, "": 1}[unit]
+
+
+@dataclass
+class HeartbeatConfig:
+    interval: float = DEFAULT_INTERVAL
+    timeout: float  = DEFAULT_TIMEOUT
+    on_failure: str = DEFAULT_ON_FAILURE   # restart | stop | alert
+
+    @classmethod
+    def from_agent_config(cls, config: AgentConfig) -> "HeartbeatConfig":
+        """Liest heartbeat-Block aus AgentConfig.extra_fields oder raw dict."""
+        raw = getattr(config, "_heartbeat_raw", None) or {}
+        return cls(
+            interval   = _parse_duration(raw.get("interval"),   DEFAULT_INTERVAL),
+            timeout    = _parse_duration(raw.get("timeout"),    DEFAULT_TIMEOUT),
+            on_failure = raw.get("on_failure", DEFAULT_ON_FAILURE),
+        )
 
 
 class AgentStatus(str, Enum):
-    STARTING  = "starting"
-    RUNNING   = "running"
+    STARTING   = "starting"
+    RUNNING    = "running"
     RESTARTING = "restarting"
-    STOPPED   = "stopped"
-    ERROR     = "error"
+    STOPPED    = "stopped"
+    ERROR      = "error"
 
 
 @dataclass
 class AgentHandle:
-    config: AgentConfig
-    status: AgentStatus = AgentStatus.STARTING
+    config:         AgentConfig
+    heartbeat_cfg:  HeartbeatConfig
+    status:         AgentStatus = AgentStatus.STARTING
     last_heartbeat: float = field(default_factory=time.monotonic)
-    restart_count: int = 0
-    task: asyncio.Task | None = field(default=None, repr=False)
+    restart_count:  int   = 0
+    task:           asyncio.Task | None = field(default=None, repr=False)
 
 
 class AgentRuntime:
     """
     Verwaltet alle laufenden Agenten.
-    start() und stop() sind die Lifecycle-Methoden für die FastAPI-App.
+    start() und stop() sind die Lifecycle-Methoden fuer die FastAPI-App.
     """
 
     def __init__(self) -> None:
@@ -75,22 +125,27 @@ class AgentRuntime:
     async def spawn_task_agent(self, config: AgentConfig) -> str:
         """Task-Agenten on-demand starten (vom Boss aufgerufen)."""
         if config.type not in {"worker"}:
-            raise ValueError(f"spawn_task_agent nur für worker, nicht {config.type}")
+            raise ValueError(f"spawn_task_agent nur fuer worker, nicht {config.type}")
         await self._spawn(config, ttl=TASK_AGENT_TTL)
         return config.id
 
     def heartbeat(self, agent_id: str) -> None:
-        """Vom Agent-Loop aufgerufen um Liveness zu melden."""
+        """Vom Agent-Loop oder REST-Endpoint aufgerufen um Liveness zu melden."""
         if handle := self._handles.get(agent_id):
             handle.last_heartbeat = time.monotonic()
+            logger.debug("Heartbeat: %s", agent_id)
 
     def status_all(self) -> dict[str, dict]:
+        now = time.monotonic()
         return {
             aid: {
-                "status": h.status,
-                "type": h.config.type,
-                "restart_count": h.restart_count,
-                "last_heartbeat_age": round(time.monotonic() - h.last_heartbeat, 1),
+                "status":             h.status,
+                "type":               h.config.type,
+                "restart_count":      h.restart_count,
+                "last_heartbeat_age": round(now - h.last_heartbeat, 1),
+                "heartbeat_timeout":  h.heartbeat_cfg.timeout,
+                "heartbeat_interval": h.heartbeat_cfg.interval,
+                "on_failure":         h.heartbeat_cfg.on_failure,
             }
             for aid, h in self._handles.items()
         }
@@ -98,15 +153,19 @@ class AgentRuntime:
     # ----------------------------------------------------------------- private
 
     async def _spawn(self, config: AgentConfig, ttl: float | None = None) -> None:
-        # Vorhandenen Task stoppen falls Agent neu gestartet wird
         if existing := self._handles.get(config.id):
             await self._cancel_handle(existing)
 
-        handle = AgentHandle(config=config)
+        hb_cfg = HeartbeatConfig.from_agent_config(config)
+        handle = AgentHandle(config=config, heartbeat_cfg=hb_cfg)
         self._handles[config.id] = handle
         coro = self._run_agent(handle, ttl)
         handle.task = asyncio.create_task(coro, name=f"agent-{config.id}")
-        logger.info("Agent gestartet: %s (%s)", config.id, config.type)
+        logger.info(
+            "Agent gestartet: %s (%s) | HB interval=%.0fs timeout=%.0fs on_failure=%s",
+            config.id, config.type,
+            hb_cfg.interval, hb_cfg.timeout, hb_cfg.on_failure,
+        )
 
     async def _cancel_handle(self, handle: AgentHandle) -> None:
         if handle.task and not handle.task.done():
@@ -120,7 +179,8 @@ class AgentRuntime:
     async def _run_agent(self, handle: AgentHandle, ttl: float | None) -> None:
         """
         Haupt-Loop eines Agenten.
-        Platzhalter — wird in #5 (Heartbeat) und #8 (Orchestrator) befüllt.
+        Sendet periodisch Heartbeats gemaess heartbeat.interval aus agent.yaml.
+        Agent-Logik (LLM-Calls) kommt in #8 (Orchestrator).
         """
         handle.status = AgentStatus.RUNNING
         handle.last_heartbeat = time.monotonic()
@@ -128,16 +188,14 @@ class AgentRuntime:
 
         try:
             while True:
-                # TTL-Check für Task-Agenten
+                # TTL-Check fuer Task-Agenten
                 if ttl and (time.monotonic() - started_at) > ttl:
                     logger.info("Task-Agent %s TTL erreicht — beende", handle.config.id)
                     break
 
-                # Heartbeat aktualisieren (wird in #5 durch echten Heartbeat ersetzt)
+                # Heartbeat gemaess konfiguriertem Interval
+                await asyncio.sleep(handle.heartbeat_cfg.interval)
                 self.heartbeat(handle.config.id)
-
-                # Platzhalter: Agent-Logik kommt in #8
-                await asyncio.sleep(10)
 
         except asyncio.CancelledError:
             pass
@@ -147,24 +205,47 @@ class AgentRuntime:
                 del self._handles[handle.config.id]
 
     async def _watchdog_loop(self) -> None:
-        """Prüft regelmäßig ob Core-Agenten noch leben."""
+        """
+        Prueft regelmaessig ob Core-Agenten noch leben.
+        Reagiert gemaess on_failure aus der jeweiligen agent.yaml.
+        """
         try:
             while True:
-                await asyncio.sleep(15)
+                await asyncio.sleep(WATCHDOG_TICK)
                 now = time.monotonic()
                 for agent_id, handle in list(self._handles.items()):
                     if handle.config.type not in CORE_TYPES:
                         continue
                     if handle.status != AgentStatus.RUNNING:
                         continue
+
                     age = now - handle.last_heartbeat
-                    if age > HEARTBEAT_TIMEOUT:
-                        logger.warning(
-                            "Agent %s Heartbeat-Timeout (%.0fs) — starte neu",
-                            agent_id, age
-                        )
+                    if age <= handle.heartbeat_cfg.timeout:
+                        continue
+
+                    on_failure = handle.heartbeat_cfg.on_failure
+                    logger.warning(
+                        "Agent %s Heartbeat-Timeout (%.0fs > %.0fs) — on_failure=%s",
+                        agent_id, age, handle.heartbeat_cfg.timeout, on_failure,
+                    )
+
+                    if on_failure == "restart":
                         handle.status = AgentStatus.RESTARTING
                         handle.restart_count += 1
                         await self._spawn(handle.config)
+
+                    elif on_failure == "stop":
+                        handle.status = AgentStatus.ERROR
+                        await self._cancel_handle(handle)
+                        logger.error("Agent %s gestoppt nach Timeout", agent_id)
+
+                    elif on_failure == "alert":
+                        # Platzhalter — wird in #12 (REST API) mit Webhook verbunden
+                        handle.status = AgentStatus.ERROR
+                        logger.error(
+                            "ALERT: Agent %s Heartbeat-Timeout — manuelle Intervention noetig",
+                            agent_id,
+                        )
+
         except asyncio.CancelledError:
             pass
