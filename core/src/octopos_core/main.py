@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .agent_config import AgentConfig
 from .agent_discovery import AgentDiscovery
 from .agent_runtime import AgentRuntime
+from .matrix_agent import BossMatrixAgent
 from .orchestrator import Orchestrator
 from .project_config import ProjectConfig
 from .project_loader import ProjectLoader
@@ -66,6 +67,10 @@ async def lifespan(app: FastAPI):
         logger.warning("Matrix Admin-Token konnte nicht geladen werden: %s", e)
         provisioner = Provisioner("", "your-hostname")
 
+    # Matrix-Clients für Boss-Agenten mit konfigurierten Rooms starten
+    server_name = _read_server_name()
+    await _setup_matrix_clients(server_name)
+
     logger.info("OctopOS Core bereit")
     yield
     logger.info("OctopOS Core faehrt herunter...")
@@ -83,6 +88,41 @@ def _read_server_name(toml_path: str = "/etc/conduwuit/conduwuit.toml") -> str:
     except OSError:
         pass
     return "your-hostname"
+
+
+async def _setup_matrix_clients(server_name: str) -> None:
+    """
+    Für jedes Projekt mit konfiguriertem Matrix-Room einen BossMatrixAgent
+    starten und an den laufenden AgentHandle hängen.
+    Wird einmal im Lifespan nach dem runtime.start() aufgerufen.
+    """
+    for project_id, project_cfg in projects.projects.items():
+        room_id = project_cfg.matrix.room
+        if not room_id:
+            logger.debug("Projekt '%s': kein Matrix-Room konfiguriert — übersprungen", project_id)
+            continue
+
+        boss_id  = project_cfg.agents.boss
+        boss_cfg = discovery.get(boss_id)
+        if not boss_cfg:
+            logger.warning(
+                "Projekt '%s': Boss-Agent '%s' nicht in Discovery — kein Matrix-Client",
+                project_id, boss_id,
+            )
+            continue
+
+        matrix_client = BossMatrixAgent(
+            config       = boss_cfg,
+            server_name  = server_name,
+            rooms        = [room_id],
+            orchestrator = orchestrator,
+            project_cfg  = project_cfg,
+        )
+        await runtime.attach_matrix_client(boss_id, matrix_client)
+        logger.info(
+            "Matrix-Client für Boss '%s' in Room %s gestartet (Projekt: %s)",
+            boss_id, room_id, project_id,
+        )
 
 
 app = FastAPI(
@@ -416,9 +456,24 @@ async def provision_project(project_id: str):
 
     result = await provisioner.provision(cfg)
 
-    # project.yaml mit Matrix-Room-ID aktualisieren wenn angelegt
+    # project.yaml mit Matrix-Room-ID aktualisieren wenn neu angelegt
     if result.matrix_room and not cfg.matrix.room:
         _update_project_matrix_room(project_id, result.matrix_room)
+
+    # Matrix-Client für Boss starten wenn Room vorhanden (neu oder bereits konfiguriert)
+    room_id = result.matrix_room or cfg.matrix.room
+    if room_id:
+        boss_cfg = discovery.get(cfg.agents.boss)
+        if boss_cfg:
+            matrix_client = BossMatrixAgent(
+                config       = boss_cfg,
+                server_name  = _read_server_name(),
+                rooms        = [room_id],
+                orchestrator = orchestrator,
+                project_cfg  = cfg,
+            )
+            await runtime.attach_matrix_client(boss_cfg.id, matrix_client)
+            logger.info("Matrix-Client nach Provisioning gestartet: %s → %s", boss_cfg.id, room_id)
 
     return {
         "project_id":  result.project_id,
@@ -452,14 +507,19 @@ def _update_project_matrix_room(project_id: str, room_id: str) -> None:
         return
     try:
         content = project_yaml.read_text(encoding="utf-8")
-        # room: "" → room: "!xyz:server"
-        updated = re.sub(
-            r"(room:\s*)\"\"",
-            f'\\1"{room_id}"',
-            content,
-        )
+        # Fall 1: room: "" vorhanden → ersetzen
+        updated = re.sub(r'(room:\s*)""', f'\\1"{room_id}"', content)
         if updated != content:
             project_yaml.write_text(updated, encoding="utf-8")
+            return
+        # Fall 2: matrix: Sektion vorhanden aber ohne room → room: einfügen
+        updated = re.sub(r"(matrix:\s*\n)", f'\\1  room: "{room_id}"\n', content)
+        if updated != content:
+            project_yaml.write_text(updated, encoding="utf-8")
+            return
+        # Fall 3: gar keine matrix: Sektion → ans Ende anhängen
+        updated = content.rstrip() + f'\nmatrix:\n  room: "{room_id}"\n'
+        project_yaml.write_text(updated, encoding="utf-8")
     except OSError as e:
         logger.warning("project.yaml konnte nicht aktualisiert werden: %s", e)
 
