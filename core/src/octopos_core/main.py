@@ -1,9 +1,9 @@
 """
-main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7)
+main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8)
 
 FastAPI-App mit Lifespan-Management:
-- AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager
-- REST-Endpoints fuer Agenten, Projekte und Sessions
+- AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager + Orchestrator
+- REST-Endpoints fuer Agenten, Projekte, Sessions und Nachrichten
 """
 
 import logging
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from .agent_config import AgentConfig
 from .agent_discovery import AgentDiscovery
 from .agent_runtime import AgentRuntime
+from .orchestrator import Orchestrator
 from .project_config import ProjectConfig
 from .project_loader import ProjectLoader
 from .session_manager import MessageRole, SessionManager
@@ -28,10 +29,11 @@ logger = logging.getLogger(__name__)
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
-discovery = AgentDiscovery(AGENTS_DIR)
-runtime   = AgentRuntime()
-projects  = ProjectLoader(PROJECTS_DIR)
-sessions  = SessionManager(PROJECTS_DIR)
+discovery     = AgentDiscovery(AGENTS_DIR)
+runtime       = AgentRuntime()
+projects      = ProjectLoader(PROJECTS_DIR)
+sessions      = SessionManager(PROJECTS_DIR)
+orchestrator  = Orchestrator(discovery, runtime, sessions)
 
 
 @asynccontextmanager
@@ -237,6 +239,41 @@ def session_history(project_id: str, limit: int = 50):
         "session_id": session.id if session else None,
         "messages":   context,
         "count":      len(context),
+    }
+
+
+# ================================================================== Orchestrator
+
+class IncomingMessage(BaseModel):
+    content: str
+    sender:  str = "user"
+
+
+@app.post("/projects/{project_id}/message")
+async def send_message(project_id: str, req: IncomingMessage):
+    """
+    User-Nachricht an Projekt senden — Boss-Agent verarbeitet und antwortet.
+    Das ist der Haupt-Einstiegspunkt für die Web-Chat-UI und Matrix-Integration.
+    """
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+    boss_id = cfg.agents.boss
+    if not discovery.get(boss_id):
+        raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+
+    response = await orchestrator.handle_message(
+        project_id=project_id,
+        project_cfg=cfg,
+        content=req.content,
+        sender=req.sender,
+    )
+    session = sessions.get_active(project_id)
+    return {
+        "response":      response,
+        "session_id":    session.id if session else None,
+        "message_count": len(session.messages) if session else 0,
     }
 
 
