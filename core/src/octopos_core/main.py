@@ -7,10 +7,14 @@ FastAPI-App mit Lifespan-Management:
 """
 
 import logging
+import os
+import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from .agent_config import AgentConfig
@@ -32,7 +36,10 @@ logger = logging.getLogger(__name__)
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
-CRED_FILE   = "/etc/octopos/admin_credentials"
+CRED_FILE    = "/etc/octopos/admin_credentials"
+JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
+JWT_ALG      = "HS256"
+JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
 
 discovery    = AgentDiscovery(AGENTS_DIR)
 runtime      = AgentRuntime()
@@ -44,12 +51,16 @@ provisioner: Provisioner | None = None   # initialisiert im Lifespan
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global provisioner
+    global provisioner, JWT_SECRET
     logger.info("OctopOS Core startet...")
     discovery.start()
     projects.start()
     sessions.start()
     await runtime.start(list(discovery.agents.values()))
+
+    # JWT-Secret laden oder generieren
+    JWT_SECRET = _load_or_create_jwt_secret()
+    logger.info("JWT-Secret geladen")
 
     # Admin-Token für Matrix-Operationen holen
     try:
@@ -88,6 +99,63 @@ def _read_server_name(toml_path: str = "/etc/conduwuit/conduwuit.toml") -> str:
     except OSError:
         pass
     return "octopos-devmaster"
+
+
+def _load_or_create_jwt_secret(secret_file: str = "/etc/octopos/jwt_secret") -> str:
+    """JWT-Secret aus Datei laden oder einmalig generieren und speichern."""
+    path = Path(secret_file)
+    if path.exists():
+        return path.read_text().strip()
+    secret = secrets.token_hex(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(secret)
+    path.chmod(0o600)
+    logger.info("Neues JWT-Secret generiert: %s", secret_file)
+    return secret
+
+
+def _read_admin_password() -> str:
+    """Admin-Passwort aus /etc/octopos/admin_credentials lesen."""
+    try:
+        for line in Path(CRED_FILE).read_text().splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                if k.strip() in ("console_password", "matrix_admin_password"):
+                    return v.strip()
+    except OSError:
+        pass
+    return ""
+
+
+def _make_jwt(username: str) -> str:
+    """JWT-Token für den angegebenen User erstellen."""
+    from jose import jwt as jose_jwt
+    payload = {
+        "sub": username,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+
+def _verify_jwt(token: str) -> str:
+    """Token verifizieren — gibt username zurück oder wirft HTTPException 401."""
+    from jose import JWTError, jwt as jose_jwt
+    try:
+        payload = jose_jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        return payload["sub"]
+    except (JWTError, KeyError):
+        raise HTTPException(401, "Ungültiger oder abgelaufener Token")
+
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
+    """FastAPI-Dependency: JWT aus Bearer-Header prüfen."""
+    if not creds:
+        raise HTTPException(401, "Kein Authorization-Header")
+    return _verify_jwt(creds.credentials)
 
 
 async def _setup_matrix_clients(server_name: str) -> None:
@@ -130,6 +198,37 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+# ================================================================== Auth (#56)
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/login")
+def login(req: LoginRequest):
+    """
+    Admin-Login: username=admin, password aus /etc/octopos/admin_credentials.
+    Gibt JWT-Bearer-Token zurück.
+    """
+    admin_pass = _read_admin_password()
+    if not admin_pass:
+        raise HTTPException(503, "Kein Admin-Passwort konfiguriert")
+
+    if req.username != "admin" or req.password != admin_pass:
+        raise HTTPException(401, "Ungültige Zugangsdaten")
+
+    token = _make_jwt(req.username)
+    logger.info("Admin-Login erfolgreich: %s", req.username)
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@app.get("/auth/me")
+def whoami(username: str = Depends(require_auth)):
+    """Token-Validierung — gibt aktuellen User zurück."""
+    return {"username": username}
 
 
 # ================================================================== Agenten
