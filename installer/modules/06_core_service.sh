@@ -31,21 +31,18 @@ fi
     fastapi "uvicorn[standard]" pydantic pyyaml watchdog litellm
 success "Python-Abhängigkeiten installiert"
 
-# --- Core-Quellcode aus Repo holen ---
-info "Lade octopos-core Quellcode..."
-for module in __init__.py agent_config.py agent_discovery.py agent_runtime.py main.py; do
-    curl -sL --fail \
-        "https://raw.githubusercontent.com/tilleulenspiegel/octopos/main/core/src/octopos_core/${module}" \
-        -o "${CORE_DIR}/src/octopos_core/${module}"
-done
+# --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
+info "Kopiere octopos-core Quellcode..."
+REPO_CORE="$(dirname "${BASH_SOURCE[0]}")/../../core"
+REPO_CORE="$(realpath "${REPO_CORE}" 2>/dev/null || echo "${REPO_CORE}")"
 
-# pyproject.toml für lokale Installation
-curl -sL --fail \
-    "https://raw.githubusercontent.com/tilleulenspiegel/octopos/main/core/pyproject.toml" \
-    -o "${CORE_DIR}/pyproject.toml"
-
-"${VENV_DIR}/bin/pip" install -q -e "${CORE_DIR}"
-success "octopos-core installiert (${CORE_DIR})"
+if [ -d "${REPO_CORE}/src/octopos_core" ]; then
+    cp -r "${REPO_CORE}/src" "${CORE_DIR}/"
+    cp "${REPO_CORE}/pyproject.toml" "${CORE_DIR}/"
+    success "octopos-core Quellcode bereit (${CORE_DIR})"
+else
+    error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
+fi
 
 chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${CORE_DIR}" "${VENV_DIR}"
 
@@ -69,6 +66,7 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=${CORE_DIR}/src
 
 [Install]
 WantedBy=multi-user.target
