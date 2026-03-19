@@ -58,7 +58,8 @@ for a in d.get('assets',[]):
 else
   info "Lade .deb: $DEB_URL"
   curl -sL --fail "$DEB_URL" -o /tmp/conduwuit.deb
-  DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/conduwuit.deb
+  # dpkg gibt viele chown-Zeilen aus — filtern
+  DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/conduwuit.deb 2>&1 | grep -v "Eigent" | grep -v "erhalten" | grep -v "^$" || true
   rm -f /tmp/conduwuit.deb
   # .deb legt Binary nach /usr/sbin/conduwuit — einheitlicher Symlink
   if [ ! -f "$TUWUNEL_BIN" ]; then
