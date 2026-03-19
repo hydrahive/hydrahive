@@ -1,4 +1,4 @@
-# AgentOS
+# OctopOS
 
 **AI-Agent Server Platform** — Standalone server solution for managing AI agent swarms.
 
@@ -6,27 +6,38 @@
 
 ## Vision
 
-Install Linux → Install AgentOS → Done.  
+Install Linux → Install OctopOS → Done.  
 Manage everything via web console. No SSH, no manual config files.
 
 "Proxmox für AI-Agenten."
 
+## Name & Metapher
+
+Der Oktopus: zentrales Hirn (Boss-Agent), viele Arme die parallel arbeiten (Worker-Swarm),  
+jeder Arm halbautonorm — mehrere Projekte und Clients gleichzeitig.
+
+## Produkt-Linie
+
+- **OctopOS** — die Plattform / das Betriebssystem-Aufsatz
+- **OctopOS AI** — fertiger Server mit GPU, vorinstalliert, plug & play
+
 ## Deployment Profiles
 
-- **Lite** — VM without GPU, Cloud APIs only (Claude, ChatGPT)
-- **Full** — VM with PCIe GPU passthrough, Ollama local models
+- **Lite** — VM ohne GPU, Cloud APIs only (Claude, ChatGPT)
+- **Full** — VM mit PCIe GPU passthrough, Ollama local models
 
 ## Status
 
-🧠 Brainstorming & Architecture Phase
+🧠 Brainstorming & Architecture Phase (Sessions 1-6 abgeschlossen)
 
 ## Structure
 
 ```
-agentOS/
-├── brainstorming/     # Session notes and raw ideas
-├── architecture/      # Architecture decisions and diagrams
-├── specs/             # Component specifications (later)
+OctopOS/
+├── brainstorming/     # Session notes and decisions
+├── architecture/      # Architecture overview
+├── core/              # Python runtime (Phase 1+)
+├── console/           # TypeScript/React webconsole (Phase 4+)
+├── installer/         # Bash installer script (Phase 1+)
 └── prompts/           # Claude Code prompt packages (later)
 ```
-
