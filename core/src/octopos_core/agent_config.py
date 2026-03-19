@@ -2,13 +2,13 @@
 agent_config.py — Agent-Konfiguration laden und validieren (#3)
 
 Pflichtfelder: id, type, identity, llm
-Unbekannte Felder werden ignoriert (model_config extra="ignore").
-Fehlerhafte Configs werden geloggt und übersprungen.
+Optionale Felder: soul, skills, tools, heartbeat
+Unbekannte Felder werden ignoriert.
 """
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -24,28 +24,44 @@ class LlmConfig(BaseModel):
     max_tokens: int = 4096
 
 
+class HeartbeatRaw(BaseModel):
+    """Rohe Heartbeat-Config aus YAML — Parsing in agent_runtime.py."""
+    model_config = {"extra": "ignore"}
+
+    interval:   str | int | float | None = None   # z.B. "30s", 30, "2m"
+    timeout:    str | int | float | None = None   # z.B. "90s"
+    on_failure: str = "restart"                   # restart | stop | alert
+
+
 class AgentConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
-    id: str
-    type: Literal["boss", "worker", "specialist"]
-    identity: str                      # Name/Persona des Agenten
-    llm: LlmConfig
-    soul: str | None = None            # Pfad zur soul.md relativ zum Agent-Dir
-    skills: list[str] = Field(default_factory=list)
-    tools: list[str] = Field(default_factory=list)
-    # Pfad zum Agent-Verzeichnis — wird nach dem Laden gesetzt, nicht aus YAML
+    id:       str
+    type:     Literal["boss", "worker", "specialist"]
+    identity: str
+    llm:      LlmConfig
+    soul:     str | None = None
+    skills:   list[str] = Field(default_factory=list)
+    tools:    list[str] = Field(default_factory=list)
+    heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
+
+    # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
+
+    @property
+    def _heartbeat_raw(self) -> dict[str, Any]:
+        """Fuer agent_runtime.HeartbeatConfig.from_agent_config()."""
+        return self.heartbeat.model_dump(exclude_none=True)
 
 
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
     """
-    Liest agent.yaml aus agent_dir, validiert und gibt AgentConfig zurück.
-    Bei Fehlern: Logging + None (kein Absturz des Callers).
+    Liest agent.yaml aus agent_dir, validiert und gibt AgentConfig zurueck.
+    Bei Fehlern: Logging + None.
     """
     yaml_path = agent_dir / "agent.yaml"
     if not yaml_path.exists():
-        logger.debug("Kein agent.yaml in %s — übersprungen", agent_dir)
+        logger.debug("Kein agent.yaml in %s — uebersprungen", agent_dir)
         return None
 
     try:
@@ -55,7 +71,7 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
         return None
 
     if not isinstance(raw, dict):
-        logger.warning("agent.yaml in %s ist kein Mapping — übersprungen", agent_dir)
+        logger.warning("agent.yaml in %s ist kein Mapping — uebersprungen", agent_dir)
         return None
 
     try:
