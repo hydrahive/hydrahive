@@ -1,5 +1,5 @@
 """
-agent_runtime.py — Agent-Lifecycle: Start / Stop / Restart + Heartbeat (#4, #5)
+agent_runtime.py — Agent-Lifecycle: Start / Stop / Restart + Heartbeat (#4, #5, #26)
 
 Verwaltet laufende Agenten-Prozesse:
 - Core-Agenten (boss, specialist): permanent, starten beim Boot
@@ -89,6 +89,7 @@ class AgentHandle:
     last_heartbeat: float = field(default_factory=time.monotonic)
     restart_count:  int   = 0
     task:           asyncio.Task | None = field(default=None, repr=False)
+    matrix_client:  object | None = field(default=None, repr=False)  # MatrixAgent
 
 
 class AgentRuntime:
@@ -179,26 +180,49 @@ class AgentRuntime:
     async def _run_agent(self, handle: AgentHandle, ttl: float | None) -> None:
         """
         Haupt-Loop eines Agenten.
-        Sendet periodisch Heartbeats gemaess heartbeat.interval aus agent.yaml.
-        Agent-Logik (LLM-Calls) kommt in #8 (Orchestrator).
+        Hat der Agent einen MatrixAgent-Client → run() übernimmt den Loop.
+        Sonst: Heartbeat-Ticker als Fallback.
         """
         handle.status = AgentStatus.RUNNING
         handle.last_heartbeat = time.monotonic()
         started_at = time.monotonic()
 
-        try:
-            while True:
-                # TTL-Check fuer Task-Agenten
-                if ttl and (time.monotonic() - started_at) > ttl:
-                    logger.info("Task-Agent %s TTL erreicht — beende", handle.config.id)
-                    break
+        # Matrix-Client aus Handle nehmen falls vorhanden
+        matrix_client = getattr(handle, "matrix_client", None)
 
-                # Heartbeat gemaess konfiguriertem Interval
-                await asyncio.sleep(handle.heartbeat_cfg.interval)
-                self.heartbeat(handle.config.id)
+        try:
+            if matrix_client is not None:
+                await matrix_client.start()
+                # run() blockiert bis stop() aufgerufen wird oder CancelledError
+                matrix_task = asyncio.create_task(
+                    matrix_client.run(),
+                    name=f"matrix-{handle.config.id}",
+                )
+                # Parallel dazu: Heartbeat-Ticker damit Watchdog zufrieden ist
+                async def _ticker():
+                    while True:
+                        if ttl and (time.monotonic() - started_at) > ttl:
+                            matrix_task.cancel()
+                            break
+                        await asyncio.sleep(handle.heartbeat_cfg.interval)
+                        self.heartbeat(handle.config.id)
+                ticker_task = asyncio.create_task(_ticker(), name=f"ticker-{handle.config.id}")
+                try:
+                    await matrix_task
+                finally:
+                    ticker_task.cancel()
+            else:
+                # Fallback: reiner Heartbeat-Ticker (kein Matrix)
+                while True:
+                    if ttl and (time.monotonic() - started_at) > ttl:
+                        logger.info("Task-Agent %s TTL erreicht — beende", handle.config.id)
+                        break
+                    await asyncio.sleep(handle.heartbeat_cfg.interval)
+                    self.heartbeat(handle.config.id)
 
         except asyncio.CancelledError:
-            pass
+            if matrix_client is not None:
+                await matrix_client.stop()
         finally:
             handle.status = AgentStatus.STOPPED
             if handle.config.id in self._handles:
