@@ -42,7 +42,7 @@
 | # | Entscheidung | Begründung |
 |---|---|---|
 | A1 | Matrix als Kommunikations-Bus | Standard-Protokoll, Client-Apps verfügbar |
-| A2 | Conduit als Matrix-Homeserver | Single binary, RocksDB, kein Postgres |
+| A2 | Tuwunel als Matrix-Homeserver | Conduit-Nachfolger (via conduwuit), aktiv gewartet, sponsored CH, static binary, RocksDB, kein Postgres |
 | A3 | AgentLink bleibt State-Layer | Bereits validiert, wird erweitert nicht ersetzt |
 | A4 | 5-Schichten-Modell | Client → Management → Bus → Runtime → LLM |
 | A5 | Web-Chat-UI ist Matrix-Client (matrix-js-sdk) | Kein Gateway-Service nötig, direkt gegen Conduit |
