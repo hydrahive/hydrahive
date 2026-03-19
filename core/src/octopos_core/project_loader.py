@@ -96,7 +96,7 @@ class ProjectLoader:
     def _start_watcher(self) -> None:
         handler = _ProjectEventHandler(self)
         self._observer = Observer()
-        self._observer.schedule(handler, str(self._dir), recursive=False)
+        self._observer.schedule(handler, str(self._dir), recursive=True)
         self._observer.daemon = True
         self._observer.start()
 
