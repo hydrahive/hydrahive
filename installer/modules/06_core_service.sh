@@ -41,6 +41,23 @@ if [ ! -s /etc/octopos/users.json ]; then
     echo '{}' > /etc/octopos/users.json
 fi
 
+# --- Console-Admin-Passwort (idempotent) ---
+# Aus Env-Variable, vorhandenem Eintrag oder neu generiert
+CRED_FILE="/etc/octopos/admin_credentials"
+EXISTING_CONSOLE_PASS=$(grep -E '^console_password=' "${CRED_FILE}" 2>/dev/null | cut -d= -f2-)
+if [ -n "${ADMIN_PASSWORD:-}" ]; then
+    CONSOLE_PASS="${ADMIN_PASSWORD}"
+elif [ -n "${EXISTING_CONSOLE_PASS:-}" ]; then
+    CONSOLE_PASS="${EXISTING_CONSOLE_PASS}"
+else
+    CONSOLE_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)"
+fi
+# Nur schreiben wenn noch nicht vorhanden
+if ! grep -q '^console_password=' "${CRED_FILE}" 2>/dev/null; then
+    echo "console_password=${CONSOLE_PASS}" >> "${CRED_FILE}"
+fi
+export CONSOLE_PASS
+
 # --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
 info "Kopiere octopos-core Quellcode..."
 REPO_CORE="$(dirname "${BASH_SOURCE[0]}")/../../core"
