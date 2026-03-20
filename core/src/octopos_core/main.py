@@ -843,6 +843,71 @@ class LlmProviderConfig(BaseModel):
     enabled:  bool = True
 
 
+
+@app.put("/llm/config/claude_max")
+async def set_claude_oauth_token(body: dict):
+    """
+    Claude Max OAuth Token speichern.
+    Token kommt von: claude setup-token (sk-ant-oat01-...)
+    Wird vom Claude OAuth Proxy auf Port 3456 genutzt.
+    """
+    token = body.get("api_key", "").strip()
+    if not token:
+        raise HTTPException(400, "api_key fehlt")
+    if not token.startswith("sk-ant-oat01-"):
+        raise HTTPException(400, "Ungültiger Claude OAuth Token — erwartet sk-ant-oat01-...")
+
+    token_file = Path("/etc/octopos/claude_oauth_token")
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(token, encoding="utf-8")
+    token_file.chmod(0o600)
+    logger.info("Claude OAuth Token gespeichert")
+
+    # Proxy-Service neustarten damit neuer Token geladen wird
+    import subprocess as _sub
+    try:
+        _sub.run(["systemctl", "restart", "octopos-claude-proxy"], check=False, timeout=5)
+        logger.info("octopos-claude-proxy neugestartet")
+    except Exception as e:
+        logger.warning("Proxy-Neustart fehlgeschlagen: %s", e)
+
+    return {"updated": True, "provider": "claude_max"}
+
+
+@app.get("/llm/claude_proxy/status")
+async def claude_proxy_status():
+    """Status des Claude OAuth Proxy."""
+    import subprocess as _sub
+    token_file = Path("/etc/octopos/claude_oauth_token")
+    has_token  = token_file.exists() and token_file.stat().st_size > 0
+
+    try:
+        result = _sub.run(
+            ["systemctl", "is-active", "octopos-claude-proxy"],
+            capture_output=True, text=True, timeout=3
+        )
+        proxy_running = result.stdout.strip() == "active"
+    except Exception:
+        proxy_running = False
+
+    # Health-Check gegen Proxy
+    proxy_ok = False
+    if proxy_running:
+        try:
+            import urllib.request as _ur
+            with _ur.urlopen("http://127.0.0.1:3456/health", timeout=2) as r:
+                proxy_ok = r.status == 200
+        except Exception:
+            pass
+
+    return {
+        "has_token":     has_token,
+        "proxy_running": proxy_running,
+        "proxy_ok":      proxy_ok,
+        "proxy_url":     "http://127.0.0.1:3456/v1",
+    }
+
+
 @app.put("/llm/config/{provider}")
 def set_llm_provider(provider: str, req: LlmProviderConfig):
     """API-Key fuer einen Provider setzen."""
