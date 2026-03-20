@@ -799,6 +799,97 @@ def list_tools():
     return result
 
 
+
+# ================================================================== LLM-Config
+
+LLM_CONFIG_FILE = "/etc/octopos/llm_config.json"
+
+
+def _load_llm_config() -> dict:
+    import json as _json
+    try:
+        return _json.loads(Path(LLM_CONFIG_FILE).read_text())
+    except (OSError, ValueError):
+        return {"providers": {}}
+
+
+def _save_llm_config(config: dict) -> None:
+    import json as _json
+    Path(LLM_CONFIG_FILE).parent.mkdir(parents=True, exist_ok=True)
+    Path(LLM_CONFIG_FILE).write_text(
+        _json.dumps(config, indent=2), encoding="utf-8"
+    )
+
+
+@app.get("/llm/config")
+def get_llm_config():
+    """LLM-Provider-Config lesen (API-Keys maskiert)."""
+    config = _load_llm_config()
+    providers = config.get("providers", {})
+    # API-Keys maskieren
+    masked = {}
+    for name, cfg in providers.items():
+        masked[name] = {
+            "enabled":  cfg.get("enabled", True),
+            "api_key":  "***" + cfg.get("api_key","")[-4:] if cfg.get("api_key") else "",
+            "has_key":  bool(cfg.get("api_key")),
+        }
+    return {"providers": masked}
+
+
+class LlmProviderConfig(BaseModel):
+    provider: str   # ollama | anthropic | openai
+    api_key:  str = ""
+    enabled:  bool = True
+
+
+@app.put("/llm/config/{provider}")
+def set_llm_provider(provider: str, req: LlmProviderConfig):
+    """API-Key fuer einen Provider setzen."""
+    config = _load_llm_config()
+    if "providers" not in config:
+        config["providers"] = {}
+    config["providers"][provider] = {
+        "enabled": req.enabled,
+        "api_key":  req.api_key,
+    }
+    # API-Key als Umgebungsvariable schreiben fuer litellm
+    env_file = Path("/etc/octopos/llm_env")
+    lines = []
+    if env_file.exists():
+        lines = [l for l in env_file.read_text().splitlines()
+                 if not l.startswith(f"{provider.upper()}_API_KEY=")]
+    if req.api_key:
+        lines.append(f"{provider.upper()}_API_KEY={req.api_key}")
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _save_llm_config(config)
+    logger.info("LLM-Provider konfiguriert: %s", provider)
+    return {"updated": True, "provider": provider}
+
+
+@app.get("/llm/ollama/models")
+async def get_ollama_models():
+    """Verfuegbare Ollama-Modelle von lokalem Server abrufen."""
+    import asyncio as _asyncio
+    try:
+        import urllib.request as _ur
+        req = _ur.Request("http://127.0.0.1:11434/api/tags")
+        with _ur.urlopen(req, timeout=3) as r:
+            data = json.loads(r.read())
+        models = [
+            {
+                "name":     m["name"],
+                "size":     m.get("size", 0),
+                "size_gb":  round(m.get("size", 0) / 1e9, 1),
+                "modified": m.get("modified_at",""),
+            }
+            for m in data.get("models", [])
+        ]
+        return {"available": True, "models": models, "count": len(models)}
+    except Exception as e:
+        return {"available": False, "models": [], "error": str(e)}
+
+
 # ================================================================== Status
 
 @app.get("/status")
