@@ -48,13 +48,15 @@ echo ""
 echo -e "${BLUE}--- Phase 3: Web-Console ---${NC}"
 source "${MODULES_DIR}/07_console.sh"
 
-# JWT-Secret vorbereiten (octopos-core legt es beim Start an, wir stellen Ownership sicher)
-JWT_SECRET_FILE="/etc/octopos/jwt_secret"
-if [ ! -f "${JWT_SECRET_FILE}" ]; then
-    touch "${JWT_SECRET_FILE}"
-    chown octopos:octopos "${JWT_SECRET_FILE}"
-    chmod 600 "${JWT_SECRET_FILE}"
-fi
+# Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
+for _f in jwt_secret llm_env llm_config.json; do
+    _path="/etc/octopos/${_f}"
+    if [ ! -f "${_path}" ]; then
+        touch "${_path}"
+        chown octopos:octopos "${_path}"
+        chmod 600 "${_path}"
+    fi
+done
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
