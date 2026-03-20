@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from .agent_config import AgentConfig
+from .agent_config import AgentConfig, load_agent_config
 from .agent_discovery import AgentDiscovery
 from .agent_runtime import AgentRuntime
 from .matrix_agent import BossMatrixAgent
@@ -537,6 +537,162 @@ async def send_message(project_id: str, req: IncomingMessage):
         "session_id":    session.id if session else None,
         "message_count": len(session.messages) if session else 0,
     }
+
+
+
+# ================================================================== Agent CRUD
+
+class CreateAgentRequest(BaseModel):
+    id:          str
+    type:        str   # boss | specialist | worker
+    identity:    str
+    model:       str
+    temperature: float = 0.7
+    max_tokens:  int   = 4096
+    soul:        str   = ""
+    tools:       list[str] = []
+    heartbeat_interval:  str = "30s"
+    heartbeat_timeout:   str = "90s"
+    heartbeat_on_failure: str = "restart"
+
+
+@app.post("/agents", status_code=201)
+async def create_agent(req: CreateAgentRequest):
+    """
+    Neuen Agenten anlegen: /agents/<id>/agent.yaml + soul.md schreiben.
+    Hot-Reload registriert ihn automatisch.
+    """
+    import re as _re, asyncio as _asyncio
+    import yaml as _yaml
+
+    if not _re.match(r"^[a-z0-9_-]+$", req.id):
+        raise HTTPException(400, "Agent-ID darf nur a-z, 0-9, _ und - enthalten")
+    if req.type not in {"boss", "specialist", "worker"}:
+        raise HTTPException(400, f"Ungültiger Typ: {req.type}")
+    if discovery.get(req.id):
+        raise HTTPException(409, f"Agent '{req.id}' existiert bereits")
+
+    agent_dir = Path(AGENTS_DIR) / req.id
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "skills").mkdir(exist_ok=True)
+
+    agent_data = {
+        "id":       req.id,
+        "type":     req.type,
+        "identity": req.identity,
+        "llm": {
+            "model":       req.model,
+            "temperature": req.temperature,
+            "max_tokens":  req.max_tokens,
+        },
+        "soul":     "./soul.md" if req.soul else None,
+        "tools":    req.tools,
+        "heartbeat": {
+            "interval":   req.heartbeat_interval,
+            "timeout":    req.heartbeat_timeout,
+            "on_failure": req.heartbeat_on_failure,
+        },
+    }
+    if not agent_data["soul"]:
+        del agent_data["soul"]
+
+    yaml_path = agent_dir / "agent.yaml"
+    yaml_path.write_text(
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
+        encoding="utf-8"
+    )
+
+    soul_path = agent_dir / "soul.md"
+    soul_path.write_text(req.soul or f"# {req.identity}\n\nDu bist {req.identity}, ein KI-Agent.\n",
+                         encoding="utf-8")
+
+    logger.info("Agent angelegt: %s (%s)", req.id, req.type)
+    await _asyncio.sleep(0.3)
+
+    cfg = discovery.get(req.id)
+    if cfg is None:
+        from .agent_discovery import AgentDiscovery as _AD
+        cfg = load_agent_config_direct(agent_dir)
+
+    return {
+        "created":    True,
+        "agent_id":   req.id,
+        "agent_dir":  str(agent_dir),
+        "yaml_path":  str(yaml_path),
+        "registered": cfg is not None,
+    }
+
+
+@app.put("/agents/{agent_id}")
+async def update_agent(agent_id: str, req: CreateAgentRequest):
+    """Agent-Config aktualisieren — überschreibt agent.yaml."""
+    import asyncio as _asyncio
+    import yaml as _yaml
+
+    agent_dir = Path(AGENTS_DIR) / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+    agent_data = {
+        "id":       req.id or agent_id,
+        "type":     req.type,
+        "identity": req.identity,
+        "llm": {
+            "model":       req.model,
+            "temperature": req.temperature,
+            "max_tokens":  req.max_tokens,
+        },
+        "tools":    req.tools,
+        "heartbeat": {
+            "interval":   req.heartbeat_interval,
+            "timeout":    req.heartbeat_timeout,
+            "on_failure": req.heartbeat_on_failure,
+        },
+    }
+    if req.soul:
+        agent_data["soul"] = "./soul.md"
+        (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
+
+    yaml_path = agent_dir / "agent.yaml"
+    yaml_path.write_text(
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
+        encoding="utf-8"
+    )
+    logger.info("Agent aktualisiert: %s", agent_id)
+    await _asyncio.sleep(0.3)
+    return {"updated": True, "agent_id": agent_id}
+
+
+@app.delete("/agents/{agent_id}")
+async def delete_agent(agent_id: str):
+    """Agent deaktivieren — benennt Verzeichnis um (kein Datenverlust)."""
+    import shutil as _shutil
+    agent_dir = Path(AGENTS_DIR) / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+    disabled_dir = Path(AGENTS_DIR) / f"_{agent_id}_disabled"
+    agent_dir.rename(disabled_dir)
+    logger.info("Agent deaktiviert: %s → %s", agent_dir, disabled_dir)
+    return {"disabled": True, "agent_id": agent_id, "moved_to": str(disabled_dir)}
+
+
+@app.get("/agents/{agent_id}/soul")
+def get_agent_soul(agent_id: str):
+    """soul.md eines Agenten lesen."""
+    soul_path = Path(AGENTS_DIR) / agent_id / "soul.md"
+    if not soul_path.exists():
+        return {"soul": "", "exists": False}
+    return {"soul": soul_path.read_text(encoding="utf-8"), "exists": True}
+
+
+def load_agent_config_direct(agent_dir: Path):
+    """Fallback falls Hot-Reload noch nicht gegriffen hat."""
+    from .agent_config import load_agent_config
+    cfg = load_agent_config(agent_dir)
+    if cfg:
+        with discovery._lock:
+            discovery._agents[cfg.id] = cfg
+    return cfg
 
 
 # ================================================================== Provisioning
