@@ -541,6 +541,167 @@ async def send_message(project_id: str, req: IncomingMessage):
 
 
 
+
+# ================================================================== User-Verwaltung
+
+USERS_FILE = Path("/etc/octopos/users.json")
+
+
+def _load_users() -> dict:
+    import json as _j
+    try:
+        return _j.loads(USERS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_users(users: dict) -> None:
+    import json as _j
+    USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    USERS_FILE.write_text(_j.dumps(users, indent=2), encoding="utf-8")
+
+
+def _hash_password(password: str) -> str:
+    import hashlib, secrets
+    salt = secrets.token_hex(16)
+    h    = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260000)
+    return f"pbkdf2:{salt}:{h.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    import hashlib
+    try:
+        _, salt, h = stored.split(":", 2)
+        check = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260000)
+        return check.hex() == h
+    except Exception:
+        return False
+
+
+async def _matrix_register(username: str, password: str, server_name: str) -> bool:
+    """User auf Conduit registrieren via Matrix Client API."""
+    import urllib.request as _ur, json as _j
+    reg_token = ""
+    try:
+        toml = Path("/etc/conduwuit/conduwuit.toml").read_text()
+        for line in toml.splitlines():
+            if line.strip().startswith("registration_token"):
+                reg_token = line.split("=", 1)[1].strip().strip('"')
+                break
+    except OSError:
+        pass
+
+    payload = _j.dumps({
+        "username":           username,
+        "password":           password,
+        "auth":               {"type": "m.login.registration_token", "token": reg_token},
+        "inhibit_login":      True,
+    }).encode()
+
+    try:
+        req = _ur.Request(
+            "http://127.0.0.1:6167/_matrix/client/v3/register",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _ur.urlopen(req, timeout=5) as r:
+            return r.status in (200, 201)
+    except Exception as e:
+        # M_USER_IN_USE = bereits registriert, das ist OK
+        if "M_USER_IN_USE" in str(e):
+            return True
+        logger.warning("Matrix-Registrierung fehlgeschlagen: %s", e)
+        return False
+
+
+@app.get("/users")
+def list_users():
+    """Alle OctopOS-User auflisten."""
+    users = _load_users()
+    return {
+        username: {
+            "username":    username,
+            "role":        data.get("role", "user"),
+            "matrix_id":  f"@{username}:{_read_server_name()}",
+            "created_at": data.get("created_at", ""),
+        }
+        for username, data in users.items()
+    }
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    role:     str = "user"   # user | admin
+
+
+@app.post("/users", status_code=201)
+async def create_user(req: CreateUserRequest):
+    """Neuen User anlegen — Console-Login + Matrix-Account."""
+    import re as _re
+    from datetime import datetime as _dt
+
+    if not _re.match(r"^[a-z0-9_.-]+$", req.username):
+        raise HTTPException(400, "Username darf nur a-z, 0-9, _ . - enthalten")
+    if len(req.password) < 8:
+        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
+
+    users = _load_users()
+    if req.username in users:
+        raise HTTPException(409, f"User '{req.username}' existiert bereits")
+
+    # Matrix-Account anlegen
+    server_name = _read_server_name()
+    matrix_ok   = await _matrix_register(req.username, req.password, server_name)
+
+    # Console-Credentials speichern
+    users[req.username] = {
+        "password_hash": _hash_password(req.password),
+        "role":          req.role,
+        "matrix_id":     f"@{req.username}:{server_name}",
+        "matrix_ok":     matrix_ok,
+        "created_at":    _dt.now().isoformat(),
+    }
+    _save_users(users)
+    logger.info("User angelegt: %s (role=%s, matrix=%s)", req.username, req.role, matrix_ok)
+
+    return {
+        "created":    True,
+        "username":   req.username,
+        "matrix_id":  f"@{req.username}:{server_name}",
+        "matrix_ok":  matrix_ok,
+    }
+
+
+@app.delete("/users/{username}")
+async def delete_user(username: str):
+    """User löschen (Console-Login entfernen)."""
+    users = _load_users()
+    if username not in users:
+        raise HTTPException(404, f"User '{username}' nicht gefunden")
+    if username == "admin":
+        raise HTTPException(403, "Admin-User kann nicht gelöscht werden")
+    del users[username]
+    _save_users(users)
+    logger.info("User gelöscht: %s", username)
+    return {"deleted": True, "username": username}
+
+
+@app.put("/users/{username}/password")
+async def change_password(username: str, body: dict):
+    """Passwort ändern."""
+    new_password = body.get("password", "").strip()
+    if len(new_password) < 8:
+        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
+    users = _load_users()
+    if username not in users:
+        raise HTTPException(404, f"User '{username}' nicht gefunden")
+    users[username]["password_hash"] = _hash_password(new_password)
+    _save_users(users)
+    return {"updated": True, "username": username}
+
+
 # ================================================================== Agent CRUD
 
 class CreateAgentRequest(BaseModel):
