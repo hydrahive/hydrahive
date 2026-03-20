@@ -5,6 +5,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
+import { ProjectCreatePage } from "@/pages/ProjectCreatePage";
 import { SystemPage } from "@/pages/SystemPage";
 import { ChatPage } from "@/pages/ChatPage";
 
@@ -22,7 +23,8 @@ export default function App() {
         <Route path="dashboard"         element={<DashboardPage />} />
         <Route path="agents"            element={<AgentsPage />} />
         <Route path="projects"          element={<ProjectsPage />} />
-        <Route path="projects/:id/chat" element={<ChatPage />} />
+        <Route path="projects/new"      element={<ProjectCreatePage />} />
+        <Route path="chat/:id"          element={<ChatPage />} />
         <Route path="system"            element={<SystemPage />} />
       </Route>
     </Routes>

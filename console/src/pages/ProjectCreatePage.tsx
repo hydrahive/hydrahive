@@ -1,0 +1,200 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Plus, X } from "lucide-react";
+import { api } from "@/lib/api";
+
+interface AgentEntry {
+  config: { type: string; identity: string; model: string };
+}
+
+export function ProjectCreatePage() {
+  const navigate = useNavigate();
+
+  const [id,          setId]          = useState("");
+  const [name,        setName]        = useState("");
+  const [description, setDescription] = useState("");
+  const [boss,        setBoss]        = useState("");
+  const [workers,     setWorkers]     = useState<string[]>([]);
+  const [workerInput, setWorkerInput] = useState("");
+  const [samba,       setSamba]       = useState(true);
+  const [showSwarm,   setShowSwarm]   = useState(false);
+
+  const [agents,      setAgents]      = useState<Record<string, AgentEntry>>({});
+  const [submitting,  setSubmitting]  = useState(false);
+  const [error,       setError]       = useState("");
+
+  useEffect(() => {
+    api.agents().then(d => setAgents(d as Record<string, AgentEntry>)).catch(() => {});
+  }, []);
+
+  const agentIds = Object.keys(agents);
+
+  function addWorker() {
+    const w = workerInput.trim();
+    if (w && !workers.includes(w)) setWorkers(ws => [...ws, w]);
+    setWorkerInput("");
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!id || !name || !boss) { setError("ID, Name und Boss sind Pflichtfelder"); return; }
+    setSubmitting(true);
+    try {
+      await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm });
+      navigate("/projects");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Anlegen");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-2xl space-y-6 overflow-y-auto flex-1">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate("/projects")}
+          className="p-1.5 rounded-md hover:bg-accent transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold">Neues Projekt</h1>
+          <p className="text-sm text-muted-foreground">Legt Verzeichnis, Linux-User, Samba-Share und Matrix-Room an</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={submit} className="space-y-5">
+        {/* ID + Name */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Projekt-ID *</label>
+            <input
+              value={id}
+              onChange={e => setId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+              placeholder="mein-projekt"
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+            />
+            <p className="text-xs text-muted-foreground">a-z, 0-9, _ und -</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Name *</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Mein Projekt"
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        </div>
+
+        {/* Beschreibung */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Beschreibung</label>
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            rows={2}
+            placeholder="Wofür ist dieses Projekt?"
+            className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+        </div>
+
+        {/* Boss */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Boss-Agent *</label>
+          <select
+            value={boss}
+            onChange={e => setBoss(e.target.value)}
+            className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">— Agent wählen —</option>
+            {agentIds.map(aid => (
+              <option key={aid} value={aid}>
+                {agents[aid].config.identity} ({aid})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Workers */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Worker-Agenten</label>
+          <div className="flex gap-2">
+            <select
+              value={workerInput}
+              onChange={e => setWorkerInput(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">— Worker hinzufügen —</option>
+              {agentIds.filter(a => !workers.includes(a)).map(aid => (
+                <option key={aid} value={aid}>
+                  {agents[aid].config.identity} ({aid})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={addWorker}
+              disabled={!workerInput}
+              className="flex items-center gap-1 px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {workers.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {workers.map(w => (
+                <span key={w} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-secondary rounded-full">
+                  {w}
+                  <button type="button" onClick={() => setWorkers(ws => ws.filter(x => x !== w))}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Optionen */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Optionen</label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={samba} onChange={e => setSamba(e.target.checked)} className="rounded" />
+            Samba-Share anlegen
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={showSwarm} onChange={e => setShowSwarm(e.target.checked)} className="rounded" />
+            Swarm-Aktivität im Chat anzeigen
+          </label>
+        </div>
+
+        {/* Aktionen */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {submitting ? "Wird angelegt…" : "Projekt anlegen"}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/projects")}
+            className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors"
+          >
+            Abbrechen
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
