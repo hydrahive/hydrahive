@@ -1514,8 +1514,9 @@ async def update_agent(agent_id: str, req: CreateAgentRequest, _a: tuple = Depen
         _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
         encoding="utf-8"
     )
+    # Discovery sofort aktualisieren — nicht auf Watchdog warten
+    discovery._register(agent_dir)
     logger.info("Agent aktualisiert: %s", agent_id)
-    await _asyncio.sleep(0.3)
     return {"updated": True, "agent_id": agent_id}
 
 
