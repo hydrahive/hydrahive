@@ -69,7 +69,7 @@ export function LlmConfigPage() {
     if (!keys[providerId]?.trim()) return;
     setSaving(providerId);
     try {
-      await api.post(`/llm/config/${providerId}`, { provider: providerId, api_key: keys[providerId], enabled: true });
+      await api.put(`/llm/config/${providerId}`, { provider: providerId, api_key: keys[providerId], enabled: true });
       setSaved(providerId);
       setKeys(k => ({ ...k, [providerId]: "" }));
       setTimeout(() => setSaved(null), 3000);
