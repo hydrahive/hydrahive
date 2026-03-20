@@ -472,3 +472,116 @@ git pull --rebase
 ### Dateigröße
 
 `main.py` ist aktuell ~1180 Zeilen. Neue Endpoints sollten sparsam sein. Bei >1500 Zeilen: Router-Module aufteilen (`/agents` → `routers/agents.py` etc.).
+
+
+---
+
+## 9. AgentLink Integration (#13)
+
+AgentLink ermöglicht State-Transfer zwischen Agenten — ein Agent übergibt seinem Nachfolger vollständigen Kontext.
+
+### Aktueller Status
+AgentLink-Backend läuft als separater Service (FastAPI + PostgreSQL). OctopOS hat #13 als offenes Issue für die Integration.
+
+### Geplante Integration
+```python
+# Im Orchestrator: nach Task-Completion
+from .agentlink_client import AgentLinkClient
+
+client = AgentLinkClient(url="http://localhost:8000")
+state = await client.create_state({
+    "task": {"type": "analysis", "status": "done"},
+    "context": {"files": [...]},
+    "working_memory": {"findings": [...]},
+    "handoff": {"to_agent": "reviewer", "reason": "Review needed"}
+})
+```
+
+---
+
+## 10. Mehrsprachigkeit
+
+OctopOS ist auf Deutsch optimiert aber modellunabhängig. Für andere Sprachen:
+
+1. `soul.md` in der gewünschten Sprache schreiben
+2. QMD-Skills in der gewünschten Sprache schreiben  
+3. System-Prompt Sprache wird durch soul.md bestimmt
+
+```markdown
+---
+skill: english-assistant
+version: 1.0
+scope: always
+---
+
+You are an English-speaking assistant. Always respond in English,
+regardless of the language of the question.
+```
+
+---
+
+## 11. Performance-Tipps
+
+### Modell-Wahl pro Agent-Typ
+```yaml
+# Schnelle Task-Agenten (ephemeral)
+llm:
+  model: llama3.2:3b    # ~2s Antwortzeit auf GTX 1080 Ti
+
+# Spezialist-Agenten
+llm:
+  model: llama3.1:8b    # ~8s Antwortzeit
+
+# Boss-Agent (maximale Qualität)
+llm:
+  model: openai/claude-haiku-4-5-20251001  # über OAuth-Proxy
+```
+
+### VRAM-Management
+- Ollama lädt Modelle lazy, entlädt nach 5min Inaktivität
+- Mehrere gleichzeitige Agenten können VRAM-Engpass verursachen
+- Monitoring: `nvidia-smi` auf dem Server oder GPU-Tab im System-Screen (geplant)
+
+### Skill-Optimierung
+```yaml
+# Schlecht: alles immer laden
+scope: always
+
+# Besser: nur bei Bedarf
+scope: on-demand
+triggers:
+  - steuer
+  - umsatzsteuer
+  - finanzamt
+priority: 10   # niedrig = zuerst geladen wenn mehrere matchen
+```
+
+---
+
+## 12. Häufige Fehler und Lösungen
+
+### "Boss-Agent nicht gefunden"
+```
+Agent 'lilith' nicht in Discovery
+```
+→ Verzeichnis `/agents/lilith/` fehlt oder `agent.yaml` ist ungültig  
+→ Prüfen: `curl http://localhost:8765/agents`
+
+### "LLM nicht erreichbar"
+```
+[Fehler] LLM nicht erreichbar: anthropic.AuthenticationError
+```
+→ Claude OAuth Token abgelaufen  
+→ Fix: `claude setup-token` → Token in LLM-Config eintragen
+
+### Matrix-Bot joint nicht
+```
+MatrixAgent @boss:octopos.local — join fehlgeschlagen
+```
+→ conduwuit nicht erreichbar oder Registration-Token falsch  
+→ Prüfen: `systemctl status octopos-conduwuit`
+
+### Hot-Reload greift nicht
+→ Watchdog überwacht nur oberste Ebene von `/agents/` und `/projects/`  
+→ Bei Änderungen in Unterverzeichnissen: `systemctl restart octopos-core`
+
