@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OctopOS Handbuch</title>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #06b6d4;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card: #1e293b;
+      --border: #334155;
+      --sidebar-w: 260px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header a {
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .sidebar-logo span { color: var(--text); }
+    .sidebar-back {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+    .sidebar-back:hover { color: var(--accent); }
+    nav.toc {
+      padding: 1rem 0;
+      flex: 1;
+    }
+    .toc-section {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 0.8rem 1.5rem 0.3rem;
+    }
+    .toc a {
+      display: block;
+      padding: 0.45rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .toc a:hover {
+      color: var(--text);
+      background: rgba(6,182,212,0.05);
+      border-left-color: var(--accent);
+    }
+    .toc a.active {
+      color: var(--accent);
+      background: rgba(6,182,212,0.08);
+      border-left-color: var(--accent);
+    }
+
+    /* MAIN CONTENT */
+    .content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    .page-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+    .page-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* CHAPTER */
+    .chapter {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+    .chapter h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .chapter h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    .chapter p {
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      font-size: 0.95rem;
+    }
+    .chapter ul, .chapter ol {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+    .chapter li {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    .chapter strong { color: var(--text); }
+    .chapter em { color: var(--accent); font-style: normal; }
+
+    /* CODE */
+    .chapter pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .chapter code {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .chapter pre code { color: #e2e8f0; }
+    .chapter p code, .chapter li code {
+      background: rgba(6,182,212,0.1);
+      border: 1px solid rgba(6,182,212,0.2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      color: var(--accent);
+    }
+
+    /* BLOCKQUOTE / NOTE */
+    .note {
+      background: rgba(6,182,212,0.06);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 0.8rem 1.2rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .note strong { color: var(--accent); }
+
+    /* TABLE */
+    .chapter table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .chapter th {
+      background: var(--card);
+      text-align: left;
+      padding: 0.6rem 1rem;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter td {
+      padding: 0.6rem 1rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter tr:last-child td { border-bottom: none; }
+    .chapter tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* STEP LIST */
+    .steps {
+      list-style: none;
+      margin: 0.5rem 0 1rem;
+    }
+    .steps li {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      margin-bottom: 0.6rem;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .content { margin-left: 0; padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <a href="index.htm">
+      <div class="sidebar-logo">Octo<span>POS</span></div>
+    </a>
+    <div class="sidebar-back">← Zurück zur Startseite</div>
+    <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">Handbuch</div>
+  </div>
+  <nav class="toc">
+    <div class="toc-section">Inhalt</div>
+    <a href="#installation">1. Installation</a>
+    <a href="#setup-wizard">2. Setup-Wizard</a>
+    <a href="#webkonsole">3. Webkonsole</a>
+    <a href="#agenten">4. Agenten anlegen</a>
+    <a href="#projekte">5. Projekte anlegen</a>
+    <a href="#chat">6. Chat verwenden</a>
+    <a href="#llm">7. LLM-Konfiguration</a>
+    <a href="#skills">8. Skills</a>
+    <a href="#webhooks">9. Webhooks</a>
+    <a href="#benutzer">10. Benutzer</a>
+    <a href="#audit">11. Audit-Log</a>
+    <a href="#matrix">12. Matrix-Integration</a>
+    <a href="#troubleshooting">13. Troubleshooting</a>
+  </nav>
+</aside>
+
+<!-- CONTENT -->
+<main class="content">
+  <h1 class="page-title">OctopOS Handbuch</h1>
+  <p class="page-intro">OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen VM oder einem Server, verwaltet KI-Agenten, Projekte und Dateisysteme — ohne externe Cloud-Abhängigkeit.</p>
+
+  <!-- 1. INSTALLATION -->
+  <section class="chapter" id="installation">
+    <h2>1. Installation</h2>
+
+    <h3>Voraussetzungen</h3>
+    <ul>
+      <li>Ubuntu 22.04 oder 24.04 LTS (amd64)</li>
+      <li>Mindestens 4 GB RAM, 20 GB Disk</li>
+      <li>Root-Zugriff</li>
+      <li>Internetzugang für Download</li>
+    </ul>
+
+    <h3>Installer ausführen</h3>
+    <pre><code>git clone https://github.com/tilleulenspiegel/octopos.git
+cd octopos
+sudo bash installer/install.sh</code></pre>
+
+    <p>Der Installer läuft vollautomatisch und richtet ein:</p>
+    <ul>
+      <li>conduwuit (Matrix-Homeserver)</li>
+      <li>OctopOS Core (Python-Backend)</li>
+      <li>OctopOS Console (React-Frontend via nginx)</li>
+      <li>HTTPS mit self-signed Zertifikat</li>
+      <li>Optional: Ollama (bei <code>PROFILE=full</code>)</li>
+    </ul>
+
+    <div class="note"><strong>Idempotent:</strong> Der Installer kann beliebig oft ausgeführt werden. Bereits installierte Komponenten werden übersprungen.</div>
+
+    <h3>HTTPS und Zertifikat</h3>
+    <p>Nach der Installation ist die Konsole unter <code>https://&lt;IP&gt;</code> erreichbar. Browser zeigen eine Warnung wegen des self-signed Zertifikats — einmalig bestätigen.</p>
+    <p>Für ein echtes Zertifikat mit Let's Encrypt:</p>
+    <pre><code>apt-get install -y certbot python3-certbot-nginx
+certbot --nginx -d mein.domain.de</code></pre>
+  </section>
+
+  <!-- 2. SETUP WIZARD -->
+  <section class="chapter" id="setup-wizard">
+    <h2>2. Erster Start — Setup-Wizard</h2>
+    <p>Beim ersten Aufruf der Konsole erscheint der Setup-Wizard. Hier wird der Admin-Account angelegt.</p>
+    <ul>
+      <li><strong>Benutzername:</strong> Nur <code>a-z</code>, <code>0-9</code>, <code>_</code>, <code>.</code>, <code>-</code> erlaubt</li>
+      <li><strong>Passwort:</strong> Mindestens 8 Zeichen</li>
+    </ul>
+    <p>Nach dem Anlegen erscheint die Login-Seite. Der Account funktioniert direkt.</p>
+    <div class="note">Der Setup-Wizard erscheint nur solange noch kein Benutzer existiert. Danach ist <code>/setup</code> nicht mehr zugänglich.</div>
+  </section>
+
+  <!-- 3. WEBKONSOLE -->
+  <section class="chapter" id="webkonsole">
+    <h2>3. Die Webkonsole</h2>
+    <p>Die Konsole ist unter <code>https://&lt;IP&gt;</code> erreichbar. Alle Bereiche sind über die linke Sidebar zugänglich:</p>
+    <table>
+      <tr><th>Bereich</th><th>Funktion</th></tr>
+      <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td></tr>
+      <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td></tr>
+      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks konfigurieren</td></tr>
+      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen</td></tr>
+      <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td></tr>
+      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI)</td></tr>
+      <tr><td><strong>Benutzer</strong></td><td>Weitere Benutzer anlegen und verwalten</td></tr>
+      <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td></tr>
+    </table>
+  </section>
+
+  <!-- 4. AGENTEN -->
+  <section class="chapter" id="agenten">
+    <h2>4. Agenten anlegen</h2>
+    <p>Agenten sind KI-Persönlichkeiten die Aufgaben ausführen. Jeder Agent hat einen Typ, ein Sprachmodell und optional eine "Soul" (Persönlichkeitsbeschreibung).</p>
+
+    <h3>Agent-Typen</h3>
+    <table>
+      <tr><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>boss</code></td><td>Nimmt Nutzer-Nachrichten entgegen, koordiniert Worker-Agenten</td></tr>
+      <tr><td><code>specialist</code></td><td>Spezialist für ein Themengebiet, wird vom Boss delegiert</td></tr>
+      <tr><td><code>worker</code></td><td>Kurzlebiger Task-Agent, wird on-demand gespawnt</td></tr>
+    </table>
+
+    <h3>Agent anlegen (Konsole)</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → <strong>Neuer Agent</strong></span></li>
+      <li><span class="step-num">2</span><span>Felder ausfüllen: Agent-ID, Anzeigename, Typ, LLM-Modell, Tools, Soul</span></li>
+      <li><span class="step-num">3</span><span><strong>Agent anlegen</strong> klicken</span></li>
+    </ol>
+
+    <h3>Agent-Konfiguration (Datei)</h3>
+    <p>Agenten liegen als Verzeichnisse unter <code>/agents/&lt;id&gt;/</code>:</p>
+    <pre><code>/agents/steuer-agent/
+├── agent.yaml       # Konfiguration
+├── soul.md          # Persönlichkeit (optional)
+└── skills/          # Skill-Dateien (optional)
+    ├── steuerrecht.md
+    └── buchhaltung.md</code></pre>
+
+    <p><strong>agent.yaml:</strong></p>
+    <pre><code>id: steuer-agent
+type: specialist
+identity: Steuerbert
+
+llm:
+  model: llama3.1:8b
+  temperature: 0.7
+  max_tokens: 4096
+
+tools:
+  - file_read
+  - file_write
+
+heartbeat:
+  interval: 30s
+  timeout: 90s
+  on_failure: restart</code></pre>
+
+    <h3>Verfügbare Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>Beschreibung</th></tr>
+      <tr><td><code>file_read</code></td><td>Datei im Projektverzeichnis lesen</td></tr>
+      <tr><td><code>file_write</code></td><td>Datei im Projektverzeichnis schreiben</td></tr>
+      <tr><td><code>web_search</code></td><td>Websuche durchführen</td></tr>
+      <tr><td><code>http_request</code></td><td>HTTP-Anfragen an externe APIs</td></tr>
+      <tr><td><code>dispatch_task</code></td><td>Andere Agenten beauftragen (nur boss)</td></tr>
+      <tr><td><code>spawn_agent</code></td><td>Kurzlebigen Worker-Agenten erstellen</td></tr>
+    </table>
+    <div class="note">Alle Filesystem-Operationen sind auf <code>/projects/&lt;projekt-id&gt;/</code> beschränkt. Zugriff darüber hinaus wird verweigert.</div>
+  </section>
+
+  <!-- 5. PROJEKTE -->
+  <section class="chapter" id="projekte">
+    <h2>5. Projekte anlegen</h2>
+    <p>Ein Projekt ist ein isolierter Arbeitsbereich: eigener Linux-User, eigenes Verzeichnis, optionale Samba-Freigabe, optionaler Matrix-Room.</p>
+
+    <h3>Projekt anlegen (Konsole)</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Projekte</strong> → <strong>Neues Projekt</strong></span></li>
+      <li><span class="step-num">2</span><span>Projekt-ID, Name, Boss-Agent, Worker-Agenten und Samba-Option eintragen</span></li>
+      <li><span class="step-num">3</span><span><strong>Projekt anlegen</strong> klicken</span></li>
+    </ol>
+
+    <p>OctopOS richtet automatisch ein:</p>
+    <ul>
+      <li>Linux-User <code>proj_&lt;id&gt;</code> mit eigenem Home-Verzeichnis</li>
+      <li>Verzeichnis <code>/projects/&lt;id&gt;/</code> für Agenten-Dateien</li>
+      <li>Matrix-Room (wenn Matrix konfiguriert)</li>
+      <li>Samba-Freigabe (wenn aktiviert)</li>
+    </ul>
+
+    <h3>Projekt-Konfiguration (Datei)</h3>
+    <pre><code># /projects/buchhaltung/project.yaml
+id: buchhaltung
+version: "1.0.0"
+
+identity:
+  name: Buchhaltung GmbH
+  description: Finanzagenten für die GmbH
+
+agents:
+  boss: finanz-boss
+  workers:
+    - steuer-agent
+    - buchhalter
+
+matrix:
+  room: "!abc123:mein-server.de"    # leer → wird automatisch angelegt
+
+filesystem:
+  samba: true
+
+chat:
+  show_swarm: false    # true = Worker im Chat anzeigen</code></pre>
+  </section>
+
+  <!-- 6. CHAT -->
+  <section class="chapter" id="chat">
+    <h2>6. Chat verwenden</h2>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Projekte</strong> → <strong>Chat öffnen</strong> beim gewünschten Projekt</span></li>
+      <li><span class="step-num">2</span><span>Nachricht eingeben und <code>Enter</code> drücken (oder <code>Shift+Enter</code> für Zeilenumbruch)</span></li>
+      <li><span class="step-num">3</span><span>Die Antwort erscheint Token-für-Token (Streaming)</span></li>
+    </ol>
+
+    <h3>Swarm-Ansicht</h3>
+    <p>Das <strong>Netzwerk-Symbol</strong> oben rechts im Chat schaltet die Swarm-Ansicht um. Bei aktivierter Ansicht wird unter jeder Antwort angezeigt welche Worker-Agenten beteiligt waren.</p>
+
+    <h3>Chat-History</h3>
+    <p>Die Nachrichten einer Session bleiben erhalten und werden beim nächsten Öffnen automatisch geladen.</p>
+  </section>
+
+  <!-- 7. LLM -->
+  <section class="chapter" id="llm">
+    <h2>7. LLM-Konfiguration</h2>
+
+    <h3>Ollama (lokal, kostenfrei)</h3>
+    <p>Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über <strong>LLM-Config</strong> → <strong>Ollama</strong> verwaltet.</p>
+    <p>Empfohlene Modelle:</p>
+    <ul>
+      <li><code>llama3.2:3b</code> — schnell, wenig RAM (4 GB)</li>
+      <li><code>llama3.1:8b</code> — ausgewogen (8 GB RAM)</li>
+      <li><code>mistral-nemo:12b</code> — beste Qualität lokal (12 GB RAM)</li>
+    </ul>
+
+    <h3>Claude Max (OAuth)</h3>
+    <p>Für Claude-Modelle via Claude Max Abonnement:</p>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>LLM-Config</strong> → <strong>Claude Max</strong></span></li>
+      <li><span class="step-num">2</span><span>OAuth-Token einfügen (<code>sk-ant-oat01-...</code>)</span></li>
+      <li><span class="step-num">3</span><span>Speichern</span></li>
+    </ol>
+    <p>Der Token-Status wird mit Ablauf-Datum angezeigt. oat01-Tokens gelten ~30 Tage.</p>
+
+    <h3>OpenAI / andere Anbieter</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>LLM-Config</strong> → <strong>Anbieter konfigurieren</strong></span></li>
+      <li><span class="step-num">2</span><span>API-Key und Modell eintragen</span></li>
+    </ol>
+  </section>
+
+  <!-- 8. SKILLS -->
+  <section class="chapter" id="skills">
+    <h2>8. Skills — Agenten-Wissen erweitern</h2>
+    <p>Skills sind Markdown-Dateien die dem Agenten zusätzliches Wissen geben. Sie werden automatisch in den System-Prompt geladen.</p>
+
+    <h3>Skill anlegen (Konsole)</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → <strong>Skills</strong> (Buch-Icon)</span></li>
+      <li><span class="step-num">2</span><span><strong>Neuer Skill</strong></span></li>
+      <li><span class="step-num">3</span><span>Dateiname, Skill-Name, Scope, Trigger-Keywords, Priority und Inhalt ausfüllen</span></li>
+    </ol>
+
+    <table>
+      <tr><th>Scope</th><th>Verhalten</th></tr>
+      <tr><td><code>always</code></td><td>Immer in jedem Request geladen</td></tr>
+      <tr><td><code>on-demand</code></td><td>Nur wenn ein Trigger-Keyword im User-Text vorkommt</td></tr>
+    </table>
+
+    <h3>Skill-Datei (direkt)</h3>
+    <pre><code>---
+skill: Steuerrecht Grundlagen
+version: "1.0"
+scope: on-demand
+triggers:
+  - steuer
+  - finanzamt
+  - umsatzsteuer
+priority: 10
+---
+
+## Steuerrecht Grundlagen
+
+Umsatzsteuer (USt) beträgt in Deutschland standardmäßig 19%.
+Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
+
+    <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu eingelesen. Kein Neustart notwendig.</div>
+  </section>
+
+  <!-- 9. WEBHOOKS -->
+  <section class="chapter" id="webhooks">
+    <h2>9. Webhooks</h2>
+    <p>Webhooks ermöglichen externen Systemen OctopOS zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.</p>
+
+    <h3>Webhook anlegen (Konsole)</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Projekte</strong> → Webhook-Icon beim Projekt</span></li>
+      <li><span class="step-num">2</span><span><strong>Neuer Webhook</strong></span></li>
+      <li><span class="step-num">3</span><span>URL, Name, Events und optional Secret eintragen</span></li>
+    </ol>
+
+    <p>Verfügbare Events: <code>message</code>, <code>agent_error</code>, <code>provision</code>, <code>agent_start</code>, <code>agent_stop</code></p>
+
+    <h3>Externer Trigger (Wake-Endpoint)</h3>
+    <pre><code>curl -X POST https://&lt;ip&gt;/api/hooks/&lt;projekt-id&gt;/wake \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Neuer Git-Push auf main — bitte Code-Review starten"}'</code></pre>
+    <div class="note">Dieser Endpoint ist öffentlich zugänglich (kein Auth nötig) und startet den Boss-Agenten asynchron.</div>
+
+    <h3>HMAC-Signierung</h3>
+    <p>Wenn ein Secret gesetzt ist, wird jeder ausgehende Webhook-Request mit <code>X-OctopOS-Signature: sha256=&lt;hmac&gt;</code> signiert.</p>
+    <pre><code>import hmac, hashlib
+expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pre>
+  </section>
+
+  <!-- 10. BENUTZER -->
+  <section class="chapter" id="benutzer">
+    <h2>10. Benutzer verwalten</h2>
+    <p>Unter <strong>Benutzer</strong> können weitere Admin-Accounts angelegt werden. Alle Benutzer haben aktuell Admin-Rechte.</p>
+    <ul>
+      <li><strong>Neuer Benutzer:</strong> Benutzername + Passwort</li>
+      <li><strong>Passwort ändern:</strong> Stift-Symbol</li>
+      <li><strong>Löschen:</strong> Papierkorb-Symbol (eigener Account kann nicht gelöscht werden)</li>
+    </ul>
+  </section>
+
+  <!-- 11. AUDIT -->
+  <section class="chapter" id="audit">
+    <h2>11. Audit-Log</h2>
+    <p>Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:</p>
+    <ul>
+      <li>Logins (erfolgreich und fehlgeschlagen)</li>
+      <li>Benutzer anlegen/löschen</li>
+      <li>Agenten anlegen/löschen</li>
+      <li>Projekte anlegen/provisionieren</li>
+      <li>Skills anlegen/ändern/löschen</li>
+      <li>Webhooks anlegen/löschen/auslösen</li>
+      <li>LLM-Token setzen</li>
+    </ul>
+    <p>Gespeichert in <code>/var/log/octopos/audit.jsonl</code> — append-only, ein JSON-Objekt pro Zeile.</p>
+    <p><strong>Filter:</strong> Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.</p>
+  </section>
+
+  <!-- 12. MATRIX -->
+  <section class="chapter" id="matrix">
+    <h2>12. Matrix-Integration</h2>
+    <p>OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
+
+    <h3>Element-Client verbinden</h3>
+    <p>Matrix-Server läuft auf Port 8008 (nginx-Proxy → conduwuit auf 6167):</p>
+    <ul>
+      <li><strong>Homeserver:</strong> <code>https://&lt;ip&gt;:8008</code> oder <code>http://&lt;ip&gt;:8008</code></li>
+      <li><strong>Benutzer:</strong> <code>@admin:&lt;hostname&gt;</code></li>
+      <li><strong>Passwort:</strong> aus <code>/etc/octopos/admin_credentials</code></li>
+    </ul>
+
+    <h3>Agenten-Bot im Room</h3>
+    <p>Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch. Nachrichten im Room werden wie Chat-Nachrichten behandelt.</p>
+    <div class="note">Der Matrix-Watchdog startet abgestürzte Bots automatisch neu — mit 15 Sekunden Verzögerung.</div>
+  </section>
+
+  <!-- 13. TROUBLESHOOTING -->
+  <section class="chapter" id="troubleshooting">
+    <h2>13. Troubleshooting</h2>
+
+    <h3>Konsole nicht erreichbar</h3>
+    <pre><code>sudo systemctl status nginx
+sudo nginx -t
+sudo journalctl -u nginx -n 50</code></pre>
+
+    <h3>Core reagiert nicht</h3>
+    <pre><code>sudo systemctl status octopos-core
+sudo journalctl -u octopos-core -n 100 --no-pager</code></pre>
+
+    <h3>Agent antwortet nicht</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → Logs-Icon prüfen</span></li>
+      <li><span class="step-num">2</span><span>Heartbeat-Status in der Agent-Liste prüfen (orange = Warnung)</span></li>
+      <li><span class="step-num">3</span><span>LLM-Verbindung prüfen: <strong>LLM-Config</strong> → Status</span></li>
+    </ol>
+
+    <h3>Matrix-Bot antwortet nicht</h3>
+    <pre><code>sudo journalctl -u octopos-core -n 50 | grep -i matrix</code></pre>
+    <p>Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler:</p>
+    <pre><code>sudo systemctl restart octopos-core</code></pre>
+
+    <h3>OAuth-Token abgelaufen</h3>
+    <p><strong>LLM-Config</strong> → <strong>Claude Max</strong> → Token-Status prüfen. Neuen Token über <code>claude setup</code> holen und eintragen.</p>
+
+    <h3>Login funktioniert nicht (429 Too Many Requests)</h3>
+    <p>Rate-Limiting: max. 10 Versuche pro Minute. Nach 60 Sekunden warten.</p>
+
+    <h3>Logs direkt auf dem Server</h3>
+    <pre><code># Core-Logs
+sudo journalctl -u octopos-core -f
+
+# Audit-Log
+sudo tail -f /var/log/octopos/audit.jsonl | python3 -m json.tool
+
+# nginx-Logs
+sudo tail -f /var/log/nginx/error.log</code></pre>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active TOC item on scroll
+  const sections = document.querySelectorAll('.chapter');
+  const links = document.querySelectorAll('.toc a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
