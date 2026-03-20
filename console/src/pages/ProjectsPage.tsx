@@ -4,6 +4,7 @@ import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook, GitMerg
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ProjectEntry {
   name:        string;
@@ -29,6 +30,7 @@ const EMPTY: CreateForm = { id:"", name:"", description:"", boss:"", workers:"",
 
 export function ProjectsPage() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [projects,  setProjects]  = useState<Record<string, ProjectEntry>>({});
   const [agents,    setAgents]    = useState<string[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -94,11 +96,13 @@ export function ProjectsPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing?"animate-spin":""}`} />
             Aktualisieren
           </button>
-          <button onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <Plus className="h-3.5 w-3.5" />
-            Neues Projekt
-          </button>
+          {isAdmin && (
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+              <Plus className="h-3.5 w-3.5" />
+              Neues Projekt
+            </button>
+          )}
         </div>
       </div>
 
@@ -176,10 +180,12 @@ export function ProjectsPage() {
         <div className="bg-card border rounded-lg p-12 text-center space-y-3">
           <FolderKanban className="h-10 w-10 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Noch keine Projekte. Lege ein erstes Projekt an.</p>
-          <button onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4" />Erstes Projekt anlegen
-          </button>
+          {isAdmin && (
+            <button onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+              <Plus className="h-4 w-4" />Erstes Projekt anlegen
+            </button>
+          )}
         </div>
       )}
 
