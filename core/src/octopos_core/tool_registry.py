@@ -530,6 +530,111 @@ class SpawnAgentTool(BaseTool):
             "project":   project_id,
         }
 
+# ============================================================= AgentLink Tools
+
+class WriteHandoffTool(BaseTool):
+    """Schreibt einen AgentLink-Handoff — State-Transfer an anderen Agenten."""
+
+    @property
+    def id(self) -> str:   return "write_handoff"
+    @property
+    def name(self) -> str: return "AgentLink Handoff schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Speichert einen Handoff im AgentLink-System damit ein anderer Agent "
+            "den Auftrag und den Kontext uebernehmen kann. "
+            "to_agent leer lassen damit jeder Agent lesen kann."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "to_agent": {
+                    "type":        "string",
+                    "description": "Ziel-Agent-ID (leer = any)",
+                },
+                "context": {
+                    "type":        "string",
+                    "description": "Freitext-Kontext fuer den empfangenden Agenten",
+                },
+                "data": {
+                    "type":        "object",
+                    "description": "Strukturierte Daten (JSON) die uebergeben werden",
+                },
+                "ttl_seconds": {
+                    "type":        "integer",
+                    "description": "Gueltigkeit in Sekunden (Standard: 3600)",
+                    "default":     3600,
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        to_agent: str = "",
+        context: str = "",
+        data: dict | None = None,
+        ttl_seconds: int = 3600,
+    ) -> dict:
+        from pathlib import Path as _Path
+        from .agentlink import write_handoff as _wh
+        project_dir = _Path("/projects") / project_id
+        return _wh(
+            project_dir,
+            from_agent=agent_id,
+            to_agent=to_agent or None,
+            context=context,
+            data=data or {},
+            ttl_seconds=ttl_seconds,
+        )
+
+
+class ReadHandoffTool(BaseTool):
+    """Liest den naechsten AgentLink-Handoff fuer diesen Agenten."""
+
+    @property
+    def id(self) -> str:   return "read_handoff"
+    @property
+    def name(self) -> str: return "AgentLink Handoff lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest den naechsten Handoff aus dem AgentLink-System der fuer diesen "
+            "Agenten bestimmt ist. consume=true loescht den Handoff nach dem Lesen "
+            "(Standard). Gibt null zurueck wenn kein Handoff vorhanden."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "consume": {
+                    "type":        "boolean",
+                    "description": "Handoff nach dem Lesen loeschen (Standard: true)",
+                    "default":     True,
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        consume: bool = True,
+    ) -> dict:
+        from pathlib import Path as _Path
+        from .agentlink import read_handoff as _rh
+        project_dir = _Path("/projects") / project_id
+        entry = _rh(project_dir, to_agent=agent_id, consume=consume)
+        if entry is None:
+            return {"handoff": None, "found": False}
+        return {"handoff": entry, "found": True}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -539,4 +644,6 @@ registry.register(FileWriteTool())
 registry.register(WebSearchTool())
 registry.register(HttpRequestTool())
 registry.register(SpawnAgentTool())
+registry.register(WriteHandoffTool())
+registry.register(ReadHandoffTool())
 
