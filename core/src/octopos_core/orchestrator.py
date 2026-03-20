@@ -141,10 +141,17 @@ class Orchestrator:
     def _resolve_model(model: str) -> tuple[str, str | None]:
         """
         Gibt (litellm_model, api_base) zurück.
-        Kein Provider-Prefix → Ollama auf localhost wird angenommen.
+        Provider-Prefix (z.B. anthropic/, openai/) → direkt weiterreichen.
+        Claude/GPT-Modellnamen → passenden Provider-Prefix ergänzen.
+        Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
         """
         if "/" in model:
             return model, None
+        # Bekannte Cloud-Modell-Prefixe automatisch ergänzen
+        if model.startswith(("claude-",)):
+            return f"anthropic/{model}", None
+        if model.startswith(("gpt-", "o1-", "o3-")):
+            return f"openai/{model}", None
         # Kein Prefix → lokales Ollama-Modell
         return f"ollama/{model}", "http://localhost:11434"
 
