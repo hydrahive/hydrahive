@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users } from "lucide-react";
+import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook } from "lucide-react";
 import { api } from "@/lib/api";
+import { WebhooksPanel } from "@/components/WebhooksPanel";
 
 interface ProjectEntry {
   name:        string;
@@ -36,6 +37,7 @@ export function ProjectsPage() {
   const [creating,  setCreating]  = useState(false);
   const [createErr, setCreateErr] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [webhookProject, setWebhookProject] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -183,7 +185,8 @@ export function ProjectsPage() {
       {!loading && projectList.length > 0 && (
         <div className="space-y-3">
           {projectList.map(([id, proj]) => (
-            <div key={id} className="bg-card border rounded-lg p-4 space-y-3">
+            <div key={id} className="bg-card border rounded-lg overflow-hidden">
+              <div className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -197,10 +200,17 @@ export function ProjectsPage() {
                     {proj.description && <p className="text-xs text-muted-foreground">{proj.description}</p>}
                   </div>
                 </div>
-                <button onClick={() => navigate(`/chat/${id}`)}
-                  className="px-3 py-1 text-xs border rounded-md hover:bg-accent transition-colors flex-shrink-0">
-                  Chat öffnen
-                </button>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => setWebhookProject(p => p === id ? null : id)}
+                    title="Webhooks verwalten"
+                    className={`p-1.5 rounded-md transition-colors ${webhookProject === id ? "bg-primary/10 text-primary" : "border hover:bg-accent text-muted-foreground"}`}>
+                    <Webhook className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => navigate(`/chat/${id}`)}
+                    className="px-3 py-1 text-xs border rounded-md hover:bg-accent transition-colors">
+                    Chat öffnen
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-1 border-t">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -216,6 +226,8 @@ export function ProjectsPage() {
                   <span className="truncate">{proj.matrix_room || "kein Room"}</span>
                 </div>
               </div>
+              </div>
+              {webhookProject === id && <WebhooksPanel projectId={id} />}
             </div>
           ))}
         </div>
