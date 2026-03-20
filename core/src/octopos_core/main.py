@@ -207,21 +207,74 @@ class LoginRequest(BaseModel):
     password: str
 
 
+@app.get("/setup/status")
+def setup_status():
+    """Gibt zurück ob der Setup-Wizard noch ausgeführt werden muss."""
+    users = _load_users()
+    return {"needs_setup": len(users) == 0}
+
+
+class SetupRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/setup", status_code=201)
+async def run_setup(req: SetupRequest):
+    """
+    Ersteinrichtung — legt den ersten Admin-User an.
+    Nur verfügbar wenn noch keine User existieren.
+    """
+    import re as _re, asyncio as _asyncio
+    from datetime import datetime as _dt
+
+    users = _load_users()
+    if users:
+        raise HTTPException(403, "Setup bereits abgeschlossen")
+    if not _re.match(r"^[a-z0-9_.-]+$", req.username):
+        raise HTTPException(400, "Username darf nur a-z, 0-9, _ . - enthalten")
+    if len(req.password) < 8:
+        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
+
+    server_name = _read_server_name()
+    matrix_ok   = await _matrix_register(req.username, req.password, server_name)
+
+    users[req.username] = {
+        "password_hash": _hash_password(req.password),
+        "role":          "admin",
+        "matrix_id":     f"@{req.username}:{server_name}",
+        "matrix_ok":     matrix_ok,
+        "created_at":    _dt.now().isoformat(),
+    }
+    _save_users(users)
+    logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
+    return {"created": True, "username": req.username, "role": "admin"}
+
+
 @app.post("/auth/login")
 def login(req: LoginRequest):
     """
-    Admin-Login: username=admin, password aus /etc/octopos/admin_credentials.
+    Login: prüft zuerst users.json, dann Fallback auf admin_credentials.
     Gibt JWT-Bearer-Token zurück.
     """
-    admin_pass = _read_admin_password()
-    if not admin_pass:
-        raise HTTPException(503, "Kein Admin-Passwort konfiguriert")
-
-    if req.username != "admin" or req.password != admin_pass:
+    # Primär: users.json
+    users = _load_users()
+    if users:
+        user = users.get(req.username)
+        if user and _verify_password(req.password, user.get("password_hash", "")):
+            token = _make_jwt(req.username)
+            logger.info("Login erfolgreich (users.json): %s", req.username)
+            return {"access_token": token, "token_type": "bearer"}
         raise HTTPException(401, "Ungültige Zugangsdaten")
 
+    # Fallback: admin_credentials (vor Setup oder Legacy-Betrieb)
+    admin_pass = _read_admin_password()
+    if not admin_pass:
+        raise HTTPException(503, "Kein Admin-Passwort konfiguriert — Setup erforderlich")
+    if req.username != "admin" or req.password != admin_pass:
+        raise HTTPException(401, "Ungültige Zugangsdaten")
     token = _make_jwt(req.username)
-    logger.info("Admin-Login erfolgreich: %s", req.username)
+    logger.info("Login erfolgreich (admin_credentials): %s", req.username)
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -1024,50 +1077,7 @@ async def set_claude_oauth_token(body: dict):
     token_file.write_text(token, encoding="utf-8")
     token_file.chmod(0o600)
     logger.info("Claude OAuth Token gespeichert")
-
-    # Proxy-Service neustarten damit neuer Token geladen wird
-    import subprocess as _sub
-    try:
-        _sub.run(["systemctl", "restart", "octopos-claude-proxy"], check=False, timeout=5)
-        logger.info("octopos-claude-proxy neugestartet")
-    except Exception as e:
-        logger.warning("Proxy-Neustart fehlgeschlagen: %s", e)
-
     return {"updated": True, "provider": "claude_max"}
-
-
-@app.get("/llm/claude_proxy/status")
-async def claude_proxy_status():
-    """Status des Claude OAuth Proxy."""
-    import subprocess as _sub
-    token_file = Path("/etc/octopos/claude_oauth_token")
-    has_token  = token_file.exists() and token_file.stat().st_size > 0
-
-    try:
-        result = _sub.run(
-            ["systemctl", "is-active", "octopos-claude-proxy"],
-            capture_output=True, text=True, timeout=3
-        )
-        proxy_running = result.stdout.strip() == "active"
-    except Exception:
-        proxy_running = False
-
-    # Health-Check gegen Proxy
-    proxy_ok = False
-    if proxy_running:
-        try:
-            import urllib.request as _ur
-            with _ur.urlopen("http://127.0.0.1:3456/health", timeout=2) as r:
-                proxy_ok = r.status == 200
-        except Exception:
-            pass
-
-    return {
-        "has_token":     has_token,
-        "proxy_running": proxy_running,
-        "proxy_ok":      proxy_ok,
-        "proxy_url":     "http://127.0.0.1:3456/v1",
-    }
 
 
 @app.put("/llm/config/{provider}")
