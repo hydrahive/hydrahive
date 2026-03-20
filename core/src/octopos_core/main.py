@@ -101,8 +101,24 @@ async def lifespan(app: FastAPI):
     server_name = _read_server_name()
     await _setup_matrix_clients(server_name)
 
+    # AgentLink Cleanup-Task — abgelaufene Handoffs alle 5 Minuten entfernen
+    async def _agentlink_cleanup_loop():
+        from .agentlink import cleanup_expired as _ce
+        while True:
+            try:
+                await asyncio.sleep(300)
+                for proj_id in list(projects.projects.keys()):
+                    _ce(Path(PROJECTS_DIR) / proj_id)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("AgentLink cleanup Fehler: %s", e)
+
+    cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
+
     logger.info("OctopOS Core bereit")
     yield
+    cleanup_task.cancel()
     logger.info("OctopOS Core faehrt herunter...")
     await runtime.stop()
     projects.stop()
