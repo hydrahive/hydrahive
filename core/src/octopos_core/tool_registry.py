@@ -635,6 +635,200 @@ class ReadHandoffTool(BaseTool):
         return {"handoff": entry, "found": True}
 
 
+# ============================================================= System Tools (Superagent)
+
+class ShellExecTool(BaseTool):
+    """
+    Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
+    Nur fuer Superagenten — kein Sandbox, voller Systemzugriff.
+    """
+
+    @property
+    def id(self) -> str:   return "shell_exec"
+    @property
+    def name(self) -> str: return "Shell-Befehl ausführen"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt einen Bash-Befehl aus und gibt stdout, stderr und Exit-Code zurück. "
+            "Verwende dies für Systemverwaltung, git, pip, systemctl, Dateioperationen, etc. "
+            "Timeout standard 30 Sekunden, maximal 120 Sekunden."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type":        "string",
+                    "description": "Bash-Befehl der ausgeführt werden soll",
+                },
+                "timeout": {
+                    "type":        "integer",
+                    "description": "Timeout in Sekunden (Standard: 30, max: 120)",
+                    "default":     30,
+                },
+                "cwd": {
+                    "type":        "string",
+                    "description": "Arbeitsverzeichnis (Standard: /opt/octopos)",
+                    "default":     "/opt/octopos",
+                },
+            },
+            "required": ["command"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        command: str, timeout: int = 30, cwd: str = "/opt/octopos",
+    ) -> dict:
+        import asyncio
+        timeout = min(max(timeout, 1), 120)
+        logger.info("shell_exec [%s]: %s", agent_id, command[:120])
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd if Path(cwd).exists() else "/opt/octopos",
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
+
+            return {
+                "stdout":    stdout.decode(errors="replace"),
+                "stderr":    stderr.decode(errors="replace"),
+                "exit_code": proc.returncode,
+                "command":   command,
+            }
+        except Exception as e:
+            return {"error": str(e), "command": command, "exit_code": -1}
+
+
+class ReadSystemFileTool(BaseTool):
+    """Liest eine beliebige Datei auf dem System — kein Pfad-Sandboxing."""
+
+    @property
+    def id(self) -> str:   return "read_system_file"
+    @property
+    def name(self) -> str: return "Systemdatei lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest den Inhalt einer beliebigen Datei auf dem System. "
+            "Kein Pfad-Sandboxing — Zugriff auf Sourcen, Configs, Logs etc. "
+            "Für große Dateien: offset und limit nutzen."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type":        "string",
+                    "description": "Absoluter oder relativer Dateipfad",
+                },
+                "offset": {
+                    "type":        "integer",
+                    "description": "Zeile ab der gelesen wird (0-basiert, Standard: 0)",
+                    "default":     0,
+                },
+                "limit": {
+                    "type":        "integer",
+                    "description": "Maximale Anzahl Zeilen (Standard: 200, max: 1000)",
+                    "default":     200,
+                },
+            },
+            "required": ["path"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        path: str, offset: int = 0, limit: int = 200,
+    ) -> dict:
+        limit = min(limit, 1000)
+        p = Path(path)
+        if not p.is_absolute():
+            p = Path("/opt/octopos") / path
+        logger.info("read_system_file [%s]: %s (offset=%d limit=%d)", agent_id, p, offset, limit)
+        if not p.exists():
+            return {"error": f"Datei nicht gefunden: {p}"}
+        if not p.is_file():
+            return {"error": f"Kein reguläre Datei: {p}"}
+        try:
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            total = len(lines)
+            sliced = lines[offset:offset + limit]
+            return {
+                "content":      "\n".join(sliced),
+                "path":         str(p),
+                "total_lines":  total,
+                "offset":       offset,
+                "returned":     len(sliced),
+            }
+        except OSError as e:
+            return {"error": str(e)}
+
+
+class WriteSystemFileTool(BaseTool):
+    """Schreibt eine beliebige Datei auf dem System — kein Pfad-Sandboxing."""
+
+    @property
+    def id(self) -> str:   return "write_system_file"
+    @property
+    def name(self) -> str: return "Systemdatei schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Schreibt Inhalt in eine beliebige Datei auf dem System. "
+            "Erstellt die Datei und fehlende Verzeichnisse wenn nötig. "
+            "mode=overwrite (Standard) oder append."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type":        "string",
+                    "description": "Absoluter Dateipfad",
+                },
+                "content": {
+                    "type":        "string",
+                    "description": "Inhalt der geschrieben werden soll",
+                },
+                "mode": {
+                    "type":        "string",
+                    "enum":        ["overwrite", "append"],
+                    "description": "overwrite (Standard) oder append",
+                    "default":     "overwrite",
+                },
+            },
+            "required": ["path", "content"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        path: str, content: str, mode: str = "overwrite",
+    ) -> dict:
+        p = Path(path)
+        if not p.is_absolute():
+            p = Path("/opt/octopos") / path
+        logger.info("write_system_file [%s]: %s (%s, %d bytes)", agent_id, p, mode, len(content))
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            write_mode = "a" if mode == "append" else "w"
+            p.open(write_mode, encoding="utf-8").write(content)
+            return {"written": True, "path": str(p), "bytes": len(content.encode())}
+        except OSError as e:
+            return {"error": str(e)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -646,4 +840,7 @@ registry.register(HttpRequestTool())
 registry.register(SpawnAgentTool())
 registry.register(WriteHandoffTool())
 registry.register(ReadHandoffTool())
+registry.register(ShellExecTool())
+registry.register(ReadSystemFileTool())
+registry.register(WriteSystemFileTool())
 
