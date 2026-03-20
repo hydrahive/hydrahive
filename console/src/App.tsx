@@ -8,6 +8,7 @@ import { ProjectsPage } from "@/pages/ProjectsPage";
 import { ProjectCreatePage } from "@/pages/ProjectCreatePage";
 import { SystemPage } from "@/pages/SystemPage";
 import { ToolsPage } from "@/pages/ToolsPage";
+import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { ChatPage } from "@/pages/ChatPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="chat/:id"          element={<ChatPage />} />
         <Route path="system"            element={<SystemPage />} />
         <Route path="tools"             element={<ToolsPage />} />
+        <Route path="llm"              element={<LlmConfigPage />} />
       </Route>
     </Routes>
   );
