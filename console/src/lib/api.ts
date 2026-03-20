@@ -26,4 +26,19 @@ export const api = {
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/projects/${id}/session/history`),
   agentLogs: (id: string, lines = 100) =>
     api.get<{agent_id:string;lines:string[];count:number}>(`/agents/${id}/logs?lines=${lines}`),
+  agentSkills:       (id: string) =>
+    api.get<{skills: AgentSkill[]}>(`/agents/${id}/skills`),
+  createSkill:       (id: string, d: unknown) => api.post(`/agents/${id}/skills`, d),
+  updateSkill:       (id: string, filename: string, d: unknown) => api.put(`/agents/${id}/skills/${filename}`, d),
+  deleteSkill:       (id: string, filename: string) => api.delete(`/agents/${id}/skills/${filename}`),
 };
+
+export interface AgentSkill {
+  filename: string;
+  skill:    string;
+  version:  string;
+  scope:    string;
+  triggers: string[];
+  priority: number;
+  content:  string;
+}

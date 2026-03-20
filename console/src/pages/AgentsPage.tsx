@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
+import { SkillsPanel } from "@/components/SkillsPanel";
 
 interface AgentRuntime {
   status: string; type: string; restart_count: number;
@@ -51,6 +52,7 @@ export function AgentsPage() {
   const [saving,    setSaving]    = useState(false);
   const [saveErr,   setSaveErr]   = useState("");
   const [deleting,  setDeleting]  = useState<string|null>(null);
+  const [skillsAgent, setSkillsAgent] = useState<string|null>(null);
   const [logAgent,  setLogAgent]  = useState<string|null>(null);
   const [logLines,  setLogLines]  = useState<string[]>([]);
   const [logErr,    setLogErr]    = useState("");
@@ -295,7 +297,8 @@ export function AgentsPage() {
             const hbAge  = rt?.last_heartbeat_age;
             const hbWarn = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
             return (
-              <div key={id} className="bg-card border rounded-lg p-4 flex items-start gap-4">
+              <div key={id} className="bg-card border rounded-lg overflow-hidden">
+              <div className="p-4 flex items-start gap-4">
                 <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <Bot className="h-5 w-5 text-primary" />
                 </div>
@@ -317,6 +320,10 @@ export function AgentsPage() {
                       {rt.restart_count > 0 && <span className="ml-1 text-orange-500">↺{rt.restart_count}</span>}
                     </span>
                   )}
+                  <button onClick={() => setSkillsAgent(s => s === id ? null : id)} title="Skills verwalten"
+                    className={`p-1.5 rounded transition-colors ${skillsAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                    <BookOpen className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => openLogs(id)} title="Logs anzeigen"
                     className={`p-1.5 rounded transition-colors ${logAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
                     <ScrollText className="h-3.5 w-3.5" />
@@ -330,6 +337,8 @@ export function AgentsPage() {
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
+              </div>
+              {skillsAgent === id && <SkillsPanel agentId={id} />}
               </div>
             );
           })}
