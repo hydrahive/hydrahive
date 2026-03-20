@@ -6,7 +6,6 @@
 
 CORE_DIR="${OCTOPOS_DIR}/core"
 VENV_DIR="${OCTOPOS_DIR}/venv"
-REPO_CORE="https://raw.githubusercontent.com/tilleulenspiegel/octopos/main/core"
 SERVICE_NAME="octopos-core"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 OCTOPOS_USER="octopos"
@@ -24,35 +23,22 @@ fi
 # --- Verzeichnisse ---
 mkdir -p "${CORE_DIR}/src/octopos_core" /agents /projects /etc/octopos
 chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${OCTOPOS_DIR}" /agents /projects
+# /etc/octopos braucht octopos-Schreibrechte (jwt_secret, users.json etc.)
+chown root:${OCTOPOS_USER} /etc/octopos
+chmod 770 /etc/octopos
 
-# --- users.json anlegen falls nicht vorhanden ---
-if [ ! -f /etc/octopos/users.json ]; then
+# --- Konfig-Dateien voranlegen (octopos-core braucht Schreibrechte) ---
+for _f in jwt_secret llm_env llm_config.json users.json; do
+    _path="/etc/octopos/${_f}"
+    if [ ! -f "${_path}" ]; then
+        touch "${_path}"
+    fi
+    chown "${OCTOPOS_USER}:${OCTOPOS_USER}" "${_path}"
+    chmod 600 "${_path}"
+done
+# users.json braucht valides JSON als Startwert
+if [ ! -s /etc/octopos/users.json ]; then
     echo '{}' > /etc/octopos/users.json
-    chown "${OCTOPOS_USER}:${OCTOPOS_USER}" /etc/octopos/users.json
-    chmod 600 /etc/octopos/users.json
-fi
-
-# --- Python-Venv einrichten (idempotent) ---
-if [ ! -f "${VENV_DIR}/bin/activate" ]; then
-    info "Lege Python-venv an: ${VENV_DIR}"
-    python3 -m venv "${VENV_DIR}"
-    success "venv angelegt"
-else
-    info "venv bereits vorhanden"
-fi
-
-"${VENV_DIR}/bin/pip" install -q --upgrade pip
-
-# Erst pyproject.toml installieren (alle Deps aus dem Repo)
-if [ -f "${CORE_DIR}/pyproject.toml" ]; then
-    "${VENV_DIR}/bin/pip" install -q -e "${CORE_DIR}"
-    success "Python-Abhängigkeiten aus pyproject.toml installiert"
-else
-    # Fallback: manuelle Liste (sollte nicht passieren)
-    "${VENV_DIR}/bin/pip" install -q \
-        fastapi "uvicorn[standard]" pydantic pyyaml watchdog litellm \
-        anthropic httpx "python-jose[cryptography]" slowapi matrix-nio
-    success "Python-Abhängigkeiten installiert (Fallback)"
 fi
 
 # --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
@@ -67,6 +53,22 @@ if [ -d "${REPO_CORE}/src/octopos_core" ]; then
 else
     error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
 fi
+
+# --- Python-Venv einrichten (idempotent) ---
+if [ ! -f "${VENV_DIR}/bin/activate" ]; then
+    info "Lege Python-venv an: ${VENV_DIR}"
+    python3 -m venv "${VENV_DIR}"
+    success "venv angelegt"
+else
+    info "venv bereits vorhanden"
+fi
+
+"${VENV_DIR}/bin/pip" install -q --upgrade pip
+
+# pyproject.toml wurde bereits kopiert — immer verwenden
+"${VENV_DIR}/bin/pip" install -q -e "${CORE_DIR}" \
+    || error "pip install -e fehlgeschlagen — pruefe ${CORE_DIR}/pyproject.toml"
+success "Python-Abhängigkeiten aus pyproject.toml installiert"
 
 chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${CORE_DIR}" "${VENV_DIR}"
 
