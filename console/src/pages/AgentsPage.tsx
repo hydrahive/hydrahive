@@ -109,14 +109,25 @@ export function AgentsPage() {
     setForm({ ...EMPTY_FORM }); setEditId(null); setSaveErr(""); setShowForm(true);
   }
 
-  async function openEdit(id: string, entry: AgentEntry) {
+  async function openEdit(id: string, _entry: AgentEntry) {
     setSaveErr("");
-    const soul = await api.getAgentSoul(id).catch(() => ({ soul:"", exists:false }));
+    const [full, soul] = await Promise.all([
+      api.get<{config: Record<string, unknown>}>(`/agents/${id}`).catch(() => null),
+      api.getAgentSoul(id).catch(() => ({ soul:"", exists:false })),
+    ]);
+    const cfg = full?.config as any;
     setForm({
-      id, type: entry.config.type, identity: entry.config.identity,
-      model: entry.config.model, temperature: 0.7, max_tokens: 4096,
-      soul: soul.soul, tools: [], heartbeat_interval: "30s",
-      heartbeat_timeout: "90s", heartbeat_on_failure: "restart",
+      id,
+      type:                  cfg?.type                  ?? _entry.config.type,
+      identity:              cfg?.identity              ?? _entry.config.identity,
+      model:                 cfg?.llm?.model            ?? _entry.config.model,
+      temperature:           cfg?.llm?.temperature      ?? 0.7,
+      max_tokens:            cfg?.llm?.max_tokens       ?? 4096,
+      soul:                  soul.soul,
+      tools:                 cfg?.tools                 ?? [],
+      heartbeat_interval:    cfg?.heartbeat?.interval   ?? "30s",
+      heartbeat_timeout:     cfg?.heartbeat?.timeout    ?? "90s",
+      heartbeat_on_failure:  cfg?.heartbeat?.on_failure ?? "restart",
     });
     setEditId(id); setShowForm(true);
   }
@@ -205,10 +216,12 @@ export function AgentsPage() {
                 </select>
               </Field>
               <Field label="LLM-Modell *">
-                <select value={form.model} onChange={e=>set("model",e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                  {KNOWN_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <input list="known-models" value={form.model} onChange={e=>set("model",e.target.value)}
+                  placeholder="z.B. mistral-nemo:12b" required
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                <datalist id="known-models">
+                  {KNOWN_MODELS.map(m => <option key={m} value={m} />)}
+                </datalist>
               </Field>
               <Field label="Temperature">
                 <Input type="number" value={form.temperature} onChange={e=>set("temperature",parseFloat(e.target.value))}
