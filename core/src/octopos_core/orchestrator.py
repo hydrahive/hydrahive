@@ -320,7 +320,9 @@ class Orchestrator:
         - sk-ant-oat01-* Token → Anthropic SDK direkt mit OAuth-Header
         - Alle anderen         → litellm (Ollama, OpenAI API-Key, etc.)
         """
-        oauth_token = _load_claude_oauth_token()
+        model_name = agent_cfg.llm.model
+        is_claude_model = model_name.startswith(("claude-", "anthropic/"))
+        oauth_token = _load_claude_oauth_token() if is_claude_model else ""
         if oauth_token:
             return await self._anthropic_oauth_call(agent_cfg, messages, tools, oauth_token)
 
@@ -465,7 +467,9 @@ class Orchestrator:
 
         try:
             full_response = ""
-            oauth_token   = _load_claude_oauth_token()
+            _model_name   = boss_cfg.llm.model
+            _is_claude    = _model_name.startswith(("claude-", "anthropic/"))
+            oauth_token   = _load_claude_oauth_token() if _is_claude else ""
 
             if oauth_token:
                 # Anthropic SDK Streaming
