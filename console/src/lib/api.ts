@@ -45,6 +45,10 @@ export const api = {
   createSkill:       (id: string, d: unknown) => api.post(`/agents/${id}/skills`, d),
   updateSkill:       (id: string, filename: string, d: unknown) => api.put(`/agents/${id}/skills/${filename}`, d),
   deleteSkill:       (id: string, filename: string) => api.delete(`/agents/${id}/skills/${filename}`),
+  agentlinkHandoffs: (id: string) =>
+    api.get<{handoffs: Handoff[]}>(`/projects/${id}/agentlink`),
+  deleteHandoff:     (id: string, handoffId: string) =>
+    api.delete(`/projects/${id}/agentlink/${handoffId}`),
 };
 
 export interface AuditEntry {
@@ -64,6 +68,16 @@ export interface Webhook {
   url:        string;
   events:     string[];
   created_at: string;
+}
+
+export interface Handoff {
+  id:         string;
+  created_at: string;
+  expires_at: string;
+  from_agent: string;
+  to_agent:   string | null;
+  context:    string;
+  data:       Record<string, unknown>;
 }
 
 export interface AgentSkill {

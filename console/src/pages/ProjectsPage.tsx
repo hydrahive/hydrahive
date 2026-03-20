@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook } from "lucide-react";
+import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook, GitMerge } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
+import { AgentLinkPanel } from "@/components/AgentLinkPanel";
 
 interface ProjectEntry {
   name:        string;
@@ -37,7 +38,8 @@ export function ProjectsPage() {
   const [creating,  setCreating]  = useState(false);
   const [createErr, setCreateErr] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [webhookProject, setWebhookProject] = useState<string | null>(null);
+  const [webhookProject,   setWebhookProject]   = useState<string | null>(null);
+  const [agentlinkProject, setAgentlinkProject] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -201,6 +203,11 @@ export function ProjectsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => setAgentlinkProject(p => p === id ? null : id)}
+                    title="AgentLink Handoffs"
+                    className={`p-1.5 rounded-md transition-colors ${agentlinkProject === id ? "bg-primary/10 text-primary" : "border hover:bg-accent text-muted-foreground"}`}>
+                    <GitMerge className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => setWebhookProject(p => p === id ? null : id)}
                     title="Webhooks verwalten"
                     className={`p-1.5 rounded-md transition-colors ${webhookProject === id ? "bg-primary/10 text-primary" : "border hover:bg-accent text-muted-foreground"}`}>
@@ -227,6 +234,7 @@ export function ProjectsPage() {
                 </div>
               </div>
               </div>
+              {agentlinkProject === id && <AgentLinkPanel projectId={id} />}
               {webhookProject === id && <WebhooksPanel projectId={id} />}
             </div>
           ))}
