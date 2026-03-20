@@ -5,9 +5,15 @@ import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
+  id:      string;
   role:    "user" | "assistant";
   content: string;
   workers?: string[];
+}
+
+let _msgCounter = 0;
+function mkMsg(role: "user" | "assistant", content: string, workers?: string[]): Message {
+  return { id: `msg-${++_msgCounter}`, role, content, workers };
 }
 
 export function ChatPage() {
@@ -34,6 +40,14 @@ export function ChatPage() {
         if (chatCfg?.chat?.show_swarm) setShowSwarm(true);
       })
       .catch(() => {});
+    api.sessionHistory(id)
+      .then(d => {
+        const loaded = d.messages
+          .filter(m => m.role === "user" || m.role === "assistant")
+          .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+        if (loaded.length > 0) setMessages(loaded);
+      })
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -45,15 +59,11 @@ export function ChatPage() {
     const content = input.trim();
     setInput("");
     setError("");
-    setMessages(ms => [...ms, { role: "user", content }]);
+    setMessages(ms => [...ms, mkMsg("user", content)]);
     setSending(true);
     try {
       const res = await api.sendMessage(id, content);
-      setMessages(ms => [...ms, {
-        role: "assistant",
-        content: res.response,
-        workers: res.workers,
-      }]);
+      setMessages(ms => [...ms, mkMsg("assistant", res.response, res.workers)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Senden");
       setMessages(ms => ms.slice(0, -1));
@@ -106,8 +116,8 @@ export function ChatPage() {
             <p className="text-sm">Schreib eine Nachricht, um den Boss-Agenten zu erreichen.</p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "assistant" && (
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                 <Bot className="h-4 w-4 text-primary" />
@@ -117,12 +127,12 @@ export function ChatPage() {
               <div className={`rounded-lg px-3 py-2 text-sm break-words ${
                 msg.role === "user"
                   ? "bg-primary text-primary-foreground"
-                  : "bg-card border"
+                  : "bg-card border prose prose-sm max-w-none dark:prose-invert"
               }`}>
                 {msg.role === "user"
-                    ? <span className="whitespace-pre-wrap">{msg.content}</span>
-                    : <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert">{msg.content}</ReactMarkdown>
-                  }
+                  ? <span className="whitespace-pre-wrap">{msg.content}</span>
+                  : <ReactMarkdown>{msg.content}</ReactMarkdown>
+                }
               </div>
               {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
                 <div className="flex flex-wrap gap-1 px-1">

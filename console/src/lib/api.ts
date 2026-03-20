@@ -22,4 +22,6 @@ export const api = {
   tools:        ()           => api.get<Record<string,unknown>>("/tools"),
   sendMessage:   (id: string, content: string) =>
     api.post<{response:string;workers:string[];session_id:string}>(`/projects/${id}/message`, { content }),
+  sessionHistory: (id: string) =>
+    api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/projects/${id}/session/history`),
 };
