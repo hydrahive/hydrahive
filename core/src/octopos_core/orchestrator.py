@@ -58,6 +58,47 @@ def _load_claude_oauth_token() -> str:
         return ""
 
 
+
+async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float = 1.0):
+    """
+    Retry-Wrapper fuer LLM-Calls.
+    - 429 Rate-Limit: sofort retry mit Backoff
+    - 5xx Server-Fehler: retry
+    - 401/403 Auth: kein Retry
+    - Timeout: retry
+    Exponential Backoff mit 10% Jitter, max 30s.
+    """
+    import random as _random
+
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            last_exc = e
+            err_str = str(e).lower()
+
+            # Auth-Fehler → kein Retry
+            if any(x in err_str for x in ["401", "403", "unauthorized", "forbidden", "authentication"]):
+                raise
+
+            # Letzter Versuch → aufgeben
+            if attempt == max_attempts - 1:
+                raise
+
+            # Backoff berechnen: 1s, 2s, 4s... max 30s + Jitter
+            delay = min(base_delay * (2 ** attempt), 30.0)
+            delay *= (1 + _random.uniform(-0.1, 0.1))  # 10% Jitter
+
+            logger.warning(
+                "LLM-Fehler (Versuch %d/%d): %s — retry in %.1fs",
+                attempt + 1, max_attempts, str(e)[:80], delay
+            )
+            await asyncio.sleep(delay)
+
+    raise last_exc
+
+
 class Orchestrator:
     """
     Einer pro Core-Instanz.
@@ -245,7 +286,7 @@ class Orchestrator:
             kwargs["tools"]       = tools
             kwargs["tool_choice"] = "auto"
 
-        return await litellm.acompletion(**kwargs)
+        return await _llm_with_retry(lambda: litellm.acompletion(**kwargs))
 
     async def _anthropic_oauth_call(
         self,
@@ -313,7 +354,7 @@ class Orchestrator:
                 for t in tools
             ]
 
-        resp = await client.messages.create(**kwargs)
+        resp = await _llm_with_retry(lambda: client.messages.create(**kwargs))
 
         # Anthropic Response → litellm-kompatibles SimpleNamespace
         text = ""
