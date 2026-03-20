@@ -35,6 +35,7 @@ export function ChatPage() {
   const [projectName,  setProjectName]  = useState(id ?? "");
   const [showSwarm,    setShowSwarm]    = useState(false);
   const [projectData,  setProjectData]  = useState<Record<string, unknown>>({});
+  const [bossModel,    setBossModel]    = useState<{model?:string;temperature?:number}>({});
   const [showSuggest,  setShowSuggest]  = useState(false);
   const [suggestIdx,   setSuggestIdx]   = useState(0);
 
@@ -50,10 +51,19 @@ export function ChatPage() {
     api.get<Record<string, unknown>>(`/projects/${id}`)
       .then(d => {
         setProjectData(d);
-        const ident = d.identity as { name?: string } | undefined;
-        if (ident?.name) setProjectName(ident.name);
-        const chatCfg = d.config as { chat?: { show_swarm?: boolean } } | undefined;
-        if (chatCfg?.chat?.show_swarm) setShowSwarm(true);
+        const cfg = d.config as { identity?: { name?: string }; agents?: { boss?: string }; chat?: { show_swarm?: boolean } } | undefined;
+        if (cfg?.identity?.name) setProjectName(cfg.identity.name);
+        if (cfg?.chat?.show_swarm) setShowSwarm(true);
+        // Boss-Agent-Modell laden
+        const bossId = cfg?.agents?.boss;
+        if (bossId) {
+          api.get<Record<string, unknown>>(`/agents/${bossId}`)
+            .then(a => {
+              const llm = (a as any)?.config?.llm as { model?: string; temperature?: number } | undefined;
+              if (llm) setBossModel(llm);
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {});
     api.sessionHistory(id)
@@ -98,11 +108,10 @@ export function ChatPage() {
     }
 
     if (base === "/status") {
-      const agents  = projectData.agents as { boss?: string; workers?: string[] } | undefined;
-      const cfg     = projectData.config as { llm?: { model?: string } } | undefined;
-      const model   = cfg?.llm?.model ?? "nicht konfiguriert";
-      const boss    = agents?.boss ?? "—";
-      const workers = agents?.workers?.join(", ") || "—";
+      const cfg     = projectData.config as { agents?: { boss?: string; workers?: string[] } } | undefined;
+      const boss    = cfg?.agents?.boss ?? "—";
+      const workers = cfg?.agents?.workers?.join(", ") || "—";
+      const model   = bossModel.model ?? "nicht konfiguriert";
       sysMsg(
         `**Projekt:** ${projectName} (\`${id}\`)\n` +
         `**Boss-Agent:** ${boss}\n` +
@@ -124,9 +133,8 @@ export function ChatPage() {
     }
 
     if (base === "/model") {
-      const cfg   = projectData.config as { llm?: { model?: string; temperature?: number } } | undefined;
-      const model = cfg?.llm?.model ?? "nicht konfiguriert";
-      const temp  = cfg?.llm?.temperature ?? "—";
+      const model = bossModel.model ?? "nicht konfiguriert";
+      const temp  = bossModel.temperature ?? "—";
       sysMsg(`**Aktuelles Modell:** \`${model}\`\n**Temperatur:** ${temp}`);
       return true;
     }
