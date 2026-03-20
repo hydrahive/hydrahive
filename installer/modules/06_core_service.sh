@@ -67,6 +67,7 @@ StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=${CORE_DIR}/src
+EnvironmentFile=-/etc/octopos/llm_env
 
 [Install]
 WantedBy=multi-user.target
