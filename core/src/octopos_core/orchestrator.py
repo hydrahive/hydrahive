@@ -188,7 +188,8 @@ class Orchestrator:
         # 3. System-Prompt aufbauen (Soul + Skills)
         system_prompt = self._build_system_prompt(boss_cfg, content)
 
-        # 4. Session-Kontext als LLM-Messages
+        # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
+        await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self._sessions.get_context(project_id, max_messages=40))
 
@@ -221,6 +222,56 @@ class Orchestrator:
         return final_response, workers_used
 
     # ----------------------------------------------------------------- private
+
+    async def _compact_if_needed(
+        self,
+        project_id: str,
+        boss_cfg: AgentConfig,
+        token_threshold: int = 6000,
+        keep_last: int = 10,
+    ) -> None:
+        """
+        Context-Kompaktierung (#74): wenn Session zu gross wird, aelteren Kontext
+        per LLM zusammenfassen und durch eine Summary-Message ersetzen.
+        token_threshold: geschaetzte Tokens ab denen kompaktiert wird.
+        """
+        if self._sessions.estimated_tokens(project_id) < token_threshold:
+            return
+
+        session = self._sessions.get_active(project_id)
+        if not session or len(session.messages) <= keep_last + 2:
+            return
+
+        to_summarize = session.messages[:-keep_last]
+        history_text = "\n".join(
+            f"{m.role.value.upper()}: {m.content[:500]}"
+            for m in to_summarize
+        )
+
+        summary_prompt = [
+            {"role": "system", "content": (
+                "Fasse die folgende Konversation praegnant zusammen. "
+                "Behalte alle wichtigen Fakten, Entscheidungen und Aufgaben. "
+                "Antworte nur mit der Zusammenfassung, keine Einleitung."
+            )},
+            {"role": "user", "content": history_text},
+        ]
+
+        try:
+            resp = await _llm_with_retry(lambda: litellm.acompletion(
+                model=boss_cfg.llm.model,
+                messages=summary_prompt,
+                max_tokens=600,
+            ))
+            summary = resp.choices[0].message.content or ""
+            if summary:
+                self._sessions.compact(project_id, summary, keep_last=keep_last)
+                logger.info(
+                    "Context kompaktiert (Projekt: %s, ~%d Tokens → Summary)",
+                    project_id, self._sessions.estimated_tokens(project_id),
+                )
+        except Exception as e:
+            logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
 
     def _build_system_prompt(self, boss_cfg: AgentConfig, user_text: str) -> str:
         parts = [f"Du bist {boss_cfg.identity}."]
