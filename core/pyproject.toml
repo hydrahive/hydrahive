@@ -17,6 +17,7 @@ matrix-nio = ">=0.24"
 watchdog = ">=4.0"
 pyyaml = ">=6.0"
 redis = ">=5.0"
+anthropic = ">=0.40"
 httpx = ">=0.27"
 
 [tool.hatch.build.targets.wheel]
