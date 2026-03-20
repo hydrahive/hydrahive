@@ -890,6 +890,29 @@ async def get_ollama_models():
         return {"available": False, "models": [], "error": str(e)}
 
 
+
+@app.post("/llm/ollama/pull")
+async def pull_ollama_model(body: dict):
+    """Ollama-Modell herunterladen (blockiert bis fertig)."""
+    model = body.get("model","").strip()
+    if not model:
+        raise HTTPException(400, "model fehlt")
+    import subprocess as _sub
+    try:
+        result = _sub.run(
+            ["ollama", "pull", model],
+            capture_output=True, text=True, timeout=600
+        )
+        if result.returncode != 0:
+            raise HTTPException(500, f"ollama pull fehlgeschlagen: {result.stderr[:200]}")
+        logger.info("Ollama-Modell geladen: %s", model)
+        return {"pulled": True, "model": model}
+    except FileNotFoundError:
+        raise HTTPException(503, "ollama nicht installiert")
+    except _sub.TimeoutExpired:
+        raise HTTPException(504, "Timeout beim Laden des Modells")
+
+
 # ================================================================== Status
 
 @app.get("/status")
