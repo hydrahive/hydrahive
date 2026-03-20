@@ -34,9 +34,18 @@ else
 fi
 
 "${VENV_DIR}/bin/pip" install -q --upgrade pip
-"${VENV_DIR}/bin/pip" install -q \
-    fastapi "uvicorn[standard]" pydantic pyyaml watchdog litellm
-success "Python-Abhängigkeiten installiert"
+
+# Erst pyproject.toml installieren (alle Deps aus dem Repo)
+if [ -f "${CORE_DIR}/pyproject.toml" ]; then
+    "${VENV_DIR}/bin/pip" install -q -e "${CORE_DIR}"
+    success "Python-Abhängigkeiten aus pyproject.toml installiert"
+else
+    # Fallback: manuelle Liste (sollte nicht passieren)
+    "${VENV_DIR}/bin/pip" install -q \
+        fastapi "uvicorn[standard]" pydantic pyyaml watchdog litellm \
+        anthropic httpx "python-jose[cryptography]" slowapi matrix-nio
+    success "Python-Abhängigkeiten installiert (Fallback)"
+fi
 
 # --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
 info "Kopiere octopos-core Quellcode..."
