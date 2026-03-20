@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OctopOS — AI Agent Server Platform</title>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #06b6d4;
+      --accent2: #0891b2;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card: #1e293b;
+      --border: #334155;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* NAV */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.2rem 2rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,14,26,0.95);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    .logo span { color: var(--text); }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+    nav a:hover { color: var(--accent); }
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+    .badge {
+      background: var(--accent);
+      color: #000;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .hero-tag {
+      display: inline-block;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 0.8rem;
+      padding: 0.3rem 1rem;
+      border-radius: 999px;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 1.5rem;
+      letter-spacing: -1px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      padding: 0.8rem 2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-secondary {
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.8rem 2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: border-color 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--accent); }
+
+    /* OCTOPUS SVG */
+    .octo-hero {
+      margin: 3rem auto 0;
+      display: flex;
+      justify-content: center;
+    }
+    .octo-svg {
+      width: 160px;
+      height: 160px;
+      filter: drop-shadow(0 0 40px rgba(6,182,212,0.3));
+      animation: float 4s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    /* TAGLINE BAR */
+    .tagline-bar {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 2rem;
+      text-align: center;
+      font-size: 1.1rem;
+      color: var(--muted);
+      margin: 4rem 0;
+    }
+    .tagline-bar strong { color: var(--text); }
+
+    /* FEATURES */
+    .section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+    .section-title {
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .section-sub {
+      text-align: center;
+      color: var(--muted);
+      margin-bottom: 3rem;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.8rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    .card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .card p { color: var(--muted); font-size: 0.9rem; }
+
+    /* ARCHITECTURE */
+    .arch-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 2;
+    }
+    .arch-box .comment { color: var(--muted); }
+
+    /* PROFILES */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .profile-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+    }
+    .profile-card.featured { border-color: var(--accent); }
+    .profile-card h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+    }
+    .profile-card .price-tag {
+      color: var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+    .profile-card ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .profile-card li { color: var(--muted); font-size: 0.9rem; }
+    .profile-card li::before { content: "✓ "; color: var(--accent); }
+
+    /* FLOW */
+    .flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 2rem 0;
+    }
+    .flow-step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8rem 1.4rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .flow-arrow { color: var(--accent); font-size: 1.2rem; }
+
+    /* STATUS */
+    .status-bar {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      max-width: 700px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4rem;
+    }
+    footer strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">Octo<span>POS</span></div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#profiles">Profiles</a>
+    <a href="#architecture">Architecture</a>
+    <span class="badge">Early Dev</span>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-tag">AI Agent Server Platform</div>
+  <h1>One brain.<br><em>Many arms.</em><br>Infinite tasks.</h1>
+  <p>Install Linux. Install OctopOS. Done.<br>
+  Manage your entire AI agent swarm from a single web console.</p>
+  <div class="hero-cta">
+    <a href="#profiles" class="btn-primary">Get Started</a>
+    <a href="#architecture" class="btn-secondary">How it works →</a>
+  </div>
+  <div class="octo-hero">
+    <svg class="octo-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- Body -->
+      <ellipse cx="100" cy="85" rx="45" ry="50" fill="#06b6d4" opacity="0.9"/>
+      <!-- Head shine -->
+      <ellipse cx="88" cy="68" rx="15" ry="18" fill="#67e8f9" opacity="0.3"/>
+      <!-- Eyes -->
+      <circle cx="85" cy="78" r="8" fill="#0a0e1a"/>
+      <circle cx="115" cy="78" r="8" fill="#0a0e1a"/>
+      <circle cx="87" cy="76" r="3" fill="#fff"/>
+      <circle cx="117" cy="76" r="3" fill="#fff"/>
+      <!-- Tentacles -->
+      <path d="M65 120 Q45 145 55 165 Q60 175 50 185" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M80 128 Q68 155 72 175 Q74 185 65 192" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M100 132 Q100 160 98 180 Q97 190 95 198" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M120 128 Q132 155 128 175 Q126 185 135 192" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M135 120 Q155 145 145 165 Q140 175 150 185" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <!-- Suction cups -->
+      <circle cx="52" cy="157" r="3" fill="#0891b2"/>
+      <circle cx="67" cy="175" r="3" fill="#0891b2"/>
+      <circle cx="70" cy="168" r="3" fill="#0891b2"/>
+      <circle cx="97" cy="172" r="3" fill="#0891b2"/>
+      <circle cx="128" cy="168" r="3" fill="#0891b2"/>
+      <circle cx="133" cy="157" r="3" fill="#0891b2"/>
+    </svg>
+  </div>
+</section>
+
+<!-- TAGLINE -->
+<div class="tagline-bar">
+  <strong>"Proxmox for AI Agents"</strong> — The missing platform for self-hosted agent swarms.
+</div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+  <p class="section-sub">Built for real infrastructure. No Docker networking nightmares.</p>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <h3>Boss + Worker Swarm</h3>
+      <p>One Boss-Agent per project coordinates a pool of specialists. Parallel task dispatching, aggregated results.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔌</div>
+      <h3>Plug & Play Installation</h3>
+      <p>One curl command. GPU auto-detected. Services configured. Web console ready in minutes.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💬</div>
+      <h3>Matrix-based Communication</h3>
+      <p>Agents communicate via Matrix rooms. Use Element to jump in and supervise any conversation live.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <h3>Multi-LLM per Agent</h3>
+      <p>Each agent runs its own model. Ollama locally, Claude API, OpenAI — mixed per task. Graceful fallback built-in.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📁</div>
+      <h3>Project File Shares</h3>
+      <p>Each project gets a Linux user, isolated filesystem, and automatic Samba share. Agents and clients share data natively.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔒</div>
+      <h3>Defense in Depth</h3>
+      <p>Three-layer tool permission model. Agents can only use what the Core Registry allows — regardless of their config.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FLOW -->
+<section class="section">
+  <h2 class="section-title" style="margin-bottom:1rem">How it works</h2>
+  <div class="flow">
+    <div class="flow-step">👤 User writes in Web Chat</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">📡 Matrix Room</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">🧠 Boss Agent</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">🐙 Worker Swarm</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">✅ Result</div>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;">The user sees a clean chat interface. The agents do the rest.</p>
+</section>
+
+<!-- ARCHITECTURE -->
+<section class="section" id="architecture">
+  <h2 class="section-title">5-Layer Architecture</h2>
+  <p class="section-sub">Clean separation of concerns. Every layer replaceable.</p>
+  <div class="arch-box">
+    <div>┌─────────────────────────────────┐</div>
+    <div>│  <span style="color:#f1f5f9">CLIENT LAYER</span>  <span class="comment">Web Chat · Element · API</span>  │</div>
+    <div>├─────────────────────────────────┤</div>
+    <div>│  <span style="color:#f1f5f9">MANAGEMENT LAYER</span>  <span class="comment">Admin Console · Auth</span>  │</div>
+    <div>├─────────────────────────────────┤</div>
+    <div>│  <span style="color:#f1f5f9">COMM BUS</span>  <span class="comment">Conduit · Matrix Rooms</span>        │</div>
+    <div>├─────────────────────────────────┤</div>
+    <div>│  <span style="color:#f1f5f9">CORE RUNTIME</span>  <span class="comment">Orchestrator · AgentLink</span>  │</div>
+    <div>├─────────────────────────────────┤</div>
+    <div>│  <span style="color:#f1f5f9">LLM ADAPTER</span>  <span class="comment">Ollama · Claude · OpenAI</span>  │</div>
+    <div>└─────────────────────────────────┘</div>
+  </div>
+</section>
+
+<!-- PROFILES -->
+<section class="section" id="profiles">
+  <h2 class="section-title">Deployment Profiles</h2>
+  <p class="section-sub">Start small. Scale to full GPU when ready.</p>
+  <div class="grid-2">
+    <div class="profile-card">
+      <h3>🔵 Lite</h3>
+      <div class="price-tag">Cloud APIs · No GPU required</div>
+      <ul>
+        <li>VM or VPS — any hardware</li>
+        <li>Claude API + OpenAI</li>
+        <li>Full web console</li>
+        <li>Matrix communication</li>
+        <li>All project features</li>
+      </ul>
+    </div>
+    <div class="profile-card featured">
+      <h3>🟣 Full</h3>
+      <div class="price-tag">Local LLMs · GPU Passthrough</div>
+      <ul>
+        <li>PCIe GPU passthrough (e.g. GTX 1080)</li>
+        <li>Ollama — llama3.1:8b default</li>
+        <li>No API costs for local tasks</li>
+        <li>Hybrid: local + cloud per agent</li>
+        <li>Auto-detected at install time</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STATUS -->
+<section class="section">
+  <div class="status-bar">
+    <div class="status-dot"></div>
+    <div>
+      <strong>Currently in active development</strong><br>
+      <span style="color:var(--muted);font-size:0.85rem;">Architecture complete · Brainstorming Sessions 1–6 done · Implementation starting</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <strong>OctopOS</strong> — AI Agent Server Platform<br>
+  <span style="font-size:0.8rem;margin-top:0.5rem;display:block;">One brain. Many arms. Infinite tasks.</span>
+</footer>
+
+</body>
+</html>
