@@ -564,6 +564,35 @@ class IncomingMessage(BaseModel):
     sender:  str = "user"
 
 
+
+@app.post("/projects/{project_id}/message/stream")
+async def send_message_stream(project_id: str, req: IncomingMessage):
+    """
+    Streaming-Version: SSE Token-für-Token.
+    Client: fetch + ReadableStream oder EventSource.
+    Format: data: {"text": "..."} / data: {"done": true} / data: {"error": "..."}
+    """
+    from fastapi.responses import StreamingResponse as _SR
+    import asyncio as _asyncio
+
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    if not discovery.get(cfg.agents.boss):
+        raise HTTPException(503, f"Boss-Agent nicht verfügbar")
+
+    async def event_stream():
+        async for chunk in orchestrator.handle_message_stream(
+            project_id=project_id,
+            project_cfg=cfg,
+            content=req.content,
+            sender=req.sender,
+        ):
+            yield chunk
+
+    return _SR(event_stream(), media_type="text/event-stream",
+               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
 @app.post("/projects/{project_id}/message")
 async def send_message(project_id: str, req: IncomingMessage):
     """
