@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OctopOS — Technische Dokumentation</title>
+  <style>
+    :root {
+      --bg: #0a0e1a; --bg2: #111827; --accent: #06b6d4;
+      --text: #f1f5f9; --muted: #94a3b8; --card: #1e293b; --border: #334155;
+      --sidebar-w: 260px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; display: flex; min-height: 100vh; }
+    .sidebar { width: var(--sidebar-w); min-height: 100vh; background: var(--bg2); border-right: 1px solid var(--border); position: fixed; top: 0; left: 0; overflow-y: auto; display: flex; flex-direction: column; }
+    .sidebar-header { padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--border); }
+    .sidebar-header a { text-decoration: none; }
+    .sidebar-logo { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+    .sidebar-logo span { color: var(--text); }
+    .sidebar-back { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; display: block; text-decoration: none; }
+    .sidebar-back:hover { color: var(--accent); }
+    nav.toc { padding: 1rem 0; flex: 1; }
+    .toc-section { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 0.8rem 1.5rem 0.3rem; }
+    .toc a { display: block; padding: 0.45rem 1.5rem; font-size: 0.85rem; color: var(--muted); text-decoration: none; transition: color 0.15s, background 0.15s; border-left: 2px solid transparent; }
+    .toc a:hover { color: var(--text); background: rgba(6,182,212,0.05); border-left-color: var(--accent); }
+    .toc a.active { color: var(--accent); background: rgba(6,182,212,0.08); border-left-color: var(--accent); }
+    .content { margin-left: var(--sidebar-w); flex: 1; padding: 3rem 4rem; max-width: 900px; }
+    .page-title { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.5px; }
+    .page-intro { color: var(--muted); font-size: 1rem; margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+    .chapter { margin-bottom: 4rem; scroll-margin-top: 2rem; }
+    .chapter h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--border); color: var(--accent); }
+    .chapter h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--text); }
+    .chapter p { color: var(--muted); margin-bottom: 0.8rem; font-size: 0.95rem; }
+    .chapter ul, .chapter ol { margin: 0.5rem 0 1rem 1.5rem; }
+    .chapter li { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.3rem; }
+    .chapter strong { color: var(--text); }
+    .chapter pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; overflow-x: auto; margin: 1rem 0; }
+    .chapter code { font-family: 'Courier New', Consolas, monospace; font-size: 0.85rem; color: var(--accent); }
+    .chapter pre code { color: #e2e8f0; }
+    .chapter p code, .chapter li code { background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.2); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.82rem; color: var(--accent); }
+    .note { background: rgba(6,182,212,0.06); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 0.8rem 1.2rem; margin: 1rem 0; font-size: 0.9rem; color: var(--muted); }
+    .note strong { color: var(--accent); }
+    .chapter table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .chapter th { background: var(--card); text-align: left; padding: 0.6rem 1rem; color: var(--accent); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+    .chapter td { padding: 0.6rem 1rem; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .chapter tr:last-child td { border-bottom: none; }
+    .chapter tr:hover td { background: rgba(255,255,255,0.02); }
+    @media (max-width: 768px) { .sidebar { display: none; } .content { margin-left: 0; padding: 2rem 1.5rem; } }
+  </style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <a href="index.htm"><div class="sidebar-logo">Octo<span>POS</span></div></a>
+    <a class="sidebar-back" href="index.htm">← Zurück zur Startseite</a>
+    <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">Technische Doku</div>
+  </div>
+  <nav class="toc">
+    <div class="toc-section">Inhalt</div>
+    <a href="#architektur">1. Architektur-Übersicht</a>
+    <a href="#verzeichnisse">2. Verzeichnisstruktur</a>
+    <a href="#module">3. Core-Module</a>
+    <a href="#lebenszyklus">4. Agent-Lebenszyklus</a>
+    <a href="#orchestrator">5. Orchestrator &amp; Message-Flow</a>
+    <a href="#konfiguration">6. Konfigurationsformate</a>
+    <a href="#tool-system">7. Tool-System</a>
+    <a href="#skill-system">8. Skill-System (QMD)</a>
+    <a href="#matrix">9. Matrix-Integration</a>
+    <a href="#sessions">10. Session-Management</a>
+    <a href="#sicherheit">11. Sicherheitsmodell</a>
+    <a href="#installer">12. Installer-Architektur</a>
+    <a href="#datenfluss">13. Datenfluss A→Z</a>
+    <a href="#fehlerbehandlung">14. Fehlerbehandlung</a>
+    <a href="#limitierungen">15. Bekannte Limitierungen</a>
+  </nav>
+</aside>
+
+<main class="content">
+  <h1 class="page-title">Technische Dokumentation</h1>
+  <p class="page-intro">Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern oder deployen wollen.</p>
+
+  <section class="chapter" id="architektur">
+    <h2>1. Architektur-Übersicht</h2>
+    <pre><code>┌─────────────────────────────────────────────────────┐
+│                   Browser (React)                    │
+│              console/src/  (Vite + Tailwind)         │
+└────────────────────────┬────────────────────────────┘
+                         │ HTTPS (nginx)
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│              nginx (Port 443 / 80→443)               │
+│   Static: /opt/octopos/console/                      │
+│   Proxy:  /api/ → localhost:8765                     │
+└────────────────────────┬────────────────────────────┘
+                         │ HTTP
+                         ▼
+┌─────────────────────────────────────────────────────┐
+│           OctopOS Core (FastAPI, Port 8765)          │
+│  ┌──────────┐  ┌─────────────┐  ┌───────────────┐  │
+│  │  Agent   │  │  Project    │  │   Session     │  │
+│  │Discovery │  │  Loader     │  │   Manager     │  │
+│  └────┬─────┘  └──────┬──────┘  └───────┬───────┘  │
+│  ┌────▼──────────────────────────────────▼───────┐  │
+│  │              Orchestrator                      │  │
+│  │  Boss-Agent → dispatch_task → Worker-Agenten  │  │
+│  └────────────────────┬──────────────────────────┘  │
+│  ┌────────────────────▼──────────────────────────┐  │
+│  │            AgentRuntime + Watchdog             │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+                         │
+              ┌──────────▼──────────┐
+              │  conduwuit (Matrix) │
+              │  Port 6167          │
+              └─────────────────────┘</code></pre>
+
+    <h3>Komponenten</h3>
+    <table>
+      <tr><th>Komponente</th><th>Technologie</th><th>Aufgabe</th></tr>
+      <tr><td><strong>Console</strong></td><td>React 18, Vite, Tailwind, shadcn</td><td>Web-UI</td></tr>
+      <tr><td><strong>Core</strong></td><td>FastAPI, Python 3.12, litellm</td><td>REST-API, Orchestration</td></tr>
+      <tr><td><strong>Matrix</strong></td><td>conduwuit, matrix-nio</td><td>Messaging-Backend</td></tr>
+      <tr><td><strong>nginx</strong></td><td>nginx 1.24+</td><td>Reverse-Proxy, TLS</td></tr>
+      <tr><td><strong>Ollama</strong></td><td>ollama</td><td>Lokale LLM-Inferenz</td></tr>
+    </table>
+  </section>
+
+  <section class="chapter" id="verzeichnisse">
+    <h2>2. Verzeichnisstruktur</h2>
+    <h3>Repository</h3>
+    <pre><code>octopos/
+├── core/
+│   └── src/octopos_core/
+│       ├── main.py                # FastAPI-App, alle Endpoints
+│       ├── orchestrator.py        # Boss-Agent, Task-Dispatching
+│       ├── agent_runtime.py       # Agent-Lifecycle, Watchdog
+│       ├── agent_discovery.py     # /agents/ Verzeichnis beobachten
+│       ├── agent_config.py        # agent.yaml Parsing (Pydantic)
+│       ├── project_config.py      # project.yaml Parsing (Pydantic)
+│       ├── project_loader.py      # /projects/ Verzeichnis beobachten
+│       ├── session_manager.py     # Chat-History, Persistenz
+│       ├── matrix_agent.py        # Matrix-Bot Basisklasse
+│       ├── skill_loader.py        # QMD Skill-Parsing
+│       ├── tool_registry.py       # Tool-Interface, Path-Safety
+│       └── provisioner.py         # Matrix-User, Samba-Share anlegen
+├── console/src/
+│   ├── pages/                     # Seiten (eine Datei pro Route)
+│   ├── components/                # Wiederverwendbare Komponenten
+│   │   ├── layout/AdminLayout.tsx
+│   │   ├── SkillsPanel.tsx
+│   │   └── WebhooksPanel.tsx
+│   ├── hooks/useAuth.ts
+│   └── lib/api.ts
+├── installer/
+│   ├── install.sh
+│   └── modules/
+│       ├── 01_os_check.sh
+│       ├── 02_gpu_detect.sh
+│       ├── 03_dependencies.sh
+│       ├── 04_tuwunel.sh
+│       ├── 05_admin_account.sh
+│       ├── 06_core_service.sh
+│       ├── 07_console.sh
+│       ├── 08_ollama.sh
+│       └── 09_https.sh
+└── docs/</code></pre>
+
+    <h3>Laufzeit (auf dem Server)</h3>
+    <pre><code>/opt/octopos/core/src/octopos_core/   # Core-Quellcode
+/opt/octopos/console/                  # Gebaute React-App
+/opt/octopos/venv/                     # Python-Virtualenv
+
+/agents/boss-main/
+│   ├── agent.yaml
+│   ├── soul.md
+│   └── skills/
+
+/projects/buchhaltung/
+│   ├── project.yaml
+│   ├── webhooks.json
+│   └── sessions/
+
+/etc/octopos/
+│   ├── jwt_secret
+│   ├── llm_config.json
+│   ├── claude_oauth_token
+│   ├── users.json
+│   ├── agent_tokens/
+│   └── tls/
+
+/var/log/octopos/audit.jsonl</code></pre>
+  </section>
+
+  <section class="chapter" id="module">
+    <h2>3. Core-Module</h2>
+
+    <h3>main.py</h3>
+    <p>FastAPI-Applikation mit Lifespan-Management. Enthält alle REST-Endpoints (~1180 Zeilen).</p>
+    <p><strong>Startup-Reihenfolge:</strong></p>
+    <ol>
+      <li><code>AgentDiscovery.start()</code> — beobachtet <code>/agents/</code> mit watchdog</li>
+      <li><code>ProjectLoader.start()</code> — beobachtet <code>/projects/</code></li>
+      <li><code>SessionManager.start()</code> — lädt aktive Sessions</li>
+      <li><code>AgentRuntime.start()</code> — startet Core-Agenten, Watchdog-Loop</li>
+      <li>JWT-Secret laden oder generieren</li>
+      <li>Matrix Admin-Token holen</li>
+      <li><code>_setup_matrix_clients()</code> — BossMatrixAgent für Projekte mit Room starten</li>
+    </ol>
+
+    <h3>agent_runtime.py</h3>
+    <p>Verwaltet laufende Agenten als <code>AgentHandle</code>-Objekte:</p>
+    <pre><code>@dataclass
+class AgentHandle:
+    config:         AgentConfig
+    status:         AgentStatus      # STARTING | RUNNING | STOPPED | ERROR
+    last_heartbeat: float
+    restart_count:  int
+    task:           asyncio.Task     # _run_agent() Coroutine
+    matrix_client:  MatrixAgent | None</code></pre>
+    <p><strong>Watchdog-Loop</strong> (alle 10s): Prüft Heartbeat-Alter gegen <code>timeout</code>. Bei Timeout: <code>on_failure</code> auswerten (restart / stop / alert).</p>
+
+    <h3>orchestrator.py</h3>
+    <p>Kernstück des Systems. Empfängt Nutzer-Nachrichten, baut LLM-Kontext auf, führt Tool-Calls aus.</p>
+    <p><strong>Message-Queue:</strong> Pro Projekt eine <code>asyncio.Queue</code>. Parallele Nachrichten werden sequenziell verarbeitet.</p>
+
+    <h3>session_manager.py</h3>
+    <p>Jedes Projekt hat genau eine aktive Session. <code>get_context(max_messages=50)</code> gibt die letzten N Nachrichten als OpenAI-kompatibles Format zurück.</p>
+  </section>
+
+  <section class="chapter" id="lebenszyklus">
+    <h2>4. Agent-Lebenszyklus</h2>
+    <pre><code>Verzeichnis /agents/&lt;id&gt;/ angelegt
+         │
+         ▼
+AgentDiscovery erkennt agent.yaml (watchdog)
+         │
+         ▼
+AgentConfig wird geparst (Pydantic-Validierung)
+         │
+         ▼
+AgentRuntime._spawn() → AgentHandle anlegen
+         │
+         ▼
+_run_agent() als asyncio.Task starten
+         │
+    ┌────▼────┐
+    │ Matrix? │
+    │  ja  ───▶ matrix_client.start() → run() (Sync-Loop)
+    │            ↕ Watchdog: bei Absturz → 15s → Restart
+    │  nein ──▶ Heartbeat-Ticker (asyncio.sleep)
+    └─────────┘
+         │
+         ▼
+Watchdog prüft last_heartbeat alle 10s
+Timeout? → on_failure: restart → _respawn()</code></pre>
+  </section>
+
+  <section class="chapter" id="orchestrator">
+    <h2>5. Orchestrator und Message-Flow</h2>
+    <pre><code>POST /projects/{id}/message[/stream]
+         │
+         ▼
+orchestrator.handle_message()
+         │ (asyncio.Queue pro Projekt)
+         ▼
+_handle_message_impl()
+         ├─ 1. User-Message → SessionManager.append()
+         ├─ 2. Boss-Agent Soul laden (soul.md)
+         ├─ 3. Skills matchen (scope=always oder trigger-match)
+         ├─ 4. System-Prompt = Soul + Skills
+         ├─ 5. litellm.acompletion(messages=[system, history, user])
+         └─ 6. Tool-Calls?
+              ├─ dispatch_task → Worker-Agent spawnen
+              │   └─ Worker führt Tool aus → Ergebnis zurück an Boss
+              └─ Weitere LLM-Iteration bis fertig
+                       │
+              Assistant-Message → SessionManager.append()
+                       │
+              return (response_text, workers_used)</code></pre>
+    <p><strong>Streaming:</strong> Identischer Flow, aber <code>litellm.acompletion(stream=True)</code>. Yields <code>data: {"text": "..."}</code> SSE-Events, Abschluss: <code>data: {"done": true}</code>.</p>
+  </section>
+
+  <section class="chapter" id="konfiguration">
+    <h2>6. Konfigurationsformate</h2>
+    <h3>agent.yaml</h3>
+    <pre><code>id: mein-agent              # Pflicht, eindeutig
+type: specialist             # boss | specialist | worker
+identity: Mein Agent Name
+
+llm:
+  model: llama3.1:8b        # litellm-kompatibler Modellname
+  temperature: 0.7
+  max_tokens: 4096
+
+soul: |                     # Optional: inline — oder soul.md verwenden
+  Du bist ein hilfreicher Assistent...
+
+tools:
+  - file_read
+  - file_write
+  - web_search
+  - dispatch_task
+
+heartbeat:
+  interval: 30s
+  timeout: 90s
+  on_failure: restart        # restart | stop | alert</code></pre>
+
+    <h3>project.yaml</h3>
+    <pre><code>id: mein-projekt
+version: "1.0.0"
+
+identity:
+  name: Mein Projekt
+  description: Optional
+
+agents:
+  boss: boss-agent-id
+  workers:
+    - specialist-1
+
+matrix:
+  room: "!roomid:server.de"  # leer → wird beim Provisionieren angelegt
+
+filesystem:
+  samba: true
+
+chat:
+  show_swarm: false</code></pre>
+
+    <h3>soul.md</h3>
+    <pre><code># Steuerbert
+
+Du bist Steuerbert, ein erfahrener Steuerberater-Assistent.
+
+## Dein Charakter
+- Präzise und verlässlich
+- Du weist auf Fristen und Risiken hin
+
+## Wichtige Regeln
+- Keine Rechtsberatung, nur Information
+- Bei Unsicherheit: Fachmann empfehlen</code></pre>
+  </section>
+
+  <section class="chapter" id="tool-system">
+    <h2>7. Tool-System</h2>
+    <pre><code>class BaseTool(ABC):
+    @property @abstractmethod
+    def id(self) -> str: ...          # "file_read"
+
+    @property @abstractmethod
+    def description(self) -> str: ... # Für LLM sichtbar
+
+    @property @abstractmethod
+    def parameters(self) -> dict: ... # JSON-Schema (function calling)
+
+    @abstractmethod
+    async def execute(
+        self, agent_id: str, project_id: str, **kwargs,
+    ) -> str: ...                     # Rückgabe als String ans LLM</code></pre>
+
+    <h3>Filesystem-Safety</h3>
+    <p>Alle Filesystem-Tools müssen <code>assert_path_within_project()</code> aufrufen:</p>
+    <pre><code>from .tool_registry import assert_path_within_project
+
+async def execute(self, agent_id, project_id, path, **kwargs):
+    safe_path = assert_path_within_project(path, project_id)
+    # garantiert innerhalb /projects/&lt;id&gt;/
+    return safe_path.read_text()</code></pre>
+    <div class="note"><strong>Path-Traversal-Schutz:</strong> <code>../../etc/passwd</code>, absolute Pfade außerhalb und Symlink-Escapes werden mit <code>PathSafetyError</code> abgelehnt.</div>
+  </section>
+
+  <section class="chapter" id="skill-system">
+    <h2>8. Skill-System (QMD)</h2>
+    <p>QMD = YAML-Frontmatter + Markdown. Skills werden aus <code>/agents/&lt;id&gt;/skills/*.md</code> geladen.</p>
+    <p><strong>Ladereihenfolge:</strong></p>
+    <ol>
+      <li><code>load_skills(agent_dir)</code> lädt alle <code>.md</code>-Dateien</li>
+      <li>Sortierung nach <code>priority</code> (aufsteigend)</li>
+      <li><code>select_skills(skills, user_text)</code> filtert nach scope/triggers</li>
+      <li><code>skills_to_system_prompt(selected)</code> baut System-Prompt-Abschnitt</li>
+    </ol>
+    <table>
+      <tr><th>scope</th><th>Verhalten</th></tr>
+      <tr><td><code>always</code></td><td>Immer geladen</td></tr>
+      <tr><td><code>on-demand</code></td><td>Wenn mindestens ein Trigger-Keyword im Nutzer-Text vorkommt (case-insensitive)</td></tr>
+    </table>
+    <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu geladen — Änderungen wirken sofort ohne Core-Neustart.</div>
+  </section>
+
+  <section class="chapter" id="matrix">
+    <h2>9. Matrix-Integration</h2>
+    <pre><code>conduwuit (Port 6167, intern)
+    ↑ nginx proxy (Port 8008, extern)
+    ↑
+matrix-nio AsyncClient
+    ↑
+MatrixAgent (Basisklasse)
+    ↑
+BossMatrixAgent (pro Projekt mit Room)</code></pre>
+
+    <h3>MatrixAgent Interface</h3>
+    <pre><code>class MatrixAgent(ABC):
+    async def start(self) -> None: ...    # Login + Rooms joinen
+    async def run(self) -> None: ...      # Sync-Loop (blockierend)
+    async def stop(self) -> None: ...     # Cleanup
+    async def send_message(self, room_id, text): ...
+    async def send_markdown(self, room_id, markdown): ...
+
+    @abstractmethod
+    async def on_user_message(self, room, text, sender): ...</code></pre>
+
+    <h3>Authentifizierung</h3>
+    <p>Bot-Accounts werden beim ersten Start automatisch auf conduwuit registriert. Der Access-Token wird in <code>/etc/octopos/agent_tokens/&lt;id&gt;.json</code> gespeichert.</p>
+
+    <h3>Watchdog</h3>
+    <p>Bei Exception in <code>run()</code>: 15s warten → <code>start()</code> + <code>run()</code> neu starten. Endlosschleife bis CancelledError.</p>
+  </section>
+
+  <section class="chapter" id="sessions">
+    <h2>10. Session-Management</h2>
+    <pre><code>@dataclass
+class Message:
+    role:      MessageRole    # user | assistant | system | tool
+    content:   str
+    timestamp: str            # ISO-8601 UTC
+    agent_id:  str | None
+
+@dataclass
+class Session:
+    id:         str           # UUID4
+    project_id: str
+    started_at: str
+    messages:   list[Message]</code></pre>
+    <p><code>get_context(max_messages=50)</code> gibt die letzten N Nachrichten als <code>[{"role": "user", "content": "..."}]</code> zurück — direkt kompatibel mit litellm/OpenAI-API.</p>
+    <p>Sessions werden in <code>/projects/&lt;id&gt;/sessions/</code> als JSON persistiert. Beim Core-Neustart automatisch geladen.</p>
+  </section>
+
+  <section class="chapter" id="sicherheit">
+    <h2>11. Sicherheitsmodell</h2>
+    <h3>Authentifizierung</h3>
+    <ul>
+      <li>JWT HS256, 24h Gültigkeit</li>
+      <li>Secret in <code>/etc/octopos/jwt_secret</code> (600, <code>octopos:octopos</code>)</li>
+      <li>Bei fehlendem Secret → <code>503</code> (kein stilles Akzeptieren des leeren Secrets)</li>
+      <li>Rate-Limiting: 10 Login-Versuche pro Minute pro IP</li>
+    </ul>
+    <h3>Filesystem-Isolation</h3>
+    <p>Jedes Projekt läuft als eigener Linux-User <code>proj_&lt;id&gt;</code>. Agenten können nur auf <code>/projects/&lt;id&gt;/</code> schreiben. <code>assert_path_within_project()</code> wird in allen Filesystem-Tools erzwungen.</p>
+    <h3>Setup-Schutz</h3>
+    <p><code>POST /setup</code> ist nur verfügbar solange <code>users.json</code> leer ist. Race Condition verhindert durch <code>asyncio.Lock</code>. Atomares Schreiben via <code>tmp.replace(target)</code>.</p>
+    <h3>Audit-Log</h3>
+    <p>Alle sicherheitsrelevanten Aktionen in <code>/var/log/octopos/audit.jsonl</code>. Append-only, non-blocking.</p>
+  </section>
+
+  <section class="chapter" id="installer">
+    <h2>12. Installer-Architektur</h2>
+    <p>Modular — jedes Modul ein eigenständiges Bash-Skript, via <code>source</code> eingebunden. Alle Module teilen <code>info()</code>, <code>success()</code>, <code>warn()</code>, <code>error()</code> und <code>$PROFILE</code> (<code>minimal | standard | full</code>).</p>
+    <table>
+      <tr><th>Modul</th><th>Idempotenz-Prüfung</th></tr>
+      <tr><td><code>04_tuwunel.sh</code></td><td>Versions-Check der installierten Binary</td></tr>
+      <tr><td><code>06_core_service.sh</code></td><td>venv existiert, users.json angelegt</td></tr>
+      <tr><td><code>07_console.sh</code></td><td>npm build immer, nginx config wird überschrieben</td></tr>
+      <tr><td><code>08_ollama.sh</code></td><td><code>ollama</code> Binary vorhanden → skip</td></tr>
+      <tr><td><code>09_https.sh</code></td><td>Cert-Datei vorhanden → skip, Ablaufdatum loggen</td></tr>
+    </table>
+  </section>
+
+  <section class="chapter" id="datenfluss">
+    <h2>13. Datenfluss — Eine Nachricht von A bis Z</h2>
+    <pre><code>1. Browser        POST /api/projects/buchhaltung/message/stream
+                  Body: {"content": "Was ist die Umsatzsteuer?"}
+
+2. nginx          Proxy → localhost:8765/projects/.../message/stream
+
+3. FastAPI        Auth-Check JWT → send_message_stream()
+
+4. Orchestrator   asyncio.Queue für "buchhaltung"
+                  _queue_worker() → _handle_message_impl()
+
+5. Impl:
+   a) Session: append(USER, "Was ist die Umsatzsteuer?")
+   b) System-Prompt: soul.md + QMD-Skills
+      (on-demand: "umsatzsteuer" matched → Skill geladen)
+   c) History: letzte 20 Nachrichten aus Session
+   d) Tools: dispatch_task, file_read (aus agent.yaml ∩ Registry)
+
+6. LLM-Call       OAuth-Token vorhanden?
+   → Ja:  Anthropic SDK direkt
+   → Nein: litellm (Ollama / OpenAI)
+
+7. Streaming      Token für Token → SSE: data: {"text": "Die Umsatz..."}
+
+8. Tool-Loop      LLM ruft dispatch_task auf?
+   → Worker-Agent gespawnt → LLM-Call → Ergebnis zurück an Boss
+
+9. Session        append(ASSISTANT, vollständige Antwort)
+
+10. Browser       ReadableStream liest SSE → Token erscheinen live
+    ChatPage      Markdown-Rendering (ReactMarkdown + prose)</code></pre>
+  </section>
+
+  <section class="chapter" id="fehlerbehandlung">
+    <h2>14. Fehlerbehandlung und Resilience</h2>
+    <h3>Agent-Ausfall</h3>
+    <ul>
+      <li><strong>Heartbeat-Timeout:</strong> Watchdog erkennt nach <code>timeout</code> Sekunden → <code>on_failure</code> Aktion</li>
+      <li><code>restart</code>: Agent wird neu gestartet, Matrix-Client reconnectet</li>
+      <li><code>stop</code>: Agent gestoppt, bleibt im Status <code>error</code></li>
+      <li><code>alert</code>: Nur Log-Eintrag, kein automatischer Neustart</li>
+    </ul>
+    <h3>Matrix-Verbindungsabbruch</h3>
+    <p>Bei Exception in <code>run()</code>: 15s warten → <code>start()</code> + <code>run()</code> neu. Audit-Log: <code>agent.matrix_reconnect</code>.</p>
+    <h3>Core-Neustart</h3>
+    <p>Sessions persistent in <code>/projects/&lt;id&gt;/sessions/</code> — werden beim Start geladen. Agenten werden automatisch neu gestartet. Matrix-Bots joinen wieder aus <code>project.yaml</code>.</p>
+    <h3>LLM-Fehler</h3>
+    <ul>
+      <li>OAuth-Token abgelaufen → <code>[Fehler] LLM nicht erreichbar</code></li>
+      <li>Ollama offline → litellm-Fallback schlägt fehl → Fehlermeldung im Chat</li>
+      <li>Kein automatischer Retry (geplant in zukünftiger Version)</li>
+    </ul>
+  </section>
+
+  <section class="chapter" id="limitierungen">
+    <h2>15. Bekannte Limitierungen</h2>
+    <table>
+      <tr><th>Bereich</th><th>Limitation</th><th>Workaround</th></tr>
+      <tr><td>Claude OAuth</td><td>Token läuft nach ~30 Tagen ab</td><td><code>claude setup-token</code> wiederholen</td></tr>
+      <tr><td>main.py</td><td>1000+ Zeilen, alle Endpoints in einer Datei</td><td>#60 Router-Refactoring geplant</td></tr>
+      <tr><td>Worker-Agenten</td><td>Keine eigene Matrix-Identität</td><td>Nur Boss ist Matrix-Bot</td></tr>
+      <tr><td>Task-Agent TTL</td><td>Nicht per Projekt konfigurierbar</td><td>300s hardcoded in agent_runtime.py</td></tr>
+      <tr><td>Sessions</td><td>Kein Memory zwischen Sessions</td><td>QMD-Skills als persistentes Wissen</td></tr>
+      <tr><td>Rollen</td><td>Alle User haben Admin-Rechte</td><td>Rollenmodell vorbereitet, nicht durchgesetzt</td></tr>
+    </table>
+  </section>
+</main>
+
+<script>
+  const sections = document.querySelectorAll('.chapter');
+  const links = document.querySelectorAll('.toc a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

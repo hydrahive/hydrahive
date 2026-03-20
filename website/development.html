@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OctopOS — Entwickler-Guide</title>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #06b6d4;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card: #1e293b;
+      --border: #334155;
+      --sidebar-w: 260px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header a {
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .sidebar-logo span { color: var(--text); }
+    .sidebar-back {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+    .sidebar-back:hover { color: var(--accent); }
+    nav.toc {
+      padding: 1rem 0;
+      flex: 1;
+    }
+    .toc-section {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 0.8rem 1.5rem 0.3rem;
+    }
+    .toc a {
+      display: block;
+      padding: 0.45rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .toc a:hover {
+      color: var(--text);
+      background: rgba(6,182,212,0.05);
+      border-left-color: var(--accent);
+    }
+    .toc a.active {
+      color: var(--accent);
+      background: rgba(6,182,212,0.08);
+      border-left-color: var(--accent);
+    }
+
+    /* MAIN CONTENT */
+    .content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    .page-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+    .page-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* CHAPTER */
+    .chapter {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+    .chapter h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .chapter h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    .chapter p {
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      font-size: 0.95rem;
+    }
+    .chapter ul, .chapter ol {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+    .chapter li {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    .chapter strong { color: var(--text); }
+    .chapter em { color: var(--accent); font-style: normal; }
+
+    /* CODE */
+    .chapter pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .chapter code {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .chapter pre code { color: #e2e8f0; }
+    .chapter p code, .chapter li code {
+      background: rgba(6,182,212,0.1);
+      border: 1px solid rgba(6,182,212,0.2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      color: var(--accent);
+    }
+
+    /* BLOCKQUOTE / NOTE */
+    .note {
+      background: rgba(6,182,212,0.06);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 0.8rem 1.2rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .note strong { color: var(--accent); }
+
+    /* TABLE */
+    .chapter table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .chapter th {
+      background: var(--card);
+      text-align: left;
+      padding: 0.6rem 1rem;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter td {
+      padding: 0.6rem 1rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter tr:last-child td { border-bottom: none; }
+    .chapter tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* STEP LIST */
+    .steps {
+      list-style: none;
+      margin: 0.5rem 0 1rem;
+    }
+    .steps li {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      margin-bottom: 0.6rem;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .content { margin-left: 0; padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <a href="index.htm">
+      <div class="sidebar-logo">Octo<span>POS</span></div>
+    </a>
+    <div class="sidebar-back">← Zurück zur Startseite</div>
+    <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">Entwickler-Guide</div>
+  </div>
+  <nav class="toc">
+    <div class="toc-section">Inhalt</div>
+    <a href="#dev-env">1. Entwicklungsumgebung</a>
+    <a href="#tools">2. Eigenes Tool schreiben</a>
+    <a href="#skills">3. Eigene Skills schreiben</a>
+    <a href="#endpoints">4. Core-Endpoint hinzufügen</a>
+    <a href="#console-pages">5. Console-Seite hinzufügen</a>
+    <a href="#installer">6. Installer-Modul hinzufügen</a>
+    <a href="#deploy">7. Deploy-Workflow</a>
+    <a href="#conventions">8. Coding-Konventionen</a>
+  </nav>
+</aside>
+
+<!-- CONTENT -->
+<main class="content">
+  <h1 class="page-title">OctopOS — Entwickler-Guide</h1>
+  <p class="page-intro">Wie man OctopOS erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.</p>
+
+  <!-- 1. ENTWICKLUNGSUMGEBUNG -->
+  <section class="chapter" id="dev-env">
+    <h2>1. Entwicklungsumgebung</h2>
+
+    <h3>Voraussetzungen</h3>
+    <ul>
+      <li>Python 3.12+</li>
+      <li>Node.js 22+</li>
+      <li>Laufende OctopOS-VM für Integrationstests</li>
+    </ul>
+
+    <h3>Console — lokale Entwicklung</h3>
+    <pre><code>cd console
+npm install
+npm run dev   # Vite Dev-Server auf Port 5173</code></pre>
+    <p>API-Calls gehen an <code>/api/...</code>. Dafür wird entweder ein lokaler Core (Port 8765) oder ein Proxy in der Vite-Konfiguration benötigt:</p>
+    <pre><code>// vite.config.ts
+export default defineConfig({
+  plugins: [react()],
+  server: { proxy: { "/api": "http://192.168.178.181" } }
+})</code></pre>
+
+    <h3>Core — lokale Entwicklung</h3>
+    <pre><code>cd core
+python3 -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
+uvicorn octopos_core.main:app --reload --port 8765</code></pre>
+    <p>Mit <code>--reload</code> startet der Server bei Dateiänderungen automatisch neu.</p>
+  </section>
+
+  <!-- 2. TOOLS -->
+  <section class="chapter" id="tools">
+    <h2>2. Eigenes Tool schreiben</h2>
+
+    <p>Tools sind Python-Klassen die von <code>BaseTool</code> erben. Sie werden im <code>tool_registry</code> registriert und können dann in <code>agent.yaml</code> aktiviert werden.</p>
+
+    <h3>Minimales Beispiel</h3>
+    <pre><code># core/src/octopos_core/tools/my_tool.py
+from ..tool_registry import BaseTool
+
+class MyTool(BaseTool):
+    @property
+    def id(self) -> str: return "my_tool"
+
+    @property
+    def description(self) -> str: return "Beschreibung für das LLM"
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "input": {"type": "string", "description": "Die Eingabe"}
+            },
+            "required": ["input"]
+        }
+
+    async def execute(self, agent_id, project_id, input, **kwargs) -> str:
+        return f"Verarbeitet: {input}"</code></pre>
+
+    <h3>Filesystem-Tool mit Pfad-Sicherheit</h3>
+    <p>Für Tools die auf das Projektverzeichnis zugreifen, muss <code>assert_path_within_project</code> verwendet werden — andernfalls können Agenten das Dateisystem verlassen.</p>
+    <pre><code>from ..tool_registry import BaseTool, assert_path_within_project
+
+class MyFileTool(BaseTool):
+    async def execute(self, agent_id, project_id, path, **kwargs) -> str:
+        safe_path = assert_path_within_project(path, project_id)
+        if not safe_path.exists():
+            return f"Datei nicht gefunden: {path}"
+        return safe_path.read_text(encoding="utf-8")</code></pre>
+
+    <h3>Tool registrieren</h3>
+    <p>In <code>tool_registry.py</code> am Ende der Registry-Initialisierung eintragen:</p>
+    <pre><code>registry.register(MyTool())</code></pre>
+
+    <h3>Tool im Agenten aktivieren</h3>
+    <p>In <code>agent.yaml</code> des gewünschten Agenten:</p>
+    <pre><code>tools:
+  - my_tool</code></pre>
+  </section>
+
+  <!-- 3. SKILLS -->
+  <section class="chapter" id="skills">
+    <h2>3. Eigene Skills schreiben</h2>
+
+    <p>Skills sind Markdown-Dateien mit YAML-Frontmatter. Sie liegen unter <code>/agents/&lt;id&gt;/skills/</code> und werden automatisch in den System-Prompt des Agenten geladen.</p>
+
+    <h3>Skill-Datei</h3>
+    <pre><code>---
+skill: Steuerrecht Grundlagen
+version: "1.0"
+scope: on-demand
+triggers:
+  - steuer
+  - finanzamt
+  - umsatzsteuer
+priority: 10
+---
+
+## Steuerrecht Grundlagen
+
+Umsatzsteuer (USt) beträgt in Deutschland standardmäßig 19%.
+Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
+
+    <h3>Scope-Optionen</h3>
+    <table>
+      <tr><th>Scope</th><th>Verhalten</th></tr>
+      <tr><td><code>always</code></td><td>Immer in jedem Request geladen, unabhängig vom Inhalt der Nachricht</td></tr>
+      <tr><td><code>on-demand</code></td><td>Nur wenn ein Trigger-Keyword im User-Text vorkommt</td></tr>
+    </table>
+
+    <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu eingelesen. Ein Neustart des Core-Services ist nicht notwendig — Änderungen wirken sofort.</div>
+
+    <h3>Skill über die Konsole anlegen</h3>
+    <p>Agenten → Agent auswählen → Buch-Icon → <strong>Neuer Skill</strong></p>
+  </section>
+
+  <!-- 4. ENDPOINTS -->
+  <section class="chapter" id="endpoints">
+    <h2>4. Core-Endpoint hinzufügen</h2>
+
+    <p>Alle Endpoints sind in <code>main.py</code> definiert. Bei wachsender Größe (über ~1500 Zeilen) sollte in separate Router-Module aufgeteilt werden.</p>
+
+    <h3>Beispiel-Endpoint</h3>
+    <pre><code>from pydantic import BaseModel
+from .auth import require_auth
+from .audit import audit_log
+
+class MyRequest(BaseModel):
+    name: str
+    value: str
+
+@app.post("/my-endpoint")
+async def my_endpoint(
+    req: MyRequest,
+    current_user: str = Depends(require_auth)
+):
+    # ... Logik ...
+    await audit_log(
+        user=current_user,
+        action="my_resource.create",
+        target=req.name
+    )
+    return {"created": True, "name": req.name}</code></pre>
+
+    <h3>audit_log-Signatur</h3>
+    <pre><code>await audit_log(
+    user=current_user,    # Benutzername
+    action="...",         # z.B. "agent.create"
+    target="...",         # Betroffenes Objekt (optional)
+    project_id="...",     # Projekt-ID (optional)
+    details={}            # Zusätzliche Infos (optional)
+)</code></pre>
+
+    <div class="note"><strong>Auth-Hinweis:</strong> <code>Depends(require_auth)</code> für geschützte Endpoints. Für öffentliche Endpoints (z.B. <code>/health</code>, <code>/hooks/*</code>) kein <code>Depends</code> angeben.</div>
+  </section>
+
+  <!-- 5. CONSOLE-SEITEN -->
+  <section class="chapter" id="console-pages">
+    <h2>5. Console-Seite hinzufügen</h2>
+
+    <p>Neue Seiten bestehen aus 4 Schritten: Komponente, API-Methode, Route und Navigation.</p>
+
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <span>
+          <strong>Page-Komponente erstellen</strong> unter <code>console/src/pages/MyPage.tsx</code>
+          <pre><code>import { useEffect, useState } from "react"
+import { api } from "@/lib/api"
+
+export default function MyPage() {
+  const [data, setData] = useState(null)
+
+  useEffect(() => {
+    api.getMyData().then(setData)
+  }, [])
+
+  return (
+    &lt;div className="p-6"&gt;
+      &lt;h1 className="text-xl font-semibold mb-4"&gt;Meine Seite&lt;/h1&gt;
+      {/* Inhalt */}
+    &lt;/div&gt;
+  )
+}</code></pre>
+        </span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span>
+          <strong>API-Methode hinzufügen</strong> in <code>console/src/lib/api.ts</code>
+          <pre><code>export interface MyData {
+  id: string
+  name: string
+}
+
+// Im api-Objekt:
+getMyData: (): Promise&lt;MyData[]&gt; =>
+  fetchJSON("/api/my-endpoint"),</code></pre>
+        </span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span>
+          <strong>Route registrieren</strong> in <code>console/src/App.tsx</code>
+          <pre><code>import MyPage from "./pages/MyPage"
+
+// In der Router-Konfiguration:
+&lt;Route path="/my-page" element={&lt;MyPage /&gt;} /&gt;</code></pre>
+        </span>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <span>
+          <strong>Nav-Eintrag hinzufügen</strong> in <code>console/src/layouts/AdminLayout.tsx</code>
+          <pre><code>import { MyIcon } from "lucide-react"
+
+// In der navItems-Liste:
+{ href: "/my-page", label: "Meine Seite", icon: MyIcon },</code></pre>
+        </span>
+      </li>
+    </ol>
+
+    <h3>Styling-Konventionen</h3>
+    <ul>
+      <li>Tailwind + shadcn-Farben — kein direktes CSS</li>
+      <li>Container: <code>bg-card border rounded-lg</code></li>
+      <li>Standard-Text: <code>text-sm</code></li>
+      <li>Sekundärtext: <code>text-muted-foreground</code></li>
+      <li>Fehler: <code>text-destructive</code></li>
+      <li>Erfolg: <code>text-green-500</code></li>
+      <li>Icons ausschließlich aus <code>lucide-react</code></li>
+    </ul>
+  </section>
+
+  <!-- 6. INSTALLER -->
+  <section class="chapter" id="installer">
+    <h2>6. Installer-Modul hinzufügen</h2>
+
+    <p>Installer-Module sind eigenständige Bash-Skripte die von <code>install.sh</code> per <code>source</code> eingebunden werden. Jedes Modul muss idempotent sein.</p>
+
+    <h3>Modul-Template</h3>
+    <pre><code>#!/usr/bin/env bash
+# installer/modules/my_module.sh
+
+install_my_component() {
+    info "Prüfe my-component..."
+
+    if command -v my-tool &gt;/dev/null 2&gt;&amp;1; then
+        info "my-component bereits installiert — übersprungen"
+        return 0
+    fi
+
+    info "Installiere my-component..."
+    apt-get install -y my-package || {
+        error "Installation von my-component fehlgeschlagen"
+        return 1
+    }
+
+    success "my-component installiert"
+}
+
+install_my_component</code></pre>
+
+    <h3>In install.sh einbinden</h3>
+    <pre><code>source "$SCRIPT_DIR/modules/my_module.sh"</code></pre>
+
+    <h3>Regeln für Module</h3>
+    <ul>
+      <li><strong>Idempotent:</strong> Mehrfaches Ausführen muss sicher sein</li>
+      <li><strong>Ausgabe:</strong> <code>info</code> / <code>success</code> / <code>warn</code> / <code>error</code> verwenden — kein direktes <code>echo</code></li>
+      <li><strong>Ausführbar:</strong> <code>chmod +x installer/modules/my_module.sh</code> nicht vergessen</li>
+      <li><strong>Fehlerbehandlung:</strong> Bei kritischen Fehlern <code>return 1</code> oder <code>exit 1</code></li>
+    </ul>
+  </section>
+
+  <!-- 7. DEPLOY -->
+  <section class="chapter" id="deploy">
+    <h2>7. Deploy-Workflow</h2>
+
+    <h3>Core — schnelles Deployment (einzelne Datei)</h3>
+    <pre><code># Einzelne Datei auf die VM kopieren und Service neu starten
+scp core/src/octopos_core/main.py octopos@192.168.178.181:/tmp/main.py
+ssh octopos@192.168.178.181 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"</code></pre>
+
+    <h3>Core — vollständiges Verzeichnis</h3>
+    <pre><code>scp -r core/src/octopos_core octopos@192.168.178.181:/tmp/octopos_core
+ssh octopos@192.168.178.181 "sudo cp -r /tmp/octopos_core /opt/octopos/core/src/ && sudo systemctl restart octopos-core"</code></pre>
+
+    <h3>Console — Deploy</h3>
+    <pre><code># Build erstellen
+cd console && npm run build
+
+# Dist auf die VM kopieren
+scp -r dist/ octopos@192.168.178.181:/tmp/console_dist/
+
+# Auf der VM installieren
+ssh octopos@192.168.178.181 "sudo cp -r /tmp/console_dist/. /var/www/octopos/"</code></pre>
+
+    <h3>Status prüfen</h3>
+    <pre><code>ssh octopos@192.168.178.181 \
+  "systemctl is-active octopos-core && journalctl -u octopos-core -n 20 --no-pager"</code></pre>
+
+    <h3>Git-Workflow</h3>
+    <div class="note"><strong>Regel:</strong> Immer <code>git pull --rebase</code> vor einem Push. Commits sollten Feature + Console + Core zusammen bündeln wenn möglich.</div>
+    <pre><code>git pull --rebase origin main
+git add core/... console/...
+git commit -m "feat: mein neues Feature"
+git push</code></pre>
+  </section>
+
+  <!-- 8. KONVENTIONEN -->
+  <section class="chapter" id="conventions">
+    <h2>8. Coding-Konventionen</h2>
+
+    <h3>Python (Core)</h3>
+    <ul>
+      <li>Keine neuen Abhängigkeiten ohne Diskussion — Standardbibliothek bevorzugen</li>
+      <li>Pydantic für alle Konfigurationen und Request-Bodies</li>
+      <li><code>async</code>/<code>await</code> für alle I/O-Operationen</li>
+      <li><code>logging</code> statt <code>print</code> — niemals <code>print()</code> in Produktionscode</li>
+      <li>Exceptions sauber fangen und mit sinnvoller HTTP-Fehlermeldung antworten</li>
+      <li><strong>Pfad-Sicherheit:</strong> Immer <code>assert_path_within_project</code> für Filesystem-Zugriffe</li>
+      <li><strong>Audit-Log:</strong> Alle schreibenden Operationen mit <code>audit_log</code> protokollieren</li>
+    </ul>
+
+    <h3>TypeScript (Console)</h3>
+    <ul>
+      <li>Kein <code>any</code> — außer in Legacy-Code mit explizitem Kommentar</li>
+      <li>Interfaces für alle API-Responses in <code>api.ts</code> definieren</li>
+      <li>Kein direktes <code>fetch()</code> — immer <code>api.*</code>-Methoden verwenden</li>
+      <li><code>useEffect</code>-Cleanups für Intervalle und Subscriptions nicht vergessen</li>
+      <li>Stabile Keys in Listen — niemals Array-Index als Key</li>
+    </ul>
+
+    <h3>Allgemein</h3>
+    <ul>
+      <li>Installer-Module müssen idempotent sein</li>
+      <li>Keine hardcodierten Pfade — Konfiguration oder Konstanten verwenden</li>
+      <li>Commits bündeln Feature + Console + Core wenn möglich</li>
+    </ul>
+
+    <h3>Dateigrößen</h3>
+    <div class="note"><strong>main.py:</strong> Aktuell ~1180 Zeilen. Ab ~1500 Zeilen in separate Router-Module aufteilen (<code>routers/agents.py</code>, <code>routers/projects.py</code> etc.) um die Wartbarkeit zu erhalten.</div>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active TOC item on scroll
+  const sections = document.querySelectorAll('.chapter');
+  const links = document.querySelectorAll('.toc a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

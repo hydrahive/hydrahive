@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OctopOS API-Referenz</title>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #06b6d4;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card: #1e293b;
+      --border: #334155;
+      --sidebar-w: 260px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header a {
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .sidebar-logo span { color: var(--text); }
+    .sidebar-back {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+    .sidebar-back:hover { color: var(--accent); }
+    nav.toc {
+      padding: 1rem 0;
+      flex: 1;
+    }
+    .toc-section {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 0.8rem 1.5rem 0.3rem;
+    }
+    .toc a {
+      display: block;
+      padding: 0.45rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .toc a:hover {
+      color: var(--text);
+      background: rgba(6,182,212,0.05);
+      border-left-color: var(--accent);
+    }
+    .toc a.active {
+      color: var(--accent);
+      background: rgba(6,182,212,0.08);
+      border-left-color: var(--accent);
+    }
+
+    /* MAIN CONTENT */
+    .content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    .page-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+    .page-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* CHAPTER */
+    .chapter {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+    .chapter h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .chapter h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    .chapter p {
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      font-size: 0.95rem;
+    }
+    .chapter ul, .chapter ol {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+    .chapter li {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    .chapter strong { color: var(--text); }
+    .chapter em { color: var(--accent); font-style: normal; }
+
+    /* CODE */
+    .chapter pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .chapter code {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .chapter pre code { color: #e2e8f0; }
+    .chapter p code, .chapter li code {
+      background: rgba(6,182,212,0.1);
+      border: 1px solid rgba(6,182,212,0.2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      color: var(--accent);
+    }
+
+    /* BLOCKQUOTE / NOTE */
+    .note {
+      background: rgba(6,182,212,0.06);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 0.8rem 1.2rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .note strong { color: var(--accent); }
+
+    /* TABLE */
+    .chapter table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .chapter th {
+      background: var(--card);
+      text-align: left;
+      padding: 0.6rem 1rem;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter td {
+      padding: 0.6rem 1rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter tr:last-child td { border-bottom: none; }
+    .chapter tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* STEP LIST */
+    .steps {
+      list-style: none;
+      margin: 0.5rem 0 1rem;
+    }
+    .steps li {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      margin-bottom: 0.6rem;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    /* METHOD BADGES */
+    .method {
+      display: inline-block;
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .method-get  { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    .method-post { background: rgba(6,182,212,0.15);  color: var(--accent); border: 1px solid rgba(6,182,212,0.3); }
+    .method-put  { background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.3); }
+    .method-del  { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+    .endpoint-path {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .content { margin-left: 0; padding: 2rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <a href="index.htm">
+      <div class="sidebar-logo">Octo<span>POS</span></div>
+    </a>
+    <div class="sidebar-back">← Zurück zur Startseite</div>
+    <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">API-Referenz</div>
+  </div>
+  <nav class="toc">
+    <div class="toc-section">Inhalt</div>
+    <a href="#auth">Auth</a>
+    <a href="#setup">Setup</a>
+    <a href="#system">System</a>
+    <a href="#agenten">Agenten</a>
+    <a href="#skills">Agent Skills</a>
+    <a href="#projekte">Projekte</a>
+    <a href="#chat">Chat</a>
+    <a href="#webhooks">Webhooks</a>
+    <a href="#benutzer">Benutzer</a>
+    <a href="#audit">Audit-Log</a>
+    <a href="#llm">LLM-Konfiguration</a>
+    <a href="#tools">Tools</a>
+    <a href="#logs">System-Logs</a>
+  </nav>
+</aside>
+
+<!-- CONTENT -->
+<main class="content">
+  <h1 class="page-title">OctopOS API-Referenz</h1>
+  <div class="page-intro">
+    <p style="margin-bottom:0.5rem;">Basis-URL: <code>https://&lt;server&gt;/api</code> — Alle Endpoints außer <code>/health</code>, <code>/setup/*</code>, <code>/auth/*</code> und <code>/hooks/*</code> erfordern einen JWT-Bearer-Token.</p>
+    <pre style="margin:0.8rem 0;"><code>Authorization: Bearer &lt;token&gt;</code></pre>
+    <p style="margin-bottom:0;">Token wird via <code>POST /auth/login</code> erhalten.</p>
+  </div>
+
+  <!-- AUTH -->
+  <section class="chapter" id="auth">
+    <h2>Auth</h2>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/auth/login</span></h3>
+    <p>Authentifizierung mit Benutzername und Passwort. Gibt einen JWT-Token zurück.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>username</code></td><td>string</td><td>Benutzername</td></tr>
+      <tr><td><code>password</code></td><td>string</td><td>Passwort</td></tr>
+    </table>
+    <p><strong>Request Body:</strong></p>
+    <pre><code>{ "username": "admin", "password": "geheim" }</code></pre>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{ "access_token": "eyJ...", "token_type": "bearer" }</code></pre>
+    <div class="note"><strong>Rate-Limit:</strong> 10 Versuche pro Minute. Bei Überschreitung: <code>429 Too Many Requests</code>.</div>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/auth/me</span></h3>
+    <p>Gibt Informationen über den aktuell eingeloggten Benutzer zurück.</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{ "username": "admin" }</code></pre>
+  </section>
+
+  <!-- SETUP -->
+  <section class="chapter" id="setup">
+    <h2>Setup</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/setup/status</span></h3>
+    <p>Prüft ob der Setup-Wizard noch benötigt wird (kein Benutzer angelegt).</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{ "needs_setup": true }</code></pre>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/setup</span></h3>
+    <p>Legt den ersten Admin-Account an. Nur verfügbar solange noch kein Benutzer existiert.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>username</code></td><td>string</td><td>Benutzername des ersten Admins</td></tr>
+      <tr><td><code>password</code></td><td>string</td><td>Passwort (min. 8 Zeichen)</td></tr>
+    </table>
+    <p><strong>Response 201:</strong></p>
+    <pre><code>{ "created": true, "username": "admin", "role": "admin" }</code></pre>
+  </section>
+
+  <!-- SYSTEM -->
+  <section class="chapter" id="system">
+    <h2>System</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/health</span></h3>
+    <p>Health-Check ohne Authentifizierung. Für Monitoring und Load-Balancer geeignet.</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{ "status": "ok" }</code></pre>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/status</span></h3>
+    <p>Detaillierter Systemstatus mit Discovery-, Projekt-, Session- und Laufzeit-Informationen.</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{
+  "discovery": { ... },
+  "projects": { ... },
+  "sessions": { ... },
+  "runtime": { ... }
+}</code></pre>
+  </section>
+
+  <!-- AGENTEN -->
+  <section class="chapter" id="agenten">
+    <h2>Agenten</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/agents</span></h3>
+    <p>Gibt eine Liste aller registrierten Agenten zurück.</p>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/agents/{id}</span></h3>
+    <p>Gibt Details zu einem einzelnen Agenten zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/agents</span></h3>
+    <p>Erstellt einen neuen Agenten.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>id</code></td><td>string</td><td>Eindeutige Agent-ID</td></tr>
+      <tr><td><code>type</code></td><td>string</td><td>boss / specialist / worker</td></tr>
+      <tr><td><code>identity</code></td><td>string</td><td>Anzeigename des Agenten</td></tr>
+      <tr><td><code>model</code></td><td>string</td><td>LLM-Modell (z.B. llama3.1:8b)</td></tr>
+      <tr><td><code>temperature</code></td><td>float</td><td>Temperatur (0.0–1.0)</td></tr>
+      <tr><td><code>max_tokens</code></td><td>int</td><td>Maximale Token-Anzahl</td></tr>
+      <tr><td><code>tools</code></td><td>array</td><td>Liste aktivierter Tool-IDs</td></tr>
+      <tr><td><code>soul</code></td><td>string</td><td>Persönlichkeitsbeschreibung (Markdown)</td></tr>
+      <tr><td><code>heartbeat</code></td><td>object</td><td>Heartbeat-Konfiguration (interval, timeout, on_failure)</td></tr>
+    </table>
+
+    <h3><span class="method method-put">PUT</span><span class="endpoint-path">/agents/{id}</span></h3>
+    <p>Aktualisiert einen bestehenden Agenten. Body-Felder wie bei POST.</p>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/agents/{id}</span></h3>
+    <p>Löscht einen Agenten. Response 204 No Content.</p>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/agents/{id}/soul</span></h3>
+    <p>Gibt den Soul-Text (Persönlichkeitsbeschreibung) des Agenten als Plaintext zurück.</p>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/agents/{id}/logs</span></h3>
+    <p>Gibt die letzten Log-Einträge des Agenten zurück.</p>
+    <table>
+      <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>lines</code></td><td>int</td><td>Anzahl zurückgegebener Log-Zeilen (optional)</td></tr>
+    </table>
+  </section>
+
+  <!-- SKILLS -->
+  <section class="chapter" id="skills">
+    <h2>Agent Skills</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/agents/{id}/skills</span></h3>
+    <p>Gibt alle Skills eines Agenten zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/agents/{id}/skills</span></h3>
+    <p>Erstellt einen neuen Skill für den Agenten.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>filename</code></td><td>string</td><td>Dateiname (z.B. steuerrecht.md)</td></tr>
+      <tr><td><code>skill</code></td><td>string</td><td>Anzeigename des Skills</td></tr>
+      <tr><td><code>version</code></td><td>string</td><td>Versionsnummer (z.B. "1.0")</td></tr>
+      <tr><td><code>scope</code></td><td>string</td><td>always oder on-demand</td></tr>
+      <tr><td><code>triggers</code></td><td>array</td><td>Trigger-Keywords (für on-demand)</td></tr>
+      <tr><td><code>priority</code></td><td>int</td><td>Priorität (niedrigere Zahl = höhere Priorität)</td></tr>
+      <tr><td><code>content</code></td><td>string</td><td>Skill-Inhalt (Markdown)</td></tr>
+    </table>
+
+    <h3><span class="method method-put">PUT</span><span class="endpoint-path">/agents/{id}/skills/{filename}</span></h3>
+    <p>Aktualisiert einen bestehenden Skill. Body-Felder wie bei POST.</p>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/agents/{id}/skills/{filename}</span></h3>
+    <p>Löscht einen Skill. Response 204 No Content.</p>
+  </section>
+
+  <!-- PROJEKTE -->
+  <section class="chapter" id="projekte">
+    <h2>Projekte</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/projects</span></h3>
+    <p>Gibt eine Liste aller Projekte zurück.</p>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/projects/{id}</span></h3>
+    <p>Gibt Details zu einem einzelnen Projekt zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects</span></h3>
+    <p>Erstellt ein neues Projekt.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>id</code></td><td>string</td><td>Eindeutige Projekt-ID</td></tr>
+      <tr><td><code>name</code></td><td>string</td><td>Anzeigename des Projekts</td></tr>
+      <tr><td><code>description</code></td><td>string</td><td>Projektbeschreibung (optional)</td></tr>
+      <tr><td><code>boss</code></td><td>string</td><td>Agent-ID des Boss-Agenten</td></tr>
+      <tr><td><code>workers</code></td><td>array</td><td>Liste der Worker-Agent-IDs</td></tr>
+      <tr><td><code>samba</code></td><td>bool</td><td>Samba-Freigabe aktivieren</td></tr>
+    </table>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects/{id}/provision</span></h3>
+    <p>Provisioniert ein Projekt: legt Linux-User, Verzeichnis, Matrix-Room und optionale Samba-Freigabe an.</p>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/projects/{id}/provision</span></h3>
+    <p>Entfernt die Provisionierung eines Projekts (Linux-User, Freigaben). Das Projekt selbst bleibt bestehen.</p>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/projects/{id}</span></h3>
+    <p>Löscht ein Projekt vollständig. Response 204 No Content.</p>
+  </section>
+
+  <!-- CHAT -->
+  <section class="chapter" id="chat">
+    <h2>Chat</h2>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects/{id}/message</span></h3>
+    <p>Sendet eine Nachricht an den Boss-Agenten eines Projekts. Wartet auf die vollständige Antwort.</p>
+    <p><strong>Request Body:</strong></p>
+    <pre><code>{ "content": "Erstelle einen Bericht über Q1." }</code></pre>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{
+  "response": "Hier ist der Q1-Bericht...",
+  "workers": ["steuer-agent", "buchhalter"],
+  "session_id": "sess_abc123"
+}</code></pre>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects/{id}/message/stream</span></h3>
+    <p>Sendet eine Nachricht und empfängt die Antwort als Server-Sent Events (SSE). Jedes Event enthält einen JSON-Payload.</p>
+    <pre><code>data: {"text": "Hier "}
+data: {"text": "ist "}
+data: {"text": "der Bericht..."}
+data: {"done": true}
+
+# Bei Fehler:
+data: {"error": "LLM nicht erreichbar"}</code></pre>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/projects/{id}/session/history</span></h3>
+    <p>Gibt die Chat-History der aktuellen Session zurück.</p>
+    <table>
+      <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>limit</code></td><td>int</td><td>Maximale Anzahl zurückgegebener Nachrichten (optional)</td></tr>
+    </table>
+  </section>
+
+  <!-- WEBHOOKS -->
+  <section class="chapter" id="webhooks">
+    <h2>Webhooks</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/projects/{id}/webhooks</span></h3>
+    <p>Gibt alle konfigurierten Webhooks eines Projekts zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects/{id}/webhooks</span></h3>
+    <p>Erstellt einen neuen ausgehenden Webhook für ein Projekt.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>name</code></td><td>string</td><td>Name des Webhooks</td></tr>
+      <tr><td><code>url</code></td><td>string</td><td>Ziel-URL für den Webhook</td></tr>
+      <tr><td><code>secret</code></td><td>string</td><td>HMAC-Secret für Signierung (optional)</td></tr>
+      <tr><td><code>events</code></td><td>array</td><td>Events die den Webhook auslösen</td></tr>
+    </table>
+    <p>Verfügbare Events: <code>message</code>, <code>agent_error</code>, <code>provision</code>, <code>agent_start</code>, <code>agent_stop</code></p>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/projects/{id}/webhooks/{webhook_id}</span></h3>
+    <p>Löscht einen Webhook. Response 204 No Content.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/projects/{id}/webhooks/test</span></h3>
+    <p>Sendet einen Test-Request an alle konfigurierten Webhooks des Projekts.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/hooks/{id}/wake</span></h3>
+    <p><strong>Kein Auth erforderlich.</strong> Externer Trigger-Endpoint für eingehende Webhooks. Startet den Boss-Agenten des Projekts asynchron.</p>
+    <p><strong>Request Body:</strong></p>
+    <pre><code>{ "message": "Neuer Git-Push auf main — bitte Code-Review starten" }</code></pre>
+    <p><strong>Response 202:</strong></p>
+    <pre><code>{ "accepted": true, "project_id": "mein-projekt" }</code></pre>
+    <div class="note"><strong>Kein Auth:</strong> Dieser Endpoint ist bewusst öffentlich zugänglich. Er kann ohne Token aufgerufen werden — z.B. von GitHub Actions oder Gitea Webhooks.</div>
+  </section>
+
+  <!-- BENUTZER -->
+  <section class="chapter" id="benutzer">
+    <h2>Benutzer</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/users</span></h3>
+    <p>Gibt eine Liste aller Benutzer zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/users</span></h3>
+    <p>Erstellt einen neuen Benutzer.</p>
+    <table>
+      <tr><th>Feld</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>username</code></td><td>string</td><td>Benutzername</td></tr>
+      <tr><td><code>password</code></td><td>string</td><td>Passwort (min. 8 Zeichen)</td></tr>
+    </table>
+
+    <h3><span class="method method-del">DELETE</span><span class="endpoint-path">/users/{username}</span></h3>
+    <p>Löscht einen Benutzer. Der eigene Account kann nicht gelöscht werden. Response 204 No Content.</p>
+
+    <h3><span class="method method-put">PUT</span><span class="endpoint-path">/users/{username}/password</span></h3>
+    <p>Ändert das Passwort eines Benutzers.</p>
+    <pre><code>{ "password": "neues-passwort" }</code></pre>
+  </section>
+
+  <!-- AUDIT -->
+  <section class="chapter" id="audit">
+    <h2>Audit-Log</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/audit/logs</span></h3>
+    <p>Gibt Audit-Log-Einträge zurück, optional gefiltert.</p>
+    <table>
+      <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>limit</code></td><td>int</td><td>Maximale Anzahl Einträge</td></tr>
+      <tr><td><code>user</code></td><td>string</td><td>Filtern nach Benutzer</td></tr>
+      <tr><td><code>action</code></td><td>string</td><td>Filtern nach Aktion</td></tr>
+      <tr><td><code>project</code></td><td>string</td><td>Filtern nach Projekt-ID</td></tr>
+    </table>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{
+  "logs": [
+    {
+      "id": "log_abc",
+      "timestamp": "2026-03-20T14:32:00Z",
+      "user": "admin",
+      "action": "user.login",
+      "target": "admin",
+      "project_id": null,
+      "ip": "192.168.178.1",
+      "details": {}
+    }
+  ],
+  "count": 1
+}</code></pre>
+    <p><strong>Bekannte Aktionen:</strong></p>
+    <ul>
+      <li><code>user.login</code> — Erfolgreicher Login</li>
+      <li><code>user.create</code> — Benutzer angelegt</li>
+      <li><code>user.delete</code> — Benutzer gelöscht</li>
+      <li><code>user.password_change</code> — Passwort geändert</li>
+      <li><code>agent.create</code> — Agent angelegt</li>
+      <li><code>agent.update</code> — Agent bearbeitet</li>
+      <li><code>agent.delete</code> — Agent gelöscht</li>
+      <li><code>project.create</code> — Projekt angelegt</li>
+      <li><code>project.provision</code> — Projekt provisioniert</li>
+      <li><code>project.delete</code> — Projekt gelöscht</li>
+      <li><code>skill.create</code> — Skill angelegt</li>
+      <li><code>skill.update</code> — Skill bearbeitet</li>
+      <li><code>skill.delete</code> — Skill gelöscht</li>
+      <li><code>webhook.create</code> — Webhook angelegt</li>
+      <li><code>webhook.delete</code> — Webhook gelöscht</li>
+      <li><code>webhook.trigger</code> — Webhook ausgelöst</li>
+      <li><code>llm.token_set</code> — LLM-Token gesetzt</li>
+    </ul>
+  </section>
+
+  <!-- LLM -->
+  <section class="chapter" id="llm">
+    <h2>LLM-Konfiguration</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/llm/config</span></h3>
+    <p>Gibt die aktuelle LLM-Konfiguration zurück (alle Anbieter).</p>
+
+    <h3><span class="method method-put">PUT</span><span class="endpoint-path">/llm/config/claude_max</span></h3>
+    <p>Setzt den Claude Max OAuth-Token.</p>
+    <pre><code>{ "token": "sk-ant-oat01-..." }</code></pre>
+
+    <h3><span class="method method-put">PUT</span><span class="endpoint-path">/llm/config/{provider}</span></h3>
+    <p>Konfiguriert einen beliebigen LLM-Anbieter (z.B. <code>openai</code>, <code>ollama</code>).</p>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/llm/claude_token_status</span></h3>
+    <p>Gibt den Status des aktuellen Claude-Tokens zurück.</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{
+  "exists": true,
+  "remaining_days": 12,
+  "expires_approx": "2026-04-01",
+  "status": "ok"
+}</code></pre>
+    <table>
+      <tr><th>Status</th><th>Bedeutung</th></tr>
+      <tr><td><code>ok</code></td><td>Token gültig, mehr als 7 Tage verbleibend</td></tr>
+      <tr><td><code>warning</code></td><td>Token läuft in weniger als 7 Tagen ab</td></tr>
+      <tr><td><code>critical</code></td><td>Token läuft in weniger als 2 Tagen ab</td></tr>
+      <tr><td><code>expired</code></td><td>Token abgelaufen</td></tr>
+    </table>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/llm/ollama/models</span></h3>
+    <p>Gibt eine Liste der lokal verfügbaren Ollama-Modelle zurück.</p>
+
+    <h3><span class="method method-post">POST</span><span class="endpoint-path">/llm/ollama/pull</span></h3>
+    <p>Lädt ein Ollama-Modell herunter.</p>
+    <pre><code>{ "model": "llama3.1:8b" }</code></pre>
+  </section>
+
+  <!-- TOOLS -->
+  <section class="chapter" id="tools">
+    <h2>Tools</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/tools</span></h3>
+    <p>Gibt eine Liste aller registrierten Tools mit ID, Beschreibung und Parameter-Schema zurück.</p>
+  </section>
+
+  <!-- LOGS -->
+  <section class="chapter" id="logs">
+    <h2>System-Logs</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/logs/core</span></h3>
+    <p>Gibt die letzten Zeilen der Core-Logs zurück.</p>
+    <table>
+      <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>lines</code></td><td>int</td><td>Anzahl Zeilen (Standard: 200, Maximum: 1000)</td></tr>
+    </table>
+  </section>
+
+</main>
+
+<script>
+  // Highlight active TOC item on scroll
+  const sections = document.querySelectorAll('.chapter');
+  const links = document.querySelectorAll('.toc a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>
