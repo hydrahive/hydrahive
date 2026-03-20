@@ -1166,6 +1166,46 @@ def set_llm_provider(provider: str, req: LlmProviderConfig):
     return {"updated": True, "provider": provider}
 
 
+
+@app.get("/llm/claude_token_status")
+def get_claude_token_status():
+    """
+    Claude OAuth Token Status — Alter und Gueltigkeit.
+    Liest sk-ant-oat01- Token aus /etc/octopos/claude_oauth_token.
+    Token-Ablauf: oat01 Tokens gelten typisch 30 Tage ab Erstellung.
+    """
+    import time as _time
+    token_file = Path("/etc/octopos/claude_oauth_token")
+
+    if not token_file.exists() or token_file.stat().st_size == 0:
+        return {"configured": False, "token_age_days": None, "warning": None}
+
+    # Alter aus mtime
+    mtime        = token_file.stat().st_mtime
+    age_seconds  = _time.time() - mtime
+    age_days     = age_seconds / 86400
+
+    # oat01 Tokens gelten ca. 30 Tage
+    TOKEN_TTL_DAYS = 30
+    remaining_days = TOKEN_TTL_DAYS - age_days
+
+    warning = None
+    if remaining_days <= 0:
+        warning = "expired"
+    elif remaining_days <= 3:
+        warning = f"expires_soon_{int(remaining_days)}d"
+    elif remaining_days <= 7:
+        warning = f"expires_in_{int(remaining_days)}d"
+
+    return {
+        "configured":     True,
+        "token_age_days": round(age_days, 1),
+        "remaining_days": round(remaining_days, 1),
+        "warning":        warning,
+        "ttl_days":       TOKEN_TTL_DAYS,
+    }
+
+
 @app.get("/llm/ollama/models")
 async def get_ollama_models():
     """Verfuegbare Ollama-Modelle von lokalem Server abrufen."""
