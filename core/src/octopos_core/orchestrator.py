@@ -295,6 +295,108 @@ class Orchestrator:
         choice  = SimpleNamespace(message=message, finish_reason=resp.stop_reason)
         return  SimpleNamespace(choices=[choice], model=model)
 
+
+    async def handle_message_stream(
+        self,
+        project_id:  str,
+        project_cfg,
+        content:     str,
+        sender:      str = "user",
+    ):
+        """
+        Streaming-Version von handle_message.
+        Yieldet SSE-Chunks: data: <text>\n\n
+        Abschluss: data: [DONE]\n\n
+        """
+        import json as _json
+
+        boss_id  = project_cfg.agents.boss
+        boss_cfg = self._discovery.get(boss_id)
+        if not boss_cfg:
+            yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
+            return
+
+        # Session + System-Prompt aufbauen (gleich wie handle_message)
+        self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
+        system_prompt = self._build_system_prompt(boss_cfg, content)
+        history       = self._sessions.get_context(project_id, max_messages=20)
+        messages      = [{"role": "system", "content": system_prompt}] + history
+
+        # Tool-Schema
+        boss_tools    = self._reg.tools_for_agent(boss_cfg.tools)
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+
+        try:
+            full_response = ""
+            oauth_token   = _load_claude_oauth_token()
+
+            if oauth_token:
+                # Anthropic SDK Streaming
+                import anthropic as _anthropic
+                client = _anthropic.AsyncAnthropic(
+                    api_key="",
+                    default_headers={"anthropic-beta": "oauth-2025-04-20"},
+                    auth_token=oauth_token,
+                )
+                system_msg = ""
+                filtered   = []
+                for m in messages:
+                    if m.get("role") == "system":
+                        system_msg = m.get("content", "")
+                    else:
+                        filtered.append({"role": m["role"], "content": m.get("content", "")})
+
+                model = boss_cfg.llm.model
+                for prefix in ("openai/", "anthropic/", "claude/"):
+                    if model.startswith(prefix):
+                        model = model[len(prefix):]
+                        break
+                if not model.startswith("claude-"):
+                    model = "claude-haiku-4-5-20251001"
+
+                kwargs: dict = {
+                    "model":      model,
+                    "max_tokens": boss_cfg.llm.max_tokens,
+                    "messages":   filtered,
+                }
+                if system_msg:
+                    kwargs["system"] = system_msg
+
+                async with client.messages.stream(**kwargs) as stream:
+                    async for text in stream.text_stream:
+                        full_response += text
+                        yield f"data: {_json.dumps({'text': text})}\n\n"
+
+            else:
+                # litellm Streaming (Ollama / OpenAI)
+                model, api_base = self._resolve_model(boss_cfg.llm.model)
+                kwargs = {
+                    "model":       model,
+                    "messages":    messages,
+                    "temperature": boss_cfg.llm.temperature,
+                    "max_tokens":  boss_cfg.llm.max_tokens,
+                    "stream":      True,
+                }
+                if api_base:
+                    kwargs["api_base"] = api_base
+
+                async for chunk in await litellm.acompletion(**kwargs):
+                    delta = chunk.choices[0].delta.content or ""
+                    if delta:
+                        full_response += delta
+                        yield f"data: {_json.dumps({'text': delta})}\n\n"
+
+            # Antwort in Session speichern
+            self._sessions.append(
+                project_id, MessageRole.ASSISTANT,
+                full_response, agent_id=boss_cfg.id
+            )
+            yield f"data: {_json.dumps({'done': True, 'session_id': None})}\n\n"
+
+        except Exception as e:
+            logger.error("Streaming-Fehler: %s", e)
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+
     async def _tool_loop(
         self,
         boss_cfg:    AgentConfig,
