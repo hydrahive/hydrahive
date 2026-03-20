@@ -52,12 +52,13 @@ if [ ! -d "${CONSOLE_SRC}" ]; then
 fi
 
 info "Installiere npm-Abhaengigkeiten..."
-cd "${CONSOLE_SRC}" || error "cd ${CONSOLE_SRC} fehlgeschlagen"
+pushd "${CONSOLE_SRC}" > /dev/null || error "cd ${CONSOLE_SRC} fehlgeschlagen"
 npm ci --silent 2>&1 | grep -v "^npm warn" || true
 success "npm-Abhaengigkeiten installiert"
 
 info "Baue Console (npm run build)..."
 npm run build --silent
+popd > /dev/null
 success "Console gebaut: ${CONSOLE_SRC}/dist/"
 
 # --- Build nach /opt/octopos/console/ kopieren ---
