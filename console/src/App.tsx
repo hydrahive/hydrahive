@@ -13,6 +13,7 @@ import { ToolsPage } from "@/pages/ToolsPage";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { UserPage } from "@/pages/UserPage";
 import { ChatPage } from "@/pages/ChatPage";
+import { AgentChatPage } from "@/pages/AgentChatPage";
 import { AuditPage } from "@/pages/AuditPage";
 import { BackupPage } from "@/pages/BackupPage";
 
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="projects"          element={<ProjectsPage />} />
           <Route path="projects/new"      element={<ProjectCreatePage />} />
           <Route path="chat/:id"          element={<ChatPage />} />
+          <Route path="agents/:id/chat"  element={<AgentChatPage />} />
           <Route path="system"            element={<SystemPage />} />
           <Route path="tools"             element={<ToolsPage />} />
           <Route path="llm"              element={<LlmConfigPage />} />
