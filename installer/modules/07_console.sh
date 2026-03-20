@@ -14,6 +14,19 @@ NGINX_DEFAULT="/etc/nginx/sites-enabled/default"
 
 info "Installiere octopos-console..."
 
+# --- Port 80 pruefen ---
+if ss -tlnp 2>/dev/null | grep -q ':80 '; then
+    PORT80_PROC=$(ss -tlnp | grep ':80 ' | grep -oP 'users:\(\("([^"]+)"' | head -1 | grep -oP '"([^"]+)"' | tr -d '"' || echo "unbekannt")
+    if [ "${PORT80_PROC}" = "apache2" ] || systemctl is-active --quiet apache2 2>/dev/null; then
+        warn "Apache2 laeuft auf Port 80 — deaktiviere Apache2"
+        systemctl stop apache2 &>/dev/null || true
+        systemctl disable apache2 &>/dev/null || true
+        success "Apache2 deaktiviert"
+    elif [ "${PORT80_PROC}" != "nginx" ] && [ "${PORT80_PROC}" != "unbekannt" ]; then
+        warn "Port 80 belegt von: ${PORT80_PROC} — nginx koennte nicht starten"
+    fi
+fi
+
 # --- Node.js pruefen ---
 if ! command -v node &>/dev/null; then
     info "Installiere Node.js 22..."
