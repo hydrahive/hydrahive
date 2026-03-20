@@ -31,15 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const data = await res.json();
     const token = data.access_token;
+    const role  = data.role ?? "user";
 
-    // Fetch role from /auth/me
-    const meRes = await fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const me = meRes.ok ? await meRes.json() : {};
-    const role = me.role ?? "user";
-
-    setUser({ username, token, role });
+    setUser({ username: data.username ?? username, token, role });
     localStorage.setItem("octopos_token", token);
     localStorage.setItem("octopos_user", username);
     localStorage.setItem("octopos_role", role);
