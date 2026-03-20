@@ -116,6 +116,17 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
 
+    # Heartbeat-Scheduler starten
+    from .heartbeat import HeartbeatScheduler as _HBS
+    heartbeat_scheduler = _HBS(
+        discovery=discovery,
+        projects=projects,
+        orchestrator=orchestrator,
+        agents_dir=Path(AGENTS_DIR),
+    )
+    heartbeat_scheduler.start()
+    logger.info("HeartbeatScheduler gestartet")
+
     logger.info("OctopOS Core bereit")
     yield
     cleanup_task.cancel()
@@ -1011,6 +1022,29 @@ async def change_password(username: str, body: dict, _a: tuple = Depends(require
 
 
 
+
+
+
+@app.get("/agents/{agent_id}/heartbeat")
+def get_agent_heartbeat(agent_id: str):
+    """Heartbeat-Task Status eines Agenten."""
+    from .heartbeat import HeartbeatScheduler as _HBS
+    # heartbeat_scheduler ist im Lifespan-Scope — via app.state zugreifbar
+    try:
+        status = heartbeat_scheduler.get_status()
+        agent_tasks = status.get(agent_id, [])
+        return {"agent_id": agent_id, "tasks": agent_tasks, "count": len(agent_tasks)}
+    except Exception as e:
+        return {"agent_id": agent_id, "tasks": [], "count": 0, "error": str(e)}
+
+
+@app.get("/heartbeat/status")
+def get_all_heartbeat_status():
+    """Status aller Heartbeat-Tasks aller Agenten."""
+    try:
+        return {"agents": heartbeat_scheduler.get_status()}
+    except Exception as e:
+        return {"agents": {}, "error": str(e)}
 
 
 # ================================================================== AgentLink
