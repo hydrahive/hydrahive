@@ -213,6 +213,16 @@ chat:
 
 ---
 
+
+#### Task-Agenten konfigurieren
+
+```yaml
+# /projects/buchhaltung/project.yaml
+task_agents:
+  ttl: 600        # Sekunden bis Task-Agent gestoppt wird (default: 300)
+  max_parallel: 5 # max gleichzeitige Task-Agenten (default: 10)
+```
+
 ## 6. Chat verwenden
 
 1. **Projekte** → **Chat öffnen** beim gewünschten Projekt
