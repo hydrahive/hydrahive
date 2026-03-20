@@ -3,7 +3,6 @@ import { RefreshCw, CheckCircle, XCircle, Eye, EyeOff, Save, Cpu, Download } fro
 import { api } from "@/lib/api";
 
 interface OllamaModel { name: string; size_gb: number; modified: string; }
-interface ClaudeProxyStatus { has_token: boolean; proxy_running: boolean; proxy_ok: boolean; proxy_url: string; }
 
 const PROVIDERS = [
   {
@@ -37,7 +36,6 @@ const PROVIDERS = [
 
 export function LlmConfigPage() {
   const [providerStatus, setProviderStatus] = useState<Record<string,{has_key:boolean}>>({});
-  const [claudeProxy, setClaudeProxy] = useState<ClaudeProxyStatus|null>(null);
   const [ollamaModels,   setOllamaModels]   = useState<OllamaModel[]>([]);
   const [ollamaOk,       setOllamaOk]       = useState<boolean|null>(null);
   const [loading,        setLoading]         = useState(true);
@@ -55,9 +53,7 @@ export function LlmConfigPage() {
       const [cfg, ollama, proxy] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
-        api.get<ClaudeProxyStatus>("/llm/claude_proxy/status"),
       ]);
-      if (proxy.status === "fulfilled") setClaudeProxy(proxy.value);
       if (cfg.status === "fulfilled")    setProviderStatus(cfg.value.providers ?? {});
       if (ollama.status === "fulfilled") {
         setOllamaOk(ollama.value.available);
@@ -133,17 +129,7 @@ export function LlmConfigPage() {
               </div>
 
               {/* Claude Max — Proxy-Status + Token-Setup */}
-              {p.id === "claude_max" && claudeProxy && (
-                <div className="flex items-center gap-4 text-xs p-2 bg-muted/50 rounded-md">
-                  <span className={claudeProxy.proxy_ok ? "text-green-600" : "text-muted-foreground"}>
-                    Proxy {claudeProxy.proxy_ok ? "✓ läuft" : "nicht aktiv"}
-                  </span>
-                  <span className={claudeProxy.has_token ? "text-green-600" : "text-orange-500"}>
-                    Token {claudeProxy.has_token ? "✓ gesetzt" : "fehlt"}
-                  </span>
-                  {claudeProxy.proxy_ok && <code className="text-muted-foreground">{claudeProxy.proxy_url}</code>}
-                </div>
-              )}
+
               {p.id === "claude_max" && (
                 <div className="bg-muted/50 rounded-md p-3 text-xs space-y-1.5 font-mono">
                   <p className="font-sans font-medium text-sm text-foreground mb-2">Setup-Anleitung</p>
