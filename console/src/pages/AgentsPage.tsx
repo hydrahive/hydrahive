@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface AgentRuntime {
@@ -51,6 +51,11 @@ export function AgentsPage() {
   const [saving,    setSaving]    = useState(false);
   const [saveErr,   setSaveErr]   = useState("");
   const [deleting,  setDeleting]  = useState<string|null>(null);
+  const [logAgent,  setLogAgent]  = useState<string|null>(null);
+  const [logLines,  setLogLines]  = useState<string[]>([]);
+  const [logErr,    setLogErr]    = useState("");
+  const logBottomRef = useRef<HTMLDivElement>(null);
+  const logIntervalRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   async function load() {
     try {
@@ -62,6 +67,33 @@ export function AgentsPage() {
 
   useEffect(() => { load(); }, []);
   function refresh() { setRefreshing(true); load(); }
+
+  async function fetchLogs(id: string) {
+    try {
+      const d = await api.agentLogs(id);
+      setLogLines(d.lines);
+      setLogErr("");
+    } catch(e) { setLogErr(e instanceof Error ? e.message : "Fehler beim Laden"); }
+  }
+
+  function openLogs(id: string) {
+    if (logAgent === id) { closeLogs(); return; }
+    setLogAgent(id); setLogLines([]); setLogErr("");
+    fetchLogs(id);
+    if (logIntervalRef.current) clearInterval(logIntervalRef.current);
+    logIntervalRef.current = setInterval(() => fetchLogs(id), 3000);
+  }
+
+  function closeLogs() {
+    setLogAgent(null);
+    if (logIntervalRef.current) { clearInterval(logIntervalRef.current); logIntervalRef.current = null; }
+  }
+
+  useEffect(() => {
+    logBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logLines]);
+
+  useEffect(() => () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current); }, []);
 
   async function openNew() {
     setForm({ ...EMPTY_FORM }); setEditId(null); setSaveErr(""); setShowForm(true);
@@ -285,6 +317,10 @@ export function AgentsPage() {
                       {rt.restart_count > 0 && <span className="ml-1 text-orange-500">↺{rt.restart_count}</span>}
                     </span>
                   )}
+                  <button onClick={() => openLogs(id)} title="Logs anzeigen"
+                    className={`p-1.5 rounded transition-colors ${logAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                    <ScrollText className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => openEdit(id, agent)}
                     className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
                     <Pencil className="h-3.5 w-3.5" />
@@ -297,6 +333,42 @@ export function AgentsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Log-Panel */}
+      {logAgent && (
+        <div className="bg-card border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+            <div className="flex items-center gap-2">
+              <ScrollText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Logs — {logAgent}</span>
+              <span className="flex items-center gap-1 text-xs text-green-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Live
+              </span>
+            </div>
+            <button onClick={closeLogs} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {logErr
+            ? <p className="p-4 text-sm text-destructive">{logErr}</p>
+            : (
+              <div className="h-72 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-[#0d0d0d] text-[#d4d4d4]">
+                {logLines.length === 0
+                  ? <span className="text-muted-foreground">Lade Logs…</span>
+                  : logLines.map((line, i) => (
+                    <div key={i} className={`whitespace-pre-wrap break-all ${
+                      line.includes(" ERROR ") || line.includes(" error ") ? "text-red-400" :
+                      line.includes(" WARNING ") || line.includes(" warning ") ? "text-yellow-400" :
+                      "text-[#d4d4d4]"
+                    }`}>{line}</div>
+                  ))
+                }
+                <div ref={logBottomRef} />
+              </div>
+            )
+          }
         </div>
       )}
     </div>

@@ -24,4 +24,6 @@ export const api = {
     api.post<{response:string;workers:string[];session_id:string}>(`/projects/${id}/message`, { content }),
   sessionHistory: (id: string) =>
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/projects/${id}/session/history`),
+  agentLogs: (id: string, lines = 100) =>
+    api.get<{agent_id:string;lines:string[];count:number}>(`/agents/${id}/logs?lines=${lines}`),
 };
