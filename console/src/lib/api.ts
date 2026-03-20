@@ -31,12 +31,32 @@ export const api = {
   createWebhook:    (id: string, d: unknown) => api.post<Webhook>(`/projects/${id}/webhooks`, d),
   deleteWebhook:    (id: string, wid: string) => api.delete(`/projects/${id}/webhooks/${wid}`),
   testWebhook:      (id: string, d: unknown) => api.post(`/projects/${id}/webhooks/test`, d),
+  auditLogs: (params?: { limit?: number; project?: string; user?: string; action?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit)   q.set("limit",   String(params.limit));
+    if (params?.project) q.set("project", params.project);
+    if (params?.user)    q.set("user",    params.user);
+    if (params?.action)  q.set("action",  params.action);
+    const qs = q.toString();
+    return api.get<{logs: AuditEntry[]; count: number}>(`/audit/logs${qs ? "?" + qs : ""}`);
+  },
   agentSkills:       (id: string) =>
     api.get<{skills: AgentSkill[]}>(`/agents/${id}/skills`),
   createSkill:       (id: string, d: unknown) => api.post(`/agents/${id}/skills`, d),
   updateSkill:       (id: string, filename: string, d: unknown) => api.put(`/agents/${id}/skills/${filename}`, d),
   deleteSkill:       (id: string, filename: string) => api.delete(`/agents/${id}/skills/${filename}`),
 };
+
+export interface AuditEntry {
+  id:         string;
+  timestamp:  string;
+  user:       string;
+  action:     string;
+  target:     string;
+  project_id: string | null;
+  ip:         string;
+  details:    Record<string, unknown>;
+}
 
 export interface Webhook {
   id:         string;
