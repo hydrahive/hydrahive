@@ -282,6 +282,21 @@ class Orchestrator:
             if soul_path.exists():
                 parts.append(soul_path.read_text(encoding="utf-8").strip())
 
+        # Persistentes Gedächtnis laden (#85)
+        if boss_cfg.agent_dir:
+            memory_dir = boss_cfg.agent_dir / "memory"
+            if memory_dir.exists():
+                mem_parts = []
+                for mf in sorted(memory_dir.glob("*.md")):
+                    try:
+                        text = mf.read_text(encoding="utf-8").strip()
+                        if text:
+                            mem_parts.append(f"### {mf.stem}\n{text}")
+                    except OSError:
+                        pass
+                if mem_parts:
+                    parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
+
         # QMD-Skills laden (scope=always immer, on-demand bei Keyword-Match)
         if boss_cfg.agent_dir:
             all_skills = load_skills(boss_cfg.agent_dir)
@@ -361,7 +376,11 @@ class Orchestrator:
         client = _anthropic.AsyncAnthropic(
             api_key="",
             auth_token=token,
-            default_headers={"anthropic-beta": "oauth-2025-04-20"},
+            default_headers={
+                "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
+                "user-agent":     "claude-cli/2.1.62",
+                "x-app":          "cli",
+            },
         )
 
         # System-Message extrahieren
@@ -371,7 +390,15 @@ class Orchestrator:
             if m.get("role") == "system":
                 system_msg = m.get("content", "")
             else:
-                filtered.append({"role": m["role"], "content": m.get("content", "")})
+                filtered.append({"role": m["role"], "content": m.get("content") or ""})
+        # Consecutive gleiche Rollen mergen (Anthropic-Constraint)
+        merged: list[dict] = []
+        for m in filtered:
+            if merged and merged[-1]["role"] == m["role"]:
+                merged[-1]["content"] += "\n\n" + m["content"]
+            else:
+                merged.append(dict(m))
+        filtered = merged
 
         # Modell-Name normalisieren (openai/claude-... → claude-...)
         model = agent_cfg.llm.model
@@ -382,20 +409,18 @@ class Orchestrator:
         if not model.startswith("claude-"):
             model = "claude-haiku-4-5"
 
-        # Nur claude-haiku-4-5 funktioniert via OAuth (Stand 2026-03)
-        # Alle anderen claude-* Modelle → Fallback auf Haiku
-        if not model.startswith("claude-haiku"):
-            logger.info("OAuth: %s nicht verfügbar, Fallback auf claude-haiku-4-5", model)
-            model = "claude-haiku-4-5"
+        # OAuth erfordert Claude-Code-Identity als ersten System-Block
+        oauth_system = [{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}]
+        if system_msg:
+            oauth_system.append({"type": "text", "text": system_msg})
 
         kwargs: dict = {
             "model":       model,
             "max_tokens":  agent_cfg.llm.max_tokens,
             "messages":    filtered,
             "temperature": agent_cfg.llm.temperature,
+            "system":      oauth_system,
         }
-        if system_msg:
-            kwargs["system"] = system_msg
         if tools:
             # Anthropic Tool-Format aus litellm-Format ableiten
             kwargs["tools"] = [
@@ -456,7 +481,9 @@ class Orchestrator:
             return
 
         # Session + System-Prompt aufbauen (gleich wie handle_message)
+        user_msg_saved = False
         self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
+        user_msg_saved = True
         system_prompt = self._build_system_prompt(boss_cfg, content)
         history       = self._sessions.get_context(project_id, max_messages=20)
         messages      = [{"role": "system", "content": system_prompt}] + history
@@ -476,16 +503,28 @@ class Orchestrator:
                 import anthropic as _anthropic
                 client = _anthropic.AsyncAnthropic(
                     api_key="",
-                    default_headers={"anthropic-beta": "oauth-2025-04-20"},
                     auth_token=oauth_token,
+                    default_headers={
+                        "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
+                        "user-agent":     "claude-cli/2.1.62",
+                        "x-app":          "cli",
+                    },
                 )
                 system_msg = ""
-                filtered   = []
+                raw = []
                 for m in messages:
                     if m.get("role") == "system":
                         system_msg = m.get("content", "")
                     else:
-                        filtered.append({"role": m["role"], "content": m.get("content", "")})
+                        raw.append({"role": m["role"], "content": m.get("content") or ""})
+                # Anthropic: keine aufeinanderfolgenden gleichen Rollen erlaubt
+                # Zusammenführen um korrupte Sessions zu tolerieren
+                filtered: list[dict] = []
+                for m in raw:
+                    if filtered and filtered[-1]["role"] == m["role"]:
+                        filtered[-1]["content"] += "\n\n" + m["content"]
+                    else:
+                        filtered.append(dict(m))
 
                 model = boss_cfg.llm.model
                 for prefix in ("openai/", "anthropic/", "claude/"):
@@ -495,18 +534,73 @@ class Orchestrator:
                 if not model.startswith("claude-"):
                     model = "claude-haiku-4-5-20251001"
 
+                # OAuth erfordert Claude-Code-Identity als ersten System-Block
+                oauth_system = [
+                    {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+                ]
+                if system_msg:
+                    oauth_system.append({"type": "text", "text": system_msg})
+
                 kwargs: dict = {
                     "model":      model,
                     "max_tokens": boss_cfg.llm.max_tokens,
                     "messages":   filtered,
+                    "system":     oauth_system,
                 }
-                if system_msg:
-                    kwargs["system"] = system_msg
+                if litellm_tools:
+                    kwargs["tools"] = [
+                        {
+                            "name":         t["function"]["name"],
+                            "description":  t["function"].get("description", ""),
+                            "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+                        }
+                        for t in litellm_tools
+                    ]
 
-                async with client.messages.stream(**kwargs) as stream:
-                    async for text in stream.text_stream:
-                        full_response += text
-                        yield f"data: {_json.dumps({'text': text})}\n\n"
+                # Agentic Tool-Loop für OAuth-Streaming
+                for _round in range(6):
+                    async with client.messages.stream(**kwargs) as stream:
+                        async for text in stream.text_stream:
+                            full_response += text
+                            yield f"data: {_json.dumps({'text': text})}\n\n"
+                        final_msg = await stream.get_final_message()
+
+                    # Tool-Calls prüfen
+                    tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
+                    if not tool_use_blocks:
+                        break  # Kein Tool-Call → fertig
+
+                    # Tool-Calls ausführen
+                    tool_results = []
+                    for block in tool_use_blocks:
+                        tool = self._reg.get(block.name)
+                        if tool:
+                            try:
+                                result = await tool.execute(
+                                    agent_id=boss_cfg.id,
+                                    project_id=project_id,
+                                    **block.input,
+                                )
+                            except Exception as te:
+                                result = {"error": str(te)}
+                        else:
+                            result = {"error": f"Tool '{block.name}' nicht gefunden"}
+                        tool_results.append({
+                            "type":        "tool_result",
+                            "tool_use_id": block.id,
+                            "content":     _json.dumps(result, ensure_ascii=False),
+                        })
+
+                    # Nächste Runde: Assistent-Antwort + Tool-Results anhängen
+                    asst_content = []
+                    for b in final_msg.content:
+                        if b.type == "text":
+                            asst_content.append({"type": "text", "text": b.text})
+                        elif b.type == "tool_use":
+                            asst_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+                    filtered.append({"role": "assistant", "content": asst_content})
+                    filtered.append({"role": "user",      "content": tool_results})
+                    kwargs["messages"] = filtered
 
             else:
                 # litellm Streaming (Ollama / OpenAI)
@@ -536,6 +630,8 @@ class Orchestrator:
 
         except Exception as e:
             logger.error("Streaming-Fehler: %s", e)
+            if user_msg_saved:
+                self._sessions.pop_last(project_id)
             yield f"data: {_json.dumps({'error': str(e)})}\n\n"
 
     async def _tool_loop(

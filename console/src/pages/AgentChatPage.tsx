@@ -11,10 +11,11 @@ interface Message {
 }
 
 const SLASH_COMMANDS = [
-  { cmd: "/help",  desc: "Verfügbare Commands anzeigen" },
-  { cmd: "/clear", desc: "Chat-Verlauf leeren" },
-  { cmd: "/model", desc: "Aktuelles LLM-Modell anzeigen" },
-  { cmd: "/retry", desc: "Letzte Nachricht nochmal senden" },
+  { cmd: "/help",     desc: "Verfügbare Commands anzeigen" },
+  { cmd: "/clear",    desc: "Chat-Verlauf leeren" },
+  { cmd: "/model",    desc: "Aktuelles LLM-Modell anzeigen" },
+  { cmd: "/retry",    desc: "Letzte Nachricht nochmal senden" },
+  { cmd: "/remember", desc: "Session im Agenten-Gedächtnis speichern (/remember [name])" },
 ];
 
 let _msgCounter = 0;
@@ -86,6 +87,7 @@ export function AgentChatPage() {
     }
     if (base === "/clear") {
       setMessages([]);
+      api.delete(`/agents/${id}/session`).catch(() => {});
       sysMsg("Chat-Verlauf geleert.");
       return true;
     }
@@ -100,6 +102,23 @@ export function AgentChatPage() {
       if (!lastUser) { sysMsg("Keine vorherige Nachricht zum Wiederholen."); return true; }
       setInput(lastUser.content);
       setTimeout(() => textareaRef.current?.focus(), 0);
+      return true;
+    }
+    if (base === "/remember") {
+      const parts = cmd.trim().split(/\s+/);
+      const filename = parts[1]
+        ? parts[1].replace(/[^a-z0-9_-]/gi, "-").toLowerCase()
+        : new Date().toISOString().slice(0, 10);
+      const history = messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .slice(-30)
+        .map(m => `**${m.role === "user" ? "User" : "Agent"}:** ${m.content}`)
+        .join("\n\n");
+      if (!history) { sysMsg("Kein Chat-Verlauf zum Speichern."); return true; }
+      const content = `# Session: ${new Date().toLocaleString("de")}\n\n${history}`;
+      api.post(`/agents/${id}/memory`, { filename, content })
+        .then(() => sysMsg(`Gespeichert als \`${filename}.md\` im Gedächtnis.`))
+        .catch((e: Error) => sysMsg(`Fehler: ${e.message}`));
       return true;
     }
     sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\` für eine Übersicht.`);
