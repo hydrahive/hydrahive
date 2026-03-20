@@ -17,6 +17,7 @@ git pull
 
 echo ""
 echo "==> [2/5] Core rsync → VM"
+$SSH "$VM" "sudo chown -R octopos:octopos /opt/octopos/core/"
 rsync -av --delete \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
   -e "ssh -i $SSH_KEY" \
