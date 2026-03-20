@@ -77,9 +77,21 @@ class Session:
     def end(self) -> None:
         self.ended_at = datetime.now(timezone.utc).isoformat()
 
-    def llm_context(self, max_messages: int = 50) -> list[dict]:
-        """Letzten N Nachrichten als LLM-Format."""
-        return [m.as_llm_message() for m in self.messages[-max_messages:]]
+    def llm_context(self, max_messages: int = 50, prune_tool_results: int = 8) -> list[dict]:
+        """
+        Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning)
+        Tool-Results die aelter als prune_tool_results Positionen sind werden
+        auf einen Platzhalter gekuerzt — spart Tokens ohne Kontext zu verlieren.
+        """
+        window = self.messages[-max_messages:]
+        cutoff = max(0, len(window) - prune_tool_results)
+        result = []
+        for i, m in enumerate(window):
+            if i < cutoff and m.role == MessageRole.TOOL and len(m.content) > 200:
+                result.append({"role": m.role.value, "content": "[Tool-Result gekürzt — zu weit zurück im Kontext]"})
+            else:
+                result.append(m.as_llm_message())
+        return result
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -193,6 +205,34 @@ class SessionManager:
 
     def active_projects(self) -> list[str]:
         return list(self._active.keys())
+
+    def estimated_tokens(self, project_id: str) -> int:
+        """Grobe Token-Schaetzung der aktiven Session (1 Token ≈ 4 Zeichen)."""
+        session = self._active.get(project_id)
+        if not session:
+            return 0
+        total_chars = sum(len(m.content) for m in session.messages)
+        return total_chars // 4
+
+    def compact(self, project_id: str, summary: str, keep_last: int = 10) -> None:
+        """
+        Context-Kompaktierung (#74): ersetzt alte Nachrichten durch eine Summary-Message.
+        Die letzten keep_last Nachrichten bleiben erhalten.
+        """
+        session = self._active.get(project_id)
+        if not session or len(session.messages) <= keep_last:
+            return
+        tail = session.messages[-keep_last:]
+        summary_msg = Message.create(
+            role=MessageRole.SYSTEM,
+            content=f"[Zusammenfassung früherer Konversation]\n{summary}",
+        )
+        session.messages = [summary_msg] + tail
+        self._persist(session)
+        logger.info(
+            "Session %s kompaktiert: Summary + %d Nachrichten behalten",
+            session.id[:8], keep_last,
+        )
 
     # ----------------------------------------------------------------- private
 
