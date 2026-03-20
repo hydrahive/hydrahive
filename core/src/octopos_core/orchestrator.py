@@ -236,7 +236,14 @@ class Orchestrator:
                 model = model[len(prefix):]
                 break
         if not model.startswith("claude-"):
-            model = "claude-sonnet-4-6"
+            model = "claude-haiku-4-5"
+
+        # claude-sonnet/opus-4-6 sind via OAuth nicht nutzbar → Fallback auf Haiku
+        # (claude-haiku-4-5 ist das einzige OAuth-kompatible Modell per 2026-03)
+        OAUTH_UNSUPPORTED = ("claude-sonnet-4-6", "claude-opus-4-6", "claude-sonnet-4-5", "claude-opus-4-5")
+        if model in OAUTH_UNSUPPORTED:
+            logger.info("OAuth: %s nicht verfügbar, Fallback auf claude-haiku-4-5", model)
+            model = "claude-haiku-4-5"
 
         kwargs: dict = {
             "model":       model,
