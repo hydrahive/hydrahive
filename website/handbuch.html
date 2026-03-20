@@ -259,7 +259,7 @@
   <nav class="toc">
     <div class="toc-section">Inhalt</div>
     <a href="#installation">1. Installation</a>
-    <a href="#setup-wizard">2. Setup-Wizard</a>
+    <a href="#erster-login">2. Erster Login</a>
     <a href="#webkonsole">3. Webkonsole</a>
     <a href="#agenten">4. Agenten anlegen</a>
     <a href="#projekte">5. Projekte anlegen</a>
@@ -267,10 +267,11 @@
     <a href="#llm">7. LLM-Konfiguration</a>
     <a href="#skills">8. Skills</a>
     <a href="#webhooks">9. Webhooks</a>
-    <a href="#benutzer">10. Benutzer</a>
-    <a href="#audit">11. Audit-Log</a>
-    <a href="#matrix">12. Matrix-Integration</a>
-    <a href="#troubleshooting">13. Troubleshooting</a>
+    <a href="#benutzer">10. Benutzer & Rollen</a>
+    <a href="#backup">11. Backup & Restore</a>
+    <a href="#audit">12. Audit-Log</a>
+    <a href="#matrix">13. Matrix-Integration</a>
+    <a href="#troubleshooting">14. Troubleshooting</a>
   </nav>
 </aside>
 
@@ -314,16 +315,17 @@ sudo bash installer/install.sh</code></pre>
 certbot --nginx -d mein.domain.de</code></pre>
   </section>
 
-  <!-- 2. SETUP WIZARD -->
-  <section class="chapter" id="setup-wizard">
-    <h2>2. Erster Start — Setup-Wizard</h2>
-    <p>Beim ersten Aufruf der Konsole erscheint der Setup-Wizard. Hier wird der Admin-Account angelegt.</p>
+  <!-- 2. ERSTER LOGIN -->
+  <section class="chapter" id="erster-login">
+    <h2>2. Erster Login</h2>
+    <p>Nach der Installation ist die Konsole sofort nutzbar. Der Installer hat einen Admin-Account angelegt:</p>
     <ul>
-      <li><strong>Benutzername:</strong> Nur <code>a-z</code>, <code>0-9</code>, <code>_</code>, <code>.</code>, <code>-</code> erlaubt</li>
-      <li><strong>Passwort:</strong> Mindestens 8 Zeichen</li>
+      <li><strong>Benutzername:</strong> <code>admin</code></li>
+      <li><strong>Passwort:</strong> steht in <code>/etc/octopos/admin_credentials</code> auf dem Server</li>
     </ul>
-    <p>Nach dem Anlegen erscheint die Login-Seite. Der Account funktioniert direkt.</p>
-    <div class="note">Der Setup-Wizard erscheint nur solange noch kein Benutzer existiert. Danach ist <code>/setup</code> nicht mehr zugänglich.</div>
+    <pre><code>sudo cat /etc/octopos/admin_credentials
+# matrix_admin_password=&lt;generiertes-passwort&gt;</code></pre>
+    <div class="note">Nach dem ersten Login empfiehlt sich das Anlegen eines persönlichen Admin-Accounts unter <strong>Benutzer</strong> → <strong>Neuer Benutzer</strong>.</div>
   </section>
 
   <!-- 3. WEBKONSOLE -->
@@ -331,15 +333,16 @@ certbot --nginx -d mein.domain.de</code></pre>
     <h2>3. Die Webkonsole</h2>
     <p>Die Konsole ist unter <code>https://&lt;IP&gt;</code> erreichbar. Alle Bereiche sind über die linke Sidebar zugänglich:</p>
     <table>
-      <tr><th>Bereich</th><th>Funktion</th></tr>
-      <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td></tr>
-      <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td></tr>
-      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks konfigurieren</td></tr>
-      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen</td></tr>
-      <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td></tr>
-      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI)</td></tr>
-      <tr><td><strong>Benutzer</strong></td><td>Weitere Benutzer anlegen und verwalten</td></tr>
-      <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td></tr>
+      <tr><th>Bereich</th><th>Funktion</th><th>Zugriff</th></tr>
+      <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td><td>alle</td></tr>
+      <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td><td>alle (Schreiben: admin)</td></tr>
+      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks konfigurieren</td><td>alle (Schreiben: admin)</td></tr>
+      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen</td><td>alle</td></tr>
+      <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td><td>alle</td></tr>
+      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI)</td><td>admin</td></tr>
+      <tr><td><strong>Benutzer</strong></td><td>Benutzer anlegen und verwalten</td><td>admin</td></tr>
+      <tr><td><strong>Backup</strong></td><td>Backups erstellen, herunterladen und wiederherstellen</td><td>admin</td></tr>
+      <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td><td>admin</td></tr>
     </table>
   </section>
 
@@ -400,6 +403,8 @@ heartbeat:
       <tr><td><code>http_request</code></td><td>HTTP-Anfragen an externe APIs</td></tr>
       <tr><td><code>dispatch_task</code></td><td>Andere Agenten beauftragen (nur boss)</td></tr>
       <tr><td><code>spawn_agent</code></td><td>Kurzlebigen Worker-Agenten erstellen</td></tr>
+      <tr><td><code>write_handoff</code></td><td>Aufgabe/Kontext an anderen Agenten übergeben (AgentLink)</td></tr>
+      <tr><td><code>read_handoff</code></td><td>Übergabe-Auftrag entgegennehmen (AgentLink)</td></tr>
     </table>
     <div class="note">Alle Filesystem-Operationen sind auf <code>/projects/&lt;projekt-id&gt;/</code> beschränkt. Zugriff darüber hinaus wird verweigert.</div>
   </section>
@@ -561,18 +566,54 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
 
   <!-- 10. BENUTZER -->
   <section class="chapter" id="benutzer">
-    <h2>10. Benutzer verwalten</h2>
-    <p>Unter <strong>Benutzer</strong> können weitere Admin-Accounts angelegt werden. Alle Benutzer haben aktuell Admin-Rechte.</p>
+    <h2>10. Benutzer und Rollen</h2>
+    <p>Unter <strong>Benutzer</strong> (Admin only) werden Accounts verwaltet. OctopOS kennt zwei Rollen:</p>
+    <table>
+      <tr><th>Rolle</th><th>Rechte</th></tr>
+      <tr><td><strong>admin</strong></td><td>Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, Backup, Benutzerverwaltung</td></tr>
+      <tr><td><strong>user</strong></td><td>Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, keine Konfiguration</td></tr>
+    </table>
     <ul>
-      <li><strong>Neuer Benutzer:</strong> Benutzername + Passwort</li>
+      <li><strong>Neuer Benutzer:</strong> Benutzername, Passwort und Rolle wählen</li>
       <li><strong>Passwort ändern:</strong> Stift-Symbol</li>
       <li><strong>Löschen:</strong> Papierkorb-Symbol (eigener Account kann nicht gelöscht werden)</li>
     </ul>
   </section>
 
-  <!-- 11. AUDIT -->
+  <!-- 11. BACKUP -->
+  <section class="chapter" id="backup">
+    <h2>11. Backup &amp; Restore</h2>
+    <p>Unter <strong>Backup</strong> (Admin only) können vollständige System-Backups erstellt und verwaltet werden.</p>
+
+    <h3>Was wird gesichert?</h3>
+    <p>Ein Backup enthält als <code>tar.gz</code>:</p>
+    <ul>
+      <li><code>/etc/octopos/</code> — Konfigurationsdateien (JWT-Secret, Users, LLM-Config)</li>
+      <li><code>/agents/</code> — alle Agenten-Definitionen und Skills</li>
+      <li><code>/projects/</code> — Projekt-Konfigurationen und Agenten-Dateien</li>
+    </ul>
+
+    <h3>Backup erstellen</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Backup</strong> → <strong>Backup erstellen</strong></span></li>
+      <li><span class="step-num">2</span><span>Das Backup erscheint sofort in der Liste mit Zeitstempel und Größe</span></li>
+    </ol>
+
+    <h3>Backup herunterladen</h3>
+    <p>Klick auf das Download-Symbol neben dem Backup — die <code>tar.gz</code>-Datei wird heruntergeladen.</p>
+
+    <h3>Backup wiederherstellen</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Klick auf das Wiederherstellen-Symbol</span></li>
+      <li><span class="step-num">2</span><span>Bestätigen</span></li>
+      <li><span class="step-num">3</span><span>Core-Service startet automatisch neu — nach 10 Sekunden Seite neu laden</span></li>
+    </ol>
+    <div class="note">Nach der Wiederherstellung sind alle Agenten, Projekte und Konfigurationen auf den Stand des Backups zurückgesetzt.</div>
+  </section>
+
+  <!-- 12. AUDIT -->
   <section class="chapter" id="audit">
-    <h2>11. Audit-Log</h2>
+    <h2>12. Audit-Log</h2>
     <p>Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:</p>
     <ul>
       <li>Logins (erfolgreich und fehlgeschlagen)</li>
@@ -587,9 +628,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <p><strong>Filter:</strong> Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.</p>
   </section>
 
-  <!-- 12. MATRIX -->
+  <!-- 13. MATRIX -->
   <section class="chapter" id="matrix">
-    <h2>12. Matrix-Integration</h2>
+    <h2>13. Matrix-Integration</h2>
     <p>OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
 
     <h3>Element-Client verbinden</h3>
@@ -605,9 +646,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <div class="note">Der Matrix-Watchdog startet abgestürzte Bots automatisch neu — mit 15 Sekunden Verzögerung.</div>
   </section>
 
-  <!-- 13. TROUBLESHOOTING -->
+  <!-- 14. TROUBLESHOOTING -->
   <section class="chapter" id="troubleshooting">
-    <h2>13. Troubleshooting</h2>
+    <h2>14. Troubleshooting</h2>
 
     <h3>Konsole nicht erreichbar</h3>
     <pre><code>sudo systemctl status nginx

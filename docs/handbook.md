@@ -7,7 +7,7 @@ OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen V
 ## Inhaltsverzeichnis
 
 1. [Installation](#1-installation)
-2. [Erster Start — Setup-Wizard](#2-erster-start--setup-wizard)
+2. [Erster Login](#2-erster-login)
 3. [Die Webkonsole](#3-die-webkonsole)
 4. [Agenten anlegen](#4-agenten-anlegen)
 5. [Projekte anlegen](#5-projekte-anlegen)
@@ -15,10 +15,11 @@ OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen V
 7. [LLM-Konfiguration](#7-llm-konfiguration)
 8. [Skills — Agenten-Wissen erweitern](#8-skills--agenten-wissen-erweitern)
 9. [Webhooks](#9-webhooks)
-10. [Benutzer verwalten](#10-benutzer-verwalten)
-11. [Audit-Log](#11-audit-log)
-12. [Matrix-Integration](#12-matrix-integration)
-13. [Troubleshooting](#13-troubleshooting)
+10. [Benutzer und Rollen](#10-benutzer-und-rollen)
+11. [Backup & Restore](#11-backup--restore)
+12. [Audit-Log](#12-audit-log)
+13. [Matrix-Integration](#13-matrix-integration)
+14. [Troubleshooting](#14-troubleshooting)
 
 ---
 
@@ -60,16 +61,21 @@ certbot --nginx -d mein.domain.de
 
 ---
 
-## 2. Erster Start — Setup-Wizard
+## 2. Erster Login
 
-Beim ersten Aufruf der Konsole erscheint der Setup-Wizard. Hier wird der Admin-Account angelegt.
+Nach der Installation ist die Konsole sofort nutzbar. Der Installer hat einen Admin-Account angelegt:
 
-- **Benutzername:** Nur `a-z`, `0-9`, `_`, `.`, `-` erlaubt
-- **Passwort:** Mindestens 8 Zeichen
+- **Benutzername:** `admin`
+- **Passwort:** steht in `/etc/octopos/admin_credentials` auf dem Server
 
-Nach dem Anlegen erscheint die Login-Seite. Der Account funktioniert direkt.
+```bash
+sudo cat /etc/octopos/admin_credentials
+# matrix_admin_password=<generiertes-passwort>
+```
 
-> Der Setup-Wizard erscheint nur solange noch kein Benutzer existiert. Danach ist `/setup` nicht mehr zugänglich.
+Das angezeigte Passwort ist der initiale Login. Nach dem ersten Login empfiehlt sich das Anlegen eines persönlichen Admin-Accounts unter **Benutzer** → **Neuer Benutzer**.
+
+> Weitere Benutzer können als `admin` (vollen Zugriff) oder `user` (nur Chat und Lesen) angelegt werden.
 
 ---
 
@@ -77,16 +83,17 @@ Nach dem Anlegen erscheint die Login-Seite. Der Account funktioniert direkt.
 
 Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die linke Sidebar erreichbar:
 
-| Bereich | Funktion |
-|---|---|
-| **Dashboard** | Überblick über Agenten, Projekte, System-Status |
-| **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten |
-| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren |
-| **System** | Service-Status, Laufzeit-Informationen |
-| **Tools** | Verfügbare Tools anzeigen |
-| **LLM-Config** | Sprachmodell konfigurieren (Ollama, Claude, OpenAI) |
-| **Benutzer** | Weitere Benutzer anlegen und verwalten |
-| **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen |
+| Bereich | Funktion | Zugriff |
+|---|---|---|
+| **Dashboard** | Überblick über Agenten, Projekte, System-Status | alle |
+| **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten | alle (Schreiben: admin) |
+| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
+| **System** | Service-Status, Laufzeit-Informationen | alle |
+| **Tools** | Verfügbare Tools anzeigen | alle |
+| **LLM-Config** | Sprachmodell konfigurieren (Ollama, Claude, OpenAI) | admin |
+| **Benutzer** | Benutzer anlegen und verwalten | admin |
+| **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
+| **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
 
 ---
 
@@ -158,6 +165,8 @@ heartbeat:
 | `http_request` | HTTP-Anfragen an externe APIs |
 | `dispatch_task` | Andere Agenten beauftragen (nur boss) |
 | `spawn_agent` | Kurzlebigen Worker-Agenten erstellen |
+| `write_handoff` | Aufgabe/Kontext an anderen Agenten übergeben (AgentLink) |
+| `read_handoff` | Übergabe-Auftrag entgegennehmen (AgentLink) |
 
 > Alle Filesystem-Operationen sind auf `/projects/<projekt-id>/` beschränkt. Zugriff darüber hinaus wird verweigert.
 
@@ -340,17 +349,78 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]
 
 ---
 
-## 10. Benutzer verwalten
+## 10. Benutzer und Rollen
 
-Unter **Benutzer** können weitere Admin-Accounts angelegt werden. Alle Benutzer haben aktuell Admin-Rechte.
+Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. OctopOS kennt zwei Rollen:
 
-- **Neuer Benutzer:** Benutzername + Passwort
+| Rolle | Rechte |
+|---|---|
+| **admin** | Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, Backup, Benutzerverwaltung |
+| **user** | Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, keine Konfiguration |
+
+- **Neuer Benutzer:** Benutzername, Passwort und Rolle (`admin` oder `user`) wählen
 - **Passwort ändern:** Stift-Symbol
 - **Löschen:** Papierkorb-Symbol (eigener Account kann nicht gelöscht werden)
 
 ---
 
-## 11. Audit-Log
+## 11. Backup & Restore
+
+Unter **Backup** (Admin only) können vollständige System-Backups erstellt und verwaltet werden.
+
+### Was wird gesichert?
+
+Ein Backup enthält als `tar.gz`:
+- `/etc/octopos/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials)
+- `/agents/` — alle Agenten-Definitionen und Skills
+- `/projects/` — Projekt-Konfigurationen und Agenten-Dateien
+
+**Nicht enthalten:** Betriebssystem, venv, Console-Build (werden bei Bedarf neu installiert).
+
+### Backup erstellen
+
+1. **Backup** → **Backup erstellen**
+2. Das Backup erscheint sofort in der Liste mit Zeitstempel und Dateigröße
+
+Backups liegen auf dem Server unter `/opt/octopos/backups/`.
+
+### Backup herunterladen
+
+Klick auf das Download-Symbol neben dem Backup. Die `tar.gz`-Datei wird heruntergeladen.
+
+### Backup wiederherstellen
+
+1. Klick auf das Wiederherstellen-Symbol
+2. Bestätigen
+3. Der Core-Service startet automatisch neu
+4. Nach 10 Sekunden Seite neu laden
+
+> Nach der Wiederherstellung sind alle Agenten, Projekte und Konfigurationen auf den Stand des Backups zurückgesetzt.
+
+### Backup per Kommandozeile
+
+```bash
+# Backup erstellen
+curl -X POST https://<ip>/api/admin/backups \
+  -H "Authorization: Bearer <token>"
+
+# Alle Backups auflisten
+curl https://<ip>/api/admin/backups \
+  -H "Authorization: Bearer <token>"
+```
+
+### Automatisches Backup
+
+Für regelmäßige automatische Backups auf Lilith (von extern):
+
+```bash
+# Skript liegt in scripts/octopos-backup.sh
+./scripts/octopos-backup.sh
+```
+
+---
+
+## 12. Audit-Log
 
 Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
 
@@ -368,7 +438,7 @@ Gespeichert in `/var/log/octopos/audit.jsonl` — append-only, ein JSON-Objekt p
 
 ---
 
-## 12. Matrix-Integration
+## 13. Matrix-Integration
 
 OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.
 
@@ -386,7 +456,7 @@ Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch.
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### Konsole nicht erreichbar
 
