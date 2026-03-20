@@ -50,6 +50,11 @@ source "${MODULES_DIR}/07_console.sh"
 source "${MODULES_DIR}/08_ollama.sh"
 source "${MODULES_DIR}/09_https.sh"
 
+# Update-Script nach /opt/octopos/ kopieren
+cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${OCTOPOS_DIR}/update.sh"
+chmod +x "${OCTOPOS_DIR}/update.sh"
+success "Update-Script: sudo bash ${OCTOPOS_DIR}/update.sh"
+
 # Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
 for _f in jwt_secret llm_env llm_config.json; do
     _path="/etc/octopos/${_f}"
