@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Impressum — OctopOS</title>
+  <style>
+    :root { --bg: #0a0e1a; --bg2: #111827; --accent: #06b6d4; --text: #f1f5f9; --muted: #94a3b8; --card: #1e293b; --border: #334155; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; min-height: 100vh; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1.2rem 2rem; border-bottom: 1px solid var(--border); background: rgba(10,14,26,0.95); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(8px); }
+    .logo { font-size: 1.2rem; font-weight: 700; color: var(--accent); text-decoration: none; }
+    .logo span { color: var(--text); }
+    nav a.back { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+    nav a.back:hover { color: var(--accent); }
+    .content { max-width: 760px; margin: 0 auto; padding: 4rem 2rem; }
+    h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 2rem; letter-spacing: -0.5px; }
+    h2 { font-size: 1rem; font-weight: 600; color: var(--accent); margin: 2rem 0 0.5rem; }
+    p { color: var(--muted); font-size: 0.95rem; margin-bottom: 0.6rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; margin-bottom: 1.5rem; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+    footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 4rem; }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.htm">Octo<span>POS</span></a>
+  <a class="back" href="index.htm">← Zurück zur Startseite</a>
+</nav>
+
+<div class="content">
+  <h1>Impressum</h1>
+
+  <div class="section">
+    <h2>Angaben gemäß § 5 TMG</h2>
+    <p>Alexander Molke<br>
+    Hahnenkammstraße 11<br>
+    60388 Frankfurt am Main<br>
+    Deutschland</p>
+
+    <hr class="divider">
+
+    <h2>Kontakt</h2>
+    <p>E-Mail: <a href="mailto:alex.mo@bergen-enkheim.biz">alex.mo@bergen-enkheim.biz</a></p>
+
+    <hr class="divider">
+
+    <h2>Hinweis</h2>
+    <p>Diese Website ist ein nicht-kommerzielles Open-Source-Projekt. OctopOS wird unter der MIT-Lizenz veröffentlicht.</p>
+  </div>
+
+  <div class="section">
+    <h2>Haftung für Inhalte</h2>
+    <p>Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.</p>
+    <p>Verpflichtungen zur Entfernung oder Sperrung der Nutzung von Informationen nach den allgemeinen Gesetzen bleiben hiervon unberührt. Eine diesbezügliche Haftung ist jedoch erst ab dem Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung möglich. Bei Bekanntwerden von entsprechenden Rechtsverletzungen werden wir diese Inhalte umgehend entfernen.</p>
+
+    <h2>Haftung für Links</h2>
+    <p>Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich.</p>
+
+    <h2>Urheberrecht</h2>
+    <p>Die durch den Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Der Quellcode von OctopOS steht unter der <strong style="color:var(--text)">MIT-Lizenz</strong> und kann frei verwendet, verändert und weitergegeben werden.</p>
+  </div>
+</div>
+
+<footer>
+  <a href="index.htm">OctopOS</a> &nbsp;·&nbsp;
+  <a href="impressum.html">Impressum</a> &nbsp;·&nbsp;
+  <a href="datenschutz.html">Datenschutz</a>
+</footer>
+</body>
+</html>
