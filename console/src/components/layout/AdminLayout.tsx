@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, LogOut } from "lucide-react";
+import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 const nav = [
@@ -8,6 +8,7 @@ const nav = [
   { to:"/projects",  icon:FolderKanban,    label:"Projekte"  },
   { to:"/system",    icon:Server,          label:"System"    },
   { to:"/tools",     icon:Wrench,          label:"Tools"     },
+  { to:"/llm",       icon:Cpu,             label:"LLM-Config" },
 ];
 export function AdminLayout() {
   const { user, logout } = useAuth();
