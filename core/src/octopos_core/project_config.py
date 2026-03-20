@@ -51,6 +51,14 @@ class ProjectChat(BaseModel):
     show_swarm: bool = False   # False = nur Boss-Antworten, True = voller Swarm-Dialog
 
 
+
+
+class ProjectTaskAgents(BaseModel):
+    """Konfiguration fuer ephemeral Task-Agenten."""
+    model_config = {"extra": "ignore"}
+    ttl:          int = 300   # Sekunden bis Task-Agent gestoppt wird
+    max_parallel: int = 10    # max gleichzeitige Task-Agenten
+
 class ProjectConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
