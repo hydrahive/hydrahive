@@ -891,6 +891,190 @@ async def change_password(username: str, body: dict):
 
 
 
+
+# ================================================================== Webhook-System
+
+VALID_EVENTS = {"message", "agent_error", "provision", "agent_start", "agent_stop"}
+
+
+def _webhooks_file(project_id: str) -> Path:
+    return Path(PROJECTS_DIR) / project_id / "webhooks.json"
+
+
+def _load_webhooks(project_id: str) -> list[dict]:
+    import json as _j
+    f = _webhooks_file(project_id)
+    try:
+        return _j.loads(f.read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def _save_webhooks(project_id: str, webhooks: list[dict]) -> None:
+    import json as _j
+    f = _webhooks_file(project_id)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(_j.dumps(webhooks, indent=2), encoding="utf-8")
+
+
+async def _fire_webhook(webhook: dict, event: str, data: dict) -> None:
+    """Webhook asynchron abfeuern — Fehler werden geloggt, nicht propagiert."""
+    import hashlib as _hl, hmac as _hm, time as _time
+    import json as _j
+
+    payload = _j.dumps({
+        "event":      event,
+        "project_id": data.get("project_id", ""),
+        "timestamp":  _time.time(),
+        "data":       data,
+    })
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent":   "OctopOS-Webhook/1.0",
+        "X-OctopOS-Event": event,
+    }
+
+    secret = webhook.get("secret", "")
+    if secret:
+        sig = _hm.new(secret.encode(), payload.encode(), _hl.sha256).hexdigest()
+        headers["X-OctopOS-Signature"] = f"sha256={sig}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(webhook["url"], content=payload, headers=headers)
+            logger.info("Webhook %s → %s: HTTP %d", event, webhook["url"], resp.status_code)
+    except Exception as e:
+        logger.warning("Webhook fehlgeschlagen (%s → %s): %s", event, webhook["url"], e)
+
+
+async def fire_project_webhooks(project_id: str, event: str, data: dict) -> None:
+    """Alle Webhooks eines Projekts fuer ein Event abfeuern."""
+    webhooks = _load_webhooks(project_id)
+    tasks = [
+        _fire_webhook(wh, event, data)
+        for wh in webhooks
+        if event in wh.get("events", [])
+    ]
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+class WebhookRequest(BaseModel):
+    name:   str
+    url:    str
+    secret: str = ""
+    events: list[str] = ["message"]
+
+
+@app.get("/projects/{project_id}/webhooks")
+def list_webhooks(project_id: str):
+    if not projects.get(project_id):
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    webhooks = _load_webhooks(project_id)
+    # Secrets maskieren
+    masked = [{**w, "secret": "***" if w.get("secret") else ""} for w in webhooks]
+    return {"project_id": project_id, "webhooks": masked}
+
+
+@app.post("/projects/{project_id}/webhooks", status_code=201)
+def create_webhook(project_id: str, req: WebhookRequest):
+    import secrets as _sec, time as _time
+    if not projects.get(project_id):
+        raise HTTPException(404, f"Projekt nicht gefunden")
+
+    invalid = [e for e in req.events if e not in VALID_EVENTS]
+    if invalid:
+        raise HTTPException(400, f"Unbekannte Events: {invalid}. Gueltig: {sorted(VALID_EVENTS)}")
+
+    webhooks = _load_webhooks(project_id)
+    wh = {
+        "id":         _sec.token_hex(8),
+        "name":       req.name,
+        "url":        req.url,
+        "secret":     req.secret,
+        "events":     req.events,
+        "created_at": _time.time(),
+    }
+    webhooks.append(wh)
+    _save_webhooks(project_id, webhooks)
+    logger.info("Webhook angelegt: %s → %s (%s)", project_id, req.url, req.events)
+    return {**wh, "secret": "***" if wh["secret"] else ""}
+
+
+@app.delete("/projects/{project_id}/webhooks/{webhook_id}")
+def delete_webhook(project_id: str, webhook_id: str):
+    if not projects.get(project_id):
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    webhooks = _load_webhooks(project_id)
+    updated  = [w for w in webhooks if w["id"] != webhook_id]
+    if len(updated) == len(webhooks):
+        raise HTTPException(404, f"Webhook '{webhook_id}' nicht gefunden")
+    _save_webhooks(project_id, updated)
+    return {"deleted": True, "webhook_id": webhook_id}
+
+
+@app.post("/projects/{project_id}/webhooks/test")
+async def test_webhook(project_id: str, body: dict):
+    """Test-Ping an einen Webhook senden."""
+    url    = body.get("url", "")
+    secret = body.get("secret", "")
+    if not url:
+        raise HTTPException(400, "url fehlt")
+    wh = {"url": url, "secret": secret}
+    await _fire_webhook(wh, "ping", {"project_id": project_id, "message": "OctopOS Webhook Test"})
+    return {"sent": True, "url": url}
+
+
+@app.post("/hooks/{project_id}/wake")
+async def webhook_wake(project_id: str, request: Request):
+    """
+    Externer Trigger — startet Boss-Agent mit einer Wake-Nachricht.
+    Optional: X-OctopOS-Signature Header fuer Verifikation.
+    Body: { "message": "...", "sender": "..." }
+    """
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt nicht gefunden")
+
+    # Signatur prüfen falls Webhook mit Secret konfiguriert
+    webhooks = _load_webhooks(project_id)
+    wake_hooks = [w for w in webhooks if "agent_start" in w.get("events", [])]
+
+    body_bytes = await request.body()
+    sig_header = request.headers.get("X-OctopOS-Signature", "")
+
+    if wake_hooks and sig_header:
+        import hashlib as _hl, hmac as _hm
+        for wh in wake_hooks:
+            secret = wh.get("secret", "")
+            if secret:
+                expected = "sha256=" + _hm.new(secret.encode(), body_bytes, _hl.sha256).hexdigest()
+                if not _hm.compare_digest(sig_header, expected):
+                    raise HTTPException(401, "Ungültige Signatur")
+                break
+
+    try:
+        data = json.loads(body_bytes) if body_bytes else {}
+    except Exception:
+        data = {}
+
+    message = data.get("message", "Wake-up call")
+    sender  = data.get("sender", "webhook")
+
+    boss_id = cfg.agents.boss
+    if not discovery.get(boss_id):
+        raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht verfügbar")
+
+    # Asynchron starten — nicht warten
+    asyncio.create_task(
+        orchestrator.handle_message(project_id, cfg, message, sender),
+        name=f"webhook-wake-{project_id}"
+    )
+
+    return {"triggered": True, "project_id": project_id, "message": message}
+
+
 # ================================================================== QMD-Skills CRUD
 
 def _skills_dir(agent_id: str) -> Path:
