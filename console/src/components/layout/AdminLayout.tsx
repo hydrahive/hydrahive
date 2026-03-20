@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ const navAdmin = [
   { to: "/llm",       icon: Cpu,             label: "LLM-Config" },
   { to: "/users",     icon: Users,           label: "Benutzer"   },
   { to: "/audit",     icon: ShieldCheck,     label: "Audit-Log"  },
+  { to: "/backup",    icon: Archive,         label: "Backup"     },
 ];
 
 export function AdminLayout() {

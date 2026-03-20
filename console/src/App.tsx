@@ -14,6 +14,7 @@ import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { UserPage } from "@/pages/UserPage";
 import { ChatPage } from "@/pages/ChatPage";
 import { AuditPage } from "@/pages/AuditPage";
+import { BackupPage } from "@/pages/BackupPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="llm"              element={<LlmConfigPage />} />
           <Route path="users"            element={<UserPage />} />
           <Route path="audit"            element={<AuditPage />} />
+          <Route path="backup"           element={<BackupPage />} />
         </Route>
       </Routes>
     </SetupGuard>

@@ -1815,6 +1815,142 @@ async def pull_ollama_model(body: dict):
         raise HTTPException(504, "Timeout beim Laden des Modells")
 
 
+# ================================================================== Backup & Restore
+
+BACKUP_DIR = Path("/opt/octopos/backups")
+_BACKUP_SOURCES = [
+    ("/etc/octopos",  "etc-octopos"),
+    ("/agents",       "agents"),
+    ("/projects",     "projects"),
+]
+
+
+def _list_backups() -> list[dict]:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    result = []
+    for f in sorted(BACKUP_DIR.glob("octopos-backup-*.tar.gz"), reverse=True):
+        stat = f.stat()
+        result.append({
+            "name":       f.name,
+            "size":       stat.st_size,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    return result
+
+
+@app.get("/admin/backups")
+def list_backups(_a: tuple = Depends(require_admin)):
+    """Alle vorhandenen Backups auflisten."""
+    return {"backups": _list_backups()}
+
+
+@app.post("/admin/backup", status_code=201)
+def create_backup(_a: tuple = Depends(require_admin)):
+    """Backup von /etc/octopos, /agents, /projects erstellen."""
+    import tarfile as _tar
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"octopos-backup-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tar.gz"
+    dest = BACKUP_DIR / name
+    with _tar.open(dest, "w:gz") as tf:
+        for src, arcname in _BACKUP_SOURCES:
+            p = Path(src)
+            if p.exists():
+                tf.add(p, arcname=arcname, filter=lambda ti: (
+                    None if any(
+                        part.startswith("proj_") or part == "files"
+                        for part in Path(ti.name).parts
+                    ) else ti
+                ))
+    size = dest.stat().st_size
+    audit_log("backup.create", target=name, details={"size": size})
+    logger.info("Backup erstellt: %s (%d bytes)", name, size)
+    return {"created": True, "name": name, "size": size,
+            "created_at": datetime.now().isoformat()}
+
+
+@app.get("/admin/backups/{name}/download")
+def download_backup(name: str, _a: tuple = Depends(require_admin)):
+    """Backup-Datei herunterladen."""
+    import re as _re
+    from fastapi.responses import FileResponse
+    if not _re.match(r"^octopos-backup-[\w\-]+\.tar\.gz$", name):
+        raise HTTPException(400, "Ungültiger Backup-Name")
+    path = BACKUP_DIR / name
+    if not path.exists():
+        raise HTTPException(404, "Backup nicht gefunden")
+    return FileResponse(path, media_type="application/gzip", filename=name)
+
+
+@app.delete("/admin/backups/{name}")
+def delete_backup(name: str, _a: tuple = Depends(require_admin)):
+    """Backup löschen."""
+    import re as _re
+    if not _re.match(r"^octopos-backup-[\w\-]+\.tar\.gz$", name):
+        raise HTTPException(400, "Ungültiger Backup-Name")
+    path = BACKUP_DIR / name
+    if not path.exists():
+        raise HTTPException(404, "Backup nicht gefunden")
+    path.unlink()
+    audit_log("backup.delete", target=name)
+    return {"deleted": True, "name": name}
+
+
+@app.post("/admin/restore/{name}")
+def restore_backup(name: str, _a: tuple = Depends(require_admin)):
+    """Backup einspielen — überschreibt /etc/octopos und /agents, startet Service neu."""
+    import re as _re, tarfile as _tar, subprocess as _sub, shutil as _sh
+    if not _re.match(r"^octopos-backup-[\w\-]+\.tar\.gz$", name):
+        raise HTTPException(400, "Ungültiger Backup-Name")
+    path = BACKUP_DIR / name
+    if not path.exists():
+        raise HTTPException(404, "Backup nicht gefunden")
+
+    import tempfile as _tmp
+    with _tmp.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        with _tar.open(path, "r:gz") as tf:
+            tf.extractall(tmp_path)
+
+        # etc-octopos → /etc/octopos
+        src_etc = tmp_path / "etc-octopos"
+        if src_etc.exists():
+            for f in src_etc.iterdir():
+                _sh.copy2(f, Path("/etc/octopos") / f.name)
+
+        # agents → /agents
+        src_agents = tmp_path / "agents"
+        if src_agents.exists():
+            _sh.copytree(src_agents, Path("/agents"), dirs_exist_ok=True)
+
+        # projects (nur project.yaml + sessions) → /projects
+        src_projects = tmp_path / "projects"
+        if src_projects.exists():
+            for proj_dir in src_projects.iterdir():
+                if proj_dir.is_dir():
+                    dest_proj = Path("/projects") / proj_dir.name
+                    dest_proj.mkdir(exist_ok=True)
+                    for item in proj_dir.iterdir():
+                        if item.name != "files":
+                            dst = dest_proj / item.name
+                            if item.is_dir():
+                                _sh.copytree(item, dst, dirs_exist_ok=True)
+                            else:
+                                _sh.copy2(item, dst)
+
+    audit_log("backup.restore", target=name)
+    logger.info("Restore abgeschlossen: %s — starte Service neu", name)
+
+    # Service-Neustart nach kurzer Verzögerung (Response noch senden)
+    import threading as _thr
+    def _restart():
+        import time as _time
+        _time.sleep(1)
+        _sub.run(["systemctl", "restart", "octopos-core"], check=False)
+    _thr.Thread(target=_restart, daemon=True).start()
+
+    return {"restored": True, "name": name, "restarting": True}
+
+
 # ================================================================== Status
 
 @app.get("/status")
