@@ -648,6 +648,86 @@ async def send_message(project_id: str, req: IncomingMessage):
 
 
 
+
+@app.get("/agents/{agent_id}/logs")
+def get_agent_logs(agent_id: str, lines: int = 100):
+    """
+    Agent-Logs aus journalctl — gefiltert auf octopos-core + Agent-ID.
+    Gibt die letzten N Zeilen zurueck.
+    Interface: { agent_id, lines: [...], count }
+    """
+    import subprocess as _sub
+
+    # Agent existiert?
+    if not discovery.get(agent_id) and not (Path(AGENTS_DIR) / agent_id).exists():
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+    lines = max(10, min(lines, 1000))  # 10-1000
+
+    try:
+        # journalctl fuer octopos-core, letzten N Zeilen, kein Pager
+        result = _sub.run(
+            [
+                "journalctl",
+                "-u", "octopos-core",
+                "-n", str(lines),
+                "--no-pager",
+                "--output=short-iso",
+            ],
+            capture_output=True, text=True, timeout=5
+        )
+        all_lines = result.stdout.splitlines()
+
+        # Auf Agent-ID filtern (case-insensitive)
+        agent_lower = agent_id.lower().replace("-", "_")
+        filtered = [
+            l for l in all_lines
+            if agent_lower in l.lower()
+            or agent_id.lower() in l.lower()
+            or "octopos_core" in l.lower()  # Core-eigene Meldungen immer drin
+        ]
+
+        # Wenn zu wenig agent-spezifisch → alle Core-Logs
+        if len(filtered) < 5:
+            filtered = all_lines
+
+        return {
+            "agent_id": agent_id,
+            "lines":    filtered[-lines:],
+            "count":    len(filtered),
+            "source":   "journalctl -u octopos-core",
+        }
+
+    except FileNotFoundError:
+        # journalctl nicht verfuegbar (z.B. in Tests)
+        return {
+            "agent_id": agent_id,
+            "lines":    ["[journalctl nicht verfuegbar]"],
+            "count":    1,
+            "source":   "unavailable",
+        }
+    except _sub.TimeoutExpired:
+        raise HTTPException(504, "Timeout beim Lesen der Logs")
+
+
+@app.get("/logs/core")
+def get_core_logs(lines: int = 200):
+    """
+    Core-Logs gesamt — fuer System-Screen.
+    """
+    import subprocess as _sub
+    lines = max(10, min(lines, 2000))
+    try:
+        result = _sub.run(
+            ["journalctl", "-u", "octopos-core", "-n", str(lines),
+             "--no-pager", "--output=short-iso"],
+            capture_output=True, text=True, timeout=5
+        )
+        log_lines = result.stdout.splitlines()
+        return {"lines": log_lines, "count": len(log_lines)}
+    except Exception as e:
+        return {"lines": [str(e)], "count": 1}
+
 # ================================================================== User-Verwaltung
 
 USERS_FILE = Path("/etc/octopos/users.json")
