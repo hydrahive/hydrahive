@@ -1,3 +1,20 @@
+export interface GpuEntry {
+  name:          string;
+  temp_c:        number | null;
+  util_gpu_pct:  number | null;
+  util_mem_pct:  number | null;
+  mem_total_mb:  number | null;
+  mem_used_mb:   number | null;
+  mem_free_mb:   number | null;
+  power_draw_w:  number | null;
+  power_limit_w: number | null;
+}
+export interface GpuInfo {
+  available: boolean;
+  reason?:   string;
+  gpus?:     GpuEntry[];
+}
+
 const BASE = "/api";
 function getToken() { return localStorage.getItem("octopos_token") || ""; }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -12,6 +29,7 @@ export const api = {
   delete: <T>(path: string)               => request<T>(path, { method: "DELETE" }),
   health:        ()           => api.get<{status:string}>("/health"),
   status:        ()           => api.get<Record<string,unknown>>("/status"),
+  gpuInfo:       ()           => api.get<GpuInfo>("/system/gpu"),
   agents:        ()           => api.get<Record<string,unknown>>("/agents"),
   projects:      ()           => api.get<Record<string,unknown>>("/projects"),
   createProject:  (d: unknown) => api.post("/projects", d),

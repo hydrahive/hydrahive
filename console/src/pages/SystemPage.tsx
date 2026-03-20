@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity } from "lucide-react";
-import { api } from "@/lib/api";
+import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap } from "lucide-react";
+import { api, GpuInfo, GpuEntry } from "@/lib/api";
 
 interface RuntimeAgent {
   status:             string;
@@ -42,16 +42,69 @@ function ServiceRow({ name, status }: { name: string; status: "ok" | "error" | "
   );
 }
 
+function GpuBar({ value, max = 100, warn = 80, danger = 95 }: { value: number | null; max?: number; warn?: number; danger?: number }) {
+  if (value === null) return <span className="text-muted-foreground text-xs">—</span>;
+  const pct = Math.min(100, (value / max) * 100);
+  const color = pct >= danger ? "bg-destructive" : pct >= warn ? "bg-orange-500" : "bg-green-500";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs text-muted-foreground w-8 text-right">{value}%</span>
+    </div>
+  );
+}
+
+function GpuCard({ gpu }: { gpu: GpuEntry }) {
+  const memPct = gpu.mem_total_mb ? Math.round((gpu.mem_used_mb ?? 0) / gpu.mem_total_mb * 100) : null;
+  const memGB  = (mb: number | null) => mb !== null ? (mb / 1024).toFixed(1) + " GB" : "—";
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{gpu.name}</span>
+        {gpu.temp_c !== null && (
+          <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+            gpu.temp_c >= 85 ? "bg-destructive/20 text-destructive" :
+            gpu.temp_c >= 70 ? "bg-orange-500/20 text-orange-500" :
+            "bg-green-500/20 text-green-500"
+          }`}>
+            {gpu.temp_c}°C
+          </span>
+        )}
+      </div>
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground w-20">GPU</span>
+          <div className="flex-1"><GpuBar value={gpu.util_gpu_pct} /></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground w-20">VRAM</span>
+          <div className="flex-1"><GpuBar value={memPct} /></div>
+        </div>
+        <div className="flex justify-between text-muted-foreground pt-1 border-t">
+          <span>VRAM: {memGB(gpu.mem_used_mb)} / {memGB(gpu.mem_total_mb)}</span>
+          {gpu.power_draw_w !== null && (
+            <span>{gpu.power_draw_w}W {gpu.power_limit_w ? `/ ${gpu.power_limit_w}W` : ""}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SystemPage() {
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
   const [healthy,   setHealthy]   = useState<boolean | null>(null);
+  const [gpu,       setGpu]       = useState<GpuInfo | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
-    const [h, s] = await Promise.allSettled([api.health(), api.status()]);
+    const [h, s, g] = await Promise.allSettled([api.health(), api.status(), api.gpuInfo()]);
     setHealthy(h.status === "fulfilled");
     if (s.status === "fulfilled") setStatus(s.value as SystemStatus);
+    if (g.status === "fulfilled") setGpu(g.value);
     setLoading(false);
     setRefreshing(false);
   }
@@ -139,6 +192,20 @@ export function SystemPage() {
           </div>
         </div>
       </div>
+
+      {/* GPU Monitoring */}
+      {gpu && gpu.available && gpu.gpus && gpu.gpus.length > 0 && (
+        <div className="bg-card border rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Zap className="h-4 w-4 text-yellow-500" />
+            <h2 className="text-sm font-medium">GPU</h2>
+            <span className="text-xs text-muted-foreground ml-auto">aktualisiert alle 15s</span>
+          </div>
+          <div className={`grid gap-6 ${gpu.gpus.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            {gpu.gpus.map((g, i) => <GpuCard key={i} gpu={g} />)}
+          </div>
+        </div>
+      )}
 
       {/* Agent Runtime Detail */}
       {agentList.length > 0 && (
