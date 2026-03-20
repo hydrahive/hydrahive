@@ -43,6 +43,21 @@ class DispatchResult:
     error:     str | None = None
 
 
+
+def _load_claude_oauth_token() -> str:
+    """
+    Laedt Claude OAuth Token falls vorhanden.
+    Token wird in LLM-Config gesetzt (sk-ant-oat01-...).
+    """
+    from pathlib import Path as _Path
+    token_file = _Path("/etc/octopos/claude_oauth_token")
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+        return token if token.startswith("sk-ant-oat01-") else ""
+    except OSError:
+        return ""
+
+
 class Orchestrator:
     """
     Einer pro Core-Instanz.
@@ -161,6 +176,15 @@ class Orchestrator:
         messages:    list[dict],
         tools:       list[dict] | None,
     ):
+        """
+        LLM-Call mit automatischer Provider-Erkennung:
+        - sk-ant-oat01-* Token → Anthropic SDK direkt mit OAuth-Header
+        - Alle anderen         → litellm (Ollama, OpenAI API-Key, etc.)
+        """
+        oauth_token = _load_claude_oauth_token()
+        if oauth_token:
+            return await self._anthropic_oauth_call(agent_cfg, messages, tools, oauth_token)
+
         model, api_base = self._resolve_model(agent_cfg.llm.model)
         kwargs: dict = {
             "model":       model,
@@ -175,6 +199,90 @@ class Orchestrator:
             kwargs["tool_choice"] = "auto"
 
         return await litellm.acompletion(**kwargs)
+
+    async def _anthropic_oauth_call(
+        self,
+        agent_cfg: AgentConfig,
+        messages:  list[dict],
+        tools:     list[dict] | None,
+        token:     str,
+    ):
+        """
+        Direkter Anthropic SDK Call mit OAuth-Token (Claude Max Subscription).
+        Setzt anthropic-beta: oauth-2025-04-20 Header wie OpenClaw.
+        Gibt ein litellm-kompatibles Response-Objekt zurueck.
+        """
+        import anthropic as _anthropic
+        from types import SimpleNamespace
+
+        client = _anthropic.AsyncAnthropic(
+            auth_token=token,
+            default_headers={"anthropic-beta": "oauth-2025-04-20"},
+        )
+
+        # System-Message extrahieren
+        system_msg = ""
+        filtered   = []
+        for m in messages:
+            if m.get("role") == "system":
+                system_msg = m.get("content", "")
+            else:
+                filtered.append({"role": m["role"], "content": m.get("content", "")})
+
+        # Modell-Name normalisieren (openai/claude-... → claude-...)
+        model = agent_cfg.llm.model
+        for prefix in ("openai/", "anthropic/", "claude/"):
+            if model.startswith(prefix):
+                model = model[len(prefix):]
+                break
+        if not model.startswith("claude-"):
+            model = "claude-sonnet-4-6"
+
+        kwargs: dict = {
+            "model":       model,
+            "max_tokens":  agent_cfg.llm.max_tokens,
+            "messages":    filtered,
+            "temperature": agent_cfg.llm.temperature,
+        }
+        if system_msg:
+            kwargs["system"] = system_msg
+        if tools:
+            # Anthropic Tool-Format aus litellm-Format ableiten
+            kwargs["tools"] = [
+                {
+                    "name":         t["function"]["name"],
+                    "description":  t["function"].get("description", ""),
+                    "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+                }
+                for t in tools
+            ]
+
+        resp = await client.messages.create(**kwargs)
+
+        # Anthropic Response → litellm-kompatibles SimpleNamespace
+        text = ""
+        tool_calls = []
+        for block in resp.content:
+            if block.type == "text":
+                text = block.text
+            elif block.type == "tool_use":
+                import json as _json
+                tool_calls.append(SimpleNamespace(
+                    id=block.id,
+                    type="function",
+                    function=SimpleNamespace(
+                        name=block.name,
+                        arguments=_json.dumps(block.input),
+                    )
+                ))
+
+        message = SimpleNamespace(
+            role="assistant",
+            content=text,
+            tool_calls=tool_calls if tool_calls else None,
+        )
+        choice  = SimpleNamespace(message=message, finish_reason=resp.stop_reason)
+        return  SimpleNamespace(choices=[choice], model=model)
 
     async def _tool_loop(
         self,
