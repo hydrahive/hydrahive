@@ -37,7 +37,7 @@ export function AdminLayout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto"><Outlet /></main>
+      <main className="flex-1 overflow-hidden flex flex-col"><Outlet /></main>
     </div>
   );
 }

@@ -17,7 +17,7 @@ export function DashboardPage() {
     { icon:Cpu,          label:"Laufend",  value:running,                         ok:true },
   ];
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 overflow-y-auto flex-1">
       <div><h1 className="text-xl font-semibold">Dashboard</h1><p className="text-sm text-muted-foreground">System-Uebersicht</p></div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map(({icon:Icon, label, value, ok}) => (
