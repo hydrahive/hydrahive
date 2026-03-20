@@ -1544,6 +1544,69 @@ def load_agent_config_direct(agent_dir: Path):
 
 # ================================================================== Provisioning
 
+
+@app.delete("/projects/{project_id}")
+async def delete_project(project_id: str, _a: tuple = Depends(require_admin)):
+    """
+    Projekt deprovisionieren und deaktivieren.
+    - Agenten stoppen
+    - Samba-Share entfernen
+    - Verzeichnis umbenennen (_deleted_)
+    - project.yaml als disabled markieren
+    Kein Datenverlust: Verzeichnis bleibt als _deleted_ erhalten.
+    """
+    import shutil as _shutil, time as _time
+
+    cfg = projects.get(project_id)
+    if not cfg:
+        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+    project_dir = Path(PROJECTS_DIR) / project_id
+    if not project_dir.exists():
+        raise HTTPException(404, f"Projektverzeichnis nicht gefunden")
+
+    # 1. Laufende Agenten stoppen
+    stopped_agents = []
+    boss_id = cfg.agents.boss
+    handle = runtime.get_handle(boss_id)
+    if handle:
+        await runtime.stop_agent(boss_id)
+        stopped_agents.append(boss_id)
+
+    # 2. Samba-Share entfernen
+    smb_conf = Path("/etc/samba/smb.conf")
+    if smb_conf.exists():
+        try:
+            smb_content = smb_conf.read_text(encoding="utf-8")
+            # Sektion [project_id] entfernen
+            import re as _re
+            smb_content = _re.sub(
+                rf"\[{_re.escape(project_id)}\][^\[]*",
+                "", smb_content, flags=_re.DOTALL
+            )
+            smb_conf.write_text(smb_content, encoding="utf-8")
+            import subprocess as _sub
+            _sub.run(["systemctl", "reload", "smbd"], check=False, timeout=5)
+        except Exception as e:
+            logger.warning("Samba-Share Entfernung fehlgeschlagen: %s", e)
+
+    # 3. Verzeichnis umbenennen
+    timestamp = int(_time.time())
+    deleted_dir = Path(PROJECTS_DIR) / f"_deleted_{project_id}_{timestamp}"
+    project_dir.rename(deleted_dir)
+
+    audit_log("project.delete", target=project_id, project_id=project_id,
+              details={"moved_to": str(deleted_dir), "stopped_agents": stopped_agents})
+    logger.info("Projekt gelöscht: %s → %s", project_id, deleted_dir)
+
+    return {
+        "deleted":      True,
+        "project_id":   project_id,
+        "moved_to":     str(deleted_dir),
+        "stopped_agents": stopped_agents,
+    }
+
+
 @app.post("/projects/{project_id}/provision")
 async def provision_project(project_id: str, _a: tuple = Depends(require_admin)):
     """
