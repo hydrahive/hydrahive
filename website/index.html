@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,15 +54,29 @@
     nav a:hover { color: var(--accent); }
     .nav-links { display: flex; gap: 2rem; align-items: center; }
     .badge {
-      background: var(--accent);
-      color: #000;
+      background: #22c55e22;
+      color: #22c55e;
+      border: 1px solid #22c55e55;
       font-size: 0.7rem;
       font-weight: 700;
-      padding: 0.15rem 0.5rem;
+      padding: 0.2rem 0.6rem;
       border-radius: 999px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
+    .github-link {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      border: 1px solid var(--border);
+      padding: 0.3rem 0.8rem;
+      border-radius: 6px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .github-link:hover { border-color: var(--accent); color: var(--accent); }
 
     /* HERO */
     .hero {
@@ -160,7 +174,7 @@
     }
     .tagline-bar strong { color: var(--text); }
 
-    /* FEATURES */
+    /* SECTIONS */
     .section {
       max-width: 1100px;
       margin: 0 auto;
@@ -177,6 +191,8 @@
       color: var(--muted);
       margin-bottom: 3rem;
     }
+
+    /* FEATURES GRID */
     .grid-3 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -190,15 +206,8 @@
       transition: border-color 0.2s, transform 0.2s;
     }
     .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .card-icon {
-      font-size: 2rem;
-      margin-bottom: 1rem;
-    }
-    .card h3 {
-      font-size: 1.05rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
+    .card-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
     .card p { color: var(--muted); font-size: 0.9rem; }
 
     /* ARCHITECTURE */
@@ -213,8 +222,41 @@
       max-width: 700px;
       margin: 0 auto;
       line-height: 2;
+      overflow-x: auto;
     }
-    .arch-box .comment { color: var(--muted); }
+    .arch-box .dim { color: var(--muted); }
+    .arch-box .bright { color: var(--text); }
+
+    /* STACK */
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .stack-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+    }
+    .stack-item .layer {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+    .stack-item .tech {
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .stack-item .tech small {
+      color: var(--muted);
+      font-size: 0.8rem;
+      display: block;
+    }
 
     /* PROFILES */
     .grid-2 {
@@ -231,11 +273,7 @@
       padding: 2rem;
     }
     .profile-card.featured { border-color: var(--accent); }
-    .profile-card h3 {
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 0.3rem;
-    }
+    .profile-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.3rem; }
     .profile-card .price-tag {
       color: var(--accent);
       font-size: 0.8rem;
@@ -243,12 +281,7 @@
       letter-spacing: 0.05em;
       margin-bottom: 1rem;
     }
-    .profile-card ul {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
+    .profile-card ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
     .profile-card li { color: var(--muted); font-size: 0.9rem; }
     .profile-card li::before { content: "✓ "; color: var(--accent); }
 
@@ -271,10 +304,48 @@
     }
     .flow-arrow { color: var(--accent); font-size: 1.2rem; }
 
+    /* DOCS */
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .doc-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.4rem;
+      text-decoration: none;
+      transition: border-color 0.2s, transform 0.2s;
+      display: block;
+    }
+    .doc-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .doc-card .doc-icon { font-size: 1.5rem; margin-bottom: 0.6rem; }
+    .doc-card h3 { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+    .doc-card p { font-size: 0.82rem; color: var(--muted); }
+
+    /* QUICKSTART */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem 2rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.88rem;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 2;
+    }
+    .code-block .prompt { color: var(--accent); }
+    .code-block .cmd { color: var(--text); }
+    .code-block .cmt { color: var(--muted); }
+
     /* STATUS */
     .status-bar {
       background: var(--bg2);
-      border: 1px solid var(--border);
+      border: 1px solid #22c55e44;
       border-radius: 12px;
       padding: 1.5rem 2rem;
       max-width: 700px;
@@ -306,6 +377,8 @@
       margin-top: 4rem;
     }
     footer strong { color: var(--accent); }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -314,40 +387,39 @@
   <div class="logo">Octo<span>POS</span></div>
   <div class="nav-links">
     <a href="#features">Features</a>
-    <a href="#profiles">Profiles</a>
-    <a href="#architecture">Architecture</a>
-    <span class="badge">Early Dev</span>
+    <a href="#how-it-works">How it works</a>
+    <a href="#docs">Docs</a>
+    <a href="https://github.com/tilleulenspiegel/octopos" class="github-link" target="_blank">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+    <span class="badge">Production Ready</span>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-tag">AI Agent Server Platform</div>
+  <div class="hero-tag">Self-Hosted AI Agent Server</div>
   <h1>One brain.<br><em>Many arms.</em><br>Infinite tasks.</h1>
   <p>Install Linux. Install OctopOS. Done.<br>
-  Manage your entire AI agent swarm from a single web console.</p>
+  Manage your entire AI agent swarm from a single web console — no Docker, no cloud dependency.</p>
   <div class="hero-cta">
-    <a href="#profiles" class="btn-primary">Get Started</a>
-    <a href="#architecture" class="btn-secondary">How it works →</a>
+    <a href="#quickstart" class="btn-primary">Quick Start</a>
+    <a href="#how-it-works" class="btn-secondary">How it works →</a>
   </div>
   <div class="octo-hero">
     <svg class="octo-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <!-- Body -->
       <ellipse cx="100" cy="85" rx="45" ry="50" fill="#06b6d4" opacity="0.9"/>
-      <!-- Head shine -->
       <ellipse cx="88" cy="68" rx="15" ry="18" fill="#67e8f9" opacity="0.3"/>
-      <!-- Eyes -->
       <circle cx="85" cy="78" r="8" fill="#0a0e1a"/>
       <circle cx="115" cy="78" r="8" fill="#0a0e1a"/>
       <circle cx="87" cy="76" r="3" fill="#fff"/>
       <circle cx="117" cy="76" r="3" fill="#fff"/>
-      <!-- Tentacles -->
       <path d="M65 120 Q45 145 55 165 Q60 175 50 185" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
       <path d="M80 128 Q68 155 72 175 Q74 185 65 192" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
       <path d="M100 132 Q100 160 98 180 Q97 190 95 198" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
       <path d="M120 128 Q132 155 128 175 Q126 185 135 192" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
       <path d="M135 120 Q155 145 145 165 Q140 175 150 185" stroke="#06b6d4" stroke-width="8" fill="none" stroke-linecap="round"/>
-      <!-- Suction cups -->
       <circle cx="52" cy="157" r="3" fill="#0891b2"/>
       <circle cx="67" cy="175" r="3" fill="#0891b2"/>
       <circle cx="70" cy="168" r="3" fill="#0891b2"/>
@@ -370,42 +442,60 @@
   <div class="grid-3">
     <div class="card">
       <div class="card-icon">🧠</div>
-      <h3>Boss + Worker Swarm</h3>
-      <p>One Boss-Agent per project coordinates a pool of specialists. Parallel task dispatching, aggregated results.</p>
+      <h3>Boss + Worker Swarms</h3>
+      <p>One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔌</div>
-      <h3>Plug & Play Installation</h3>
-      <p>One curl command. GPU auto-detected. Services configured. Web console ready in minutes.</p>
+      <h3>One-Command Install</h3>
+      <p>One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.</p>
     </div>
     <div class="card">
       <div class="card-icon">💬</div>
-      <h3>Matrix-based Communication</h3>
-      <p>Agents communicate via Matrix rooms. Use Element to jump in and supervise any conversation live.</p>
+      <h3>Matrix Communication</h3>
+      <p>Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.</p>
     </div>
     <div class="card">
       <div class="card-icon">🤖</div>
       <h3>Multi-LLM per Agent</h3>
-      <p>Each agent runs its own model. Ollama locally, Claude API, OpenAI — mixed per task. Graceful fallback built-in.</p>
+      <p>Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📚</div>
+      <h3>QMD Skills</h3>
+      <p>Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.</p>
     </div>
     <div class="card">
       <div class="card-icon">📁</div>
-      <h3>Project File Shares</h3>
-      <p>Each project gets a Linux user, isolated filesystem, and automatic Samba share. Agents and clients share data natively.</p>
+      <h3>Project Isolation</h3>
+      <p>Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
     </div>
     <div class="card">
-      <div class="card-icon">🔒</div>
-      <h3>Defense in Depth</h3>
-      <p>Three-layer tool permission model. Agents can only use what the Core Registry allows — regardless of their config.</p>
+      <div class="card-icon">🔗</div>
+      <h3>Webhook System</h3>
+      <p>Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🛡️</div>
+      <h3>Security & Audit</h3>
+      <p>JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🖥️</div>
+      <h3>Full Web Console</h3>
+      <p>Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Built with React + Tailwind.</p>
     </div>
   </div>
 </section>
 
-<!-- FLOW -->
-<section class="section">
-  <h2 class="section-title" style="margin-bottom:1rem">How it works</h2>
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works">
+  <h2 class="section-title">How it works</h2>
+  <p class="section-sub">A message travels through 10 layers in under a second.</p>
   <div class="flow">
-    <div class="flow-step">👤 User writes in Web Chat</div>
+    <div class="flow-step">👤 Web Chat</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">⚡ FastAPI Core</div>
     <span class="flow-arrow">→</span>
     <div class="flow-step">📡 Matrix Room</div>
     <span class="flow-arrow">→</span>
@@ -413,27 +503,71 @@
     <span class="flow-arrow">→</span>
     <div class="flow-step">🐙 Worker Swarm</div>
     <span class="flow-arrow">→</span>
-    <div class="flow-step">✅ Result</div>
+    <div class="flow-step">✅ SSE Stream</div>
   </div>
-  <p style="text-align:center;color:var(--muted);font-size:0.9rem;">The user sees a clean chat interface. The agents do the rest.</p>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;">The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.</p>
 </section>
 
 <!-- ARCHITECTURE -->
 <section class="section" id="architecture">
-  <h2 class="section-title">5-Layer Architecture</h2>
+  <h2 class="section-title">Architecture</h2>
   <p class="section-sub">Clean separation of concerns. Every layer replaceable.</p>
   <div class="arch-box">
-    <div>┌─────────────────────────────────┐</div>
-    <div>│  <span style="color:#f1f5f9">CLIENT LAYER</span>  <span class="comment">Web Chat · Element · API</span>  │</div>
-    <div>├─────────────────────────────────┤</div>
-    <div>│  <span style="color:#f1f5f9">MANAGEMENT LAYER</span>  <span class="comment">Admin Console · Auth</span>  │</div>
-    <div>├─────────────────────────────────┤</div>
-    <div>│  <span style="color:#f1f5f9">COMM BUS</span>  <span class="comment">Conduit · Matrix Rooms</span>        │</div>
-    <div>├─────────────────────────────────┤</div>
-    <div>│  <span style="color:#f1f5f9">CORE RUNTIME</span>  <span class="comment">Orchestrator · AgentLink</span>  │</div>
-    <div>├─────────────────────────────────┤</div>
-    <div>│  <span style="color:#f1f5f9">LLM ADAPTER</span>  <span class="comment">Ollama · Claude · OpenAI</span>  │</div>
-    <div>└─────────────────────────────────┘</div>
+    <div><span class="dim">┌─────────────────────────────────────────┐</span></div>
+    <div><span class="dim">│</span>  <span class="bright">CLIENT</span>       <span class="dim">React Console · Element · REST API</span>  <span class="dim">│</span></div>
+    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
+    <div><span class="dim">│</span>  <span class="bright">GATEWAY</span>      <span class="dim">nginx HTTPS · JWT Auth · Rate Limit</span>  <span class="dim">│</span></div>
+    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
+    <div><span class="dim">│</span>  <span class="bright">CORE</span>         <span class="dim">FastAPI · Orchestrator · Audit Log</span>   <span class="dim">│</span></div>
+    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
+    <div><span class="dim">│</span>  <span class="bright">COMM BUS</span>     <span class="dim">conduwuit Matrix · Agent Bots</span>        <span class="dim">│</span></div>
+    <div><span class="dim">├─────────────────────────────────────────┤</span></div>
+    <div><span class="dim">│</span>  <span class="bright">LLM ADAPTER</span>  <span class="dim">Ollama · Claude OAuth · OpenAI</span>       <span class="dim">│</span></div>
+    <div><span class="dim">└─────────────────────────────────────────┘</span></div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section class="section">
+  <h2 class="section-title">Stack</h2>
+  <p class="section-sub">Boring technology. Battle-tested components.</p>
+  <div class="stack-grid">
+    <div class="stack-item">
+      <div class="layer">Core</div>
+      <div class="tech">Python 3.12 + FastAPI
+        <small>litellm · matrix-nio · anthropic SDK</small>
+      </div>
+    </div>
+    <div class="stack-item">
+      <div class="layer">Console</div>
+      <div class="tech">React 18 + TypeScript
+        <small>Vite · Tailwind CSS · shadcn/ui</small>
+      </div>
+    </div>
+    <div class="stack-item">
+      <div class="layer">Matrix</div>
+      <div class="tech">conduwuit (Rust)
+        <small>Single binary · RocksDB · no Postgres</small>
+      </div>
+    </div>
+    <div class="stack-item">
+      <div class="layer">LLM</div>
+      <div class="tech">Ollama + Cloud APIs
+        <small>llama3 · Claude · OpenAI · mixed per agent</small>
+      </div>
+    </div>
+    <div class="stack-item">
+      <div class="layer">Infrastructure</div>
+      <div class="tech">Bash + systemd
+        <small>No Docker · idempotent installer</small>
+      </div>
+    </div>
+    <div class="stack-item">
+      <div class="layer">Platform</div>
+      <div class="tech">Ubuntu 22/24 LTS
+        <small>Proxmox VM · PCIe GPU passthrough</small>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -446,11 +580,12 @@
       <h3>🔵 Lite</h3>
       <div class="price-tag">Cloud APIs · No GPU required</div>
       <ul>
-        <li>VM or VPS — any hardware</li>
-        <li>Claude API + OpenAI</li>
+        <li>Any VM or VPS</li>
+        <li>Claude Max OAuth + OpenAI</li>
         <li>Full web console</li>
         <li>Matrix communication</li>
         <li>All project features</li>
+        <li>HTTPS out of the box</li>
       </ul>
     </div>
     <div class="profile-card featured">
@@ -462,8 +597,148 @@
         <li>No API costs for local tasks</li>
         <li>Hybrid: local + cloud per agent</li>
         <li>Auto-detected at install time</li>
+        <li>Reference: GTX 1080 Ti, 11GB VRAM</li>
       </ul>
     </div>
+  </div>
+</section>
+
+<!-- HANDBOOK HIGHLIGHTS -->
+<section class="section" id="handbook">
+  <h2 class="section-title">Agent System</h2>
+  <p class="section-sub">From the handbook — how agents, skills and projects work together.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:3rem;">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">Agent Types</h3>
+      <div style="display:flex;flex-direction:column;gap:0.8rem;">
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;">🎯 Boss</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Receives user messages, coordinates worker agents, streams results back</div>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;">🔬 Specialist</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Domain expert delegated tasks from Boss — tax, legal, code, etc.</div>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;">⚡ Worker</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Short-lived task agent, spawned on-demand, discarded after completion</div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">QMD Skills</h3>
+      <div style="font-family:'Courier New',monospace;font-size:0.8rem;color:var(--muted);line-height:1.8;">
+        <span style="color:#818cf8">---</span><br>
+        <span style="color:var(--accent)">skill:</span> <span style="color:var(--text)">Tax Law Basics</span><br>
+        <span style="color:var(--accent)">scope:</span> <span style="color:var(--text)">on-demand</span><br>
+        <span style="color:var(--accent)">triggers:</span> <span style="color:var(--text)">[tax, vat, income]</span><br>
+        <span style="color:var(--accent)">priority:</span> <span style="color:var(--text)">10</span><br>
+        <span style="color:#818cf8">---</span><br>
+        <span style="color:var(--muted)">## Knowledge content here...</span>
+      </div>
+      <p style="color:var(--muted);font-size:0.82rem;margin-top:0.8rem;">Hot-reload. No restart needed. Injected into system prompt on keyword match.</p>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">Available Tools</h3>
+      <div style="display:flex;flex-direction:column;gap:0.6rem;">
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read</span> <span style="color:var(--muted)">— read project files</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted)">— write project files</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted)">— search the web</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted)">— call external APIs</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task</span> <span style="color:var(--muted)">— delegate to workers (boss only)</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">spawn_agent</span> <span style="color:var(--muted)">— create short-lived agent</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DATA FLOW -->
+<section class="section" id="dataflow">
+  <h2 class="section-title">Data Flow A → Z</h2>
+  <p class="section-sub">From the technical docs — what happens when a message is sent.</p>
+  <div style="max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:0;">
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">1</div>
+      <div><strong>Browser</strong> — <span style="color:var(--muted);font-size:0.9rem;">POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">2</div>
+      <div><strong>Auth</strong> — <span style="color:var(--muted);font-size:0.9rem;">JWT validated, project loaded, asyncio.Queue selected</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">3</div>
+      <div><strong>Matrix</strong> — <span style="color:var(--muted);font-size:0.9rem;">Message enqueued → Boss-Agent's Matrix room → matrix-nio client</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">4</div>
+      <div><strong>Skills</strong> — <span style="color:var(--muted);font-size:0.9rem;">Skill files scanned, always-loaded + keyword-matched injected into system prompt</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">5</div>
+      <div><strong>LLM</strong> — <span style="color:var(--muted);font-size:0.9rem;">litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">6</div>
+      <div><strong>Tools</strong> — <span style="color:var(--muted);font-size:0.9rem;">Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">7</div>
+      <div><strong>Workers</strong> — <span style="color:var(--muted);font-size:0.9rem;">dispatch_task → parallel worker calls → aggregated results back to Boss</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">8</div>
+      <div><strong>Response</strong> — <span style="color:var(--muted);font-size:0.9rem;">Final answer posted to Matrix room, stored in session history</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
+      <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">9</div>
+      <div><strong>SSE</strong> — <span style="color:var(--muted);font-size:0.9rem;">Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown</span></div>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;">
+      <div style="background:#22c55e;color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">✓</div>
+      <div><strong>Done</strong> — <span style="color:var(--muted);font-size:0.9rem;">data: {"done":true} → stream closed → Audit Log written</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section class="section" id="quickstart">
+  <h2 class="section-title">Quick Start</h2>
+  <p class="section-sub">Three commands. One browser tab. Running.</p>
+  <div class="code-block">
+    <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/tilleulenspiegel/octopos.git</span></div>
+    <div><span class="prompt">$ </span><span class="cmd">cd octopos</span></div>
+    <div><span class="prompt">$ </span><span class="cmd">sudo bash installer/install.sh</span></div>
+    <div>&nbsp;</div>
+    <div><span class="cmt"># → open https://&lt;your-ip&gt; → Setup Wizard → done</span></div>
+  </div>
+</section>
+
+<!-- DOCS -->
+<section class="section" id="docs">
+  <h2 class="section-title">Documentation</h2>
+  <p class="section-sub">Everything you need to install, use, and extend OctopOS.</p>
+  <div class="docs-grid">
+    <a class="doc-card" href="https://github.com/tilleulenspiegel/octopos/blob/main/docs/handbook.md" target="_blank">
+      <div class="doc-icon">📖</div>
+      <h3>Handbook</h3>
+      <p>Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting</p>
+    </a>
+    <a class="doc-card" href="https://github.com/tilleulenspiegel/octopos/blob/main/docs/technical.md" target="_blank">
+      <div class="doc-icon">⚙️</div>
+      <h3>Technical Docs</h3>
+      <p>Architecture, module overview, data flow A–Z, error handling, known limitations</p>
+    </a>
+    <a class="doc-card" href="https://github.com/tilleulenspiegel/octopos/blob/main/docs/api-reference.md" target="_blank">
+      <div class="doc-icon">🔌</div>
+      <h3>API Reference</h3>
+      <p>All REST endpoints with request/response examples — agents, projects, webhooks, audit</p>
+    </a>
+    <a class="doc-card" href="https://github.com/tilleulenspiegel/octopos/blob/main/docs/development.md" target="_blank">
+      <div class="doc-icon">🛠️</div>
+      <h3>Developer Guide</h3>
+      <p>Write tools, skills, endpoints, Console pages — extend OctopOS with new features</p>
+    </a>
   </div>
 </section>
 
@@ -472,14 +747,16 @@
   <div class="status-bar">
     <div class="status-dot"></div>
     <div>
-      <strong>Currently in active development</strong><br>
-      <span style="color:var(--muted);font-size:0.85rem;">Architecture complete · Brainstorming Sessions 1–6 done · Implementation starting</span>
+      <strong>Production ready — actively developed</strong><br>
+      <span style="color:var(--muted);font-size:0.85rem;">Core complete · Console complete · Docs complete · API not yet stable</span>
     </div>
   </div>
 </section>
 
 <footer>
-  <strong>OctopOS</strong> — AI Agent Server Platform<br>
+  <strong>OctopOS</strong> — AI Agent Server Platform &nbsp;·&nbsp;
+  <a href="https://github.com/tilleulenspiegel/octopos" target="_blank">GitHub</a> &nbsp;·&nbsp;
+  MIT License<br>
   <span style="font-size:0.8rem;margin-top:0.5rem;display:block;">One brain. Many arms. Infinite tasks.</span>
 </footer>
 
