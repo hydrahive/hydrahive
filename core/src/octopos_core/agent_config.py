@@ -24,6 +24,18 @@ class LlmConfig(BaseModel):
     max_tokens: int = 4096
 
 
+class HeartbeatTaskConfig(BaseModel):
+    """Ein einzelner periodischer Task in agent.yaml heartbeat_tasks."""
+    model_config = {"extra": "ignore"}
+
+    id:           str
+    message:      str
+    schedule:     str | None = None   # Cron-Syntax: "0 8 * * *"
+    interval:     int | None = None   # Sekunden: 1800
+    project:      str | None = None   # optional — sonst erstes Projekt des Agenten
+    active_hours: str | None = None   # "08:00-22:00" — kein Run ausserhalb
+
+
 class HeartbeatRaw(BaseModel):
     """Rohe Heartbeat-Config aus YAML — Parsing in agent_runtime.py."""
     model_config = {"extra": "ignore"}
@@ -43,7 +55,8 @@ class AgentConfig(BaseModel):
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
     tools:    list[str] = Field(default_factory=list)
-    heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
+    heartbeat:       HeartbeatRaw           = Field(default_factory=HeartbeatRaw)
+    heartbeat_tasks: list[HeartbeatTaskConfig] = Field(default_factory=list)
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
