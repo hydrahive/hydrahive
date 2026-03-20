@@ -193,6 +193,13 @@ class SessionManager:
         self._persist(session)
         return message
 
+    def pop_last(self, project_id: str) -> None:
+        """Letzte Nachricht aus der aktiven Session entfernen (Rollback bei Fehler)."""
+        session = self._active.get(project_id)
+        if session and session.messages:
+            session.messages.pop()
+            self._persist(session)
+
     def get_context(self, project_id: str, max_messages: int = 50) -> list[dict]:
         """LLM-Context der aktiven Session (für Boss-Agent in #8)."""
         session = self._active.get(project_id)

@@ -699,6 +699,34 @@ def agent_session_history(agent_id: str, limit: int = 50):
     }
 
 
+@app.post("/agents/{agent_id}/memory", status_code=201)
+def write_agent_memory(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
+    """Schreibt direkt in das Gedächtnis-Verzeichnis eines Agenten (für /remember)."""
+    import re as _re
+    filename = str(body.get("filename", "session")).strip().removesuffix(".md")
+    content  = str(body.get("content",  "")).strip()
+    mode     = str(body.get("mode",     "overwrite"))
+    if not _re.match(r"^[a-z0-9_-]+$", filename):
+        raise HTTPException(400, "Ungültiger Dateiname (nur a-z, 0-9, -, _)")
+    if not content:
+        raise HTTPException(400, "content fehlt")
+    agent_dir = Path(AGENTS_DIR) / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+    memory_dir = agent_dir / "memory"
+    memory_dir.mkdir(exist_ok=True)
+    p = memory_dir / f"{filename}.md"
+    p.open("a" if mode == "append" else "w", encoding="utf-8").write(content)
+    return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
+
+
+@app.delete("/agents/{agent_id}/session")
+def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
+    """Direkten Agenten-Chat-Verlauf löschen."""
+    agent_sessions.end_session(agent_id)
+    return {"cleared": True}
+
+
 @app.post("/agents/{agent_id}/message/stream")
 async def agent_message_stream(agent_id: str, req: IncomingMessage):
     """Direkter Chat mit einem Agenten — ohne Projekt-Kontext."""
@@ -1474,6 +1502,7 @@ async def create_agent(req: CreateAgentRequest, _a: tuple = Depends(require_admi
     agent_dir = Path(AGENTS_DIR) / req.id
     agent_dir.mkdir(parents=True, exist_ok=True)
     (agent_dir / "skills").mkdir(exist_ok=True)
+    (agent_dir / "memory").mkdir(exist_ok=True)
 
     agent_data = {
         "id":       req.id,

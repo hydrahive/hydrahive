@@ -17,6 +17,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 PROJECTS_ROOT = Path("/projects")
+AGENTS_ROOT   = Path("/agents")
 
 
 # ============================================================= Path Safety (#54)
@@ -299,7 +300,6 @@ class FileWriteTool(BaseTool):
                     "type":        "string",
                     "enum":        ["overwrite", "append"],
                     "description": "overwrite (Standard) oder append",
-                    "default":     "overwrite",
                 },
             },
             "required": ["path", "content"],
@@ -350,7 +350,6 @@ class WebSearchTool(BaseTool):
                 "max_results": {
                     "type":        "integer",
                     "description": "Maximale Anzahl Ergebnisse (Standard: 5)",
-                    "default":     5,
                 },
             },
             "required": ["query"],
@@ -419,20 +418,22 @@ class HttpRequestTool(BaseTool):
                     "type":        "string",
                     "enum":        ["GET", "POST", "PUT", "DELETE"],
                     "description": "HTTP-Methode (Standard: GET)",
-                    "default":     "GET",
                 },
                 "json_body": {
-                    "type":        "object",
-                    "description": "JSON-Body fuer POST/PUT (optional)",
+                    "type":                 "object",
+                    "description":          "JSON-Body fuer POST/PUT (optional)",
+                    "properties":           {},
+                    "additionalProperties": True,
                 },
                 "headers": {
-                    "type":        "object",
-                    "description": "Zusaetzliche Headers als Key-Value (optional)",
+                    "type":                 "object",
+                    "description":          "Zusaetzliche Headers als Key-Value (optional)",
+                    "properties":           {},
+                    "additionalProperties": True,
                 },
                 "timeout": {
                     "type":        "integer",
                     "description": "Timeout in Sekunden (Standard: 15)",
-                    "default":     15,
                 },
             },
             "required": ["url"],
@@ -567,7 +568,6 @@ class WriteHandoffTool(BaseTool):
                 "ttl_seconds": {
                     "type":        "integer",
                     "description": "Gueltigkeit in Sekunden (Standard: 3600)",
-                    "default":     3600,
                 },
             },
             "required": [],
@@ -616,7 +616,6 @@ class ReadHandoffTool(BaseTool):
                 "consume": {
                     "type":        "boolean",
                     "description": "Handoff nach dem Lesen loeschen (Standard: true)",
-                    "default":     True,
                 },
             },
             "required": [],
@@ -667,12 +666,10 @@ class ShellExecTool(BaseTool):
                 "timeout": {
                     "type":        "integer",
                     "description": "Timeout in Sekunden (Standard: 30, max: 120)",
-                    "default":     30,
                 },
                 "cwd": {
                     "type":        "string",
                     "description": "Arbeitsverzeichnis (Standard: /opt/octopos)",
-                    "default":     "/opt/octopos",
                 },
             },
             "required": ["command"],
@@ -735,12 +732,10 @@ class ReadSystemFileTool(BaseTool):
                 "offset": {
                     "type":        "integer",
                     "description": "Zeile ab der gelesen wird (0-basiert, Standard: 0)",
-                    "default":     0,
                 },
                 "limit": {
                     "type":        "integer",
                     "description": "Maximale Anzahl Zeilen (Standard: 200, max: 1000)",
-                    "default":     200,
                 },
             },
             "required": ["path"],
@@ -806,7 +801,6 @@ class WriteSystemFileTool(BaseTool):
                     "type":        "string",
                     "enum":        ["overwrite", "append"],
                     "description": "overwrite (Standard) oder append",
-                    "default":     "overwrite",
                 },
             },
             "required": ["path", "content"],
@@ -829,6 +823,117 @@ class WriteSystemFileTool(BaseTool):
             return {"error": str(e)}
 
 
+# ============================================================= Memory Tools (#85)
+
+import re as _re
+
+def _safe_memory_filename(filename: str) -> str:
+    """Normalisiert Dateinamen: nur a-z0-9_- erlaubt, erzwingt .md Extension."""
+    base = filename.removesuffix(".md").strip()
+    if not _re.match(r"^[a-z0-9_-]+$", base):
+        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, 0-9, _ und - erlaubt.")
+    return base + ".md"
+
+
+class ReadMemoryTool(BaseTool):
+    """Liest Dateien aus dem persönlichen Gedächtnis-Verzeichnis des Agenten."""
+
+    @property
+    def id(self) -> str:   return "read_memory"
+    @property
+    def name(self) -> str: return "Gedächtnis lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest Dateien aus dem eigenen persistenten Gedächtnis. "
+            "Ohne filename: listet alle vorhandenen Gedächtnis-Dateien auf. "
+            "Mit filename: gibt den Inhalt dieser Datei zurück."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type":        "string",
+                    "description": "Dateiname (ohne Pfad, z.B. 'facts' oder 'facts.md'). Leer lassen um alle Dateien aufzulisten.",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, filename: str = "") -> dict:
+        memory_dir = AGENTS_ROOT / agent_id / "memory"
+        if not filename:
+            if not memory_dir.exists():
+                return {"files": [], "count": 0}
+            files = sorted(p.name for p in memory_dir.glob("*.md"))
+            return {"files": files, "count": len(files)}
+        try:
+            safe = _safe_memory_filename(filename)
+        except ValueError as e:
+            return {"error": str(e)}
+        p = memory_dir / safe
+        if not p.exists():
+            return {"error": f"Datei '{safe}' nicht gefunden."}
+        return {"filename": safe, "content": p.read_text(encoding="utf-8")}
+
+
+class WriteMemoryTool(BaseTool):
+    """Schreibt in das persönliche Gedächtnis-Verzeichnis des Agenten."""
+
+    @property
+    def id(self) -> str:   return "write_memory"
+    @property
+    def name(self) -> str: return "Gedächtnis schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Speichert Information dauerhaft im eigenen Gedächtnis. "
+            "Verwende aussagekräftige Dateinamen wie 'project-context', 'learned-facts', 'user-preferences'. "
+            "mode=overwrite (Standard) ersetzt die Datei, mode=append hängt Text an."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type":        "string",
+                    "description": "Dateiname ohne Pfad (z.B. 'learned-facts' oder 'learned-facts.md')",
+                },
+                "content": {
+                    "type":        "string",
+                    "description": "Inhalt der gespeichert werden soll (Markdown empfohlen)",
+                },
+                "mode": {
+                    "type":        "string",
+                    "enum":        ["overwrite", "append"],
+                    "description": "overwrite (Standard) oder append",
+                },
+            },
+            "required": ["filename", "content"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        filename: str, content: str, mode: str = "overwrite",
+    ) -> dict:
+        try:
+            safe = _safe_memory_filename(filename)
+        except ValueError as e:
+            return {"error": str(e)}
+        memory_dir = AGENTS_ROOT / agent_id / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        p = memory_dir / safe
+        write_mode = "a" if mode == "append" else "w"
+        p.open(write_mode, encoding="utf-8").write(content)
+        logger.info("write_memory [%s]: %s (%s, %d bytes)", agent_id, safe, mode, len(content))
+        return {"saved": True, "filename": safe, "bytes": len(content.encode())}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -843,4 +948,6 @@ registry.register(ReadHandoffTool())
 registry.register(ShellExecTool())
 registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
+registry.register(ReadMemoryTool())
+registry.register(WriteMemoryTool())
 
