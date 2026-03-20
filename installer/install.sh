@@ -48,6 +48,7 @@ echo ""
 echo -e "${BLUE}--- Phase 3: Web-Console ---${NC}"
 source "${MODULES_DIR}/07_console.sh"
 source "${MODULES_DIR}/08_ollama.sh"
+source "${MODULES_DIR}/09_https.sh"
 
 # Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
 for _f in jwt_secret llm_env llm_config.json; do
@@ -67,7 +68,8 @@ echo ""
 info "Profil:        $PROFILE"
 info "Matrix:        http://127.0.0.1:6167"
 info "Core API:      http://127.0.0.1:8765"
-info "Console:       http://$(hostname -I | awk '{print $1}'):80"
+info "Console:       https://$(hostname -I | awk '{print $1}')  (self-signed Cert, Browser-Warnung ignorieren)"
+info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
 info "Login:         admin / (Passwort aus /etc/octopos/admin_credentials)"
 info "Credentials:   /etc/octopos/admin_credentials"
