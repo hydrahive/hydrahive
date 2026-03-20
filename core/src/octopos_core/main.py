@@ -986,6 +986,51 @@ async def change_password(username: str, body: dict):
 
 
 
+
+# ================================================================== AgentLink
+
+@app.get("/projects/{project_id}/agentlink")
+def list_agentlink(project_id: str):
+    """Aktive Handoffs eines Projekts auflisten."""
+    from .agentlink import list_handoffs as _lh
+    project_dir = Path(PROJECTS_DIR) / project_id
+    if not project_dir.exists():
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    handoffs = _lh(project_dir)
+    return {"project_id": project_id, "handoffs": handoffs, "count": len(handoffs)}
+
+
+@app.delete("/projects/{project_id}/agentlink/{handoff_id}")
+def delete_agentlink(project_id: str, handoff_id: str):
+    """Handoff manuell loeschen."""
+    from .agentlink import delete_handoff as _dh
+    project_dir = Path(PROJECTS_DIR) / project_id
+    if not project_dir.exists():
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    deleted = _dh(project_dir, handoff_id)
+    if not deleted:
+        raise HTTPException(404, f"Handoff '{handoff_id}' nicht gefunden")
+    return {"deleted": True, "handoff_id": handoff_id}
+
+
+@app.post("/projects/{project_id}/agentlink")
+def create_agentlink(project_id: str, body: dict):
+    """Handoff manuell anlegen (fuer Tests)."""
+    from .agentlink import write_handoff as _wh
+    project_dir = Path(PROJECTS_DIR) / project_id
+    if not project_dir.exists():
+        raise HTTPException(404, f"Projekt nicht gefunden")
+    entry = _wh(
+        project_dir,
+        from_agent=body.get("from_agent", "manual"),
+        to_agent=body.get("to_agent", ""),
+        context=body.get("context", ""),
+        data=body.get("data", {}),
+        ttl_seconds=int(body.get("ttl_seconds", 3600)),
+    )
+    return entry
+
+
 # ================================================================== Webhook-System
 
 VALID_EVENTS = {"message", "agent_error", "provision", "agent_start", "agent_stop"}
