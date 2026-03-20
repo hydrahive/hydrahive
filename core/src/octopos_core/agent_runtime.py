@@ -30,8 +30,9 @@ DEFAULT_INTERVAL = 30.0
 DEFAULT_TIMEOUT  = 90.0
 DEFAULT_ON_FAILURE = "restart"
 
-TASK_AGENT_TTL = 300.0  # Max-Laufzeit Task-Agent in Sekunden
-WATCHDOG_TICK  = 10.0   # Wie oft der Watchdog prueft
+TASK_AGENT_TTL         = 300.0  # Max-Laufzeit Task-Agent in Sekunden
+WATCHDOG_TICK          = 10.0   # Wie oft der Watchdog prueft
+MATRIX_RESTART_DELAY_S = 15.0   # Wartezeit vor Matrix-Client Neustart (#61)
 
 
 def _parse_duration(value: str | int | float, default: float) -> float:
@@ -212,25 +213,49 @@ class AgentRuntime:
 
         try:
             if matrix_client is not None:
-                await matrix_client.start()
-                # run() blockiert bis stop() aufgerufen wird oder CancelledError
-                matrix_task = asyncio.create_task(
-                    matrix_client.run(),
-                    name=f"matrix-{handle.config.id}",
-                )
-                # Parallel dazu: Heartbeat-Ticker damit Watchdog zufrieden ist
-                async def _ticker():
-                    while True:
-                        if ttl and (time.monotonic() - started_at) > ttl:
-                            matrix_task.cancel()
-                            break
-                        await asyncio.sleep(handle.heartbeat_cfg.interval)
-                        self.heartbeat(handle.config.id)
-                ticker_task = asyncio.create_task(_ticker(), name=f"ticker-{handle.config.id}")
-                try:
-                    await matrix_task
-                finally:
-                    ticker_task.cancel()
+                # Restart-Loop: bei unerwartetem Verbindungsabbruch neu verbinden (#61)
+                while True:
+                    try:
+                        await matrix_client.start()
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.error(
+                            "Matrix-Client %s start() fehlgeschlagen: %s — Neustart in %.0fs",
+                            handle.config.id, e, MATRIX_RESTART_DELAY_S,
+                        )
+                        await asyncio.sleep(MATRIX_RESTART_DELAY_S)
+                        continue
+
+                    matrix_task = asyncio.create_task(
+                        matrix_client.run(),
+                        name=f"matrix-{handle.config.id}",
+                    )
+
+                    async def _ticker():
+                        while True:
+                            if ttl and (time.monotonic() - started_at) > ttl:
+                                matrix_task.cancel()
+                                break
+                            await asyncio.sleep(handle.heartbeat_cfg.interval)
+                            self.heartbeat(handle.config.id)
+
+                    ticker_task = asyncio.create_task(_ticker(), name=f"ticker-{handle.config.id}")
+                    try:
+                        await matrix_task
+                        # Normales Ende (_running=False) → Restart-Loop verlassen
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.warning(
+                            "Matrix-Client %s unerwartet beendet: %s — Neustart in %.0fs",
+                            handle.config.id, e, MATRIX_RESTART_DELAY_S,
+                        )
+                    finally:
+                        ticker_task.cancel()
+
+                    await asyncio.sleep(MATRIX_RESTART_DELAY_S)
             else:
                 # Fallback: reiner Heartbeat-Ticker (kein Matrix)
                 while True:
