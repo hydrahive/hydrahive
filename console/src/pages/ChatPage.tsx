@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Bot, User, Network } from "lucide-react";
 import { api } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   role:    "user" | "assistant";
@@ -113,12 +114,15 @@ export function ChatPage() {
               </div>
             )}
             <div className="flex flex-col gap-1 max-w-[75%]">
-              <div className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+              <div className={`rounded-lg px-3 py-2 text-sm break-words ${
                 msg.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : "bg-card border"
               }`}>
-                {msg.content}
+                {msg.role === "user"
+                    ? <span className="whitespace-pre-wrap">{msg.content}</span>
+                    : <ReactMarkdown className="prose prose-sm max-w-none dark:prose-invert">{msg.content}</ReactMarkdown>
+                  }
               </div>
               {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
                 <div className="flex flex-wrap gap-1 px-1">
