@@ -47,6 +47,7 @@ source "${MODULES_DIR}/06_core_service.sh"
 echo ""
 echo -e "${BLUE}--- Phase 3: Web-Console ---${NC}"
 source "${MODULES_DIR}/07_console.sh"
+source "${MODULES_DIR}/08_ollama.sh"
 
 # Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
 for _f in jwt_secret llm_env llm_config.json; do

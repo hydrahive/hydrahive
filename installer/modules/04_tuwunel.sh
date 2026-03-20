@@ -22,6 +22,17 @@ if [ -z "$RELEASE_TAG" ]; then
 fi
 info "Gefunden: conduwuit $RELEASE_TAG"
 
+# Idempotenz: Version-Check — Download überspringen wenn gleiche Version läuft
+if [ -f "$TUWUNEL_BIN" ]; then
+  INSTALLED_VER=$("$TUWUNEL_BIN" --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "")
+  if [ -n "$INSTALLED_VER" ] && echo "$RELEASE_TAG" | grep -qF "$INSTALLED_VER"; then
+    success "conduwuit $INSTALLED_VER bereits aktuell — Download übersprungen"
+    SKIP_DOWNLOAD=1
+  fi
+fi
+SKIP_DOWNLOAD=${SKIP_DOWNLOAD:-0}
+
+if [ "$SKIP_DOWNLOAD" -eq 0 ]; then
 # .deb Asset URL finden
 DEB_URL=$(echo "$RELEASE_INFO" | python3 -c "
 import sys,json
@@ -72,6 +83,7 @@ else
   fi
   success "conduwuit $RELEASE_TAG via .deb installiert"
 fi
+fi # SKIP_DOWNLOAD
 
 # System-User anlegen (idempotent)
 if ! id "$TUWUNEL_USER" &>/dev/null; then
