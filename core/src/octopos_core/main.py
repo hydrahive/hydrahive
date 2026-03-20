@@ -854,13 +854,20 @@ def set_llm_provider(provider: str, req: LlmProviderConfig):
         "api_key":  req.api_key,
     }
     # API-Key als Umgebungsvariable schreiben fuer litellm
+    # claude_max → ANTHROPIC_API_KEY, openai → OPENAI_API_KEY, etc.
+    ENV_KEY_MAP = {
+        "claude_max": "ANTHROPIC_API_KEY",
+        "anthropic":  "ANTHROPIC_API_KEY",
+        "openai":     "OPENAI_API_KEY",
+    }
+    env_var = ENV_KEY_MAP.get(provider, f"{provider.upper()}_API_KEY")
     env_file = Path("/etc/octopos/llm_env")
     lines = []
     if env_file.exists():
         lines = [l for l in env_file.read_text().splitlines()
-                 if not l.startswith(f"{provider.upper()}_API_KEY=")]
+                 if not l.startswith(f"{env_var}=")]
     if req.api_key:
-        lines.append(f"{provider.upper()}_API_KEY={req.api_key}")
+        lines.append(f"{env_var}={req.api_key}")
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     _save_llm_config(config)
     logger.info("LLM-Provider konfiguriert: %s", provider)
