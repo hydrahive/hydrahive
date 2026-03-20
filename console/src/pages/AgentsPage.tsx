@@ -216,12 +216,10 @@ export function AgentsPage() {
                 </select>
               </Field>
               <Field label="LLM-Modell *">
-                <input list="known-models" value={form.model} onChange={e=>set("model",e.target.value)}
-                  placeholder="z.B. mistral-nemo:12b" required
-                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-                <datalist id="known-models">
-                  {KNOWN_MODELS.map(m => <option key={m} value={m} />)}
-                </datalist>
+                <select value={form.model} onChange={e=>set("model",e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                  {[...new Set([...KNOWN_MODELS, form.model].filter(Boolean))].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
               </Field>
               <Field label="Temperature">
                 <Input type="number" value={form.temperature} onChange={e=>set("temperature",parseFloat(e.target.value))}
