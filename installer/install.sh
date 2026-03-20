@@ -45,6 +45,18 @@ echo -e "${BLUE}--- Phase 2: Core Runtime ---${NC}"
 source "${MODULES_DIR}/06_core_service.sh"
 
 echo ""
+echo -e "${BLUE}--- Phase 3: Web-Console ---${NC}"
+source "${MODULES_DIR}/07_console.sh"
+
+# JWT-Secret vorbereiten (octopos-core legt es beim Start an, wir stellen Ownership sicher)
+JWT_SECRET_FILE="/etc/octopos/jwt_secret"
+if [ ! -f "${JWT_SECRET_FILE}" ]; then
+    touch "${JWT_SECRET_FILE}"
+    chown octopos:octopos "${JWT_SECRET_FILE}"
+    chmod 600 "${JWT_SECRET_FILE}"
+fi
+
+echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Installation abgeschlossen       ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
@@ -52,6 +64,8 @@ echo ""
 info "Profil:        $PROFILE"
 info "Matrix:        http://127.0.0.1:6167"
 info "Core API:      http://127.0.0.1:8765"
+info "Console:       http://$(hostname -I | awk '{print $1}'):80"
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
+info "Login:         admin / (Passwort aus /etc/octopos/admin_credentials)"
 info "Credentials:   /etc/octopos/admin_credentials"
 info "Agenten-Dir:   /agents"
