@@ -873,9 +873,10 @@ async def get_ollama_models():
     import asyncio as _asyncio
     try:
         import urllib.request as _ur
+        import json as _json
         req = _ur.Request("http://127.0.0.1:11434/api/tags")
         with _ur.urlopen(req, timeout=3) as r:
-            data = json.loads(r.read())
+            data = _json.loads(r.read())
         models = [
             {
                 "name":     m["name"],
