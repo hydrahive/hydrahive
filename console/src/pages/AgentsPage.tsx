@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AgentRuntime {
   status: string; type: string; restart_count: number;
@@ -42,6 +43,7 @@ function Input({ value, onChange, ...props }: React.InputHTMLAttributes<HTMLInpu
 }
 
 export function AgentsPage() {
+  const { isAdmin } = useAuth();
   const [agents,    setAgents]    = useState<Record<string,AgentEntry>>({});
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
@@ -159,10 +161,12 @@ export function AgentsPage() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing?"animate-spin":""}`} />Aktualisieren
           </button>
-          <button onClick={openNew}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <Plus className="h-3.5 w-3.5" />Neuer Agent
-          </button>
+          {isAdmin && (
+            <button onClick={openNew}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+              <Plus className="h-3.5 w-3.5" />Neuer Agent
+            </button>
+          )}
         </div>
       </div>
 
@@ -280,10 +284,12 @@ export function AgentsPage() {
         <div className="bg-card border rounded-lg p-12 text-center space-y-3">
           <Bot className="h-10 w-10 mx-auto text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Keine Agenten. Leg den ersten an.</p>
-          <button onClick={openNew}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4" />Ersten Agent anlegen
-          </button>
+          {isAdmin && (
+            <button onClick={openNew}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+              <Plus className="h-4 w-4" />Ersten Agent anlegen
+            </button>
+          )}
         </div>
       )}
 
@@ -328,14 +334,18 @@ export function AgentsPage() {
                     className={`p-1.5 rounded transition-colors ${logAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
                     <ScrollText className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => openEdit(id, agent)}
-                    className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => handleDelete(id)} disabled={deleting === id}
-                    className="p-1.5 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive disabled:opacity-50">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {isAdmin && (
+                    <button onClick={() => openEdit(id, agent)}
+                      className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => handleDelete(id)} disabled={deleting === id}
+                      className="p-1.5 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive disabled:opacity-50">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
               {skillsAgent === id && <SkillsPanel agentId={id} />}
