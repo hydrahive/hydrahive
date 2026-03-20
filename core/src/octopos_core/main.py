@@ -463,6 +463,7 @@ async def create_project(req: CreateProjectRequest):
     yaml_path = project_dir / "project.yaml"
     yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
     logger.info("project.yaml geschrieben: %s", yaml_path)
+    audit_log("project.create", target=req.id, project_id=req.id, details={"boss": req.boss})
 
     await _asyncio.sleep(0.3)
 
@@ -474,6 +475,7 @@ async def create_project(req: CreateProjectRequest):
         raise HTTPException(503, "Provisioner nicht initialisiert")
 
     result = await provisioner.provision(cfg)
+    audit_log("project.provision", target=project_id, project_id=project_id)
     if result.matrix_room and not cfg.matrix.room:
         _update_project_matrix_room(req.id, result.matrix_room)
 
@@ -728,6 +730,96 @@ def get_core_logs(lines: int = 200):
     except Exception as e:
         return {"lines": [str(e)], "count": 1}
 
+
+# ================================================================== Audit-Log
+
+AUDIT_LOG_FILE = Path("/var/log/octopos/audit.jsonl")
+
+
+def audit_log(
+    action:     str,
+    user:       str = "system",
+    target:     str = "",
+    project_id: str = "",
+    ip:         str = "",
+    details:    dict | None = None,
+) -> None:
+    """
+    Audit-Event schreiben — append-only JSONL.
+    Nicht-blockierend: Fehler werden geloggt, nicht propagiert.
+    """
+    import time as _time
+    import secrets as _sec
+
+    entry = {
+        "id":         _sec.token_hex(6),
+        "timestamp":  _time.time(),
+        "action":     action,
+        "user":       user,
+        "target":     target,
+        "project_id": project_id,
+        "ip":         ip,
+        "details":    details or {},
+    }
+
+    try:
+        AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with AUDIT_LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        logger.warning("Audit-Log Schreibfehler: %s", e)
+
+
+def _read_audit_logs(
+    limit:      int = 100,
+    project_id: str = "",
+    user:       str = "",
+    action:     str = "",
+) -> list[dict]:
+    """Audit-Log lesen mit optionalen Filtern."""
+    if not AUDIT_LOG_FILE.exists():
+        return []
+
+    logs = []
+    try:
+        with AUDIT_LOG_FILE.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if project_id and entry.get("project_id") != project_id:
+                    continue
+                if user and entry.get("user") != user:
+                    continue
+                if action and not entry.get("action", "").startswith(action):
+                    continue
+
+                logs.append(entry)
+    except OSError:
+        return []
+
+    # Neueste zuerst, limit anwenden
+    return list(reversed(logs))[:limit]
+
+
+@app.get("/audit/logs")
+def get_audit_logs(
+    limit:      int = 100,
+    project_id: str = "",
+    user:       str = "",
+    action:     str = "",
+):
+    """Audit-Log lesen mit optionalen Filtern."""
+    limit = max(10, min(limit, 1000))
+    logs  = _read_audit_logs(limit, project_id, user, action)
+    return {"logs": logs, "count": len(logs)}
+
+
 # ================================================================== User-Verwaltung
 
 USERS_FILE = Path("/etc/octopos/users.json")
@@ -853,6 +945,7 @@ async def create_user(req: CreateUserRequest):
     }
     _save_users(users)
     logger.info("User angelegt: %s (role=%s, matrix=%s)", req.username, req.role, matrix_ok)
+    audit_log("user.create", target=req.username, details={"role": req.role})
 
     return {
         "created":    True,
@@ -873,6 +966,7 @@ async def delete_user(username: str):
     del users[username]
     _save_users(users)
     logger.info("User gelöscht: %s", username)
+    audit_log("user.delete", target=username)
     return {"deleted": True, "username": username}
 
 
@@ -999,6 +1093,7 @@ def create_webhook(project_id: str, req: WebhookRequest):
     webhooks.append(wh)
     _save_webhooks(project_id, webhooks)
     logger.info("Webhook angelegt: %s → %s (%s)", project_id, req.url, req.events)
+    audit_log("webhook.create", target=req.url, project_id=project_id, details={"events": req.events})
     return {**wh, "secret": "***" if wh["secret"] else ""}
 
 
@@ -1286,6 +1381,7 @@ async def create_agent(req: CreateAgentRequest):
                          encoding="utf-8")
 
     logger.info("Agent angelegt: %s (%s)", req.id, req.type)
+    audit_log("agent.create", target=req.id, details={"type": req.type, "model": req.model})
     await _asyncio.sleep(0.3)
 
     cfg = discovery.get(req.id)
@@ -1352,6 +1448,7 @@ async def delete_agent(agent_id: str):
     disabled_dir = Path(AGENTS_DIR) / f"_{agent_id}_disabled"
     agent_dir.rename(disabled_dir)
     logger.info("Agent deaktiviert: %s → %s", agent_dir, disabled_dir)
+    audit_log("agent.delete", target=agent_id)
     return {"disabled": True, "agent_id": agent_id, "moved_to": str(disabled_dir)}
 
 
@@ -1541,6 +1638,7 @@ async def set_claude_oauth_token(body: dict):
     token_file.write_text(token, encoding="utf-8")
     token_file.chmod(0o600)
     logger.info("Claude OAuth Token gespeichert")
+    audit_log("llm.token_set", details={"provider": "claude_max"})
     return {"updated": True, "provider": "claude_max"}
 
 
