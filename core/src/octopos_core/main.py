@@ -157,14 +157,14 @@ def _make_jwt(username: str) -> str:
     return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 
-def _verify_jwt(token: str) -> str:
-    """Token verifizieren — gibt username zurück oder wirft HTTPException 401."""
+def _verify_jwt(token: str) -> tuple[str, str]:
+    """Token verifizieren — gibt (username, role) zurück oder wirft HTTPException 401."""
     if not JWT_SECRET:
         raise HTTPException(503, "Server noch nicht bereit — JWT-Secret fehlt")
     from jose import JWTError, jwt as jose_jwt
     try:
         payload = jose_jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-        return payload["sub"]
+        return payload["sub"], payload.get("role", "user")
     except (JWTError, KeyError):
         raise HTTPException(401, "Ungültiger oder abgelaufener Token")
 
@@ -172,11 +172,19 @@ def _verify_jwt(token: str) -> str:
 _bearer = HTTPBearer(auto_error=False)
 
 
-def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
-    """FastAPI-Dependency: JWT aus Bearer-Header prüfen."""
+def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> tuple[str, str]:
+    """FastAPI-Dependency: JWT aus Bearer-Header prüfen. Gibt (username, role) zurück."""
     if not creds:
         raise HTTPException(401, "Kein Authorization-Header")
     return _verify_jwt(creds.credentials)
+
+
+def require_admin(auth: tuple[str, str] = Depends(require_auth)) -> tuple[str, str]:
+    """Nur Admin-User — wirft 403 wenn role != admin."""
+    username, role = auth
+    if role != "admin":
+        raise HTTPException(403, f"Keine Berechtigung — Admin erforderlich (du bist '{role}')")
+    return auth
 
 
 async def _setup_matrix_clients(server_name: str) -> None:
@@ -303,9 +311,10 @@ def login(req: LoginRequest, request: Request):
 
 
 @app.get("/auth/me")
-def whoami(username: str = Depends(require_auth)):
-    """Token-Validierung — gibt aktuellen User zurück."""
-    return {"username": username}
+def whoami(auth: tuple[str,str] = Depends(require_auth)):
+    """Token-Validierung — gibt aktuellen User + Role zurück."""
+    username, role = auth
+    return {"username": username, "role": role}
 
 
 # ================================================================== Agenten
@@ -428,7 +437,7 @@ class CreateProjectRequest(BaseModel):
 
 
 @app.post("/projects", status_code=201)
-async def create_project(req: CreateProjectRequest):
+async def create_project(req: CreateProjectRequest, _a: tuple = Depends(require_admin)):
     """
     Neues Projekt anlegen — alles in einem Schritt:
     1. Verzeichnis + project.yaml schreiben
@@ -917,7 +926,7 @@ class CreateUserRequest(BaseModel):
 
 
 @app.post("/users", status_code=201)
-async def create_user(req: CreateUserRequest):
+async def create_user(req: CreateUserRequest, _a: tuple = Depends(require_admin)):
     """Neuen User anlegen — Console-Login + Matrix-Account."""
     import re as _re
     from datetime import datetime as _dt
@@ -956,7 +965,7 @@ async def create_user(req: CreateUserRequest):
 
 
 @app.delete("/users/{username}")
-async def delete_user(username: str):
+async def delete_user(username: str, _a: tuple = Depends(require_admin)):
     """User löschen (Console-Login entfernen)."""
     users = _load_users()
     if username not in users:
@@ -971,7 +980,7 @@ async def delete_user(username: str):
 
 
 @app.put("/users/{username}/password")
-async def change_password(username: str, body: dict):
+async def change_password(username: str, body: dict, _a: tuple = Depends(require_admin)):
     """Passwort ändern."""
     new_password = body.get("password", "").strip()
     if len(new_password) < 8:
@@ -1117,7 +1126,7 @@ def list_webhooks(project_id: str):
 
 
 @app.post("/projects/{project_id}/webhooks", status_code=201)
-def create_webhook(project_id: str, req: WebhookRequest):
+def create_webhook(project_id: str, req: WebhookRequest, _a: tuple = Depends(require_admin)):
     import secrets as _sec, time as _time
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt nicht gefunden")
@@ -1143,7 +1152,7 @@ def create_webhook(project_id: str, req: WebhookRequest):
 
 
 @app.delete("/projects/{project_id}/webhooks/{webhook_id}")
-def delete_webhook(project_id: str, webhook_id: str):
+def delete_webhook(project_id: str, webhook_id: str, _a: tuple = Depends(require_admin)):
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt nicht gefunden")
     webhooks = _load_webhooks(project_id)
@@ -1319,7 +1328,7 @@ class SkillRequest(BaseModel):
 
 
 @app.post("/agents/{agent_id}/skills", status_code=201)
-def create_agent_skill(agent_id: str, req: SkillRequest):
+def create_agent_skill(agent_id: str, req: SkillRequest, _a: tuple = Depends(require_admin)):
     """Neuen QMD-Skill anlegen."""
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
@@ -1336,7 +1345,7 @@ def create_agent_skill(agent_id: str, req: SkillRequest):
 
 
 @app.put("/agents/{agent_id}/skills/{filename}")
-def update_agent_skill(agent_id: str, filename: str, req: SkillRequest):
+def update_agent_skill(agent_id: str, filename: str, req: SkillRequest, _a: tuple = Depends(require_admin)):
     """Bestehenden QMD-Skill aktualisieren."""
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
@@ -1348,7 +1357,7 @@ def update_agent_skill(agent_id: str, filename: str, req: SkillRequest):
 
 
 @app.delete("/agents/{agent_id}/skills/{filename}")
-def delete_agent_skill(agent_id: str, filename: str):
+def delete_agent_skill(agent_id: str, filename: str, _a: tuple = Depends(require_admin)):
     """QMD-Skill löschen."""
     safe = filename.replace(".md", "").replace("/", "-").replace("..", "")
     path = _skills_dir(agent_id) / f"{safe}.md"
@@ -1376,7 +1385,7 @@ class CreateAgentRequest(BaseModel):
 
 
 @app.post("/agents", status_code=201)
-async def create_agent(req: CreateAgentRequest):
+async def create_agent(req: CreateAgentRequest, _a: tuple = Depends(require_admin)):
     """
     Neuen Agenten anlegen: /agents/<id>/agent.yaml + soul.md schreiben.
     Hot-Reload registriert ihn automatisch.
@@ -1444,7 +1453,7 @@ async def create_agent(req: CreateAgentRequest):
 
 
 @app.put("/agents/{agent_id}")
-async def update_agent(agent_id: str, req: CreateAgentRequest):
+async def update_agent(agent_id: str, req: CreateAgentRequest, _a: tuple = Depends(require_admin)):
     """Agent-Config aktualisieren — überschreibt agent.yaml."""
     import asyncio as _asyncio
     import yaml as _yaml
@@ -1484,7 +1493,7 @@ async def update_agent(agent_id: str, req: CreateAgentRequest):
 
 
 @app.delete("/agents/{agent_id}")
-async def delete_agent(agent_id: str):
+async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
     """Agent deaktivieren — benennt Verzeichnis um (kein Datenverlust)."""
     import shutil as _shutil
     agent_dir = Path(AGENTS_DIR) / agent_id
@@ -1519,7 +1528,7 @@ def load_agent_config_direct(agent_dir: Path):
 # ================================================================== Provisioning
 
 @app.post("/projects/{project_id}/provision")
-async def provision_project(project_id: str):
+async def provision_project(project_id: str, _a: tuple = Depends(require_admin)):
     """
     Projekt provisionieren: Linux-User + Samba-Share + Matrix-Room.
     Idempotent — kann mehrfach aufgerufen werden.
@@ -1666,7 +1675,7 @@ class LlmProviderConfig(BaseModel):
 
 
 @app.put("/llm/config/claude_max")
-async def set_claude_oauth_token(body: dict):
+async def set_claude_oauth_token(body: dict, _a: tuple = Depends(require_admin)):
     """
     Claude Max OAuth Token speichern.
     Token kommt von: claude setup-token (sk-ant-oat01-...)
@@ -1688,7 +1697,7 @@ async def set_claude_oauth_token(body: dict):
 
 
 @app.put("/llm/config/{provider}")
-def set_llm_provider(provider: str, req: LlmProviderConfig):
+def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(require_admin)):
     """API-Key fuer einen Provider setzen."""
     config = _load_llm_config()
     if "providers" not in config:
