@@ -71,10 +71,12 @@ class Orchestrator:
         sessions:   SessionManager,
         tool_reg:   ToolRegistry | None = None,
     ) -> None:
-        self._discovery = discovery
-        self._runtime   = runtime
-        self._sessions  = sessions
-        self._reg       = tool_reg or default_registry
+        self._discovery      = discovery
+        self._runtime        = runtime
+        self._sessions       = sessions
+        self._reg            = tool_reg or default_registry
+        self._project_queues: dict[str, asyncio.Queue]  = {}
+        self._queue_tasks:    dict[str, asyncio.Task]   = {}
 
     # ------------------------------------------------------------------ public
 
