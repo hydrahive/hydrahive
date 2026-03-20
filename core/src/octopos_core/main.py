@@ -2032,6 +2032,49 @@ def restore_backup(name: str, _a: tuple = Depends(require_admin)):
 
 # ================================================================== Status
 
+@app.get("/system/gpu")
+def gpu_info():
+    """nvidia-smi Monitoring — read-only, kein Auth nötig."""
+    import shutil, subprocess
+    if not shutil.which("nvidia-smi"):
+        return {"available": False, "reason": "nvidia-smi nicht gefunden"}
+    try:
+        fields = "name,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.used,memory.free,power.draw,power.limit"
+        out = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode != 0:
+            return {"available": False, "reason": out.stderr.strip()}
+        gpus = []
+        for line in out.stdout.strip().splitlines():
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 7:
+                continue
+            def _int(v: str):
+                try: return int(v)
+                except: return None
+            def _float(v: str):
+                try: return round(float(v), 1)
+                except: return None
+            gpus.append({
+                "name":          parts[0],
+                "temp_c":        _int(parts[1]),
+                "util_gpu_pct":  _int(parts[2]),
+                "util_mem_pct":  _int(parts[3]),
+                "mem_total_mb":  _int(parts[4]),
+                "mem_used_mb":   _int(parts[5]),
+                "mem_free_mb":   _int(parts[6]),
+                "power_draw_w":  _float(parts[7]) if len(parts) > 7 else None,
+                "power_limit_w": _float(parts[8]) if len(parts) > 8 else None,
+            })
+        return {"available": True, "gpus": gpus}
+    except subprocess.TimeoutExpired:
+        return {"available": False, "reason": "nvidia-smi Timeout"}
+    except Exception as e:
+        return {"available": False, "reason": str(e)}
+
+
 @app.get("/status")
 def system_status():
     return {
