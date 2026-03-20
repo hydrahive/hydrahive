@@ -1,24 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User } from "lucide-react";
+import { ArrowLeft, Send, Bot, User, Network } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface Message {
   role:    "user" | "assistant";
   content: string;
+  workers?: string[];
 }
 
 export function ChatPage() {
   const { id } = useParams<{ id: string }>();
   const navigate  = useNavigate();
 
-  const [messages,  setMessages]  = useState<Message[]>([]);
-  const [input,     setInput]     = useState("");
-  const [sending,   setSending]   = useState(false);
-  const [error,     setError]     = useState("");
-  const [projectName, setProjectName] = useState(id ?? "");
+  const [messages,     setMessages]     = useState<Message[]>([]);
+  const [input,        setInput]        = useState("");
+  const [sending,      setSending]      = useState(false);
+  const [error,        setError]        = useState("");
+  const [projectName,  setProjectName]  = useState(id ?? "");
+  const [showSwarm,    setShowSwarm]    = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -27,6 +29,8 @@ export function ChatPage() {
       .then(d => {
         const ident = d.identity as { name?: string } | undefined;
         if (ident?.name) setProjectName(ident.name);
+        const chatCfg = d.config as { chat?: { show_swarm?: boolean } } | undefined;
+        if (chatCfg?.chat?.show_swarm) setShowSwarm(true);
       })
       .catch(() => {});
   }, [id]);
@@ -44,7 +48,11 @@ export function ChatPage() {
     setSending(true);
     try {
       const res = await api.sendMessage(id, content);
-      setMessages(ms => [...ms, { role: "assistant", content: res.response }]);
+      setMessages(ms => [...ms, {
+        role: "assistant",
+        content: res.response,
+        workers: res.workers,
+      }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Senden");
       setMessages(ms => ms.slice(0, -1));
@@ -76,6 +84,17 @@ export function ChatPage() {
           <h1 className="text-sm font-semibold truncate">{projectName}</h1>
           <p className="text-xs text-muted-foreground font-mono">{id}</p>
         </div>
+        <button
+          onClick={() => setShowSwarm(s => !s)}
+          title={showSwarm ? "Swarm-Ansicht ausblenden" : "Swarm-Ansicht einblenden"}
+          className={`p-1.5 rounded-md transition-colors ${
+            showSwarm
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          <Network className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Nachrichten */}
@@ -93,12 +112,24 @@ export function ChatPage() {
                 <Bot className="h-4 w-4 text-primary" />
               </div>
             )}
-            <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
-              msg.role === "user"
-                ? "bg-primary text-primary-foreground"
-                : "bg-card border"
-            }`}>
-              {msg.content}
+            <div className="flex flex-col gap-1 max-w-[75%]">
+              <div className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border"
+              }`}>
+                {msg.content}
+              </div>
+              {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
+                <div className="flex flex-wrap gap-1 px-1">
+                  {msg.workers.map(w => (
+                    <span key={w} className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground rounded px-1.5 py-0.5">
+                      <Network className="h-2.5 w-2.5" />
+                      {w}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             {msg.role === "user" && (
               <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">

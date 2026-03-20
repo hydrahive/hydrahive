@@ -84,18 +84,20 @@ class Orchestrator:
         project_cfg: ProjectConfig,
         content:     str,
         sender:      str = "user",
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
-        Gibt den finalen Text zurück.
+        Gibt (finaler Text, beteiligte Worker-IDs) zurück.
         """
+        workers_used: list[str] = []
+
         # 1. Nachricht in Session speichern
         self._sessions.append(project_id, MessageRole.USER, content)
 
         # 2. Boss-Agent-Config holen
         boss_cfg = self._discovery.get(project_cfg.agents.boss)
         if not boss_cfg:
-            return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden."
+            return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden.", []
 
         # 3. System-Prompt aufbauen (Soul + Skills)
         system_prompt = self._build_system_prompt(boss_cfg, content)
@@ -113,14 +115,14 @@ class Orchestrator:
             response = await self._llm_call(boss_cfg, messages, litellm_tools)
         except Exception as e:
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
-            return f"[Fehler] LLM nicht erreichbar: {e}"
+            return f"[Fehler] LLM nicht erreichbar: {e}", []
 
         # 7. Tool-Calls verarbeiten (Agentic Loop mit max. 5 Runden)
         final_response = response.choices[0].message.content or ""
         tool_calls = getattr(response.choices[0].message, "tool_calls", None)
 
         if tool_calls:
-            final_response = await self._tool_loop(
+            final_response, workers_used = await self._tool_loop(
                 boss_cfg, project_id, project_cfg, messages, response
             )
 
@@ -130,7 +132,7 @@ class Orchestrator:
             final_response, agent_id=boss_cfg.id
         )
 
-        return final_response
+        return final_response, workers_used
 
     # ----------------------------------------------------------------- private
 
@@ -215,7 +217,10 @@ class Orchestrator:
         import anthropic as _anthropic
         from types import SimpleNamespace
 
+        # api_key="" verhindert dass der SDK ANTHROPIC_API_KEY aus env liest
+        # (SDK sendet sonst x-api-key UND Authorization: Bearer gleichzeitig)
         client = _anthropic.AsyncAnthropic(
+            api_key="",
             auth_token=token,
             default_headers={"anthropic-beta": "oauth-2025-04-20"},
         )
@@ -238,10 +243,9 @@ class Orchestrator:
         if not model.startswith("claude-"):
             model = "claude-haiku-4-5"
 
-        # claude-sonnet/opus-4-6 sind via OAuth nicht nutzbar → Fallback auf Haiku
-        # (claude-haiku-4-5 ist das einzige OAuth-kompatible Modell per 2026-03)
-        OAUTH_UNSUPPORTED = ("claude-sonnet-4-6", "claude-opus-4-6", "claude-sonnet-4-5", "claude-opus-4-5")
-        if model in OAUTH_UNSUPPORTED:
+        # Nur claude-haiku-4-5 funktioniert via OAuth (Stand 2026-03)
+        # Alle anderen claude-* Modelle → Fallback auf Haiku
+        if not model.startswith("claude-haiku"):
             logger.info("OAuth: %s nicht verfügbar, Fallback auf claude-haiku-4-5", model)
             model = "claude-haiku-4-5"
 
@@ -299,29 +303,31 @@ class Orchestrator:
         messages:    list[dict],
         response,
         max_rounds:  int = 5,
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """
         Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
         Dispatch-Tasks werden parallel ausgeführt, andere Tools sequentiell.
         Max. max_rounds Runden um Endlosschleifen zu vermeiden.
+        Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
         """
         boss_tools = self._reg.tools_for_agent(boss_cfg.tools)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
         current_messages = list(messages)
+        workers_used: list[str] = []
 
         for _round in range(max_rounds):
             tool_calls = getattr(response.choices[0].message, "tool_calls", None)
             if not tool_calls:
-                return response.choices[0].message.content or ""
+                return response.choices[0].message.content or "", workers_used
 
             # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
             if _round == max_rounds - 1:
                 logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
                 try:
                     final = await self._llm_call(boss_cfg, current_messages, tools=None)
-                    return final.choices[0].message.content or ""
+                    return final.choices[0].message.content or "", workers_used
                 except Exception as e:
-                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}"
+                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}", workers_used
 
             # Assistant-Message mit Tool-Calls in History aufnehmen
             current_messages.append({
@@ -350,6 +356,8 @@ class Orchestrator:
                     )
                     content = res.result if res.success else f"[Fehler] {res.error}"
                     tool_results[call_id] = content
+                    if res.worker_id not in workers_used:
+                        workers_used.append(res.worker_id)
 
             for tc in other_tcs:
                 tool = self._reg.get(tc.function.name)
@@ -379,9 +387,9 @@ class Orchestrator:
                 response = await self._llm_call(boss_cfg, current_messages, litellm_tools)
             except Exception as e:
                 logger.error("LLM-Fehler in Tool-Loop: %s", e)
-                return f"[Fehler] LLM nicht erreichbar: {e}"
+                return f"[Fehler] LLM nicht erreichbar: {e}", workers_used
 
-        return response.choices[0].message.content or ""
+        return response.choices[0].message.content or "", workers_used
 
     def _parse_dispatch_calls(self, tool_calls: list) -> list[dict]:
         """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls."""

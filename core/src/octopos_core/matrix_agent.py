@@ -219,7 +219,10 @@ class MatrixAgent(ABC):
             return
 
         logger.debug("%s ← %s: %s", self._mxid, event.sender, text[:80])
-        await self.on_user_message(room, text, event.sender)
+        try:
+            await self.on_user_message(room, text, event.sender)
+        except Exception as e:
+            logger.error("%s: Unbehandelte Exception in on_user_message: %s", self._mxid, e, exc_info=True)
 
     async def _on_member_event(self, room: MatrixRoom, event: RoomMemberEvent) -> None:
         """Room-Membership-Änderungen loggen."""
@@ -285,22 +288,36 @@ class BossMatrixAgent(MatrixAgent):
         project_id = self._project_cfg.id
         logger.info("Boss %s empfängt Nachricht in %s von %s", self._mxid, room.room_id, sender)
 
-        # Typing-Indikator setzen während LLM denkt
-        if self._client:
-            await self._client.room_typing(room.room_id, typing=True, timeout=60_000)
-
         try:
-            response = await self._orchestrator.handle_message(
-                project_id  = project_id,
-                project_cfg = self._project_cfg,
-                content     = text,
-                sender      = sender,
-            )
-        finally:
+            # Typing-Indikator setzen während LLM denkt
             if self._client:
-                await self._client.room_typing(room.room_id, typing=False)
+                try:
+                    await self._client.room_typing(room.room_id, typing=True, timeout=60_000)
+                except Exception:
+                    pass
 
-        await self.send_markdown(room.room_id, response)
+            try:
+                response, _workers = await self._orchestrator.handle_message(
+                    project_id  = project_id,
+                    project_cfg = self._project_cfg,
+                    content     = text,
+                    sender      = sender,
+                )
+            finally:
+                if self._client:
+                    try:
+                        await self._client.room_typing(room.room_id, typing=False)
+                    except Exception:
+                        pass
+
+            await self.send_markdown(room.room_id, response)
+
+        except Exception as e:
+            logger.error("Boss %s: Fehler beim Verarbeiten der Nachricht: %s", self._mxid, e, exc_info=True)
+            try:
+                await self.send_message(room.room_id, f"[Fehler] {e}")
+            except Exception:
+                pass
 
 
 class WorkerMatrixAgent(MatrixAgent):
