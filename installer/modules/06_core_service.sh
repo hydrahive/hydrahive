@@ -13,6 +13,14 @@ OCTOPOS_USER="octopos"
 
 info "Installiere octopos-core..."
 
+# --- System-User anlegen (idempotent) ---
+if ! id "${OCTOPOS_USER}" &>/dev/null; then
+    useradd -r -s /bin/false -d "${OCTOPOS_DIR}" "${OCTOPOS_USER}"
+    success "System-User '${OCTOPOS_USER}' angelegt"
+else
+    success "System-User '${OCTOPOS_USER}' bereits vorhanden"
+fi
+
 # --- Verzeichnisse ---
 mkdir -p "${CORE_DIR}/src/octopos_core" /agents /projects /etc/octopos
 chown -R "${OCTOPOS_USER}:${OCTOPOS_USER}" "${OCTOPOS_DIR}" /agents /projects
