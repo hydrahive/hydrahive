@@ -67,8 +67,8 @@ success "Python-Dependencies aktualisiert"
 info "Baue Console..."
 CONSOLE_SRC="${TMPDIR_BASE}/console"
 cd "${CONSOLE_SRC}"
-npm ci --silent 2>&1 | grep -v "^npm warn" || true
-npm run build --silent
+npm ci 2>&1 | grep -v "^npm warn" || error "npm ci fehlgeschlagen"
+npm run build 2>&1 | tail -5 || error "npm run build fehlgeschlagen"
 success "Console gebaut"
 
 # --- 5. Console deployen ---
