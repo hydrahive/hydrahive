@@ -146,13 +146,14 @@ def _read_admin_password() -> str:
     return ""
 
 
-def _make_jwt(username: str) -> str:
+def _make_jwt(username: str, role: str = "user") -> str:
     """JWT-Token für den angegebenen User erstellen."""
     from jose import jwt as jose_jwt
     payload = {
-        "sub": username,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
-        "iat": datetime.now(timezone.utc),
+        "sub":  username,
+        "role": role,
+        "exp":  datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
+        "iat":  datetime.now(timezone.utc),
     }
     return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
@@ -294,7 +295,7 @@ def login(req: LoginRequest, request: Request):
     if users:
         user = users.get(req.username)
         if user and _verify_password(req.password, user.get("password_hash", "")):
-            token = _make_jwt(req.username)
+            token = _make_jwt(req.username, user.get("role", "user"))
             logger.info("Login erfolgreich (users.json): %s", req.username)
             return {"access_token": token, "token_type": "bearer"}
         raise HTTPException(401, "Ungültige Zugangsdaten")
@@ -305,7 +306,7 @@ def login(req: LoginRequest, request: Request):
         raise HTTPException(503, "Kein Admin-Passwort konfiguriert — Setup erforderlich")
     if req.username != "admin" or req.password != admin_pass:
         raise HTTPException(401, "Ungültige Zugangsdaten")
-    token = _make_jwt(req.username)
+    token = _make_jwt(req.username, "admin")
     logger.info("Login erfolgreich (admin_credentials): %s", req.username)
     return {"access_token": token, "token_type": "bearer"}
 
