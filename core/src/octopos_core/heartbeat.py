@@ -1,254 +1,179 @@
 """
-heartbeat.py — Periodische Agent-Aktivierung (#77)
+heartbeat.py — Periodische Agenten-Aktivierung (#77)
 
-Liest heartbeat_tasks aus agent.yaml und fuert sie zur konfigurierten Zeit aus.
-State (last_run) wird in /agents/{id}/.heartbeat_state.json gespeichert.
+Liest heartbeat_tasks aus agent.yaml und führt sie zur konfigurierten Zeit aus.
+State (last_run pro Task) wird in /agents/{id}/.heartbeat_state.json gespeichert.
 
-Unterstuetzte Formate:
-  schedule: "0 8 * * *"   # Cron-Syntax (braucht croniter)
+Unterstützte Formate:
+  schedule: "0 8 * * *"   # Cron-Ausdruck (via croniter)
   interval: 1800           # Sekunden-Intervall
 
-active_hours: "08:00-22:00"  # optional, lokale Zeit
-project: "buchhaltung"       # optional, sonst erstes Projekt des Agenten
+Projekt-Auflösung:
+  - Explizit via task.project
+  - Fallback: erstes Projekt in dem der Agent als Boss konfiguriert ist
+  - Kein Projekt → Task wird nicht ausgeführt
+
+Missed runs (Server war aus) → werden übersprungen, kein Backlog.
 """
 
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .agent_config import AgentConfig, HeartbeatTaskConfig
-    from .agent_discovery import AgentDiscovery
-    from .project_loader import ProjectLoader
-    from .orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 
-HEARTBEAT_CHECK_INTERVAL = 60   # Scheduler-Loop alle 60 Sekunden
-STATE_FILENAME            = ".heartbeat_state.json"
+_STATE_FILE = ".heartbeat_state.json"
 
 
-# ------------------------------------------------------------------ Helpers
-
-def _load_state(agent_dir: Path) -> dict:
-    path = agent_dir / STATE_FILENAME
+def _load_state(agent_dir: Path) -> dict[str, datetime]:
+    path = agent_dir / _STATE_FILE
+    if not path.exists():
+        return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = json.loads(path.read_text())
+        return {k: datetime.fromisoformat(v) for k, v in raw.items()}
+    except Exception:
         return {}
 
 
-def _save_state(agent_dir: Path, state: dict) -> None:
-    path = agent_dir / STATE_FILENAME
+def _save_state(agent_dir: Path, task_id: str, dt: datetime) -> None:
+    path = agent_dir / _STATE_FILE
+    state = _load_state(agent_dir)
+    state[task_id] = dt
+    path.write_text(json.dumps({k: v.isoformat() for k, v in state.items()}))
+
+
+def _in_active_hours(active_hours: str, now: datetime) -> bool:
+    """Prüft ob 'now' im Fenster 'HH:MM-HH:MM' liegt."""
     try:
-        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    except OSError as e:
-        logger.warning("Heartbeat State konnte nicht gespeichert werden: %s", e)
+        start_s, end_s = active_hours.split("-")
+        sh, sm = map(int, start_s.strip().split(":"))
+        eh, em = map(int, end_s.strip().split(":"))
+        start_min = sh * 60 + sm
+        end_min   = eh * 60 + em
+        cur_min   = now.hour * 60 + now.minute
+        return start_min <= cur_min <= end_min
+    except Exception:
+        return True  # bei Parse-Fehler: immer aktiv
 
 
-def _now_ts() -> float:
-    return datetime.now(timezone.utc).timestamp()
-
-
-def _is_active_hours(active_hours: str | None) -> bool:
-    """Prueft ob aktuelle Uhrzeit im aktiven Fenster liegt."""
-    if not active_hours or "-" not in active_hours:
-        return True
-    try:
-        start_str, end_str = active_hours.split("-", 1)
-        now = datetime.now()
-        start = now.replace(
-            hour=int(start_str.split(":")[0]),
-            minute=int(start_str.split(":")[1]),
-            second=0, microsecond=0
-        )
-        end = now.replace(
-            hour=int(end_str.split(":")[0]),
-            minute=int(end_str.split(":")[1]),
-            second=0, microsecond=0
-        )
-        return start <= now <= end
-    except (ValueError, IndexError):
-        return True
-
-
-def _is_due_cron(schedule: str, last_run: float | None) -> bool:
-    """Prueft ob ein Cron-Task faellig ist."""
+def _is_due_cron(schedule: str, last_run: datetime | None, now: datetime) -> bool:
     try:
         from croniter import croniter
-        base = datetime.fromtimestamp(last_run) if last_run else datetime(2000, 1, 1)
-        it   = croniter(schedule, base)
-        next_run = it.get_next(datetime)
-        return datetime.now() >= next_run
+        if last_run is None:
+            base = now.replace(second=0, microsecond=0)
+            cron = croniter(schedule, base)
+            prev = cron.get_prev(datetime)
+            return prev >= base
+        cron = croniter(schedule, last_run)
+        return cron.get_next(datetime) <= now
     except Exception as e:
-        logger.warning("Cron-Auswertung fehlgeschlagen (%s): %s", schedule, e)
+        logger.warning("Cron-Ausdruck ungültig '%s': %s", schedule, e)
         return False
 
 
-def _is_due_interval(interval: int, last_run: float | None) -> bool:
-    """Prueft ob ein Intervall-Task faellig ist."""
+def _is_due_interval(interval: int, last_run: datetime | None, now: datetime) -> bool:
     if last_run is None:
         return True
-    return (_now_ts() - last_run) >= interval
+    return (now - last_run).total_seconds() >= interval
 
 
-def _find_project(agent_id: str, preferred: str | None, projects) -> str | None:
-    """Erstes Projekt in dem der Agent als Boss konfiguriert ist."""
-    if preferred and projects.get(preferred):
-        cfg = projects.get(preferred)
-        if cfg and cfg.agents.boss == agent_id:
-            return preferred
-
-    for project_id, cfg in projects.items():
-        if cfg.agents.boss == agent_id:
-            return project_id
-    return None
-
-
-# ------------------------------------------------------------------ Scheduler
-
-class HeartbeatScheduler:
+class AgentHeartbeatScheduler:
     """
-    Background-Scheduler fuer periodische Agent-Tasks.
-    Wird einmal im Lifespan gestartet, laeuft fuer immer.
+    Läuft als asyncio-Task. Prüft alle 60 Sekunden welche Heartbeat-Tasks fällig sind.
     """
 
-    def __init__(
-        self,
-        discovery: "AgentDiscovery",
-        projects,   # dict[str, ProjectConfig]
-        orchestrator: "Orchestrator",
-        agents_dir: Path,
-    ) -> None:
-        self._discovery   = discovery
-        self._projects    = projects
+    def __init__(self, discovery, projects, orchestrator, agents_dir: str | Path):
+        self._discovery    = discovery
+        self._projects     = projects
         self._orchestrator = orchestrator
-        self._agents_dir  = agents_dir
-        self._task: asyncio.Task | None = None
+        self._agents_dir   = Path(agents_dir)
 
-    def start(self) -> asyncio.Task:
-        self._task = asyncio.create_task(self._loop(), name="heartbeat-scheduler")
-        logger.info("HeartbeatScheduler gestartet (Check alle %ds)", HEARTBEAT_CHECK_INTERVAL)
-        return self._task
-
-    async def _loop(self) -> None:
+    async def run(self) -> None:
+        logger.info("HeartbeatScheduler gestartet")
         while True:
             try:
-                await self._check_all()
+                await asyncio.sleep(60)
+                await self._tick()
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.error("Heartbeat Scheduler Fehler: %s", e)
-            await asyncio.sleep(HEARTBEAT_CHECK_INTERVAL)
+                logger.warning("HeartbeatScheduler Fehler: %s", e)
 
-    async def _check_all(self) -> None:
-        """Alle Agenten pruefen — faellige Tasks ausfuehren."""
-        for agent_id, agent_cfg in self._discovery.agents.items():
-            tasks = getattr(agent_cfg, "heartbeat_tasks", [])
-            if not tasks:
+    async def _tick(self) -> None:
+        now = datetime.now().replace(second=0, microsecond=0)
+        for agent_id, cfg in self._discovery.agents.items():
+            if not cfg.heartbeat_tasks:
                 continue
-
-            agent_dir = getattr(agent_cfg, "agent_dir", None)
-            if not agent_dir:
-                continue
-
-            state = _load_state(agent_dir)
-            changed = False
-
-            for task in tasks:
+            agent_dir = self._agents_dir / agent_id
+            state     = _load_state(agent_dir)
+            for task in cfg.heartbeat_tasks:
                 try:
-                    fired = await self._check_task(agent_id, agent_cfg, task, state)
-                    if fired:
-                        changed = True
+                    await self._check_task(agent_id, cfg, task, agent_dir, state, now)
                 except Exception as e:
-                    logger.error("Heartbeat Task %s/%s Fehler: %s", agent_id, task.id, e)
+                    logger.warning("Heartbeat-Task '%s/%s' Fehler: %s", agent_id, task.id, e)
 
-            if changed:
-                _save_state(agent_dir, state)
-
-    async def _check_task(
-        self,
-        agent_id: str,
-        agent_cfg: "AgentConfig",
-        task: "HeartbeatTaskConfig",
-        state: dict,
-    ) -> bool:
-        """Einen Task pruefen und ggf. ausfuehren. Gibt True zurueck wenn gefired."""
+    async def _check_task(self, agent_id, cfg, task, agent_dir, state, now) -> None:
         last_run = state.get(task.id)
 
-        # Faellig?
+        # active_hours prüfen
+        if task.active_hours and not _in_active_hours(task.active_hours, now):
+            return
+
+        # Fälligkeitsprüfung
         if task.schedule:
-            due = _is_due_cron(task.schedule, last_run)
+            due = _is_due_cron(task.schedule, last_run, now)
         elif task.interval:
-            due = _is_due_interval(task.interval, last_run)
+            due = _is_due_interval(task.interval, last_run, now)
         else:
-            logger.warning("Heartbeat Task %s/%s hat weder schedule noch interval", agent_id, task.id)
-            return False
+            return
 
         if not due:
-            return False
+            return
 
-        # Active-Hours-Check
-        if not _is_active_hours(task.active_hours):
-            logger.debug("Heartbeat Task %s/%s ausserhalb active_hours", agent_id, task.id)
-            return False
-
-        # Projekt finden
-        project_id = _find_project(agent_id, task.project, self._projects)
+        # Projekt auflösen
+        project_id = task.project or self._find_project(agent_id)
         if not project_id:
-            logger.warning("Heartbeat Task %s/%s — kein Projekt gefunden", agent_id, task.id)
-            return False
+            logger.debug("Heartbeat-Task '%s/%s': kein Projekt gefunden → übersprungen", agent_id, task.id)
+            return
 
         project_cfg = self._projects.get(project_id)
         if not project_cfg:
-            return False
+            logger.debug("Heartbeat-Task '%s/%s': Projekt '%s' nicht geladen → übersprungen", agent_id, task.id, project_id)
+            return
 
-        # Task ausfuehren
-        logger.info("Heartbeat Task %s/%s → Projekt %s", agent_id, task.id, project_id)
+        logger.info("Heartbeat-Task '%s/%s' → Projekt '%s': %s", agent_id, task.id, project_id, task.message[:60])
         try:
-            await self._orchestrator.handle_message(
-                project_id=project_id,
-                project_cfg=project_cfg,
-                content=task.message,
-                sender=f"heartbeat:{task.id}",
-            )
-            state[task.id] = _now_ts()
-            return True
+            await self._orchestrator.handle_message(project_id, project_cfg, task.message, sender="heartbeat")
+            _save_state(agent_dir, task.id, now)
         except Exception as e:
-            logger.error("Heartbeat Task %s/%s Ausfuehrungsfehler: %s", agent_id, task.id, e)
-            return False
+            logger.warning("Heartbeat-Task '%s/%s' Ausführung fehlgeschlagen: %s", agent_id, task.id, e)
 
-    def get_status(self) -> dict:
-        """Status aller Heartbeat-Tasks fuer die API."""
-        result = {}
-        for agent_id, agent_cfg in self._discovery.agents.items():
-            tasks = getattr(agent_cfg, "heartbeat_tasks", [])
-            if not tasks:
+    def _find_project(self, agent_id: str) -> str | None:
+        """Erstes Projekt in dem der Agent als Boss konfiguriert ist."""
+        for proj_id, proj_cfg in self._projects.projects.items():
+            if getattr(proj_cfg.agents, "boss", None) == agent_id:
+                return proj_id
+        return None
+
+    def task_summary(self) -> list[dict]:
+        """Für API-Endpunkt: alle registrierten Tasks mit letztem Lauf."""
+        result = []
+        for agent_id, cfg in self._discovery.agents.items():
+            if not cfg.heartbeat_tasks:
                 continue
-            agent_dir = getattr(agent_cfg, "agent_dir", None)
-            state = _load_state(agent_dir) if agent_dir else {}
-            result[agent_id] = []
-            for task in tasks:
-                last_run = state.get(task.id)
-                next_run = None
-                if task.schedule and last_run:
-                    try:
-                        from croniter import croniter
-                        it = croniter(task.schedule, datetime.fromtimestamp(last_run))
-                        next_run = it.get_next(datetime).isoformat()
-                    except Exception:
-                        pass
-                elif task.interval and last_run:
-                    from datetime import timedelta
-                    next_run = datetime.fromtimestamp(last_run + task.interval).isoformat()
-                result[agent_id].append({
-                    "id":        task.id,
-                    "message":   task.message,
-                    "schedule":  task.schedule,
-                    "interval":  task.interval,
-                    "last_run":  datetime.fromtimestamp(last_run).isoformat() if last_run else None,
-                    "next_run":  next_run,
-                    "project":   task.project,
+            agent_dir = self._agents_dir / agent_id
+            state     = _load_state(agent_dir)
+            for task in cfg.heartbeat_tasks:
+                result.append({
+                    "agent_id": agent_id,
+                    "task_id":  task.id,
+                    "schedule": task.schedule,
+                    "interval": task.interval,
+                    "message":  task.message[:80],
+                    "project":  task.project,
+                    "last_run": state[task.id].isoformat() if task.id in state else None,
                 })
         return result

@@ -24,18 +24,6 @@ class LlmConfig(BaseModel):
     max_tokens: int = 4096
 
 
-class HeartbeatTaskConfig(BaseModel):
-    """Ein einzelner periodischer Task in agent.yaml heartbeat_tasks."""
-    model_config = {"extra": "ignore"}
-
-    id:           str
-    message:      str
-    schedule:     str | None = None   # Cron-Syntax: "0 8 * * *"
-    interval:     int | None = None   # Sekunden: 1800
-    project:      str | None = None   # optional — sonst erstes Projekt des Agenten
-    active_hours: str | None = None   # "08:00-22:00" — kein Run ausserhalb
-
-
 class HeartbeatRaw(BaseModel):
     """Rohe Heartbeat-Config aus YAML — Parsing in agent_runtime.py."""
     model_config = {"extra": "ignore"}
@@ -43,6 +31,18 @@ class HeartbeatRaw(BaseModel):
     interval:   str | int | float | None = None   # z.B. "30s", 30, "2m"
     timeout:    str | int | float | None = None   # z.B. "90s"
     on_failure: str = "restart"                   # restart | stop | alert
+
+
+class HeartbeatTask(BaseModel):
+    """Ein periodischer Task der automatisch an den Agenten geschickt wird."""
+    model_config = {"extra": "ignore"}
+
+    id:           str
+    message:      str
+    schedule:     str | None = None    # Cron-Ausdruck, z.B. "0 8 * * *"
+    interval:     int | None = None    # Sekunden-Intervall, z.B. 1800
+    project:      str | None = None    # explizites Projekt (sonst: erstes Boss-Projekt)
+    active_hours: str | None = None    # z.B. "07:00-22:00"
 
 
 class AgentConfig(BaseModel):
@@ -55,8 +55,8 @@ class AgentConfig(BaseModel):
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
     tools:    list[str] = Field(default_factory=list)
-    heartbeat:       HeartbeatRaw           = Field(default_factory=HeartbeatRaw)
-    heartbeat_tasks: list[HeartbeatTaskConfig] = Field(default_factory=list)
+    heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
+    heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
