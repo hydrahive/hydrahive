@@ -1,43 +1,72 @@
 # OctopOS
 
-**AI-Agent Server Platform** — Standalone server solution for managing AI agent swarms.
+**Selbst-gehosteter KI-Agent-Server** — Agenten-Swarms, Matrix-Kommunikation, Projekt-Isolation.
 
-> Brainstorming started: 19. März 2026
+> Installiere Linux → Installiere OctopOS → Verwalte alles über die Webkonsole.
 
-## Vision
+---
 
-Install Linux → Install OctopOS → Done.  
-Manage everything via web console. No SSH, no manual config files.
+## Features
 
-"Proxmox für AI-Agenten."
+- **Multi-Agent Swarms** — Boss-Agent koordiniert Worker-Agenten parallel
+- **Projekt-Isolation** — Jedes Projekt bekommt eigenen Linux-User, Samba-Share und Matrix-Room
+- **Multi-LLM** — Ollama (lokal), Claude Max (OAuth), OpenAI — pro Agent konfigurierbar
+- **Matrix-Integration** — Agenten sind echte Matrix-Bots, du kannst mit Element eingreifen
+- **QMD-Skills** — Angelerntes Wissen in Markdown-Dateien mit YAML-Frontmatter
+- **Webkonsole** — Vollständige Verwaltung ohne SSH: Agenten, Projekte, Users, Logs, Skills
+- **Streaming** — Antworten erscheinen Token für Token
+- **Webhook-System** — Externe Trigger für Agenten (`/hooks/{project}/wake`)
+- **Audit-Log** — Alle User-Aktionen protokolliert
 
-## Name & Metapher
+## Deployment-Profile
 
-Der Oktopus: zentrales Hirn (Boss-Agent), viele Arme die parallel arbeiten (Worker-Swarm),  
-jeder Arm halbautonorm — mehrere Projekte und Clients gleichzeitig.
+| Profil | GPU | LLM | Geeignet für |
+|--------|-----|-----|-------------|
+| **Lite** | Nein | Cloud-APIs | VPS, Test, Demo |
+| **Full** | Ja (PCIe-Passthrough) | Ollama + Cloud | Produktion, volle Kontrolle |
 
-## Produkt-Linie
+Referenz-Setup: GTX 1080 Ti (11GB VRAM) auf Proxmox VM, Ubuntu 24.04
 
-- **OctopOS** — die Plattform / das Betriebssystem-Aufsatz
-- **OctopOS AI** — fertiger Server mit GPU, vorinstalliert, plug & play
+## Schnellstart
 
-## Deployment Profiles
+```bash
+git clone https://github.com/tilleulenspiegel/octopos.git
+cd octopos
+sudo bash installer/install.sh
+# → https://<IP> öffnen → Setup-Wizard
+```
 
-- **Lite** — VM ohne GPU, Cloud APIs only (Claude, ChatGPT)
-- **Full** — VM mit PCIe GPU passthrough, Ollama local models
+## Dokumentation
+
+| Dokument | Inhalt |
+|----------|--------|
+| [Handbuch](docs/handbook.md) | Installation, Erste Schritte, alle Features |
+| [Technische Doku](docs/technical.md) | Architektur, Module, Datenfluss |
+| [API-Referenz](docs/api-reference.md) | Alle REST-Endpoints |
+| [Entwickler-Guide](docs/development.md) | Tools, Skills, Endpoints, Console-Seiten hinzufügen |
+
+## Architektur
+
+```
+Browser (React) → nginx (HTTPS) → FastAPI Core → Orchestrator
+                                              ↓
+                                   Boss-Agent → Worker-Agenten
+                                              ↓
+                                   conduwuit (Matrix) ← Element
+```
+
+## Stack
+
+- **Core:** Python 3.12, FastAPI, litellm, matrix-nio, anthropic SDK
+- **Console:** React 18, TypeScript, Vite, Tailwind CSS
+- **Matrix:** conduwuit (Rust, single binary, RocksDB)
+- **LLM:** Ollama + Anthropic OAuth + OpenAI
+- **Installer:** Bash + Systemd (kein Docker)
 
 ## Status
 
-🧠 Brainstorming & Architecture Phase (Sessions 1-6 abgeschlossen)
+🚧 Aktive Entwicklung — produktiv nutzbar, API noch nicht stabil
 
-## Structure
+## Lizenz
 
-```
-OctopOS/
-├── brainstorming/     # Session notes and decisions
-├── architecture/      # Architecture overview
-├── core/              # Python runtime (Phase 1+)
-├── console/           # TypeScript/React webconsole (Phase 4+)
-├── installer/         # Bash installer script (Phase 1+)
-└── prompts/           # Claude Code prompt packages (later)
-```
+MIT
