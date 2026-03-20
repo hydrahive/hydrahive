@@ -608,3 +608,83 @@ Der Installer ist modular aufgebaut. Jedes Modul ist ein eigenständiges bash-Sk
 | `07_console.sh` | npm build immer, nginx config wird überschrieben |
 | `08_ollama.sh` | `ollama` Binary vorhanden → skip |
 | `09_https.sh` | Cert-Datei vorhanden → skip, Ablaufdatum loggen |
+
+
+---
+
+## 13. Datenfluss — Eine Nachricht von A bis Z
+
+Wie läuft eine User-Nachricht durch das gesamte System?
+
+```
+1. Browser                POST /api/projects/buchhaltung/message/stream
+                          Body: {"content": "Was ist die Umsatzsteuer?"}
+
+2. nginx                  Proxy → localhost:8765/projects/buchhaltung/message/stream
+
+3. FastAPI (main.py)      Auth-Check JWT → send_message_stream()
+
+4. Orchestrator           asyncio.Queue für "buchhaltung"
+   handle_message()  →   _queue_worker() → _handle_message_impl()
+
+5. _handle_message_impl() 
+   a) Session: append(USER, "Was ist die Umsatzsteuer?")
+   b) System-Prompt: soul.md + QMD-Skills (on-demand: "umsatzsteuer" matched)
+   c) History: letzte 20 Nachrichten aus Session
+   d) Tools: dispatch_task, file_read (aus agent.yaml ∩ Registry ∩ permissions)
+
+6. LLM-Call               OAuth-Token vorhanden?
+   → Ja:  Anthropic SDK direkt (anthropic-beta: oauth-2025-04-20)
+   → Nein: litellm (Ollama / OpenAI)
+
+7. Streaming              Token für Token → SSE: data: {"text": "Die Umsatz..."}
+
+8. Tool-Loop              LLM ruft dispatch_task auf?
+   → Worker-Agent wird gespawnt (ephemeral)
+   → Worker macht LLM-Call mit eigenem Kontext
+   → Ergebnis zurück an Boss
+
+9. Session                append(ASSISTANT, vollständige Antwort)
+
+10. Browser               ReadableStream liest SSE → Token erscheinen live
+    ChatPage              Markdown-Rendering (ReactMarkdown + prose)
+```
+
+---
+
+## 14. Fehlerbehandlung und Resilience
+
+### Agent-Ausfall
+- **Heartbeat-Timeout:** Watchdog erkennt nach `timeout` Sekunden → `on_failure` Aktion
+- `restart`: Agent wird neu gestartet, Matrix-Client reconnectet
+- `stop`: Agent wird gestoppt, bleibt im Status `error`
+- `alert`: Nur Log-Eintrag, kein automatischer Neustart
+
+### Matrix-Verbindungsabbruch
+- `matrix_agent.py` hat einen Watchdog-Task
+- Bei Exception in `run()`: 15s warten → `start()` + `run()` neu
+- Audit-Log: `agent.matrix_reconnect`
+
+### Core-Neustart
+- Sessions: persistent in `/projects/<id>/sessions/` → werden beim Start geladen
+- Agenten: werden automatisch neu gestartet (AgentRuntime.start())
+- Matrix-Rooms: werden aus `project.yaml` gelesen, Bots joinen wieder
+
+### LLM-Fehler
+- OAuth-Token abgelaufen → `[Fehler] LLM nicht erreichbar`
+- Ollama offline → litellm-Fallback schlägt fehl → Fehlermeldung im Chat
+- Kein automatischer Retry (geplant in zukünftiger Version)
+
+---
+
+## 15. Bekannte Limitierungen
+
+| Bereich | Limitation | Workaround |
+|---|---|---|
+| Claude OAuth | Token läuft nach ~30 Tagen ab | `claude setup-token` wiederholen |
+| main.py | 1000+ Zeilen, alle Endpoints in einer Datei | #60 Router-Refactoring geplant |
+| Worker-Agenten | Keine eigene Matrix-Identität | Nur Boss ist Matrix-Bot |
+| Task-Agent TTL | Nicht per Projekt konfigurierbar | 300s hardcoded in agent_runtime.py |
+| Sessions | Kein Memory zwischen Sessions | QMD-Skills als persistentes Wissen nutzen |
+| AgentLink | State-Transfer noch nicht produktiv | #13 offen |
+
