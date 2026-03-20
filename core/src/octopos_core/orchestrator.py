@@ -127,7 +127,7 @@ class Orchestrator:
         await self._get_queue(project_id).put((future, project_cfg, content, sender))
         return await future
 
-    async def _handle_message_impl(
+    async def _handle_message_impl(self, project_id: str, project_cfg, content: str, sender: str):
         """
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
         Gibt (finaler Text, beteiligte Worker-IDs) zurück.
