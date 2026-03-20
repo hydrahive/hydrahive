@@ -3,6 +3,13 @@ import { RefreshCw, CheckCircle, XCircle, Eye, EyeOff, Save, Cpu, Download } fro
 import { api } from "@/lib/api";
 
 interface OllamaModel { name: string; size_gb: number; modified: string; }
+interface ClaudeTokenStatus {
+  configured: boolean;
+  token_age_days: number | null;
+  remaining_days: number | null;
+  warning: string | null;
+  ttl_days: number;
+}
 
 const PROVIDERS = [
   {
@@ -47,13 +54,16 @@ export function LlmConfigPage() {
   const [pulling,        setPulling]         = useState(false);
   const [pullMsg,        setPullMsg]         = useState("");
   const [refreshing,     setRefreshing]      = useState(false);
+  const [claudeStatus,   setClaudeStatus]    = useState<ClaudeTokenStatus|null>(null);
 
   async function load() {
     try {
-      const [cfg, ollama] = await Promise.allSettled([
+      const [cfg, ollama, tokenStatus] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
+        api.get<ClaudeTokenStatus>("/llm/claude_token_status"),
       ]);
+      if (tokenStatus.status === "fulfilled") setClaudeStatus(tokenStatus.value);
       if (cfg.status === "fulfilled")    setProviderStatus(cfg.value.providers ?? {});
       if (ollama.status === "fulfilled") {
         setOllamaOk(ollama.value.available);
@@ -166,6 +176,26 @@ export function LlmConfigPage() {
                 </div>
               )}
 
+              {p.id === "claude_max" && claudeStatus?.configured && (
+                <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
+                  claudeStatus.warning === "expired"
+                    ? "bg-destructive/10 text-destructive"
+                    : claudeStatus.warning?.startsWith("expires_soon")
+                      ? "bg-orange-50 text-orange-700 border border-orange-200"
+                      : claudeStatus.warning?.startsWith("expires_in")
+                        ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                        : "bg-green-50 text-green-700 border border-green-200"
+                }`}>
+                  {claudeStatus.warning === "expired"
+                    ? "⚠ Token abgelaufen — bitte erneuern (claude setup-token)"
+                    : claudeStatus.warning
+                      ? `⚠ Token läuft in ${claudeStatus.remaining_days?.toFixed(0)} Tagen ab`
+                      : `✓ Token aktiv — noch ${claudeStatus.remaining_days?.toFixed(0)} Tage gültig`}
+                  <span className="text-muted-foreground ml-auto">
+                    Alter: {claudeStatus.token_age_days?.toFixed(0)} Tage
+                  </span>
+                </div>
+              )}
               {p.hint && <p className="text-xs text-muted-foreground">{p.hint}</p>}
 
               {/* Ollama Modell-Liste */}
