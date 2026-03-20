@@ -1,21 +1,72 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-interface AuthUser { username: string; token: string; }
-interface AuthCtx  { user: AuthUser|null; isAuthenticated: boolean; login(u:string,p:string): Promise<void>; logout(): void; }
-const Ctx = createContext<AuthCtx|null>(null);
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser|null>(() => {
-    const t=localStorage.getItem("octopos_token"), u=localStorage.getItem("octopos_user");
-    return t&&u ? {token:t,username:u} : null;
-  });
-  async function login(username: string, password: string) {
-    const res = await fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username,password}) });
-    if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.detail||"Login fehlgeschlagen"); }
-    const data = await res.json();
-    setUser({username, token:data.access_token});
-    localStorage.setItem("octopos_token", data.access_token);
-    localStorage.setItem("octopos_user", username);
-  }
-  function logout() { setUser(null); localStorage.removeItem("octopos_token"); localStorage.removeItem("octopos_user"); }
-  return <Ctx.Provider value={{user, isAuthenticated:!!user, login, logout}}>{children}</Ctx.Provider>;
+
+interface AuthUser { username: string; token: string; role: string; }
+interface AuthCtx  {
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  login(u: string, p: string): Promise<void>;
+  logout(): void;
 }
-export function useAuth() { const ctx=useContext(Ctx); if(!ctx) throw new Error("useAuth ausserhalb AuthProvider"); return ctx; }
+
+const Ctx = createContext<AuthCtx | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const t = localStorage.getItem("octopos_token");
+    const u = localStorage.getItem("octopos_user");
+    const r = localStorage.getItem("octopos_role") ?? "user";
+    return t && u ? { token: t, username: u, role: r } : null;
+  });
+
+  async function login(username: string, password: string) {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || "Login fehlgeschlagen");
+    }
+    const data = await res.json();
+    const token = data.access_token;
+
+    // Fetch role from /auth/me
+    const meRes = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const me = meRes.ok ? await meRes.json() : {};
+    const role = me.role ?? "user";
+
+    setUser({ username, token, role });
+    localStorage.setItem("octopos_token", token);
+    localStorage.setItem("octopos_user", username);
+    localStorage.setItem("octopos_role", role);
+  }
+
+  function logout() {
+    setUser(null);
+    localStorage.removeItem("octopos_token");
+    localStorage.removeItem("octopos_user");
+    localStorage.removeItem("octopos_role");
+  }
+
+  return (
+    <Ctx.Provider value={{
+      user,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === "admin",
+      login,
+      logout,
+    }}>
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+export function useAuth() {
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("useAuth ausserhalb AuthProvider");
+  return ctx;
+}
