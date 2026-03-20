@@ -21,5 +21,5 @@ export const api = {
   getAgentSoul: (id: string) => api.get<{soul:string;exists:boolean}>(`/agents/${id}/soul`),
   tools:        ()           => api.get<Record<string,unknown>>("/tools"),
   sendMessage:   (id: string, content: string) =>
-    api.post<{response:string;session_id:string}>(`/projects/${id}/message`, { content }),
+    api.post<{response:string;workers:string[];session_id:string}>(`/projects/${id}/message`, { content }),
 };

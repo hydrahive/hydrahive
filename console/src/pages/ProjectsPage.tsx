@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -25,6 +26,7 @@ interface CreateForm {
 const EMPTY: CreateForm = { id:"", name:"", description:"", boss:"", workers:"", samba:true };
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
   const [projects,  setProjects]  = useState<Record<string, ProjectEntry>>({});
   const [agents,    setAgents]    = useState<string[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -195,10 +197,10 @@ export function ProjectsPage() {
                     {proj.description && <p className="text-xs text-muted-foreground">{proj.description}</p>}
                   </div>
                 </div>
-                <a href={`/projects/${id}/chat`}
+                <button onClick={() => navigate(`/chat/${id}`)}
                   className="px-3 py-1 text-xs border rounded-md hover:bg-accent transition-colors flex-shrink-0">
                   Chat öffnen
-                </a>
+                </button>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-1 border-t">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

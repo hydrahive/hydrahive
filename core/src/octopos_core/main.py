@@ -525,7 +525,7 @@ async def send_message(project_id: str, req: IncomingMessage):
     if not discovery.get(boss_id):
         raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
 
-    response = await orchestrator.handle_message(
+    response, workers = await orchestrator.handle_message(
         project_id=project_id,
         project_cfg=cfg,
         content=req.content,
@@ -534,6 +534,7 @@ async def send_message(project_id: str, req: IncomingMessage):
     session = sessions.get_active(project_id)
     return {
         "response":      response,
+        "workers":       workers,
         "session_id":    session.id if session else None,
         "message_count": len(session.messages) if session else 0,
     }

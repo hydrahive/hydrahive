@@ -50,7 +50,7 @@ export function LlmConfigPage() {
 
   async function load() {
     try {
-      const [cfg, ollama, proxy] = await Promise.allSettled([
+      const [cfg, ollama] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
       ]);
