@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook, GitMerge } from "lucide-react";
+import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook, GitMerge, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
@@ -42,6 +42,8 @@ export function ProjectsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [webhookProject,   setWebhookProject]   = useState<string | null>(null);
   const [agentlinkProject, setAgentlinkProject] = useState<string | null>(null);
+  const [deleting,         setDeleting]         = useState<string | null>(null);
+  const [confirmDel,       setConfirmDel]       = useState<string | null>(null);
 
   async function load() {
     try {
@@ -76,6 +78,16 @@ export function ProjectsPage() {
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : "Fehler");
     } finally { setCreating(false); }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(id); setConfirmDel(null);
+    try {
+      await api.deleteProject(id);
+      setProjects(p => { const n = { ...p }; delete n[id]; return n; });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Löschen");
+    } finally { setDeleting(null); }
   }
 
   const projectList = Object.entries(projects);
@@ -223,6 +235,24 @@ export function ProjectsPage() {
                     className="px-3 py-1 text-xs border rounded-md hover:bg-accent transition-colors">
                     Chat öffnen
                   </button>
+                  {isAdmin && (confirmDel === id ? (
+                    <span className="flex items-center gap-1">
+                      <button onClick={() => handleDelete(id)} disabled={deleting === id}
+                        className="px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded hover:bg-destructive/90 disabled:opacity-50">
+                        Ja, löschen
+                      </button>
+                      <button onClick={() => setConfirmDel(null)}
+                        className="px-2 py-1 text-xs border rounded hover:bg-accent">
+                        Abbrechen
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmDel(id)} disabled={!!deleting}
+                      title="Projekt löschen"
+                      className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-50">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-1 border-t">
