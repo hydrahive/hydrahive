@@ -7,6 +7,7 @@ import { AgentsPage } from "@/pages/AgentsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
 import { ProjectCreatePage } from "@/pages/ProjectCreatePage";
 import { SystemPage } from "@/pages/SystemPage";
+import { ToolsPage } from "@/pages/ToolsPage";
 import { ChatPage } from "@/pages/ChatPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="projects/new"      element={<ProjectCreatePage />} />
         <Route path="chat/:id"          element={<ChatPage />} />
         <Route path="system"            element={<SystemPage />} />
+        <Route path="tools"             element={<ToolsPage />} />
       </Route>
     </Routes>
   );
