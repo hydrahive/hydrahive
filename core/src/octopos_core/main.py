@@ -65,12 +65,13 @@ runtime      = AgentRuntime()
 projects     = ProjectLoader(PROJECTS_DIR)
 sessions     = SessionManager(PROJECTS_DIR)
 orchestrator = Orchestrator(discovery, runtime, sessions)
-provisioner: Provisioner | None = None   # initialisiert im Lifespan
+provisioner:  Provisioner | None = None              # initialisiert im Lifespan
+hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifespan
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global provisioner, JWT_SECRET
+    global provisioner, JWT_SECRET, hb_scheduler
     logger.info("OctopOS Core startet...")
     discovery.start()
     projects.start()
@@ -101,6 +102,11 @@ async def lifespan(app: FastAPI):
     server_name = _read_server_name()
     await _setup_matrix_clients(server_name)
 
+    # Heartbeat-Scheduler starten (#77)
+    from .heartbeat import AgentHeartbeatScheduler as _HBS
+    hb_scheduler = _HBS(discovery, projects, orchestrator, AGENTS_DIR)
+    hb_task = asyncio.create_task(hb_scheduler.run(), name="heartbeat-scheduler")
+
     # AgentLink Cleanup-Task — abgelaufene Handoffs alle 5 Minuten entfernen
     async def _agentlink_cleanup_loop():
         from .agentlink import cleanup_expired as _ce
@@ -116,19 +122,9 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
 
-    # Heartbeat-Scheduler starten
-    from .heartbeat import HeartbeatScheduler as _HBS
-    heartbeat_scheduler = _HBS(
-        discovery=discovery,
-        projects=projects,
-        orchestrator=orchestrator,
-        agents_dir=Path(AGENTS_DIR),
-    )
-    heartbeat_scheduler.start()
-    logger.info("HeartbeatScheduler gestartet")
-
     logger.info("OctopOS Core bereit")
     yield
+    hb_task.cancel()
     cleanup_task.cancel()
     logger.info("OctopOS Core faehrt herunter...")
     await runtime.stop()
@@ -1025,26 +1021,6 @@ async def change_password(username: str, body: dict, _a: tuple = Depends(require
 
 
 
-@app.get("/agents/{agent_id}/heartbeat")
-def get_agent_heartbeat(agent_id: str):
-    """Heartbeat-Task Status eines Agenten."""
-    from .heartbeat import HeartbeatScheduler as _HBS
-    # heartbeat_scheduler ist im Lifespan-Scope — via app.state zugreifbar
-    try:
-        status = heartbeat_scheduler.get_status()
-        agent_tasks = status.get(agent_id, [])
-        return {"agent_id": agent_id, "tasks": agent_tasks, "count": len(agent_tasks)}
-    except Exception as e:
-        return {"agent_id": agent_id, "tasks": [], "count": 0, "error": str(e)}
-
-
-@app.get("/heartbeat/status")
-def get_all_heartbeat_status():
-    """Status aller Heartbeat-Tasks aller Agenten."""
-    try:
-        return {"agents": heartbeat_scheduler.get_status()}
-    except Exception as e:
-        return {"agents": {}, "error": str(e)}
 
 
 # ================================================================== AgentLink
@@ -2065,6 +2041,13 @@ def restore_backup(name: str, _a: tuple = Depends(require_admin)):
 
 
 # ================================================================== Status
+
+@app.get("/system/heartbeat-tasks")
+def heartbeat_tasks_status(_a: tuple = Depends(require_admin)):
+    """Alle registrierten Heartbeat-Tasks mit letztem Lauf."""
+    tasks = hb_scheduler.task_summary() if hb_scheduler else []
+    return {"tasks": tasks}
+
 
 @app.get("/system/gpu")
 def gpu_info():

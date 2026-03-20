@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen } from "lucide-react";
-import { api } from "@/lib/api";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer } from "lucide-react";
+import { api, HeartbeatTaskStatus } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -58,12 +58,18 @@ export function AgentsPage() {
   const [logAgent,  setLogAgent]  = useState<string|null>(null);
   const [logLines,  setLogLines]  = useState<string[]>([]);
   const [logErr,    setLogErr]    = useState("");
+  const [hbTasks,   setHbTasks]   = useState<HeartbeatTaskStatus[]>([]);
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   async function load() {
     try {
-      setAgents(await api.agents() as Record<string,AgentEntry>);
+      const [agentsData, hbData] = await Promise.allSettled([
+        api.agents() as Promise<Record<string,AgentEntry>>,
+        api.heartbeatTasks(),
+      ]);
+      if (agentsData.status === "fulfilled") setAgents(agentsData.value);
+      if (hbData.status === "fulfilled") setHbTasks(hbData.value.tasks);
       setError("");
     } catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setLoading(false); setRefreshing(false); }
@@ -297,11 +303,12 @@ export function AgentsPage() {
       {!loading && agentList.length > 0 && (
         <div className="space-y-3">
           {agentList.map(([id, agent]) => {
-            const rt     = agent.runtime;
-            const status = rt?.status ?? "unbekannt";
-            const color  = STATUS_COLORS[status] ?? "text-muted-foreground";
-            const hbAge  = rt?.last_heartbeat_age;
-            const hbWarn = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
+            const rt       = agent.runtime;
+            const status   = rt?.status ?? "unbekannt";
+            const color    = STATUS_COLORS[status] ?? "text-muted-foreground";
+            const hbAge    = rt?.last_heartbeat_age;
+            const hbWarn   = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
+            const taskCount = hbTasks.filter(t => t.agent_id === id).length;
             return (
               <div key={id} className="bg-card border rounded-lg overflow-hidden">
               <div className="p-4 flex items-start gap-4">
@@ -313,6 +320,11 @@ export function AgentsPage() {
                     <span className="font-medium text-sm">{agent.config.identity}</span>
                     <span className="text-xs text-muted-foreground">({id})</span>
                     <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">{agent.config.type}</span>
+                    {taskCount > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary" title={`${taskCount} Heartbeat-Task${taskCount > 1 ? "s" : ""}`}>
+                        <Timer className="h-3 w-3" />{taskCount}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{agent.config.model}</p>
                 </div>

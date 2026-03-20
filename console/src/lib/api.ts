@@ -1,3 +1,13 @@
+export interface HeartbeatTaskStatus {
+  agent_id:  string;
+  task_id:   string;
+  schedule:  string | null;
+  interval:  number | null;
+  message:   string;
+  project:   string | null;
+  last_run:  string | null;
+}
+
 export interface GpuEntry {
   name:          string;
   temp_c:        number | null;
@@ -30,6 +40,7 @@ export const api = {
   health:        ()           => api.get<{status:string}>("/health"),
   status:        ()           => api.get<Record<string,unknown>>("/status"),
   gpuInfo:       ()           => api.get<GpuInfo>("/system/gpu"),
+  heartbeatTasks: ()          => api.get<{tasks: HeartbeatTaskStatus[]}>("/system/heartbeat-tasks"),
   agents:        ()           => api.get<Record<string,unknown>>("/agents"),
   projects:      ()           => api.get<Record<string,unknown>>("/projects"),
   createProject:  (d: unknown) => api.post("/projects", d),
