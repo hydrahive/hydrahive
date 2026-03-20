@@ -78,13 +78,56 @@ class Orchestrator:
 
     # ------------------------------------------------------------------ public
 
+    def _get_queue(self, project_id: str) -> asyncio.Queue:
+        if project_id not in self._project_queues:
+            self._project_queues[project_id] = asyncio.Queue()
+        return self._project_queues[project_id]
+
+    async def _ensure_worker(self, project_id: str) -> None:
+        task = self._queue_tasks.get(project_id)
+        if task is None or task.done():
+            self._queue_tasks[project_id] = asyncio.create_task(
+                self._queue_worker(project_id),
+                name=f"queue-{project_id}"
+            )
+
+    async def _queue_worker(self, project_id: str) -> None:
+        """Verarbeitet Nachrichten sequenziell — kein paralleler Orchestrator-Zustand."""
+        queue = self._get_queue(project_id)
+        try:
+            while True:
+                future, project_cfg, content, sender = await queue.get()
+                try:
+                    result = await self._handle_message_impl(
+                        project_id, project_cfg, content, sender
+                    )
+                    if not future.done():
+                        future.set_result(result)
+                except Exception as e:
+                    if not future.done():
+                        future.set_exception(e)
+                finally:
+                    queue.task_done()
+        except asyncio.CancelledError:
+            pass
+
     async def handle_message(
         self,
         project_id:  str,
-        project_cfg: ProjectConfig,
+        project_cfg: "ProjectConfig",
         content:     str,
         sender:      str = "user",
     ) -> tuple[str, list[str]]:
+        """
+        Oeffentlicher Einstiegspunkt — serialisiert ueber asyncio.Queue.
+        Mehrere parallele Aufrufe ans gleiche Projekt werden sequenziell abgearbeitet.
+        """
+        await self._ensure_worker(project_id)
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        await self._get_queue(project_id).put((future, project_cfg, content, sender))
+        return await future
+
+    async def _handle_message_impl(
         """
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
         Gibt (finaler Text, beteiligte Worker-IDs) zurück.
