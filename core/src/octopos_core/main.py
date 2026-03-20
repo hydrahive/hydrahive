@@ -60,11 +60,13 @@ def _check_login_rate(ip: str) -> None:
 
 _setup_lock = asyncio.Lock()   # verhindert parallele Setup-Requests (#71)
 
-discovery    = AgentDiscovery(AGENTS_DIR)
-runtime      = AgentRuntime()
-projects     = ProjectLoader(PROJECTS_DIR)
-sessions     = SessionManager(PROJECTS_DIR)
-orchestrator = Orchestrator(discovery, runtime, sessions)
+discovery        = AgentDiscovery(AGENTS_DIR)
+runtime          = AgentRuntime()
+projects         = ProjectLoader(PROJECTS_DIR)
+sessions         = SessionManager(PROJECTS_DIR)
+orchestrator     = Orchestrator(discovery, runtime, sessions)
+agent_sessions   = SessionManager(AGENTS_DIR)          # Direkte Agenten-Chats
+agent_orchestrator = Orchestrator(discovery, runtime, agent_sessions)
 provisioner:  Provisioner | None = None              # initialisiert im Lifespan
 hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifespan
 
@@ -76,6 +78,7 @@ async def lifespan(app: FastAPI):
     discovery.start()
     projects.start()
     sessions.start()
+    agent_sessions.start()
     await runtime.start(list(discovery.agents.values()))
 
     # JWT-Secret laden oder generieren
@@ -682,6 +685,47 @@ async def send_message(project_id: str, req: IncomingMessage):
 
 
 
+
+
+@app.get("/agents/{agent_id}/session/history")
+def agent_session_history(agent_id: str, limit: int = 50):
+    """Nachrichten-History für direkten Agenten-Chat."""
+    context = agent_sessions.get_context(agent_id, max_messages=limit)
+    session = agent_sessions.get_active(agent_id)
+    return {
+        "session_id": session.id if session else None,
+        "messages":   context,
+        "count":      len(context),
+    }
+
+
+@app.post("/agents/{agent_id}/message/stream")
+async def agent_message_stream(agent_id: str, req: IncomingMessage):
+    """Direkter Chat mit einem Agenten — ohne Projekt-Kontext."""
+    from fastapi.responses import StreamingResponse as _SR
+    from .project_config import ProjectConfig as _PC, ProjectAgents as _PA, ProjectIdentity as _PI
+
+    cfg = discovery.get(agent_id)
+    if not cfg:
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+    virtual_cfg = _PC(
+        id=agent_id,
+        identity=_PI(name=cfg.identity),
+        agents=_PA(boss=agent_id, workers=[]),
+    )
+
+    async def event_stream():
+        async for chunk in agent_orchestrator.handle_message_stream(
+            project_id=agent_id,
+            project_cfg=virtual_cfg,
+            content=req.content,
+            sender=req.sender,
+        ):
+            yield chunk
+
+    return _SR(event_stream(), media_type="text/event-stream",
+               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/agents/{agent_id}/logs")

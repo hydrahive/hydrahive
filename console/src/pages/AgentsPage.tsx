@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
@@ -44,6 +45,7 @@ function Input({ value, onChange, ...props }: React.InputHTMLAttributes<HTMLInpu
 
 export function AgentsPage() {
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [agents,    setAgents]    = useState<Record<string,AgentEntry>>({});
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
@@ -349,6 +351,10 @@ export function AgentsPage() {
                       {rt.restart_count > 0 && <span className="ml-1 text-orange-500">↺{rt.restart_count}</span>}
                     </span>
                   )}
+                  <button onClick={() => navigate(`/agents/${id}/chat`)} title="Direkt chatten"
+                    className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                  </button>
                   <button onClick={() => setSkillsAgent(s => s === id ? null : id)} title="Skills verwalten"
                     className={`p-1.5 rounded transition-colors ${skillsAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
                     <BookOpen className="h-3.5 w-3.5" />
