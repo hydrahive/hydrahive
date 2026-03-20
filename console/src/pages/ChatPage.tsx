@@ -59,14 +59,58 @@ export function ChatPage() {
     const content = input.trim();
     setInput("");
     setError("");
-    setMessages(ms => [...ms, mkMsg("user", content)]);
+    const userMsg = mkMsg("user", content);
+    const assistantMsg = mkMsg("assistant", "");
+    setMessages(ms => [...ms, userMsg]);
     setSending(true);
+
     try {
-      const res = await api.sendMessage(id, content);
-      setMessages(ms => [...ms, mkMsg("assistant", res.response, res.workers)]);
+      const token = localStorage.getItem("octopos_token") || "";
+      const res = await fetch(`/api/projects/${id}/message/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(e.detail || `HTTP ${res.status}`);
+      }
+
+      // SSE stream lesen
+      setMessages(ms => [...ms, assistantMsg]);
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          for (const line of part.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.text !== undefined) {
+                setMessages(ms => ms.map(m =>
+                  m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m
+                ));
+              } else if (evt.done) {
+                break outer;
+              } else if (evt.error) {
+                throw new Error(evt.error);
+              }
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") throw parseErr;
+            }
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Senden");
-      setMessages(ms => ms.slice(0, -1));
+      setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
       setInput(content);
     } finally {
       setSending(false);
@@ -152,7 +196,7 @@ export function ChatPage() {
             )}
           </div>
         ))}
-        {sending && (
+        {sending && messages[messages.length - 1]?.role !== "assistant" && (
           <div className="flex gap-3 justify-start">
             <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Bot className="h-4 w-4 text-primary" />
