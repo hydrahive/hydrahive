@@ -13,7 +13,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+import asyncio
+import time
+from collections import defaultdict
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -40,6 +44,21 @@ CRED_FILE    = "/etc/octopos/admin_credentials"
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
+
+# Rate-Limiting für /auth/login (#70)
+_LOGIN_ATTEMPTS: dict[str, list[float]] = defaultdict(list)
+_LOGIN_MAX   = 10   # max. Versuche
+_LOGIN_WIN_S = 60   # pro Minute
+
+def _check_login_rate(ip: str) -> None:
+    now = time.monotonic()
+    _LOGIN_ATTEMPTS[ip] = [t for t in _LOGIN_ATTEMPTS[ip] if now - t < _LOGIN_WIN_S]
+    if len(_LOGIN_ATTEMPTS[ip]) >= _LOGIN_MAX:
+        raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
+    _LOGIN_ATTEMPTS[ip].append(now)
+
+
+_setup_lock = asyncio.Lock()   # verhindert parallele Setup-Requests (#71)
 
 discovery    = AgentDiscovery(AGENTS_DIR)
 runtime      = AgentRuntime()
@@ -140,6 +159,8 @@ def _make_jwt(username: str) -> str:
 
 def _verify_jwt(token: str) -> str:
     """Token verifizieren — gibt username zurück oder wirft HTTPException 401."""
+    if not JWT_SECRET:
+        raise HTTPException(503, "Server noch nicht bereit — JWT-Secret fehlt")
     from jose import JWTError, jwt as jose_jwt
     try:
         payload = jose_jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
@@ -224,39 +245,42 @@ async def run_setup(req: SetupRequest):
     """
     Ersteinrichtung — legt den ersten Admin-User an.
     Nur verfügbar wenn noch keine User existieren.
+    Lock verhindert parallele Requests (#71).
     """
-    import re as _re, asyncio as _asyncio
+    import re as _re
     from datetime import datetime as _dt
 
-    users = _load_users()
-    if users:
-        raise HTTPException(403, "Setup bereits abgeschlossen")
-    if not _re.match(r"^[a-z0-9_.-]+$", req.username):
-        raise HTTPException(400, "Username darf nur a-z, 0-9, _ . - enthalten")
-    if len(req.password) < 8:
-        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
+    async with _setup_lock:
+        users = _load_users()
+        if users:
+            raise HTTPException(403, "Setup bereits abgeschlossen")
+        if not _re.match(r"^[a-z0-9_.-]+$", req.username):
+            raise HTTPException(400, "Username darf nur a-z, 0-9, _ . - enthalten")
+        if len(req.password) < 8:
+            raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
 
-    server_name = _read_server_name()
-    matrix_ok   = await _matrix_register(req.username, req.password, server_name)
+        server_name = _read_server_name()
+        matrix_ok   = await _matrix_register(req.username, req.password, server_name)
 
-    users[req.username] = {
-        "password_hash": _hash_password(req.password),
-        "role":          "admin",
-        "matrix_id":     f"@{req.username}:{server_name}",
-        "matrix_ok":     matrix_ok,
-        "created_at":    _dt.now().isoformat(),
-    }
-    _save_users(users)
-    logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
-    return {"created": True, "username": req.username, "role": "admin"}
+        users[req.username] = {
+            "password_hash": _hash_password(req.password),
+            "role":          "admin",
+            "matrix_id":     f"@{req.username}:{server_name}",
+            "matrix_ok":     matrix_ok,
+            "created_at":    _dt.now().isoformat(),
+        }
+        _save_users(users)
+        logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
+        return {"created": True, "username": req.username, "role": "admin"}
 
 
 @app.post("/auth/login")
-def login(req: LoginRequest):
+def login(req: LoginRequest, request: Request):
     """
     Login: prüft zuerst users.json, dann Fallback auf admin_credentials.
     Gibt JWT-Bearer-Token zurück.
     """
+    _check_login_rate(request.client.host if request.client else "unknown")
     # Primär: users.json
     users = _load_users()
     if users:
@@ -640,7 +664,9 @@ def _load_users() -> dict:
 def _save_users(users: dict) -> None:
     import json as _j
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    USERS_FILE.write_text(_j.dumps(users, indent=2), encoding="utf-8")
+    tmp = USERS_FILE.with_suffix(".tmp")
+    tmp.write_text(_j.dumps(users, indent=2), encoding="utf-8")
+    tmp.replace(USERS_FILE)   # atomares Rename (#71)
 
 
 def _hash_password(password: str) -> str:
