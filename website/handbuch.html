@@ -271,7 +271,8 @@
     <a href="#backup">11. Backup & Restore</a>
     <a href="#audit">12. Audit-Log</a>
     <a href="#matrix">13. Matrix-Integration</a>
-    <a href="#troubleshooting">14. Troubleshooting</a>
+    <a href="#gpu">14. GPU-Monitoring</a>
+    <a href="#troubleshooting">15. Troubleshooting</a>
   </nav>
 </aside>
 
@@ -392,7 +393,30 @@ tools:
 heartbeat:
   interval: 30s
   timeout: 90s
-  on_failure: restart</code></pre>
+  on_failure: restart
+
+heartbeat_tasks:
+  - id: tagesstart
+    message: "Guten Morgen! Bitte prüfe offene Aufgaben."
+    schedule: "0 8 * * 1-5"    # Mo–Fr um 08:00
+    active_hours: "07:00-22:00"
+
+  - id: erinnerung
+    message: "Bitte prüfe ob neue Dokumente hochgeladen wurden."
+    interval: 3600              # jede Stunde</code></pre>
+
+    <h3>Heartbeat Tasks — Automatische Aktivierung</h3>
+    <p><code>heartbeat_tasks</code> definiert periodische Aufgaben die der Agent automatisch ausführt.</p>
+    <table>
+      <tr><th>Feld</th><th>Pflicht</th><th>Beschreibung</th></tr>
+      <tr><td><code>id</code></td><td>ja</td><td>Eindeutiger Name des Tasks</td></tr>
+      <tr><td><code>message</code></td><td>ja</td><td>Nachricht die an den Agenten gesendet wird</td></tr>
+      <tr><td><code>schedule</code></td><td>nein</td><td>Cron-Ausdruck: <code>"0 8 * * *"</code> (täglich 08:00)</td></tr>
+      <tr><td><code>interval</code></td><td>nein</td><td>Sekunden-Intervall: <code>3600</code> (jede Stunde)</td></tr>
+      <tr><td><code>project</code></td><td>nein</td><td>Explizites Projekt; sonst: erstes Projekt des Boss-Agenten</td></tr>
+      <tr><td><code>active_hours</code></td><td>nein</td><td>Nur in diesem Zeitfenster aktiv: <code>"08:00-22:00"</code></td></tr>
+    </table>
+    <div class="note">Heartbeat Tasks laufen nur auf <code>boss</code>-Agenten mit zugeordnetem Projekt. Verpasste Ausführungen werden nicht nachgeholt.</div>
 
     <h3>Verfügbare Tools</h3>
     <table>
@@ -468,6 +492,18 @@ chat:
 
     <h3>Chat-History</h3>
     <p>Die Nachrichten einer Session bleiben erhalten und werden beim nächsten Öffnen automatisch geladen.</p>
+
+    <h3>Slash Commands</h3>
+    <p>Tippe <code>/</code> um verfügbare Schnellbefehle anzuzeigen. Das Dropdown öffnet sich automatisch und kann mit Pfeiltasten navigiert werden.</p>
+    <table>
+      <tr><th>Befehl</th><th>Funktion</th></tr>
+      <tr><td><code>/help</code></td><td>Alle verfügbaren Befehle anzeigen</td></tr>
+      <tr><td><code>/clear</code></td><td>Chat-Verlauf leeren (nur Anzeige)</td></tr>
+      <tr><td><code>/status</code></td><td>Projekt-Informationen anzeigen (Boss, Modell, Worker)</td></tr>
+      <tr><td><code>/model</code></td><td>Aktuell verwendetes LLM-Modell anzeigen</td></tr>
+      <tr><td><code>/retry</code></td><td>Letzte eigene Nachricht erneut senden</td></tr>
+    </table>
+    <p><strong>Bedienung:</strong> Pfeiltasten zum Navigieren, <code>Tab</code> oder <code>Enter</code> zum Auswählen, <code>Escape</code> schließt das Dropdown.</p>
   </section>
 
   <!-- 7. LLM -->
@@ -646,9 +682,29 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <div class="note">Der Matrix-Watchdog startet abgestürzte Bots automatisch neu — mit 15 Sekunden Verzögerung.</div>
   </section>
 
-  <!-- 14. TROUBLESHOOTING -->
+  <!-- 14. GPU -->
+  <section class="chapter" id="gpu">
+    <h2>14. GPU-Monitoring</h2>
+    <p>Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die <strong>System</strong>-Seite eine GPU-Auslastungsanzeige.</p>
+
+    <h3>Angezeigte Werte</h3>
+    <table>
+      <tr><th>Anzeige</th><th>Beschreibung</th></tr>
+      <tr><td>GPU-Auslastung</td><td>Prozent der Shader-Prozessoren in Benutzung</td></tr>
+      <tr><td>VRAM-Auslastung</td><td>Prozent des Grafikspeichers belegt</td></tr>
+      <tr><td>Speicher</td><td>Verwendet / Gesamt in MB</td></tr>
+      <tr><td>Temperatur</td><td>GPU-Kerntemperatur in °C</td></tr>
+      <tr><td>Leistungsaufnahme</td><td>Watt (aktuell / Limit)</td></tr>
+    </table>
+    <p>Die Auslastungsbalken sind farbkodiert: grün (&lt; 80 %), orange (&lt; 95 %), rot (≥ 95 %).</p>
+
+    <h3>Voraussetzung</h3>
+    <p>NVIDIA-Treiber und <code>nvidia-smi</code> müssen installiert sein. Ohne GPU oder ohne Treiber wird die GPU-Sektion nicht angezeigt — kein Fehler.</p>
+  </section>
+
+  <!-- 15. TROUBLESHOOTING -->
   <section class="chapter" id="troubleshooting">
-    <h2>14. Troubleshooting</h2>
+    <h2>15. Troubleshooting</h2>
 
     <h3>Konsole nicht erreichbar</h3>
     <pre><code>sudo systemctl status nginx

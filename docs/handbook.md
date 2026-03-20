@@ -19,7 +19,8 @@ OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen V
 11. [Backup & Restore](#11-backup--restore)
 12. [Audit-Log](#12-audit-log)
 13. [Matrix-Integration](#13-matrix-integration)
-14. [Troubleshooting](#14-troubleshooting)
+14. [GPU-Monitoring](#14-gpu-monitoring)
+15. [Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -88,7 +89,7 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Dashboard** | Überblick über Agenten, Projekte, System-Status | alle |
 | **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten | alle (Schreiben: admin) |
 | **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
-| **System** | Service-Status, Laufzeit-Informationen | alle |
+| **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
 | **LLM-Config** | Sprachmodell konfigurieren (Ollama, Claude, OpenAI) | admin |
 | **Benutzer** | Benutzer anlegen und verwalten | admin |
@@ -153,7 +154,36 @@ heartbeat:
   interval: 30s
   timeout: 90s
   on_failure: restart
+
+heartbeat_tasks:
+  - id: tagesstart
+    message: "Guten Morgen! Bitte prüfe offene Aufgaben und erstelle eine Tages-Zusammenfassung."
+    schedule: "0 8 * * 1-5"    # Mo–Fr um 08:00
+    active_hours: "07:00-22:00"
+
+  - id: erinnerung
+    message: "Bitte prüfe ob neue Dokumente hochgeladen wurden."
+    interval: 3600              # jede Stunde
 ```
+
+### Heartbeat Tasks — Automatische Aktivierung
+
+`heartbeat_tasks` definiert periodische Aufgaben die der Agent automatisch ausführt — ohne manuelles Triggern.
+
+| Feld | Pflicht | Beschreibung |
+|---|---|---|
+| `id` | ja | Eindeutiger Name des Tasks |
+| `message` | ja | Nachricht die an den Agenten gesendet wird |
+| `schedule` | nein | Cron-Ausdruck: `"0 8 * * *"` (täglich 08:00) |
+| `interval` | nein | Sekunden-Intervall: `3600` (jede Stunde) |
+| `project` | nein | Explizites Projekt; sonst: erstes Projekt des Boss-Agenten |
+| `active_hours` | nein | Nur in diesem Zeitfenster aktiv: `"08:00-22:00"` |
+
+Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werden.
+
+Der Status aller konfigurierten Tasks wird in der **Agenten**-Ansicht als Timer-Badge angezeigt (Anzahl aktiver Tasks).
+
+> **Hinweis:** Heartbeat Tasks laufen nur auf `boss`-Agenten mit zugeordnetem Projekt. Verpasste Ausführungen (Server war aus) werden nicht nachgeholt.
 
 ### Verfügbare Tools
 
@@ -245,6 +275,20 @@ Das **Netzwerk-Symbol** (oben rechts im Chat) schaltet die Swarm-Ansicht um. Bei
 ### Chat-History
 
 Die Nachrichten einer Session bleiben erhalten und werden beim nächsten Öffnen automatisch geladen.
+
+### Slash Commands
+
+Im Chat stehen Schnellbefehle zur Verfügung. Tippe `/` um die verfügbaren Befehle anzuzeigen — die Auswahl erscheint als Dropdown.
+
+| Befehl | Funktion |
+|---|---|
+| `/help` | Alle verfügbaren Befehle anzeigen |
+| `/clear` | Chat-Verlauf leeren (nur in der Anzeige, keine Server-Änderung) |
+| `/status` | Projekt-Informationen anzeigen (Boss-Agent, Modell, Worker) |
+| `/model` | Aktuell verwendetes LLM-Modell anzeigen |
+| `/retry` | Letzte eigene Nachricht erneut senden |
+
+**Bedienung:** Nach dem `/` mit Pfeiltasten navigieren, `Tab` oder `Enter` zum Auswählen, `Escape` schließt das Dropdown.
 
 ---
 
@@ -456,7 +500,29 @@ Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch.
 
 ---
 
-## 14. Troubleshooting
+## 14. GPU-Monitoring
+
+Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die **System**-Seite eine GPU-Auslastungsanzeige.
+
+### Angezeigte Werte
+
+| Anzeige | Beschreibung |
+|---|---|
+| GPU-Auslastung | Prozent der Shader-Prozessoren in Benutzung |
+| VRAM-Auslastung | Prozent des Grafikspeichers belegt |
+| Speicher | Verwendet / Gesamt in MB |
+| Temperatur | GPU-Kerntemperatur in °C |
+| Leistungsaufnahme | Watt (aktuell / Limit) |
+
+Die Auslastungsbalken sind farbkodiert: grün (< 80 %), orange (< 95 %), rot (≥ 95 %).
+
+### Voraussetzung
+
+NVIDIA-Treiber und `nvidia-smi` müssen installiert sein. Ohne GPU oder ohne Treiber wird die GPU-Sektion nicht angezeigt (kein Fehler).
+
+---
+
+## 15. Troubleshooting
 
 ### Konsole nicht erreichbar
 
