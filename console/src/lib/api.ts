@@ -26,12 +26,25 @@ export const api = {
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/projects/${id}/session/history`),
   agentLogs: (id: string, lines = 100) =>
     api.get<{agent_id:string;lines:string[];count:number}>(`/agents/${id}/logs?lines=${lines}`),
+  projectWebhooks:  (id: string) =>
+    api.get<{webhooks: Webhook[]}>(`/projects/${id}/webhooks`),
+  createWebhook:    (id: string, d: unknown) => api.post<Webhook>(`/projects/${id}/webhooks`, d),
+  deleteWebhook:    (id: string, wid: string) => api.delete(`/projects/${id}/webhooks/${wid}`),
+  testWebhook:      (id: string, d: unknown) => api.post(`/projects/${id}/webhooks/test`, d),
   agentSkills:       (id: string) =>
     api.get<{skills: AgentSkill[]}>(`/agents/${id}/skills`),
   createSkill:       (id: string, d: unknown) => api.post(`/agents/${id}/skills`, d),
   updateSkill:       (id: string, filename: string, d: unknown) => api.put(`/agents/${id}/skills/${filename}`, d),
   deleteSkill:       (id: string, filename: string) => api.delete(`/agents/${id}/skills/${filename}`),
 };
+
+export interface Webhook {
+  id:         string;
+  name:       string;
+  url:        string;
+  events:     string[];
+  created_at: string;
+}
 
 export interface AgentSkill {
   filename: string;
