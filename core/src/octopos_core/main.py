@@ -1,5 +1,5 @@
 """
-main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11, #12)
+main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11, #12, #35)
 
 FastAPI-App mit Lifespan-Management:
 - AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager + Orchestrator
@@ -621,6 +621,26 @@ def _update_project_matrix_room(project_id: str, room_id: str) -> None:
         project_yaml.write_text(updated, encoding="utf-8")
     except OSError as e:
         logger.warning("project.yaml konnte nicht aktualisiert werden: %s", e)
+
+
+
+# ================================================================== Tools
+
+@app.get("/tools")
+def list_tools():
+    """Alle registrierten Tools mit Schema — fuer die Webkonsole."""
+    from .tool_registry import registry
+    result = {}
+    for tool_id in registry.all_ids():
+        tool = registry.get(tool_id)
+        if tool:
+            result[tool_id] = {
+                "name":                 tool.name,
+                "description":          tool.description,
+                "permissions_required": tool.permissions_required,
+                "parameters":           tool.parameters,
+            }
+    return result
 
 
 # ================================================================== Status
