@@ -49,6 +49,11 @@ export const api = {
     api.get<{handoffs: Handoff[]}>(`/projects/${id}/agentlink`),
   deleteHandoff:     (id: string, handoffId: string) =>
     api.delete(`/projects/${id}/agentlink/${handoffId}`),
+  listBackups:   () => api.get<{backups: BackupEntry[]}>("/admin/backups"),
+  createBackup:  () => api.post<BackupEntry>("/admin/backup", {}),
+  deleteBackup:  (name: string) => api.delete(`/admin/backups/${name}`),
+  restoreBackup: (name: string) => api.post(`/admin/restore/${name}`, {}),
+  downloadBackupUrl: (name: string) => `/api/admin/backups/${encodeURIComponent(name)}/download`,
 };
 
 export interface AuditEntry {
@@ -78,6 +83,12 @@ export interface Handoff {
   to_agent:   string | null;
   context:    string;
   data:       Record<string, unknown>;
+}
+
+export interface BackupEntry {
+  name:       string;
+  size:       number;
+  created_at: string;
 }
 
 export interface AgentSkill {
