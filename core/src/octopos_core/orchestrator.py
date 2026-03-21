@@ -650,12 +650,11 @@ class Orchestrator:
             ]
 
         payload: dict = {
-            "model":             model_id,
-            "input":             input_items,
-            "max_output_tokens": agent_cfg.llm.max_tokens,
-            "temperature":       agent_cfg.llm.temperature,
-            "store":             False,
-            "stream":            True,   # Codex API erfordert stream=true
+            "model":       model_id,
+            "input":       input_items,
+            "temperature": agent_cfg.llm.temperature,
+            "store":       False,
+            "stream":      True,   # Codex API erfordert stream=true
         }
         if system_prompt:
             payload["instructions"] = system_prompt
