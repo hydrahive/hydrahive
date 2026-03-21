@@ -801,9 +801,11 @@ class Orchestrator:
                                 tool = self._reg.get(tc["name"])
                                 try:
                                     tool_input = _json2.loads(_safe_args(tc["arguments"]))
+                                    # project_id aus tool_input extrahieren falls übergeben
+                                    effective_pid = tool_input.pop("project_id", None) or project_id
                                     result = await tool.execute(
                                         agent_id=boss_cfg.id,
-                                        project_id=project_id,
+                                        project_id=effective_pid,
                                         **tool_input,
                                     ) if tool else f"Tool '{tc['name']}' nicht gefunden"
                                 except Exception as te:
@@ -919,8 +921,9 @@ class Orchestrator:
                     continue
                 try:
                     args = json.loads(tc.function.arguments)
+                    effective_pid = args.pop("project_id", None) or project_id
                     result = await tool.execute(
-                        agent_id=boss_cfg.id, project_id=project_id, **args
+                        agent_id=boss_cfg.id, project_id=effective_pid, **args
                     )
                     result_str = json.dumps(result, ensure_ascii=False)
                     if len(result_str) > 8000:
