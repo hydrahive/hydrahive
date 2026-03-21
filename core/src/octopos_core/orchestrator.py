@@ -789,22 +789,18 @@ class Orchestrator:
                                         pass
                                     return "{}"
 
-                            loop_messages.append({
-                                "role":      "assistant",
-                                "content":   round_text or None,
-                                "tool_calls": [
-                                    {"id": tc["id"], "type": "function",
-                                     "function": {"name": tc["name"], "arguments": _safe_args(tc["arguments"])}}
-                                    for tc in tc_list
-                                ],
-                            })
+                            # Assistant-Nachricht ohne tool_calls einfügen (plain text) +
+                            # Tools ausführen und Ergebnisse als user-Nachricht — umgeht
+                            # litellm Ollama-Transformation die mit tool_call-History crasht
+                            if round_text:
+                                loop_messages.append({"role": "assistant", "content": round_text})
 
-                            # Tools ausführen
+                            tool_results_text = []
                             for tc in tc_list:
                                 yield f"data: {_json.dumps({'tool_call': tc['name']})}\n\n"
                                 tool = self._reg.get(tc["name"])
                                 try:
-                                    tool_input = _json2.loads(tc["arguments"] or "{}")
+                                    tool_input = _json2.loads(_safe_args(tc["arguments"]))
                                     result = await tool.execute(
                                         agent_id=boss_cfg.id,
                                         project_id=project_id,
@@ -812,11 +808,14 @@ class Orchestrator:
                                     ) if tool else f"Tool '{tc['name']}' nicht gefunden"
                                 except Exception as te:
                                     result = f"Tool-Fehler: {te}"
-                                loop_messages.append({
-                                    "role":         "tool",
-                                    "tool_call_id": tc["id"],
-                                    "content":      str(result),
-                                })
+                                tool_results_text.append(
+                                    f"[Tool: {tc['name']}]\n{_json2.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)}"
+                                )
+
+                            loop_messages.append({
+                                "role":    "user",
+                                "content": "Tool-Ergebnisse:\n" + "\n\n".join(tool_results_text),
+                            })
 
                     break  # Erfolgreich — kein weiterer Failover nötig
 
