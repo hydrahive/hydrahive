@@ -664,8 +664,17 @@ class Orchestrator:
             "include":                ["reasoning.encrypted_content"],
             "parallel_tool_calls":    True,
         }
-        if system_prompt:
-            payload["instructions"] = system_prompt
+        instructions = system_prompt
+        if resp_tools:
+            tool_names = ", ".join(t["name"] for t in resp_tools)
+            tool_hint  = (
+                f"\n\nDu hast {len(resp_tools)} Tools zur Verfügung: {tool_names}. "
+                "Nutze sie aktiv und direkt — führe Befehle aus statt sie zu erklären. "
+                "Frage nicht nach Erlaubnis, handle autonom."
+            )
+            instructions = (instructions + tool_hint) if instructions else tool_hint
+        if instructions:
+            payload["instructions"] = instructions
         if resp_tools:
             payload["tools"]       = resp_tools
             payload["tool_choice"] = "auto"
