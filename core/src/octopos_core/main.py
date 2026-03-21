@@ -2809,6 +2809,7 @@ def get_update_status(_a: tuple = Depends(require_admin)):
     import json as _json
     STATUS_FILE = "/var/run/octopos-update.json"
     LOG_FILE    = "/var/log/octopos-update.log"
+    from datetime import datetime, timezone, timedelta
     p = Path(STATUS_FILE)
     status = {}
     if p.exists():
@@ -2818,6 +2819,15 @@ def get_update_status(_a: tuple = Depends(require_admin)):
             status = {"status": "unknown"}
     else:
         status = {"status": "never"}
+    # "running" das älter als 10 Min ist → veraltet (Service-Neustart hat Status überschrieben)
+    if status.get("status") == "running" and status.get("started_at"):
+        try:
+            started = datetime.fromisoformat(status["started_at"])
+            if datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc) > timedelta(minutes=10):
+                status["status"] = "ok"
+                status["stale"] = True
+        except Exception:
+            pass
     # Letzte 20 Log-Zeilen anhängen
     try:
         lines = Path(LOG_FILE).read_text(errors="replace").splitlines()
