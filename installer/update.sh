@@ -3,7 +3,7 @@
 # Usage: sudo bash /opt/octopos/update.sh
 #
 # Ablauf:
-#   1. Repo von GitHub klonen (shallow, temp-Verzeichnis)
+#   1. Repo klonen: lokales Gitea (primär) → GitHub (Fallback)
 #   2. Core rsync → /opt/octopos/core/
 #   3. pip install -e . im venv
 #   4. Console npm ci + build
@@ -15,8 +15,12 @@ set -euo pipefail
 OCTOPOS_DIR="/opt/octopos"
 VENV="${OCTOPOS_DIR}/venv"
 GITHUB_REPO="https://github.com/tilleulenspiegel/octopos.git"
+GITEA_CONFIG="/etc/octopos/gitea_config.json"
 TOKEN_FILE="/etc/octopos/github_token"
 TMPDIR_BASE="/tmp/octopos-update-$$"
+
+# Log-Datei für Webhook-Deploy (damit GET /admin/update/status etwas zum Lesen hat)
+UPDATE_LOG="/var/log/octopos-update.log"
 
 # Farben
 GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; RED="\033[0;31m"; NC="\033[0m"
@@ -27,12 +31,27 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || error "Bitte als root ausführen: sudo bash $0"
 
-# Token für private Repos (optional)
-CLONE_URL="${GITHUB_REPO}"
-if [ -f "${TOKEN_FILE}" ]; then
-    TOKEN=$(cat "${TOKEN_FILE}" | tr -d '[:space:]')
-    CLONE_URL="https://${TOKEN}@github.com/tilleulenspiegel/octopos.git"
-    info "GitHub-Token gefunden — klone privates Repo"
+# Lokales Gitea als primäre Quelle, GitHub als Fallback
+CLONE_URL=""
+if [ -f "${GITEA_CONFIG}" ]; then
+    GITEA_URL=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('url',''))" 2>/dev/null || echo "")
+    GITEA_TOKEN=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('token',''))" 2>/dev/null || echo "")
+    GITEA_ORG=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('org','octopos'))" 2>/dev/null || echo "octopos")
+    if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
+        # Interne URL umbauen: http://127.0.0.1:3001 → mit Token
+        CLONE_URL="${GITEA_URL}/octopos/octopos.git"
+        CLONE_URL="${CLONE_URL/http:\/\//http:\/\/${GITEA_ORG}:${GITEA_TOKEN}@}"
+        info "Klone von lokalem Gitea: ${GITEA_URL}/octopos/octopos"
+    fi
+fi
+
+if [ -z "${CLONE_URL}" ]; then
+    CLONE_URL="${GITHUB_REPO}"
+    if [ -f "${TOKEN_FILE}" ]; then
+        GH_TOKEN=$(cat "${TOKEN_FILE}" | tr -d '[:space:]')
+        CLONE_URL="https://${GH_TOKEN}@github.com/tilleulenspiegel/octopos.git"
+    fi
+    info "Fallback: klone von GitHub"
 fi
 
 cleanup() { rm -rf "${TMPDIR_BASE}"; }
@@ -44,10 +63,15 @@ echo "   OctopOS Update"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+# Status-Datei schreiben (für GET /admin/update/status)
+UPDATE_STATUS_FILE="/var/run/octopos-update.json"
+echo "{\"status\":\"running\",\"started_at\":\"$(date -Iseconds)\",\"commit\":\"\"}" \
+    > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
+
 # --- 1. Repo klonen ---
-info "Klone aktuellen Stand von GitHub..."
+info "Klone aktuellen Stand..."
 git clone --depth 1 --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
-    || error "git clone fehlgeschlagen — Token in ${TOKEN_FILE} hinterlegt?"
+    || error "git clone fehlgeschlagen"
 success "Repo geklont"
 
 # --- 2. Core aktualisieren ---
@@ -100,8 +124,16 @@ if systemctl is-enabled --quiet gitea 2>/dev/null; then
     fi
 fi
 
-# --- Versions-Info ---
+# --- Versions-Info + Status-Datei ---
 COMMIT=$(git -C "${TMPDIR_BASE}" rev-parse --short HEAD 2>/dev/null || echo "unbekannt")
+COMMIT_FULL=$(git -C "${TMPDIR_BASE}" rev-parse HEAD 2>/dev/null || echo "")
+COMMIT_MSG=$(git -C "${TMPDIR_BASE}" log -1 --pretty=format:'%s' 2>/dev/null || echo "")
+
+echo "{\"status\":\"ok\",\"finished_at\":\"$(date -Iseconds)\",\"commit\":\"${COMMIT}\",\"commit_full\":\"${COMMIT_FULL}\",\"message\":\"${COMMIT_MSG}\"}" \
+    > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
+# Auch ins Log schreiben
+echo "[$(date -Iseconds)] OK commit=${COMMIT} msg=${COMMIT_MSG}" >> "${UPDATE_LOG}" 2>/dev/null || true
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 success "Update abgeschlossen (Commit: ${COMMIT})"

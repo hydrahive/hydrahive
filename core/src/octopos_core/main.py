@@ -2734,7 +2734,104 @@ async def gitea_webhook(project_id: str, request: Request):
         _shutil.rmtree(ws)
         logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
 
+    # OctopOS-Core selbst deployen wenn das octopos-Core-Repo gepusht wurde
+    if project_id == "octopos-core":
+        asyncio.create_task(_run_self_update(pusher, commits))
+        return {"status": "deploying", "project": project_id, "ref": ref}
+
     return {"status": "ok", "project": project_id, "ref": ref}
+
+
+async def _run_self_update(pusher: str, commits: int) -> None:
+    """Startet update.sh im Hintergrund — OctopOS deployt sich selbst."""
+    import asyncio as _asyncio
+    UPDATE_SCRIPT = "/opt/octopos/update.sh"
+    STATUS_FILE   = "/var/run/octopos-update.json"
+    LOG_FILE      = "/var/log/octopos-update.log"
+
+    logger.info("Self-Update gestartet (pusher=%s commits=%d)", pusher, commits)
+
+    # Status: running
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        Path(STATUS_FILE).write_text(_json.dumps({
+            "status": "running",
+            "started_at": _dt.now().isoformat(),
+            "pusher": pusher,
+            "commits": commits,
+            "commit": "",
+        }))
+    except Exception:
+        pass
+
+    try:
+        # update.sh braucht root — via sudo (sudoers-Regel nötig)
+        proc = await _asyncio.create_subprocess_exec(
+            "sudo", "bash", UPDATE_SCRIPT,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=300)
+        output = stdout.decode(errors="replace") if stdout else ""
+
+        # Ausgabe ins Log schreiben
+        try:
+            with open(LOG_FILE, "a") as f:
+                f.write(f"\n=== Self-Update {_dt.now().isoformat()} (pusher={pusher}) ===\n")
+                f.write(output)
+        except Exception:
+            pass
+
+        if proc.returncode == 0:
+            logger.info("Self-Update erfolgreich (pusher=%s)", pusher)
+            # Status-Datei wird von update.sh selbst geschrieben
+        else:
+            logger.error("Self-Update fehlgeschlagen (rc=%d): %s", proc.returncode, output[-500:])
+            try:
+                Path(STATUS_FILE).write_text(_json.dumps({
+                    "status": "error",
+                    "finished_at": _dt.now().isoformat(),
+                    "error": output[-500:],
+                }))
+            except Exception:
+                pass
+
+    except _asyncio.TimeoutError:
+        logger.error("Self-Update Timeout nach 300s")
+    except Exception as e:
+        logger.error("Self-Update Fehler: %s", e)
+
+
+@app.get("/admin/update/status")
+def get_update_status(_a: tuple = Depends(require_admin)):
+    """Status des letzten Self-Updates (für Update-Button in der Console)."""
+    import json as _json
+    STATUS_FILE = "/var/run/octopos-update.json"
+    LOG_FILE    = "/var/log/octopos-update.log"
+    p = Path(STATUS_FILE)
+    status = {}
+    if p.exists():
+        try:
+            status = _json.loads(p.read_text())
+        except Exception:
+            status = {"status": "unknown"}
+    else:
+        status = {"status": "never"}
+    # Letzte 20 Log-Zeilen anhängen
+    try:
+        lines = Path(LOG_FILE).read_text(errors="replace").splitlines()
+        status["log_tail"] = lines[-20:]
+    except Exception:
+        status["log_tail"] = []
+    return status
+
+
+@app.post("/admin/update/trigger")
+async def trigger_update(_a: tuple = Depends(require_admin)):
+    """Manueller Update-Trigger — startet Self-Update ohne Webhook."""
+    asyncio.create_task(_run_self_update(pusher="admin-manual", commits=0))
+    return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
 
 
 class GiteaConfigRequest(BaseModel):
