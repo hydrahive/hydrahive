@@ -157,6 +157,8 @@ class Orchestrator:
         self._reg            = tool_reg or default_registry
         self._project_queues: dict[str, asyncio.Queue]  = {}
         self._queue_tasks:    dict[str, asyncio.Task]   = {}
+        self._queue_last_used: dict[str, float]         = {}
+        self._queue_idle_timeout_s: float               = 600.0
 
     # ------------------------------------------------------------------ public
 
@@ -174,11 +176,25 @@ class Orchestrator:
             )
 
     async def _queue_worker(self, project_id: str) -> None:
-        """Verarbeitet Nachrichten sequenziell — kein paralleler Orchestrator-Zustand."""
+        """Verarbeitet Nachrichten sequenziell — kein paralleler Orchestrator-Zustand.
+
+        Beendet sich bei Inaktivitaet automatisch und raeumt Queue/Task-Metadaten auf.
+        """
         queue = self._get_queue(project_id)
+        self._queue_last_used[project_id] = asyncio.get_event_loop().time()
         try:
             while True:
-                future, project_cfg, content, sender = await queue.get()
+                try:
+                    future, project_cfg, content, sender = await asyncio.wait_for(
+                        queue.get(), timeout=self._queue_idle_timeout_s
+                    )
+                except asyncio.TimeoutError:
+                    # Idle-Timeout: wenn keine Arbeit anliegt, Worker sauber beenden
+                    if queue.empty():
+                        break
+                    continue
+
+                self._queue_last_used[project_id] = asyncio.get_event_loop().time()
                 try:
                     result = await self._handle_message_impl(
                         project_id, project_cfg, content, sender
@@ -192,6 +208,17 @@ class Orchestrator:
                     queue.task_done()
         except asyncio.CancelledError:
             pass
+        finally:
+            # Cleanup nur wenn das registrierte Task-Objekt dieses Worker-Task ist
+            current = asyncio.current_task()
+            task = self._queue_tasks.get(project_id)
+            if task is current or task is None or task.done():
+                self._queue_tasks.pop(project_id, None)
+                # Queue nur entfernen wenn wirklich leer, damit keine Arbeit verloren geht
+                q = self._project_queues.get(project_id)
+                if q is not None and q.empty():
+                    self._project_queues.pop(project_id, None)
+                self._queue_last_used.pop(project_id, None)
 
     async def handle_message(
         self,
@@ -207,6 +234,7 @@ class Orchestrator:
         await self._ensure_worker(project_id)
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         await self._get_queue(project_id).put((future, project_cfg, content, sender))
+        self._queue_last_used[project_id] = asyncio.get_event_loop().time()
         return await future
 
     async def _handle_message_impl(self, project_id: str, project_cfg, content: str, sender: str):
