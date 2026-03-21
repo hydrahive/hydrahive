@@ -58,6 +58,24 @@ def _load_claude_oauth_token() -> str:
         return ""
 
 
+def _load_openai_codex_token() -> dict | None:
+    """
+    Laedt OpenAI Codex OAuth Token (ChatGPT Plus/Pro).
+    Gespeichert in /etc/octopos/openai_codex_token.json:
+    {access_token, refresh_token, expires, account_id}
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    token_file = _Path("/etc/octopos/openai_codex_token.json")
+    try:
+        data = _json.loads(token_file.read_text(encoding="utf-8"))
+        if data.get("access_token") and data.get("account_id"):
+            return data
+    except OSError:
+        pass
+    return None
+
+
 
 _FAILOVER_SIGNALS = [
     "402", "payment", "credit", "quota", "insufficient",
@@ -358,6 +376,13 @@ class Orchestrator:
         tools:       list[dict] | None,
     ):
         """Ein einzelnes Modell aufrufen — kein Failover-Logik."""
+        # OpenAI Codex (ChatGPT Plus OAuth)
+        if model_name.startswith("openai-codex/"):
+            codex_token = _load_openai_codex_token()
+            if codex_token:
+                return await self._openai_codex_call(agent_cfg, messages, tools, codex_token, model_name)
+
+        # Claude Max OAuth
         is_claude = model_name.startswith(("claude-", "anthropic/"))
         oauth_token = _load_claude_oauth_token() if is_claude else ""
         if oauth_token:
@@ -553,6 +578,131 @@ class Orchestrator:
         return  SimpleNamespace(choices=[choice], model=model)
 
 
+    async def _openai_codex_call(
+        self,
+        agent_cfg:   AgentConfig,
+        messages:    list[dict],
+        tools:       list[dict] | None,
+        token_data:  dict,
+        model_name:  str,
+    ):
+        """
+        ChatGPT Plus/Pro via Codex OAuth.
+        Endpoint: chatgpt.com/backend-api/codex/responses (OpenAI Responses API).
+        """
+        import json as _json
+        import litellm as _litellm
+        from types import SimpleNamespace
+
+        # Model-ID normalisieren: "openai-codex/gpt-5.2" → "gpt-5.2"
+        model_id = model_name
+        if model_id.startswith("openai-codex/"):
+            model_id = model_id[len("openai-codex/"):]
+
+        access_token = token_data["access_token"]
+        account_id   = token_data["account_id"]
+
+        # Chat Completions Messages → Responses API input konvertieren
+        system_prompt = ""
+        input_items: list = []
+        for m in messages:
+            role    = m.get("role", "")
+            content = m.get("content", "") or ""
+            if role == "system":
+                system_prompt = content
+                continue
+            # Tool-Result: Chat Completions role=tool → function_call_output
+            if role == "tool":
+                input_items.append({
+                    "type":     "function_call_output",
+                    "call_id":  m.get("tool_call_id", ""),
+                    "output":   content,
+                })
+                continue
+            # Assistant mit Tool-Calls
+            tc_list = m.get("tool_calls")
+            if role == "assistant" and tc_list:
+                if content:
+                    input_items.append({
+                        "role":    "assistant",
+                        "content": [{"type": "output_text", "text": content}],
+                    })
+                for tc in tc_list:
+                    fn = tc.get("function", {})
+                    input_items.append({
+                        "type":      "function_call",
+                        "id":        tc.get("id", ""),
+                        "call_id":   tc.get("id", ""),
+                        "name":      fn.get("name", ""),
+                        "arguments": fn.get("arguments", "{}"),
+                    })
+                continue
+            # Normaler Text
+            input_items.append({"role": role, "content": content})
+
+        # Tools: litellm-Format → Responses API Format
+        resp_tools = None
+        if tools:
+            resp_tools = [
+                {
+                    "type":        "function",
+                    "name":        t["function"]["name"],
+                    "description": t["function"].get("description", ""),
+                    "parameters":  t["function"].get("parameters", {"type": "object", "properties": {}}),
+                }
+                for t in tools
+            ]
+
+        kwargs: dict = {
+            "model":            f"openai/{model_id}",
+            "api_base":         "https://chatgpt.com/backend-api/codex",
+            "api_key":          access_token,
+            "input":            input_items,
+            "instructions":     system_prompt or None,
+            "max_output_tokens": agent_cfg.llm.max_tokens,
+            "temperature":      agent_cfg.llm.temperature,
+            "extra_headers": {
+                "chatgpt-account-id": account_id,
+                "OpenAI-Beta":        "responses=experimental",
+                "originator":         "pi",
+            },
+            "store":  False,
+            "stream": False,
+        }
+        if resp_tools:
+            kwargs["tools"]       = resp_tools
+            kwargs["tool_choice"] = "auto"
+
+        resp = await _llm_with_retry(lambda: _litellm.aresponses(**kwargs))
+
+        # ResponsesAPIResponse → litellm-kompatibles SimpleNamespace
+        text         = ""
+        tool_calls_out: list = []
+        for item in (resp.output or []):
+            item_type = getattr(item, "type", None)
+            if item_type == "message":
+                for c in (getattr(item, "content", None) or []):
+                    if getattr(c, "type", None) == "output_text":
+                        text += getattr(c, "text", "") or ""
+            elif item_type == "function_call":
+                tool_calls_out.append(SimpleNamespace(
+                    id=getattr(item, "call_id", "") or getattr(item, "id", ""),
+                    type="function",
+                    function=SimpleNamespace(
+                        name=getattr(item, "name", ""),
+                        arguments=getattr(item, "arguments", "{}") or "{}",
+                    ),
+                ))
+
+        message = SimpleNamespace(
+            role="assistant",
+            content=text,
+            tool_calls=tool_calls_out if tool_calls_out else None,
+        )
+        choice = SimpleNamespace(message=message, finish_reason="stop")
+        return SimpleNamespace(choices=[choice], model=model_id)
+
+
     async def handle_message_stream(
         self,
         project_id:  str,
@@ -595,6 +745,56 @@ class Orchestrator:
                 try:
                     full_response = ""
                     streamed_any  = False
+
+                    # --- OpenAI Codex (ChatGPT Plus OAuth) ---
+                    _is_codex = _model_name.startswith("openai-codex/")
+                    if _is_codex:
+                        codex_token = _load_openai_codex_token()
+                        if codex_token:
+                            # Non-streaming call, simuliere SSE danach
+                            codex_resp = await self._openai_codex_call(
+                                boss_cfg, messages, litellm_tools, codex_token, _model_name
+                            )
+                            msg = codex_resp.choices[0].message
+                            # Tool-Loop (gleiche Logik wie litellm-Pfad unten)
+                            cur_messages = list(messages)
+                            for _round in range(boss_cfg.max_tool_rounds):
+                                if not getattr(msg, "tool_calls", None):
+                                    break
+                                # Tool-Calls ausführen
+                                tool_results = []
+                                asst_tc = [
+                                    {"id": tc.id, "type": "function",
+                                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                                    for tc in msg.tool_calls
+                                ]
+                                cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
+                                for tc in msg.tool_calls:
+                                    yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
+                                    tool = self._reg.get(tc.function.name)
+                                    try:
+                                        args = _json.loads(tc.function.arguments or "{}")
+                                        result = await tool.execute(agent_id=boss_cfg.id, project_id=project_id, **args) if tool else {"error": f"Tool '{tc.function.name}' nicht gefunden"}
+                                    except Exception as te:
+                                        result = {"error": str(te)}
+                                    result_str = _json.dumps(result, ensure_ascii=False)
+                                    if len(result_str) > 8000:
+                                        result_str = result_str[:8000] + "\n...[gekürzt]"
+                                    tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
+                                cur_messages.extend(tool_results)
+                                next_resp = await self._openai_codex_call(
+                                    boss_cfg, cur_messages, litellm_tools, codex_token, _model_name
+                                )
+                                msg = next_resp.choices[0].message
+                            # Antwort streamen
+                            text = msg.content or ""
+                            full_response = text
+                            streamed_any = bool(text)
+                            if text:
+                                yield f"data: {_json.dumps({'text': text})}\n\n"
+                            break  # Modell hat geantwortet
+
+                    # --- Claude Max OAuth ---
                     _is_claude    = _model_name.startswith(("claude-", "anthropic/"))
                     oauth_token   = _load_claude_oauth_token() if _is_claude else ""
 

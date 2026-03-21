@@ -98,6 +98,10 @@ export const api = {
   updateGiteaConfig: (d: GiteaConfig) => api.put("/gitea/config", d),
   giteaRepos:        () => api.get<{repos: GiteaRepo[]}>("/gitea/repos"),
   giteaProjectPRs:   (id: string) => api.get<{prs: unknown[]; count: number}>(`/gitea/repos/${id}/prs`),
+  // LLM Token Status
+  claudeTokenStatus:    () => api.get<{configured:boolean;token_age_days:number|null;remaining_days:number|null;warning:string|null;ttl_days:number}>("/llm/claude_token_status"),
+  openaiCodexStatus:    () => api.get<{configured:boolean;account_id:string|null;models?:string[]}>("/llm/openai_codex_status"),
+  setOpenaiCodexToken:  (d: {access_token:string;account_id:string;refresh_token?:string}) => api.put("/llm/config/openai_codex", d),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
