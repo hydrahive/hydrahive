@@ -14,13 +14,19 @@ OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen V
 6. [Chat verwenden](#6-chat-verwenden)
 7. [LLM-Konfiguration](#7-llm-konfiguration)
 8. [Skills — Agenten-Wissen erweitern](#8-skills--agenten-wissen-erweitern)
-9. [Webhooks](#9-webhooks)
-10. [Benutzer und Rollen](#10-benutzer-und-rollen)
-11. [Backup & Restore](#11-backup--restore)
-12. [Audit-Log](#12-audit-log)
-13. [Matrix-Integration](#13-matrix-integration)
-14. [GPU-Monitoring](#14-gpu-monitoring)
-15. [Troubleshooting](#15-troubleshooting)
+9. [Persönlicher Agent (Mein Agent)](#9-persönlicher-agent-mein-agent)
+10. [Gedächtnis-System (Memory)](#10-gedächtnis-system-memory)
+11. [WKS-Zugang (Workstation)](#11-wks-zugang-workstation)
+12. [Git-Tools](#12-git-tools)
+13. [MCP-Server](#13-mcp-server)
+14. [Webhooks](#14-webhooks)
+15. [Benutzer und Rollen](#15-benutzer-und-rollen)
+16. [Backup & Restore](#16-backup--restore)
+17. [Audit-Log](#17-audit-log)
+18. [Matrix-Integration](#18-matrix-integration)
+19. [GPU-Monitoring](#19-gpu-monitoring)
+20. [System-Update](#20-system-update)
+21. [Troubleshooting](#21-troubleshooting)
 
 ---
 
@@ -87,14 +93,17 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | Bereich | Funktion | Zugriff |
 |---|---|---|
 | **Dashboard** | Überblick über Agenten, Projekte, System-Status | alle |
+| **Mein Agent** | Persönlicher Agent: Chat, Einstellungen, Skills, WKS | alle |
 | **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten | alle (Schreiben: admin) |
 | **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
 | **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
 | **LLM-Config** | Sprachmodell konfigurieren (Ollama, Claude, OpenAI) | admin |
+| **MCP-Server** | Externe Tool-Server konfigurieren | admin |
 | **Benutzer** | Benutzer anlegen und verwalten | admin |
 | **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
+| **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
 
 ---
 
@@ -130,9 +139,12 @@ Agenten liegen als Verzeichnisse unter `/agents/<id>/`:
 /agents/steuer-agent/
 ├── agent.yaml       # Konfiguration
 ├── soul.md          # Persönlichkeit (optional)
-└── skills/          # Skill-Dateien (optional)
-    ├── steuerrecht.md
-    └── buchhaltung.md
+├── skills/          # Skill-Dateien (optional)
+│   ├── steuerrecht.md
+│   └── buchhaltung.md
+└── memory/          # Gedächtnis-Dateien (optional)
+    ├── user.md
+    └── projects.md
 ```
 
 **agent.yaml:**
@@ -145,10 +157,18 @@ llm:
   model: llama3.1:8b
   temperature: 0.7
   max_tokens: 4096
+  fallback_models:
+    - claude-haiku-4-5-20251001
+  ollama_base_url: null   # WKS-Ollama-Endpunkt (optional)
 
 tools:
   - file_read
   - file_write
+  - read_memory
+  - write_memory
+
+mcp_servers:
+  - qmd                  # MCP-Server-IDs aus /etc/octopos/mcp_servers.json
 
 heartbeat:
   interval: 30s
@@ -181,8 +201,6 @@ heartbeat_tasks:
 
 Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werden.
 
-Der Status aller konfigurierten Tasks wird in der **Agenten**-Ansicht als Timer-Badge angezeigt (Anzahl aktiver Tasks).
-
 > **Hinweis:** Heartbeat Tasks laufen nur auf `boss`-Agenten mit zugeordnetem Projekt. Verpasste Ausführungen (Server war aus) werden nicht nachgeholt.
 
 ### Verfügbare Tools
@@ -193,10 +211,25 @@ Der Status aller konfigurierten Tasks wird in der **Agenten**-Ansicht als Timer-
 | `file_write` | Datei im Projektverzeichnis schreiben |
 | `web_search` | Websuche durchführen |
 | `http_request` | HTTP-Anfragen an externe APIs |
+| `shell_exec` | Shell-Befehl auf dem Server ausführen (Blocklist beachten) |
+| `read_system_file` | Systemdatei außerhalb des Projekts lesen (z.B. Konfigurationen) |
+| `write_system_file` | Systemdatei schreiben (eingeschränkt) |
 | `dispatch_task` | Andere Agenten beauftragen (nur boss) |
 | `spawn_agent` | Kurzlebigen Worker-Agenten erstellen |
+| `ask_agent` | Synchron einen anderen Agenten befragen |
+| `delegate_agent` | Asynchron einen Agenten beauftragen |
 | `write_handoff` | Aufgabe/Kontext an anderen Agenten übergeben (AgentLink) |
 | `read_handoff` | Übergabe-Auftrag entgegennehmen (AgentLink) |
+| `read_memory` | Gedächtnis-Datei des Agenten lesen |
+| `write_memory` | Gedächtnis-Datei des Agenten schreiben |
+| `git_status` | Git-Status eines Projekts abfragen |
+| `git_diff` | Git-Diff anzeigen |
+| `git_commit` | Dateien committen |
+| `git_push` | Commits zu Gitea pushen |
+| `git_create_pr` | Pull Request erstellen |
+| `wks_shell_exec` | Shell-Befehl auf der eigenen Workstation ausführen (SSH) |
+| `wks_file_read` | Datei von der Workstation lesen (SFTP) |
+| `wks_file_write` | Datei auf die Workstation schreiben (SFTP) |
 
 > Alle Filesystem-Operationen sind auf `/projects/<projekt-id>/` beschränkt. Zugriff darüber hinaus wird verweigert.
 
@@ -250,17 +283,15 @@ chat:
   show_swarm: false    # true = Worker-Agenten im Chat anzeigen
 ```
 
----
-
-
 #### Task-Agenten konfigurieren
 
 ```yaml
-# /projects/buchhaltung/project.yaml
 task_agents:
   ttl: 600        # Sekunden bis Task-Agent gestoppt wird (default: 300)
   max_parallel: 5 # max gleichzeitige Task-Agenten (default: 10)
 ```
+
+---
 
 ## 6. Chat verwenden
 
@@ -299,9 +330,10 @@ Im Chat stehen Schnellbefehle zur Verfügung. Tippe `/` um die verfügbaren Befe
 Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über **LLM-Config** → **Ollama** verwaltet.
 
 Empfohlene Modelle:
-- `llama3.2:3b` — schnell, wenig RAM (4 GB)
-- `llama3.1:8b` — ausgewogen (8 GB RAM)
-- `mistral-nemo:12b` — beste Qualität lokal (12 GB RAM)
+- `llama3.2:3b` — schnell, wenig VRAM (4 GB)
+- `llama3.1:8b` — ausgewogen (8 GB VRAM)
+- `qwen2.5:7b` — gute Tool-Nutzung (8 GB VRAM)
+- `mistral-nemo:12b` — beste Qualität lokal (12 GB VRAM)
 
 ### Claude Max (OAuth)
 
@@ -317,6 +349,18 @@ Der Token-Status wird mit Ablauf-Datum angezeigt. oat01-Tokens gelten ~30 Tage.
 
 1. **LLM-Config** → **Anbieter konfigurieren**
 2. API-Key und Modell eintragen
+
+### Fallback-Modelle
+
+Jeder Agent kann Fallback-Modelle definieren. Wenn das primäre Modell nicht erreichbar ist, wird automatisch das nächste versucht:
+
+```yaml
+llm:
+  model: ollama/llama3.1:8b
+  fallback_models:
+    - claude-haiku-4-5-20251001
+    - ollama/llama3.2:3b
+```
 
 ---
 
@@ -355,13 +399,232 @@ priority: 10
 
 Umsatzsteuer (USt) beträgt in Deutschland standardmäßig 19%.
 Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.
+```
 
-...
+> **Hot-Reload:** Skills werden bei jedem Request neu eingelesen. Kein Core-Neustart notwendig.
+
+---
+
+## 9. Persönlicher Agent (Mein Agent)
+
+Jeder User bekommt automatisch einen persönlichen Agenten — `personal_<username>`. Dieser Agent läuft unabhängig von Projekten und ist direkt über **Mein Agent** in der Sidebar erreichbar.
+
+### Chat
+
+Der Chat unter **Mein Agent → Chat** funktioniert wie der Projekt-Chat: Streaming, Chat-History, Slash Commands. Der Agent merkt sich den Gesprächsverlauf sessionübergreifend.
+
+### Einstellungen
+
+Unter **Mein Agent → Einstellungen** kann jeder User seinen Agenten selbst konfigurieren:
+
+| Einstellung | Beschreibung |
+|---|---|
+| **Name / Identität** | Anzeigename des Agenten |
+| **Soul** | Markdown-Text für Persönlichkeit und Verhalten |
+| **Primäres Modell** | Dropdown mit allen verfügbaren Modellen (Server-Ollama + WKS-Ollama + Cloud) |
+| **Temperatur** | Kreativität (0 = deterministisch, 1 = kreativ) |
+| **Max Tokens** | Maximale Antwortlänge |
+| **Fallback-Modelle** | Alternativ-Modelle wenn primäres nicht erreichbar |
+| **Tools** | Welche Tools der Agent nutzen darf |
+| **Agenten-Delegation** | Welche anderen Agenten beauftragt werden dürfen |
+
+### Skills-Tab
+
+Eigene Skills anlegen — genau wie bei regulären Agenten.
+
+### MCP-Tab
+
+Externe MCP-Server zuweisen. Die verfügbaren Server werden vom Admin unter **MCP-Server** konfiguriert.
+
+### WKS-Tab
+
+Workstation-Zugang konfigurieren — siehe [Kapitel 11](#11-wks-zugang-workstation).
+
+---
+
+## 10. Gedächtnis-System (Memory)
+
+Das Gedächtnis-System ermöglicht Agenten, Informationen persistent über Sessions hinaus zu speichern und gezielt abzurufen.
+
+### Funktionsweise
+
+Memory-Dateien liegen als Markdown-Dateien unter `/agents/<id>/memory/`:
+
+```
+/agents/personal_admin/memory/
+├── user.md          # Informationen über den User
+├── projects.md      # Aktive Projekte und Kontext
+├── daily_2026-03-21.md  # Tages-Notizen
+└── handbook.md      # Wichtige Referenz-Dokumente
+```
+
+Beim Start einer Session werden alle Memory-Dateien automatisch in den System-Prompt des Agenten injiziert.
+
+### Tools
+
+| Tool | Beschreibung |
+|---|---|
+| `read_memory` | Einzelne Gedächtnis-Datei lesen (`filename`) |
+| `write_memory` | Gedächtnis-Datei schreiben oder aktualisieren (`filename`, `content`) |
+
+Agenten sollten für gezielte Suche statt vollständiger Injektion QMD nutzen (spart Tokens).
+
+### QMD Memory Search
+
+Wenn der Agent `qmd` als MCP-Server konfiguriert hat, kann er gezielt in den Memory-Dateien suchen:
+
+```
+# Im Chat mit dem Agenten:
+"Was weißt du über das AgentLink-Projekt?"
+→ Agent ruft qmd_query("AgentLink Projekt") auf
+→ Liefert relevante Chunks statt alle Dateien zu laden
+```
+
+Das spart erheblich Tokens gegenüber der vollständigen Memory-Injektion.
+
+---
+
+## 11. WKS-Zugang (Workstation)
+
+Persönliche Agenten können via SSH auf die eigene Workstation des Users zugreifen — Dateien lesen/schreiben und Befehle ausführen.
+
+### Einrichten
+
+1. **Mein Agent → WKS-Tab** öffnen
+2. **IP-Adresse** der Workstation eintragen (z.B. `192.168.1.197`)
+3. **SSH-Benutzer** eintragen (z.B. `till`)
+4. **SSH Private Key** (PEM) einfügen
+5. **Ollama-Port** (Standard: `11434`)
+6. **Speichern**
+
+**SSH-Key auf der Workstation einrichten:**
+
+```bash
+# Auf der Workstation:
+# Den Public Key in authorized_keys eintragen
+echo "ssh-ed25519 AAAA... octopos-wks@octopos" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+
+# SSH-Daemon aktivieren (falls nicht aktiv)
+sudo systemctl enable --now ssh
+```
+
+**Verbindung testen:**
+
+Im WKS-Tab → **Verbindung testen** — zeigt verfügbare Ollama-Modelle auf der WKS an.
+
+### WKS-Tools
+
+| Tool | Beschreibung |
+|---|---|
+| `wks_shell_exec` | Shell-Befehl auf der WKS ausführen (mit optionalem `cwd`) |
+| `wks_file_read` | Datei von der WKS lesen (absoluter Pfad) |
+| `wks_file_write` | Datei auf die WKS schreiben (absoluter Pfad) |
+
+Diese Tools müssen in **Mein Agent → Einstellungen → Tools** aktiviert werden.
+
+### WKS-Ollama
+
+Wenn Ollama auf der Workstation läuft und der Port von außen erreichbar ist, erscheinen die WKS-Modelle automatisch im Modell-Dropdown:
+
+```bash
+# Ollama auf allen Interfaces lauschen lassen:
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+echo '[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee /etc/systemd/system/ollama.service.d/listen.conf
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+Im Modell-Dropdown erscheinen WKS-Modelle als `WKS: <modellname>`. Beim Auswählen wird automatisch die WKS-IP als `ollama_base_url` im Agenten gespeichert.
+
+---
+
+## 12. Git-Tools
+
+Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits erstellen und Pull Requests öffnen.
+
+### Gitea konfigurieren
+
+1. **LLM-Config** → **Gitea** (oder direkt in `/etc/octopos/gitea_config.json`)
+2. Gitea-URL, Token, Organisation eintragen
+
+```json
+{
+  "url": "http://YOUR-VM-IP:3001",
+  "token": "dein-gitea-token",
+  "org": "octopos"
+}
+```
+
+### Git-Tools
+
+| Tool | Beschreibung |
+|---|---|
+| `git_status` | Status eines Repos abfragen (`project_id`) |
+| `git_diff` | Unstaged/staged Änderungen anzeigen |
+| `git_commit` | Dateien committen (`files`, `message`, optional `branch`) |
+| `git_push` | Branch zu Gitea pushen |
+| `git_create_pr` | Pull Request erstellen (`title`, `head`, optional `base`, `body`) |
+
+### Projekt-ID
+
+Alle Git-Tools akzeptieren einen optionalen `project_id`-Parameter. Standardmäßig wird die ID des aktuellen Projekts verwendet. Für persönliche Agenten muss ein explizites Projekt angegeben werden:
+
+```
+# Im Chat:
+"Erstelle einen Commit für testprojekt mit den aktuellen Änderungen"
+→ Agent: git_commit(project_id="testprojekt", files=[...], message="...")
 ```
 
 ---
 
-## 9. Webhooks
+## 13. MCP-Server
+
+MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. OctopOS unterstützt streamableHttp-Transport.
+
+### MCP-Server konfigurieren (Admin)
+
+1. **MCP-Server** in der Sidebar (Admin only)
+2. **Neuer MCP-Server**
+3. Felder ausfüllen: ID, Name, Transport (`streamableHttp`), URL
+
+Oder direkt in `/etc/octopos/mcp_servers.json`:
+
+```json
+[
+  {
+    "id": "qmd",
+    "name": "QMD Memory Search",
+    "transport": "streamableHttp",
+    "url": "http://127.0.0.1:8181/mcp"
+  }
+]
+```
+
+### Agent einem MCP-Server zuweisen
+
+In `agent.yaml`:
+```yaml
+mcp_servers:
+  - qmd
+```
+
+Oder in **Mein Agent → MCP-Tab** → Server aktivieren.
+
+### QMD Memory Search MCP
+
+QMD ist ein semantischer Suchserver für die Memory-Dateien der Agenten. Er läuft als systemd-Service auf Port 8181:
+
+```bash
+sudo systemctl status qmd-mcp
+# Active: active (running) — QMD MCP server listening on http://localhost:8181/mcp
+```
+
+Agenten mit `qmd` in `mcp_servers` können gezielt in ihren Memory-Dateien suchen statt alle Dateien beim Start zu laden. Dies spart deutlich Tokens.
+
+---
+
+## 14. Webhooks
 
 Webhooks ermöglichen externe Systeme OctopOS zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.
 
@@ -393,30 +656,32 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]
 
 ---
 
-## 10. Benutzer und Rollen
+## 15. Benutzer und Rollen
 
 Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. OctopOS kennt zwei Rollen:
 
 | Rolle | Rechte |
 |---|---|
-| **admin** | Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, Backup, Benutzerverwaltung |
-| **user** | Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, keine Konfiguration |
+| **admin** | Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, MCP-Server, Backup, Benutzerverwaltung, System-Update |
+| **user** | Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, eigenen Agenten konfigurieren, keine Systemkonfiguration |
 
 - **Neuer Benutzer:** Benutzername, Passwort und Rolle (`admin` oder `user`) wählen
 - **Passwort ändern:** Stift-Symbol
 - **Löschen:** Papierkorb-Symbol (eigener Account kann nicht gelöscht werden)
 
+Beim Anlegen eines Users wird automatisch ein persönlicher Agent `personal_<username>` erstellt.
+
 ---
 
-## 11. Backup & Restore
+## 16. Backup & Restore
 
 Unter **Backup** (Admin only) können vollständige System-Backups erstellt und verwaltet werden.
 
 ### Was wird gesichert?
 
 Ein Backup enthält als `tar.gz`:
-- `/etc/octopos/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials)
-- `/agents/` — alle Agenten-Definitionen und Skills
+- `/etc/octopos/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials, WKS-Keys)
+- `/agents/` — alle Agenten-Definitionen, Skills und Memory-Dateien
 - `/projects/` — Projekt-Konfigurationen und Agenten-Dateien
 
 **Nicht enthalten:** Betriebssystem, venv, Console-Build (werden bei Bedarf neu installiert).
@@ -455,8 +720,6 @@ curl https://<ip>/api/admin/backups \
 
 ### Automatisches Backup
 
-Für regelmäßige automatische Backups auf Lilith (von extern):
-
 ```bash
 # Skript liegt in scripts/octopos-backup.sh
 ./scripts/octopos-backup.sh
@@ -464,7 +727,7 @@ Für regelmäßige automatische Backups auf Lilith (von extern):
 
 ---
 
-## 12. Audit-Log
+## 17. Audit-Log
 
 Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
 
@@ -475,6 +738,7 @@ Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
 - Skills anlegen/ändern/löschen
 - Webhooks anlegen/löschen/auslösen
 - LLM-Token setzen
+- WKS-Konfiguration ändern
 
 Gespeichert in `/var/log/octopos/audit.jsonl` — append-only, ein JSON-Objekt pro Zeile.
 
@@ -482,7 +746,7 @@ Gespeichert in `/var/log/octopos/audit.jsonl` — append-only, ein JSON-Objekt p
 
 ---
 
-## 13. Matrix-Integration
+## 18. Matrix-Integration
 
 OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.
 
@@ -500,7 +764,7 @@ Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch.
 
 ---
 
-## 14. GPU-Monitoring
+## 19. GPU-Monitoring
 
 Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die **System**-Seite eine GPU-Auslastungsanzeige.
 
@@ -522,7 +786,35 @@ NVIDIA-Treiber und `nvidia-smi` müssen installiert sein. Ohne GPU oder ohne Tre
 
 ---
 
-## 15. Troubleshooting
+## 20. System-Update
+
+OctopOS kann sich selbst aktualisieren — entweder manuell über die Console oder automatisch per Webhook.
+
+### Update über die Console
+
+Admins sehen in der Sidebar einen **Update**-Button mit dem aktuellen Commit-Hash. Ein Klick startet den Update-Prozess:
+
+1. Aktuellen Stand von Gitea (primär) oder GitHub (Fallback) klonen
+2. Core-Dateien aktualisieren (`rsync`)
+3. Python-Dependencies neu installieren (`pip install -e .`)
+4. Console bauen (`npm ci && npm run build`)
+5. Console deployen
+6. `octopos-core` neustarten
+7. QMD Memory re-indexieren
+
+Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann sich selbst neustarten ohne den Prozess zu unterbrechen.
+
+**Status:** Der Button zeigt während des Updates einen Ladeindikator und danach den neuen Commit-Hash.
+
+### Update per Kommandozeile
+
+```bash
+sudo bash /opt/octopos/update.sh
+```
+
+---
+
+## 21. Troubleshooting
 
 ### Konsole nicht erreichbar
 
@@ -545,6 +837,18 @@ sudo journalctl -u octopos-core -n 100 --no-pager
 2. Heartbeat-Status in der Agent-Liste prüfen (orange = Warnung)
 3. LLM-Verbindung prüfen: **LLM-Config** → Status
 
+### WKS-Verbindung schlägt fehl
+
+```bash
+# SSH manuell testen (vom OctopOS-Server):
+sudo ssh -i /etc/octopos/wks_keys/<username> <ssh_user>@<wks_ip> hostname
+
+# Häufige Ursachen:
+# - SSH-Daemon auf WKS nicht aktiv: sudo systemctl enable --now ssh
+# - Public Key nicht in authorized_keys
+# - Firewall blockiert Port 22
+```
+
 ### Matrix-Bot antwortet nicht
 
 ```bash
@@ -561,11 +865,23 @@ Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler: `su
 
 Rate-Limiting: max. 10 Versuche pro Minute. Nach 60 Sekunden warten.
 
+### QMD-Service nicht erreichbar
+
+```bash
+sudo systemctl status qmd-mcp
+sudo journalctl -u qmd-mcp -n 30
+# Bei Bedarf neu starten:
+sudo systemctl restart qmd-mcp
+```
+
 ### Logs direkt auf Server
 
 ```bash
 # Core-Logs
 sudo journalctl -u octopos-core -f
+
+# Update-Log
+sudo tail -f /var/log/octopos-update.log
 
 # Audit-Log
 sudo tail -f /var/log/octopos/audit.jsonl | python3 -m json.tool
