@@ -709,6 +709,9 @@ class Orchestrator:
                         ev = _json.loads(data_str)
                     except Exception:
                         continue
+                    _ev_type_log = ev.get("type", "?")
+                    if "function" in _ev_type_log or "output_item" in _ev_type_log:
+                        logger.info("Codex SSE: %s | %s", _ev_type_log, str(ev)[:200])
 
                     ev_type = ev.get("type", "")
 
