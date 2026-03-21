@@ -677,7 +677,7 @@ class Orchestrator:
             payload["instructions"] = instructions
         if resp_tools:
             payload["tools"]       = resp_tools
-            payload["tool_choice"] = "auto"
+            payload["tool_choice"] = "required"
 
         headers = {
             "Authorization":      f"Bearer {access_token}",
