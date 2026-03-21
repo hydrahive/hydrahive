@@ -721,27 +721,28 @@ class Orchestrator:
                     elif ev_type == "response.output_item.added":
                         item = ev.get("item", {})
                         if item.get("type") == "function_call":
-                            cid = item.get("call_id") or item.get("id", "")
-                            accumulated_fn[cid] = {
-                                "id":        item.get("id", cid),
-                                "call_id":   cid,
+                            item_id  = item.get("id", "")          # fc_xxx  (used by delta/done events)
+                            call_id  = item.get("call_id", "")      # call_xxx (used in function_call_output)
+                            accumulated_fn[item_id] = {
+                                "id":        item_id,
+                                "call_id":   call_id,
                                 "name":      item.get("name", ""),
                                 "arguments": "",
                             }
 
                     elif ev_type == "response.function_call_arguments.delta":
-                        cid = ev.get("call_id", ev.get("item_id", ""))
+                        cid = ev.get("item_id", ev.get("call_id", ""))
                         if cid in accumulated_fn:
                             accumulated_fn[cid]["arguments"] += ev.get("delta", "")
 
                     elif ev_type == "response.function_call_arguments.done":
-                        cid = ev.get("call_id", ev.get("item_id", ""))
+                        cid = ev.get("item_id", ev.get("call_id", ""))
                         if cid in accumulated_fn:
                             accumulated_fn[cid]["arguments"] = ev.get("arguments", accumulated_fn[cid]["arguments"])
 
         tool_calls_out = [
             SimpleNamespace(
-                id=fn["call_id"] or fn["id"],
+                id=fn["call_id"],
                 item_id=fn["id"],
                 type="function",
                 function=SimpleNamespace(
