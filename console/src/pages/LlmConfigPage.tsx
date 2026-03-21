@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw, CheckCircle, XCircle, ExternalLink, Save, Cpu, Download } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -21,21 +21,19 @@ interface OAuthFlow {
   provider: string;
   state: string;
   authUrl: string;
-  step: 1 | 2;  // 1=open browser, 2=enter code
+  step: 1 | 2;
   input: string;
   error: string;
   loading: boolean;
 }
 
-// Generic OAuth card for Anthropic/Codex/Google
 function OAuthCard({
-  id, label, description, configured, statusLabel, statusExtra, modelPrefix, models,
-  onStartOAuth, onRefresh,
+  id, label, description, configured, statusExtra, modelPrefix, models, onStartOAuth,
 }: {
   id: string; label: string; description: string;
-  configured: boolean; statusLabel?: string; statusExtra?: React.ReactNode;
+  configured: boolean; statusExtra?: React.ReactNode;
   modelPrefix?: string; models?: string[];
-  onStartOAuth: (provider: string) => void; onRefresh: () => void;
+  onStartOAuth: (provider: string) => void;
 }) {
   return (
     <div className="bg-card border rounded-lg p-5 space-y-3">
@@ -56,13 +54,7 @@ function OAuthCard({
           {configured ? "Erneuern" : "OAuth verbinden"}
         </button>
       </div>
-
       {statusExtra}
-
-      {configured && statusLabel && (
-        <p className="text-xs text-muted-foreground">{statusLabel}</p>
-      )}
-
       {configured && models && models.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Verfügbare Modelle</p>
@@ -80,45 +72,30 @@ function OAuthCard({
   );
 }
 
-// OAuth Flow Modal/Inline
 function OAuthFlowPanel({
-  flow, onClose, onSuccess,
+  flow,
+  onClose,
+  onNextStep,
+  onInputChange,
+  onExchange,
 }: {
   flow: OAuthFlow;
   onClose: () => void;
-  onSuccess: () => void;
+  onNextStep: () => void;
+  onInputChange: (val: string) => void;
+  onExchange: () => void;
 }) {
-  const isAnthropic  = flow.provider === "anthropic";
-  const isCodex      = flow.provider === "openai_codex";
-  const isGoogle     = flow.provider === "google_antigravity";
+  const isAnthropic = flow.provider === "anthropic";
 
   const step2Hint = isAnthropic
     ? "Die Seite zeigt einen Code — kopiere den gesamten Text (Format: code#state) und füge ihn unten ein."
-    : isCodex
-    ? "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (beginnt mit http://localhost:1455/auth/callback?code=...) und füge sie unten ein."
-    : "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (beginnt mit http://localhost:51121/oauth-callback?code=...) und füge sie unten ein.";
+    : flow.provider === "openai_codex"
+    ? "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (http://localhost:1455/auth/callback?code=...&state=...) und füge sie unten ein."
+    : "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (http://localhost:51121/oauth-callback?code=...&state=...) und füge sie unten ein.";
 
   const inputPlaceholder = isAnthropic
     ? "4/0AX4XfWi...#verifier..."
     : "http://localhost:.../callback?code=...&state=...";
-
-  async function doExchange() {
-    // Exchange aufrufen
-    const body: Record<string, string> = {};
-    if (isAnthropic) {
-      body.code_and_state = flow.input.trim();
-    } else {
-      // URL oder Code direkt
-      const val = flow.input.trim();
-      if (val.startsWith("http")) {
-        body.redirect_url = val;
-      } else {
-        body.code = val;
-        body.state = flow.state;
-      }
-    }
-    await api.exchangeOAuth(flow.provider, body);
-  }
 
   return (
     <div className="bg-card border rounded-lg p-5 space-y-4 ring-2 ring-primary/30">
@@ -129,7 +106,7 @@ function OAuthFlowPanel({
 
       {flow.step === 1 && (
         <div className="space-y-3">
-          <div className="bg-muted/50 rounded-md p-3 text-xs space-y-2">
+          <div className="bg-muted/50 rounded-md p-3 text-xs space-y-1">
             <p className="font-medium text-foreground">Schritt 1: Im Browser einloggen</p>
             <p>Öffne den Link und logge dich ein. Du wirst danach auf localhost weitergeleitet — das ist normal.</p>
           </div>
@@ -138,12 +115,8 @@ function OAuthFlowPanel({
               className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
               <ExternalLink className="h-3.5 w-3.5"/>Login-Seite öffnen
             </a>
-            <button onClick={() => {
-              // Advance to step 2 — we'll update in parent via onSuccess/close
-              // This is handled by parent state
-              const event = new CustomEvent("oauth-step2", { detail: flow.provider });
-              window.dispatchEvent(event);
-            }} className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors">
+            <button onClick={onNextStep}
+              className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors">
               Weiter → Code eingeben
             </button>
           </div>
@@ -158,27 +131,19 @@ function OAuthFlowPanel({
           </div>
           <textarea
             value={flow.input}
-            onChange={e => {
-              const event = new CustomEvent("oauth-input", { detail: { provider: flow.provider, value: e.target.value } });
-              window.dispatchEvent(event);
-            }}
+            onChange={e => onInputChange(e.target.value)}
             placeholder={inputPlaceholder}
             rows={3}
             className="w-full px-3 py-2 text-xs font-mono border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
           />
           {flow.error && <p className="text-xs text-destructive">{flow.error}</p>}
-          <div className="flex gap-2">
-            <button
-              onClick={async () => {
-                const event = new CustomEvent("oauth-exchange", { detail: flow.provider });
-                window.dispatchEvent(event);
-              }}
-              disabled={flow.loading || !flow.input.trim()}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              <Save className="h-3.5 w-3.5"/>
-              {flow.loading ? "Verbinde..." : "Verbinden"}
-            </button>
-          </div>
+          <button
+            onClick={onExchange}
+            disabled={flow.loading || !flow.input.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5"/>
+            {flow.loading ? "Verbinde..." : "Verbinden"}
+          </button>
         </div>
       )}
     </div>
@@ -189,18 +154,22 @@ export function LlmConfigPage() {
   const [providerStatus, setProviderStatus] = useState<Record<string,{has_key:boolean}>>({});
   const [ollamaModels,   setOllamaModels]   = useState<OllamaModel[]>([]);
   const [ollamaOk,       setOllamaOk]       = useState<boolean|null>(null);
-  const [loading,        setLoading]         = useState(true);
-  const [keys,           setKeys]            = useState<Record<string,string>>({});
-  const [saving,         setSaving]          = useState<string|null>(null);
-  const [saved,          setSaved]           = useState<string|null>(null);
-  const [pullModel,      setPullModel]       = useState("");
-  const [pulling,        setPulling]         = useState(false);
-  const [pullMsg,        setPullMsg]         = useState("");
-  const [refreshing,     setRefreshing]      = useState(false);
-  const [claudeStatus,   setClaudeStatus]    = useState<ClaudeStatus|null>(null);
-  const [codexStatus,    setCodexStatus]     = useState<OAuthStatus|null>(null);
-  const [googleStatus,   setGoogleStatus]    = useState<OAuthStatus|null>(null);
-  const [oauthFlow,      setOauthFlow]       = useState<OAuthFlow|null>(null);
+  const [loading,        setLoading]        = useState(true);
+  const [keys,           setKeys]           = useState<Record<string,string>>({});
+  const [saving,         setSaving]         = useState<string|null>(null);
+  const [saved,          setSaved]          = useState<string|null>(null);
+  const [pullModel,      setPullModel]      = useState("");
+  const [pulling,        setPulling]        = useState(false);
+  const [pullMsg,        setPullMsg]        = useState("");
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [claudeStatus,   setClaudeStatus]   = useState<ClaudeStatus|null>(null);
+  const [codexStatus,    setCodexStatus]    = useState<OAuthStatus|null>(null);
+  const [googleStatus,   setGoogleStatus]   = useState<OAuthStatus|null>(null);
+  const [oauthFlow,      setOauthFlow]      = useState<OAuthFlow|null>(null);
+
+  // Ref so exchange handler always sees current flow state
+  const oauthFlowRef = useRef<OAuthFlow | null>(null);
+  oauthFlowRef.current = oauthFlow;
 
   async function load() {
     try {
@@ -223,51 +192,7 @@ export function LlmConfigPage() {
   }
 
   useEffect(() => { load(); }, []);
-
-  // OAuth flow event handling
-  useEffect(() => {
-    function onStep2(e: Event) {
-      setOauthFlow(f => f ? { ...f, step: 2 } : f);
-    }
-    function onInput(e: Event) {
-      const { value } = (e as CustomEvent).detail;
-      setOauthFlow(f => f ? { ...f, input: value, error: "" } : f);
-    }
-    async function onExchange(e: Event) {
-      setOauthFlow(f => f ? { ...f, loading: true, error: "" } : f);
-      try {
-        const flow = oauthFlowRef.current;
-        if (!flow) return;
-        const body: Record<string, string> = {};
-        const val = flow.input.trim();
-        if (flow.provider === "anthropic") {
-          body.code_and_state = val;
-        } else if (val.startsWith("http")) {
-          body.redirect_url = val;
-        } else {
-          body.code = val;
-          body.state = flow.state;
-        }
-        await api.exchangeOAuth(flow.provider, body);
-        setOauthFlow(null);
-        await load();
-      } catch(err) {
-        setOauthFlow(f => f ? { ...f, loading: false, error: err instanceof Error ? err.message : "Fehler" } : f);
-      }
-    }
-    window.addEventListener("oauth-step2",    onStep2);
-    window.addEventListener("oauth-input",    onInput);
-    window.addEventListener("oauth-exchange", onExchange);
-    return () => {
-      window.removeEventListener("oauth-step2",    onStep2);
-      window.removeEventListener("oauth-input",    onInput);
-      window.removeEventListener("oauth-exchange", onExchange);
-    };
-  }, []);
-
-  // Ref to access current flow state in event handlers
-  const oauthFlowRef = { current: oauthFlow };
-  useEffect(() => { oauthFlowRef.current = oauthFlow; }, [oauthFlow]);
+  function refresh() { setRefreshing(true); load(); }
 
   async function startOAuth(provider: string) {
     try {
@@ -276,7 +201,28 @@ export function LlmConfigPage() {
     } catch(e) { alert(e instanceof Error ? e.message : "Fehler beim Starten"); }
   }
 
-  function refresh() { setRefreshing(true); load(); }
+  async function handleExchange() {
+    const flow = oauthFlowRef.current;
+    if (!flow) return;
+    setOauthFlow(f => f ? { ...f, loading: true, error: "" } : f);
+    try {
+      const body: Record<string, string> = {};
+      const val = flow.input.trim();
+      if (flow.provider === "anthropic") {
+        body.code_and_state = val;
+      } else if (val.startsWith("http")) {
+        body.redirect_url = val;
+      } else {
+        body.code  = val;
+        body.state = flow.state;
+      }
+      await api.exchangeOAuth(flow.provider, body);
+      setOauthFlow(null);
+      await load();
+    } catch(err) {
+      setOauthFlow(f => f ? { ...f, loading: false, error: err instanceof Error ? err.message : "Fehler" } : f);
+    }
+  }
 
   async function saveKey(providerId: string) {
     if (!keys[providerId]?.trim()) return;
@@ -320,12 +266,14 @@ export function LlmConfigPage() {
         </button>
       </div>
 
-      {/* OAuth Flow Panel (inline) */}
+      {/* OAuth Flow Panel */}
       {oauthFlow && (
         <OAuthFlowPanel
           flow={oauthFlow}
           onClose={() => setOauthFlow(null)}
-          onSuccess={() => { setOauthFlow(null); load(); }}
+          onNextStep={() => setOauthFlow(f => f ? { ...f, step: 2 } : f)}
+          onInputChange={val => setOauthFlow(f => f ? { ...f, input: val, error: "" } : f)}
+          onExchange={handleExchange}
         />
       )}
 
@@ -335,16 +283,12 @@ export function LlmConfigPage() {
         label="Claude Max (Subscription)"
         description="Claude Max/Pro via OAuth — claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5. Kein API-Key nötig."
         configured={!!claudeStatus?.configured}
-        statusLabel={claudeStatus?.configured ? `Token-Alter: ${claudeStatus.token_age_days?.toFixed(0)} Tage` : undefined}
         statusExtra={claudeStatus?.configured ? (
           <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
-            claudeWarning === "expired"
-              ? "bg-destructive/10 text-destructive"
-              : claudeWarning?.startsWith("expires_soon")
-                ? "bg-orange-50 text-orange-700 border border-orange-200"
-                : claudeWarning?.startsWith("expires_in")
-                  ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                  : "bg-green-50 text-green-700 border border-green-200"
+            claudeWarning === "expired"            ? "bg-destructive/10 text-destructive"
+            : claudeWarning?.startsWith("expires_soon") ? "bg-orange-50 text-orange-700 border border-orange-200"
+            : claudeWarning?.startsWith("expires_in")   ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+            : "bg-green-50 text-green-700 border border-green-200"
           }`}>
             {claudeWarning === "expired"
               ? "⚠ Token abgelaufen — bitte erneuern"
@@ -355,7 +299,6 @@ export function LlmConfigPage() {
         ) : undefined}
         models={claudeStatus?.configured ? ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] : undefined}
         onStartOAuth={startOAuth}
-        onRefresh={load}
       />
 
       {/* OpenAI Codex OAuth */}
@@ -364,17 +307,15 @@ export function LlmConfigPage() {
         label="OpenAI Codex (ChatGPT Plus/Pro)"
         description="ChatGPT Plus/Pro via OAuth — gpt-5.2, gpt-5.1-codex-max und weitere. Kein API-Key nötig."
         configured={!!codexStatus?.configured}
-        statusLabel={codexStatus?.configured ? `Account: ${codexStatus.account_id?.slice(0, 16)}…` : undefined}
         statusExtra={codexStatus?.configured ? (
           <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200">
             <CheckCircle className="h-3.5 w-3.5"/>
-            Verbunden — <code className="font-mono">{codexStatus.account_id?.slice(0, 16)}…</code>
+            Verbunden — <code className="font-mono ml-1">{codexStatus.account_id?.slice(0, 20)}…</code>
           </div>
         ) : undefined}
         models={codexStatus?.configured ? codexStatus.models : undefined}
         modelPrefix="openai-codex"
         onStartOAuth={startOAuth}
-        onRefresh={load}
       />
 
       {/* Google Antigravity OAuth */}
@@ -383,19 +324,15 @@ export function LlmConfigPage() {
         label="Google Antigravity (Gemini 3)"
         description="Gemini 3 Flash/Pro via Google Cloud Code Assist OAuth. Kein API-Key nötig."
         configured={!!googleStatus?.configured}
-        statusLabel={googleStatus?.configured
-          ? `${googleStatus.email ?? ""} · Projekt: ${googleStatus.project_id ?? ""}`
-          : undefined}
         statusExtra={googleStatus?.configured ? (
           <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200">
             <CheckCircle className="h-3.5 w-3.5"/>
-            Verbunden — {googleStatus.email}
+            Verbunden — {googleStatus.email} · Projekt: {googleStatus.project_id}
           </div>
         ) : undefined}
         models={googleStatus?.configured ? googleStatus.models : undefined}
         modelPrefix="google-antigravity"
         onStartOAuth={startOAuth}
-        onRefresh={load}
       />
 
       {/* OpenAI API Key */}
@@ -482,7 +419,7 @@ export function LlmConfigPage() {
 
       <div className="bg-muted/30 border rounded-lg p-4 text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground">Wie werden Keys verwendet?</p>
-        <p>API-Keys werden in <code>/etc/octopos/llm_config.json</code> gespeichert. OAuth-Tokens in <code>/etc/octopos/*.json</code>. Jeder Agent kann in seiner <code>agent.yaml</code> ein anderes Modell wählen.</p>
+        <p>API-Keys in <code>/etc/octopos/llm_config.json</code>, OAuth-Tokens in <code>/etc/octopos/*.json</code>. Jeder Agent wählt sein Modell in <code>agent.yaml</code>.</p>
       </div>
     </div>
   );
