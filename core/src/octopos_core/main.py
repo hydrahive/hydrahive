@@ -1565,6 +1565,99 @@ async def update_my_wks(req: WksConfigRequest, auth: tuple = Depends(require_aut
     return {"updated": True}
 
 
+@app.get("/me/wks/pubkey")
+def get_wks_pubkey(auth: tuple = Depends(require_auth)):
+    """Public Key des WKS SSH-Keys zurückgeben (für authorized_keys auf der Workstation)."""
+    import subprocess as _sp
+    username, _ = auth
+    key_file = WKS_KEYS_DIR / username
+    if not key_file.exists():
+        raise HTTPException(404, "Kein SSH-Key vorhanden — bitte erst generieren oder einfügen")
+    try:
+        result = _sp.run(
+            ["ssh-keygen", "-y", "-f", str(key_file)],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            raise HTTPException(500, f"ssh-keygen Fehler: {result.stderr}")
+        return {"public_key": result.stdout.strip()}
+    except FileNotFoundError:
+        raise HTTPException(500, "ssh-keygen nicht gefunden")
+
+
+@app.post("/me/wks/generate-key")
+def generate_wks_key(auth: tuple = Depends(require_auth)):
+    """Neues ED25519 SSH-Keypair für WKS generieren. Gibt Public Key zurück."""
+    import subprocess as _sp
+    import tempfile, os as _os
+    username, _ = auth
+    WKS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
+    key_file = WKS_KEYS_DIR / username
+    # Temporär generieren dann verschieben
+    with tempfile.NamedTemporaryFile(delete=False, suffix="_wks") as tf:
+        tmp_path = tf.name
+    try:
+        _sp.run(
+            ["ssh-keygen", "-t", "ed25519", "-f", tmp_path, "-N", "",
+             "-C", f"octopos-wks@{username}"],
+            capture_output=True, check=True, timeout=10,
+        )
+        import shutil as _shutil
+        _shutil.move(tmp_path, str(key_file))
+        key_file.chmod(0o600)
+        _os.remove(tmp_path + ".pub")
+        # Public Key ausgeben
+        result = _sp.run(["ssh-keygen", "-y", "-f", str(key_file)],
+                         capture_output=True, text=True, timeout=5)
+        pub_key = result.stdout.strip()
+        logger.info("WKS SSH-Key generiert für %s", username)
+        audit_log("wks.key_generated", details={"user": username})
+        return {"generated": True, "public_key": pub_key}
+    except Exception as e:
+        try: _os.unlink(tmp_path)
+        except Exception: pass
+        raise HTTPException(500, f"Key-Generierung fehlgeschlagen: {e}")
+
+
+@app.post("/me/wks/test-ssh")
+async def test_wks_ssh(auth: tuple = Depends(require_auth)):
+    """SSH-Verbindung zur Workstation testen (hostname + whoami)."""
+    import asyncio as _asyncio
+    username, _ = auth
+    users = _load_users()
+    wks = users.get(username, {}).get("wks", {})
+    ip       = wks.get("ip", "")
+    ssh_user = wks.get("ssh_user", username)
+    key_file = WKS_KEYS_DIR / username
+
+    if not ip:
+        raise HTTPException(400, "WKS nicht konfiguriert")
+    if not key_file.exists():
+        raise HTTPException(400, "Kein SSH-Key vorhanden")
+
+    try:
+        proc = await _asyncio.create_subprocess_exec(
+            "ssh", "-i", str(key_file),
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=5",
+            "-o", "BatchMode=yes",
+            f"{ssh_user}@{ip}", "hostname && whoami",
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await _asyncio.wait_for(proc.communicate(), timeout=10)
+        if proc.returncode == 0:
+            output = stdout.decode().strip()
+            lines  = output.splitlines()
+            return {"ok": True, "hostname": lines[0] if lines else "", "user": lines[1] if len(lines) > 1 else ""}
+        else:
+            return {"ok": False, "error": stderr.decode().strip()[:300]}
+    except _asyncio.TimeoutError:
+        return {"ok": False, "error": "Timeout — Host nicht erreichbar"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/me/wks/ollama-models")
 async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):
     """Verfügbare Ollama-Modelle von der Workstation des Users abfragen."""

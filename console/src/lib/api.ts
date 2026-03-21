@@ -114,6 +114,9 @@ export const api = {
   getWks:             () => api.get<WksConfig>("/me/wks"),
   updateWks:          (d: WksConfigPayload) => api.put("/me/wks", d),
   getWksOllamaModels: () => api.get<{models: {id:string;label:string;provider:string}[];wks_url:string|null;error?:string}>("/me/wks/ollama-models"),
+  getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
+  generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
+  testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
 };
 
 export interface AuditEntry {

@@ -712,6 +712,10 @@ function WksTab() {
   const [wksModels,   setWksModels]   = useState<{id:string;label:string}[]>([]);
   const [testMsg,     setTestMsg]     = useState("");
   const [testing,     setTesting]     = useState(false);
+  const [pubKey,      setPubKey]      = useState("");
+  const [generating,  setGenerating]  = useState(false);
+  const [sshTestMsg,  setSshTestMsg]  = useState("");
+  const [sshTesting,  setSshTesting]  = useState(false);
 
   useEffect(() => {
     api.getWks().then(d => {
@@ -719,6 +723,9 @@ function WksTab() {
       setIp(d.ip);
       setSshUser(d.ssh_user);
       setOllamaPort(d.ollama_port);
+      if (d.has_ssh_key) {
+        api.getWksPubkey().then(r => setPubKey(r.public_key)).catch(() => {});
+      }
     }).catch(() => {});
   }, []);
 
@@ -734,6 +741,29 @@ function WksTab() {
       setTimeout(() => setMsg(""), 3000);
     } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(false); }
+  }
+
+  async function generateKey() {
+    setGenerating(true);
+    try {
+      const r = await api.generateWksKey();
+      setPubKey(r.public_key);
+      const updated = await api.getWks();
+      setWks(updated);
+      setMsg("SSH-Key generiert ✓");
+      setTimeout(() => setMsg(""), 3000);
+    } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setGenerating(false); }
+  }
+
+  async function testSsh() {
+    setSshTesting(true); setSshTestMsg("");
+    try {
+      const r = await api.testWksSsh();
+      if (r.ok) setSshTestMsg(`✓ Verbunden — ${r.hostname} (${r.user})`);
+      else setSshTestMsg(`✗ ${r.error}`);
+    } catch(e) { setSshTestMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSshTesting(false); }
   }
 
   async function testConnection() {
@@ -784,14 +814,51 @@ function WksTab() {
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">SSH Private Key (PEM)</label>
-            <textarea value={sshKey} onChange={e => setSshKey(e.target.value)} rows={5}
-              placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
-              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-xs" />
-            <p className="text-xs text-muted-foreground">
-              {wks?.has_ssh_key ? "SSH-Key bereits gespeichert — nur ausfüllen zum Ersetzen." : "Privaten SSH-Key einfügen (wird verschlüsselt gespeichert)."}
-            </p>
+          {/* SSH Key */}
+          <div className="space-y-2">
+            <label className="text-xs text-muted-foreground">SSH-Key</label>
+            {pubKey ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-green-600 font-medium">✓ SSH-Key vorhanden</span>
+                  <button type="button" onClick={() => navigator.clipboard.writeText(pubKey)}
+                    className="text-xs text-muted-foreground hover:text-foreground border rounded px-2 py-0.5">
+                    Public Key kopieren
+                  </button>
+                </div>
+                <p className="text-xs font-mono bg-muted/50 rounded px-2 py-1.5 break-all text-muted-foreground">
+                  {pubKey}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Diesen Public Key in <code>~/.ssh/authorized_keys</code> auf der Workstation eintragen.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button type="button" onClick={generateKey} disabled={generating}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
+                  {generating ? "Generiere…" : "Neuen SSH-Key generieren"}
+                </button>
+                <p className="text-xs text-muted-foreground">Oder eigenen privaten Key einfügen:</p>
+                <textarea value={sshKey} onChange={e => setSshKey(e.target.value)} rows={4}
+                  placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-xs" />
+              </div>
+            )}
+            {/* SSH Test */}
+            {wks?.has_ssh_key && ip && (
+              <div className="flex items-center gap-3 pt-1">
+                <button type="button" onClick={testSsh} disabled={sshTesting}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
+                  {sshTesting ? "Teste…" : "SSH testen"}
+                </button>
+                {sshTestMsg && (
+                  <span className={`text-xs ${sshTestMsg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>
+                    {sshTestMsg}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
