@@ -2423,6 +2423,19 @@ async def get_available_models(auth: tuple = Depends(require_auth)):
         for m in ["gpt-4o-mini", "gpt-4o"]:
             models.append({"id": m, "label": m, "provider": "openai"})
 
+    # OpenAI Codex (ChatGPT Plus/Pro OAuth)
+    codex_file = Path("/etc/octopos/openai_codex_token.json")
+    if codex_file.exists():
+        try:
+            import json as _json
+            codex_data = _json.loads(codex_file.read_text(encoding="utf-8"))
+            if codex_data.get("access_token") and codex_data.get("account_id"):
+                for m in ["gpt-5.2", "gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
+                          "gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.4"]:
+                    models.append({"id": f"openai-codex/{m}", "label": f"Codex: {m}", "provider": "openai_codex"})
+        except Exception:
+            pass
+
     # Server-Ollama — live Tags abfragen
     ollama_cfg = providers.get("ollama", {})
     ollama_base = ollama_cfg.get("base_url", "http://localhost:11434")
@@ -2455,6 +2468,56 @@ async def get_available_models(auth: tuple = Depends(require_auth)):
             pass  # WKS nicht erreichbar
 
     return {"models": models}
+
+
+@app.put("/llm/config/openai_codex")
+async def set_openai_codex_token(body: dict, _a: tuple = Depends(require_admin)):
+    """
+    OpenAI Codex OAuth Token speichern (ChatGPT Plus/Pro).
+    Erwartet: {access_token, account_id, refresh_token?}
+    """
+    import json as _json
+    access_token = body.get("access_token", "").strip()
+    account_id   = body.get("account_id", "").strip()
+    if not access_token:
+        raise HTTPException(400, "access_token fehlt")
+    if not account_id:
+        raise HTTPException(400, "account_id fehlt")
+
+    data = {
+        "access_token":  access_token,
+        "refresh_token": body.get("refresh_token", ""),
+        "account_id":    account_id,
+    }
+    token_file = Path("/etc/octopos/openai_codex_token.json")
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    token_file.chmod(0o600)
+    logger.info("OpenAI Codex OAuth Token gespeichert")
+    audit_log("llm.token_set", details={"provider": "openai_codex"})
+    return {"updated": True, "provider": "openai_codex"}
+
+
+@app.get("/llm/openai_codex_status")
+def get_openai_codex_status():
+    """OpenAI Codex Token Status — konfiguriert, Account-ID."""
+    import json as _json
+    token_file = Path("/etc/octopos/openai_codex_token.json")
+    if not token_file.exists() or token_file.stat().st_size == 0:
+        return {"configured": False, "account_id": None}
+    try:
+        data = _json.loads(token_file.read_text(encoding="utf-8"))
+        if data.get("access_token") and data.get("account_id"):
+            return {
+                "configured": True,
+                "account_id": data["account_id"],
+                "models": ["gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
+                           "gpt-5.2", "gpt-5.2-codex", "gpt-5.3-codex",
+                           "gpt-5.3-codex-spark", "gpt-5.4"],
+            }
+    except Exception:
+        pass
+    return {"configured": False, "account_id": None}
 
 
 @app.get("/llm/claude_token_status")

@@ -10,6 +10,11 @@ interface ClaudeTokenStatus {
   warning: string | null;
   ttl_days: number;
 }
+interface CodexStatus {
+  configured: boolean;
+  account_id: string | null;
+  models?: string[];
+}
 
 const PROVIDERS = [
   {
@@ -55,15 +60,22 @@ export function LlmConfigPage() {
   const [pullMsg,        setPullMsg]         = useState("");
   const [refreshing,     setRefreshing]      = useState(false);
   const [claudeStatus,   setClaudeStatus]    = useState<ClaudeTokenStatus|null>(null);
+  const [codexStatus,    setCodexStatus]     = useState<CodexStatus|null>(null);
+  const [codexToken,     setCodexToken]      = useState("");
+  const [codexAccountId, setCodexAccountId]  = useState("");
+  const [savingCodex,    setSavingCodex]     = useState(false);
+  const [savedCodex,     setSavedCodex]      = useState(false);
 
   async function load() {
     try {
-      const [cfg, ollama, tokenStatus] = await Promise.allSettled([
+      const [cfg, ollama, tokenStatus, codexSt] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
-        api.get<ClaudeTokenStatus>("/llm/claude_token_status"),
+        api.claudeTokenStatus(),
+        api.openaiCodexStatus(),
       ]);
       if (tokenStatus.status === "fulfilled") setClaudeStatus(tokenStatus.value);
+      if (codexSt.status === "fulfilled")     setCodexStatus(codexSt.value);
       if (cfg.status === "fulfilled")    setProviderStatus(cfg.value.providers ?? {});
       if (ollama.status === "fulfilled") {
         setOllamaOk(ollama.value.available);
@@ -86,6 +98,19 @@ export function LlmConfigPage() {
       await load();
     } catch(e) { alert(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(null); }
+  }
+
+  async function saveCodexToken() {
+    if (!codexToken.trim() || !codexAccountId.trim()) return;
+    setSavingCodex(true);
+    try {
+      await api.setOpenaiCodexToken({ access_token: codexToken.trim(), account_id: codexAccountId.trim() });
+      setSavedCodex(true);
+      setCodexToken(""); setCodexAccountId("");
+      setTimeout(() => setSavedCodex(false), 3000);
+      await load();
+    } catch(e) { alert(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSavingCodex(false); }
   }
 
   async function pullOllamaModel() {
@@ -240,6 +265,79 @@ export function LlmConfigPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* OpenAI Codex (ChatGPT Plus/Pro OAuth) */}
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <h2 className="font-medium text-sm">OpenAI Codex (ChatGPT Plus/Pro)</h2>
+              {codexStatus?.configured
+                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>Aktiv</span>
+                : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>Nicht konfiguriert</span>
+              }
+              {savedCodex && <span className="text-xs text-green-600">Gespeichert ✓</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">ChatGPT Plus/Pro via OAuth — Modelle wie gpt-5.2, gpt-5.1-codex-max. Kein API-Key nötig.</p>
+          </div>
+        </div>
+
+        <div className="bg-muted/50 rounded-md p-3 text-xs space-y-1.5 font-mono">
+          <p className="font-sans font-medium text-sm text-foreground mb-2">Token aus OpenClaw / Browser DevTools</p>
+          <p className="font-sans">1. OpenClaw → Configure → ChatGPT OAuth einrichten</p>
+          <p className="font-sans">2. <code>~/.openclaw/openclaw.json</code> öffnen → <code>openai_access_token</code> und <code>openai_account_id</code> kopieren</p>
+          <p className="font-sans text-muted-foreground">Alternativ: DevTools → chatgpt.com → Network → Request-Header <code>Authorization</code> und <code>chatgpt-account-id</code></p>
+        </div>
+
+        {codexStatus?.configured && (
+          <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200">
+            <CheckCircle className="h-3.5 w-3.5"/>
+            Token aktiv — Account: <code className="font-mono ml-1">{codexStatus.account_id?.slice(0, 12)}…</code>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type="password"
+                value={codexToken}
+                onChange={e => setCodexToken(e.target.value)}
+                placeholder={codexStatus?.configured ? "••••••• (gesetzt)" : "Access Token (eyJhbGc...)"}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={codexAccountId}
+              onChange={e => setCodexAccountId(e.target.value)}
+              placeholder={codexStatus?.configured ? codexStatus.account_id ?? "" : "Account ID (user-...)"}
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              onClick={saveCodexToken}
+              disabled={savingCodex || !codexToken.trim() || !codexAccountId.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <Save className="h-3.5 w-3.5"/>
+              {savingCodex ? "Speichern..." : "Speichern"}
+            </button>
+          </div>
+        </div>
+
+        {codexStatus?.configured && codexStatus.models && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Verfügbare Modelle</p>
+            <div className="flex flex-wrap gap-1.5">
+              {codexStatus.models.map(m => (
+                <span key={m} className="px-2 py-0.5 text-xs font-mono bg-muted rounded border">{m}</span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">In agent.yaml als <code>openai-codex/gpt-5.2</code> verwenden.</p>
+          </div>
+        )}
       </div>
 
       <div className="bg-muted/30 border rounded-lg p-4 text-xs text-muted-foreground space-y-1">
