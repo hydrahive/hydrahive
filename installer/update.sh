@@ -114,7 +114,14 @@ else
     error "octopos-core konnte nicht starten — prüfe: journalctl -u octopos-core -n 30"
 fi
 
-# --- 7. Gitea sicherstellen ---
+# --- 7. QMD re-indexieren ---
+if command -v qmd &>/dev/null; then
+    info "QMD: re-indexiere Memory..."
+    sudo -u octopos bash -c "HOME=/home/octopos qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
+    success "QMD aktualisiert"
+fi
+
+# --- 8. Gitea sicherstellen ---
 if systemctl is-enabled --quiet gitea 2>/dev/null; then
     if systemctl is-active --quiet gitea; then
         info "Gitea läuft bereits"
