@@ -2766,9 +2766,13 @@ async def _run_self_update(pusher: str, commits: int) -> None:
         pass
 
     try:
-        # update.sh braucht root — via sudo (sudoers-Regel nötig)
+        # update.sh über systemd-run starten — eigene transient Unit,
+        # überlebt den Neustart von octopos-core (nicht im selben Cgroup)
         proc = await _asyncio.create_subprocess_exec(
-            "sudo", "bash", UPDATE_SCRIPT,
+            "sudo", "systemd-run", "--unit=octopos-selfupdate",
+            "--description=OctopOS Self-Update",
+            "--wait", "--collect",
+            "bash", UPDATE_SCRIPT,
             stdout=_asyncio.subprocess.PIPE,
             stderr=_asyncio.subprocess.STDOUT,
         )
