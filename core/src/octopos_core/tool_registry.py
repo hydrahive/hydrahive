@@ -1507,6 +1507,182 @@ class GitCreatePRTool(BaseTool):
             return {"error": str(e)}
 
 
+# ============================================================= WKS Tools (Workstation-Zugriff via SSH)
+
+def _get_wks_config(project_id: str) -> dict | None:
+    """WKS-Config des Users laden, der zum project_id gehört.
+    Persönliche Agenten heißen personal_<username> → username extrahieren."""
+    import json as _j
+    USERS_FILE = Path("/etc/octopos/users.json")
+    if not project_id.startswith("personal_"):
+        return None
+    username = project_id[len("personal_"):]
+    try:
+        users = _j.loads(USERS_FILE.read_text())
+        wks = users.get(username, {}).get("wks", {})
+        if wks.get("ip"):
+            return wks
+    except Exception:
+        pass
+    return None
+
+
+class WksShellExecTool(BaseTool):
+    """Führt einen Shell-Befehl auf der Workstation des Users aus (via SSH)."""
+
+    @property
+    def id(self) -> str:   return "wks_shell_exec"
+    @property
+    def name(self) -> str: return "WKS Shell-Befehl"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt einen Shell-Befehl auf der eigenen Workstation des Users aus (SSH). "
+            "Nur für persönliche Agenten mit konfigurierter WKS verfügbar."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "Der auszuführende Shell-Befehl"},
+                "cwd":     {"type": "string", "description": "Arbeitsverzeichnis (optional)"},
+            },
+            "required": ["command"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, command: str, cwd: str = "", **kwargs) -> dict:
+        import asyncio, shlex
+        wks = _get_wks_config(project_id)
+        if not wks:
+            return {"error": "Keine WKS-Konfiguration für diesen Agenten — bitte in Mein Agent → WKS einrichten"}
+
+        def _run():
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            connect_kw: dict = {
+                "hostname": wks["ip"],
+                "username": wks.get("ssh_user", ""),
+                "timeout":  30,
+            }
+            key_path = wks.get("ssh_key_path", "")
+            if key_path and Path(key_path).exists():
+                connect_kw["key_filename"] = key_path
+            client.connect(**connect_kw)
+            full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
+            _, stdout, stderr = client.exec_command(full_cmd, timeout=60)
+            out      = stdout.read().decode("utf-8", errors="replace")
+            err      = stderr.read().decode("utf-8", errors="replace")
+            exit_code = stdout.channel.recv_exit_status()
+            client.close()
+            return {"stdout": out, "stderr": err, "exit_code": exit_code}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": str(e)}
+
+
+class WksFileReadTool(BaseTool):
+    """Liest eine Datei von der Workstation des Users (via SFTP)."""
+
+    @property
+    def id(self) -> str:   return "wks_file_read"
+    @property
+    def name(self) -> str: return "WKS Datei lesen"
+    @property
+    def description(self) -> str:
+        return "Liest eine Datei von der eigenen Workstation des Users via SFTP."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Absoluter Pfad zur Datei auf der WKS"},
+            },
+            "required": ["path"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, path: str, **kwargs) -> dict:
+        import asyncio, io
+        wks = _get_wks_config(project_id)
+        if not wks:
+            return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
+
+        def _run():
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            connect_kw: dict = {"hostname": wks["ip"], "username": wks.get("ssh_user", ""), "timeout": 30}
+            key_path = wks.get("ssh_key_path", "")
+            if key_path and Path(key_path).exists():
+                connect_kw["key_filename"] = key_path
+            client.connect(**connect_kw)
+            sftp = client.open_sftp()
+            buf = io.BytesIO()
+            sftp.getfo(path, buf)
+            content = buf.getvalue().decode("utf-8", errors="replace")
+            sftp.close(); client.close()
+            return {"content": content, "path": path}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": str(e)}
+
+
+class WksFileWriteTool(BaseTool):
+    """Schreibt eine Datei auf die Workstation des Users (via SFTP)."""
+
+    @property
+    def id(self) -> str:   return "wks_file_write"
+    @property
+    def name(self) -> str: return "WKS Datei schreiben"
+    @property
+    def description(self) -> str:
+        return "Schreibt/überschreibt eine Datei auf der eigenen Workstation des Users via SFTP."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path":    {"type": "string", "description": "Absoluter Pfad zur Datei auf der WKS"},
+                "content": {"type": "string", "description": "Dateiinhalt"},
+            },
+            "required": ["path", "content"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, path: str, content: str, **kwargs) -> dict:
+        import asyncio, io
+        wks = _get_wks_config(project_id)
+        if not wks:
+            return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
+
+        def _run():
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            connect_kw: dict = {"hostname": wks["ip"], "username": wks.get("ssh_user", ""), "timeout": 30}
+            key_path = wks.get("ssh_key_path", "")
+            if key_path and Path(key_path).exists():
+                connect_kw["key_filename"] = key_path
+            client.connect(**connect_kw)
+            sftp = client.open_sftp()
+            buf = io.BytesIO(content.encode("utf-8"))
+            sftp.putfo(buf, path)
+            sftp.close(); client.close()
+            return {"written": True, "path": path, "bytes": len(content.encode())}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": str(e)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -1530,4 +1706,7 @@ registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
 registry.register(GitCreatePRTool())
+registry.register(WksShellExecTool())
+registry.register(WksFileReadTool())
+registry.register(WksFileWriteTool())
 

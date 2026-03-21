@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug } from "lucide-react";
-import { api, McpServer } from "@/lib/api";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor } from "lucide-react";
+import { api, McpServer, WksConfig } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -25,7 +25,7 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "file_write",       label: "Datei schreiben" },
   { id: "web_search",       label: "Web-Suche" },
   { id: "http_request",     label: "HTTP-Request" },
-  { id: "shell_exec",       label: "Shell-Befehl" },
+  { id: "shell_exec",       label: "Shell-Befehl (Server)" },
   { id: "read_system_file", label: "Systemdatei lesen" },
   { id: "write_system_file",label: "Systemdatei schreiben" },
   { id: "read_memory",      label: "Gedächtnis lesen" },
@@ -34,6 +34,9 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "delegate_agent",   label: "Agent beauftragen (async)" },
   { id: "write_handoff",    label: "AgentLink Handoff schreiben" },
   { id: "read_handoff",     label: "AgentLink Handoff lesen" },
+  { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
+  { id: "wks_file_read",    label: "WKS Datei lesen" },
+  { id: "wks_file_write",   label: "WKS Datei schreiben" },
 ];
 
 const KNOWN_MODELS = [
@@ -57,7 +60,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"wks">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -242,6 +245,7 @@ export function MyAgentPage() {
             { id: "settings", label: "Einstellungen",  icon: Settings },
             { id: "skills",   label: "Skills",         icon: BookOpen },
             { id: "mcp",      label: "MCP",            icon: Plug },
+            { id: "wks",      label: "WKS",            icon: Monitor },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -392,6 +396,11 @@ export function MyAgentPage() {
       {tab === "mcp" && agentInfo && (
         <McpTab agentInfo={agentInfo} mcpServers={mcpServers} onSaved={loadAgent} />
       )}
+
+      {/* ── WKS Tab ───────────────────────────────────────────────────────── */}
+      {tab === "wks" && (
+        <WksTab />
+      )}
     </div>
   );
 }
@@ -505,10 +514,10 @@ function SettingsPanel({
   const [allowedAgents,  setAllowedAgents]  = useState<string[]>(cfg.allowed_agents ?? []);
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
-  const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string}[]>([]);
+  const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string;wks_base_url?:string}[]>([]);
 
   useEffect(() => {
-    api.get<{models:{id:string;label:string;provider:string}[]}>("/llm/available-models")
+    api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models")
       .then(r => setAvailableModels(r.models))
       .catch(() => {});
   }, []);
@@ -542,9 +551,12 @@ function SettingsPanel({
     e.preventDefault();
     setSaving(true); setSaveMsg("");
     try {
+      const selectedModel = availableModels.find(m => m.id === model);
+      const ollama_base_url = selectedModel?.wks_base_url ?? null;
       await api.put("/me/agent", {
         identity, soul, model, temperature, max_tokens: maxTokens,
         fallback_models: fallbacks, tools, allowed_agents: allowedAgents,
+        ollama_base_url,
       });
       setSaveMsg("Gespeichert ✓");
       onSaved();
@@ -681,6 +693,144 @@ function SettingsPanel({
             className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <RefreshCw className="h-3 w-3" />Neu laden
           </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── WKS Tab ───────────────────────────────────────────────────────────────────
+
+function WksTab() {
+  const [wks,         setWks]         = useState<WksConfig | null>(null);
+  const [ip,          setIp]          = useState("");
+  const [sshUser,     setSshUser]     = useState("");
+  const [ollamaPort,  setOllamaPort]  = useState(11434);
+  const [sshKey,      setSshKey]      = useState("");
+  const [saving,      setSaving]      = useState(false);
+  const [msg,         setMsg]         = useState("");
+  const [wksModels,   setWksModels]   = useState<{id:string;label:string}[]>([]);
+  const [testMsg,     setTestMsg]     = useState("");
+  const [testing,     setTesting]     = useState(false);
+
+  useEffect(() => {
+    api.getWks().then(d => {
+      setWks(d);
+      setIp(d.ip);
+      setSshUser(d.ssh_user);
+      setOllamaPort(d.ollama_port);
+    }).catch(() => {});
+  }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setMsg("");
+    try {
+      await api.updateWks({ ip, ssh_user: sshUser, ollama_port: ollamaPort, ssh_key: sshKey });
+      setMsg("Gespeichert ✓");
+      setSshKey("");
+      const updated = await api.getWks();
+      setWks(updated);
+      setTimeout(() => setMsg(""), 3000);
+    } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSaving(false); }
+  }
+
+  async function testConnection() {
+    setTesting(true); setTestMsg(""); setWksModels([]);
+    try {
+      const r = await api.getWksOllamaModels();
+      if (r.models.length > 0) {
+        setWksModels(r.models);
+        setTestMsg(`✓ Verbunden — ${r.models.length} Modell(e) gefunden`);
+      } else if (r.error) {
+        setTestMsg(`Fehler: ${r.error}`);
+      } else {
+        setTestMsg("Verbunden, aber keine Ollama-Modelle gefunden");
+      }
+    } catch(e) { setTestMsg(e instanceof Error ? e.message : "Verbindung fehlgeschlagen"); }
+    finally { setTesting(false); }
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <form onSubmit={save} className="p-6 space-y-8 max-w-2xl">
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Monitor className="h-4 w-4" />Workstation-Zugang (WKS)
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Verbinde deinen Agenten mit deiner eigenen Workstation via SSH. Der Agent kann dann Befehle ausführen und Dateien lesen/schreiben.
+          </p>
+          {wks?.configured && (
+            <p className="text-xs text-green-600 font-medium">
+              ✓ WKS konfiguriert: {wks.ssh_user}@{wks.ip}:{wks.ollama_port}
+              {wks.has_ssh_key && " · SSH-Key vorhanden"}
+            </p>
+          )}
+        </div>
+
+        <section className="space-y-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Verbindung</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">IP-Adresse</label>
+              <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.178.10"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">SSH-Benutzer</label>
+              <input value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="till"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">SSH Private Key (PEM)</label>
+            <textarea value={sshKey} onChange={e => setSshKey(e.target.value)} rows={5}
+              placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-xs" />
+            <p className="text-xs text-muted-foreground">
+              {wks?.has_ssh_key ? "SSH-Key bereits gespeichert — nur ausfüllen zum Ersetzen." : "Privaten SSH-Key einfügen (wird verschlüsselt gespeichert)."}
+            </p>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ollama auf WKS</h3>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Ollama-Port</label>
+            <input type="number" value={ollamaPort} onChange={e => setOllamaPort(parseInt(e.target.value))}
+              className="w-40 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={testConnection} disabled={testing || !ip}
+              className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
+              <RefreshCw className={`h-3.5 w-3.5 ${testing ? "animate-spin" : ""}`} />
+              {testing ? "Prüfe…" : "Verbindung testen"}
+            </button>
+            {testMsg && (
+              <span className={`text-xs ${testMsg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>{testMsg}</span>
+            )}
+          </div>
+          {wksModels.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Verfügbare Modelle auf WKS:</p>
+              <div className="flex flex-wrap gap-1">
+                {wksModels.map(m => (
+                  <span key={m.id} className="text-xs bg-secondary px-2 py-0.5 rounded font-mono">{m.label}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={saving || !ip}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? "Speichern…" : "Speichern"}
+          </button>
+          {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
         </div>
       </form>
     </div>
