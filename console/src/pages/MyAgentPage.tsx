@@ -505,6 +505,13 @@ function SettingsPanel({
   const [allowedAgents,  setAllowedAgents]  = useState<string[]>(cfg.allowed_agents ?? []);
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
+  const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string}[]>([]);
+
+  useEffect(() => {
+    api.get<{models:{id:string;label:string;provider:string}[]}>("/llm/available-models")
+      .then(r => setAvailableModels(r.models))
+      .catch(() => {});
+  }, []);
 
   // Sync state wenn agentInfo von außen aktualisiert wird (nach Speichern oder Reload)
   useEffect(() => {
@@ -574,12 +581,16 @@ function SettingsPanel({
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 space-y-1">
               <label className="text-xs text-muted-foreground">Primäres Modell</label>
-              <input value={model} onChange={e => setModel(e.target.value)}
-                list="model-suggestions"
-                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-              <datalist id="model-suggestions">
-                {[...new Set([...KNOWN_MODELS, model].filter(Boolean))].map(m => <option key={m} value={m} />)}
-              </datalist>
+              <select value={model} onChange={e => setModel(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                {model && !availableModels.find(m => m.id === model) && (
+                  <option value={model}>{model}</option>
+                )}
+                {availableModels.length === 0
+                  ? KNOWN_MODELS.map(m => <option key={m} value={m}>{m}</option>)
+                  : availableModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)
+                }
+              </select>
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Temperatur ({temperature})</label>
@@ -607,11 +618,13 @@ function SettingsPanel({
               ))}
             </div>
             <div className="flex gap-2">
-              <input value={fbInput} onChange={e => setFbInput(e.target.value)}
-                onKeyDown={e => { if(e.key==="Enter"){e.preventDefault();addFallback();} }}
-                list="model-suggestions"
-                placeholder="z.B. ollama/mistral:latest"
-                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+              <select value={fbInput} onChange={e => setFbInput(e.target.value)}
+                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="">— Modell wählen —</option>
+                {(availableModels.length === 0 ? KNOWN_MODELS.map(m=>({id:m,label:m})) : availableModels)
+                  .filter(m => !fallbacks.includes(m.id))
+                  .map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
               <button type="button" onClick={addFallback}
                 className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors">
                 <Plus className="h-4 w-4" />
