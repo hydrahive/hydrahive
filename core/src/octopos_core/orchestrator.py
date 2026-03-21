@@ -427,18 +427,62 @@ class Orchestrator:
             },
         )
 
-        # System-Message extrahieren
+        # System-Message extrahieren + OpenAI→Anthropic-Format konvertieren
+        import json as _json
         system_msg = ""
         filtered   = []
         for m in messages:
-            if m.get("role") == "system":
+            role = m.get("role", "")
+            if role == "system":
                 system_msg = m.get("content", "")
-            else:
-                filtered.append({"role": m["role"], "content": m.get("content") or ""})
-        # Consecutive gleiche Rollen mergen (Anthropic-Constraint)
+                continue
+
+            # OpenAI tool-result: {"role":"tool","tool_call_id":...,"content":...}
+            # → Anthropic: {"role":"user","content":[{"type":"tool_result","tool_use_id":...,"content":...}]}
+            if role == "tool":
+                tool_result_block = {
+                    "type":        "tool_result",
+                    "tool_use_id": m.get("tool_call_id", "unknown"),
+                    "content":     m.get("content", ""),
+                }
+                # Mit vorherigem user-Block zusammenführen wenn möglich
+                if filtered and filtered[-1]["role"] == "user" and isinstance(filtered[-1].get("content"), list):
+                    filtered[-1]["content"].append(tool_result_block)
+                else:
+                    filtered.append({"role": "user", "content": [tool_result_block]})
+                continue
+
+            # OpenAI assistant mit tool_calls: {"role":"assistant","tool_calls":[...]}
+            # → Anthropic: {"role":"assistant","content":[{"type":"tool_use","id":...,"name":...,"input":...}]}
+            tool_calls = m.get("tool_calls")
+            if role == "assistant" and tool_calls:
+                asst_content = []
+                if m.get("content"):
+                    asst_content.append({"type": "text", "text": m["content"]})
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    try:
+                        inp = _json.loads(fn.get("arguments", "{}"))
+                    except Exception:
+                        inp = {}
+                    asst_content.append({
+                        "type":  "tool_use",
+                        "id":    tc.get("id", "unknown"),
+                        "name":  fn.get("name", "unknown"),
+                        "input": inp,
+                    })
+                filtered.append({"role": "assistant", "content": asst_content})
+                continue
+
+            # Normaler Text-Message
+            filtered.append({"role": role, "content": m.get("content") or ""})
+
+        # Consecutive gleiche Rollen mergen (Anthropic-Constraint) — nur für Text-Messages
         merged: list[dict] = []
         for m in filtered:
-            if merged and merged[-1]["role"] == m["role"]:
+            if (merged and merged[-1]["role"] == m["role"]
+                    and isinstance(m.get("content"), str)
+                    and isinstance(merged[-1].get("content"), str)):
                 merged[-1]["content"] += "\n\n" + m["content"]
             else:
                 merged.append(dict(m))
