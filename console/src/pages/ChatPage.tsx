@@ -36,11 +36,27 @@ export function ChatPage() {
   const [showSwarm,    setShowSwarm]    = useState(false);
   const [projectData,  setProjectData]  = useState<Record<string, unknown>>({});
   const [bossModel,    setBossModel]    = useState<{model?:string;temperature?:number}>({});
-  const [showSuggest,  setShowSuggest]  = useState(false);
-  const [suggestIdx,   setSuggestIdx]   = useState(0);
+  const [showSuggest,    setShowSuggest]    = useState(false);
+  const [suggestIdx,     setSuggestIdx]     = useState(0);
+  const [activeTool,     setActiveTool]     = useState<{name:string;detail:string} | null>(null);
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const [doneMsgId,      setDoneMsgId]      = useState<string | null>(null);
 
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function toolDetail(name: string, input: Record<string,unknown>): string {
+    if (name === "read_system_file" || name === "file_read")   return String(input.path ?? input.file_path ?? "");
+    if (name === "write_system_file" || name === "file_write") return String(input.path ?? input.file_path ?? "");
+    if (name === "shell_exec")    return String(input.command ?? "").slice(0, 60);
+    if (name === "web_search")    return String(input.query ?? "");
+    if (name === "http_request")  return String(input.url ?? "");
+    if (name === "ask_agent")     return String(input.target ?? "");
+    if (name === "delegate_agent")return String(input.target ?? "");
+    if (name === "write_memory" || name === "read_memory") return String(input.filename ?? "");
+    if (name === "write_handoff" || name === "read_handoff") return String(input.to_agent ?? input.handoff_id ?? "");
+    return "";
+  }
 
   const suggestions = input.startsWith("/")
     ? SLASH_COMMANDS.filter(c => c.cmd.startsWith(input.split(" ")[0]))
@@ -173,6 +189,7 @@ export function ChatPage() {
       }
 
       setMessages(ms => [...ms, assistantMsg]);
+      setStreamingMsgId(assistantMsg.id);
       const reader  = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer    = "";
@@ -189,9 +206,12 @@ export function ChatPage() {
             try {
               const evt = JSON.parse(line.slice(6));
               if (evt.text !== undefined) {
+                setActiveTool(null);
                 setMessages(ms => ms.map(m =>
                   m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m
                 ));
+              } else if (evt.tool_call !== undefined) {
+                setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
               } else if (evt.done) {
                 break outer;
               } else if (evt.error) {
@@ -208,7 +228,9 @@ export function ChatPage() {
       setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
       setInput(content);
     } finally {
-      setSending(false);
+      setSending(false); setActiveTool(null);
+      if (streamingMsgId) setDoneMsgId(streamingMsgId);
+      setStreamingMsgId(null);
       textareaRef.current?.focus();
     }
   }
@@ -295,7 +317,18 @@ export function ChatPage() {
                 }`}>
                   {msg.role === "user"
                     ? <span className="whitespace-pre-wrap">{msg.content}</span>
-                    : <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    : streamingMsgId === msg.id && !msg.content
+                      ? <div className="flex gap-1 items-center h-5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                        </div>
+                      : <><ReactMarkdown>{msg.content}</ReactMarkdown>
+                          {streamingMsgId === msg.id
+                            ? <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
+                            : doneMsgId === msg.id && <span className="inline-block text-xs text-green-500 ml-1 align-text-bottom">✓</span>
+                          }
+                        </>
                   }
                 </div>
                 {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
@@ -333,6 +366,19 @@ export function ChatPage() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Tool-Status */}
+      {activeTool && (
+        <div className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 border-t flex-shrink-0 flex items-center gap-2 min-w-0">
+          <span className="flex gap-0.5 flex-shrink-0">
+            <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
+            <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
+            <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
+          </span>
+          <code className="font-mono text-primary flex-shrink-0">{activeTool.name}</code>
+          {activeTool.detail && <span className="truncate text-muted-foreground">{activeTool.detail}</span>}
+        </div>
+      )}
 
       {/* Fehler */}
       {error && (

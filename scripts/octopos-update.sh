@@ -51,4 +51,8 @@ sleep 3
 $SSH "$VM" "sudo systemctl status octopos-core --no-pager | head -4"
 
 echo ""
+echo "==> [6/5] Gitea-Status prüfen"
+$SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
+
+echo ""
 echo "✓ Update abgeschlossen"

@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
-CRED_FILE    = "/etc/octopos/admin_credentials"
+CRED_FILE        = "/etc/octopos/admin_credentials"
+MCP_SERVERS_FILE = "/etc/octopos/mcp_servers.json"
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
@@ -56,6 +57,21 @@ def _check_login_rate(ip: str) -> None:
     if len(_LOGIN_ATTEMPTS[ip]) >= _LOGIN_MAX:
         raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
     _LOGIN_ATTEMPTS[ip].append(now)
+
+
+# Rate-Limiting für /message Endpoints (#72)
+_MESSAGE_ATTEMPTS: dict[tuple[str, str], list[float]] = defaultdict(list)  # (user_id, project_id) -> timestamps
+_MESSAGE_MAX   = 50  # max. Nachrichten pro Fenster
+_MESSAGE_WIN_S = 60  # pro Minute
+
+def _check_message_rate(user_id: str, project_id: str) -> None:
+    """Rate-Limit für Nachrichten pro User+Projekt"""
+    key = (user_id, project_id)
+    now = time.monotonic()
+    _MESSAGE_ATTEMPTS[key] = [t for t in _MESSAGE_ATTEMPTS[key] if now - t < _MESSAGE_WIN_S]
+    if len(_MESSAGE_ATTEMPTS[key]) >= _MESSAGE_MAX:
+        raise HTTPException(429, f"Zu viele Nachrichten — max. {_MESSAGE_MAX} pro Minute")
+    _MESSAGE_ATTEMPTS[key].append(now)
 
 
 _setup_lock = asyncio.Lock()   # verhindert parallele Setup-Requests (#71)
@@ -124,6 +140,14 @@ async def lifespan(app: FastAPI):
                 logger.warning("AgentLink cleanup Fehler: %s", e)
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
+
+    # Gitea-Verbindung prüfen (best-effort, blockiert nicht den Start)
+    try:
+        from .gitea import get_gitea_client
+        gitea_ver = await get_gitea_client()._get("/version")
+        logger.info("Gitea verbunden: version=%s", gitea_ver.get("version", "?"))
+    except Exception as _ge:
+        logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
     logger.info("OctopOS Core bereit")
     yield
@@ -212,6 +236,16 @@ def require_admin(auth: tuple[str, str] = Depends(require_auth)) -> tuple[str, s
     if role != "admin":
         raise HTTPException(403, f"Keine Berechtigung — Admin erforderlich (du bist '{role}')")
     return auth
+
+
+def _check_agent_write(agent_id: str, auth: tuple[str, str]) -> None:
+    """Admin darf alles; normaler User nur seinen eigenen personal_{username} Agenten."""
+    username, role = auth
+    if role == "admin":
+        return
+    if agent_id == f"personal_{username}":
+        return
+    raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
 
 
 async def _setup_matrix_clients(server_name: str) -> None:
@@ -321,9 +355,10 @@ def login(req: LoginRequest, request: Request):
     if users:
         user = users.get(req.username)
         if user and _verify_password(req.password, user.get("password_hash", "")):
-            token = _make_jwt(req.username, user.get("role", "user"))
+            role  = user.get("role", "user")
+            token = _make_jwt(req.username, role)
             logger.info("Login erfolgreich (users.json): %s", req.username)
-            return {"access_token": token, "token_type": "bearer"}
+            return {"access_token": token, "token_type": "bearer", "role": role, "username": req.username}
         raise HTTPException(401, "Ungültige Zugangsdaten")
 
     # Fallback: admin_credentials (vor Setup oder Legacy-Betrieb)
@@ -334,7 +369,7 @@ def login(req: LoginRequest, request: Request):
         raise HTTPException(401, "Ungültige Zugangsdaten")
     token = _make_jwt(req.username, "admin")
     logger.info("Login erfolgreich (admin_credentials): %s", req.username)
-    return {"access_token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer", "role": "admin", "username": req.username}
 
 
 @app.get("/auth/me")
@@ -358,9 +393,10 @@ def list_agents():
     return {
         agent_id: {
             "config": {
-                "type":     cfg.type,
-                "identity": cfg.identity,
-                "model":    cfg.llm.model,
+                "type":            cfg.type,
+                "identity":        cfg.identity,
+                "model":           cfg.llm.model,
+                "fallback_models": cfg.llm.fallback_models,
             },
             "runtime": running.get(agent_id),
         }
@@ -377,6 +413,37 @@ def get_agent(agent_id: str):
         "config":  cfg.model_dump(exclude={"agent_dir"}),
         "runtime": runtime.status_all().get(agent_id),
     }
+
+
+class AgentLlmPatchRequest(BaseModel):
+    fallback_models: list[str]
+
+
+@app.patch("/agents/{agent_id}/llm")
+def patch_agent_llm(
+    agent_id: str,
+    req: AgentLlmPatchRequest,
+    _a: tuple = Depends(require_admin),
+):
+    """Aktualisiert llm.fallback_models in agent.yaml."""
+    cfg = discovery.get(agent_id)
+    if not cfg or not cfg.agent_dir:
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+    yaml_path = cfg.agent_dir / "agent.yaml"
+    try:
+        import yaml as _yaml
+        raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        if "llm" not in raw:
+            raw["llm"] = {}
+        if req.fallback_models:
+            raw["llm"]["fallback_models"] = req.fallback_models
+        else:
+            raw["llm"].pop("fallback_models", None)
+        yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        # watchdog lädt agent.yaml automatisch neu (on_modified)
+    except Exception as e:
+        raise HTTPException(500, f"Fehler beim Speichern: {e}")
+    return {"ok": True, "agent_id": agent_id, "fallback_models": req.fallback_models}
 
 
 class SpawnRequest(BaseModel):
@@ -515,11 +582,28 @@ async def create_project(req: CreateProjectRequest, _a: tuple = Depends(require_
     if result.matrix_room and not cfg.matrix.room:
         _update_project_matrix_room(req.id, result.matrix_room)
 
+    # Gitea-Repo anlegen (best-effort — kein harter Fehler wenn Gitea nicht verfügbar)
+    gitea_repo_url = ""
+    gitea_error    = ""
+    try:
+        from .gitea import get_gitea_client
+        gitea = get_gitea_client()
+        repo  = await gitea.create_repo(req.id, description=req.description or "")
+        gitea_repo_url = repo.get("html_url", "")
+        # Webhook einrichten: Gitea push auf main → /webhooks/gitea/{project_id}
+        webhook_url = f"http://127.0.0.1:8765/webhooks/gitea/{req.id}"
+        await gitea.create_webhook(req.id, webhook_url)
+        logger.info("Gitea-Repo '%s' angelegt: %s", req.id, gitea_repo_url)
+    except Exception as _ge:
+        gitea_error = str(_ge)
+        logger.warning("Gitea-Repo konnte nicht angelegt werden: %s", _ge)
+
     return {
         "created": True, "project_id": req.id,
         "linux_user": result.linux_user, "files_dir": result.files_dir,
         "samba_share": result.samba_share, "matrix_room": result.matrix_room,
         "warnings": result.warnings, "ok": result.ok,
+        "gitea_repo": gitea_repo_url, "gitea_error": gitea_error,
     }
 
 
@@ -540,6 +624,14 @@ async def delete_project(project_id: str, remove_files: bool = False):
         yaml_path = project_dir / "project.yaml"
         if yaml_path.exists():
             yaml_path.unlink()
+
+    # Gitea-Repo löschen (best-effort)
+    try:
+        from .gitea import get_gitea_client
+        await get_gitea_client().delete_repo(project_id)
+    except Exception as _ge:
+        warnings.append(f"Gitea-Repo konnte nicht gelöscht werden: {_ge}")
+
     return {"deleted": project_id, "files_removed": remove_files, "warnings": warnings}
 
 # ================================================================== Sessions
@@ -637,6 +729,9 @@ async def send_message_stream(project_id: str, req: IncomingMessage):
     from fastapi.responses import StreamingResponse as _SR
     import asyncio as _asyncio
 
+    # Rate-Limiting
+    _check_message_rate(req.sender, project_id)
+
     cfg = projects.get(project_id)
     if not cfg:
         raise HTTPException(404, f"Projekt nicht gefunden")
@@ -661,6 +756,9 @@ async def send_message(project_id: str, req: IncomingMessage):
     User-Nachricht an Projekt senden — Boss-Agent verarbeitet und antwortet.
     Das ist der Haupt-Einstiegspunkt für die Web-Chat-UI und Matrix-Integration.
     """
+    # Rate-Limiting
+    _check_message_rate(req.sender, project_id)
+
     cfg = projects.get(project_id)
     if not cfg:
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -727,8 +825,116 @@ def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
     return {"cleared": True}
 
 
+@app.post("/agents/{agent_id}/session/compact")
+async def agent_session_compact(agent_id: str, _a: tuple = Depends(require_auth)):
+    """
+    Fasst den bisherigen Chat-Verlauf via LLM zusammen und ersetzt die Session
+    durch eine kompakte Zusammenfassung. Reduziert Token-Verbrauch bei langen Sessions.
+    """
+    from .orchestrator import _load_claude_oauth_token
+    from .session_manager import Message, MessageRole
+
+    context = agent_sessions.get_context(agent_id, max_messages=200)
+    if not context:
+        return {"compacted": False, "reason": "Keine Nachrichten vorhanden"}
+
+    # Konversation als Text aufbereiten (max 60k Zeichen um selbst nicht zu überlaufen)
+    lines = []
+    for m in context:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
+        if role in ("user", "assistant") and content:
+            lines.append(f"{role.upper()}: {content[:2000]}")
+    conversation_text = "\n\n".join(lines)[:60000]
+
+    if not conversation_text:
+        return {"compacted": False, "reason": "Kein kompaktierbarer Inhalt"}
+
+    summary_prompt = (
+        "Fasse das folgende Gespräch zwischen User und Agent präzise auf Deutsch zusammen. "
+        "Behalte alle wichtigen Fakten, Entscheidungen, Zwischenergebnisse und offenen Fragen. "
+        "Schreibe die Zusammenfassung so, dass der Agent danach nahtlos weiterarbeiten kann. "
+        "Maximal 800 Wörter.\n\n---\n\n" + conversation_text
+    )
+
+    oauth_token = _load_claude_oauth_token()
+    summary = ""
+
+    if oauth_token:
+        try:
+            import anthropic as _anthropic
+            client = _anthropic.AsyncAnthropic(
+                api_key="",
+                auth_token=oauth_token,
+                default_headers={
+                    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+                    "user-agent":     "claude-cli/2.1.62",
+                    "x-app":          "cli",
+                },
+            )
+            resp = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1200,
+                system=[{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}],
+                messages=[{"role": "user", "content": summary_prompt}],
+            )
+            summary = resp.content[0].text if resp.content else ""
+        except Exception as e:
+            logger.error("compact: LLM-Fehler: %s", e)
+            return {"compacted": False, "reason": f"LLM-Fehler: {e}"}
+    else:
+        return {"compacted": False, "reason": "Kein OAuth-Token konfiguriert"}
+
+    if not summary:
+        return {"compacted": False, "reason": "Leere Zusammenfassung vom LLM"}
+
+    # Session durch Zusammenfassung ersetzen
+    msg_count = len(context)
+    summary_user = Message.create(
+        MessageRole.USER,
+        f"[Zusammenfassung der bisherigen Konversation ({msg_count} Nachrichten)]\n\n{summary}",
+    )
+    summary_asst = Message.create(
+        MessageRole.ASSISTANT,
+        "Verstanden. Ich habe die Zusammenfassung der bisherigen Konversation gelesen und kann nahtlos weiterarbeiten.",
+    )
+    agent_sessions.replace_messages(agent_id, [summary_user, summary_asst])
+    logger.info("compact: %s — %d Nachrichten → 2 (Zusammenfassung)", agent_id, msg_count)
+
+    return {"compacted": True, "original_count": msg_count, "summary": summary}
+
+
+@app.post("/agents/{agent_id}/message")
+async def agent_message_sync(agent_id: str, req: IncomingMessage):
+    # Rate-Limiting
+    _check_message_rate(req.sender, agent_id)
+    """Direkter synchroner Chat mit einem Agenten — gibt vollständige Antwort zurück."""
+    from .project_config import ProjectConfig as _PC, ProjectAgents as _PA, ProjectIdentity as _PI
+
+    cfg = discovery.get(agent_id)
+    if not cfg:
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+    virtual_cfg = _PC(
+        id=agent_id,
+        identity=_PI(name=cfg.identity),
+        agents=_PA(boss=agent_id, workers=[]),
+    )
+    response, _ = await agent_orchestrator.handle_message(
+        project_id=agent_id,
+        project_cfg=virtual_cfg,
+        content=req.content,
+        sender=req.sender,
+    )
+    return {"response": response, "agent_id": agent_id}
+
+
 @app.post("/agents/{agent_id}/message/stream")
 async def agent_message_stream(agent_id: str, req: IncomingMessage):
+    # Rate-Limiting
+    _check_message_rate(req.sender, agent_id)
     """Direkter Chat mit einem Agenten — ohne Projekt-Kontext."""
     from fastapi.responses import StreamingResponse as _SR
     from .project_config import ProjectConfig as _PC, ProjectAgents as _PA, ProjectIdentity as _PI
@@ -1070,13 +1276,22 @@ async def delete_user(username: str, _a: tuple = Depends(require_admin)):
         raise HTTPException(403, "Admin-User kann nicht gelöscht werden")
     del users[username]
     _save_users(users)
+
+    # Persönlichen Agenten deaktivieren
+    personal_id  = f"personal_{username}"
+    personal_dir = Path(AGENTS_DIR) / personal_id
+    if personal_dir.exists():
+        disabled = Path(AGENTS_DIR) / f"_{personal_id}_disabled"
+        personal_dir.rename(disabled)
+        logger.info("Persönlicher Agent deaktiviert: %s", personal_id)
+
     logger.info("User gelöscht: %s", username)
     audit_log("user.delete", target=username)
     return {"deleted": True, "username": username}
 
 
 @app.put("/users/{username}/password")
-async def change_password(username: str, body: dict, _a: tuple = Depends(require_admin)):
+async def change_user_password(username: str, body: dict, _a: tuple = Depends(require_admin)):
     """Passwort ändern."""
     new_password = body.get("password", "").strip()
     if len(new_password) < 8:
@@ -1093,6 +1308,205 @@ async def change_password(username: str, body: dict, _a: tuple = Depends(require
 
 
 
+
+
+# ================================================================== Personal Agent (/me/agent)
+
+def _create_personal_agent(username: str) -> str:
+    """Persönlichen Agenten für einen User anlegen. Gibt agent_id zurück."""
+    import yaml as _yaml
+
+    agent_id  = f"personal_{username}"
+    agent_dir = Path(AGENTS_DIR) / agent_id
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    (agent_dir / "skills").mkdir(exist_ok=True)
+    (agent_dir / "memory").mkdir(exist_ok=True)
+
+    # Standard-Modell aus LLM-Config
+    model = "claude-haiku-4-5-20251001"
+    try:
+        import json as _j
+        llm_raw = _j.loads(Path("/etc/octopos/llm_config.json").read_text())
+        providers = llm_raw.get("providers", {})
+        if providers.get("claude_max", {}).get("enabled"):
+            model = "claude-haiku-4-5-20251001"
+        elif providers.get("openai", {}).get("enabled"):
+            model = "gpt-4o-mini"
+        elif providers.get("ollama", {}).get("enabled"):
+            model = "ollama/mistral:latest"
+    except Exception:
+        pass
+
+    soul_text = (
+        f"# Persönlicher Assistent von {username}\n\n"
+        f"Du bist der persönliche KI-Assistent von {username}. "
+        f"Du hilfst bei Fragen, Aufgaben und Ideen — freundlich, direkt und auf den Punkt. "
+        f"Du erinnerst dich an wichtige Informationen und Präferenzen.\n"
+    )
+
+    agent_data = {
+        "id":       agent_id,
+        "type":     "specialist",
+        "identity": f"Assistent von {username}",
+        "llm": {
+            "model":       model,
+            "temperature": 0.7,
+            "max_tokens":  4096,
+        },
+        "soul":  "./soul.md",
+        "tools": ["read_file", "write_file", "shell_exec"],
+        "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
+    }
+
+    (agent_dir / "agent.yaml").write_text(
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
+    )
+    (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
+    discovery._register(agent_dir)
+    logger.info("Persönlicher Agent angelegt: %s (model=%s)", agent_id, model)
+    audit_log("personal_agent.create", user=username, target=agent_id)
+    return agent_id
+
+
+def _ensure_personal_agent(username: str):
+    """Persönlichen Agenten laden oder lazy anlegen."""
+    agent_id  = f"personal_{username}"
+    agent_dir = Path(AGENTS_DIR) / agent_id
+    if not agent_dir.exists():
+        _create_personal_agent(username)
+    cfg = discovery.get(agent_id)
+    if cfg is None and agent_dir.exists():
+        cfg = load_agent_config_direct(agent_dir)
+    return agent_id, cfg
+
+
+@app.get("/me/agent")
+def get_my_agent(auth: tuple[str, str] = Depends(require_auth)):
+    """Persönlichen Agenten des eingeloggten Users abrufen — lazy erstellt bei erstem Aufruf."""
+    username, _role = auth
+    agent_id, cfg = _ensure_personal_agent(username)
+    if cfg is None:
+        raise HTTPException(500, "Persönlicher Agent konnte nicht erstellt werden")
+    return {
+        "agent_id": agent_id,
+        "config":   cfg.model_dump(exclude={"agent_dir"}),
+        "runtime":  runtime.status_all().get(agent_id),
+    }
+
+
+@app.post("/me/agent/message/stream")
+async def my_agent_message_stream(
+    req: IncomingMessage,
+    auth: tuple[str, str] = Depends(require_auth),
+):
+    """Streaming-Chat mit dem persönlichen Agenten."""
+    from fastapi.responses import StreamingResponse as _SR
+    from .project_config import ProjectConfig as _PC, ProjectAgents as _PA, ProjectIdentity as _PI
+
+    username, _role = auth
+    agent_id, cfg = _ensure_personal_agent(username)
+    if cfg is None:
+        raise HTTPException(503, "Persönlicher Agent nicht verfügbar")
+
+    virtual_cfg = _PC(
+        id=agent_id,
+        identity=_PI(name=cfg.identity),
+        agents=_PA(boss=agent_id, workers=[]),
+    )
+
+    async def event_stream():
+        async for chunk in agent_orchestrator.handle_message_stream(
+            project_id=agent_id,
+            project_cfg=virtual_cfg,
+            content=req.content,
+            sender=req.sender,
+        ):
+            yield chunk
+
+    return _SR(event_stream(), media_type="text/event-stream",
+               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/me/agent/session/history")
+def my_agent_session_history(
+    limit: int = 50,
+    auth: tuple[str, str] = Depends(require_auth),
+):
+    """Chat-Verlauf mit dem persönlichen Agenten."""
+    username, _role = auth
+    agent_id = f"personal_{username}"
+    context = agent_sessions.get_context(agent_id, max_messages=limit)
+    session = agent_sessions.get_active(agent_id)
+    return {
+        "session_id": session.id if session else None,
+        "messages":   context,
+        "count":      len(context),
+    }
+
+
+@app.delete("/me/agent/session")
+def my_agent_session_clear(auth: tuple[str, str] = Depends(require_auth)):
+    """Chat-Verlauf mit dem persönlichen Agenten löschen."""
+    username, _role = auth
+    agent_sessions.end_session(f"personal_{username}")
+    return {"cleared": True}
+
+
+class MyAgentUpdateRequest(BaseModel):
+    identity:        str
+    soul:            str          = ""
+    model:           str
+    temperature:     float        = 0.7
+    max_tokens:      int          = 4096
+    fallback_models: list[str]    = []
+    tools:           list[str]    = []
+    allowed_agents:  list[str]    = []
+    mcp_servers:     list[str]    = []
+
+
+@app.put("/me/agent")
+async def update_my_agent(
+    req: MyAgentUpdateRequest,
+    auth: tuple[str, str] = Depends(require_auth),
+):
+    """Persönlichen Agenten des eingeloggten Users konfigurieren."""
+    import yaml as _yaml
+
+    username, _role = auth
+    agent_id, cfg = _ensure_personal_agent(username)
+    agent_dir = Path(AGENTS_DIR) / agent_id
+
+    llm_data: dict = {
+        "model":       req.model,
+        "temperature": req.temperature,
+        "max_tokens":  req.max_tokens,
+    }
+    if req.fallback_models:
+        llm_data["fallback_models"] = req.fallback_models
+
+    agent_data: dict = {
+        "id":       agent_id,
+        "type":     "specialist",
+        "identity": req.identity,
+        "llm":      llm_data,
+        "soul":     "./soul.md",
+        "tools":    req.tools,
+        "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
+    }
+    if req.allowed_agents:
+        agent_data["allowed_agents"] = req.allowed_agents
+    if req.mcp_servers:
+        agent_data["mcp_servers"] = req.mcp_servers
+
+    (agent_dir / "agent.yaml").write_text(
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
+    )
+    if req.soul is not None:
+        (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
+
+    discovery._register(agent_dir)
+    logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
+    return {"updated": True, "agent_id": agent_id}
 
 
 # ================================================================== AgentLink
@@ -1427,8 +1841,9 @@ class SkillRequest(BaseModel):
 
 
 @app.post("/agents/{agent_id}/skills", status_code=201)
-def create_agent_skill(agent_id: str, req: SkillRequest, _a: tuple = Depends(require_admin)):
+def create_agent_skill(agent_id: str, req: SkillRequest, auth: tuple = Depends(require_auth)):
     """Neuen QMD-Skill anlegen."""
+    _check_agent_write(agent_id, auth)
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
         raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -1444,8 +1859,9 @@ def create_agent_skill(agent_id: str, req: SkillRequest, _a: tuple = Depends(req
 
 
 @app.put("/agents/{agent_id}/skills/{filename}")
-def update_agent_skill(agent_id: str, filename: str, req: SkillRequest, _a: tuple = Depends(require_admin)):
+def update_agent_skill(agent_id: str, filename: str, req: SkillRequest, auth: tuple = Depends(require_auth)):
     """Bestehenden QMD-Skill aktualisieren."""
+    _check_agent_write(agent_id, auth)
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
         raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -1456,8 +1872,9 @@ def update_agent_skill(agent_id: str, filename: str, req: SkillRequest, _a: tupl
 
 
 @app.delete("/agents/{agent_id}/skills/{filename}")
-def delete_agent_skill(agent_id: str, filename: str, _a: tuple = Depends(require_admin)):
+def delete_agent_skill(agent_id: str, filename: str, auth: tuple = Depends(require_auth)):
     """QMD-Skill löschen."""
+    _check_agent_write(agent_id, auth)
     safe = filename.replace(".md", "").replace("/", "-").replace("..", "")
     path = _skills_dir(agent_id) / f"{safe}.md"
     if not path.exists():
@@ -1478,6 +1895,8 @@ class CreateAgentRequest(BaseModel):
     max_tokens:  int   = 4096
     soul:        str   = ""
     tools:       list[str] = []
+    fallback_models: list[str] = []
+    mcp_servers:     list[str] = []
     heartbeat_interval:  str = "30s"
     heartbeat_timeout:   str = "90s"
     heartbeat_on_failure: str = "restart"
@@ -1521,6 +1940,10 @@ async def create_agent(req: CreateAgentRequest, _a: tuple = Depends(require_admi
             "on_failure": req.heartbeat_on_failure,
         },
     }
+    if req.fallback_models:
+        agent_data["llm"]["fallback_models"] = req.fallback_models
+    if req.mcp_servers:
+        agent_data["mcp_servers"] = req.mcp_servers
     if not agent_data["soul"]:
         del agent_data["soul"]
 
@@ -1562,15 +1985,19 @@ async def update_agent(agent_id: str, req: CreateAgentRequest, _a: tuple = Depen
     if not agent_dir.exists():
         raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
 
+    llm_data: dict = {
+        "model":       req.model,
+        "temperature": req.temperature,
+        "max_tokens":  req.max_tokens,
+    }
+    if req.fallback_models:
+        llm_data["fallback_models"] = req.fallback_models
+
     agent_data = {
         "id":       req.id or agent_id,
         "type":     req.type,
         "identity": req.identity,
-        "llm": {
-            "model":       req.model,
-            "temperature": req.temperature,
-            "max_tokens":  req.max_tokens,
-        },
+        "llm":      llm_data,
         "tools":    req.tools,
         "heartbeat": {
             "interval":   req.heartbeat_interval,
@@ -1578,6 +2005,8 @@ async def update_agent(agent_id: str, req: CreateAgentRequest, _a: tuple = Depen
             "on_failure": req.heartbeat_on_failure,
         },
     }
+    if req.mcp_servers:
+        agent_data["mcp_servers"] = req.mcp_servers
     if req.soul:
         agent_data["soul"] = "./soul.md"
         (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
@@ -1978,6 +2407,78 @@ async def pull_ollama_model(body: dict):
         raise HTTPException(504, "Timeout beim Laden des Modells")
 
 
+# ================================================================== MCP-Server
+
+class McpServerEntry(BaseModel):
+    id:        str
+    name:      str
+    transport: str = "streamableHttp"   # streamableHttp | sse | stdio
+    url:       str
+    headers:   dict = {}
+
+
+def _load_mcp_servers() -> list[dict]:
+    import json as _json
+    try:
+        data = _json.loads(Path(MCP_SERVERS_FILE).read_text())
+        return data.get("servers", [])
+    except (OSError, ValueError):
+        return []
+
+
+def _save_mcp_servers(servers: list[dict]) -> None:
+    import json as _json
+    Path(MCP_SERVERS_FILE).parent.mkdir(parents=True, exist_ok=True)
+    Path(MCP_SERVERS_FILE).write_text(
+        _json.dumps({"servers": servers}, indent=2), encoding="utf-8"
+    )
+
+
+@app.get("/mcp/servers")
+def list_mcp_servers(_a: tuple = Depends(require_auth)):
+    """Alle konfigurierten MCP-Server auflisten (alle eingeloggten User)."""
+    return {"servers": _load_mcp_servers()}
+
+
+@app.post("/mcp/servers", status_code=201)
+def create_mcp_server(req: McpServerEntry, _a: tuple = Depends(require_admin)):
+    """Neuen MCP-Server anlegen."""
+    import re as _re
+    if not _re.match(r"^[a-z0-9_-]+$", req.id):
+        raise HTTPException(400, "ID darf nur a-z, 0-9, _ und - enthalten")
+    servers = _load_mcp_servers()
+    if any(s["id"] == req.id for s in servers):
+        raise HTTPException(409, f"MCP-Server '{req.id}' existiert bereits")
+    servers.append(req.model_dump())
+    _save_mcp_servers(servers)
+    audit_log("mcp.create", target=req.id, details={"url": req.url})
+    return {"created": True, "server": req.model_dump()}
+
+
+@app.put("/mcp/servers/{server_id}")
+def update_mcp_server(server_id: str, req: McpServerEntry, _a: tuple = Depends(require_admin)):
+    """MCP-Server aktualisieren."""
+    servers = _load_mcp_servers()
+    idx = next((i for i, s in enumerate(servers) if s["id"] == server_id), None)
+    if idx is None:
+        raise HTTPException(404, f"MCP-Server '{server_id}' nicht gefunden")
+    servers[idx] = req.model_dump()
+    _save_mcp_servers(servers)
+    return {"updated": True, "server": req.model_dump()}
+
+
+@app.delete("/mcp/servers/{server_id}")
+def delete_mcp_server(server_id: str, _a: tuple = Depends(require_admin)):
+    """MCP-Server löschen."""
+    servers = _load_mcp_servers()
+    new_servers = [s for s in servers if s["id"] != server_id]
+    if len(new_servers) == len(servers):
+        raise HTTPException(404, f"MCP-Server '{server_id}' nicht gefunden")
+    _save_mcp_servers(new_servers)
+    audit_log("mcp.delete", target=server_id)
+    return {"deleted": True, "server_id": server_id}
+
+
 # ================================================================== Backup & Restore
 
 BACKUP_DIR = Path("/opt/octopos/backups")
@@ -2182,3 +2683,132 @@ def system_status():
         },
         "runtime": runtime.status_all(),
     }
+
+
+# ================================================================== Gitea Webhook + Config
+
+@app.post("/webhooks/gitea/{project_id}")
+async def gitea_webhook(project_id: str, request: Request):
+    """
+    Gitea Push-Webhook: bei Push auf main wird der OctopOS-Core-Service neu gestartet
+    wenn es sich um das octopos-core Repo handelt, sonst nur geloggt.
+    Kein Auth — Gitea-Secret wird in der Gitea-Config gesetzt.
+    """
+    import hmac
+    import hashlib
+
+    body = await request.body()
+
+    # Optional: Webhook-Secret prüfen
+    from .gitea import _load_config as _gitea_cfg
+    cfg = _gitea_cfg()
+    webhook_secret = cfg.get("webhook_secret", "")
+    if webhook_secret:
+        sig = request.headers.get("X-Gitea-Signature", "")
+        expected = hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()  # type: ignore[attr-defined]
+        if not hmac.compare_digest(sig, expected):
+            raise HTTPException(403, "Webhook-Signatur ungültig")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    ref    = payload.get("ref", "")
+    pusher = payload.get("pusher", {}).get("login", "unknown")
+    commits = len(payload.get("commits", []))
+
+    logger.info("Gitea Webhook: project=%s ref=%s pusher=%s commits=%d",
+                project_id, ref, pusher, commits)
+
+    if ref != "refs/heads/main":
+        return {"status": "ignored", "reason": "not main branch", "ref": ref}
+
+    audit_log("gitea.webhook.push", target=project_id, project_id=project_id,
+              details={"ref": ref, "pusher": pusher, "commits": commits})
+
+    # Workspace-Cache löschen damit nächste Tool-Nutzung frisch clont
+    import shutil as _shutil
+    ws = Path(f"/tmp/octopos-git/{project_id}")
+    if ws.exists():
+        _shutil.rmtree(ws)
+        logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
+
+    return {"status": "ok", "project": project_id, "ref": ref}
+
+
+class GiteaConfigRequest(BaseModel):
+    url:            str = "http://127.0.0.1:3001"
+    token:          str = ""
+    org:            str = "octopos"
+    webhook_secret: str = ""
+
+
+GITEA_CONFIG_FILE = "/etc/octopos/gitea_config.json"
+
+
+@app.get("/gitea/config")
+def get_gitea_config(_a: tuple = Depends(require_admin)):
+    """Gitea-Konfiguration lesen."""
+    import json as _json
+    p = Path(GITEA_CONFIG_FILE)
+    if not p.exists():
+        return {"url": "http://127.0.0.1:3001", "token": "", "org": "octopos", "webhook_secret": ""}
+    cfg = _json.loads(p.read_text(encoding="utf-8"))
+    # Token maskieren
+    if cfg.get("token"):
+        cfg["token_masked"] = cfg["token"][:8] + "..." + cfg["token"][-4:]
+    return cfg
+
+
+@app.put("/gitea/config")
+def update_gitea_config(req: GiteaConfigRequest, _a: tuple = Depends(require_admin)):
+    """Gitea-Konfiguration aktualisieren."""
+    import json as _json
+    from .gitea import reload_gitea_client
+    data = req.model_dump()
+    Path(GITEA_CONFIG_FILE).write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    reload_gitea_client()
+    logger.info("Gitea-Config aktualisiert: url=%s org=%s", req.url, req.org)
+    return {"updated": True}
+
+
+@app.get("/gitea/repos")
+async def list_gitea_repos(_a: tuple = Depends(require_auth)):
+    """Alle Gitea-Repos des OctopOS-Owners (User oder Organisation)."""
+    from .gitea import get_gitea_client
+    import aiohttp as _aio
+    try:
+        client = get_gitea_client()
+        # Erst Org-Repos versuchen, dann User-Repos
+        try:
+            repos = await client._get(f"/orgs/{client.org}/repos?limit=50")
+        except _aio.ClientResponseError as e:
+            if e.status == 404:
+                repos = await client._get(f"/users/{client.org}/repos?limit=50")
+            else:
+                raise
+        return {"repos": [
+            {
+                "name":           r.get("name"),
+                "description":    r.get("description"),
+                "html_url":       r.get("html_url"),
+                "default_branch": r.get("default_branch"),
+                "updated":        r.get("updated"),
+            }
+            for r in (repos if isinstance(repos, list) else [])
+        ]}
+    except Exception as e:
+        raise HTTPException(503, f"Gitea nicht erreichbar: {e}")
+
+
+@app.get("/gitea/repos/{project_id}/prs")
+async def list_project_prs(project_id: str, _a: tuple = Depends(require_auth)):
+    """Offene Pull Requests eines Projekts."""
+    from .gitea import get_gitea_client
+    try:
+        client = get_gitea_client()
+        prs    = await client.list_prs(project_id)
+        return {"prs": prs, "count": len(prs if isinstance(prs, list) else [])}
+    except Exception as e:
+        raise HTTPException(503, f"Gitea-Fehler: {e}")

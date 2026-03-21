@@ -13,6 +13,7 @@ interface Message {
 const SLASH_COMMANDS = [
   { cmd: "/help",     desc: "Verfügbare Commands anzeigen" },
   { cmd: "/clear",    desc: "Chat-Verlauf leeren" },
+  { cmd: "/compact",  desc: "Konversation via LLM zusammenfassen (spart Tokens)" },
   { cmd: "/model",    desc: "Aktuelles LLM-Modell anzeigen" },
   { cmd: "/retry",    desc: "Letzte Nachricht nochmal senden" },
   { cmd: "/remember", desc: "Session im Agenten-Gedächtnis speichern (/remember [name])" },
@@ -102,6 +103,23 @@ export function AgentChatPage() {
       if (!lastUser) { sysMsg("Keine vorherige Nachricht zum Wiederholen."); return true; }
       setInput(lastUser.content);
       setTimeout(() => textareaRef.current?.focus(), 0);
+      return true;
+    }
+    if (base === "/compact") {
+      sysMsg("Kompaktiere Konversation...");
+      api.post<{ compacted: boolean; original_count?: number; summary?: string; reason?: string }>(`/agents/${id}/session/compact`, {})
+        .then((d) => {
+          if (d.compacted) {
+            setMessages([
+              { id: `compact-sys-${Date.now()}`,  role: "system",    content: `Konversation kompaktiert (${d.original_count} Nachrichten → Zusammenfassung).` },
+              { id: `compact-usr-${Date.now()}`,  role: "user",      content: `[Zusammenfassung der bisherigen Konversation (${d.original_count} Nachrichten)]\n\n${d.summary ?? ""}` },
+              { id: `compact-ast-${Date.now()}`,  role: "assistant", content: "Verstanden. Ich habe die Zusammenfassung der bisherigen Konversation gelesen und kann nahtlos weiterarbeiten." },
+            ]);
+          } else {
+            sysMsg(`Kompaktierung fehlgeschlagen: ${d.reason}`);
+          }
+        })
+        .catch((e: Error) => sysMsg(`Fehler: ${e.message}`));
       return true;
     }
     if (base === "/remember") {

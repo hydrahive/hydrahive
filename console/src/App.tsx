@@ -16,6 +16,9 @@ import { ChatPage } from "@/pages/ChatPage";
 import { AgentChatPage } from "@/pages/AgentChatPage";
 import { AuditPage } from "@/pages/AuditPage";
 import { BackupPage } from "@/pages/BackupPage";
+import { MyAgentPage } from "@/pages/MyAgentPage";
+import { McpConfigPage } from "@/pages/McpConfigPage";
+import GiteaConfigPage from "@/pages/GiteaConfigPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -61,6 +64,9 @@ export default function App() {
           <Route path="users"            element={<UserPage />} />
           <Route path="audit"            element={<AuditPage />} />
           <Route path="backup"           element={<BackupPage />} />
+          <Route path="my-agent"         element={<MyAgentPage />} />
+          <Route path="mcp"              element={<McpConfigPage />} />
+          <Route path="gitea"            element={<GiteaConfigPage />} />
         </Route>
       </Routes>
     </SetupGuard>

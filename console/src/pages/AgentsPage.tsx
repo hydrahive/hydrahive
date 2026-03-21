@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, HeartbeatTaskStatus } from "@/lib/api";
+import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -17,8 +17,8 @@ interface AgentEntry {
 const EMPTY_FORM = {
   id: "", type: "specialist", identity: "", model: "llama3.1:8b",
   temperature: 0.7, max_tokens: 4096, soul: "",
-  tools: [] as string[], heartbeat_interval: "30s",
-  heartbeat_timeout: "90s", heartbeat_on_failure: "restart",
+  tools: [] as string[], fallback_models: [] as string[], mcp_servers: [] as string[],
+  heartbeat_interval: "30s", heartbeat_timeout: "90s", heartbeat_on_failure: "restart",
 };
 
 const KNOWN_TOOLS = ["file_read","file_write","web_search","http_request","dispatch_task","spawn_agent"];
@@ -56,22 +56,26 @@ export function AgentsPage() {
   const [saving,    setSaving]    = useState(false);
   const [saveErr,   setSaveErr]   = useState("");
   const [deleting,  setDeleting]  = useState<string|null>(null);
+  const [fallbackInput, setFallbackInput] = useState("");
   const [skillsAgent, setSkillsAgent] = useState<string|null>(null);
   const [logAgent,  setLogAgent]  = useState<string|null>(null);
   const [logLines,  setLogLines]  = useState<string[]>([]);
   const [logErr,    setLogErr]    = useState("");
   const [hbTasks,   setHbTasks]   = useState<HeartbeatTaskStatus[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   async function load() {
     try {
-      const [agentsData, hbData] = await Promise.allSettled([
+      const [agentsData, hbData, mcpData] = await Promise.allSettled([
         api.agents() as Promise<Record<string,AgentEntry>>,
         api.heartbeatTasks(),
+        api.mcpServers(),
       ]);
       if (agentsData.status === "fulfilled") setAgents(agentsData.value);
       if (hbData.status === "fulfilled") setHbTasks(hbData.value.tasks);
+      if (mcpData.status === "fulfilled") setMcpServers(mcpData.value.servers);
       setError("");
     } catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
     finally { setLoading(false); setRefreshing(false); }
@@ -118,6 +122,7 @@ export function AgentsPage() {
       api.getAgentSoul(id).catch(() => ({ soul:"", exists:false })),
     ]);
     const cfg = full?.config as any;
+    setFallbackInput("");
     setForm({
       id,
       type:                  cfg?.type                  ?? _entry.config.type,
@@ -127,6 +132,8 @@ export function AgentsPage() {
       max_tokens:            cfg?.llm?.max_tokens       ?? 4096,
       soul:                  soul.soul,
       tools:                 cfg?.tools                 ?? [],
+      fallback_models:       cfg?.llm?.fallback_models  ?? [],
+      mcp_servers:           cfg?.mcp_servers           ?? [],
       heartbeat_interval:    cfg?.heartbeat?.interval   ?? "30s",
       heartbeat_timeout:     cfg?.heartbeat?.timeout    ?? "90s",
       heartbeat_on_failure:  cfg?.heartbeat?.on_failure ?? "restart",
@@ -165,7 +172,7 @@ export function AgentsPage() {
     finally { setDeleting(null); }
   }
 
-  const agentList = Object.entries(agents);
+  const agentList = Object.entries(agents).filter(([id]) => !id.startsWith("personal_"));
 
   return (
     <div className="p-6 space-y-6">
@@ -223,6 +230,60 @@ export function AgentsPage() {
                   {[...new Set([...KNOWN_MODELS, form.model].filter(Boolean))].map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </Field>
+            </div>
+
+            {/* Fallback-Modelle */}
+            {editId && (
+              <Field label="Fallback-Modelle" hint="Bei Quota/Overload wird automatisch das nächste Modell probiert">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5 min-h-7">
+                    {form.fallback_models.length === 0
+                      ? <span className="text-xs text-muted-foreground italic self-center">Kein Fallback</span>
+                      : form.fallback_models.map((m, i) => (
+                          <span key={m} className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded-full font-mono">
+                            <span className="text-muted-foreground">{i+1}.</span>{m}
+                            <button type="button"
+                              onClick={() => set("fallback_models", form.fallback_models.filter(x => x !== m))}
+                              className="ml-0.5 text-muted-foreground hover:text-destructive">
+                              <X className="h-3 w-3"/>
+                            </button>
+                          </span>
+                        ))
+                    }
+                  </div>
+                  <div className="flex gap-2">
+                    <input value={fallbackInput} onChange={e => setFallbackInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { e.preventDefault();
+                          const v = fallbackInput.trim();
+                          if (v && !form.fallback_models.includes(v)) set("fallback_models", [...form.fallback_models, v]);
+                          setFallbackInput("");
+                        }
+                      }}
+                      list="fallback-suggestions"
+                      placeholder="z.B. claude-haiku-4-5-20251001 oder llama3.2"
+                      className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary font-mono" />
+                    <datalist id="fallback-suggestions">
+                      {["claude-haiku-4-5-20251001","claude-sonnet-4-5-20251001","claude-sonnet-4-20250514","llama3.2","llama3.1:8b","mistral-nemo:12b"]
+                        .filter(m => m !== form.model && !form.fallback_models.includes(m))
+                        .map(m => <option key={m} value={m}/>)}
+                    </datalist>
+                    <button type="button"
+                      onClick={() => {
+                        const v = fallbackInput.trim();
+                        if (v && !form.fallback_models.includes(v)) set("fallback_models", [...form.fallback_models, v]);
+                        setFallbackInput("");
+                      }}
+                      disabled={!fallbackInput.trim()}
+                      className="flex items-center gap-1 px-3 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-40 transition-colors">
+                      <Plus className="h-3.5 w-3.5"/>
+                    </button>
+                  </div>
+                </div>
+              </Field>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
               <Field label="Temperature">
                 <Input type="number" value={form.temperature} onChange={e=>set("temperature",parseFloat(e.target.value))}
                   min={0} max={2} step={0.1} />
@@ -270,6 +331,29 @@ export function AgentsPage() {
                 ))}
               </div>
             </div>
+
+            {/* MCP-Server (nur Admin, nur beim Bearbeiten) */}
+            {isAdmin && mcpServers.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">MCP-Server</p>
+                <div className="flex flex-wrap gap-2">
+                  {mcpServers.map(s => (
+                    <button key={s.id} type="button"
+                      onClick={() => set("mcp_servers", form.mcp_servers.includes(s.id)
+                        ? form.mcp_servers.filter((x: string) => x !== s.id)
+                        : [...form.mcp_servers, s.id]
+                      )}
+                      className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                        form.mcp_servers.includes(s.id)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border hover:bg-accent"
+                      }`}>
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Soul */}
             <Field label="Soul (Persönlichkeit)" hint="Markdown — beschreibt Charakter und Kommunikationsstil des Agenten">
