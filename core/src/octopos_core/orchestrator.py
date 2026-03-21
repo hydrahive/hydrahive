@@ -635,7 +635,11 @@ class Orchestrator:
                         "arguments": fn.get("arguments", "{}"),
                     })
                 continue
-            input_items.append({"role": role, "content": content})
+            # user/assistant: Responses API erwartet content als Liste
+            input_items.append({
+                "role":    role,
+                "content": [{"type": "input_text" if role == "user" else "output_text", "text": content}],
+            })
 
         resp_tools = None
         if tools:
@@ -645,16 +649,20 @@ class Orchestrator:
                     "name":        t["function"]["name"],
                     "description": t["function"].get("description", ""),
                     "parameters":  t["function"].get("parameters", {"type": "object", "properties": {}}),
+                    "strict":      None,
                 }
                 for t in tools
             ]
 
+        # Codex API: temperature, max_output_tokens etc. werden abgelehnt
         payload: dict = {
-            "model":       model_id,
-            "input":       input_items,
-            "temperature": agent_cfg.llm.temperature,
-            "store":       False,
-            "stream":      True,   # Codex API erfordert stream=true
+            "model":                  model_id,
+            "input":                  input_items,
+            "store":                  False,
+            "stream":                 True,
+            "text":                   {"verbosity": "medium"},
+            "include":                ["reasoning.encrypted_content"],
+            "parallel_tool_calls":    True,
         }
         if system_prompt:
             payload["instructions"] = system_prompt
