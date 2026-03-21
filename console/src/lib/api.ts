@@ -98,6 +98,9 @@ export const api = {
   updateGiteaConfig: (d: GiteaConfig) => api.put("/gitea/config", d),
   giteaRepos:        () => api.get<{repos: GiteaRepo[]}>("/gitea/repos"),
   giteaProjectPRs:   (id: string) => api.get<{prs: unknown[]; count: number}>(`/gitea/repos/${id}/prs`),
+  // System-Update
+  updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
+  updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
 };
 
 export interface AuditEntry {
@@ -166,4 +169,15 @@ export interface GiteaRepo {
   html_url:       string;
   default_branch: string;
   updated:        string;
+}
+
+export interface UpdateStatus {
+  status:      string;   // "ok" | "running" | "error" | "unknown"
+  started_at?: string;
+  finished_at?: string;
+  commit?:     string;
+  commit_full?: string;
+  message?:    string;
+  log_tail?:   string[];
+  error?:      string;
 }

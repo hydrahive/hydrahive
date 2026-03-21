@@ -1,8 +1,9 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive, Sun, Moon, Sparkles, Plug, GitBranch } from "lucide-react";
+import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive, Sun, Moon, Sparkles, Plug, GitBranch, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { api } from "@/lib/api";
 
 const navAll = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -21,6 +22,60 @@ const navAdmin = [
   { to: "/audit",     icon: ShieldCheck,     label: "Audit-Log"  },
   { to: "/backup",    icon: Archive,         label: "Backup"     },
 ];
+
+function useUpdateStatus(isAdmin: boolean) {
+  const [updating, setUpdating] = useState(false);
+  const [lastCommit, setLastCommit] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const check = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const s = await api.updateStatus();
+      if (s.status === "running") {
+        setUpdating(true);
+      } else {
+        setUpdating(false);
+        if (s.commit) setLastCommit(s.commit);
+        if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
+        else setError(null);
+      }
+    } catch {
+      // status endpoint not critical
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    check();
+    const t = setInterval(check, 15000);
+    return () => clearInterval(t);
+  }, [check]);
+
+  const trigger = useCallback(async () => {
+    setUpdating(true);
+    setError(null);
+    try {
+      await api.updateTrigger();
+      // poll faster while updating
+      const poll = setInterval(async () => {
+        try {
+          const s = await api.updateStatus();
+          if (s.status !== "running") {
+            clearInterval(poll);
+            setUpdating(false);
+            if (s.commit) setLastCommit(s.commit);
+            if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
+          }
+        } catch { clearInterval(poll); setUpdating(false); }
+      }, 3000);
+    } catch (e: unknown) {
+      setUpdating(false);
+      setError(e instanceof Error ? e.message : "Fehler");
+    }
+  }, []);
+
+  return { updating, lastCommit, error, trigger };
+}
 
 function useDarkMode() {
   const [dark, setDark] = useState(() => {
@@ -42,6 +97,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const nav = isAdmin ? [...navAll, ...navAdmin] : navAll;
   const [dark, toggleDark] = useDarkMode();
+  const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
 
   return (
     <div className="flex h-screen bg-background">
@@ -63,6 +119,27 @@ export function AdminLayout() {
             </NavLink>
           ))}
         </nav>
+        {isAdmin && (
+          <div className="px-2 pb-2">
+            {updateError && (
+              <div className="text-xs text-destructive bg-destructive/10 rounded-md px-2 py-1.5 mb-1">
+                {updateError}
+              </div>
+            )}
+            <button
+              onClick={triggerUpdate}
+              disabled={updating}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
+                updating
+                  ? "text-muted-foreground cursor-not-allowed"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}>
+              <RefreshCw className={cn("h-3.5 w-3.5", updating && "animate-spin")} />
+              {updating ? "Update läuft…" : lastCommit ? `Update (${lastCommit})` : "Update auslösen"}
+            </button>
+          </div>
+        )}
         <div className="p-3 border-t space-y-1">
           <div className="px-3 py-1.5 text-xs text-muted-foreground flex items-center justify-between">
             <span className="truncate">{user?.username}</span>
