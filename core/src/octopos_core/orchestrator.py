@@ -580,11 +580,12 @@ class Orchestrator:
 
     async def _openai_codex_call(
         self,
-        agent_cfg:   AgentConfig,
-        messages:    list[dict],
-        tools:       list[dict] | None,
-        token_data:  dict,
-        model_name:  str,
+        agent_cfg:    AgentConfig,
+        messages:     list[dict],
+        tools:        list[dict] | None,
+        token_data:   dict,
+        model_name:   str,
+        force_tools:  bool = True,
     ):
         """
         ChatGPT Plus/Pro via Codex OAuth.
@@ -677,7 +678,7 @@ class Orchestrator:
             payload["instructions"] = instructions
         if resp_tools:
             payload["tools"]       = resp_tools
-            payload["tool_choice"] = "required"
+            payload["tool_choice"] = "required" if force_tools else "auto"
 
         headers = {
             "Authorization":      f"Bearer {access_token}",
@@ -842,7 +843,8 @@ class Orchestrator:
                                     tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
                                 cur_messages.extend(tool_results)
                                 next_resp = await self._openai_codex_call(
-                                    boss_cfg, cur_messages, litellm_tools, codex_token, _model_name
+                                    boss_cfg, cur_messages, litellm_tools, codex_token, _model_name,
+                                    force_tools=False,
                                 )
                                 msg = next_resp.choices[0].message
                             # Antwort streamen
