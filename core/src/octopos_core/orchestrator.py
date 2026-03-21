@@ -629,7 +629,7 @@ class Orchestrator:
                     fn = tc.get("function", {})
                     input_items.append({
                         "type":      "function_call",
-                        "id":        tc.get("id", ""),
+                        "id":        tc.get("item_id") or tc.get("id", ""),
                         "call_id":   tc.get("id", ""),
                         "name":      fn.get("name", ""),
                         "arguments": fn.get("arguments", "{}"),
@@ -739,6 +739,7 @@ class Orchestrator:
         tool_calls_out = [
             SimpleNamespace(
                 id=fn["call_id"] or fn["id"],
+                item_id=fn["id"],
                 type="function",
                 function=SimpleNamespace(
                     name=fn["name"],
@@ -818,7 +819,7 @@ class Orchestrator:
                                 # Tool-Calls ausführen
                                 tool_results = []
                                 asst_tc = [
-                                    {"id": tc.id, "type": "function",
+                                    {"id": tc.id, "item_id": getattr(tc, "item_id", tc.id), "type": "function",
                                      "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
                                     for tc in msg.tool_calls
                                 ]
