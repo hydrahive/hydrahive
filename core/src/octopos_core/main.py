@@ -2321,6 +2321,43 @@ def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(
 
 
 
+@app.get("/llm/available-models")
+async def get_available_models(_u: tuple = Depends(require_login)):
+    """Gibt verfügbare LLM-Modelle zurück: Anthropic (konfiguriert) + Ollama (live Tags)."""
+    import httpx as _httpx
+    models: list[dict] = []
+
+    config = _load_llm_config()
+    providers = config.get("providers", {})
+
+    # Anthropic / Claude
+    if providers.get("claude_max", {}).get("enabled") or providers.get("anthropic", {}).get("enabled"):
+        for m in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]:
+            models.append({"id": m, "label": m, "provider": "anthropic"})
+
+    # OpenAI
+    if providers.get("openai", {}).get("enabled"):
+        for m in ["gpt-4o-mini", "gpt-4o"]:
+            models.append({"id": m, "label": m, "provider": "openai"})
+
+    # Ollama — live Tags abfragen
+    ollama_cfg = providers.get("ollama", {})
+    ollama_base = ollama_cfg.get("base_url", "http://localhost:11434")
+    try:
+        async with _httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(f"{ollama_base}/api/tags")
+            if resp.status_code == 200:
+                tags = resp.json().get("models", [])
+                for t in tags:
+                    name = t.get("name", "")
+                    if name:
+                        models.append({"id": f"ollama/{name}", "label": f"ollama/{name}", "provider": "ollama"})
+    except Exception:
+        pass  # Ollama nicht erreichbar — kein Fehler
+
+    return {"models": models}
+
+
 @app.get("/llm/claude_token_status")
 def get_claude_token_status():
     """
