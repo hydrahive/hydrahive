@@ -328,16 +328,18 @@ class Orchestrator:
         return "\n\n".join(parts)
 
     @staticmethod
-    def _resolve_model(model: str) -> tuple[str, str | None]:
+    def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str, str | None]:
         """
         Gibt (litellm_model, api_base) zurück.
         Provider-Prefix (z.B. anthropic/, openai/) → direkt weiterreichen.
         Claude/GPT-Modellnamen → passenden Provider-Prefix ergänzen.
         Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
+        ollama_base_url: wenn gesetzt, wird statt localhost dieser Endpunkt genutzt (WKS-Ollama).
         """
+        ollama_base = ollama_base_url or "http://localhost:11434"
         # ollama/ → ollama_chat/ damit /api/chat (mit Tool Calling) statt /api/generate genutzt wird
         if model.startswith("ollama/"):
-            return f"ollama_chat/{model[len('ollama/'):]}", "http://localhost:11434"
+            return f"ollama_chat/{model[len('ollama/'):]}", ollama_base
         if "/" in model:
             return model, None
         # Bekannte Cloud-Modell-Prefixe automatisch ergänzen
@@ -346,7 +348,7 @@ class Orchestrator:
         if model.startswith(("gpt-", "o1-", "o3-")):
             return f"openai/{model}", None
         # Kein Prefix → lokales Ollama-Modell (chat)
-        return f"ollama_chat/{model}", "http://localhost:11434"
+        return f"ollama_chat/{model}", ollama_base
 
     async def _llm_call_single(
         self,
@@ -361,7 +363,7 @@ class Orchestrator:
         if oauth_token:
             return await self._anthropic_oauth_call(agent_cfg, messages, tools, oauth_token, model_name)
 
-        model, api_base = self._resolve_model(model_name)
+        model, api_base = self._resolve_model(model_name, agent_cfg.llm.ollama_base_url)
         kwargs: dict = {
             "model":       model,
             "messages":    messages,
@@ -718,7 +720,7 @@ class Orchestrator:
                     else:
                         # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
                         import json as _json2
-                        model, api_base = self._resolve_model(_model_name)
+                        model, api_base = self._resolve_model(_model_name, boss_cfg.llm.ollama_base_url)
                         loop_messages = list(messages)
 
                         for _round in range(boss_cfg.max_tool_rounds):

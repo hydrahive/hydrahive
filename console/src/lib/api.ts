@@ -101,6 +101,10 @@ export const api = {
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
+  // WKS (Workstation)
+  getWks:             () => api.get<WksConfig>("/me/wks"),
+  updateWks:          (d: WksConfigPayload) => api.put("/me/wks", d),
+  getWksOllamaModels: () => api.get<{models: {id:string;label:string;provider:string}[];wks_url:string|null;error?:string}>("/me/wks/ollama-models"),
 };
 
 export interface AuditEntry {
@@ -169,6 +173,21 @@ export interface GiteaRepo {
   html_url:       string;
   default_branch: string;
   updated:        string;
+}
+
+export interface WksConfig {
+  configured:  boolean;
+  ip:          string;
+  ssh_user:    string;
+  ollama_port: number;
+  has_ssh_key: boolean;
+}
+
+export interface WksConfigPayload {
+  ip:          string;
+  ssh_user:    string;
+  ollama_port: number;
+  ssh_key?:    string;
 }
 
 export interface UpdateStatus {

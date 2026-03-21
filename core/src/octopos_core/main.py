@@ -1453,15 +1453,16 @@ def my_agent_session_clear(auth: tuple[str, str] = Depends(require_auth)):
 
 
 class MyAgentUpdateRequest(BaseModel):
-    identity:        str
-    soul:            str          = ""
-    model:           str
-    temperature:     float        = 0.7
-    max_tokens:      int          = 4096
-    fallback_models: list[str]    = []
-    tools:           list[str]    = []
-    allowed_agents:  list[str]    = []
-    mcp_servers:     list[str]    = []
+    identity:         str
+    soul:             str          = ""
+    model:            str
+    temperature:      float        = 0.7
+    max_tokens:       int          = 4096
+    fallback_models:  list[str]    = []
+    tools:            list[str]    = []
+    allowed_agents:   list[str]    = []
+    mcp_servers:      list[str]    = []
+    ollama_base_url:  str | None   = None   # WKS-Ollama-Endpunkt
 
 
 @app.put("/me/agent")
@@ -1483,6 +1484,8 @@ async def update_my_agent(
     }
     if req.fallback_models:
         llm_data["fallback_models"] = req.fallback_models
+    if req.ollama_base_url:
+        llm_data["ollama_base_url"] = req.ollama_base_url
 
     agent_data: dict = {
         "id":       agent_id,
@@ -1507,6 +1510,85 @@ async def update_my_agent(
     discovery._register(agent_dir)
     logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
     return {"updated": True, "agent_id": agent_id}
+
+
+# ================================================================== WKS (Workstation-Zugriff)
+
+WKS_KEYS_DIR = Path("/etc/octopos/wks_keys")
+
+
+@app.get("/me/wks")
+def get_my_wks(auth: tuple = Depends(require_auth)):
+    """WKS-Konfiguration des eingeloggten Users abrufen."""
+    username, _ = auth
+    users = _load_users()
+    wks = users.get(username, {}).get("wks", {})
+    return {
+        "configured":   bool(wks.get("ip")),
+        "ip":           wks.get("ip", ""),
+        "ssh_user":     wks.get("ssh_user", username),
+        "ollama_port":  wks.get("ollama_port", 11434),
+        "has_ssh_key":  (WKS_KEYS_DIR / username).exists(),
+    }
+
+
+class WksConfigRequest(BaseModel):
+    ip:           str
+    ssh_user:     str = ""
+    ollama_port:  int = 11434
+    ssh_key:      str = ""   # PEM-Inhalt des privaten SSH-Keys
+
+
+@app.put("/me/wks")
+async def update_my_wks(req: WksConfigRequest, auth: tuple = Depends(require_auth)):
+    """WKS-Konfiguration des eingeloggten Users speichern."""
+    username, _ = auth
+    users = _load_users()
+    if username not in users:
+        raise HTTPException(404, "User nicht gefunden")
+
+    if req.ssh_key.strip():
+        WKS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
+        key_file = WKS_KEYS_DIR / username
+        key_file.write_text(req.ssh_key.strip() + "\n", encoding="utf-8")
+        import stat as _stat
+        key_file.chmod(_stat.S_IRUSR | _stat.S_IWUSR)   # 0o600
+
+    users[username]["wks"] = {
+        "ip":           req.ip.strip(),
+        "ssh_user":     req.ssh_user.strip() or username,
+        "ollama_port":  req.ollama_port,
+        "ssh_key_path": str(WKS_KEYS_DIR / username),
+    }
+    _save_users(users)
+    logger.info("WKS konfiguriert: %s → %s@%s", username, req.ssh_user or username, req.ip)
+    return {"updated": True}
+
+
+@app.get("/me/wks/ollama-models")
+async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):
+    """Verfügbare Ollama-Modelle von der Workstation des Users abfragen."""
+    import httpx as _httpx
+    username, _ = auth
+    users = _load_users()
+    wks = users.get(username, {}).get("wks", {})
+    if not wks.get("ip"):
+        return {"models": [], "wks_url": None}
+
+    wks_url = f"http://{wks['ip']}:{wks.get('ollama_port', 11434)}"
+    try:
+        async with _httpx.AsyncClient(timeout=3) as client:
+            resp = await client.get(f"{wks_url}/api/tags")
+            if resp.status_code == 200:
+                tags = resp.json().get("models", [])
+                models = [
+                    {"id": f"ollama/{t['name']}", "label": f"WKS: {t['name']}", "provider": "wks_ollama"}
+                    for t in tags if t.get("name")
+                ]
+                return {"models": models, "wks_url": wks_url}
+    except Exception as e:
+        return {"models": [], "wks_url": wks_url, "error": str(e)}
+    return {"models": [], "wks_url": wks_url}
 
 
 # ================================================================== AgentLink
@@ -2322,9 +2404,10 @@ def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(
 
 
 @app.get("/llm/available-models")
-async def get_available_models(_u: tuple = Depends(require_auth)):
-    """Gibt verfügbare LLM-Modelle zurück: Anthropic (konfiguriert) + Ollama (live Tags)."""
+async def get_available_models(auth: tuple = Depends(require_auth)):
+    """Gibt verfügbare LLM-Modelle zurück: Anthropic + OpenAI + Server-Ollama + WKS-Ollama."""
     import httpx as _httpx
+    username, _ = auth
     models: list[dict] = []
 
     config = _load_llm_config()
@@ -2340,7 +2423,7 @@ async def get_available_models(_u: tuple = Depends(require_auth)):
         for m in ["gpt-4o-mini", "gpt-4o"]:
             models.append({"id": m, "label": m, "provider": "openai"})
 
-    # Ollama — live Tags abfragen
+    # Server-Ollama — live Tags abfragen
     ollama_cfg = providers.get("ollama", {})
     ollama_base = ollama_cfg.get("base_url", "http://localhost:11434")
     try:
@@ -2354,6 +2437,22 @@ async def get_available_models(_u: tuple = Depends(require_auth)):
                         models.append({"id": f"ollama/{name}", "label": f"ollama/{name}", "provider": "ollama"})
     except Exception:
         pass  # Ollama nicht erreichbar — kein Fehler
+
+    # WKS-Ollama — falls der User eine Workstation konfiguriert hat
+    wks = _load_users().get(username, {}).get("wks", {})
+    if wks.get("ip"):
+        wks_url = f"http://{wks['ip']}:{wks.get('ollama_port', 11434)}"
+        try:
+            async with _httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get(f"{wks_url}/api/tags")
+                if resp.status_code == 200:
+                    tags = resp.json().get("models", [])
+                    for t in tags:
+                        name = t.get("name", "")
+                        if name:
+                            models.append({"id": f"ollama/{name}", "label": f"WKS: {name}", "provider": "wks_ollama", "wks_base_url": wks_url})
+        except Exception:
+            pass  # WKS nicht erreichbar
 
     return {"models": models}
 
