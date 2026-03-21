@@ -10,13 +10,20 @@
 
 - **Multi-Agent Swarms** — Boss-Agent koordiniert Worker-Agenten parallel
 - **Projekt-Isolation** — Jedes Projekt bekommt eigenen Linux-User, Samba-Share und Matrix-Room
-- **Multi-LLM** — Ollama (lokal), Claude Max (OAuth), OpenAI — pro Agent konfigurierbar
+- **Multi-LLM** — Ollama (lokal), Claude Max (OAuth), OpenAI — pro Agent konfigurierbar; Fallback-Ketten
 - **Matrix-Integration** — Agenten sind echte Matrix-Bots, du kannst mit Element eingreifen
 - **QMD-Skills** — Angelerntes Wissen in Markdown-Dateien mit YAML-Frontmatter
-- **Webkonsole** — Vollständige Verwaltung ohne SSH: Agenten, Projekte, Users, Logs, Skills
+- **Persönlicher Agent** — Jeder User bekommt einen eigenen privaten Agenten (`personal_<username>`)
+- **Memory-System** — Agenten speichern Wissen persistent in Markdown-Dateien, auto-injiziert in System-Prompt
+- **WKS-Zugang** — Persönliche Agenten verbinden sich per SSH/SFTP mit der eigenen Workstation
+- **WKS-Ollama** — Ollama auf der Workstation wird automatisch im Modell-Dropdown angeboten
+- **Git-Tools** — Agenten können committen, pushen und Pull Requests auf Gitea erstellen
+- **MCP-Server** — Externe Tool-Server per streamableHttp einbinden (z.B. QMD Memory Search)
+- **Webkonsole** — Vollständige Verwaltung ohne SSH: Agenten, Projekte, Users, Logs, Skills, MCP
 - **Streaming** — Antworten erscheinen Token für Token
 - **Webhook-System** — Externe Trigger für Agenten (`/hooks/{project}/wake`)
 - **Audit-Log** — Alle User-Aktionen protokolliert
+- **System-Update** — Ein-Klick-Update aus der Webkonsole (git pull + Build + Restart)
 
 ## Deployment-Profile
 

@@ -257,7 +257,7 @@
     <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">Handbuch</div>
   </div>
   <nav class="toc">
-    <div class="toc-section">Inhalt</div>
+    <div class="toc-section">Grundlagen</div>
     <a href="#installation">1. Installation</a>
     <a href="#erster-login">2. Erster Login</a>
     <a href="#webkonsole">3. Webkonsole</a>
@@ -266,13 +266,22 @@
     <a href="#chat">6. Chat verwenden</a>
     <a href="#llm">7. LLM-Konfiguration</a>
     <a href="#skills">8. Skills</a>
-    <a href="#webhooks">9. Webhooks</a>
-    <a href="#benutzer">10. Benutzer & Rollen</a>
-    <a href="#backup">11. Backup & Restore</a>
-    <a href="#audit">12. Audit-Log</a>
-    <a href="#matrix">13. Matrix-Integration</a>
-    <a href="#gpu">14. GPU-Monitoring</a>
-    <a href="#troubleshooting">15. Troubleshooting</a>
+    <div class="toc-section">Mein Agent</div>
+    <a href="#mein-agent">9. Persönlicher Agent</a>
+    <a href="#memory">10. Gedächtnis-System</a>
+    <a href="#wks">11. WKS-Zugang</a>
+    <div class="toc-section">Erweiterungen</div>
+    <a href="#git">12. Git-Tools</a>
+    <a href="#mcp">13. MCP-Server</a>
+    <a href="#webhooks">14. Webhooks</a>
+    <div class="toc-section">Administration</div>
+    <a href="#benutzer">15. Benutzer & Rollen</a>
+    <a href="#backup">16. Backup & Restore</a>
+    <a href="#audit">17. Audit-Log</a>
+    <a href="#matrix">18. Matrix-Integration</a>
+    <a href="#gpu">19. GPU-Monitoring</a>
+    <a href="#update">20. System-Update</a>
+    <a href="#troubleshooting">21. Troubleshooting</a>
   </nav>
 </aside>
 
@@ -336,14 +345,17 @@ certbot --nginx -d mein.domain.de</code></pre>
     <table>
       <tr><th>Bereich</th><th>Funktion</th><th>Zugriff</th></tr>
       <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td><td>alle</td></tr>
+      <tr><td><strong>Mein Agent</strong></td><td>Persönlicher Agent: Chat, Einstellungen, Skills, WKS</td><td>alle</td></tr>
       <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td><td>alle (Schreiben: admin)</td></tr>
       <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks konfigurieren</td><td>alle (Schreiben: admin)</td></tr>
-      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen</td><td>alle</td></tr>
+      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen, GPU-Auslastung</td><td>alle</td></tr>
       <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td><td>alle</td></tr>
-      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI)</td><td>admin</td></tr>
+      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI, Gitea)</td><td>admin</td></tr>
+      <tr><td><strong>MCP-Server</strong></td><td>Externe Tool-Server konfigurieren</td><td>admin</td></tr>
       <tr><td><strong>Benutzer</strong></td><td>Benutzer anlegen und verwalten</td><td>admin</td></tr>
       <tr><td><strong>Backup</strong></td><td>Backups erstellen, herunterladen und wiederherstellen</td><td>admin</td></tr>
       <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td><td>admin</td></tr>
+      <tr><td><strong>Update</strong></td><td>System auf neuesten Stand bringen (Sidebar-Button)</td><td>admin</td></tr>
     </table>
   </section>
 
@@ -425,10 +437,21 @@ heartbeat_tasks:
       <tr><td><code>file_write</code></td><td>Datei im Projektverzeichnis schreiben</td></tr>
       <tr><td><code>web_search</code></td><td>Websuche durchführen</td></tr>
       <tr><td><code>http_request</code></td><td>HTTP-Anfragen an externe APIs</td></tr>
+      <tr><td><code>shell_exec</code></td><td>Shell-Befehl auf dem Server ausführen (Blocklist beachten)</td></tr>
       <tr><td><code>dispatch_task</code></td><td>Andere Agenten beauftragen (nur boss)</td></tr>
       <tr><td><code>spawn_agent</code></td><td>Kurzlebigen Worker-Agenten erstellen</td></tr>
+      <tr><td><code>ask_agent</code></td><td>Synchron einen anderen Agenten befragen</td></tr>
       <tr><td><code>write_handoff</code></td><td>Aufgabe/Kontext an anderen Agenten übergeben (AgentLink)</td></tr>
       <tr><td><code>read_handoff</code></td><td>Übergabe-Auftrag entgegennehmen (AgentLink)</td></tr>
+      <tr><td><code>read_memory</code></td><td>Gedächtnis-Datei des Agenten lesen</td></tr>
+      <tr><td><code>write_memory</code></td><td>Gedächtnis-Datei des Agenten schreiben</td></tr>
+      <tr><td><code>git_status</code></td><td>Git-Status eines Projekts abfragen</td></tr>
+      <tr><td><code>git_commit</code></td><td>Dateien committen</td></tr>
+      <tr><td><code>git_push</code></td><td>Commits zu Gitea pushen</td></tr>
+      <tr><td><code>git_create_pr</code></td><td>Pull Request erstellen</td></tr>
+      <tr><td><code>wks_shell_exec</code></td><td>Shell-Befehl auf der Workstation ausführen (SSH)</td></tr>
+      <tr><td><code>wks_file_read</code></td><td>Datei von der Workstation lesen (SFTP)</td></tr>
+      <tr><td><code>wks_file_write</code></td><td>Datei auf die Workstation schreiben (SFTP)</td></tr>
     </table>
     <div class="note">Alle Filesystem-Operationen sind auf <code>/projects/&lt;projekt-id&gt;/</code> beschränkt. Zugriff darüber hinaus wird verweigert.</div>
   </section>
@@ -573,9 +596,152 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
     <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu eingelesen. Kein Neustart notwendig.</div>
   </section>
 
-  <!-- 9. WEBHOOKS -->
+  <!-- 9. PERSÖNLICHER AGENT -->
+  <section class="chapter" id="mein-agent">
+    <h2>9. Persönlicher Agent (Mein Agent)</h2>
+    <p>Jeder User bekommt automatisch einen persönlichen Agenten — <code>personal_&lt;username&gt;</code>. Dieser Agent läuft unabhängig von Projekten und ist direkt über <strong>Mein Agent</strong> in der Sidebar erreichbar.</p>
+
+    <h3>Chat</h3>
+    <p>Der Chat unter <strong>Mein Agent → Chat</strong> funktioniert wie der Projekt-Chat: Streaming, History, Slash Commands. Der Agent merkt sich den Gesprächsverlauf sessionübergreifend.</p>
+
+    <h3>Einstellungen</h3>
+    <p>Unter <strong>Mein Agent → Einstellungen</strong> kann jeder User seinen Agenten selbst konfigurieren:</p>
+    <table>
+      <tr><th>Einstellung</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Name / Identität</strong></td><td>Anzeigename des Agenten</td></tr>
+      <tr><td><strong>Soul</strong></td><td>Markdown-Text für Persönlichkeit und Verhalten</td></tr>
+      <tr><td><strong>Primäres Modell</strong></td><td>Dropdown mit Server-Ollama, WKS-Ollama und Cloud-Modellen</td></tr>
+      <tr><td><strong>Temperatur</strong></td><td>Kreativität (0 = deterministisch, 1 = kreativ)</td></tr>
+      <tr><td><strong>Max Tokens</strong></td><td>Maximale Antwortlänge</td></tr>
+      <tr><td><strong>Fallback-Modelle</strong></td><td>Alternativ-Modelle wenn primäres nicht erreichbar</td></tr>
+      <tr><td><strong>Tools</strong></td><td>Welche Tools der Agent nutzen darf</td></tr>
+    </table>
+
+    <div class="note">Der persönliche Agent hat zusätzliche Tabs: <strong>Skills</strong> (eigenes Wissen anlegen), <strong>MCP</strong> (externe Tool-Server zuweisen) und <strong>WKS</strong> (Workstation-Zugang konfigurieren).</div>
+  </section>
+
+  <!-- 10. MEMORY -->
+  <section class="chapter" id="memory">
+    <h2>10. Gedächtnis-System (Memory)</h2>
+    <p>Das Gedächtnis-System ermöglicht Agenten, Informationen persistent über Sessions hinaus zu speichern und beim nächsten Start automatisch zu laden.</p>
+
+    <h3>Funktionsweise</h3>
+    <p>Memory-Dateien liegen als Markdown unter <code>/agents/&lt;id&gt;/memory/</code> und werden beim Start jeder Session automatisch in den System-Prompt injiziert.</p>
+    <pre><code>/agents/personal_admin/memory/
+├── user.md          # Informationen über den User
+├── projects.md      # Aktive Projekte und Kontext
+└── daily_2026-03-21.md  # Tages-Notizen</code></pre>
+
+    <h3>Memory-Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>Beschreibung</th></tr>
+      <tr><td><code>read_memory</code></td><td>Einzelne Gedächtnis-Datei lesen (<code>filename</code>)</td></tr>
+      <tr><td><code>write_memory</code></td><td>Gedächtnis-Datei schreiben oder aktualisieren (<code>filename</code>, <code>content</code>)</td></tr>
+    </table>
+
+    <h3>QMD Memory Search</h3>
+    <p>Wenn der Agent <code>qmd</code> als MCP-Server konfiguriert hat, kann er gezielt in Memory-Dateien suchen statt alles zu laden — spart erheblich Tokens:</p>
+    <pre><code># Im Chat:
+"Was weißt du über das AgentLink-Projekt?"
+→ Agent: qmd_query("AgentLink Projekt")
+→ Liefert nur relevante Abschnitte</code></pre>
+  </section>
+
+  <!-- 11. WKS -->
+  <section class="chapter" id="wks">
+    <h2>11. WKS-Zugang (Workstation)</h2>
+    <p>Persönliche Agenten können via SSH auf die eigene Workstation des Users zugreifen — Dateien lesen/schreiben und Befehle ausführen.</p>
+
+    <h3>WKS einrichten</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Mein Agent → WKS</strong> öffnen</span></li>
+      <li><span class="step-num">2</span><span>IP-Adresse der Workstation eintragen (z.B. <code>192.168.178.197</code>)</span></li>
+      <li><span class="step-num">3</span><span>SSH-Benutzer eintragen (z.B. <code>till</code>)</span></li>
+      <li><span class="step-num">4</span><span>SSH Private Key (PEM) einfügen</span></li>
+      <li><span class="step-num">5</span><span>Ollama-Port eintragen (Standard: <code>11434</code>) → Speichern</span></li>
+    </ol>
+
+    <p><strong>Public Key auf der Workstation hinterlegen:</strong></p>
+    <pre><code>echo "ssh-ed25519 AAAA... octopos-wks@octopos" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+sudo systemctl enable --now ssh</code></pre>
+
+    <p>Klick auf <strong>Verbindung testen</strong> zeigt die verfügbaren Ollama-Modelle auf der WKS.</p>
+
+    <h3>WKS-Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>Beschreibung</th></tr>
+      <tr><td><code>wks_shell_exec</code></td><td>Shell-Befehl auf der WKS ausführen (mit optionalem <code>cwd</code>)</td></tr>
+      <tr><td><code>wks_file_read</code></td><td>Datei von der WKS lesen (absoluter Pfad)</td></tr>
+      <tr><td><code>wks_file_write</code></td><td>Datei auf die WKS schreiben (absoluter Pfad)</td></tr>
+    </table>
+    <div class="note">WKS-Tools müssen unter <strong>Mein Agent → Einstellungen → Tools</strong> aktiviert werden.</div>
+
+    <h3>WKS-Ollama</h3>
+    <p>Wenn Ollama auf der Workstation läuft und von außen erreichbar ist, erscheinen WKS-Modelle im Modell-Dropdown als <code>WKS: &lt;modellname&gt;</code>:</p>
+    <pre><code># Ollama auf allen Interfaces lauschen lassen:
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+echo '[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee /etc/systemd/system/ollama.service.d/listen.conf
+sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
+  </section>
+
+  <!-- 12. GIT -->
+  <section class="chapter" id="git">
+    <h2>12. Git-Tools</h2>
+    <p>Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits erstellen und Pull Requests öffnen.</p>
+
+    <h3>Gitea konfigurieren</h3>
+    <p>Unter <strong>LLM-Config → Gitea</strong> oder direkt in <code>/etc/octopos/gitea_config.json</code>:</p>
+    <pre><code>{
+  "url": "http://192.168.178.181:3001",
+  "token": "dein-gitea-token",
+  "org": "octopos"
+}</code></pre>
+
+    <h3>Git-Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>Beschreibung</th></tr>
+      <tr><td><code>git_status</code></td><td>Status eines Repos abfragen</td></tr>
+      <tr><td><code>git_diff</code></td><td>Unstaged/staged Änderungen anzeigen</td></tr>
+      <tr><td><code>git_commit</code></td><td>Dateien committen (<code>files</code>, <code>message</code>, optional <code>branch</code>)</td></tr>
+      <tr><td><code>git_push</code></td><td>Branch zu Gitea pushen</td></tr>
+      <tr><td><code>git_create_pr</code></td><td>Pull Request erstellen (<code>title</code>, <code>head</code>, optional <code>base</code>, <code>body</code>)</td></tr>
+    </table>
+  </section>
+
+  <!-- 13. MCP -->
+  <section class="chapter" id="mcp">
+    <h2>13. MCP-Server</h2>
+    <p>MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. OctopOS unterstützt <code>streamableHttp</code>-Transport.</p>
+
+    <h3>MCP-Server konfigurieren (Admin)</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>MCP-Server</strong> in der Sidebar → <strong>Neuer MCP-Server</strong></span></li>
+      <li><span class="step-num">2</span><span>ID, Name, Transport (<code>streamableHttp</code>), URL eintragen</span></li>
+    </ol>
+
+    <h3>QMD — Memory Search MCP</h3>
+    <p>OctopOS wird mit einem QMD-MCP-Server ausgeliefert (Port 8181). Er ermöglicht semantische Suche in Agent-Memory und Skills:</p>
+    <pre><code>[
+  {
+    "id": "qmd",
+    "name": "QMD Memory Search",
+    "transport": "streamableHttp",
+    "url": "http://127.0.0.1:8181/mcp"
+  }
+]</code></pre>
+
+    <h3>MCP im Agenten aktivieren</h3>
+    <p>MCP-Server werden pro Agent in <code>agent.yaml</code> eingetragen:</p>
+    <pre><code>mcp_servers:
+  - qmd</code></pre>
+    <p>Oder unter <strong>Mein Agent → MCP</strong> für den persönlichen Agenten.</p>
+  </section>
+
+  <!-- 14. WEBHOOKS (was 9) -->
   <section class="chapter" id="webhooks">
-    <h2>9. Webhooks</h2>
+    <h2>14. Webhooks</h2>
     <p>Webhooks ermöglichen externen Systemen OctopOS zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.</p>
 
     <h3>Webhook anlegen (Konsole)</h3>
@@ -600,9 +766,9 @@ expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pre>
   </section>
 
-  <!-- 10. BENUTZER -->
+  <!-- 15. BENUTZER (was 10) -->
   <section class="chapter" id="benutzer">
-    <h2>10. Benutzer und Rollen</h2>
+    <h2>15. Benutzer und Rollen</h2>
     <p>Unter <strong>Benutzer</strong> (Admin only) werden Accounts verwaltet. OctopOS kennt zwei Rollen:</p>
     <table>
       <tr><th>Rolle</th><th>Rechte</th></tr>
@@ -616,9 +782,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     </ul>
   </section>
 
-  <!-- 11. BACKUP -->
+  <!-- 16. BACKUP (was 11) -->
   <section class="chapter" id="backup">
-    <h2>11. Backup &amp; Restore</h2>
+    <h2>16. Backup &amp; Restore</h2>
     <p>Unter <strong>Backup</strong> (Admin only) können vollständige System-Backups erstellt und verwaltet werden.</p>
 
     <h3>Was wird gesichert?</h3>
@@ -647,9 +813,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <div class="note">Nach der Wiederherstellung sind alle Agenten, Projekte und Konfigurationen auf den Stand des Backups zurückgesetzt.</div>
   </section>
 
-  <!-- 12. AUDIT -->
+  <!-- 17. AUDIT (was 12) -->
   <section class="chapter" id="audit">
-    <h2>12. Audit-Log</h2>
+    <h2>17. Audit-Log</h2>
     <p>Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:</p>
     <ul>
       <li>Logins (erfolgreich und fehlgeschlagen)</li>
@@ -664,9 +830,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <p><strong>Filter:</strong> Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.</p>
   </section>
 
-  <!-- 13. MATRIX -->
+  <!-- 18. MATRIX (was 13) -->
   <section class="chapter" id="matrix">
-    <h2>13. Matrix-Integration</h2>
+    <h2>18. Matrix-Integration</h2>
     <p>OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
 
     <h3>Element-Client verbinden</h3>
@@ -682,9 +848,9 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <div class="note">Der Matrix-Watchdog startet abgestürzte Bots automatisch neu — mit 15 Sekunden Verzögerung.</div>
   </section>
 
-  <!-- 14. GPU -->
+  <!-- 19. GPU (was 14) -->
   <section class="chapter" id="gpu">
-    <h2>14. GPU-Monitoring</h2>
+    <h2>19. GPU-Monitoring</h2>
     <p>Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die <strong>System</strong>-Seite eine GPU-Auslastungsanzeige.</p>
 
     <h3>Angezeigte Werte</h3>
@@ -702,9 +868,26 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <p>NVIDIA-Treiber und <code>nvidia-smi</code> müssen installiert sein. Ohne GPU oder ohne Treiber wird die GPU-Sektion nicht angezeigt — kein Fehler.</p>
   </section>
 
-  <!-- 15. TROUBLESHOOTING -->
+  <!-- 20. SYSTEM-UPDATE -->
+  <section class="chapter" id="update">
+    <h2>20. System-Update</h2>
+    <p>OctopOS kann sich selbst aus der Webkonsole heraus auf den neuesten Stand bringen — ohne SSH.</p>
+
+    <h3>Update starten</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Sidebar → <strong>Update</strong>-Button (Admin only, oben links neben dem Logo)</span></li>
+      <li><span class="step-num">2</span><span>Bestätigen</span></li>
+      <li><span class="step-num">3</span><span>Das System zieht die neuesten Änderungen aus dem Git-Repository, baut die Console neu und startet den Service</span></li>
+    </ol>
+
+    <p>Der Update-Status ist live einsehbar — inkl. Log-Ausgaben und Commit-Hash nach Abschluss. Nach einem Update die Seite neu laden.</p>
+
+    <div class="note"><strong>Vorsicht:</strong> Während des Updates ist der Core kurz nicht erreichbar. Laufende Agenten werden nach dem Neustart automatisch wieder gestartet.</div>
+  </section>
+
+  <!-- 21. TROUBLESHOOTING (was 15) -->
   <section class="chapter" id="troubleshooting">
-    <h2>15. Troubleshooting</h2>
+    <h2>21. Troubleshooting</h2>
 
     <h3>Konsole nicht erreichbar</h3>
     <pre><code>sudo systemctl status nginx

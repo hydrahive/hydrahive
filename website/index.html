@@ -471,6 +471,31 @@
       <p>Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
     </div>
     <div class="card">
+      <div class="card-icon">🧑‍💻</div>
+      <h3>Personal Agent</h3>
+      <p>Every user gets a private agent (<code>personal_&lt;username&gt;</code>) with its own chat, skills, memory and workstation access — completely independent of projects.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <h3>Memory System</h3>
+      <p>Agents store knowledge in Markdown files, auto-injected into every session. Combine with QMD semantic search to save tokens on large memory sets.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💻</div>
+      <h3>WKS Access</h3>
+      <p>Personal agents SSH into your workstation — run commands, read and write files. WKS Ollama models appear automatically in the model dropdown.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔧</div>
+      <h3>Git Integration</h3>
+      <p>Agents commit, push, and create pull requests on Gitea. Full git workflow from chat — no terminal needed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔌</div>
+      <h3>MCP Servers</h3>
+      <p>Connect external tool servers via streamableHttp (Model Context Protocol). Ships with QMD — semantic memory search built in.</p>
+    </div>
+    <div class="card">
       <div class="card-icon">🔗</div>
       <h3>Webhook System</h3>
       <p>Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
@@ -483,7 +508,7 @@
     <div class="card">
       <div class="card-icon">🖥️</div>
       <h3>Full Web Console</h3>
-      <p>Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Built with React + Tailwind.</p>
+      <p>Manage agents, projects, users, skills, webhooks, MCP servers and LLM config — all without SSH. One-click system update included.</p>
     </div>
   </div>
 </section>
@@ -642,12 +667,13 @@
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
       <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">Available Tools</h3>
       <div style="display:flex;flex-direction:column;gap:0.6rem;">
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read</span> <span style="color:var(--muted)">— read project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted)">— write project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted)">— search the web</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted)">— call external APIs</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task</span> <span style="color:var(--muted)">— delegate to workers (boss only)</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">spawn_agent</span> <span style="color:var(--muted)">— create short-lived agent</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read / file_write</span> <span style="color:var(--muted)">— project filesystem</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search / http_request</span> <span style="color:var(--muted)">— web &amp; APIs</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">shell_exec</span> <span style="color:var(--muted)">— server shell (blocklist)</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task / spawn_agent</span> <span style="color:var(--muted)">— agent coordination</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">read_memory / write_memory</span> <span style="color:var(--muted)">— persistent memory</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">git_commit / git_push / git_create_pr</span> <span style="color:var(--muted)">— Gitea</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">wks_shell_exec / wks_file_read / wks_file_write</span> <span style="color:var(--muted)">— workstation</span></div>
       </div>
     </div>
   </div>
