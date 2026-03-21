@@ -90,6 +90,16 @@ else
     error "octopos-core konnte nicht starten — prüfe: journalctl -u octopos-core -n 30"
 fi
 
+# --- 7. Gitea sicherstellen ---
+if systemctl is-enabled --quiet gitea 2>/dev/null; then
+    if systemctl is-active --quiet gitea; then
+        info "Gitea läuft bereits"
+    else
+        info "Starte Gitea..."
+        systemctl start gitea && success "Gitea gestartet" || warn "Gitea konnte nicht gestartet werden"
+    fi
+fi
+
 # --- Versions-Info ---
 COMMIT=$(git -C "${TMPDIR_BASE}" rev-parse --short HEAD 2>/dev/null || echo "unbekannt")
 echo ""
