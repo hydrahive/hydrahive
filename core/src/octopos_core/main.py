@@ -2322,7 +2322,7 @@ def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(
 
 
 @app.get("/llm/available-models")
-async def get_available_models(_u: tuple = Depends(require_login)):
+async def get_available_models(_u: tuple = Depends(require_auth)):
     """Gibt verfügbare LLM-Modelle zurück: Anthropic (konfiguriert) + Ollama (live Tags)."""
     import httpx as _httpx
     models: list[dict] = []
