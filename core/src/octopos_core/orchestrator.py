@@ -335,6 +335,9 @@ class Orchestrator:
         Claude/GPT-Modellnamen → passenden Provider-Prefix ergänzen.
         Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
         """
+        # ollama/ → ollama_chat/ damit /api/chat (mit Tool Calling) statt /api/generate genutzt wird
+        if model.startswith("ollama/"):
+            return f"ollama_chat/{model[len('ollama/'):]}", "http://localhost:11434"
         if "/" in model:
             return model, None
         # Bekannte Cloud-Modell-Prefixe automatisch ergänzen
@@ -342,8 +345,8 @@ class Orchestrator:
             return f"anthropic/{model}", None
         if model.startswith(("gpt-", "o1-", "o3-")):
             return f"openai/{model}", None
-        # Kein Prefix → lokales Ollama-Modell
-        return f"ollama/{model}", "http://localhost:11434"
+        # Kein Prefix → lokales Ollama-Modell (chat)
+        return f"ollama_chat/{model}", "http://localhost:11434"
 
     async def _llm_call_single(
         self,
