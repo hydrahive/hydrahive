@@ -589,12 +589,12 @@ class Orchestrator:
         """
         ChatGPT Plus/Pro via Codex OAuth.
         Endpoint: chatgpt.com/backend-api/codex/responses (OpenAI Responses API).
+        Die Codex API erfordert stream=true — wir sammeln alle Chunks zu einem Response.
         """
         import json as _json
-        import litellm as _litellm
+        import httpx as _httpx
         from types import SimpleNamespace
 
-        # Model-ID normalisieren: "openai-codex/gpt-5.2" → "gpt-5.2"
         model_id = model_name
         if model_id.startswith("openai-codex/"):
             model_id = model_id[len("openai-codex/"):]
@@ -611,15 +611,13 @@ class Orchestrator:
             if role == "system":
                 system_prompt = content
                 continue
-            # Tool-Result: Chat Completions role=tool → function_call_output
             if role == "tool":
                 input_items.append({
-                    "type":     "function_call_output",
-                    "call_id":  m.get("tool_call_id", ""),
-                    "output":   content,
+                    "type":    "function_call_output",
+                    "call_id": m.get("tool_call_id", ""),
+                    "output":  content,
                 })
                 continue
-            # Assistant mit Tool-Calls
             tc_list = m.get("tool_calls")
             if role == "assistant" and tc_list:
                 if content:
@@ -637,10 +635,8 @@ class Orchestrator:
                         "arguments": fn.get("arguments", "{}"),
                     })
                 continue
-            # Normaler Text
             input_items.append({"role": role, "content": content})
 
-        # Tools: litellm-Format → Responses API Format
         resp_tools = None
         if tools:
             resp_tools = [
@@ -653,46 +649,88 @@ class Orchestrator:
                 for t in tools
             ]
 
-        kwargs: dict = {
-            "model":            f"openai/{model_id}",
-            "api_base":         "https://chatgpt.com/backend-api/codex",
-            "api_key":          access_token,
-            "input":            input_items,
-            "instructions":     system_prompt or None,
+        payload: dict = {
+            "model":             model_id,
+            "input":             input_items,
             "max_output_tokens": agent_cfg.llm.max_tokens,
-            "temperature":      agent_cfg.llm.temperature,
-            "extra_headers": {
-                "chatgpt-account-id": account_id,
-                "OpenAI-Beta":        "responses=experimental",
-                "originator":         "pi",
-            },
-            "store":  False,
-            "stream": False,
+            "temperature":       agent_cfg.llm.temperature,
+            "store":             False,
+            "stream":            True,   # Codex API erfordert stream=true
         }
+        if system_prompt:
+            payload["instructions"] = system_prompt
         if resp_tools:
-            kwargs["tools"]       = resp_tools
-            kwargs["tool_choice"] = "auto"
+            payload["tools"]       = resp_tools
+            payload["tool_choice"] = "auto"
 
-        resp = await _llm_with_retry(lambda: _litellm.aresponses(**kwargs))
+        headers = {
+            "Authorization":      f"Bearer {access_token}",
+            "chatgpt-account-id": account_id,
+            "OpenAI-Beta":        "responses=experimental",
+            "originator":         "pi",
+            "Content-Type":       "application/json",
+        }
 
-        # ResponsesAPIResponse → litellm-kompatibles SimpleNamespace
-        text         = ""
-        tool_calls_out: list = []
-        for item in (resp.output or []):
-            item_type = getattr(item, "type", None)
-            if item_type == "message":
-                for c in (getattr(item, "content", None) or []):
-                    if getattr(c, "type", None) == "output_text":
-                        text += getattr(c, "text", "") or ""
-            elif item_type == "function_call":
-                tool_calls_out.append(SimpleNamespace(
-                    id=getattr(item, "call_id", "") or getattr(item, "id", ""),
-                    type="function",
-                    function=SimpleNamespace(
-                        name=getattr(item, "name", ""),
-                        arguments=getattr(item, "arguments", "{}") or "{}",
-                    ),
-                ))
+        text = ""
+        accumulated_fn: dict[str, dict] = {}  # call_id → {id, name, arguments}
+
+        async with _httpx.AsyncClient(timeout=120) as client:
+            async with client.stream(
+                "POST", "https://chatgpt.com/backend-api/codex/responses",
+                headers=headers, json=payload,
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    raise RuntimeError(f"Codex API {resp.status_code}: {body.decode()[:300]}")
+
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        ev = _json.loads(data_str)
+                    except Exception:
+                        continue
+
+                    ev_type = ev.get("type", "")
+
+                    if ev_type == "response.output_text.delta":
+                        text += ev.get("delta", "")
+
+                    elif ev_type == "response.output_item.added":
+                        item = ev.get("item", {})
+                        if item.get("type") == "function_call":
+                            cid = item.get("call_id") or item.get("id", "")
+                            accumulated_fn[cid] = {
+                                "id":        item.get("id", cid),
+                                "call_id":   cid,
+                                "name":      item.get("name", ""),
+                                "arguments": "",
+                            }
+
+                    elif ev_type == "response.function_call_arguments.delta":
+                        cid = ev.get("call_id", ev.get("item_id", ""))
+                        if cid in accumulated_fn:
+                            accumulated_fn[cid]["arguments"] += ev.get("delta", "")
+
+                    elif ev_type == "response.function_call_arguments.done":
+                        cid = ev.get("call_id", ev.get("item_id", ""))
+                        if cid in accumulated_fn:
+                            accumulated_fn[cid]["arguments"] = ev.get("arguments", accumulated_fn[cid]["arguments"])
+
+        tool_calls_out = [
+            SimpleNamespace(
+                id=fn["call_id"] or fn["id"],
+                type="function",
+                function=SimpleNamespace(
+                    name=fn["name"],
+                    arguments=fn["arguments"] or "{}",
+                ),
+            )
+            for fn in accumulated_fn.values()
+        ]
 
         message = SimpleNamespace(
             role="assistant",
