@@ -28,7 +28,7 @@ chown root:${OCTOPOS_USER} /etc/octopos
 chmod 770 /etc/octopos
 
 # --- Konfig-Dateien voranlegen (octopos-core braucht Schreibrechte) ---
-for _f in jwt_secret llm_env llm_config.json users.json admin_credentials; do
+for _f in jwt_secret llm_env llm_config.json gitea_config.json users.json admin_credentials; do
     _path="/etc/octopos/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"

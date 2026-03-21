@@ -50,13 +50,17 @@ source "${MODULES_DIR}/07_console.sh"
 source "${MODULES_DIR}/08_ollama.sh"
 source "${MODULES_DIR}/09_https.sh"
 
+echo ""
+echo -e "${BLUE}--- Phase 4: Git-Integration ---${NC}"
+source "${MODULES_DIR}/10_gitea.sh"
+
 # Update-Script nach /opt/octopos/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${OCTOPOS_DIR}/update.sh"
 chmod +x "${OCTOPOS_DIR}/update.sh"
 success "Update-Script: sudo bash ${OCTOPOS_DIR}/update.sh"
 
 # Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
-for _f in jwt_secret llm_env llm_config.json; do
+for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
     _path="/etc/octopos/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"
@@ -79,3 +83,7 @@ info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
 info "Login:         admin / ${CONSOLE_PASS}"
 info "Credentials:   /etc/octopos/admin_credentials"
 info "Agenten-Dir:   /agents"
+if systemctl is-active --quiet gitea 2>/dev/null; then
+  SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+  info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / ${GITEA_ADMIN_PASS:-siehe /etc/octopos/gitea_config.json})"
+fi
