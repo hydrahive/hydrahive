@@ -2423,6 +2423,18 @@ async def get_available_models(auth: tuple = Depends(require_auth)):
         for m in ["gpt-4o-mini", "gpt-4o"]:
             models.append({"id": m, "label": m, "provider": "openai"})
 
+    # Google Antigravity (Gemini via Cloud Code Assist OAuth)
+    ga_file = Path("/etc/octopos/google_antigravity_token.json")
+    if ga_file.exists():
+        try:
+            import json as _json
+            ga_data = _json.loads(ga_file.read_text(encoding="utf-8"))
+            if ga_data.get("access_token"):
+                for m in ["gemini-3.0-flash", "gemini-3.0-pro", "gemini-3.5-pro"]:
+                    models.append({"id": f"google-antigravity/{m}", "label": f"Antigravity: {m}", "provider": "google_antigravity"})
+        except Exception:
+            pass
+
     # OpenAI Codex (ChatGPT Plus/Pro OAuth)
     codex_file = Path("/etc/octopos/openai_codex_token.json")
     if codex_file.exists():
@@ -2518,6 +2530,366 @@ def get_openai_codex_status():
     except Exception:
         pass
     return {"configured": False, "account_id": None}
+
+
+# ---------------------------------------------------------------------------
+# OAuth PKCE Flow — Anthropic, OpenAI Codex, Google Antigravity
+# ---------------------------------------------------------------------------
+
+# In-Memory State Store: state → {verifier, provider, expires}
+_oauth_pending: dict[str, dict] = {}
+
+def _pkce_pair() -> tuple[str, str]:
+    """Generiert PKCE code_verifier und code_challenge (S256)."""
+    import hashlib, secrets, base64 as _b64
+    verifier  = _b64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    challenge = _b64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+@app.post("/llm/oauth/anthropic/start")
+async def start_anthropic_oauth(_a: tuple = Depends(require_admin)):
+    """
+    Startet Anthropic Claude Max PKCE OAuth Flow.
+    Gibt Authorization-URL zurück — User oeffnet sie im Browser.
+    Nach Login: console.anthropic.com/oauth/code/callback zeigt code#state — User kopiert es.
+    """
+    import secrets, time, urllib.parse
+    verifier, challenge = _pkce_pair()
+    state = verifier  # Anthropic nutzt verifier als state
+
+    _oauth_pending[state] = {"verifier": verifier, "provider": "anthropic", "expires": time.time() + 600}
+
+    params = {
+        "code":                   "true",
+        "client_id":              "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+        "response_type":          "code",
+        "redirect_uri":           "https://console.anthropic.com/oauth/code/callback",
+        "scope":                  "org:create_api_key user:profile user:inference",
+        "code_challenge":         challenge,
+        "code_challenge_method":  "S256",
+        "state":                  state,
+    }
+    auth_url = "https://claude.ai/oauth/authorize?" + urllib.parse.urlencode(params)
+    return {"auth_url": auth_url, "state": state}
+
+
+@app.post("/llm/oauth/anthropic/exchange")
+async def exchange_anthropic_code(body: dict, _a: tuple = Depends(require_admin)):
+    """
+    Tauscht Anthropic Authorization Code gegen Token.
+    body: {code_and_state: "code#state"} oder {code, state} getrennt.
+    Speichert sk-ant-oat01-... Token in /etc/octopos/claude_oauth_token.
+    """
+    import time
+    import httpx as _httpx
+
+    # Akzeptiere "code#state" als kombiniertes Feld (wie console.anthropic.com es anzeigt)
+    code_and_state = body.get("code_and_state", "").strip()
+    if code_and_state and "#" in code_and_state:
+        code, state = code_and_state.split("#", 1)
+    else:
+        code  = body.get("code", "").strip()
+        state = body.get("state", "").strip()
+
+    if not code or not state:
+        raise HTTPException(400, "code und state erforderlich")
+
+    pending = _oauth_pending.pop(state, None)
+    if not pending:
+        raise HTTPException(400, "Ungültiger oder abgelaufener State — bitte OAuth neu starten")
+    if pending["expires"] < time.time():
+        raise HTTPException(400, "OAuth-Session abgelaufen — bitte neu starten")
+
+    async with _httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://console.anthropic.com/v1/oauth/token",
+            headers={"Content-Type": "application/json"},
+            json={
+                "grant_type":    "authorization_code",
+                "client_id":     "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+                "code":          code,
+                "state":         state,
+                "redirect_uri":  "https://console.anthropic.com/oauth/code/callback",
+                "code_verifier": pending["verifier"],
+            },
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(400, f"Token-Exchange fehlgeschlagen: {resp.text[:300]}")
+
+    token_data = resp.json()
+    access_token = token_data.get("access_token", "")
+    if not access_token or not access_token.startswith("sk-ant-oat01-"):
+        raise HTTPException(400, f"Kein gültiger Anthropic Token in Response: {str(token_data)[:200]}")
+
+    token_file = Path("/etc/octopos/claude_oauth_token")
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(access_token, encoding="utf-8")
+    token_file.chmod(0o600)
+    logger.info("Claude OAuth Token via PKCE gespeichert")
+    audit_log("llm.token_set", details={"provider": "anthropic", "via": "pkce_oauth"})
+    return {"updated": True, "provider": "anthropic"}
+
+
+@app.post("/llm/oauth/openai_codex/start")
+async def start_openai_codex_oauth(_a: tuple = Depends(require_admin)):
+    """
+    Startet OpenAI Codex PKCE OAuth Flow (ChatGPT Plus/Pro).
+    Redirect geht auf localhost:1455 (schlägt im Browser fehl — das ist normal).
+    User kopiert die code= URL-Parameter und gibt sie hier ein.
+    """
+    import secrets, time, urllib.parse
+    verifier, challenge = _pkce_pair()
+    state = secrets.token_hex(16)
+
+    _oauth_pending[state] = {"verifier": verifier, "provider": "openai_codex", "expires": time.time() + 600}
+
+    params = {
+        "response_type":               "code",
+        "client_id":                   "app_EMoamEEZ73f0CkXaXp7hrann",
+        "redirect_uri":                "http://localhost:1455/auth/callback",
+        "scope":                       "openid profile email offline_access",
+        "code_challenge":              challenge,
+        "code_challenge_method":       "S256",
+        "state":                       state,
+        "id_token_add_organizations":  "true",
+        "codex_cli_simplified_flow":   "true",
+        "originator":                  "pi",
+    }
+    auth_url = "https://auth.openai.com/oauth/authorize?" + urllib.parse.urlencode(params)
+    return {"auth_url": auth_url, "state": state}
+
+
+@app.post("/llm/oauth/openai_codex/exchange")
+async def exchange_openai_codex_code(body: dict, _a: tuple = Depends(require_admin)):
+    """
+    Tauscht OpenAI Codex Authorization Code gegen Token.
+    body: {redirect_url: "http://localhost:1455/auth/callback?code=...&state=..."}
+    oder  {code, state} getrennt.
+    """
+    import time, base64 as _b64, json as _json
+    import httpx as _httpx
+    from urllib.parse import urlparse, parse_qs, unquote
+
+    # Redirect-URL automatisch parsen wenn übergeben
+    redirect_url = body.get("redirect_url", "").strip()
+    if redirect_url:
+        parsed = urlparse(redirect_url)
+        qs     = parse_qs(parsed.query)
+        code  = qs.get("code",  [""])[0]
+        state = qs.get("state", [""])[0]
+    else:
+        code  = body.get("code",  "").strip()
+        state = body.get("state", "").strip()
+
+    if not code or not state:
+        raise HTTPException(400, "code und state erforderlich (oder redirect_url mit beiden)")
+
+    pending = _oauth_pending.pop(state, None)
+    if not pending:
+        raise HTTPException(400, "Ungültiger oder abgelaufener State — bitte OAuth neu starten")
+    if pending["expires"] < time.time():
+        raise HTTPException(400, "OAuth-Session abgelaufen")
+
+    async with _httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://auth.openai.com/oauth/token",
+            data={
+                "grant_type":    "authorization_code",
+                "client_id":     "app_EMoamEEZ73f0CkXaXp7hrann",
+                "code":          code,
+                "code_verifier": pending["verifier"],
+                "redirect_uri":  "http://localhost:1455/auth/callback",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(400, f"Token-Exchange fehlgeschlagen: {resp.text[:300]}")
+
+    token_data = resp.json()
+    access_token  = token_data.get("access_token", "")
+    refresh_token = token_data.get("refresh_token", "")
+    if not access_token:
+        raise HTTPException(400, "Kein access_token in Response")
+
+    # Account-ID aus JWT-Payload extrahieren
+    account_id = ""
+    try:
+        payload_b64 = access_token.split(".")[1]
+        payload = _json.loads(_b64.urlsafe_b64decode(payload_b64 + "=="))
+        account_id = payload.get("https://api.openai.com/auth", {}).get("chatgpt_account_id", "")
+    except Exception:
+        pass
+    if not account_id:
+        raise HTTPException(400, "account_id konnte nicht aus Token extrahiert werden")
+
+    token_file = Path("/etc/octopos/openai_codex_token.json")
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(_json.dumps({
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "account_id":    account_id,
+        "expires":       token_data.get("expires_in", 3600) + int(time.time()),
+    }, indent=2), encoding="utf-8")
+    token_file.chmod(0o600)
+    logger.info("OpenAI Codex Token via PKCE gespeichert (account: %s…)", account_id[:12])
+    audit_log("llm.token_set", details={"provider": "openai_codex", "via": "pkce_oauth"})
+    return {"updated": True, "account_id": account_id}
+
+
+@app.post("/llm/oauth/google_antigravity/start")
+async def start_google_antigravity_oauth(_a: tuple = Depends(require_admin)):
+    """
+    Startet Google Antigravity PKCE OAuth Flow (Gemini 3 Flash/Pro).
+    Redirect geht auf localhost:51121 (schlägt im Browser fehl — normal).
+    User kopiert die redirect-URL und gibt sie hier ein.
+    """
+    import time, urllib.parse
+    verifier, challenge = _pkce_pair()
+    state = verifier  # Google nutzt verifier als state
+
+    _oauth_pending[state] = {"verifier": verifier, "provider": "google_antigravity", "expires": time.time() + 600}
+
+    scopes = " ".join([
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/cclog",
+        "https://www.googleapis.com/auth/experimentsandconfigs",
+    ])
+    params = {
+        "client_id":             "REDACTED_GOOGLE_CLIENT_ID",
+        "response_type":         "code",
+        "redirect_uri":          "http://localhost:51121/oauth-callback",
+        "scope":                 scopes,
+        "code_challenge":        challenge,
+        "code_challenge_method": "S256",
+        "state":                 state,
+        "access_type":           "offline",
+        "prompt":                "consent",
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return {"auth_url": auth_url, "state": state}
+
+
+@app.post("/llm/oauth/google_antigravity/exchange")
+async def exchange_google_antigravity_code(body: dict, _a: tuple = Depends(require_admin)):
+    """
+    Tauscht Google Antigravity Authorization Code gegen Token.
+    body: {redirect_url: "http://localhost:51121/oauth-callback?code=...&state=..."}
+    oder  {code, state} getrennt.
+    """
+    import time, json as _json
+    import httpx as _httpx
+    from urllib.parse import urlparse, parse_qs
+
+    redirect_url = body.get("redirect_url", "").strip()
+    if redirect_url:
+        parsed = urlparse(redirect_url)
+        qs     = parse_qs(parsed.query)
+        code  = qs.get("code",  [""])[0]
+        state = qs.get("state", [""])[0]
+    else:
+        code  = body.get("code",  "").strip()
+        state = body.get("state", "").strip()
+
+    if not code or not state:
+        raise HTTPException(400, "code und state erforderlich")
+
+    pending = _oauth_pending.pop(state, None)
+    if not pending:
+        raise HTTPException(400, "Ungültiger oder abgelaufener State — bitte OAuth neu starten")
+    if pending["expires"] < time.time():
+        raise HTTPException(400, "OAuth-Session abgelaufen")
+
+    async with _httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id":     "REDACTED_GOOGLE_CLIENT_ID",
+                "client_secret": "REDACTED_GOOGLE_SECRET",
+                "code":          code,
+                "grant_type":    "authorization_code",
+                "redirect_uri":  "http://localhost:51121/oauth-callback",
+                "code_verifier": pending["verifier"],
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(400, f"Token-Exchange fehlgeschlagen: {resp.text[:300]}")
+
+    token_data    = resp.json()
+    access_token  = token_data.get("access_token", "")
+    refresh_token = token_data.get("refresh_token", "")
+    if not access_token:
+        raise HTTPException(400, "Kein access_token in Response")
+
+    # Email aus User-Info
+    email = ""
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            ui = await client.get(
+                "https://www.googleapis.com/oauth2/v1/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if ui.status_code == 200:
+                email = ui.json().get("email", "")
+    except Exception:
+        pass
+
+    # Projekt-Discovery (Fallback: REDACTED_GOOGLE_PROJECT)
+    project_id = "REDACTED_GOOGLE_PROJECT"
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            ca = await client.post(
+                "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                json={"cloudaiCompanionClient": {"clientVersion": ""}},
+            )
+            if ca.status_code == 200:
+                project_id = ca.json().get("currentProject", {}).get("projectId", project_id)
+    except Exception:
+        pass
+
+    token_file = Path("/etc/octopos/google_antigravity_token.json")
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text(_json.dumps({
+        "access_token":  access_token,
+        "refresh_token": refresh_token,
+        "email":         email,
+        "project_id":    project_id,
+        "expires":       token_data.get("expires_in", 3600) + int(time.time()),
+    }, indent=2), encoding="utf-8")
+    token_file.chmod(0o600)
+    logger.info("Google Antigravity Token via PKCE gespeichert (email: %s, project: %s)", email, project_id)
+    audit_log("llm.token_set", details={"provider": "google_antigravity", "via": "pkce_oauth"})
+    return {"updated": True, "email": email, "project_id": project_id}
+
+
+@app.get("/llm/google_antigravity_status")
+def get_google_antigravity_status():
+    """Google Antigravity Token Status."""
+    import json as _json
+    token_file = Path("/etc/octopos/google_antigravity_token.json")
+    if not token_file.exists():
+        return {"configured": False}
+    try:
+        data = _json.loads(token_file.read_text(encoding="utf-8"))
+        if data.get("access_token"):
+            return {
+                "configured": True,
+                "email":      data.get("email", ""),
+                "project_id": data.get("project_id", ""),
+                "models":     ["gemini-3.0-flash", "gemini-3.0-pro", "gemini-3.5-pro"],
+            }
+    except Exception:
+        pass
+    return {"configured": False}
 
 
 @app.get("/llm/claude_token_status")
