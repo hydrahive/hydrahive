@@ -48,26 +48,46 @@ JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
 
 # Rate-Limiting für /auth/login (#70)
 _LOGIN_ATTEMPTS: dict[str, list[float]] = defaultdict(list)
-_LOGIN_MAX   = 10   # max. Versuche
-_LOGIN_WIN_S = 60   # pro Minute
+_LOGIN_MAX      = 10     # max. Versuche
+_LOGIN_WIN_S    = 60     # pro Minute
+_LOGIN_MAX_KEYS = 10000  # harte Obergrenze unterschiedlicher IP-Keys
+
+# Rate-Limiting für /message Endpoints (#72)
+_MESSAGE_ATTEMPTS: dict[tuple[str, str], list[float]] = defaultdict(list)
+_MESSAGE_MAX      = 50     # max. Nachrichten pro Fenster
+_MESSAGE_WIN_S    = 60     # pro Minute
+_MESSAGE_MAX_KEYS = 50000  # harte Obergrenze unterschiedlicher user+project-Keys
+
+def _prune_attempt_map[K](attempts: dict[K, list[float]], window_s: float) -> int:
+    """Entfernt abgelaufene Einträge. Gibt Anzahl entfernter Keys zurück."""
+    now = time.monotonic()
+    remove_keys: list[K] = [k for k, ts in attempts.items() if not any(now - t < window_s for t in ts)]
+    for k in remove_keys:
+        attempts.pop(k, None)
+    return len(remove_keys)
 
 def _check_login_rate(ip: str) -> None:
     now = time.monotonic()
+    if len(_LOGIN_ATTEMPTS) > _LOGIN_MAX_KEYS:
+        _prune_attempt_map(_LOGIN_ATTEMPTS, _LOGIN_WIN_S)
+        if len(_LOGIN_ATTEMPTS) > _LOGIN_MAX_KEYS:
+            for k in list(_LOGIN_ATTEMPTS.keys())[:len(_LOGIN_ATTEMPTS) - _LOGIN_MAX_KEYS]:
+                _LOGIN_ATTEMPTS.pop(k, None)
     _LOGIN_ATTEMPTS[ip] = [t for t in _LOGIN_ATTEMPTS[ip] if now - t < _LOGIN_WIN_S]
     if len(_LOGIN_ATTEMPTS[ip]) >= _LOGIN_MAX:
         raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
     _LOGIN_ATTEMPTS[ip].append(now)
 
 
-# Rate-Limiting für /message Endpoints (#72)
-_MESSAGE_ATTEMPTS: dict[tuple[str, str], list[float]] = defaultdict(list)  # (user_id, project_id) -> timestamps
-_MESSAGE_MAX   = 50  # max. Nachrichten pro Fenster
-_MESSAGE_WIN_S = 60  # pro Minute
-
 def _check_message_rate(user_id: str, project_id: str) -> None:
     """Rate-Limit für Nachrichten pro User+Projekt"""
     key = (user_id, project_id)
     now = time.monotonic()
+    if len(_MESSAGE_ATTEMPTS) > _MESSAGE_MAX_KEYS:
+        _prune_attempt_map(_MESSAGE_ATTEMPTS, _MESSAGE_WIN_S)
+        if len(_MESSAGE_ATTEMPTS) > _MESSAGE_MAX_KEYS:
+            for k in list(_MESSAGE_ATTEMPTS.keys())[:len(_MESSAGE_ATTEMPTS) - _MESSAGE_MAX_KEYS]:
+                _MESSAGE_ATTEMPTS.pop(k, None)
     _MESSAGE_ATTEMPTS[key] = [t for t in _MESSAGE_ATTEMPTS[key] if now - t < _MESSAGE_WIN_S]
     if len(_MESSAGE_ATTEMPTS[key]) >= _MESSAGE_MAX:
         raise HTTPException(429, f"Zu viele Nachrichten — max. {_MESSAGE_MAX} pro Minute")
@@ -141,6 +161,22 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
 
+    # Rate-Limiter Cleanup-Task (verhindert unbounded key growth)
+    async def _rate_limit_cleanup_loop():
+        while True:
+            try:
+                await asyncio.sleep(300)  # alle 5 Minuten
+                _prune_attempt_map(_LOGIN_ATTEMPTS, _LOGIN_WIN_S)
+                _prune_attempt_map(_MESSAGE_ATTEMPTS, _MESSAGE_WIN_S)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("Rate-limit cleanup Fehler: %s", e)
+
+    rate_limit_cleanup_task = asyncio.create_task(
+        _rate_limit_cleanup_loop(), name="rate-limit-cleanup"
+    )
+
     # Gitea-Verbindung prüfen (best-effort, blockiert nicht den Start)
     try:
         from .gitea import get_gitea_client
@@ -153,6 +189,7 @@ async def lifespan(app: FastAPI):
     yield
     hb_task.cancel()
     cleanup_task.cancel()
+    rate_limit_cleanup_task.cancel()
     logger.info("OctopOS Core faehrt herunter...")
     await runtime.stop()
     projects.stop()
