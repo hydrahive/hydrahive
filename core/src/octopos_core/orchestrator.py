@@ -31,7 +31,7 @@ from .tool_registry import ToolRegistry, registry as default_registry
 
 logger = logging.getLogger(__name__)
 
-litellm.drop_params = True   # Unbekannte LLM-Parameter ignorieren statt crashen
+# drop_params per-call via kwargs, nicht global (verhindert cross-module side effects)
 
 
 @dataclass
@@ -329,6 +329,7 @@ class Orchestrator:
                 model=boss_cfg.llm.model,
                 messages=summary_prompt,
                 max_tokens=600,
+                drop_params=True,
             ))
             summary = resp.choices[0].message.content or ""
             if summary:
@@ -429,7 +430,7 @@ class Orchestrator:
             kwargs["tools"]       = tools
             kwargs["tool_choice"] = "auto"
 
-        return await _llm_with_retry(lambda: litellm.acompletion(**kwargs))
+        return await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True))
 
     async def _llm_call(
         self,
@@ -1024,7 +1025,7 @@ class Orchestrator:
                             round_text = ""
                             accumulated_tcs: dict = {}  # index → {id, name, arguments}
 
-                            async for chunk in await litellm.acompletion(**kwargs):
+                            async for chunk in await litellm.acompletion(**kwargs, drop_params=True):
                                 choice = chunk.choices[0]
                                 delta  = choice.delta
                                 if delta.content:
