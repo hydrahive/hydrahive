@@ -713,24 +713,84 @@ class Orchestrator:
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
 
                     else:
-                        # litellm Streaming (Ollama / OpenAI)
+                        # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
+                        import json as _json2
                         model, api_base = self._resolve_model(_model_name)
-                        kwargs = {
-                            "model":       model,
-                            "messages":    messages,
-                            "temperature": boss_cfg.llm.temperature,
-                            "max_tokens":  boss_cfg.llm.max_tokens,
-                            "stream":      True,
-                        }
-                        if api_base:
-                            kwargs["api_base"] = api_base
+                        loop_messages = list(messages)
 
-                        async for chunk in await litellm.acompletion(**kwargs):
-                            delta = chunk.choices[0].delta.content or ""
-                            if delta:
-                                full_response += delta
-                                streamed_any   = True
-                                yield f"data: {_json.dumps({'text': delta})}\n\n"
+                        for _round in range(boss_cfg.max_tool_rounds):
+                            kwargs = {
+                                "model":       model,
+                                "messages":    loop_messages,
+                                "temperature": boss_cfg.llm.temperature,
+                                "max_tokens":  boss_cfg.llm.max_tokens,
+                                "stream":      True,
+                            }
+                            if api_base:
+                                kwargs["api_base"] = api_base
+                            if litellm_tools:
+                                kwargs["tools"] = litellm_tools
+
+                            round_text = ""
+                            accumulated_tcs: dict = {}  # index → {id, name, arguments}
+
+                            async for chunk in await litellm.acompletion(**kwargs):
+                                choice = chunk.choices[0]
+                                delta  = choice.delta
+                                if delta.content:
+                                    round_text     += delta.content
+                                    full_response  += delta.content
+                                    streamed_any    = True
+                                    yield f"data: {_json.dumps({'text': delta.content})}\n\n"
+                                # Tool-Call-Deltas akkumulieren
+                                if getattr(delta, "tool_calls", None):
+                                    for tc_d in delta.tool_calls:
+                                        idx = tc_d.index
+                                        if idx not in accumulated_tcs:
+                                            accumulated_tcs[idx] = {"id": "", "name": "", "arguments": ""}
+                                        if tc_d.id:
+                                            accumulated_tcs[idx]["id"] = tc_d.id
+                                        fn = getattr(tc_d, "function", None)
+                                        if fn:
+                                            if getattr(fn, "name", None):
+                                                accumulated_tcs[idx]["name"] += fn.name
+                                            if getattr(fn, "arguments", None):
+                                                accumulated_tcs[idx]["arguments"] += fn.arguments
+
+                            # Kein Tool-Call → fertig
+                            if not accumulated_tcs:
+                                break
+
+                            # Assistant-Nachricht mit tool_calls in History
+                            tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
+                            loop_messages.append({
+                                "role":      "assistant",
+                                "content":   round_text or None,
+                                "tool_calls": [
+                                    {"id": tc["id"], "type": "function",
+                                     "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                                    for tc in tc_list
+                                ],
+                            })
+
+                            # Tools ausführen
+                            for tc in tc_list:
+                                yield f"data: {_json.dumps({'tool_call': tc['name']})}\n\n"
+                                tool = self._reg.get(tc["name"])
+                                try:
+                                    tool_input = _json2.loads(tc["arguments"] or "{}")
+                                    result = await tool.execute(
+                                        agent_id=boss_cfg.id,
+                                        project_id=project_id,
+                                        **tool_input,
+                                    ) if tool else f"Tool '{tc['name']}' nicht gefunden"
+                                except Exception as te:
+                                    result = f"Tool-Fehler: {te}"
+                                loop_messages.append({
+                                    "role":         "tool",
+                                    "tool_call_id": tc["id"],
+                                    "content":      str(result),
+                                })
 
                     break  # Erfolgreich — kein weiterer Failover nötig
 
