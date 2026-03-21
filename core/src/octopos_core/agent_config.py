@@ -22,6 +22,7 @@ class LlmConfig(BaseModel):
     model: str
     temperature: float = 0.7
     max_tokens: int = 4096
+    fallback_models: list[str] = Field(default_factory=list)
 
 
 class HeartbeatRaw(BaseModel):
@@ -54,7 +55,10 @@ class AgentConfig(BaseModel):
     llm:      LlmConfig
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
-    tools:    list[str] = Field(default_factory=list)
+    tools:           list[str] = Field(default_factory=list)
+    allowed_agents:  list[str] = Field(default_factory=list)
+    mcp_servers:     list[str] = Field(default_factory=list)
+    max_tool_rounds: int       = 20
     heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
     heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)
 

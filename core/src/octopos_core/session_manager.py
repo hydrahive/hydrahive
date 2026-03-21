@@ -193,6 +193,12 @@ class SessionManager:
         self._persist(session)
         return message
 
+    def replace_messages(self, project_id: str, messages: list[Message]) -> None:
+        """Session-Nachrichten komplett ersetzen (für /compact)."""
+        session = self.get_or_create(project_id)
+        session.messages = messages
+        self._persist(session)
+
     def pop_last(self, project_id: str) -> None:
         """Letzte Nachricht aus der aktiven Session entfernen (Rollback bei Fehler)."""
         session = self._active.get(project_id)

@@ -35,7 +35,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   get:    <T>(path: string)                => request<T>(path),
   post:   <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) }),
-  put:    <T>(path: string, body: unknown) => request<T>(path, { method: "PUT",    body: JSON.stringify(body) }),
+  put:    <T>(path: string, body: unknown) => request<T>(path, { method: "PUT",   body: JSON.stringify(body) }),
+  patch:  <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string)               => request<T>(path, { method: "DELETE" }),
   health:        ()           => api.get<{status:string}>("/health"),
   status:        ()           => api.get<Record<string,unknown>>("/status"),
@@ -79,11 +80,24 @@ export const api = {
     api.get<{handoffs: Handoff[]}>(`/projects/${id}/agentlink`),
   deleteHandoff:     (id: string, handoffId: string) =>
     api.delete(`/projects/${id}/agentlink/${handoffId}`),
+  myAgent:       () => api.get<{agent_id:string;config:Record<string,unknown>}>("/me/agent"),
+  updateMyAgent: (d: unknown) => api.put("/me/agent", d),
+  myAgentHistory: (limit = 50) => api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/me/agent/session/history?limit=${limit}`),
+  clearMyAgentSession: () => api.delete("/me/agent/session"),
+  mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
+  createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
+  updateMcpServer: (id: string, d: unknown) => api.put<{server: McpServer}>(`/mcp/servers/${id}`, d),
+  deleteMcpServer: (id: string) => api.delete(`/mcp/servers/${id}`),
   listBackups:   () => api.get<{backups: BackupEntry[]}>("/admin/backups"),
   createBackup:  () => api.post<BackupEntry>("/admin/backup", {}),
   deleteBackup:  (name: string) => api.delete(`/admin/backups/${name}`),
   restoreBackup: (name: string) => api.post(`/admin/restore/${name}`, {}),
   downloadBackupUrl: (name: string) => `/api/admin/backups/${encodeURIComponent(name)}/download`,
+  // Gitea
+  giteaConfig:       () => api.get<GiteaConfig>("/gitea/config"),
+  updateGiteaConfig: (d: GiteaConfig) => api.put("/gitea/config", d),
+  giteaRepos:        () => api.get<{repos: GiteaRepo[]}>("/gitea/repos"),
+  giteaProjectPRs:   (id: string) => api.get<{prs: unknown[]; count: number}>(`/gitea/repos/${id}/prs`),
 };
 
 export interface AuditEntry {
@@ -129,4 +143,27 @@ export interface AgentSkill {
   triggers: string[];
   priority: number;
   content:  string;
+}
+
+export interface McpServer {
+  id:        string;
+  name:      string;
+  transport: string;
+  url:       string;
+  headers:   Record<string, string>;
+}
+
+export interface GiteaConfig {
+  url:            string;
+  token:          string;
+  org:            string;
+  webhook_secret: string;
+}
+
+export interface GiteaRepo {
+  name:           string;
+  description:    string;
+  html_url:       string;
+  default_branch: string;
+  updated:        string;
 }

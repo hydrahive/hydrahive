@@ -533,6 +533,22 @@ class SpawnAgentTool(BaseTool):
 
 # ============================================================= AgentLink Tools
 
+def _handoff_dir(project_id: str):
+    """
+    Gibt das Handoff-Basisverzeichnis zurück.
+    Normale Projekte: /projects/{id}/
+    Persönliche Agenten (personal_*) und direkte Agent-Chats: /agents/{id}/
+    """
+    from pathlib import Path as _P
+    project_path = _P("/projects") / project_id
+    if project_path.exists():
+        return project_path
+    agent_path = _P("/agents") / project_id
+    if agent_path.exists():
+        return agent_path
+    return project_path  # Fallback — wird ggf. angelegt
+
+
 class WriteHandoffTool(BaseTool):
     """Schreibt einen AgentLink-Handoff — State-Transfer an anderen Agenten."""
 
@@ -580,9 +596,8 @@ class WriteHandoffTool(BaseTool):
         data: dict | None = None,
         ttl_seconds: int = 3600,
     ) -> dict:
-        from pathlib import Path as _Path
         from .agentlink import write_handoff as _wh
-        project_dir = _Path("/projects") / project_id
+        project_dir = _handoff_dir(project_id)
         return _wh(
             project_dir,
             from_agent=agent_id,
@@ -625,9 +640,8 @@ class ReadHandoffTool(BaseTool):
         self, agent_id: str, project_id: str,
         consume: bool = True,
     ) -> dict:
-        from pathlib import Path as _Path
         from .agentlink import read_handoff as _rh
-        project_dir = _Path("/projects") / project_id
+        project_dir = _handoff_dir(project_id)
         entry = _rh(project_dir, to_agent=agent_id, consume=consume)
         if entry is None:
             return {"handoff": None, "found": False}
@@ -636,10 +650,64 @@ class ReadHandoffTool(BaseTool):
 
 # ============================================================= System Tools (Superagent)
 
+import re as _re_shell
+
+# Kommandos die niemals ausgeführt werden dürfen — unabhängig vom Agenten
+_SHELL_BLOCKLIST: list[tuple[str, str]] = [
+    # Rekursives Löschen
+    (r"\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-[a-zA-Z]*f[a-zA-Z]*r|--recursive)\b", "rm -r / rm -rf verboten"),
+    (r"\brm\b.*\s/opt/",            "rm auf /opt/ verboten"),
+    (r"\brmdir\s+--parents\b",      "rmdir --parents verboten"),
+    # Disk-Destruktion
+    (r"\bdd\b.*\bof=/dev/",         "dd auf Blockdevice verboten"),
+    (r"\bmkfs\b",                   "mkfs verboten"),
+    (r"\bfdisk\b",                  "fdisk verboten"),
+    (r"\bparted\b",                 "parted verboten"),
+    (r"\bshred\b",                  "shred verboten"),
+    (r"\bwipefs\b",                 "wipefs verboten"),
+    # Service-Sabotage (OctopOS selbst killen)
+    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+octopos",  "systemctl stop/disable octopos verboten"),
+    (r"\bkillall\s+uvicorn\b",      "killall uvicorn verboten"),
+    (r"\bkill\b.*\buvicorn\b",      "kill uvicorn verboten"),
+    # Fork-Bombe / Wildcard-Gefahr
+    (r":\(\)\s*\{",                 "Fork-Bombe verboten"),
+    (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
+    (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
+    # Schreiben in geschützte Systempfade via Redirects
+    (r">\s*/opt/octopos/(?!.*\bjournald?\b)",  "Redirect nach /opt/octopos/ verboten"),
+    (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
+    (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
+    (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
+    (r">\s*/lib",                   "Redirect nach /lib verboten"),
+    (r">\s*/boot/",                 "Redirect nach /boot/ verboten"),
+    (r">\s*/dev/",                  "Redirect nach /dev/ verboten"),
+    (r">\s*/sys/",                  "Redirect nach /sys/ verboten"),
+    (r">\s*/proc/",                 "Redirect nach /proc/ verboten"),
+    # chmod/chown auf Systempfade
+    (r"\b(chmod|chown)\b.*/opt/",   "chmod/chown auf /opt/ verboten"),
+    (r"\b(chmod|chown)\b.*/etc/",   "chmod/chown auf /etc/ verboten"),
+    (r"\b(chmod|chown)\b.*/bin/",   "chmod/chown auf /bin/ verboten"),
+    # git clone/reset --hard auf /opt/
+    (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
+    (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
+    (r"cd\s+/opt/octopos\b.*&&.*\bgit\b", "git in /opt/octopos/ verboten"),
+]
+
+
+def _check_shell_blocklist(command: str) -> str | None:
+    """Gibt die Fehlermeldung zurück wenn der Befehl blockiert ist, sonst None."""
+    for pattern, reason in _SHELL_BLOCKLIST:
+        if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
+            return reason
+    return None
+
+
 class ShellExecTool(BaseTool):
     """
     Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
     Nur fuer Superagenten — kein Sandbox, voller Systemzugriff.
+    Destruktive Kommandos (rm -rf, dd, mkfs, ...) und Zugriffe auf
+    /opt/octopos/ werden blockiert.
     """
 
     @property
@@ -651,7 +719,9 @@ class ShellExecTool(BaseTool):
         return (
             "Führt einen Bash-Befehl aus und gibt stdout, stderr und Exit-Code zurück. "
             "Verwende dies für Systemverwaltung, git, pip, systemctl, Dateioperationen, etc. "
-            "Timeout standard 30 Sekunden, maximal 120 Sekunden."
+            "Timeout standard 30 Sekunden, maximal 120 Sekunden. "
+            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/octopos/, "
+            "git clone/reset in /opt/octopos/, systemctl stop/disable octopos."
         )
 
     @property
@@ -669,7 +739,7 @@ class ShellExecTool(BaseTool):
                 },
                 "cwd": {
                     "type":        "string",
-                    "description": "Arbeitsverzeichnis (Standard: /opt/octopos)",
+                    "description": "Arbeitsverzeichnis (Standard: /tmp)",
                 },
             },
             "required": ["command"],
@@ -677,17 +747,29 @@ class ShellExecTool(BaseTool):
 
     async def execute(
         self, agent_id: str, project_id: str,
-        command: str, timeout: int = 30, cwd: str = "/opt/octopos",
+        command: str, timeout: int = 30, cwd: str = "/tmp",
     ) -> dict:
         import asyncio
+
+        blocked = _check_shell_blocklist(command)
+        if blocked:
+            logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
+            return {
+                "error":     f"Befehl blockiert: {blocked}",
+                "command":   command,
+                "exit_code": -1,
+                "blocked":   True,
+            }
+
         timeout = min(max(timeout, 1), 120)
+        safe_cwd = cwd if Path(cwd).exists() else "/tmp"
         logger.info("shell_exec [%s]: %s", agent_id, command[:120])
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=cwd if Path(cwd).exists() else "/opt/octopos",
+                cwd=safe_cwd,
             )
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -825,12 +907,10 @@ class WriteSystemFileTool(BaseTool):
 
 # ============================================================= Memory Tools (#85)
 
-import re as _re
-
 def _safe_memory_filename(filename: str) -> str:
     """Normalisiert Dateinamen: nur a-z0-9_- erlaubt, erzwingt .md Extension."""
     base = filename.removesuffix(".md").strip()
-    if not _re.match(r"^[a-z0-9_-]+$", base):
+    if not _re_shell.match(r"^[a-z0-9_-]+$", base):
         raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, 0-9, _ und - erlaubt.")
     return base + ".md"
 
@@ -934,6 +1014,482 @@ class WriteMemoryTool(BaseTool):
         return {"saved": True, "filename": safe, "bytes": len(content.encode())}
 
 
+# ============================================================= Agenten-Delegation (#107)
+
+class AskAgentTool(BaseTool):
+    """
+    Synchrone Frage / Aufgabe an einen anderen Agenten.
+    Der Ziel-Agent antwortet direkt — ideal für kurze Delegationen.
+    Ruft intern POST /agents/{target}/message auf (localhost:8765).
+    """
+
+    @property
+    def id(self) -> str:   return "ask_agent"
+    @property
+    def name(self) -> str: return "Agenten fragen (sync)"
+    @property
+    def description(self) -> str:
+        return (
+            "Stellt eine synchrone Frage oder gibt einen Task an einen anderen Agenten. "
+            "Der Ziel-Agent antwortet direkt. Nutze dies um spezialisierte Agenten "
+            "für bestimmte Aufgaben einzusetzen. Gibt die Antwort des Agenten zurück."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type":        "string",
+                    "description": "ID des Ziel-Agenten (z.B. 'octopos-dev', 'claude_boss')",
+                },
+                "question": {
+                    "type":        "string",
+                    "description": "Frage oder Aufgabe für den Ziel-Agenten",
+                },
+                "context": {
+                    "type":        "string",
+                    "description": "Zusätzlicher Kontext der für den Agenten hilfreich ist (optional)",
+                },
+            },
+            "required": ["target", "question"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        target: str, question: str, context: str = "",
+    ) -> dict:
+        import aiohttp as _aio
+
+        content = f"{context}\n\n{question}".strip() if context else question
+        logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
+        try:
+            async with _aio.ClientSession() as session:
+                async with session.post(
+                    f"http://127.0.0.1:8765/agents/{target}/message",
+                    json={"content": content, "sender": agent_id},
+                    timeout=_aio.ClientTimeout(total=120),
+                ) as resp:
+                    if resp.status == 404:
+                        return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
+                    data = await resp.json()
+                    return {
+                        "agent_id": target,
+                        "response": data.get("response", ""),
+                        "success":  True,
+                    }
+        except Exception as e:
+            return {"error": f"Fehler bei Kommunikation mit '{target}': {e}", "agent_id": target}
+
+
+class DelegateAgentTool(BaseTool):
+    """
+    Asynchrone Delegation: schreibt einen AgentLink-Handoff an den Ziel-Agenten.
+    Nützlich für lange Tasks die im Hintergrund laufen sollen.
+    Das Ergebnis wird via read_handoff abgerufen wenn fertig.
+    """
+
+    @property
+    def id(self) -> str:   return "delegate_agent"
+    @property
+    def name(self) -> str: return "Agenten beauftragen (async)"
+    @property
+    def description(self) -> str:
+        return (
+            "Beauftragt einen anderen Agenten asynchron mit einem Task via AgentLink-Handoff. "
+            "Für lange Tasks die im Hintergrund laufen — kein direktes Warten auf Ergebnis. "
+            "Gibt eine handoff_id zurück. Der Ziel-Agent holt sich den Auftrag über read_handoff."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type":        "string",
+                    "description": "ID des Ziel-Agenten",
+                },
+                "task": {
+                    "type":        "string",
+                    "description": "Aufgabe die der Ziel-Agent erledigen soll",
+                },
+                "context": {
+                    "type":        "string",
+                    "description": "Kontext und Daten für den Agenten (optional)",
+                },
+                "ttl_seconds": {
+                    "type":        "integer",
+                    "description": "Gültigkeit des Handoffs in Sekunden (Standard: 3600)",
+                },
+            },
+            "required": ["target", "task"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        target: str, task: str, context: str = "", ttl_seconds: int = 3600,
+    ) -> dict:
+        from pathlib import Path as _Path
+        from .agentlink import write_handoff as _wh
+
+        # Handoff im /agents-Verzeichnis des Ziel-Agenten ablegen
+        # (agent_id hier = aufrufender Agent, target = Ziel-Agent)
+        handoff_base = _Path("/agents") / target
+        handoff_base.mkdir(parents=True, exist_ok=True)
+
+        entry = _wh(
+            handoff_base,
+            from_agent=agent_id,
+            to_agent=target,
+            context=context or task,
+            data={"task": task, "from": agent_id},
+            ttl_seconds=ttl_seconds,
+        )
+        logger.info("delegate_agent [%s] → %s: %s…", agent_id, target, task[:60])
+        return {
+            "delegated":   True,
+            "target":      target,
+            "handoff_id":  entry.get("id", ""),
+            "ttl_seconds": ttl_seconds,
+        }
+
+
+# ============================================================= Git Tools (#gitea)
+
+class GitStatusTool(BaseTool):
+    """Zeigt den Git-Status des Projekt-Workspaces."""
+
+    @property
+    def id(self) -> str:   return "git_status"
+    @property
+    def name(self) -> str: return "Git Status"
+    @property
+    def description(self) -> str:
+        return (
+            "Zeigt den aktuellen Git-Status des Projekt-Workspaces: "
+            "geänderte, neue und gelöschte Dateien, aktueller Branch."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str) -> dict:
+        from .gitea import GiteaClient
+        try:
+            ws = await GiteaClient.git_workspace(project_id)
+        except Exception as e:
+            return {"error": str(e)}
+        stdout, stderr, rc = await GiteaClient._git(["status", "--short", "--branch"], ws)
+        branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
+        return {
+            "status":    stdout.strip(),
+            "branch":    branch_out.strip(),
+            "clean":     stdout.strip() == "" or stdout.strip().startswith("##") and "\n" not in stdout.strip(),
+            "exit_code": rc,
+        }
+
+
+class GitDiffTool(BaseTool):
+    """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
+
+    @property
+    def id(self) -> str:   return "git_diff"
+    @property
+    def name(self) -> str: return "Git Diff"
+    @property
+    def description(self) -> str:
+        return (
+            "Zeigt die Unterschiede zwischen dem aktuellen Workspace und dem letzten Commit. "
+            "path: optional — nur Diff für diese Datei/Verzeichnis."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type":        "string",
+                    "description": "Optionaler Pfad (relativ zum Workspace-Root)",
+                },
+                "staged": {
+                    "type":        "boolean",
+                    "description": "True um gestagete Änderungen zu zeigen (Standard: False)",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        path: str = "", staged: bool = False,
+    ) -> dict:
+        from .gitea import GiteaClient
+        try:
+            ws = await GiteaClient.git_workspace(project_id)
+        except Exception as e:
+            return {"error": str(e)}
+        args = ["diff"]
+        if staged:
+            args.append("--cached")
+        if path:
+            args += ["--", path]
+        stdout, stderr, rc = await GiteaClient._git(args, ws)
+        # Diff auf 10000 Zeichen begrenzen
+        diff = stdout[:10000]
+        return {
+            "diff":      diff,
+            "truncated": len(stdout) > 10000,
+            "exit_code": rc,
+        }
+
+
+class GitCommitTool(BaseTool):
+    """
+    Erstellt einen Git-Commit aus Dateiinhalten im Projekt-Workspace.
+    Schreibt die Dateien in den Workspace, staged sie und committet.
+    """
+
+    @property
+    def id(self) -> str:   return "git_commit"
+    @property
+    def name(self) -> str: return "Git Commit"
+    @property
+    def description(self) -> str:
+        return (
+            "Schreibt Dateien in den Git-Workspace und erstellt einen Commit. "
+            "files: Liste von {path, content} Objekten. "
+            "message: Commit-Nachricht. "
+            "branch: Branch-Name (Standard: feature/agent-<agent_id>)."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type":        "array",
+                    "description": "Liste von Dateien die commitet werden sollen",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path":    {"type": "string", "description": "Pfad relativ zum Repo-Root"},
+                            "content": {"type": "string", "description": "Dateiinhalt"},
+                        },
+                        "required": ["path", "content"],
+                    },
+                },
+                "message": {
+                    "type":        "string",
+                    "description": "Commit-Nachricht",
+                },
+                "branch": {
+                    "type":        "string",
+                    "description": "Branch-Name (Standard: feature/agent-<agent_id>)",
+                },
+            },
+            "required": ["files", "message"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        files: list, message: str, branch: str = "",
+    ) -> dict:
+        from .gitea import GiteaClient
+        import asyncio
+
+        if not branch:
+            safe_id = agent_id.replace("_", "-").replace(" ", "-")[:30]
+            branch = f"feature/agent-{safe_id}"
+
+        try:
+            ws = await GiteaClient.git_workspace(project_id)
+        except Exception as e:
+            return {"error": str(e)}
+
+        # Branch anlegen/wechseln
+        out, err, rc = await GiteaClient._git(["checkout", "-B", branch], ws)
+        if rc != 0:
+            return {"error": f"Branch-Wechsel fehlgeschlagen: {err[:200]}"}
+
+        # Dateien schreiben
+        written = []
+        for f in files:
+            fpath = ws / f["path"].lstrip("/")
+            fpath.parent.mkdir(parents=True, exist_ok=True)
+            fpath.write_text(f["content"], encoding="utf-8")
+            written.append(f["path"])
+            logger.info("git_commit [%s]: schreibe %s", agent_id, f["path"])
+
+        # git add + commit
+        _, err, rc = await GiteaClient._git(["add", "-A"], ws)
+        if rc != 0:
+            return {"error": f"git add fehlgeschlagen: {err[:200]}"}
+
+        # Prüfen ob es was zu committen gibt
+        stat_out, _, _ = await GiteaClient._git(["status", "--porcelain"], ws)
+        if not stat_out.strip():
+            return {"committed": False, "reason": "Keine Änderungen zu committen", "branch": branch}
+
+        _, err, rc = await GiteaClient._git(["commit", "-m", message], ws)
+        if rc != 0:
+            return {"error": f"git commit fehlgeschlagen: {err[:200]}"}
+
+        # letzte Commit-Hash
+        hash_out, _, _ = await GiteaClient._git(["rev-parse", "--short", "HEAD"], ws)
+
+        return {
+            "committed": True,
+            "branch":    branch,
+            "files":     written,
+            "commit":    hash_out.strip(),
+            "message":   message,
+        }
+
+
+class GitPushTool(BaseTool):
+    """Pusht den aktuellen Branch auf Gitea."""
+
+    @property
+    def id(self) -> str:   return "git_push"
+    @property
+    def name(self) -> str: return "Git Push"
+    @property
+    def description(self) -> str:
+        return (
+            "Pusht den aktuellen Branch auf Gitea. "
+            "Normalerweise nach git_commit aufrufen. "
+            "create_pr=True erstellt automatisch einen Pull Request nach main."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "create_pr": {
+                    "type":        "boolean",
+                    "description": "True um automatisch einen PR nach main zu erstellen",
+                },
+                "pr_title": {
+                    "type":        "string",
+                    "description": "Titel des PRs (nur wenn create_pr=True)",
+                },
+                "pr_body": {
+                    "type":        "string",
+                    "description": "Beschreibung des PRs (optional)",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        create_pr: bool = False, pr_title: str = "", pr_body: str = "",
+    ) -> dict:
+        from .gitea import GiteaClient, get_gitea_client, _load_config
+        cfg = _load_config()
+
+        try:
+            ws = await GiteaClient.git_workspace(project_id)
+        except Exception as e:
+            return {"error": str(e)}
+
+        # Remote-URL mit Token setzen
+        remote_url = f"{cfg['url']}/octopos/{project_id}.git"
+        token_url  = remote_url.replace("://", f"://octopos:{cfg['token']}@")
+        await GiteaClient._git(["remote", "set-url", "origin", token_url], ws)
+
+        # Branch ermitteln
+        branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
+        branch = branch_out.strip()
+        if not branch:
+            return {"error": "Kein aktiver Branch"}
+
+        # Push
+        _, err, rc = await GiteaClient._git(["push", "-u", "origin", branch], ws)
+        if rc != 0:
+            return {"error": f"git push fehlgeschlagen: {err[:300]}", "branch": branch}
+
+        result: dict = {"pushed": True, "branch": branch}
+
+        if create_pr and branch != "main":
+            title = pr_title or f"Agent-Änderung: {branch}"
+            try:
+                client = get_gitea_client()
+                pr = await client.create_pr(project_id, title, branch, body=pr_body)
+                result["pr"] = {
+                    "number": pr.get("number"),
+                    "url":    pr.get("html_url"),
+                    "title":  pr.get("title"),
+                }
+            except Exception as e:
+                result["pr_error"] = str(e)
+
+        return result
+
+
+class GitCreatePRTool(BaseTool):
+    """Erstellt einen Pull Request auf Gitea."""
+
+    @property
+    def id(self) -> str:   return "git_create_pr"
+    @property
+    def name(self) -> str: return "Pull Request erstellen"
+    @property
+    def description(self) -> str:
+        return (
+            "Erstellt einen Pull Request von einem Feature-Branch nach main. "
+            "Nutze dies nach git_push wenn du Änderungen zur Review einreichen möchtest."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type":        "string",
+                    "description": "Titel des Pull Requests",
+                },
+                "head": {
+                    "type":        "string",
+                    "description": "Quell-Branch (z.B. feature/agent-xyz)",
+                },
+                "base": {
+                    "type":        "string",
+                    "description": "Ziel-Branch (Standard: main)",
+                },
+                "body": {
+                    "type":        "string",
+                    "description": "Beschreibung / Changelog des PRs",
+                },
+            },
+            "required": ["title", "head"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        title: str, head: str, base: str = "main", body: str = "",
+    ) -> dict:
+        from .gitea import get_gitea_client
+        try:
+            client = get_gitea_client()
+            pr = await client.create_pr(project_id, title, head, base, body)
+            return {
+                "created": True,
+                "pr_number": pr.get("number"),
+                "pr_url":    pr.get("html_url"),
+                "title":     pr.get("title"),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -950,4 +1506,11 @@ registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
+registry.register(AskAgentTool())
+registry.register(DelegateAgentTool())
+registry.register(GitStatusTool())
+registry.register(GitDiffTool())
+registry.register(GitCommitTool())
+registry.register(GitPushTool())
+registry.register(GitCreatePRTool())
 

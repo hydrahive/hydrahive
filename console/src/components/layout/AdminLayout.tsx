@@ -1,27 +1,47 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive } from "lucide-react";
+import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive, Sun, Moon, Sparkles, Plug, GitBranch } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 const navAll = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/my-agent",  icon: Sparkles,        label: "Mein Agent" },
   { to: "/projects",  icon: FolderKanban,    label: "Projekte"  },
   { to: "/tools",     icon: Wrench,          label: "Tools"     },
 ];
 
 const navAdmin = [
-  { to: "/agents",    icon: Bot,             label: "Agenten"   },
-  { to: "/system",    icon: Server,          label: "System"    },
+  { to: "/agents",    icon: Bot,             label: "Agenten"    },
+  { to: "/system",    icon: Server,          label: "System"     },
   { to: "/llm",       icon: Cpu,             label: "LLM-Config" },
+  { to: "/mcp",       icon: Plug,            label: "MCP-Server" },
+  { to: "/gitea",     icon: GitBranch,       label: "Gitea"      },
   { to: "/users",     icon: Users,           label: "Benutzer"   },
   { to: "/audit",     icon: ShieldCheck,     label: "Audit-Log"  },
   { to: "/backup",    icon: Archive,         label: "Backup"     },
 ];
 
+function useDarkMode() {
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored) return stored === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
+  return [dark, () => setDark(d => !d)] as const;
+}
+
 export function AdminLayout() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const nav = isAdmin ? [...navAll, ...navAdmin] : navAll;
+  const [dark, toggleDark] = useDarkMode();
 
   return (
     <div className="flex h-screen bg-background">
@@ -52,6 +72,11 @@ export function AdminLayout() {
               </span>
             )}
           </div>
+          <button onClick={toggleDark}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {dark ? "Hell" : "Dunkel"}
+          </button>
           <button onClick={() => { logout(); navigate("/login"); }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
             <LogOut className="h-4 w-4" />Abmelden
