@@ -766,12 +766,35 @@ class Orchestrator:
 
                             # Assistant-Nachricht mit tool_calls in History
                             tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
+
+                            def _safe_args(raw: str) -> str:
+                                """Stellt sicher dass arguments valides JSON ist."""
+                                if not raw:
+                                    return "{}"
+                                try:
+                                    _json2.loads(raw)
+                                    return raw
+                                except _json2.JSONDecodeError:
+                                    # Versuche zu reparieren: doppelte Objekte zusammenführen
+                                    try:
+                                        parts = [p for p in raw.split("}{") if p]
+                                        if len(parts) > 1:
+                                            merged = {}
+                                            for p in parts:
+                                                s = p if p.startswith("{") else "{" + p
+                                                s = s if s.endswith("}") else s + "}"
+                                                merged.update(_json2.loads(s))
+                                            return _json2.dumps(merged)
+                                    except Exception:
+                                        pass
+                                    return "{}"
+
                             loop_messages.append({
                                 "role":      "assistant",
                                 "content":   round_text or None,
                                 "tool_calls": [
                                     {"id": tc["id"], "type": "function",
-                                     "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+                                     "function": {"name": tc["name"], "arguments": _safe_args(tc["arguments"])}}
                                     for tc in tc_list
                                 ],
                             })
