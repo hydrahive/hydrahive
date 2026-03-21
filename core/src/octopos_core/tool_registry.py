@@ -1169,22 +1169,31 @@ class GitStatusTool(BaseTool):
     def description(self) -> str:
         return (
             "Zeigt den aktuellen Git-Status des Projekt-Workspaces: "
-            "geänderte, neue und gelöschte Dateien, aktueller Branch."
+            "geänderte, neue und gelöschte Dateien, aktueller Branch. "
+            "project_id: Welches Projekt (z.B. 'testprojekt')."
         )
 
     @property
     def parameters(self) -> dict:
-        return {"type": "object", "properties": {}, "required": []}
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+            },
+            "required": [],
+        }
 
-    async def execute(self, agent_id: str, project_id: str) -> dict:
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        pid = kwargs.get("project_id") or project_id
         from .gitea import GiteaClient
         try:
-            ws = await GiteaClient.git_workspace(project_id)
+            ws = await GiteaClient.git_workspace(pid)
         except Exception as e:
             return {"error": str(e)}
         stdout, stderr, rc = await GiteaClient._git(["status", "--short", "--branch"], ws)
         branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
         return {
+            "project_id": pid,
             "status":    stdout.strip(),
             "branch":    branch_out.strip(),
             "clean":     stdout.strip() == "" or stdout.strip().startswith("##") and "\n" not in stdout.strip(),
@@ -1211,6 +1220,7 @@ class GitDiffTool(BaseTool):
         return {
             "type": "object",
             "properties": {
+                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
                 "path": {
                     "type":        "string",
                     "description": "Optionaler Pfad (relativ zum Workspace-Root)",
@@ -1225,11 +1235,12 @@ class GitDiffTool(BaseTool):
 
     async def execute(
         self, agent_id: str, project_id: str,
-        path: str = "", staged: bool = False,
+        path: str = "", staged: bool = False, **kwargs,
     ) -> dict:
+        pid = kwargs.get("project_id") or project_id
         from .gitea import GiteaClient
         try:
-            ws = await GiteaClient.git_workspace(project_id)
+            ws = await GiteaClient.git_workspace(pid)
         except Exception as e:
             return {"error": str(e)}
         args = ["diff"]
@@ -1291,14 +1302,16 @@ class GitCommitTool(BaseTool):
                     "type":        "string",
                     "description": "Branch-Name (Standard: feature/agent-<agent_id>)",
                 },
+                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
             },
             "required": ["files", "message"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        files: list, message: str, branch: str = "",
+        files: list, message: str, branch: str = "", **kwargs,
     ) -> dict:
+        pid = kwargs.get("project_id") or project_id
         from .gitea import GiteaClient
         import asyncio
 
@@ -1307,7 +1320,7 @@ class GitCommitTool(BaseTool):
             branch = f"feature/agent-{safe_id}"
 
         try:
-            ws = await GiteaClient.git_workspace(project_id)
+            ws = await GiteaClient.git_workspace(pid)
         except Exception as e:
             return {"error": str(e)}
 
@@ -1383,24 +1396,26 @@ class GitPushTool(BaseTool):
                     "type":        "string",
                     "description": "Beschreibung des PRs (optional)",
                 },
+                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
             },
             "required": [],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        create_pr: bool = False, pr_title: str = "", pr_body: str = "",
+        create_pr: bool = False, pr_title: str = "", pr_body: str = "", **kwargs,
     ) -> dict:
+        pid = kwargs.get("project_id") or project_id
         from .gitea import GiteaClient, get_gitea_client, _load_config
         cfg = _load_config()
 
         try:
-            ws = await GiteaClient.git_workspace(project_id)
+            ws = await GiteaClient.git_workspace(pid)
         except Exception as e:
             return {"error": str(e)}
 
         # Remote-URL mit Token setzen
-        remote_url = f"{cfg['url']}/octopos/{project_id}.git"
+        remote_url = f"{cfg['url']}/octopos/{pid}.git"
         token_url  = remote_url.replace("://", f"://octopos:{cfg['token']}@")
         await GiteaClient._git(["remote", "set-url", "origin", token_url], ws)
 
@@ -1468,14 +1483,16 @@ class GitCreatePRTool(BaseTool):
                     "type":        "string",
                     "description": "Beschreibung / Changelog des PRs",
                 },
+                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
             },
             "required": ["title", "head"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        title: str, head: str, base: str = "main", body: str = "",
+        title: str, head: str, base: str = "main", body: str = "", **kwargs,
     ) -> dict:
+        project_id = kwargs.get("project_id") or project_id
         from .gitea import get_gitea_client
         try:
             client = get_gitea_client()
