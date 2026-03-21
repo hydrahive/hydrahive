@@ -506,6 +506,19 @@ function SettingsPanel({
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
 
+  // Sync state wenn agentInfo von außen aktualisiert wird (nach Speichern oder Reload)
+  useEffect(() => {
+    const c = agentInfo.config;
+    setIdentity(c.identity ?? "");
+    setSoul(c.soul ?? "");
+    setModel(c.llm?.model ?? "");
+    setTemperature(c.llm?.temperature ?? 0.7);
+    setMaxTokens(c.llm?.max_tokens ?? 4096);
+    setFallbacks(c.llm?.fallback_models ?? []);
+    setTools(c.tools ?? []);
+    setAllowedAgents(c.allowed_agents ?? []);
+  }, [agentInfo]);
+
   function toggleTool(id: string) {
     setTools(t => t.includes(id) ? t.filter(x => x!==id) : [...t, id]);
   }

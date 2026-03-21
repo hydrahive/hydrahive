@@ -61,9 +61,11 @@ def _load_claude_oauth_token() -> str:
 
 _FAILOVER_SIGNALS = [
     "402", "payment", "credit", "quota", "insufficient",
+    "429", "rate_limit", "rate limit",
     "529", "overloaded", "capacity", "credit_balance",
     "your credit balance is too low",
     "exceeded your current quota",
+    "this request would exceed",
     "billing",
 ]
 
@@ -95,6 +97,10 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float
 
             # Auth-Fehler → kein Retry
             if any(x in err_str for x in ["401", "403", "unauthorized", "forbidden", "authentication"]):
+                raise
+
+            # Quota/Rate-Limit erschöpft → kein Retry, sofort an Aufrufer weitergeben (Failover)
+            if any(x in err_str for x in ["rate_limit", "rate limit", "429", "quota", "credit", "billing", "payment"]):
                 raise
 
             # Letzter Versuch → aufgeben
