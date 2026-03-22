@@ -164,33 +164,6 @@ def register_project_routes(
             "gitea_error": gitea_error,
         }
 
-    @admin_router.delete("/projects/{project_id}")
-    async def delete_project(project_id: str, remove_files: bool = False):
-        import shutil as _shutil
-
-        cfg = projects.get(project_id)
-        if not cfg:
-            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-        provisioner = get_provisioner()
-        if provisioner is None:
-            raise HTTPException(503, "Provisioner nicht initialisiert")
-        warnings = await provisioner.deprovision(cfg)
-        project_dir = Path(projects_dir) / project_id
-        if remove_files and project_dir.exists():
-            _shutil.rmtree(project_dir)
-        else:
-            yaml_path = project_dir / "project.yaml"
-            if yaml_path.exists():
-                yaml_path.unlink()
-
-        try:
-            from .gitea import get_gitea_client
-            await get_gitea_client().delete_repo(project_id)
-        except Exception as e:
-            warnings.append(f"Gitea-Repo konnte nicht gelöscht werden: {e}")
-
-        return {"deleted": project_id, "files_removed": remove_files, "warnings": warnings}
-
     @auth_router.get("/projects/{project_id}/session")
     def get_session(project_id: str):
         if not projects.get(project_id):

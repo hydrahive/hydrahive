@@ -155,6 +155,18 @@ class SecurityRegressionTests(unittest.TestCase):
         }
         self.assertEqual(direct_app_routes, expected)
 
+    def test_project_delete_route_is_registered_once_from_lifecycle_router(self):
+        matches = [
+            route
+            for route in main.app.routes
+            if getattr(route, "path", None) == "/projects/{project_id}"
+            and "DELETE" in getattr(route, "methods", set())
+        ]
+        self.assertEqual(len(matches), 1)
+        endpoint = getattr(matches[0], "endpoint", None)
+        self.assertEqual(getattr(endpoint, "__name__", None), "delete_project")
+        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_project_lifecycle")
+
     def test_read_server_name_priority(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
