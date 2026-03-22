@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.parse import quote
 
 import aiohttp
 
@@ -158,6 +159,29 @@ class GiteaClient:
     async def list_commits(self, owner: str, repo: str, limit: int = 5) -> list:
         return await self._get(f"/repos/{owner}/{repo}/commits?limit={limit}")  # type: ignore[return-value]
 
+    async def list_repo_tree(self, owner: str, repo: str, path: str = "", ref: str = "") -> list:
+        query = ""
+        if ref:
+            query = f"?ref={quote(ref)}"
+        safe_path = path.strip("/")
+        if safe_path:
+            return await self._get(f"/repos/{owner}/{repo}/contents/{quote(safe_path)}{query}")  # type: ignore[return-value]
+        return await self._get(f"/repos/{owner}/{repo}/contents{query}")  # type: ignore[return-value]
+
+    async def get_repo_file(self, owner: str, repo: str, path: str, ref: str = "") -> str:
+        if not path.strip("/"):
+            raise ValueError("Dateipfad fehlt")
+        query = f"?ref={quote(ref)}" if ref else ""
+        raw_path = quote(path.strip("/"), safe="/")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self.url}/api/v1/repos/{owner}/{repo}/raw/{raw_path}{query}",
+                headers=self._headers(),
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.text()
+
     # ------------------------------------------------------------------ PRs
 
     async def create_pr(
@@ -176,6 +200,23 @@ class GiteaClient:
             "body":  body,
         }
         return await self._post(f"/repos/{self.org}/{project_id}/pulls", data)
+
+    async def create_pr_for_repo(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        head: str,
+        base: str = "main",
+        body: str = "",
+    ) -> dict:
+        data = {
+            "title": title,
+            "head":  head,
+            "base":  base,
+            "body":  body,
+        }
+        return await self._post(f"/repos/{owner}/{repo}/pulls", data)
 
     async def list_prs(self, project_id: str, state: str = "open") -> list:
         """Listet PRs eines Repos."""
@@ -224,17 +265,18 @@ class GiteaClient:
     # ------------------------------------------------------------------ Git (lokal via subprocess)
 
     @staticmethod
-    async def git_workspace(project_id: str) -> Path:
+    async def git_workspace(repo_key: str, owner: str | None = None, repo: str | None = None) -> Path:
         """
-        Gibt das lokale Git-Workspace-Verzeichnis zurück.
-        /tmp/octopos-git/{project_id}/ — wird bei Bedarf geclont.
+        Gibt das lokale Git-Workspace-Verzeichnis zurueck.
+        /tmp/octopos-git/{repo_key}/ — wird bei Bedarf geclont.
         """
         import asyncio
-        workspace = Path(f"/tmp/octopos-git/{project_id}")
+        workspace = Path(f"/tmp/octopos-git/{repo_key}")
         if not workspace.exists():
             cfg = _load_config()
-            # clone_url nutzt lokale URL damit keine Auth nötig
-            clone_url = f"{cfg['url']}/octopos/{project_id}.git"
+            repo_owner = owner or cfg.get("org", "octopos")
+            repo_name = repo or repo_key
+            clone_url = f"{cfg['url']}/{repo_owner}/{repo_name}.git"
             # URL mit Token für Auth
             token_url = clone_url.replace("://", f"://octopos:{cfg['token']}@")
             workspace.parent.mkdir(parents=True, exist_ok=True)
@@ -315,3 +357,74 @@ def resolve_repo_ref(repo: str, default_owner: str | None = None) -> tuple[str, 
     if name.endswith(".git"):
         name = name[:-4]
     return owner, name
+
+
+def repo_workspace_key(owner: str, repo: str) -> str:
+    return f"{owner}__{repo}"
+
+
+def _candidate_repo_names(project_id: str) -> list[str]:
+    raw = (project_id or "").strip()
+    if not raw:
+        return []
+
+    candidates: list[str] = []
+
+    def add(value: str) -> None:
+        value = value.strip()
+        if value and value not in candidates:
+            candidates.append(value)
+
+    add(raw)
+
+    for suffix in ("_dev", "-dev"):
+        if raw.endswith(suffix):
+            base = raw[: -len(suffix)]
+            add(base)
+            add(base.replace("_", "-"))
+            add(base.replace("-", "_"))
+
+    add(raw.replace("_", "-"))
+    add(raw.replace("-", "_"))
+
+    return candidates
+
+
+async def resolve_git_target(
+    client: GiteaClient,
+    *,
+    project_id: str,
+    repo: str = "",
+) -> dict[str, str]:
+    if repo.strip():
+        owner, name = resolve_repo_ref(repo, default_owner=client.org)
+        info = await client.get_repo_by_full_name(owner, name)
+        return {
+            "owner": owner,
+            "repo": name,
+            "full_name": info.get("full_name") or f"{owner}/{name}",
+            "workspace_key": repo_workspace_key(owner, name),
+            "source": "repo",
+        }
+
+    last_error: Exception | None = None
+    for candidate in _candidate_repo_names(project_id):
+        try:
+            info = await client.get_repo_by_full_name(client.org, candidate)
+            return {
+                "owner": client.org,
+                "repo": candidate,
+                "full_name": info.get("full_name") or f"{client.org}/{candidate}",
+                "workspace_key": repo_workspace_key(client.org, candidate),
+                "source": "project_id",
+            }
+        except aiohttp.ClientResponseError as e:
+            if e.status == 404:
+                last_error = e
+                continue
+            raise
+
+    hint = project_id
+    if project_id.startswith("personal_"):
+        hint = "Bitte repo explizit angeben (URL, owner/repo oder Repo-Name)"
+    raise ValueError(f"Repository konnte nicht aufgeloest werden: {hint}") from last_error
