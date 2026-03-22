@@ -20,6 +20,15 @@ class SecurityRegressionTests(unittest.TestCase):
             if getattr(dep, "call", None) is not None
         }
 
+    def _route_provider(self, path: str, method: str) -> str | None:
+        for route in main.app.routes:
+            if getattr(route, "path", None) == path and method in getattr(route, "methods", set()):
+                endpoint = getattr(route, "endpoint", None)
+                if endpoint is None:
+                    return None
+                return getattr(endpoint, "__name__", None)
+        return None
+
     def test_sensitive_routes_keep_auth_guards(self):
         self.assertIn("require_auth", self._dependency_names("/tools", "GET"))
         self.assertIn("require_auth", self._dependency_names("/system/gpu", "GET"))
@@ -76,6 +85,28 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(cfg["has_token"])
         self.assertEqual(cfg["token_masked"], "12345678...cdef")
         self.assertNotIn("token", cfg)
+
+    def test_only_special_cases_remain_direct_app_routes(self):
+        direct_app_routes = {
+            (route.path, tuple(sorted(route.methods)))
+            for route in main.app.routes
+            if getattr(route, "endpoint", None) is not None
+            and getattr(route.endpoint, "__name__", None) in {
+                "spawn_task_agent",
+                "agent_heartbeat",
+                "agent_message_sync",
+                "agent_message_stream",
+                "gitea_webhook",
+            }
+        }
+        expected = {
+            ("/agents/spawn", ("POST",)),
+            ("/agents/{agent_id}/heartbeat", ("POST",)),
+            ("/agents/{agent_id}/message", ("POST",)),
+            ("/agents/{agent_id}/message/stream", ("POST",)),
+            ("/webhooks/gitea/{project_id}", ("POST",)),
+        }
+        self.assertEqual(direct_app_routes, expected)
 
 
 if __name__ == "__main__":
