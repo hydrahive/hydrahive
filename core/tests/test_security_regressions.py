@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from types import SimpleNamespace
+import asyncio
 
 import yaml
 
@@ -306,6 +307,41 @@ class SecurityRegressionTests(unittest.TestCase):
         )
         self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))
         self.assertEqual(resolve_repo_ref("octopos", default_owner="octopos"), ("octopos", "octopos"))
+
+    def test_execute_tool_uses_project_id_override_without_duplicate_kwarg(self):
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        boss_cfg = AgentConfig.model_validate(
+            {
+                "id": "personal_test",
+                "type": "specialist",
+                "identity": "Test",
+                "llm": {"model": "openai-codex/gpt-5.3-codex"},
+                "tools": ["git_status"],
+            }
+        )
+
+        tool = mock.AsyncMock()
+        asyncio.run(
+            orchestrator._execute_tool(
+                tool,
+                boss_cfg=boss_cfg,
+                project_id="personal_test",
+                tool_name="git_status",
+                tool_input={"project_id": "octopos_dev"},
+            )
+        )
+
+        tool.execute.assert_awaited_once_with(
+            agent_id="personal_test",
+            project_id="octopos_dev",
+        )
+
+    def test_project_message_routes_accept_execution_mode_field(self):
+        route = self._route("/projects/{project_id}/message", "POST")
+        body_param = route.dependant.body_params[0]
+        annotation = body_param.field_info.annotation
+        fields = set(annotation.model_fields.keys())
+        self.assertIn("execution_mode", fields)
 
     def test_personal_agent_update_reloads_discovery_after_write(self):
         req = MyAgentUpdateRequest(

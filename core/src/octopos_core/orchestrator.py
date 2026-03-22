@@ -191,6 +191,25 @@ class Orchestrator:
         allowed = self._allowed_tool_map(agent_cfg, execution_mode)
         return allowed.get(tool_name)
 
+    async def _execute_tool(
+        self,
+        tool,
+        *,
+        boss_cfg: AgentConfig,
+        project_id: str,
+        tool_name: str,
+        tool_input: dict | None = None,
+    ):
+        args = dict(tool_input or {})
+        effective_pid = args.pop("project_id", None) or project_id
+        if tool is None:
+            return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}
+        return await tool.execute(
+            agent_id=boss_cfg.id,
+            project_id=effective_pid,
+            **args,
+        )
+
     # ------------------------------------------------------------------ public
 
     def _get_queue(self, project_id: str) -> asyncio.Queue:
@@ -912,7 +931,13 @@ class Orchestrator:
                                     tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
                                     try:
                                         args = _json.loads(tc.function.arguments or "{}")
-                                        result = await tool.execute(agent_id=boss_cfg.id, project_id=project_id, **args) if tool else {"error": f"Tool '{tc.function.name}' ist in diesem Modus nicht erlaubt"}
+                                        result = await self._execute_tool(
+                                            tool,
+                                            boss_cfg=boss_cfg,
+                                            project_id=project_id,
+                                            tool_name=tc.function.name,
+                                            tool_input=args,
+                                        )
                                     except Exception as te:
                                         result = {"error": str(te)}
                                     result_str = _json.dumps(result, ensure_ascii=False)
@@ -1017,10 +1042,12 @@ class Orchestrator:
                                 tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
                                 if tool:
                                     try:
-                                        result = await tool.execute(
-                                            agent_id=boss_cfg.id,
+                                        result = await self._execute_tool(
+                                            tool,
+                                            boss_cfg=boss_cfg,
                                             project_id=project_id,
-                                            **block.input,
+                                            tool_name=block.name,
+                                            tool_input=block.input,
                                         )
                                     except Exception as te:
                                         result = {"error": str(te)}
@@ -1142,13 +1169,13 @@ class Orchestrator:
                                 tool = self._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
                                 try:
                                     tool_input = _json2.loads(_safe_args(tc["arguments"]))
-                                    # project_id aus tool_input extrahieren falls übergeben
-                                    effective_pid = tool_input.pop("project_id", None) or project_id
-                                    result = await tool.execute(
-                                        agent_id=boss_cfg.id,
-                                        project_id=effective_pid,
-                                        **tool_input,
-                                    ) if tool else f"Tool '{tc['name']}' ist in diesem Modus nicht erlaubt"
+                                    result = await self._execute_tool(
+                                        tool,
+                                        boss_cfg=boss_cfg,
+                                        project_id=project_id,
+                                        tool_name=tc["name"],
+                                        tool_input=tool_input,
+                                    )
                                 except Exception as te:
                                     result = f"Tool-Fehler: {te}"
                                 tool_results_text.append(
@@ -1266,9 +1293,12 @@ class Orchestrator:
                     continue
                 try:
                     args = json.loads(tc.function.arguments)
-                    effective_pid = args.pop("project_id", None) or project_id
-                    result = await tool.execute(
-                        agent_id=boss_cfg.id, project_id=effective_pid, **args
+                    result = await self._execute_tool(
+                        tool,
+                        boss_cfg=boss_cfg,
+                        project_id=project_id,
+                        tool_name=tc.function.name,
+                        tool_input=args,
                     )
                     result_str = json.dumps(result, ensure_ascii=False)
                     if len(result_str) > 8000:
