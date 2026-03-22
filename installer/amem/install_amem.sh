@@ -10,6 +10,7 @@ AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/octopos/amem.env}"
 MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/octopos/mcp_servers.json}"
 AMEM_MCP_URL="${AMEM_MCP_URL:-http://127.0.0.1:8020/sse}"
 AMEM_SEARCH_UI_URL="${AMEM_SEARCH_UI_URL:-http://127.0.0.1:8021}"
+AMEM_BIND_HOST="${AMEM_BIND_HOST:-0.0.0.0}"
 
 info()    { echo "[A-MEM] $1"; }
 success() { echo "[A-MEM] OK: $1"; }
@@ -41,8 +42,7 @@ install -m 755 "$(dirname "$0")/amem_mcp_server.py" "${AMEM_DIR}/amem_mcp_server
 install -m 755 "$(dirname "$0")/search_ui.py" "${AMEM_SEARCH_DIR}/search_ui.py"
 chown -R "${OCTOPOS_USER}:${OCTOPOS_GROUP}" "${AMEM_DIR}" "${AMEM_SEARCH_DIR}"
 
-if [ ! -f "${AMEM_ENV_FILE}" ]; then
-  AMEM_MODEL="$(python3 - <<'PY'
+AMEM_MODEL="$(python3 - <<'PY'
 import json
 import urllib.request
 
@@ -60,12 +60,47 @@ except Exception:
     print("qwen2.5:7b")
 PY
 )"
+
+if [ -f "${AMEM_ENV_FILE}" ]; then
+  python3 - <<PY
+from pathlib import Path
+
+path = Path("${AMEM_ENV_FILE}")
+entries = {}
+for line in path.read_text(encoding="utf-8").splitlines():
+    if not line or line.lstrip().startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    entries[key.strip()] = value.strip()
+
+entries["OLLAMA_HOST"] = entries.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+entries["AMEM_LLM_BACKEND"] = entries.get("AMEM_LLM_BACKEND", "ollama")
+entries["AMEM_LLM_MODEL"] = "${AMEM_MODEL}"
+entries["AMEM_EMBEDDING_MODEL"] = entries.get("AMEM_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+entries["AMEM_HOST"] = "${AMEM_BIND_HOST}"
+entries["AMEM_PORT"] = entries.get("AMEM_PORT", "8020")
+entries["AMEM_CHROMADB_DIR"] = entries.get("AMEM_CHROMADB_DIR", "/var/lib/octopos/amem/chromadb_data")
+entries["AMEM_LOG_FILE"] = entries.get("AMEM_LOG_FILE", "/var/log/octopos/amem_mcp.log")
+
+ordered = [
+    "OLLAMA_HOST",
+    "AMEM_LLM_BACKEND",
+    "AMEM_LLM_MODEL",
+    "AMEM_EMBEDDING_MODEL",
+    "AMEM_HOST",
+    "AMEM_PORT",
+    "AMEM_CHROMADB_DIR",
+    "AMEM_LOG_FILE",
+]
+path.write_text("\n".join(f"{key}={entries[key]}" for key in ordered) + "\n", encoding="utf-8")
+PY
+else
   cat > "${AMEM_ENV_FILE}" <<ENV
 OLLAMA_HOST=http://127.0.0.1:11434
 AMEM_LLM_BACKEND=ollama
 AMEM_LLM_MODEL=${AMEM_MODEL}
 AMEM_EMBEDDING_MODEL=all-MiniLM-L6-v2
-AMEM_HOST=127.0.0.1
+AMEM_HOST=${AMEM_BIND_HOST}
 AMEM_PORT=8020
 AMEM_CHROMADB_DIR=/var/lib/octopos/amem/chromadb_data
 AMEM_LOG_FILE=/var/log/octopos/amem_mcp.log
