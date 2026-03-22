@@ -1,26 +1,45 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Bot, FolderKanban, Server, Wrench, Cpu, Users, LogOut, ShieldCheck, Archive, Sun, Moon, Sparkles, Plug, GitBranch, RefreshCw } from "lucide-react";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Bot,
+  FolderKanban,
+  Server,
+  Wrench,
+  Cpu,
+  Users,
+  LogOut,
+  ShieldCheck,
+  Archive,
+  Sun,
+  Moon,
+  Sparkles,
+  Plug,
+  GitBranch,
+  RefreshCw,
+  Menu,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 
 const navAll = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/my-agent",  icon: Sparkles,        label: "Mein Agent" },
-  { to: "/projects",  icon: FolderKanban,    label: "Projekte"  },
-  { to: "/tools",     icon: Wrench,          label: "Tools"     },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hint: "Lagebild" },
+  { to: "/my-agent", icon: Sparkles, label: "Mein Agent", hint: "Persoenlicher Kanal" },
+  { to: "/projects", icon: FolderKanban, label: "Projekte", hint: "Queues und Chats" },
+  { to: "/tools", icon: Wrench, label: "Tools", hint: "Aktionen und Skills" },
 ];
 
 const navAdmin = [
-  { to: "/agents",    icon: Bot,             label: "Agenten"    },
-  { to: "/system",    icon: Server,          label: "System"     },
-  { to: "/llm",       icon: Cpu,             label: "LLM-Config" },
-  { to: "/mcp",       icon: Plug,            label: "MCP-Server" },
-  { to: "/gitea",     icon: GitBranch,       label: "Gitea"      },
-  { to: "/users",     icon: Users,           label: "Benutzer"   },
-  { to: "/audit",     icon: ShieldCheck,     label: "Audit-Log"  },
-  { to: "/backup",    icon: Archive,         label: "Backup"     },
+  { to: "/agents", icon: Bot, label: "Agenten", hint: "Runtime und Profile" },
+  { to: "/system", icon: Server, label: "System", hint: "Host und Dienste" },
+  { to: "/llm", icon: Cpu, label: "LLM-Config", hint: "Modelle und Provider" },
+  { to: "/mcp", icon: Plug, label: "MCP-Server", hint: "Externe Adapter" },
+  { to: "/gitea", icon: GitBranch, label: "Gitea", hint: "Repos und Sync" },
+  { to: "/users", icon: Users, label: "Benutzer", hint: "Accounts und Rollen" },
+  { to: "/audit", icon: ShieldCheck, label: "Audit-Log", hint: "Nachvollziehbarkeit" },
+  { to: "/backup", icon: Archive, label: "Backup", hint: "Snapshots und Restore" },
 ];
 
 function useUpdateStatus(isAdmin: boolean) {
@@ -56,7 +75,6 @@ function useUpdateStatus(isAdmin: boolean) {
     setError(null);
     try {
       await api.updateTrigger();
-      // poll faster while updating
       const poll = setInterval(async () => {
         try {
           const s = await api.updateStatus();
@@ -66,7 +84,10 @@ function useUpdateStatus(isAdmin: boolean) {
             if (s.commit) setLastCommit(s.commit);
             if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
           }
-        } catch { clearInterval(poll); setUpdating(false); }
+        } catch {
+          clearInterval(poll);
+          setUpdating(false);
+        }
       }, 3000);
     } catch (e: unknown) {
       setUpdating(false);
@@ -89,78 +110,159 @@ function useDarkMode() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
-  return [dark, () => setDark(d => !d)] as const;
+  return [dark, () => setDark((d) => !d)] as const;
 }
 
 export function AdminLayout() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const nav = isAdmin ? [...navAll, ...navAdmin] : navAll;
   const [dark, toggleDark] = useDarkMode();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
 
-  return (
-    <div className="flex h-screen bg-background">
-      <aside className="w-56 flex flex-col border-r bg-card">
-        <div className="h-14 flex items-center gap-2 px-4 border-b">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">O</span>
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  const activeItem = useMemo(
+    () => nav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)) ?? nav[0],
+    [location.pathname, nav],
+  );
+
+  const sidebar = (
+    <aside className="app-sidebar">
+      <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent)))] text-sm font-bold text-primary-foreground shadow-lg shadow-black/20">
+              O
+            </div>
+            <div>
+              <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">Control Fabric</p>
+              <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">OctopOS</h1>
+            </div>
           </div>
-          <span className="font-semibold text-sm">OctopOS</span>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <nav className="flex-1 p-2 space-y-0.5">
-          {nav.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} className={({ isActive }) =>
-              cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground")}>
-              <Icon className="h-4 w-4" />{label}
-            </NavLink>
-          ))}
-        </nav>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[hsl(var(--sidebar-foreground))]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">{user?.username ?? "unbekannt"}</span>
+            {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
+          </div>
+          <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">Hybrid-Konsole fuer Agenten, Runtime und Systeme.</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {nav.map(({ to, icon: Icon, label, hint }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+          >
+            <Icon className="h-4 w-4 flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="truncate">{label}</div>
+              <div className="truncate text-xs text-[hsl(var(--sidebar-muted))]">{hint}</div>
+            </div>
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
         {isAdmin && (
-          <div className="px-2 pb-2">
-            {updateError && (
-              <div className="text-xs text-destructive bg-destructive/10 rounded-md px-2 py-1.5 mb-1">
-                {updateError}
-              </div>
-            )}
+          <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-[hsl(var(--sidebar-foreground))]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">Deployment</span>
+              <span className={cn("status-pill", updating ? "bg-white/10 text-[hsl(var(--sidebar-foreground))]" : "status-pill-ok")}>{updating ? "laeuft" : "bereit"}</span>
+            </div>
+            <p className="mt-2 text-[hsl(var(--sidebar-muted))]">
+              {lastCommit ? `Letzter Stand ${lastCommit}` : "Kein Commit-Stand vorhanden"}
+            </p>
+            {updateError && <p className="mt-2 text-[#ffd0d0]">{updateError}</p>}
             <button
               onClick={triggerUpdate}
               disabled={updating}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-colors",
-                updating
-                  ? "text-muted-foreground cursor-not-allowed"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}>
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <RefreshCw className={cn("h-3.5 w-3.5", updating && "animate-spin")} />
-              {updating ? "Update läuft…" : lastCommit ? `Update (${lastCommit})` : "Update auslösen"}
+              {updating ? "Update laeuft" : "Update ausloesen"}
             </button>
           </div>
         )}
-        <div className="p-3 border-t space-y-1">
-          <div className="px-3 py-1.5 text-xs text-muted-foreground flex items-center justify-between">
-            <span className="truncate">{user?.username}</span>
-            {isAdmin && (
-              <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full ml-1 flex-shrink-0">
-                admin
-              </span>
-            )}
-          </div>
-          <button onClick={toggleDark}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={toggleDark}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
+          >
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {dark ? "Hell" : "Dunkel"}
           </button>
-          <button onClick={() => { logout(); navigate("/login"); }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-            <LogOut className="h-4 w-4" />Abmelden
+          <button
+            onClick={() => {
+              logout();
+              navigate("/login");
+            }}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:border-red-300/20 hover:bg-red-500/10 hover:text-red-100"
+          >
+            <LogOut className="h-4 w-4" />
+            Ende
           </button>
         </div>
-      </aside>
-      <main className="flex-1 overflow-y-auto flex flex-col"><Outlet /></main>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="app-shell lg:grid lg:min-h-screen lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="hidden lg:block">{sidebar}</div>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)}>
+          <div className="h-full w-[18rem]" onClick={(e) => e.stopPropagation()}>
+            {sidebar}
+          </div>
+        </div>
+      )}
+
+      <main className="relative min-w-0">
+        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-4 backdrop-blur md:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                className="rounded-2xl border bg-card/70 p-2.5 text-foreground shadow-sm lg:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div>
+                <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">Operations Console</p>
+                <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "OctopOS"}</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="status-pill">{activeItem?.hint ?? "Systemansicht"}</span>
+              <span className={cn("status-pill", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
+                {updating ? "Update aktiv" : "System bereit"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-8">
+          <Outlet />
+        </div>
+      </main>
     </div>
   );
 }

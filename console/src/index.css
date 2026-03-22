@@ -4,24 +4,194 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%; --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%; --card-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%; --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%; --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%; --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%; --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%; --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%; --radius: 0.5rem;
+    --background: 38 33% 96%;
+    --foreground: 215 38% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 38% 14%;
+    --primary: 196 78% 31%;
+    --primary-foreground: 42 57% 97%;
+    --secondary: 35 50% 91%;
+    --secondary-foreground: 215 33% 18%;
+    --muted: 36 36% 92%;
+    --muted-foreground: 214 16% 38%;
+    --accent: 16 72% 52%;
+    --accent-foreground: 42 57% 97%;
+    --destructive: 2 72% 52%;
+    --destructive-foreground: 42 57% 97%;
+    --border: 30 22% 82%;
+    --radius: 1rem;
+    --shell: 40 40% 98%;
+    --shell-foreground: 215 38% 14%;
+    --sidebar: 193 55% 14%;
+    --sidebar-foreground: 42 57% 94%;
+    --sidebar-muted: 194 24% 70%;
+    --sidebar-border: 193 43% 23%;
+    --panel: 0 0% 100%;
+    --panel-foreground: 215 38% 14%;
+    --panel-muted: 35 47% 95%;
+    --hero-start: 189 53% 92%;
+    --hero-end: 36 71% 91%;
+    --shadow-soft: 18 29% 72%;
   }
+
   .dark {
-    --background: 222.2 84% 4.9%; --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%; --card-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%; --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%; --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%; --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%; --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%; --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
+    --background: 195 27% 10%;
+    --foreground: 36 43% 94%;
+    --card: 196 26% 12%;
+    --card-foreground: 36 43% 94%;
+    --primary: 188 74% 63%;
+    --primary-foreground: 197 39% 10%;
+    --secondary: 197 18% 19%;
+    --secondary-foreground: 36 43% 94%;
+    --muted: 197 18% 17%;
+    --muted-foreground: 194 17% 67%;
+    --accent: 19 77% 59%;
+    --accent-foreground: 20 33% 10%;
+    --destructive: 5 68% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 197 18% 24%;
+    --shell: 194 30% 8%;
+    --shell-foreground: 36 43% 94%;
+    --sidebar: 194 42% 9%;
+    --sidebar-foreground: 36 43% 94%;
+    --sidebar-muted: 190 17% 67%;
+    --sidebar-border: 196 22% 19%;
+    --panel: 196 26% 12%;
+    --panel-foreground: 36 43% 94%;
+    --panel-muted: 196 19% 16%;
+    --hero-start: 194 31% 16%;
+    --hero-end: 18 36% 18%;
+    --shadow-soft: 198 44% 3%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at top left, hsl(var(--hero-start) / 0.75), transparent 34%),
+      radial-gradient(circle at top right, hsl(var(--hero-end) / 0.55), transparent 28%),
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--shell)) 65%, hsl(var(--background)));
+  }
+
+  #root {
+    min-height: 100vh;
   }
 }
-@layer base { * { @apply border-border; } body { @apply bg-background text-foreground; } }
+
+@layer components {
+  .app-shell {
+    @apply min-h-screen text-foreground;
+    background: transparent;
+  }
+
+  .app-sidebar {
+    @apply flex h-full w-72 flex-col border-r;
+    background: hsl(var(--sidebar) / 0.96);
+    color: hsl(var(--sidebar-foreground));
+    border-color: hsl(var(--sidebar-border));
+    box-shadow: 0 24px 80px hsl(var(--shadow-soft) / 0.18);
+    backdrop-filter: blur(20px);
+  }
+
+  .app-panel {
+    @apply rounded-[calc(var(--radius)+0.25rem)] border;
+    background: hsl(var(--panel) / 0.8);
+    color: hsl(var(--panel-foreground));
+    border-color: hsl(var(--border) / 0.9);
+    box-shadow: 0 12px 40px hsl(var(--shadow-soft) / 0.16);
+    backdrop-filter: blur(16px);
+  }
+
+  .app-panel-muted {
+    background: hsl(var(--panel-muted) / 0.95);
+  }
+
+  .shell-grid {
+    @apply grid gap-4 lg:grid-cols-12;
+  }
+
+  .shell-title {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+
+  .shell-copy {
+    @apply text-sm leading-6 text-muted-foreground;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all;
+    color: hsl(var(--sidebar-muted));
+  }
+
+  .nav-item:hover {
+    background: hsl(var(--sidebar-foreground) / 0.08);
+    color: hsl(var(--sidebar-foreground));
+  }
+
+  .nav-item-active {
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.26), hsl(var(--accent) / 0.18));
+    color: hsl(var(--sidebar-foreground));
+    box-shadow: inset 0 0 0 1px hsl(var(--sidebar-foreground) / 0.08);
+  }
+
+  .status-pill {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium;
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+
+  .status-pill-ok {
+    background: hsl(var(--primary) / 0.14);
+    color: hsl(var(--primary));
+  }
+
+  .hero-panel {
+    @apply relative overflow-hidden rounded-[calc(var(--radius)+0.75rem)] border p-6 lg:p-8;
+    background:
+      linear-gradient(135deg, hsl(var(--hero-start) / 0.72), transparent 55%),
+      linear-gradient(160deg, hsl(var(--hero-end) / 0.72), transparent 62%),
+      hsl(var(--panel) / 0.92);
+    border-color: hsl(var(--border) / 0.9);
+    box-shadow: 0 16px 60px hsl(var(--shadow-soft) / 0.18);
+  }
+
+  .hero-panel::after {
+    content: "";
+    @apply absolute inset-y-0 right-0 w-1/3;
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.12), transparent 72%);
+    pointer-events: none;
+  }
+
+  .metric-card {
+    @apply app-panel p-5;
+  }
+
+  .metric-kicker {
+    @apply text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-muted-foreground;
+  }
+
+  .metric-value {
+    @apply mt-3 text-3xl font-semibold tracking-tight;
+  }
+
+  .metric-meta {
+    @apply mt-2 text-sm text-muted-foreground;
+  }
+
+  .section-card {
+    @apply app-panel p-5;
+  }
+
+  .dot {
+    @apply inline-block h-2.5 w-2.5 rounded-full;
+  }
+}
