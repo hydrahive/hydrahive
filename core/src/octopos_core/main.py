@@ -3657,11 +3657,34 @@ def _ufw_status_summary() -> dict:
     return {"available": True, "active": True, "rules": rules}
 
 
+def _ufw_allowed_ports(ufw: dict) -> dict[str, list[int]]:
+    import re as _re
+
+    allowed = {"tcp": set(), "udp": set()}
+    for rule in ufw.get("rules", []):
+        rule_text = str(rule.get("rule", "")).lower()
+        match = _re.match(r"(\d+)(?:/(tcp|udp))?$", rule_text)
+        if not match:
+            continue
+        port = int(match.group(1))
+        proto = match.group(2)
+        if proto is None:
+            allowed["tcp"].add(port)
+            allowed["udp"].add(port)
+            continue
+        allowed[proto].add(port)
+    return {
+        "tcp": sorted(allowed["tcp"]),
+        "udp": sorted(allowed["udp"]),
+    }
+
+
 def _network_profile_status() -> dict:
     profile = _read_network_profile()
     spec = NETWORK_PROFILES[profile]
     exposed = _list_public_listening_ports()
     ufw = _ufw_status_summary()
+    allowed = _ufw_allowed_ports(ufw)
 
     expected_tcp = sorted(spec["tcp_ports"])  # type: ignore[index]
     expected_udp = sorted(spec["udp_ports"])  # type: ignore[index]
@@ -3672,20 +3695,25 @@ def _network_profile_status() -> dict:
     if not spec["ufw_enabled"] and ufw["active"]:  # type: ignore[index]
         deviations.append("ufw_active_while_profile_is_full")
 
-    unexpected_tcp: list[int] = []
-    unexpected_udp: list[int] = []
     if profile != "full":
-        unexpected_tcp = sorted(p for p in exposed["tcp"] if p not in expected_tcp and p not in {22, 80})
-        unexpected_udp = sorted(p for p in exposed["udp"] if p not in expected_udp)
-        if unexpected_tcp:
-            deviations.append(f"unexpected_tcp_ports:{','.join(map(str, unexpected_tcp))}")
-        if unexpected_udp:
-            deviations.append(f"unexpected_udp_ports:{','.join(map(str, unexpected_udp))}")
+        missing_tcp = sorted(p for p in expected_tcp if p not in allowed["tcp"])
+        missing_udp = sorted(p for p in expected_udp if p not in allowed["udp"])
+        extra_tcp = sorted(p for p in allowed["tcp"] if p not in expected_tcp)
+        extra_udp = sorted(p for p in allowed["udp"] if p not in expected_udp)
+        if missing_tcp:
+            deviations.append(f"missing_tcp_rules:{','.join(map(str, missing_tcp))}")
+        if missing_udp:
+            deviations.append(f"missing_udp_rules:{','.join(map(str, missing_udp))}")
+        if extra_tcp:
+            deviations.append(f"unexpected_tcp_rules:{','.join(map(str, extra_tcp))}")
+        if extra_udp:
+            deviations.append(f"unexpected_udp_rules:{','.join(map(str, extra_udp))}")
 
     return {
         "profile": profile,
         "ufw": ufw,
         "expected": {"tcp": expected_tcp, "udp": expected_udp},
+        "allowed": allowed,
         "exposed": exposed,
         "deviations": deviations,
     }

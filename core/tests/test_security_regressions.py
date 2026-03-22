@@ -150,8 +150,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertEqual(status["profile"], "minimal")
         self.assertIn("ufw_inactive_for_profile", status["deviations"])
-        self.assertIn("unexpected_tcp_ports:445", status["deviations"])
-        self.assertIn("unexpected_udp_ports:137", status["deviations"])
+        self.assertIn("missing_tcp_rules:22,80,3002,8008", status["deviations"])
 
     def test_network_profile_status_full_mode_allows_disabled_ufw(self):
         with mock.patch.object(main, "_read_network_profile", return_value="full"), \
@@ -160,6 +159,25 @@ class SecurityRegressionTests(unittest.TestCase):
             status = main._network_profile_status()
 
         self.assertEqual(status["profile"], "full")
+        self.assertEqual(status["deviations"], [])
+
+    def test_network_profile_status_uses_ufw_rules_not_raw_listeners(self):
+        with mock.patch.object(main, "_read_network_profile", return_value="minimal"), \
+             mock.patch.object(main, "_list_public_listening_ports", return_value={"tcp": [22, 80, 3002, 8008, 445], "udp": [137]}), \
+             mock.patch.object(main, "_ufw_status_summary", return_value={
+                 "available": True,
+                 "active": True,
+                 "rules": [
+                     {"rule": "22/tcp", "from": "Anywhere"},
+                     {"rule": "80/tcp", "from": "Anywhere"},
+                     {"rule": "3002/tcp", "from": "Anywhere"},
+                     {"rule": "8008/tcp", "from": "Anywhere"},
+                 ],
+             }):
+            status = main._network_profile_status()
+
+        self.assertEqual(status["allowed"]["tcp"], [22, 80, 3002, 8008])
+        self.assertEqual(status["allowed"]["udp"], [])
         self.assertEqual(status["deviations"], [])
 
 
