@@ -23,6 +23,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "agents.ask",
                 "agents.delegate",
                 "git.read",
+                "git.issue",
                 "workstation.read",
                 "discord",
             ],
@@ -40,6 +41,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "agents.ask",
                 "agents.delegate",
                 "git.read",
+                "git.issue",
                 "git.write",
                 "workstation.read",
                 "workstation.write",
@@ -59,6 +61,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "agents.ask",
                 "agents.delegate",
                 "git.read",
+                "git.issue",
                 "git.write",
                 "git.push",
                 "git.pr",
@@ -70,6 +73,33 @@ def default_personal_agent_execution_modes() -> dict:
             ],
         },
     }
+
+
+def upgrade_personal_agent_data(agent_data: dict) -> tuple[dict, bool]:
+    changed = False
+    defaults = default_personal_agent_execution_modes()
+    execution_modes = agent_data.setdefault("execution_modes", {})
+    if execution_modes.get("default") != defaults["default"]:
+        execution_modes["default"] = defaults["default"]
+        changed = True
+
+    for mode_name in ("safe", "elevated", "root"):
+        profile = execution_modes.setdefault(mode_name, {})
+        permissions = list(profile.get("permissions") or [])
+        for permission in defaults[mode_name]["permissions"]:
+            if permission not in permissions:
+                permissions.append(permission)
+                changed = True
+        profile["permissions"] = permissions
+
+    tools = list(agent_data.get("tools") or [])
+    has_gitea_tools = any(tool.startswith("gitea_repo_") for tool in tools)
+    if has_gitea_tools and "gitea_create_issue" not in tools:
+        tools.append("gitea_create_issue")
+        agent_data["tools"] = tools
+        changed = True
+
+    return agent_data, changed
 
 
 class CreateUserRequest(BaseModel):

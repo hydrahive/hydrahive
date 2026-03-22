@@ -42,7 +42,11 @@ from .router_project_lifecycle import register_project_lifecycle_routes, update_
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
-from .router_users import default_personal_agent_execution_modes, register_user_routes
+from .router_users import (
+    default_personal_agent_execution_modes,
+    register_user_routes,
+    upgrade_personal_agent_data,
+)
 from .session_manager import MessageRole, SessionManager
 
 logging.basicConfig(
@@ -694,12 +698,28 @@ def _create_personal_agent(username: str) -> str:
 
 def _ensure_personal_agent(username: str):
     """Persönlichen Agenten laden oder lazy anlegen."""
+    import yaml as _yaml
+
     agent_id = f"personal_{username}"
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
         _create_personal_agent(username)
+    agent_yaml = agent_dir / "agent.yaml"
+    if agent_yaml.exists():
+        try:
+            agent_data = _yaml.safe_load(agent_yaml.read_text(encoding="utf-8")) or {}
+            agent_data, changed = upgrade_personal_agent_data(agent_data)
+            if changed:
+                agent_yaml.write_text(
+                    _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
+                    encoding="utf-8",
+                )
+        except Exception:
+            pass
     cfg = discovery.get(agent_id)
     if cfg is None and agent_dir.exists():
+        cfg = load_agent_config_direct(agent_dir)
+    elif agent_dir.exists():
         cfg = load_agent_config_direct(agent_dir)
     return agent_id, cfg
 

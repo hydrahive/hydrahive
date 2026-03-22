@@ -1593,6 +1593,70 @@ class GiteaRepoDiffTool(BaseTool):
         }
 
 
+class GiteaCreateIssueTool(BaseTool):
+    """Erstellt ein Gitea-Issue in einem Ziel-Repository."""
+
+    @property
+    def id(self) -> str:   return "gitea_create_issue"
+    @property
+    def name(self) -> str: return "Gitea Issue erstellen"
+    @property
+    def description(self) -> str:
+        return (
+            "Erstellt ein neues Issue in einem Gitea-Repository. "
+            "Nutze dieses Tool fuer Findings, Review-Ergebnisse, Features oder Aufgaben."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.issue"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "title": {"type": "string", "description": "Issue-Titel"},
+                "body": {"type": "string", "description": "Issue-Beschreibung in Markdown"},
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optionale Labels",
+                },
+            },
+            "required": ["repo", "title"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        repo: str,
+        title: str,
+        body: str = "",
+        labels: list[str] | None = None,
+    ) -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            issue = await client.create_issue_for_repo(owner, name, title, body=body, labels=labels or [])
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "title": title}
+
+        return {
+            "created": True,
+            "owner": owner,
+            "repo": name,
+            "full_name": f"{owner}/{name}",
+            "issue_number": issue.get("number"),
+            "issue_url": issue.get("html_url"),
+            "title": issue.get("title"),
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -2273,6 +2337,7 @@ registry.register(GiteaRepoTreeTool())
 registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
 registry.register(GiteaRepoDiffTool())
+registry.register(GiteaCreateIssueTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())

@@ -182,6 +182,22 @@ class GiteaClient:
                 resp.raise_for_status()
                 return await resp.text()
 
+    async def create_issue_for_repo(
+        self,
+        owner: str,
+        repo: str,
+        title: str,
+        body: str = "",
+        labels: list[str] | None = None,
+    ) -> dict:
+        data: dict[str, Any] = {
+            "title": title,
+            "body": body,
+        }
+        if labels:
+            data["labels"] = labels
+        return await self._post(f"/repos/{owner}/{repo}/issues", data)
+
     # ------------------------------------------------------------------ PRs
 
     async def create_pr(

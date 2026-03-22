@@ -20,7 +20,7 @@ from octopos_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from octopos_core.tool_registry import GitStatusTool
+from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -298,9 +298,58 @@ class SecurityRegressionTests(unittest.TestCase):
         execution_modes = default_personal_agent_execution_modes()
         self.assertEqual(execution_modes["default"], "safe")
         self.assertIn("git.read", execution_modes["safe"]["permissions"])
+        self.assertIn("git.issue", execution_modes["safe"]["permissions"])
         self.assertIn("git.write", execution_modes["elevated"]["permissions"])
         self.assertIn("git.push", execution_modes["root"]["permissions"])
         self.assertIn("shell.exec", execution_modes["root"]["permissions"])
+
+    def test_upgrade_personal_agent_data_backfills_issue_tool_and_permission(self):
+        agent_data = {
+            "tools": ["gitea_repo_inspect", "gitea_repo_tree"],
+            "execution_modes": {
+                "default": "safe",
+                "safe": {"permissions": ["git.read"]},
+                "elevated": {"permissions": ["git.read", "git.write"]},
+                "root": {"permissions": ["git.read", "git.write", "git.push", "shell.exec"]},
+            },
+        }
+
+        upgraded, changed = main.upgrade_personal_agent_data(agent_data)
+
+        self.assertTrue(changed)
+        self.assertIn("gitea_create_issue", upgraded["tools"])
+        self.assertIn("git.issue", upgraded["execution_modes"]["safe"]["permissions"])
+
+    def test_gitea_create_issue_tool_uses_repo_reference(self):
+        tool = GiteaCreateIssueTool()
+        fake_client = mock.Mock(org="octopos")
+        fake_client.create_issue_for_repo = mock.AsyncMock(return_value={
+            "number": 131,
+            "html_url": "http://example.local/octopos/octopos/issues/131",
+            "title": "Test issue",
+        })
+
+        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+            result = asyncio.run(
+                tool.execute(
+                    "personal_till",
+                    "personal_till",
+                    repo="octopos/octopos",
+                    title="Test issue",
+                    body="Body",
+                    labels=["review"],
+                )
+            )
+
+        self.assertTrue(result["created"])
+        self.assertEqual(result["issue_number"], 131)
+        fake_client.create_issue_for_repo.assert_awaited_once_with(
+            "octopos",
+            "octopos",
+            "Test issue",
+            body="Body",
+            labels=["review"],
+        )
 
     def test_resolve_repo_ref_accepts_url_and_short_forms(self):
         self.assertEqual(
