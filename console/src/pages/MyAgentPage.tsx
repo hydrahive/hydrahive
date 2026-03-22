@@ -578,6 +578,8 @@ function McpTab({
   const [selected, setSelected] = useState<string[]>(cfg.mcp_servers ?? []);
   const [saving,   setSaving]   = useState(false);
   const [msg,      setMsg]      = useState("");
+  const amemServer = mcpServers.find((s) => s.id === "amem");
+  const amemEnabled = selected.includes("amem");
 
   function toggle(id: string) {
     setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -618,8 +620,42 @@ function McpTab({
     <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-2xl">
       <div className="space-y-1">
         <h2 className="text-sm font-semibold">MCP-Server</h2>
-        <p className="text-xs text-muted-foreground">Wähle welche MCP-Server dein Agent nutzen soll. Die Server stellen externe Tools bereit.</p>
+        <p className="text-xs text-muted-foreground">Waehle welche MCP-Server dein Agent nutzen soll. Lokales Memory bleibt privat; A-MEM ist die zentrale Shared-Memory-Schicht.</p>
       </div>
+
+      {amemServer && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Sparkles className="h-4 w-4 text-primary" />
+                A-MEM Shared Memory
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Zentraler Langzeitspeicher fuer agentenuebergreifende Learnings, Fehler, Loesungen und Projektwissen.
+              </p>
+              <p className="text-xs font-mono text-muted-foreground">{amemServer.url}</p>
+            </div>
+            <div className="text-right text-xs">
+              <div className={`inline-flex rounded-full px-2.5 py-1 ${amemEnabled ? "bg-emerald-500/15 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+                {amemEnabled ? "diesem Agenten zugewiesen" : "nicht zugewiesen"}
+              </div>
+              {typeof amemServer.meta?.search_ui_url === "string" && (
+                <div className="mt-2">
+                  <a
+                    href={amemServer.meta.search_ui_url as string}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Search UI oeffnen
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         {mcpServers.map(s => (
@@ -633,6 +669,7 @@ function McpTab({
                 <span className="text-sm font-medium">{s.name}</span>
                 <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{s.id}</span>
                 <span className="text-xs text-muted-foreground">{s.transport}</span>
+                {s.id === "amem" && <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">shared memory</span>}
               </div>
               <p className="text-xs text-muted-foreground font-mono truncate">{s.url}</p>
             </div>
