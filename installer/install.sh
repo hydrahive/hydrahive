@@ -59,6 +59,12 @@ cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${OCTOPOS_DIR}/update.sh"
 chmod +x "${OCTOPOS_DIR}/update.sh"
 success "Update-Script: sudo bash ${OCTOPOS_DIR}/update.sh"
 
+# Self-Update Service + sudo-Regel installieren
+install -m 644 "$(dirname "${BASH_SOURCE[0]}")/octopos-selfupdate.service" /etc/systemd/system/octopos-selfupdate.service
+install -m 440 "$(dirname "${BASH_SOURCE[0]}")/octopos-update.sudoers" /etc/sudoers.d/octopos-update
+systemctl daemon-reload
+success "Self-Update-Service installiert"
+
 # Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
 for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
     _path="/etc/octopos/${_f}"

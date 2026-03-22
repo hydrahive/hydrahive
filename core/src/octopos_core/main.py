@@ -3643,11 +3643,9 @@ async def gitea_webhook(project_id: str, request: Request):
 
 
 async def _run_self_update(pusher: str, commits: int) -> None:
-    """Startet update.sh im Hintergrund — OctopOS deployt sich selbst."""
+    """Übergibt den Self-Update-Job an eine dedizierte systemd-Service-Unit."""
     import asyncio as _asyncio
-    UPDATE_SCRIPT = "/opt/octopos/update.sh"
     STATUS_FILE   = "/var/run/octopos-update.json"
-    LOG_FILE      = "/var/log/octopos-update.log"
 
     logger.info("Self-Update gestartet (pusher=%s commits=%d)", pusher, commits)
 
@@ -3666,32 +3664,28 @@ async def _run_self_update(pusher: str, commits: int) -> None:
         pass
 
     try:
-        # update.sh über systemd-run starten — eigene transient Unit,
-        # überlebt den Neustart von octopos-core (nicht im selben Cgroup)
+        check = await _asyncio.create_subprocess_exec(
+            "sudo", "systemctl", "is-active", "--quiet", "octopos-selfupdate.service",
+            stdout=_asyncio.subprocess.DEVNULL,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        await check.wait()
+        if check.returncode == 0:
+            logger.info("Self-Update läuft bereits")
+            return
+
         proc = await _asyncio.create_subprocess_exec(
-            "sudo", "systemd-run", "--unit=octopos-selfupdate",
-            "--description=OctopOS Self-Update",
-            "--wait", "--collect",
-            "bash", UPDATE_SCRIPT,
+            "sudo", "systemctl", "start", "octopos-selfupdate.service",
             stdout=_asyncio.subprocess.PIPE,
             stderr=_asyncio.subprocess.STDOUT,
         )
-        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=300)
+        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=30)
         output = stdout.decode(errors="replace") if stdout else ""
 
-        # Ausgabe ins Log schreiben
-        try:
-            with open(LOG_FILE, "a") as f:
-                f.write(f"\n=== Self-Update {_dt.now().isoformat()} (pusher={pusher}) ===\n")
-                f.write(output)
-        except Exception:
-            pass
-
         if proc.returncode == 0:
-            logger.info("Self-Update erfolgreich (pusher=%s)", pusher)
-            # Status-Datei wird von update.sh selbst geschrieben
+            logger.info("Self-Update an systemd uebergeben (pusher=%s)", pusher)
         else:
-            logger.error("Self-Update fehlgeschlagen (rc=%d): %s", proc.returncode, output[-500:])
+            logger.error("Self-Update Start fehlgeschlagen (rc=%d): %s", proc.returncode, output[-500:])
             try:
                 Path(STATUS_FILE).write_text(_json.dumps({
                     "status": "error",
@@ -3702,7 +3696,7 @@ async def _run_self_update(pusher: str, commits: int) -> None:
                 pass
 
     except _asyncio.TimeoutError:
-        logger.error("Self-Update Timeout nach 300s")
+        logger.error("Self-Update Start-Timeout nach 30s")
     except Exception as e:
         logger.error("Self-Update Fehler: %s", e)
 

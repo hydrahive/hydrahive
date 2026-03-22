@@ -1,0 +1,14 @@
+[Unit]
+Description=OctopOS Self-Update
+After=network-online.target gitea.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/octopos
+ExecStart=/bin/bash /opt/octopos/update.sh
+StandardOutput=journal
+StandardError=journal
+

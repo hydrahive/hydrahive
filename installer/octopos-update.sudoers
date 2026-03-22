@@ -1,0 +1,2 @@
+octopos ALL=(root) NOPASSWD: /usr/bin/systemctl start octopos-selfupdate.service
+

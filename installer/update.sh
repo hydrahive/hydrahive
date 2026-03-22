@@ -21,6 +21,7 @@ TMPDIR_BASE="/tmp/octopos-update-$$"
 
 # Log-Datei für Webhook-Deploy (damit GET /admin/update/status etwas zum Lesen hat)
 UPDATE_LOG="/var/log/octopos-update.log"
+UPDATE_STATUS_FILE="/var/run/octopos-update.json"
 
 # Farben
 GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; RED="\033[0;31m"; NC="\033[0m"
@@ -56,6 +57,21 @@ fi
 
 cleanup() { rm -rf "${TMPDIR_BASE}"; }
 trap cleanup EXIT
+on_error() {
+    local rc=$?
+    echo "{\"status\":\"error\",\"finished_at\":\"$(date -Iseconds)\",\"error\":\"update.sh failed (rc=${rc})\"}" \
+        > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
+    echo "[$(date -Iseconds)] ERROR rc=${rc}" >> "${UPDATE_LOG}" 2>/dev/null || true
+    exit "${rc}"
+}
+trap on_error ERR
+
+mkdir -p "$(dirname "${UPDATE_LOG}")"
+touch "${UPDATE_LOG}"
+exec >> "${UPDATE_LOG}" 2>&1
+
+echo ""
+echo "=== Self-Update $(date -Iseconds) ==="
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -64,7 +80,6 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Status-Datei schreiben (für GET /admin/update/status)
-UPDATE_STATUS_FILE="/var/run/octopos-update.json"
 echo "{\"status\":\"running\",\"started_at\":\"$(date -Iseconds)\",\"commit\":\"\"}" \
     > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
 
