@@ -18,7 +18,7 @@ import asyncio
 import time
 from collections import defaultdict
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -283,6 +283,10 @@ def require_admin(auth: tuple[str, str] = Depends(require_auth)) -> tuple[str, s
     if role != "admin":
         raise HTTPException(403, f"Keine Berechtigung — Admin erforderlich (du bist '{role}')")
     return auth
+
+
+auth_router = APIRouter(dependencies=[Depends(require_auth)])
+admin_router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _is_local_request(request: Request) -> bool:
@@ -1222,13 +1226,12 @@ def _read_audit_logs(
     return list(reversed(logs))[:limit]
 
 
-@app.get("/audit/logs")
+@admin_router.get("/audit/logs")
 def get_audit_logs(
     limit:      int = 100,
     project_id: str = "",
     user:       str = "",
     action:     str = "",
-    _a: tuple[str, str] = Depends(require_admin),
 ):
     """Audit-Log lesen mit optionalen Filtern."""
     limit = max(10, min(limit, 1000))
@@ -1311,8 +1314,8 @@ async def _matrix_register(username: str, password: str, server_name: str) -> bo
         return False
 
 
-@app.get("/users")
-def list_users(_a: tuple[str, str] = Depends(require_admin)):
+@admin_router.get("/users")
+def list_users():
     """Alle OctopOS-User auflisten."""
     users = _load_users()
     return {
@@ -1332,8 +1335,8 @@ class CreateUserRequest(BaseModel):
     role:     str = "user"   # user | admin
 
 
-@app.post("/users", status_code=201)
-async def create_user(req: CreateUserRequest, _a: tuple = Depends(require_admin)):
+@admin_router.post("/users", status_code=201)
+async def create_user(req: CreateUserRequest):
     """Neuen User anlegen — Console-Login + Matrix-Account."""
     import re as _re
     from datetime import datetime as _dt
@@ -1371,8 +1374,8 @@ async def create_user(req: CreateUserRequest, _a: tuple = Depends(require_admin)
     }
 
 
-@app.delete("/users/{username}")
-async def delete_user(username: str, _a: tuple = Depends(require_admin)):
+@admin_router.delete("/users/{username}")
+async def delete_user(username: str):
     """User löschen (Console-Login entfernen)."""
     users = _load_users()
     if username not in users:
@@ -1395,8 +1398,8 @@ async def delete_user(username: str, _a: tuple = Depends(require_admin)):
     return {"deleted": True, "username": username}
 
 
-@app.put("/users/{username}/password")
-async def change_user_password(username: str, body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.put("/users/{username}/password")
+async def change_user_password(username: str, body: dict):
     """Passwort ändern."""
     new_password = body.get("password", "").strip()
     if len(new_password) < 8:
@@ -2616,8 +2619,8 @@ def _update_project_matrix_room(project_id: str, room_id: str) -> None:
 
 # ================================================================== Tools
 
-@app.get("/tools")
-def list_tools(_a: tuple[str, str] = Depends(require_auth)):
+@auth_router.get("/tools")
+def list_tools():
     """Alle registrierten Tools mit Schema — fuer die Webkonsole."""
     from .tool_registry import registry
     result = {}
@@ -3524,8 +3527,8 @@ def heartbeat_tasks_status(_a: tuple = Depends(require_admin)):
     return {"tasks": tasks}
 
 
-@app.get("/system/gpu")
-def gpu_info(_a: tuple[str, str] = Depends(require_auth)):
+@auth_router.get("/system/gpu")
+def gpu_info():
     """nvidia-smi Monitoring — read-only für eingeloggte User."""
     import shutil, subprocess
     if not shutil.which("nvidia-smi"):
@@ -3567,8 +3570,8 @@ def gpu_info(_a: tuple[str, str] = Depends(require_auth)):
         return {"available": False, "reason": str(e)}
 
 
-@app.get("/status")
-def system_status(_a: tuple[str, str] = Depends(require_auth)):
+@auth_router.get("/status")
+def system_status():
     return {
         "discovery": {
             "agents_dir": AGENTS_DIR,
@@ -3701,8 +3704,8 @@ async def _run_self_update(pusher: str, commits: int) -> None:
         logger.error("Self-Update Fehler: %s", e)
 
 
-@app.get("/admin/update/status")
-def get_update_status(_a: tuple = Depends(require_admin)):
+@admin_router.get("/admin/update/status")
+def get_update_status():
     """Status des letzten Self-Updates (für Update-Button in der Console)."""
     import json as _json
     STATUS_FILE = "/var/run/octopos-update.json"
@@ -3735,8 +3738,8 @@ def get_update_status(_a: tuple = Depends(require_admin)):
     return status
 
 
-@app.post("/admin/update/trigger")
-async def trigger_update(_a: tuple = Depends(require_admin)):
+@admin_router.post("/admin/update/trigger")
+async def trigger_update():
     """Manueller Update-Trigger — startet Self-Update ohne Webhook."""
     asyncio.create_task(_run_self_update(pusher="admin-manual", commits=0))
     return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
@@ -3752,8 +3755,8 @@ class GiteaConfigRequest(BaseModel):
 GITEA_CONFIG_FILE = "/etc/octopos/gitea_config.json"
 
 
-@app.get("/gitea/config")
-def get_gitea_config(_a: tuple = Depends(require_admin)):
+@admin_router.get("/gitea/config")
+def get_gitea_config():
     """Gitea-Konfiguration lesen."""
     import json as _json
     p = Path(GITEA_CONFIG_FILE)
@@ -3766,8 +3769,8 @@ def get_gitea_config(_a: tuple = Depends(require_admin)):
     return cfg
 
 
-@app.put("/gitea/config")
-def update_gitea_config(req: GiteaConfigRequest, _a: tuple = Depends(require_admin)):
+@admin_router.put("/gitea/config")
+def update_gitea_config(req: GiteaConfigRequest):
     """Gitea-Konfiguration aktualisieren."""
     import json as _json
     from .gitea import reload_gitea_client
@@ -3820,3 +3823,7 @@ async def list_project_prs(project_id: str, _a: tuple = Depends(require_auth)):
         return {"prs": prs, "count": len(prs if isinstance(prs, list) else [])}
     except Exception as e:
         raise HTTPException(503, f"Gitea-Fehler: {e}")
+
+
+app.include_router(auth_router)
+app.include_router(admin_router)
