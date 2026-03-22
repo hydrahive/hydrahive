@@ -302,6 +302,7 @@ class BossMatrixAgent(MatrixAgent):
                     project_cfg = self._project_cfg,
                     content     = text,
                     sender      = sender,
+                    execution_mode = "safe",
                 )
             finally:
                 if self._client:

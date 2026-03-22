@@ -216,7 +216,7 @@ class Orchestrator:
         try:
             while True:
                 try:
-                    future, project_cfg, content, sender = await asyncio.wait_for(
+                    future, project_cfg, content, sender, execution_mode = await asyncio.wait_for(
                         queue.get(), timeout=self._queue_idle_timeout_s
                     )
                 except asyncio.TimeoutError:
@@ -228,7 +228,7 @@ class Orchestrator:
                 self._queue_last_used[project_id] = asyncio.get_event_loop().time()
                 try:
                     result = await self._handle_message_impl(
-                        project_id, project_cfg, content, sender
+                        project_id, project_cfg, content, sender, execution_mode
                     )
                     if not future.done():
                         future.set_result(result)
@@ -257,6 +257,7 @@ class Orchestrator:
         project_cfg: "ProjectConfig",
         content:     str,
         sender:      str = "user",
+        execution_mode: str | None = None,
     ) -> tuple[str, list[str]]:
         """
         Oeffentlicher Einstiegspunkt — serialisiert ueber asyncio.Queue.
@@ -264,11 +265,18 @@ class Orchestrator:
         """
         await self._ensure_worker(project_id)
         future: asyncio.Future = asyncio.get_event_loop().create_future()
-        await self._get_queue(project_id).put((future, project_cfg, content, sender))
+        await self._get_queue(project_id).put((future, project_cfg, content, sender, execution_mode))
         self._queue_last_used[project_id] = asyncio.get_event_loop().time()
         return await future
 
-    async def _handle_message_impl(self, project_id: str, project_cfg, content: str, sender: str):
+    async def _handle_message_impl(
+        self,
+        project_id: str,
+        project_cfg,
+        content: str,
+        sender: str,
+        execution_mode: str | None = None,
+    ):
         """
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
         Gibt (finaler Text, beteiligte Worker-IDs) zurück.
@@ -292,7 +300,7 @@ class Orchestrator:
         messages.extend(self._sessions.get_context(project_id, max_messages=40))
 
         # 5. Verfügbare Tools für Boss ermitteln
-        boss_tools = self._allowed_tools(boss_cfg)
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         # 6. LLM aufrufen
@@ -308,7 +316,7 @@ class Orchestrator:
 
         if tool_calls:
             final_response, workers_used = await self._tool_loop(
-                boss_cfg, project_id, project_cfg, messages, response
+                boss_cfg, project_id, project_cfg, messages, response, execution_mode=execution_mode
             )
 
         # 8. Antwort in Session speichern
@@ -825,6 +833,7 @@ class Orchestrator:
         project_cfg,
         content:     str,
         sender:      str = "user",
+        execution_mode: str | None = None,
     ):
         """
         Streaming-Version von handle_message.
@@ -849,7 +858,7 @@ class Orchestrator:
         messages      = [{"role": "system", "content": system_prompt}] + history
 
         # Tool-Schema
-        boss_tools    = self._allowed_tools(boss_cfg)
+        boss_tools    = self._allowed_tools(boss_cfg, execution_mode)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
@@ -887,7 +896,7 @@ class Orchestrator:
                                 cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
                                 for tc in msg.tool_calls:
                                     yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
-                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name)
+                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
                                     try:
                                         args = _json.loads(tc.function.arguments or "{}")
                                         result = await tool.execute(agent_id=boss_cfg.id, project_id=project_id, **args) if tool else {"error": f"Tool '{tc.function.name}' ist in diesem Modus nicht erlaubt"}
@@ -992,7 +1001,7 @@ class Orchestrator:
                             tool_results = []
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
-                                tool = self._resolve_allowed_tool(boss_cfg, block.name)
+                                tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
                                 if tool:
                                     try:
                                         result = await tool.execute(
@@ -1117,7 +1126,7 @@ class Orchestrator:
                             tool_results_text = []
                             for tc in tc_list:
                                 yield f"data: {_json.dumps({'tool_call': tc['name']})}\n\n"
-                                tool = self._resolve_allowed_tool(boss_cfg, tc["name"])
+                                tool = self._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
                                 try:
                                     tool_input = _json2.loads(_safe_args(tc["arguments"]))
                                     # project_id aus tool_input extrahieren falls übergeben
@@ -1177,6 +1186,7 @@ class Orchestrator:
         messages:    list[dict],
         response,
         max_rounds:  int = 5,
+        execution_mode: str | None = None,
     ) -> tuple[str, list[str]]:
         """
         Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
@@ -1184,7 +1194,7 @@ class Orchestrator:
         Max. max_rounds Runden um Endlosschleifen zu vermeiden.
         Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
         """
-        boss_tools = self._allowed_tools(boss_cfg)
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
         current_messages = list(messages)
         workers_used: list[str] = []
@@ -1234,7 +1244,7 @@ class Orchestrator:
                         workers_used.append(res.worker_id)
 
             for tc in other_tcs:
-                tool = self._resolve_allowed_tool(boss_cfg, tc.function.name)
+                tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
                 if tool is None:
                     tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
                     continue

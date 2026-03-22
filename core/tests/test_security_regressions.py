@@ -3,7 +3,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 from octopos_core import main
+from octopos_core.agent_config import AgentConfig
+from octopos_core.orchestrator import Orchestrator
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -190,6 +194,47 @@ class SecurityRegressionTests(unittest.TestCase):
             status = main._ufw_status_summary()
 
         self.assertEqual(status, {"available": True, "active": False, "rules": []})
+
+    def test_execution_modes_filter_tools_by_permissions(self):
+        cfg = AgentConfig.model_validate(
+            {
+                "id": "personal_test",
+                "type": "specialist",
+                "identity": "Test",
+                "llm": {"model": "gpt-4o-mini"},
+                "tools": ["file_read", "file_write", "shell_exec"],
+                "execution_modes": {
+                    "default": "safe",
+                    "safe": {"permissions": ["filesystem.read"]},
+                    "elevated": {"permissions": ["filesystem.read", "filesystem.write"]},
+                    "root": {"permissions": ["filesystem.read", "filesystem.write", "shell.exec"]},
+                },
+            }
+        )
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+
+        safe_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "safe")]
+        elevated_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "elevated")]
+        root_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "root")]
+
+        self.assertEqual(safe_tools, ["file_read"])
+        self.assertEqual(elevated_tools, ["file_read", "file_write"])
+        self.assertEqual(root_tools, ["file_read", "file_write", "shell_exec"])
+
+    def test_create_personal_agent_writes_default_execution_modes(self):
+        with tempfile.TemporaryDirectory() as tmpdir, \
+             mock.patch.object(main, "AGENTS_DIR", tmpdir), \
+             mock.patch.object(main.discovery, "_register"), \
+             mock.patch.object(main, "audit_log"):
+            agent_id = main._create_personal_agent("alice")
+
+            agent_yaml = Path(tmpdir) / agent_id / "agent.yaml"
+            raw = yaml.safe_load(agent_yaml.read_text(encoding="utf-8"))
+
+        self.assertEqual(raw["execution_modes"]["default"], "safe")
+        self.assertEqual(raw["execution_modes"]["safe"]["permissions"], ["filesystem.read", "memory.read", "memory.write"])
+        self.assertEqual(raw["execution_modes"]["elevated"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write"])
+        self.assertEqual(raw["execution_modes"]["root"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"])
 
 
 if __name__ == "__main__":
