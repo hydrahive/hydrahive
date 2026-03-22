@@ -821,6 +821,7 @@ register_project_lifecycle_routes(
 register_project_routes(
     auth_router,
     admin_router,
+    require_auth=require_auth,
     projects=projects,
     discovery=discovery,
     runtime=runtime,
