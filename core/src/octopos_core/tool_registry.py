@@ -1241,6 +1241,84 @@ class GitStatusTool(BaseTool):
         }
 
 
+class GiteaRepoInspectTool(BaseTool):
+    """Liest Repo-Metadaten und letzte Commits direkt via Gitea-API."""
+
+    @property
+    def id(self) -> str:   return "gitea_repo_inspect"
+    @property
+    def name(self) -> str: return "Gitea Repo pruefen"
+    @property
+    def description(self) -> str:
+        return (
+            "Prueft ein Gitea-Repository per URL oder owner/repo. "
+            "Liefert Repo-Metadaten, Branch-Infos und die letzten Commits. "
+            "Nutze dieses Tool fuer Repo-, Review- und Aenderungsfragen statt eines rohen URL-GET."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "description": "Repo-Referenz als URL, owner/repo oder repo-Name",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Anzahl letzter Commits (Standard: 5)",
+                },
+            },
+            "required": ["repo"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 5) -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+        except ValueError as e:
+            return {"error": str(e), "repo": repo}
+
+        try:
+            info = await client.get_repo_by_full_name(owner, name)
+            commits = await client.list_commits(owner, name, limit=max(1, min(limit, 10)))
+        except Exception as e:
+            return {"error": str(e), "owner": owner, "repo": name}
+
+        recent_commits = []
+        for item in commits:
+            commit = item.get("commit", {})
+            author = commit.get("author", {}) or {}
+            recent_commits.append(
+                {
+                    "sha": (item.get("sha") or "")[:12],
+                    "message": (commit.get("message") or "").splitlines()[0],
+                    "author": author.get("name") or item.get("author", {}).get("login"),
+                    "date": author.get("date"),
+                }
+            )
+
+        return {
+            "owner": owner,
+            "repo": name,
+            "full_name": info.get("full_name"),
+            "html_url": info.get("html_url"),
+            "default_branch": info.get("default_branch"),
+            "private": info.get("private"),
+            "updated_at": info.get("updated_at"),
+            "description": info.get("description") or "",
+            "open_pr_count": info.get("open_pr_counter"),
+            "recent_commits": recent_commits,
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -1873,6 +1951,7 @@ registry.register(WriteMemoryTool())
 registry.register(AskAgentTool())
 registry.register(DelegateAgentTool())
 registry.register(GitStatusTool())
+registry.register(GiteaRepoInspectTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
