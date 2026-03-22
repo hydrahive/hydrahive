@@ -1499,6 +1499,100 @@ class GiteaRepoCommitsTool(BaseTool):
         }
 
 
+class GiteaRepoDiffTool(BaseTool):
+    """Zeigt einen Diff fuer ein Repository ueber den lokalen Repo-Workspace."""
+
+    @property
+    def id(self) -> str:   return "gitea_repo_diff"
+    @property
+    def name(self) -> str: return "Gitea Repo Diff"
+    @property
+    def description(self) -> str:
+        return (
+            "Zeigt einen Diff fuer ein Gitea-Repository. "
+            "Standardmaessig wird der letzte Commit gegen seinen Vorgaenger verglichen. "
+            "Optional mit base, head und path eingrenzbar."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "base": {"type": "string", "description": "Basis-Ref oder Commit (optional)"},
+                "head": {"type": "string", "description": "Ziel-Ref oder Commit (optional)"},
+                "path": {"type": "string", "description": "Optionaler Pfad im Repo"},
+                "stat_only": {"type": "boolean", "description": "Nur Diff-Stat statt vollem Patch"},
+            },
+            "required": ["repo"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        repo: str,
+        base: str = "",
+        head: str = "",
+        path: str = "",
+        stat_only: bool = False,
+    ) -> dict:
+        from .gitea import GiteaClient, get_gitea_client, resolve_repo_ref, repo_workspace_key
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            ws = await GiteaClient.git_workspace(repo_workspace_key(owner, name), owner=owner, repo=name)
+            await GiteaClient._git(["fetch", "--all", "--prune"], ws)
+
+            diff_head = head or "origin/main"
+            diff_base = base
+            if not diff_base:
+                commits = await client.list_commits(owner, name, limit=2)
+                if len(commits) >= 2:
+                    diff_head = commits[0].get("sha") or diff_head
+                    diff_base = commits[1].get("sha") or f"{diff_head}~1"
+                else:
+                    diff_base = f"{diff_head}~1"
+
+            stat_args = ["diff", "--stat", f"{diff_base}..{diff_head}"]
+            patch_args = ["diff", f"{diff_base}..{diff_head}"]
+            if path:
+                stat_args += ["--", path]
+                patch_args += ["--", path]
+
+            stat_out, stat_err, stat_rc = await GiteaClient._git(stat_args, ws)
+            patch_out, patch_err, patch_rc = await GiteaClient._git(patch_args, ws)
+        except Exception as e:
+            return {
+                "error": str(e),
+                "repo": repo,
+                "base": base,
+                "head": head,
+                "path": path,
+            }
+
+        patch_text = patch_out[:20000]
+        return {
+            "owner": owner,
+            "repo": name,
+            "base": diff_base,
+            "head": diff_head,
+            "path": path.strip("/"),
+            "stat": stat_out.strip(),
+            "diff": "" if stat_only else patch_text,
+            "truncated": (not stat_only) and len(patch_out) > 20000,
+            "stat_exit_code": stat_rc,
+            "diff_exit_code": patch_rc,
+            "stderr": (stat_err or patch_err)[:500],
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -2178,6 +2272,7 @@ registry.register(GiteaRepoInspectTool())
 registry.register(GiteaRepoTreeTool())
 registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
+registry.register(GiteaRepoDiffTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())

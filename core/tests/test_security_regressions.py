@@ -396,6 +396,29 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(result["full_name"], "octopos/octopos")
         self.assertEqual(result["branch"], "main")
 
+    def test_gitea_repo_diff_defaults_to_latest_two_commits(self):
+        from octopos_core.tool_registry import GiteaRepoDiffTool
+
+        tool = GiteaRepoDiffTool()
+        fake_client = mock.Mock(org="octopos")
+        fake_client.list_commits = mock.AsyncMock(return_value=[
+            {"sha": "headsha123456"},
+            {"sha": "basesha654321"},
+        ])
+        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client), \
+             mock.patch("octopos_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("octopos_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
+                 ("", "", 0),
+                 (" file1 | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)", "", 0),
+                 ("diff --git a/file1 b/file1\n--- a/file1\n+++ b/file1\n@@ -1 +1 @@\n-old\n+new\n", "", 0),
+             ])):
+            result = asyncio.run(tool.execute("personal_admin", "personal_admin", repo="octopos/octopos"))
+
+        self.assertEqual(result["base"], "basesha654321")
+        self.assertEqual(result["head"], "headsha123456")
+        self.assertIn("file changed", result["stat"])
+        self.assertIn("diff --git", result["diff"])
+
     def test_execute_tool_uses_project_id_override_without_duplicate_kwarg(self):
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
         boss_cfg = AgentConfig.model_validate(

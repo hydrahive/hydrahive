@@ -38,6 +38,7 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "gitea_repo_tree",  label: "Gitea-Repo Struktur" },
   { id: "gitea_repo_file",  label: "Gitea-Repo Datei" },
   { id: "gitea_repo_commits", label: "Gitea-Repo Commits" },
+  { id: "gitea_repo_diff", label: "Gitea-Repo Diff" },
   { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
   { id: "wks_file_read",    label: "WKS Datei lesen" },
   { id: "wks_file_write",   label: "WKS Datei schreiben" },
