@@ -73,10 +73,9 @@ class DiscordAgentClient(ABC):
         self.channel_ids = set(channel_ids)
         self._client     = None
         self._running    = False
-        self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
-        """Discord-Client initialisieren und als Task starten."""
+        """Discord-Client initialisieren und verbinden (blockiert bis stop())."""
         import discord
 
         intents = discord.Intents.default()
@@ -109,23 +108,15 @@ class DiscordAgentClient(ABC):
                 logger.error("Discord on_message Fehler für Agent %s: %s",
                              self.agent_id, e)
 
-        self._task = asyncio.create_task(
-            self._client.start(self.bot_token),
-            name=f"discord-{self.agent_id}",
-        )
         logger.info("Discord-Client für Agent '%s' gestartet", self.agent_id)
+        # Blockiert bis close() aufgerufen wird
+        await self._client.start(self.bot_token)
 
     async def stop(self) -> None:
         """Discord-Client sauber beenden."""
         self._running = False
         if self._client and not self._client.is_closed():
             await self._client.close()
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
-                pass
         logger.info("Discord-Client für Agent '%s' gestoppt", self.agent_id)
 
     async def send_message(self, channel_id: str, text: str) -> None:
