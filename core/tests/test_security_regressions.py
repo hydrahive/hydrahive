@@ -167,6 +167,17 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(getattr(endpoint, "__name__", None), "delete_project")
         self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_project_lifecycle")
 
+    def test_llm_routes_are_registered_from_router_llm(self):
+        for path, method in (
+            ("/llm/config", "GET"),
+            ("/llm/available-models", "GET"),
+            ("/llm/oauth/openai_codex/start", "POST"),
+            ("/llm/ollama/models", "GET"),
+        ):
+            route = self._route(path, method)
+            endpoint = getattr(route, "endpoint", None)
+            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_llm")
+
     def test_read_server_name_priority(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
