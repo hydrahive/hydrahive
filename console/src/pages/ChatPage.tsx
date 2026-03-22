@@ -283,143 +283,204 @@ export function ChatPage() {
         </div>
       </section>
 
-      <section className="section-card flex min-h-[65vh] flex-col overflow-hidden p-0">
-        <div className="border-b bg-muted/20 px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="metric-kicker">Conversation</p>
-              <h2 className="mt-2 text-lg font-semibold tracking-tight">Projektkanal</h2>
-            </div>
-            <span className="status-pill">{messages.length} Nachricht{messages.length !== 1 ? "en" : ""}</span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-          {messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
-              <Bot className="h-10 w-10" />
-              <p className="text-sm">Schreib eine Nachricht, um den Boss-Agenten zu erreichen.</p>
-              <p className="text-xs opacity-60">Tippe <code className="rounded bg-muted px-1">/help</code> fuer verfuegbare Commands.</p>
-            </div>
-          )}
-          {messages.map((msg) => {
-            if (msg.role === "system") {
-              return (
-                <div key={msg.id} className="flex justify-center">
-                  <div className="flex max-w-[85%] items-start gap-2 rounded-2xl border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary/60" />
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5 prose-headings:text-foreground">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
-                  </div>
+      <section className="section-card min-h-[65vh] overflow-hidden p-0">
+        <div className="grid min-h-[65vh] lg:grid-cols-[minmax(0,1.7fr)_22rem]">
+          <div className="flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
+            <div className="border-b bg-muted/20 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="metric-kicker">Conversation</p>
+                  <h2 className="mt-2 text-lg font-semibold tracking-tight">Projektkanal</h2>
                 </div>
-              );
-            }
-            return (
-              <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                {msg.role === "assistant" && (
+                <span className="status-pill">{messages.length} Nachricht{messages.length !== 1 ? "en" : ""}</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+              {messages.length === 0 && (
+                <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
+                  <Bot className="h-10 w-10" />
+                  <p className="text-sm">Schreib eine Nachricht, um den Boss-Agenten zu erreichen.</p>
+                  <p className="text-xs opacity-60">Tippe <code className="rounded bg-muted px-1">/help</code> fuer verfuegbare Commands.</p>
+                </div>
+              )}
+              {messages.map((msg) => {
+                if (msg.role === "system") {
+                  return (
+                    <div key={msg.id} className="flex justify-center">
+                      <div className="flex max-w-[85%] items-start gap-2 rounded-2xl border border-border/50 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                        <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary/60" />
+                        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5 prose-headings:text-foreground">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "assistant" && (
+                      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                    <div className="flex max-w-[78%] flex-col gap-1">
+                      <div className={`break-words rounded-2xl px-4 py-3 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground shadow-sm" : "border bg-card prose prose-sm max-w-none dark:prose-invert"}`}>
+                        {msg.role === "user" ? (
+                          <span className="whitespace-pre-wrap">{msg.content}</span>
+                        ) : streamingMsgId === msg.id && !msg.content ? (
+                          <div className="flex h-5 items-center gap-1">
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                          </div>
+                        ) : (
+                          <>
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            {streamingMsgId === msg.id ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" /> : doneMsgId === msg.id && <span className="ml-1 inline-block text-xs text-green-500 align-text-bottom">✓</span>}
+                          </>
+                        )}
+                      </div>
+                      {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
+                        <div className="flex flex-wrap gap-1 px-1">
+                          {msg.workers.map((w) => (
+                            <span key={w} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"><Network className="h-2.5 w-2.5" />{w}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {msg.role === "user" && (
+                      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">
+                        <User className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {sending && messages[messages.length - 1]?.role !== "assistant" && (
+                <div className="flex justify-start gap-3">
                   <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
                     <Bot className="h-4 w-4 text-primary" />
                   </div>
-                )}
-                <div className="flex max-w-[78%] flex-col gap-1">
-                  <div className={`break-words rounded-2xl px-4 py-3 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground shadow-sm" : "border bg-card prose prose-sm max-w-none dark:prose-invert"}`}>
-                    {msg.role === "user" ? (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
-                    ) : streamingMsgId === msg.id && !msg.content ? (
-                      <div className="flex h-5 items-center gap-1">
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                  <div className="rounded-2xl border bg-card px-4 py-3">
+                    <div className="flex h-5 items-center gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            {error && <div className="border-t bg-destructive/10 px-5 py-3 text-xs text-destructive">{error}</div>}
+
+            <div className="border-t px-5 py-4 relative">
+              {showSuggest && suggestions.length > 0 && (
+                <div className="absolute bottom-full left-5 right-5 z-10 mb-2 overflow-hidden rounded-2xl border bg-card shadow-lg">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s.cmd}
+                      onMouseDown={(e) => { e.preventDefault(); setInput(s.cmd + " "); setShowSuggest(false); textareaRef.current?.focus(); }}
+                      className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${i === suggestIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}
+                    >
+                      <span className="font-mono text-xs text-primary">{s.cmd}</span>
+                      <span className="text-xs text-muted-foreground">{s.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="rounded-3xl border bg-muted/20 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span className="status-pill">Enter senden</span>
+                    <span className="status-pill">Shift+Enter Umbruch</span>
+                    <span className="status-pill">/ Commands</span>
+                  </div>
+                  {sending && <span className="status-pill status-pill-ok">Streaming aktiv</span>}
+                </div>
+                <div className="flex items-end gap-3">
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                    placeholder="Nachricht... (Enter zum Senden, Shift+Enter fuer Zeilenumbruch, / fuer Commands)"
+                    rows={1}
+                    disabled={sending}
+                    className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                    style={{ maxHeight: "140px", overflowY: "auto" }}
+                  />
+                  <button onClick={send} disabled={!input.trim() || sending} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside className="bg-muted/10 p-5">
+            <div className="space-y-4 lg:sticky lg:top-6">
+              <div className="app-panel app-panel-muted p-4">
+                <p className="metric-kicker">Live</p>
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="rounded-2xl bg-primary/12 p-2 text-primary"><Sparkles className="h-4 w-4" /></span>
+                    <div>
+                      <p className="text-sm font-medium">Streaming</p>
+                      <p className="text-xs text-muted-foreground">{sending ? "Antwort wird gerade aufgebaut" : "Kein aktiver Stream"}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border bg-background/75 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Aktives Tool</p>
+                    {activeTool ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm font-medium text-primary">{activeTool.name}</p>
+                        <p className="break-all text-xs text-muted-foreground">{activeTool.detail || "ohne Zusatzdetail"}</p>
                       </div>
                     ) : (
-                      <>
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        {streamingMsgId === msg.id ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" /> : doneMsgId === msg.id && <span className="ml-1 inline-block text-xs text-green-500 align-text-bottom">✓</span>}
-                      </>
+                      <p className="mt-2 text-xs text-muted-foreground">Kein Tool aktiv.</p>
                     )}
                   </div>
-                  {showSwarm && msg.role === "assistant" && msg.workers && msg.workers.length > 0 && (
-                    <div className="flex flex-wrap gap-1 px-1">
-                      {msg.workers.map((w) => (
-                        <span key={w} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"><Network className="h-2.5 w-2.5" />{w}</span>
-                      ))}
-                    </div>
-                  )}
                 </div>
-                {msg.role === "user" && (
-                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">
-                    <User className="h-4 w-4" />
+              </div>
+
+              <div className="app-panel p-4">
+                <p className="metric-kicker">Projekt</p>
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Projekt</p>
+                    <p className="mt-1 font-medium">{projectName}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{id}</p>
                   </div>
-                )}
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Boss-Modell</p>
+                    <p className="mt-1 break-all font-medium">{bossModel.model ?? "nicht konfiguriert"}</p>
+                    <p className="text-xs text-muted-foreground">Temperatur {bossModel.temperature ?? "—"}</p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Verlauf</p>
+                    <p className="mt-1 font-medium">{messages.length} Nachrichten</p>
+                    <p className="text-xs text-muted-foreground">{showSwarm ? "Swarm-Hinweise sichtbar" : "Swarm-Hinweise kompakt"}</p>
+                  </div>
+                </div>
               </div>
-            );
-          })}
-          {sending && messages[messages.length - 1]?.role !== "assistant" && (
-            <div className="flex justify-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                <Bot className="h-4 w-4 text-primary" />
-              </div>
-              <div className="rounded-2xl border bg-card px-4 py-3">
-                <div className="flex h-5 items-center gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+
+              <div className="app-panel p-4">
+                <p className="metric-kicker">Shortcuts</p>
+                <div className="mt-3 space-y-2">
+                  {SLASH_COMMANDS.map((command) => (
+                    <div key={command.cmd} className="rounded-2xl border bg-background/70 px-3 py-2">
+                      <p className="font-mono text-xs text-primary">{command.cmd}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{command.desc}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {activeTool && (
-          <div className="border-t bg-muted/50 px-5 py-2 text-xs text-muted-foreground">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="flex flex-shrink-0 gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
-              </span>
-              <code className="flex-shrink-0 font-mono text-primary">{activeTool.name}</code>
-              {activeTool.detail && <span className="truncate">{activeTool.detail}</span>}
-            </div>
-          </div>
-        )}
-
-        {error && <div className="border-t bg-destructive/10 px-5 py-3 text-xs text-destructive">{error}</div>}
-
-        <div className="border-t px-5 py-4 relative">
-          {showSuggest && suggestions.length > 0 && (
-            <div className="absolute bottom-full left-5 right-5 z-10 mb-2 overflow-hidden rounded-2xl border bg-card shadow-lg">
-              {suggestions.map((s, i) => (
-                <button
-                  key={s.cmd}
-                  onMouseDown={(e) => { e.preventDefault(); setInput(s.cmd + " "); setShowSuggest(false); textareaRef.current?.focus(); }}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${i === suggestIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}
-                >
-                  <span className="font-mono text-xs text-primary">{s.cmd}</span>
-                  <span className="text-xs text-muted-foreground">{s.desc}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex items-end gap-3">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-              placeholder="Nachricht... (Enter zum Senden, Shift+Enter fuer Zeilenumbruch, / fuer Commands)"
-              rows={1}
-              disabled={sending}
-              className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-              style={{ maxHeight: "140px", overflowY: "auto" }}
-            />
-            <button onClick={send} disabled={!input.trim() || sending} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
+          </aside>
         </div>
       </section>
     </div>
