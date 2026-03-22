@@ -10,6 +10,12 @@ from octopos_core import main
 from octopos_core.agent_config import AgentConfig
 from octopos_core.execution_mode_policy import resolve_request_execution_mode
 from octopos_core.orchestrator import Orchestrator
+from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
+from octopos_core.router_users import (
+    MyAgentUpdateRequest,
+    build_personal_agent_data,
+    persist_personal_agent_config,
+)
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -258,11 +264,72 @@ class SecurityRegressionTests(unittest.TestCase):
 
             toml_path.unlink()
             config_path.unlink()
+
             with mock.patch.dict("os.environ", {}, clear=False):
                 self.assertEqual(
                     main._read_server_name(str(toml_path), str(config_path)),
                     "your-hostname",
                 )
+
+    def test_personal_agent_update_persists_empty_lists(self):
+        req = MyAgentUpdateRequest(
+            identity="Mein Agent",
+            model="gpt-4o",
+            fallback_models=[],
+            tools=[],
+            allowed_agents=[],
+            mcp_servers=[],
+        )
+
+        agent_data = build_personal_agent_data("personal_till", req)
+
+        self.assertEqual(agent_data["llm"]["fallback_models"], [])
+        self.assertEqual(agent_data["tools"], [])
+        self.assertEqual(agent_data["allowed_agents"], [])
+        self.assertEqual(agent_data["mcp_servers"], [])
+
+    def test_personal_agent_update_reloads_discovery_after_write(self):
+        req = MyAgentUpdateRequest(
+            identity="Mein Agent",
+            soul="# Soul",
+            model="gpt-4o",
+            fallback_models=[],
+            tools=[],
+            allowed_agents=[],
+            mcp_servers=[],
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir)
+            loader = mock.Mock()
+
+            persist_personal_agent_config(
+                agent_dir,
+                "personal_till",
+                req,
+                load_agent_config_direct=loader,
+            )
+
+            self.assertTrue((agent_dir / "agent.yaml").exists())
+            self.assertEqual((agent_dir / "soul.md").read_text(encoding="utf-8"), "# Soul")
+            loader.assert_called_once_with(agent_dir)
+
+    def test_admin_agent_update_persists_empty_lists(self):
+        req = CreateAgentRequest(
+            id="test_agent",
+            type="specialist",
+            identity="Test Agent",
+            model="gpt-4o",
+            fallback_models=[],
+            tools=[],
+            mcp_servers=[],
+        )
+
+        agent_data = build_agent_admin_data(req)
+
+        self.assertEqual(agent_data["llm"]["fallback_models"], [])
+        self.assertEqual(agent_data["tools"], [])
+        self.assertEqual(agent_data["mcp_servers"], [])
 
     def test_network_profile_status_detects_unexpected_ports(self):
         with mock.patch.object(main, "_read_network_profile", return_value="minimal"), \

@@ -715,6 +715,16 @@ def _ensure_personal_agent(username: str):
     return agent_id, cfg
 
 
+def load_agent_config_direct(agent_dir: Path):
+    """Fallback falls Hot-Reload noch nicht gegriffen hat."""
+    from .agent_config import load_agent_config
+    cfg = load_agent_config(agent_dir)
+    if cfg:
+        with discovery._lock:
+            discovery._agents[cfg.id] = cfg
+    return cfg
+
+
 register_user_routes(
     auth_router,
     admin_router,
@@ -733,6 +743,7 @@ register_user_routes(
     audit_log=audit_log,
     logger=logger,
     incoming_message_model=IncomingMessage,
+    load_agent_config_direct=load_agent_config_direct,
 )
 
 
@@ -774,16 +785,6 @@ register_agent_skill_routes(
     agents_dir=AGENTS_DIR,
     logger=logger,
 )
-
-
-def load_agent_config_direct(agent_dir: Path):
-    """Fallback falls Hot-Reload noch nicht gegriffen hat."""
-    from .agent_config import load_agent_config
-    cfg = load_agent_config(agent_dir)
-    if cfg:
-        with discovery._lock:
-            discovery._agents[cfg.id] = cfg
-    return cfg
 
 
 register_agent_admin_routes(

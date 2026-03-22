@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateAgentRequest(BaseModel):
@@ -14,12 +14,40 @@ class CreateAgentRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     soul: str = ""
-    tools: list[str] = []
-    fallback_models: list[str] = []
-    mcp_servers: list[str] = []
+    tools: list[str] = Field(default_factory=list)
+    fallback_models: list[str] = Field(default_factory=list)
+    mcp_servers: list[str] = Field(default_factory=list)
     heartbeat_interval: str = "30s"
     heartbeat_timeout: str = "90s"
     heartbeat_on_failure: str = "restart"
+
+
+def build_agent_admin_llm_data(req: CreateAgentRequest) -> dict:
+    return {
+        "model": req.model,
+        "temperature": req.temperature,
+        "max_tokens": req.max_tokens,
+        "fallback_models": list(req.fallback_models),
+    }
+
+
+def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None) -> dict:
+    agent_data = {
+        "id": req.id or agent_id,
+        "type": req.type,
+        "identity": req.identity,
+        "llm": build_agent_admin_llm_data(req),
+        "tools": list(req.tools),
+        "mcp_servers": list(req.mcp_servers),
+        "heartbeat": {
+            "interval": req.heartbeat_interval,
+            "timeout": req.heartbeat_timeout,
+            "on_failure": req.heartbeat_on_failure,
+        },
+    }
+    if req.soul:
+        agent_data["soul"] = "./soul.md"
+    return agent_data
 
 
 def register_agent_admin_routes(
@@ -52,29 +80,7 @@ def register_agent_admin_routes(
         (agent_dir / "skills").mkdir(exist_ok=True)
         (agent_dir / "memory").mkdir(exist_ok=True)
 
-        agent_data = {
-            "id": req.id,
-            "type": req.type,
-            "identity": req.identity,
-            "llm": {
-                "model": req.model,
-                "temperature": req.temperature,
-                "max_tokens": req.max_tokens,
-            },
-            "soul": "./soul.md" if req.soul else None,
-            "tools": req.tools,
-            "heartbeat": {
-                "interval": req.heartbeat_interval,
-                "timeout": req.heartbeat_timeout,
-                "on_failure": req.heartbeat_on_failure,
-            },
-        }
-        if req.fallback_models:
-            agent_data["llm"]["fallback_models"] = req.fallback_models
-        if req.mcp_servers:
-            agent_data["mcp_servers"] = req.mcp_servers
-        if not agent_data["soul"]:
-            del agent_data["soul"]
+        agent_data = build_agent_admin_data(req)
 
         yaml_path = agent_dir / "agent.yaml"
         yaml_path.write_text(_yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
@@ -105,30 +111,8 @@ def register_agent_admin_routes(
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
 
-        llm_data: dict = {
-            "model": req.model,
-            "temperature": req.temperature,
-            "max_tokens": req.max_tokens,
-        }
-        if req.fallback_models:
-            llm_data["fallback_models"] = req.fallback_models
-
-        agent_data = {
-            "id": req.id or agent_id,
-            "type": req.type,
-            "identity": req.identity,
-            "llm": llm_data,
-            "tools": req.tools,
-            "heartbeat": {
-                "interval": req.heartbeat_interval,
-                "timeout": req.heartbeat_timeout,
-                "on_failure": req.heartbeat_on_failure,
-            },
-        }
-        if req.mcp_servers:
-            agent_data["mcp_servers"] = req.mcp_servers
+        agent_data = build_agent_admin_data(req, agent_id=agent_id)
         if req.soul:
-            agent_data["soul"] = "./soul.md"
             (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
 
         yaml_path = agent_dir / "agent.yaml"
