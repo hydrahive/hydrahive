@@ -42,7 +42,7 @@ from .router_project_lifecycle import register_project_lifecycle_routes, update_
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
-from .router_users import register_user_routes
+from .router_users import default_personal_agent_execution_modes, register_user_routes
 from .session_manager import MessageRole, SessionManager
 
 logging.basicConfig(
@@ -678,18 +678,7 @@ def _create_personal_agent(username: str) -> str:
         },
         "soul": "./soul.md",
         "tools": ["file_read", "file_write", "shell_exec"],
-        "execution_modes": {
-            "default": "safe",
-            "safe": {
-                "permissions": ["filesystem.read", "memory.read", "memory.write"],
-            },
-            "elevated": {
-                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write"],
-            },
-            "root": {
-                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"],
-            },
-        },
+        "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
 
