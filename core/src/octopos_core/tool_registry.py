@@ -565,6 +565,10 @@ class WriteHandoffTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["handoff.write"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -622,6 +626,10 @@ class ReadHandoffTool(BaseTool):
             "Agenten bestimmt ist. consume=true loescht den Handoff nach dem Lesen "
             "(Standard). Gibt null zurueck wenn kein Handoff vorhanden."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["handoff.read"]
 
     @property
     def parameters(self) -> dict:
@@ -725,6 +733,10 @@ class ShellExecTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["shell.exec"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -803,6 +815,10 @@ class ReadSystemFileTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["system.read"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -865,6 +881,10 @@ class WriteSystemFileTool(BaseTool):
             "Erstellt die Datei und fehlende Verzeichnisse wenn nötig. "
             "mode=overwrite (Standard) oder append."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["system.write"]
 
     @property
     def parameters(self) -> dict:
@@ -931,6 +951,10 @@ class ReadMemoryTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["memory.read"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -974,6 +998,10 @@ class WriteMemoryTool(BaseTool):
             "Verwende aussagekräftige Dateinamen wie 'project-context', 'learned-facts', 'user-preferences'. "
             "mode=overwrite (Standard) ersetzt die Datei, mode=append hängt Text an."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["memory.write"]
 
     @property
     def parameters(self) -> dict:
@@ -1034,6 +1062,10 @@ class AskAgentTool(BaseTool):
             "Der Ziel-Agent antwortet direkt. Nutze dies um spezialisierte Agenten "
             "für bestimmte Aufgaben einzusetzen. Gibt die Antwort des Agenten zurück."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["agents.ask"]
 
     @property
     def parameters(self) -> dict:
@@ -1101,6 +1133,10 @@ class DelegateAgentTool(BaseTool):
             "Für lange Tasks die im Hintergrund laufen — kein direktes Warten auf Ergebnis. "
             "Gibt eine handoff_id zurück. Der Ziel-Agent holt sich den Auftrag über read_handoff."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["agents.delegate"]
 
     @property
     def parameters(self) -> dict:
@@ -1174,6 +1210,10 @@ class GitStatusTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -1214,6 +1254,10 @@ class GitDiffTool(BaseTool):
             "Zeigt die Unterschiede zwischen dem aktuellen Workspace und dem letzten Commit. "
             "path: optional — nur Diff für diese Datei/Verzeichnis."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
 
     @property
     def parameters(self) -> dict:
@@ -1276,6 +1320,10 @@ class GitCommitTool(BaseTool):
             "message: Commit-Nachricht. "
             "branch: Branch-Name (Standard: feature/agent-<agent_id>)."
         )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.write"]
 
     @property
     def parameters(self) -> dict:
@@ -1380,6 +1428,10 @@ class GitPushTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["git.push"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -1463,6 +1515,10 @@ class GitCreatePRTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["git.pr"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -1542,6 +1598,10 @@ class WksShellExecTool(BaseTool):
         )
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["workstation.shell"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -1597,6 +1657,10 @@ class WksFileReadTool(BaseTool):
         return "Liest eine Datei von der eigenen Workstation des Users via SFTP."
 
     @property
+    def permissions_required(self) -> list[str]:
+        return ["workstation.read"]
+
+    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
@@ -1644,6 +1708,10 @@ class WksFileWriteTool(BaseTool):
     @property
     def description(self) -> str:
         return "Schreibt/überschreibt eine Datei auf der eigenen Workstation des Users via SFTP."
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["workstation.write"]
 
     @property
     def parameters(self) -> dict:
@@ -1815,4 +1883,3 @@ registry.register(WksFileWriteTool())
 registry.register(DiscordSendTool())
 registry.register(DiscordReadTool())
 registry.register(DiscordListChannelsTool())
-

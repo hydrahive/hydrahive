@@ -160,6 +160,37 @@ class Orchestrator:
         self._queue_last_used: dict[str, float]         = {}
         self._queue_idle_timeout_s: float               = 600.0
 
+    def _execution_mode_for_request(
+        self,
+        agent_cfg: AgentConfig,
+        execution_mode: str | None = None,
+    ) -> str | None:
+        return agent_cfg.effective_execution_mode(execution_mode)  # type: ignore[arg-type]
+
+    def _allowed_tools(
+        self,
+        agent_cfg: AgentConfig,
+        execution_mode: str | None = None,
+    ) -> list:
+        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
+        return self._reg.tools_for_agent(agent_cfg.tools, agent_permissions=permissions)
+
+    def _allowed_tool_map(
+        self,
+        agent_cfg: AgentConfig,
+        execution_mode: str | None = None,
+    ) -> dict[str, object]:
+        return {tool.id: tool for tool in self._allowed_tools(agent_cfg, execution_mode)}
+
+    def _resolve_allowed_tool(
+        self,
+        agent_cfg: AgentConfig,
+        tool_name: str,
+        execution_mode: str | None = None,
+    ):
+        allowed = self._allowed_tool_map(agent_cfg, execution_mode)
+        return allowed.get(tool_name)
+
     # ------------------------------------------------------------------ public
 
     def _get_queue(self, project_id: str) -> asyncio.Queue:
@@ -261,7 +292,7 @@ class Orchestrator:
         messages.extend(self._sessions.get_context(project_id, max_messages=40))
 
         # 5. Verfügbare Tools für Boss ermitteln
-        boss_tools = self._reg.tools_for_agent(boss_cfg.tools)
+        boss_tools = self._allowed_tools(boss_cfg)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         # 6. LLM aufrufen
@@ -818,7 +849,7 @@ class Orchestrator:
         messages      = [{"role": "system", "content": system_prompt}] + history
 
         # Tool-Schema
-        boss_tools    = self._reg.tools_for_agent(boss_cfg.tools)
+        boss_tools    = self._allowed_tools(boss_cfg)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
@@ -856,10 +887,10 @@ class Orchestrator:
                                 cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
                                 for tc in msg.tool_calls:
                                     yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
-                                    tool = self._reg.get(tc.function.name)
+                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name)
                                     try:
                                         args = _json.loads(tc.function.arguments or "{}")
-                                        result = await tool.execute(agent_id=boss_cfg.id, project_id=project_id, **args) if tool else {"error": f"Tool '{tc.function.name}' nicht gefunden"}
+                                        result = await tool.execute(agent_id=boss_cfg.id, project_id=project_id, **args) if tool else {"error": f"Tool '{tc.function.name}' ist in diesem Modus nicht erlaubt"}
                                     except Exception as te:
                                         result = {"error": str(te)}
                                     result_str = _json.dumps(result, ensure_ascii=False)
@@ -961,7 +992,7 @@ class Orchestrator:
                             tool_results = []
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
-                                tool = self._reg.get(block.name)
+                                tool = self._resolve_allowed_tool(boss_cfg, block.name)
                                 if tool:
                                     try:
                                         result = await tool.execute(
@@ -972,7 +1003,7 @@ class Orchestrator:
                                     except Exception as te:
                                         result = {"error": str(te)}
                                 else:
-                                    result = {"error": f"Tool '{block.name}' nicht gefunden"}
+                                    result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
                                 result_str = _json.dumps(result, ensure_ascii=False)
                                 if len(result_str) > 8000:
                                     result_str = result_str[:8000] + "\n...[gekürzt, zu groß]"
@@ -1086,7 +1117,7 @@ class Orchestrator:
                             tool_results_text = []
                             for tc in tc_list:
                                 yield f"data: {_json.dumps({'tool_call': tc['name']})}\n\n"
-                                tool = self._reg.get(tc["name"])
+                                tool = self._resolve_allowed_tool(boss_cfg, tc["name"])
                                 try:
                                     tool_input = _json2.loads(_safe_args(tc["arguments"]))
                                     # project_id aus tool_input extrahieren falls übergeben
@@ -1095,7 +1126,7 @@ class Orchestrator:
                                         agent_id=boss_cfg.id,
                                         project_id=effective_pid,
                                         **tool_input,
-                                    ) if tool else f"Tool '{tc['name']}' nicht gefunden"
+                                    ) if tool else f"Tool '{tc['name']}' ist in diesem Modus nicht erlaubt"
                                 except Exception as te:
                                     result = f"Tool-Fehler: {te}"
                                 tool_results_text.append(
@@ -1153,7 +1184,7 @@ class Orchestrator:
         Max. max_rounds Runden um Endlosschleifen zu vermeiden.
         Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
         """
-        boss_tools = self._reg.tools_for_agent(boss_cfg.tools)
+        boss_tools = self._allowed_tools(boss_cfg)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
         current_messages = list(messages)
         workers_used: list[str] = []
@@ -1203,9 +1234,9 @@ class Orchestrator:
                         workers_used.append(res.worker_id)
 
             for tc in other_tcs:
-                tool = self._reg.get(tc.function.name)
+                tool = self._resolve_allowed_tool(boss_cfg, tc.function.name)
                 if tool is None:
-                    tool_results[tc.id] = f"[Fehler] Unbekanntes Tool: {tc.function.name}"
+                    tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
                     continue
                 try:
                     args = json.loads(tc.function.arguments)
