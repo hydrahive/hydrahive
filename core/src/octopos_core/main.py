@@ -1774,9 +1774,11 @@ async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(req
     }
     save_discord_config(username, cfg)
 
+    personal_agent_id = f"personal_{username}"
+
     # Test ob Token gültig ist
     test_client = AgentDiscordClient(
-        agent_id    = username,
+        agent_id    = personal_agent_id,
         bot_token   = cfg["bot_token"],
         guild_id    = cfg["guild_id"],
         channel_ids = cfg["channel_ids"],
@@ -1791,7 +1793,7 @@ async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(req
     # Alten Client stoppen und neuen starten
     await runtime.detach_discord_client(username)
     client = AgentDiscordClient(
-        agent_id    = username,
+        agent_id    = personal_agent_id,
         bot_token   = cfg["bot_token"],
         guild_id    = cfg["guild_id"],
         channel_ids = cfg["channel_ids"],
@@ -1827,7 +1829,7 @@ async def test_my_discord(auth: tuple = Depends(require_auth)):
     if not cfg:
         raise HTTPException(400, "Discord nicht konfiguriert")
     test_client = AgentDiscordClient(
-        agent_id    = username,
+        agent_id    = f"personal_{username}",
         bot_token   = cfg["bot_token"],
         guild_id    = cfg["guild_id"],
         channel_ids = cfg.get("channel_ids", []),
@@ -1852,8 +1854,9 @@ async def _setup_discord_clients() -> None:
         cfg = load_discord_config(username)
         if not cfg:
             continue
+        personal_agent_id = f"personal_{username}"
         client = AgentDiscordClient(
-            agent_id    = username,
+            agent_id    = personal_agent_id,
             bot_token   = cfg["bot_token"],
             guild_id    = cfg.get("guild_id", ""),
             channel_ids = cfg.get("channel_ids", []),
@@ -1861,7 +1864,7 @@ async def _setup_discord_clients() -> None:
         )
         _discord_clients[username] = client
         await runtime.attach_discord_client(username, client)
-        logger.info("Discord-Bot für User '%s' gestartet", username)
+        logger.info("Discord-Bot für User '%s' (Agent: %s) gestartet", username, personal_agent_id)
 
 
 # ================================================================== AgentLink
