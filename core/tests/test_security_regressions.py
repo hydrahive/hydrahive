@@ -60,6 +60,18 @@ class SecurityRegressionTests(unittest.TestCase):
         deps = self._dependency_names("/agents/{agent_id}/message", "POST")
         self.assertIn("require_auth_or_localhost", deps)
 
+    def test_message_routes_keep_json_body_params(self):
+        for path in (
+            "/agents/{agent_id}/message",
+            "/agents/{agent_id}/message/stream",
+            "/me/agent/message/stream",
+        ):
+            route = self._route(path, "POST")
+            self.assertEqual([param.name for param in route.dependant.body_params], ["body"])
+            query_param_names = {param.name for param in route.dependant.query_params}
+            self.assertNotIn("req", query_param_names)
+            self.assertNotIn("body", query_param_names)
+
     def test_audit_log_write_and_read_roundtrip(self):
         original_audit_log_file = main.AUDIT_LOG_FILE
         with tempfile.TemporaryDirectory() as tmpdir:

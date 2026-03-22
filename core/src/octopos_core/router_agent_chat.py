@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
 
 
 def register_agent_chat_routes(
@@ -128,13 +128,14 @@ def register_agent_chat_routes(
     @app.post("/agents/{agent_id}/message")
     async def agent_message_sync(
         agent_id: str,
-        req: incoming_message_model,
+        body: dict = Body(...),
         _a: tuple[str, str] = Depends(require_auth_or_localhost),
     ):
         from .project_config import ProjectAgents as _PA
         from .project_config import ProjectConfig as _PC
         from .project_config import ProjectIdentity as _PI
 
+        req = incoming_message_model.model_validate(body)
         check_message_rate(req.sender, agent_id)
         cfg = discovery.get(agent_id)
         if not cfg:
@@ -157,7 +158,7 @@ def register_agent_chat_routes(
     @app.post("/agents/{agent_id}/message/stream")
     async def agent_message_stream(
         agent_id: str,
-        req: incoming_message_model,
+        body: dict = Body(...),
         _a: tuple[str, str] = Depends(require_auth_or_localhost),
     ):
         from fastapi.responses import StreamingResponse as _SR
@@ -165,6 +166,7 @@ def register_agent_chat_routes(
         from .project_config import ProjectConfig as _PC
         from .project_config import ProjectIdentity as _PI
 
+        req = incoming_message_model.model_validate(body)
         check_message_rate(req.sender, agent_id)
         cfg = discovery.get(agent_id)
         if not cfg:
