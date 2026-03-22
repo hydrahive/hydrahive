@@ -283,7 +283,7 @@ export function ChatPage() {
         </div>
       </section>
 
-      <section className="section-card min-h-[65vh] overflow-hidden p-0">
+      <section className="section-card min-h-[65vh] overflow-hidden lg:overflow-visible p-0">
         <div className="grid min-h-[65vh] lg:grid-cols-[minmax(0,1.7fr)_22rem]">
           <div className="flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
             <div className="border-b bg-muted/20 px-5 py-4">
@@ -421,8 +421,8 @@ export function ChatPage() {
             </div>
           </div>
 
-          <aside className="bg-muted/10 p-5">
-            <div className="space-y-4 lg:sticky lg:top-6">
+          <aside className="bg-muted/10 p-5 lg:self-start">
+            <div className="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
               <div className="app-panel app-panel-muted p-4">
                 <p className="metric-kicker">Live</p>
                 <div className="mt-3 space-y-3">
