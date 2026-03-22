@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -491,13 +491,13 @@ export function AgentsPage() {
             const taskCount = hbTasks.filter((t) => t.agent_id === id).length;
             return (
               <div key={id} className="app-panel overflow-hidden">
-                <div className="p-5">
+                <div className="p-5 space-y-5">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex items-start gap-4">
                       <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
                         <Bot className="h-5 w-5" />
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-lg font-semibold tracking-tight">{agent.config.identity}</span>
                           <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{id}</span>
@@ -505,24 +505,131 @@ export function AgentsPage() {
                           {taskCount > 0 && <span className="status-pill status-pill-ok"><Timer className="h-3 w-3" />{taskCount} HB</span>}
                         </div>
                         <p className="text-sm text-muted-foreground">{agent.config.model}</p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm">
-                          <span className={`inline-flex items-center gap-1.5 font-medium ${color}`}><Circle className="h-2 w-2 fill-current" />{status}</span>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`status-pill ${status === "running" ? "status-pill-ok" : ""}`}>
+                            <Circle className={`h-2.5 w-2.5 fill-current ${color}`} />
+                            {status}
+                          </span>
                           {rt && (
-                            <span className={hbWarn ? "text-orange-500" : "text-muted-foreground"}>
-                              HB {hbAge?.toFixed(0)}s
-                              {rt.restart_count > 0 && <span className="ml-1 text-orange-500">↺{rt.restart_count}</span>}
+                            <span className={`status-pill ${hbWarn ? "text-orange-500" : ""}`}>
+                              <Timer className="h-3.5 w-3.5" />
+                              HB {hbAge?.toFixed(0)}s / {rt.heartbeat_timeout}s
                             </span>
                           )}
-                          {rt?.status === "error" && <span className="inline-flex items-center gap-1 text-destructive"><ShieldAlert className="h-4 w-4" />Fehlerzustand</span>}
+                          {rt && rt.restart_count > 0 && (
+                            <span className="status-pill">
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              {rt.restart_count} Restarts
+                            </span>
+                          )}
+                          {rt?.status === "error" && <span className="status-pill text-destructive"><ShieldAlert className="h-3.5 w-3.5" />Fehlerzustand</span>}
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 xl:justify-end">
-                      <button onClick={() => navigate(`/agents/${id}/chat`)} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent"><MessageSquare className="h-4 w-4" />Chat</button>
-                      <button onClick={() => setSkillsAgent((s) => (s === id ? null : id))} className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${skillsAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}><BookOpen className="h-4 w-4" />Skills</button>
-                      <button onClick={() => openLogs(id)} className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${logAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}><ScrollText className="h-4 w-4" />Logs</button>
-                      {isAdmin && <button onClick={() => openEdit(id, agent)} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent"><Pencil className="h-4 w-4" />Bearbeiten</button>}
-                      {isAdmin && <button onClick={() => handleDelete(id)} disabled={deleting === id} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm text-muted-foreground transition hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"><Trash2 className="h-4 w-4" />Loeschen</button>}
+
+                    <div className="grid gap-3 sm:grid-cols-2 xl:w-[26rem]">
+                      <button onClick={() => navigate(`/agents/${id}/chat`)} className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background">
+                        <span className="flex items-center gap-3">
+                          <span className="rounded-2xl bg-primary/12 p-2 text-primary"><MessageSquare className="h-4 w-4" /></span>
+                          <span>
+                            <span className="block font-medium">Chat</span>
+                            <span className="text-xs text-muted-foreground">Direkter Runtime-Dialog</span>
+                          </span>
+                        </span>
+                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => setSkillsAgent((s) => (s === id ? null : id))} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${skillsAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
+                        <span className="flex items-center gap-3">
+                          <span className={`rounded-2xl p-2 ${skillsAgent === id ? "bg-primary/15" : "bg-secondary"}`}><BookOpen className="h-4 w-4" /></span>
+                          <span>
+                            <span className="block font-medium">Skills</span>
+                            <span className="text-xs text-muted-foreground">Verhalten und Trigger</span>
+                          </span>
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => openLogs(id)} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${logAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
+                        <span className="flex items-center gap-3">
+                          <span className={`rounded-2xl p-2 ${logAgent === id ? "bg-primary/15" : "bg-secondary"}`}><ScrollText className="h-4 w-4" /></span>
+                          <span>
+                            <span className="block font-medium">Logs</span>
+                            <span className="text-xs text-muted-foreground">Live-Ausgabe und Fehlerbild</span>
+                          </span>
+                        </span>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      <div className="rounded-3xl border bg-secondary/50 px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-2xl bg-background p-2 text-foreground/75"><Cpu className="h-4 w-4" /></span>
+                          <div>
+                            <p className="text-sm font-medium">Ops-Kontext</p>
+                            <p className="text-xs text-muted-foreground">Rolle, Runtime und Heartbeat kompakt</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr_0.9fr]">
+                    <div className="rounded-3xl border bg-background/55 p-4">
+                      <p className="metric-kicker">Runtime</p>
+                      <div className="mt-3 space-y-3 text-sm">
+                        <div className="flex items-start gap-3">
+                          <Cpu className="mt-0.5 h-4 w-4 text-primary" />
+                          <div>
+                            <p className="font-medium">Modell</p>
+                            <p className="break-all text-muted-foreground">{agent.config.model}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <Workflow className="mt-0.5 h-4 w-4 text-primary" />
+                          <div>
+                            <p className="font-medium">Status</p>
+                            <p className={`${color}`}>{status}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <Timer className="mt-0.5 h-4 w-4 text-primary" />
+                          <div>
+                            <p className="font-medium">Heartbeat</p>
+                            <p className={hbWarn ? "text-orange-500" : "text-muted-foreground"}>
+                              {rt ? `${hbAge?.toFixed(0)}s seit letztem Signal, Timeout ${rt.heartbeat_timeout}s` : "Keine Runtime-Daten"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border bg-background/55 p-4">
+                      <p className="metric-kicker">Profil</p>
+                      <div className="mt-3 space-y-3 text-sm">
+                        <div className="rounded-2xl bg-secondary/60 px-3 py-3">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Rolle</p>
+                          <p className="mt-1 font-medium">{agent.config.type}</p>
+                        </div>
+                        <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Heartbeat-Tasks</p>
+                          <p className="mt-1 font-medium">{taskCount}</p>
+                        </div>
+                        <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Recovery</p>
+                          <p className="mt-1 font-medium">{rt?.on_failure ?? "n/a"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-destructive/15 bg-destructive/5 p-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                        <ShieldAlert className="h-4 w-4" />
+                        Admin Actions
+                      </div>
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        Bearbeiten und Deaktivieren bleiben absichtlich von der Runtime-Sicht getrennt.
+                      </p>
+                      <div className="mt-4 space-y-2">
+                        {isAdmin && <button onClick={() => openEdit(id, agent)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent"><Pencil className="h-4 w-4" />Bearbeiten</button>}
+                        {isAdmin && <button onClick={() => handleDelete(id)} disabled={deleting === id} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50"><Trash2 className="h-4 w-4" />Loeschen</button>}
+                      </div>
                     </div>
                   </div>
                 </div>
