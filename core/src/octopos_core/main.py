@@ -141,6 +141,12 @@ async def lifespan(app: FastAPI):
     server_name = _read_server_name()
     await _setup_matrix_clients(server_name)
 
+    # Discord-Bots für User mit konfiguriertem Bot-Token starten
+    try:
+        await _setup_discord_clients()
+    except Exception as e:
+        logger.warning("Discord-Setup fehlgeschlagen: %s", e)
+
     # Heartbeat-Scheduler starten (#77)
     from .heartbeat import AgentHeartbeatScheduler as _HBS
     hb_scheduler = _HBS(discovery, projects, orchestrator, AGENTS_DIR)
@@ -424,7 +430,7 @@ def health():
 
 
 @app.get("/agents")
-def list_agents():
+def list_agents(_a: tuple[str, str] = Depends(require_auth)):
     registered = discovery.agents
     running    = runtime.status_all()
     return {
@@ -442,7 +448,7 @@ def list_agents():
 
 
 @app.get("/agents/{agent_id}")
-def get_agent(agent_id: str):
+def get_agent(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
     cfg = discovery.get(agent_id)
     if not cfg:
         raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -507,7 +513,7 @@ def agent_heartbeat(agent_id: str):
 # ================================================================== Projekte
 
 @app.get("/projects")
-def list_projects():
+def list_projects(_a: tuple[str, str] = Depends(require_auth)):
     return {
         pid: {
             "name":        cfg.identity.name,
@@ -524,7 +530,7 @@ def list_projects():
 
 
 @app.get("/projects/{project_id}")
-def get_project(project_id: str):
+def get_project(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     cfg = projects.get(project_id)
     if not cfg:
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -539,7 +545,7 @@ def get_project(project_id: str):
 
 
 @app.get("/projects/{project_id}/agents")
-def project_agents(project_id: str):
+def project_agents(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     cfg = projects.get(project_id)
     if not cfg:
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -757,7 +763,11 @@ class IncomingMessage(BaseModel):
 
 
 @app.post("/projects/{project_id}/message/stream")
-async def send_message_stream(project_id: str, req: IncomingMessage):
+async def send_message_stream(
+    project_id: str,
+    req: IncomingMessage,
+    _a: tuple[str, str] = Depends(require_auth),
+):
     """
     Streaming-Version: SSE Token-für-Token.
     Client: fetch + ReadableStream oder EventSource.
@@ -788,7 +798,11 @@ async def send_message_stream(project_id: str, req: IncomingMessage):
                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.post("/projects/{project_id}/message")
-async def send_message(project_id: str, req: IncomingMessage):
+async def send_message(
+    project_id: str,
+    req: IncomingMessage,
+    _a: tuple[str, str] = Depends(require_auth),
+):
     """
     User-Nachricht an Projekt senden — Boss-Agent verarbeitet und antwortet.
     Das ist der Haupt-Einstiegspunkt für die Web-Chat-UI und Matrix-Integration.
@@ -1061,7 +1075,7 @@ def get_agent_logs(agent_id: str, lines: int = 100):
 
 
 @app.get("/logs/core")
-def get_core_logs(lines: int = 200):
+def get_core_logs(lines: int = 200, _a: tuple[str, str] = Depends(require_admin)):
     """
     Core-Logs gesamt — fuer System-Screen.
     """
@@ -1161,6 +1175,7 @@ def get_audit_logs(
     project_id: str = "",
     user:       str = "",
     action:     str = "",
+    _a: tuple[str, str] = Depends(require_admin),
 ):
     """Audit-Log lesen mit optionalen Filtern."""
     limit = max(10, min(limit, 1000))
@@ -1244,7 +1259,7 @@ async def _matrix_register(username: str, password: str, server_name: str) -> bo
 
 
 @app.get("/users")
-def list_users():
+def list_users(_a: tuple[str, str] = Depends(require_admin)):
     """Alle OctopOS-User auflisten."""
     users = _load_users()
     return {
@@ -1719,6 +1734,134 @@ async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):
     except Exception as e:
         return {"models": [], "wks_url": wks_url, "error": str(e)}
     return {"models": [], "wks_url": wks_url}
+
+
+# ================================================================== Discord (/me/discord)
+
+class DiscordConfigRequest(BaseModel):
+    bot_token:   str
+    guild_id:    str = ""
+    channel_ids: list[str] = []
+
+
+@app.get("/me/discord")
+def get_my_discord(auth: tuple = Depends(require_auth)):
+    """Discord-Konfiguration des eingeloggten Users abrufen."""
+    username, _ = auth
+    from .discord_agent import load_discord_config
+    cfg = load_discord_config(username)
+    if not cfg:
+        return {"configured": False}
+    return {
+        "configured":  True,
+        "guild_id":    cfg.get("guild_id", ""),
+        "channel_ids": cfg.get("channel_ids", []),
+        "connected":   _discord_client_connected(username),
+    }
+
+
+@app.put("/me/discord", status_code=200)
+async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
+    """Discord-Bot-Token speichern und Bot starten."""
+    username, _ = auth
+    from .discord_agent import save_discord_config, AgentDiscordClient
+    from .tool_registry import _discord_clients
+
+    cfg = {
+        "bot_token":   req.bot_token.strip(),
+        "guild_id":    req.guild_id.strip(),
+        "channel_ids": [c.strip() for c in req.channel_ids if c.strip()],
+    }
+    save_discord_config(username, cfg)
+
+    # Test ob Token gültig ist
+    test_client = AgentDiscordClient(
+        agent_id    = username,
+        bot_token   = cfg["bot_token"],
+        guild_id    = cfg["guild_id"],
+        channel_ids = cfg["channel_ids"],
+        orchestrator = orchestrator,
+    )
+    test_result = await test_client.test_connection()
+    if not test_result.get("ok"):
+        from .discord_agent import delete_discord_config
+        delete_discord_config(username)
+        raise HTTPException(400, f"Discord-Token ungültig: {test_result.get('error', '')}")
+
+    # Alten Client stoppen und neuen starten
+    await runtime.detach_discord_client(username)
+    client = AgentDiscordClient(
+        agent_id    = username,
+        bot_token   = cfg["bot_token"],
+        guild_id    = cfg["guild_id"],
+        channel_ids = cfg["channel_ids"],
+        orchestrator = orchestrator,
+    )
+    _discord_clients[username] = client
+    await runtime.attach_discord_client(username, client)
+
+    audit_log("discord.configured", details={"user": username, "bot": test_result.get("bot_name", "")})
+    logger.info("Discord konfiguriert für %s: Bot '%s'", username, test_result.get("bot_name", ""))
+    return {"updated": True, "bot_name": test_result.get("bot_name", ""), "bot_id": test_result.get("bot_id", "")}
+
+
+@app.delete("/me/discord", status_code=200)
+async def delete_my_discord(auth: tuple = Depends(require_auth)):
+    """Discord-Konfiguration löschen und Bot stoppen."""
+    username, _ = auth
+    from .discord_agent import delete_discord_config
+    from .tool_registry import _discord_clients
+    await runtime.detach_discord_client(username)
+    _discord_clients.pop(username, None)
+    delete_discord_config(username)
+    audit_log("discord.removed", details={"user": username})
+    return {"deleted": True}
+
+
+@app.post("/me/discord/test")
+async def test_my_discord(auth: tuple = Depends(require_auth)):
+    """Discord-Token testen ohne zu speichern."""
+    username, _ = auth
+    from .discord_agent import load_discord_config, AgentDiscordClient
+    cfg = load_discord_config(username)
+    if not cfg:
+        raise HTTPException(400, "Discord nicht konfiguriert")
+    test_client = AgentDiscordClient(
+        agent_id    = username,
+        bot_token   = cfg["bot_token"],
+        guild_id    = cfg["guild_id"],
+        channel_ids = cfg.get("channel_ids", []),
+        orchestrator = orchestrator,
+    )
+    result = await test_client.test_connection()
+    return result
+
+
+def _discord_client_connected(agent_id: str) -> bool:
+    from .tool_registry import _discord_clients
+    client = _discord_clients.get(agent_id)
+    return bool(client and getattr(client, "is_connected", False))
+
+
+async def _setup_discord_clients() -> None:
+    """Discord-Bots für alle konfigurierten User beim Start laden."""
+    from .discord_agent import load_discord_config, AgentDiscordClient
+    from .tool_registry import _discord_clients
+    users = _load_users()
+    for username in users:
+        cfg = load_discord_config(username)
+        if not cfg:
+            continue
+        client = AgentDiscordClient(
+            agent_id    = username,
+            bot_token   = cfg["bot_token"],
+            guild_id    = cfg.get("guild_id", ""),
+            channel_ids = cfg.get("channel_ids", []),
+            orchestrator = orchestrator,
+        )
+        _discord_clients[username] = client
+        await runtime.attach_discord_client(username, client)
+        logger.info("Discord-Bot für User '%s' gestartet", username)
 
 
 # ================================================================== AgentLink
@@ -3023,7 +3166,7 @@ def get_google_antigravity_status():
 
 
 @app.get("/llm/claude_token_status")
-def get_claude_token_status():
+def get_claude_token_status(_a: tuple[str, str] = Depends(require_admin)):
     """
     Claude OAuth Token Status — Alter und Gueltigkeit.
     Liest sk-ant-oat01- Token aus /etc/octopos/claude_oauth_token.
@@ -3369,7 +3512,7 @@ def gpu_info():
 
 
 @app.get("/status")
-def system_status():
+def system_status(_a: tuple[str, str] = Depends(require_auth)):
     return {
         "discovery": {
             "agents_dir": AGENTS_DIR,

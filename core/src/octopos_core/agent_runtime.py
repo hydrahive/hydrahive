@@ -91,6 +91,7 @@ class AgentHandle:
     restart_count:  int   = 0
     task:           asyncio.Task | None = field(default=None, repr=False)
     matrix_client:  object | None = field(default=None, repr=False)  # MatrixAgent
+    discord_client: object | None = field(default=None, repr=False)  # AgentDiscordClient
 
 
 class AgentRuntime:
@@ -150,6 +151,34 @@ class AgentRuntime:
         handle.task = asyncio.create_task(coro, name=f"agent-{agent_id}")
         self._handles[agent_id] = handle
         logger.info("Matrix-Client an Agent %s angehängt, Task neu gestartet", agent_id)
+
+    async def attach_discord_client(self, agent_id: str, discord_client: object) -> None:
+        """Discord-Client an laufenden Agenten hängen und als eigenen Task starten."""
+        handle = self._handles.get(agent_id)
+        if not handle:
+            logger.warning("attach_discord_client: Agent '%s' nicht gefunden", agent_id)
+            return
+        # Alten Discord-Client stoppen falls vorhanden
+        if handle.discord_client is not None:
+            try:
+                await handle.discord_client.stop()
+            except Exception:
+                pass
+        handle.discord_client = discord_client
+        asyncio.create_task(discord_client.start(), name=f"discord-{agent_id}")
+        logger.info("Discord-Client an Agent %s angehängt", agent_id)
+
+    async def detach_discord_client(self, agent_id: str) -> None:
+        """Discord-Client eines Agenten stoppen und entfernen."""
+        handle = self._handles.get(agent_id)
+        if not handle or handle.discord_client is None:
+            return
+        try:
+            await handle.discord_client.stop()
+        except Exception:
+            pass
+        handle.discord_client = None
+        logger.info("Discord-Client von Agent %s getrennt", agent_id)
 
     def heartbeat(self, agent_id: str) -> None:
         """Vom Agent-Loop oder REST-Endpoint aufgerufen um Liveness zu melden."""

@@ -1683,6 +1683,109 @@ class WksFileWriteTool(BaseTool):
             return {"error": str(e)}
 
 
+# ============================================================= Discord-Tools
+
+# _discord_clients: {agent_id: AgentDiscordClient} — wird von main.py befüllt
+_discord_clients: dict[str, object] = {}
+
+
+class DiscordSendTool(BaseTool):
+    """Nachricht in einen Discord-Channel senden."""
+
+    @property
+    def id(self) -> str:          return "discord_send"
+    @property
+    def name(self) -> str:        return "Discord Send"
+    @property
+    def description(self) -> str: return "Sendet eine Textnachricht in einen Discord-Channel."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "channel_id": {"type": "string", "description": "Discord Channel-ID"},
+                "text":       {"type": "string", "description": "Nachrichtentext"},
+            },
+            "required": ["channel_id", "text"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str,
+                      channel_id: str, text: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client:
+            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
+        try:
+            await client.send_message(channel_id, text)
+            return {"sent": True, "channel_id": channel_id}
+        except Exception as e:
+            return {"error": str(e)}
+
+
+class DiscordReadTool(BaseTool):
+    """Letzte Nachrichten aus einem Discord-Channel lesen."""
+
+    @property
+    def id(self) -> str:          return "discord_read"
+    @property
+    def name(self) -> str:        return "Discord Read"
+    @property
+    def description(self) -> str: return "Liest die letzten Nachrichten aus einem Discord-Channel."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "channel_id": {"type": "string", "description": "Discord Channel-ID"},
+                "limit":      {"type": "integer", "description": "Anzahl Nachrichten (max 50)", "default": 20},
+            },
+            "required": ["channel_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str,
+                      channel_id: str, limit: int = 20, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client:
+            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
+        try:
+            messages = await client.read_messages(channel_id, limit=min(limit, 50))
+            return {"messages": messages}
+        except Exception as e:
+            return {"error": str(e)}
+
+
+class DiscordListChannelsTool(BaseTool):
+    """Alle Text-Channels der konfigurierten Discord-Guild auflisten."""
+
+    @property
+    def id(self) -> str:          return "discord_list_channels"
+    @property
+    def name(self) -> str:        return "Discord List Channels"
+    @property
+    def description(self) -> str: return "Listet alle Text-Channels der konfigurierten Discord-Guild auf."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client:
+            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
+        try:
+            channels = await client.list_channels()
+            return {"channels": channels}
+        except Exception as e:
+            return {"error": str(e)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -1709,4 +1812,7 @@ registry.register(GitCreatePRTool())
 registry.register(WksShellExecTool())
 registry.register(WksFileReadTool())
 registry.register(WksFileWriteTool())
+registry.register(DiscordSendTool())
+registry.register(DiscordReadTool())
+registry.register(DiscordListChannelsTool())
 
