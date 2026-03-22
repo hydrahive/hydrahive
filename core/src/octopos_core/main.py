@@ -281,6 +281,33 @@ def require_admin(auth: tuple[str, str] = Depends(require_auth)) -> tuple[str, s
     return auth
 
 
+def _is_local_request(request: Request) -> bool:
+    client = request.client
+    if client is None:
+        return False
+    return client.host in {"127.0.0.1", "::1", "localhost"}
+
+
+def require_auth_or_localhost(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> tuple[str, str]:
+    """JWT fuer externe Aufrufe, localhost-Bypass fuer interne Core-Calls."""
+    if _is_local_request(request):
+        return ("internal", "admin")
+    return require_auth(creds)
+
+
+def require_admin_or_localhost(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> tuple[str, str]:
+    """Admin fuer externe Aufrufe, localhost-Bypass fuer interne Core-Calls."""
+    if _is_local_request(request):
+        return ("internal", "admin")
+    return require_admin(require_auth(creds))
+
+
 def _check_agent_write(agent_id: str, auth: tuple[str, str]) -> None:
     """Admin darf alles; normaler User nur seinen eigenen personal_{username} Agenten."""
     username, role = auth
@@ -494,7 +521,7 @@ class SpawnRequest(BaseModel):
 
 
 @app.post("/agents/spawn")
-async def spawn_task_agent(req: SpawnRequest):
+async def spawn_task_agent(req: SpawnRequest, _a: tuple = Depends(require_admin_or_localhost)):
     cfg = discovery.get(req.agent_id)
     if not cfg:
         raise HTTPException(404, f"Agent '{req.agent_id}' nicht in Discovery")
@@ -505,7 +532,7 @@ async def spawn_task_agent(req: SpawnRequest):
 
 
 @app.post("/agents/{agent_id}/heartbeat")
-def agent_heartbeat(agent_id: str):
+def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost)):
     runtime.heartbeat(agent_id)
     return {"ok": True}
 
@@ -651,7 +678,7 @@ async def create_project(req: CreateProjectRequest, _a: tuple = Depends(require_
 
 
 @app.delete("/projects/{project_id}")
-async def delete_project(project_id: str, remove_files: bool = False):
+async def delete_project(project_id: str, remove_files: bool = False, _a: tuple = Depends(require_admin)):
     """Projekt loeschen: Deprovisionieren + project.yaml entfernen."""
     import shutil as _shutil
     cfg = projects.get(project_id)
@@ -680,7 +707,7 @@ async def delete_project(project_id: str, remove_files: bool = False):
 # ================================================================== Sessions
 
 @app.get("/projects/{project_id}/session")
-def get_session(project_id: str):
+def get_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Aktive Session eines Projekts."""
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -696,7 +723,7 @@ def get_session(project_id: str):
 
 
 @app.post("/projects/{project_id}/session/start")
-def start_session(project_id: str):
+def start_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Neue Session starten (beendet ggf. vorherige)."""
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -705,7 +732,7 @@ def start_session(project_id: str):
 
 
 @app.post("/projects/{project_id}/session/end")
-def end_session(project_id: str):
+def end_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Aktive Session beenden."""
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -722,7 +749,7 @@ class MessageRequest(BaseModel):
 
 
 @app.post("/projects/{project_id}/session/message")
-def append_message(project_id: str, req: MessageRequest):
+def append_message(project_id: str, req: MessageRequest, _a: tuple[str, str] = Depends(require_auth)):
     """Nachricht an aktive Session anhängen (Session wird ggf. angelegt)."""
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -741,7 +768,7 @@ def append_message(project_id: str, req: MessageRequest):
 
 
 @app.get("/projects/{project_id}/session/history")
-def session_history(project_id: str, limit: int = 50):
+def session_history(project_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
     """Nachrichten-History der aktiven Session."""
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -837,7 +864,7 @@ async def send_message(
 
 
 @app.get("/agents/{agent_id}/session/history")
-def agent_session_history(agent_id: str, limit: int = 50):
+def agent_session_history(agent_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
     """Nachrichten-History für direkten Agenten-Chat."""
     context = agent_sessions.get_context(agent_id, max_messages=limit)
     session = agent_sessions.get_active(agent_id)
@@ -958,7 +985,11 @@ async def agent_session_compact(agent_id: str, _a: tuple = Depends(require_auth)
 
 
 @app.post("/agents/{agent_id}/message")
-async def agent_message_sync(agent_id: str, req: IncomingMessage):
+async def agent_message_sync(
+    agent_id: str,
+    req: IncomingMessage,
+    _a: tuple[str, str] = Depends(require_auth_or_localhost),
+):
     # Rate-Limiting
     _check_message_rate(req.sender, agent_id)
     """Direkter synchroner Chat mit einem Agenten — gibt vollständige Antwort zurück."""
@@ -983,7 +1014,11 @@ async def agent_message_sync(agent_id: str, req: IncomingMessage):
 
 
 @app.post("/agents/{agent_id}/message/stream")
-async def agent_message_stream(agent_id: str, req: IncomingMessage):
+async def agent_message_stream(
+    agent_id: str,
+    req: IncomingMessage,
+    _a: tuple[str, str] = Depends(require_auth_or_localhost),
+):
     # Rate-Limiting
     _check_message_rate(req.sender, agent_id)
     """Direkter Chat mit einem Agenten — ohne Projekt-Kontext."""
@@ -1014,7 +1049,7 @@ async def agent_message_stream(agent_id: str, req: IncomingMessage):
 
 
 @app.get("/agents/{agent_id}/logs")
-def get_agent_logs(agent_id: str, lines: int = 100):
+def get_agent_logs(agent_id: str, lines: int = 100, _a: tuple[str, str] = Depends(require_auth)):
     """
     Agent-Logs aus journalctl — gefiltert auf octopos-core + Agent-ID.
     Gibt die letzten N Zeilen zurueck.
@@ -1870,7 +1905,7 @@ async def _setup_discord_clients() -> None:
 # ================================================================== AgentLink
 
 @app.get("/projects/{project_id}/agentlink")
-def list_agentlink(project_id: str):
+def list_agentlink(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Aktive Handoffs eines Projekts auflisten."""
     from .agentlink import list_handoffs as _lh
     project_dir = Path(PROJECTS_DIR) / project_id
@@ -1881,7 +1916,7 @@ def list_agentlink(project_id: str):
 
 
 @app.delete("/projects/{project_id}/agentlink/{handoff_id}")
-def delete_agentlink(project_id: str, handoff_id: str):
+def delete_agentlink(project_id: str, handoff_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Handoff manuell loeschen."""
     from .agentlink import delete_handoff as _dh
     project_dir = Path(PROJECTS_DIR) / project_id
@@ -1894,7 +1929,7 @@ def delete_agentlink(project_id: str, handoff_id: str):
 
 
 @app.post("/projects/{project_id}/agentlink")
-def create_agentlink(project_id: str, body: dict):
+def create_agentlink(project_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
     """Handoff manuell anlegen (fuer Tests)."""
     from .agentlink import write_handoff as _wh
     project_dir = Path(PROJECTS_DIR) / project_id
@@ -1987,7 +2022,7 @@ class WebhookRequest(BaseModel):
 
 
 @app.get("/projects/{project_id}/webhooks")
-def list_webhooks(project_id: str):
+def list_webhooks(project_id: str, _a: tuple = Depends(require_admin)):
     if not projects.get(project_id):
         raise HTTPException(404, f"Projekt nicht gefunden")
     webhooks = _load_webhooks(project_id)
@@ -2035,7 +2070,7 @@ def delete_webhook(project_id: str, webhook_id: str, _a: tuple = Depends(require
 
 
 @app.post("/projects/{project_id}/webhooks/test")
-async def test_webhook(project_id: str, body: dict):
+async def test_webhook(project_id: str, body: dict, _a: tuple = Depends(require_admin)):
     """Test-Ping an einen Webhook senden."""
     url    = body.get("url", "")
     secret = body.get("secret", "")
@@ -2168,7 +2203,7 @@ def _write_skill_file(skills_dir: Path, filename: str, data: dict) -> Path:
 
 
 @app.get("/agents/{agent_id}/skills")
-def list_agent_skills(agent_id: str):
+def list_agent_skills(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """Alle QMD-Skills eines Agenten."""
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
@@ -2395,7 +2430,7 @@ async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
 
 
 @app.get("/agents/{agent_id}/soul")
-def get_agent_soul(agent_id: str):
+def get_agent_soul(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
     """soul.md eines Agenten lesen."""
     soul_path = Path(AGENTS_DIR) / agent_id / "soul.md"
     if not soul_path.exists():
@@ -2523,7 +2558,7 @@ async def provision_project(project_id: str, _a: tuple = Depends(require_admin))
 
 
 @app.delete("/projects/{project_id}/provision")
-async def deprovision_project(project_id: str):
+async def deprovision_project(project_id: str, _a: tuple = Depends(require_admin)):
     """Projekt-Ressourcen entfernen (User, Samba-Share)."""
     cfg = projects.get(project_id)
     if not cfg:
@@ -2564,7 +2599,7 @@ def _update_project_matrix_room(project_id: str, room_id: str) -> None:
 # ================================================================== Tools
 
 @app.get("/tools")
-def list_tools():
+def list_tools(_a: tuple[str, str] = Depends(require_auth)):
     """Alle registrierten Tools mit Schema — fuer die Webkonsole."""
     from .tool_registry import registry
     result = {}
@@ -2603,7 +2638,7 @@ def _save_llm_config(config: dict) -> None:
 
 
 @app.get("/llm/config")
-def get_llm_config():
+def get_llm_config(_a: tuple = Depends(require_admin)):
     """LLM-Provider-Config lesen (API-Keys maskiert)."""
     config = _load_llm_config()
     providers = config.get("providers", {})
@@ -2787,7 +2822,7 @@ async def set_openai_codex_token(body: dict, _a: tuple = Depends(require_admin))
 
 
 @app.get("/llm/openai_codex_status")
-def get_openai_codex_status():
+def get_openai_codex_status(_a: tuple = Depends(require_admin)):
     """OpenAI Codex Token Status — konfiguriert, Account-ID."""
     import json as _json
     token_file = Path("/etc/octopos/openai_codex_token.json")
@@ -3148,7 +3183,7 @@ async def exchange_google_antigravity_code(body: dict, _a: tuple = Depends(requi
 
 
 @app.get("/llm/google_antigravity_status")
-def get_google_antigravity_status():
+def get_google_antigravity_status(_a: tuple = Depends(require_admin)):
     """Google Antigravity Token Status."""
     import json as _json
     token_file = Path("/etc/octopos/google_antigravity_token.json")
@@ -3208,7 +3243,7 @@ def get_claude_token_status(_a: tuple[str, str] = Depends(require_admin)):
 
 
 @app.get("/llm/ollama/models")
-async def get_ollama_models():
+async def get_ollama_models(_a: tuple[str, str] = Depends(require_auth)):
     """Verfuegbare Ollama-Modelle von lokalem Server abrufen."""
     import asyncio as _asyncio
     try:
@@ -3233,7 +3268,7 @@ async def get_ollama_models():
 
 
 @app.post("/llm/ollama/pull")
-async def pull_ollama_model(body: dict):
+async def pull_ollama_model(body: dict, _a: tuple = Depends(require_admin)):
     """Ollama-Modell herunterladen (blockiert bis fertig)."""
     model = body.get("model","").strip()
     if not model:
@@ -3472,8 +3507,8 @@ def heartbeat_tasks_status(_a: tuple = Depends(require_admin)):
 
 
 @app.get("/system/gpu")
-def gpu_info():
-    """nvidia-smi Monitoring — read-only, kein Auth nötig."""
+def gpu_info(_a: tuple[str, str] = Depends(require_auth)):
+    """nvidia-smi Monitoring — read-only für eingeloggte User."""
     import shutil, subprocess
     if not shutil.which("nvidia-smi"):
         return {"available": False, "reason": "nvidia-smi nicht gefunden"}
