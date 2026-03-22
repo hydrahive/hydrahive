@@ -1,24 +1,25 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { AdminLayout } from "@/components/layout/AdminLayout";
-import { LoginPage } from "@/pages/LoginPage";
-import { SetupPage } from "@/pages/SetupPage";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { AgentsPage } from "@/pages/AgentsPage";
-import { ProjectsPage } from "@/pages/ProjectsPage";
-import { ProjectCreatePage } from "@/pages/ProjectCreatePage";
-import { SystemPage } from "@/pages/SystemPage";
-import { ToolsPage } from "@/pages/ToolsPage";
-import { LlmConfigPage } from "@/pages/LlmConfigPage";
-import { UserPage } from "@/pages/UserPage";
-import { ChatPage } from "@/pages/ChatPage";
-import { AgentChatPage } from "@/pages/AgentChatPage";
-import { AuditPage } from "@/pages/AuditPage";
-import { BackupPage } from "@/pages/BackupPage";
-import { MyAgentPage } from "@/pages/MyAgentPage";
-import { McpConfigPage } from "@/pages/McpConfigPage";
-import GiteaConfigPage from "@/pages/GiteaConfigPage";
+
+const AdminLayout = lazy(() => import("@/components/layout/AdminLayout").then((m) => ({ default: m.AdminLayout })));
+const LoginPage = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
+const SetupPage = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
+const DashboardPage = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const AgentsPage = lazy(() => import("@/pages/AgentsPage").then((m) => ({ default: m.AgentsPage })));
+const ProjectsPage = lazy(() => import("@/pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));
+const ProjectCreatePage = lazy(() => import("@/pages/ProjectCreatePage").then((m) => ({ default: m.ProjectCreatePage })));
+const SystemPage = lazy(() => import("@/pages/SystemPage").then((m) => ({ default: m.SystemPage })));
+const ToolsPage = lazy(() => import("@/pages/ToolsPage").then((m) => ({ default: m.ToolsPage })));
+const LlmConfigPage = lazy(() => import("@/pages/LlmConfigPage").then((m) => ({ default: m.LlmConfigPage })));
+const UserPage = lazy(() => import("@/pages/UserPage").then((m) => ({ default: m.UserPage })));
+const ChatPage = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m.ChatPage })));
+const AgentChatPage = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
+const AuditPage = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
+const BackupPage = lazy(() => import("@/pages/BackupPage").then((m) => ({ default: m.BackupPage })));
+const MyAgentPage = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
+const McpConfigPage = lazy(() => import("@/pages/McpConfigPage").then((m) => ({ default: m.McpConfigPage })));
+const GiteaConfigPage = lazy(() => import("@/pages/GiteaConfigPage"));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -47,28 +48,30 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <SetupGuard>
-      <Routes>
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard"         element={<DashboardPage />} />
-          <Route path="agents"            element={<AgentsPage />} />
-          <Route path="projects"          element={<ProjectsPage />} />
-          <Route path="projects/new"      element={<ProjectCreatePage />} />
-          <Route path="chat/:id"          element={<ChatPage />} />
-          <Route path="agents/:id/chat"  element={<AgentChatPage />} />
-          <Route path="system"            element={<SystemPage />} />
-          <Route path="tools"             element={<ToolsPage />} />
-          <Route path="llm"              element={<LlmConfigPage />} />
-          <Route path="users"            element={<UserPage />} />
-          <Route path="audit"            element={<AuditPage />} />
-          <Route path="backup"           element={<BackupPage />} />
-          <Route path="my-agent"         element={<MyAgentPage />} />
-          <Route path="mcp"              element={<McpConfigPage />} />
-          <Route path="gitea"            element={<GiteaConfigPage />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<div className="min-h-screen bg-background" />}>
+        <Routes>
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard"         element={<DashboardPage />} />
+            <Route path="agents"            element={<AgentsPage />} />
+            <Route path="projects"          element={<ProjectsPage />} />
+            <Route path="projects/new"      element={<ProjectCreatePage />} />
+            <Route path="chat/:id"          element={<ChatPage />} />
+            <Route path="agents/:id/chat"   element={<AgentChatPage />} />
+            <Route path="system"            element={<SystemPage />} />
+            <Route path="tools"             element={<ToolsPage />} />
+            <Route path="llm"               element={<LlmConfigPage />} />
+            <Route path="users"             element={<UserPage />} />
+            <Route path="audit"             element={<AuditPage />} />
+            <Route path="backup"            element={<BackupPage />} />
+            <Route path="my-agent"          element={<MyAgentPage />} />
+            <Route path="mcp"               element={<McpConfigPage />} />
+            <Route path="gitea"             element={<GiteaConfigPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </SetupGuard>
   );
 }
