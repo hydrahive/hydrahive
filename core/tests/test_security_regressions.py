@@ -447,6 +447,61 @@ class SecurityRegressionTests(unittest.TestCase):
             project_id="octopos_dev",
         )
 
+    def test_tool_loop_uses_agent_max_tool_rounds_and_breaks_on_repeat(self):
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        boss_cfg = AgentConfig.model_validate(
+            {
+                "id": "personal_test",
+                "type": "specialist",
+                "identity": "Test",
+                "llm": {"model": "openai-codex/gpt-5.3-codex"},
+                "tools": ["file_read"],
+                "max_tool_rounds": 2,
+            }
+        )
+
+        repeated_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="call_1",
+                                item_id="fc_1",
+                                function=SimpleNamespace(name="file_read", arguments='{"path":"README.md"}'),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        class FakeTool:
+            async def execute(self, **kwargs):
+                return {"ok": True}
+
+        orchestrator._resolve_allowed_tool = mock.Mock(return_value=FakeTool())
+        orchestrator._llm_call = mock.AsyncMock(return_value=repeated_response)
+        orchestrator._finalize_tool_loop_response = mock.AsyncMock(
+            return_value=SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="final summary", tool_calls=None))]
+            )
+        )
+
+        result, _workers = asyncio.run(
+            orchestrator._tool_loop(
+                boss_cfg,
+                "project-test",
+                mock.MagicMock(),
+                [{"role": "system", "content": "sys"}],
+                repeated_response,
+            )
+        )
+
+        self.assertEqual(result, "final summary")
+        orchestrator._finalize_tool_loop_response.assert_awaited_once()
+
     def test_project_message_routes_accept_execution_mode_field(self):
         route = self._route("/projects/{project_id}/message", "POST")
         body_param = route.dependant.body_params[0]

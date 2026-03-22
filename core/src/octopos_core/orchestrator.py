@@ -210,6 +210,37 @@ class Orchestrator:
             **args,
         )
 
+    @staticmethod
+    def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
+        signature: list[str] = []
+        for tc in tool_calls:
+            fn = getattr(tc, "function", None)
+            name = getattr(fn, "name", "") or ""
+            arguments = getattr(fn, "arguments", "") or ""
+            signature.append(f"{name}:{arguments}")
+        return tuple(signature)
+
+    async def _finalize_tool_loop_response(
+        self,
+        boss_cfg: AgentConfig,
+        current_messages: list[dict],
+        *,
+        reason: str,
+        execution_mode: str | None = None,
+    ):
+        summary_messages = list(current_messages)
+        summary_messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"[System: Tool-Loop wird beendet ({reason}). "
+                    "Fasse die vorliegenden Ergebnisse jetzt kurz und konkret zusammen. "
+                    "Rufe keine weiteren Tools auf.]"
+                ),
+            }
+        )
+        return await self._llm_call(boss_cfg, summary_messages, tools=None)
+
     # ------------------------------------------------------------------ public
 
     def _get_queue(self, project_id: str) -> asyncio.Queue:
@@ -948,8 +979,25 @@ class Orchestrator:
                             msg = codex_resp.choices[0].message
                             # Tool-Loop (gleiche Logik wie litellm-Pfad unten)
                             cur_messages = list(messages)
+                            last_signature: tuple[str, ...] | None = None
+                            repeated_signature_count = 0
                             for _round in range(boss_cfg.max_tool_rounds):
                                 if not getattr(msg, "tool_calls", None):
+                                    break
+                                signature = self._tool_call_signature(msg.tool_calls)
+                                if signature and signature == last_signature:
+                                    repeated_signature_count += 1
+                                else:
+                                    repeated_signature_count = 0
+                                last_signature = signature
+                                if repeated_signature_count >= 1:
+                                    final = await self._finalize_tool_loop_response(
+                                        boss_cfg,
+                                        cur_messages,
+                                        reason="wiederholte Tool-Signatur",
+                                        execution_mode=execution_mode,
+                                    )
+                                    msg = final.choices[0].message
                                     break
                                 # Tool-Calls ausführen
                                 tool_results = []
@@ -1053,6 +1101,8 @@ class Orchestrator:
                             ]
 
                         # Agentic Tool-Loop für OAuth-Streaming
+                        last_tool_signature: tuple[str, ...] | None = None
+                        repeated_tool_signature_count = 0
                         for _round in range(boss_cfg.max_tool_rounds):
                             async with client.messages.stream(**kwargs) as stream:
                                 async for text in stream.text_stream:
@@ -1063,6 +1113,35 @@ class Orchestrator:
 
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
+                                break
+                            signature = tuple(
+                                f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
+                                for block in tool_use_blocks
+                            )
+                            if signature and signature == last_tool_signature:
+                                repeated_tool_signature_count += 1
+                            else:
+                                repeated_tool_signature_count = 0
+                            last_tool_signature = signature
+                            if repeated_tool_signature_count >= 1:
+                                kwargs_final = dict(kwargs)
+                                kwargs_final.pop("tools", None)
+                                kwargs_final["messages"] = filtered + [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",
+                                            }
+                                        ],
+                                    }
+                                ]
+                                async with client.messages.stream(**kwargs_final) as stream:
+                                    async for text in stream.text_stream:
+                                        full_response += text
+                                        streamed_any = True
+                                        yield f"data: {_json.dumps({'text': text})}\n\n"
                                 break
                             if _round == boss_cfg.max_tool_rounds - 2:
                                 # Vorletzter Durchlauf — Agent soll jetzt abschließen
@@ -1121,6 +1200,8 @@ class Orchestrator:
                         import json as _json2
                         model, api_base = self._resolve_model(_model_name, boss_cfg.llm.ollama_base_url)
                         loop_messages = list(messages)
+                        last_tool_signature: tuple[str, ...] | None = None
+                        repeated_tool_signature_count = 0
 
                         for _round in range(boss_cfg.max_tool_rounds):
                             kwargs = {
@@ -1167,6 +1248,27 @@ class Orchestrator:
 
                             # Assistant-Nachricht mit tool_calls in History
                             tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
+                            signature = tuple(
+                                f"{tc['name']}:{tc['arguments']}"
+                                for tc in tc_list
+                            )
+                            if signature and signature == last_tool_signature:
+                                repeated_tool_signature_count += 1
+                            else:
+                                repeated_tool_signature_count = 0
+                            last_tool_signature = signature
+                            if repeated_tool_signature_count >= 1:
+                                loop_messages.append({
+                                    "role": "user",
+                                    "content": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",
+                                })
+                                final_resp = await self._llm_call_single(_model_name, boss_cfg, loop_messages, tools=None)
+                                final_text = final_resp.choices[0].message.content or ""
+                                if final_text:
+                                    full_response += final_text
+                                    streamed_any = True
+                                    yield f"data: {_json.dumps({'text': final_text})}\n\n"
+                                break
 
                             def _safe_args(raw: str) -> str:
                                 """Stellt sicher dass arguments valides JSON ist."""
@@ -1258,7 +1360,7 @@ class Orchestrator:
         project_cfg: ProjectConfig,
         messages:    list[dict],
         response,
-        max_rounds:  int = 5,
+        max_rounds:  int | None = None,
         execution_mode: str | None = None,
     ) -> tuple[str, list[str]]:
         """
@@ -1271,17 +1373,48 @@ class Orchestrator:
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
         current_messages = list(messages)
         workers_used: list[str] = []
+        last_signature: tuple[str, ...] | None = None
+        repeated_signature_count = 0
+        max_rounds = max_rounds or boss_cfg.max_tool_rounds
 
         for _round in range(max_rounds):
             tool_calls = getattr(response.choices[0].message, "tool_calls", None)
             if not tool_calls:
                 return response.choices[0].message.content or "", workers_used
 
+            signature = self._tool_call_signature(tool_calls)
+            if signature and signature == last_signature:
+                repeated_signature_count += 1
+            else:
+                repeated_signature_count = 0
+            last_signature = signature
+
+            if repeated_signature_count >= 1:
+                logger.warning(
+                    "Tool-Loop: wiederholte Tool-Signatur erkannt (%s) — erzwinge Abschluss",
+                    ", ".join(signature[:3])[:180],
+                )
+                try:
+                    final = await self._finalize_tool_loop_response(
+                        boss_cfg,
+                        current_messages,
+                        reason="wiederholte Tool-Signatur",
+                        execution_mode=execution_mode,
+                    )
+                    return final.choices[0].message.content or "", workers_used
+                except Exception as e:
+                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}", workers_used
+
             # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
             if _round == max_rounds - 1:
                 logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
                 try:
-                    final = await self._llm_call(boss_cfg, current_messages, tools=None)
+                    final = await self._finalize_tool_loop_response(
+                        boss_cfg,
+                        current_messages,
+                        reason=f"max_rounds={max_rounds}",
+                        execution_mode=execution_mode,
+                    )
                     return final.choices[0].message.content or "", workers_used
                 except Exception as e:
                     return f"[Fehler] Konnte keine Antwort erzeugen: {e}", workers_used
