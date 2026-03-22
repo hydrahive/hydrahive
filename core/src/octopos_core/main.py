@@ -34,6 +34,7 @@ from .provisioner import Provisioner, get_admin_access_token
 from .router_agent_chat import register_agent_chat_routes
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
+from .router_user_integrations import register_user_integration_routes, setup_discord_clients
 from .router_users import register_user_routes
 from .session_manager import MessageRole, SessionManager
 
@@ -152,7 +153,12 @@ async def lifespan(app: FastAPI):
 
     # Discord-Bots für User mit konfiguriertem Bot-Token starten
     try:
-        await _setup_discord_clients()
+        await setup_discord_clients(
+            load_users=_load_users,
+            runtime=runtime,
+            orchestrator=orchestrator,
+            logger=logger,
+        )
     except Exception as e:
         logger.warning("Discord-Setup fehlgeschlagen: %s", e)
 
@@ -896,307 +902,20 @@ register_user_routes(
 )
 
 
-# ================================================================== WKS (Workstation-Zugriff)
-
 WKS_KEYS_DIR = Path("/etc/octopos/wks_keys")
 
 
-@auth_router.get("/me/wks")
-def get_my_wks(auth: tuple = Depends(require_auth)):
-    """WKS-Konfiguration des eingeloggten Users abrufen."""
-    username, _ = auth
-    users = _load_users()
-    wks = users.get(username, {}).get("wks", {})
-    return {
-        "configured":   bool(wks.get("ip")),
-        "ip":           wks.get("ip", ""),
-        "ssh_user":     wks.get("ssh_user", username),
-        "ollama_port":  wks.get("ollama_port", 11434),
-        "has_ssh_key":  (WKS_KEYS_DIR / username).exists(),
-    }
-
-
-class WksConfigRequest(BaseModel):
-    ip:           str
-    ssh_user:     str = ""
-    ollama_port:  int = 11434
-    ssh_key:      str = ""   # PEM-Inhalt des privaten SSH-Keys
-
-
-@auth_router.put("/me/wks")
-async def update_my_wks(req: WksConfigRequest, auth: tuple = Depends(require_auth)):
-    """WKS-Konfiguration des eingeloggten Users speichern."""
-    username, _ = auth
-    users = _load_users()
-    if username not in users:
-        raise HTTPException(404, "User nicht gefunden")
-
-    if req.ssh_key.strip():
-        WKS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
-        key_file = WKS_KEYS_DIR / username
-        key_file.write_text(req.ssh_key.strip() + "\n", encoding="utf-8")
-        import stat as _stat
-        key_file.chmod(_stat.S_IRUSR | _stat.S_IWUSR)   # 0o600
-
-    users[username]["wks"] = {
-        "ip":           req.ip.strip(),
-        "ssh_user":     req.ssh_user.strip() or username,
-        "ollama_port":  req.ollama_port,
-        "ssh_key_path": str(WKS_KEYS_DIR / username),
-    }
-    _save_users(users)
-    logger.info("WKS konfiguriert: %s → %s@%s", username, req.ssh_user or username, req.ip)
-    return {"updated": True}
-
-
-@auth_router.get("/me/wks/pubkey")
-def get_wks_pubkey(auth: tuple = Depends(require_auth)):
-    """Public Key des WKS SSH-Keys zurückgeben (für authorized_keys auf der Workstation)."""
-    import subprocess as _sp
-    username, _ = auth
-    key_file = WKS_KEYS_DIR / username
-    if not key_file.exists():
-        raise HTTPException(404, "Kein SSH-Key vorhanden — bitte erst generieren oder einfügen")
-    try:
-        result = _sp.run(
-            ["ssh-keygen", "-y", "-f", str(key_file)],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            raise HTTPException(500, f"ssh-keygen Fehler: {result.stderr}")
-        return {"public_key": result.stdout.strip()}
-    except FileNotFoundError:
-        raise HTTPException(500, "ssh-keygen nicht gefunden")
-
-
-@auth_router.post("/me/wks/generate-key")
-def generate_wks_key(auth: tuple = Depends(require_auth)):
-    """Neues ED25519 SSH-Keypair für WKS generieren. Gibt Public Key zurück."""
-    import subprocess as _sp
-    import tempfile, os as _os
-    username, _ = auth
-    WKS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
-    key_file = WKS_KEYS_DIR / username
-    # Temporär generieren dann verschieben
-    with tempfile.NamedTemporaryFile(delete=False, suffix="_wks") as tf:
-        tmp_path = tf.name
-    try:
-        _sp.run(
-            ["ssh-keygen", "-t", "ed25519", "-f", tmp_path, "-N", "",
-             "-C", f"octopos-wks@{username}"],
-            capture_output=True, check=True, timeout=10,
-        )
-        import shutil as _shutil
-        _shutil.move(tmp_path, str(key_file))
-        key_file.chmod(0o600)
-        _os.remove(tmp_path + ".pub")
-        # Public Key ausgeben
-        result = _sp.run(["ssh-keygen", "-y", "-f", str(key_file)],
-                         capture_output=True, text=True, timeout=5)
-        pub_key = result.stdout.strip()
-        logger.info("WKS SSH-Key generiert für %s", username)
-        audit_log("wks.key_generated", details={"user": username})
-        return {"generated": True, "public_key": pub_key}
-    except Exception as e:
-        try: _os.unlink(tmp_path)
-        except Exception: pass
-        raise HTTPException(500, f"Key-Generierung fehlgeschlagen: {e}")
-
-
-@auth_router.post("/me/wks/test-ssh")
-async def test_wks_ssh(auth: tuple = Depends(require_auth)):
-    """SSH-Verbindung zur Workstation testen (hostname + whoami)."""
-    import asyncio as _asyncio
-    username, _ = auth
-    users = _load_users()
-    wks = users.get(username, {}).get("wks", {})
-    ip       = wks.get("ip", "")
-    ssh_user = wks.get("ssh_user", username)
-    key_file = WKS_KEYS_DIR / username
-
-    if not ip:
-        raise HTTPException(400, "WKS nicht konfiguriert")
-    if not key_file.exists():
-        raise HTTPException(400, "Kein SSH-Key vorhanden")
-
-    try:
-        proc = await _asyncio.create_subprocess_exec(
-            "ssh", "-i", str(key_file),
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=5",
-            "-o", "BatchMode=yes",
-            f"{ssh_user}@{ip}", "hostname && whoami",
-            stdout=_asyncio.subprocess.PIPE,
-            stderr=_asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await _asyncio.wait_for(proc.communicate(), timeout=10)
-        if proc.returncode == 0:
-            output = stdout.decode().strip()
-            lines  = output.splitlines()
-            return {"ok": True, "hostname": lines[0] if lines else "", "user": lines[1] if len(lines) > 1 else ""}
-        else:
-            return {"ok": False, "error": stderr.decode().strip()[:300]}
-    except _asyncio.TimeoutError:
-        return {"ok": False, "error": "Timeout — Host nicht erreichbar"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-@auth_router.get("/me/wks/ollama-models")
-async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):
-    """Verfügbare Ollama-Modelle von der Workstation des Users abfragen."""
-    import httpx as _httpx
-    username, _ = auth
-    users = _load_users()
-    wks = users.get(username, {}).get("wks", {})
-    if not wks.get("ip"):
-        return {"models": [], "wks_url": None}
-
-    wks_url = f"http://{wks['ip']}:{wks.get('ollama_port', 11434)}"
-    try:
-        async with _httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(f"{wks_url}/api/tags")
-            if resp.status_code == 200:
-                tags = resp.json().get("models", [])
-                models = [
-                    {"id": f"ollama/{t['name']}", "label": f"WKS: {t['name']}", "provider": "wks_ollama"}
-                    for t in tags if t.get("name")
-                ]
-                return {"models": models, "wks_url": wks_url}
-    except Exception as e:
-        return {"models": [], "wks_url": wks_url, "error": str(e)}
-    return {"models": [], "wks_url": wks_url}
-
-
-# ================================================================== Discord (/me/discord)
-
-class DiscordConfigRequest(BaseModel):
-    bot_token:   str
-    guild_id:    str = ""
-    channel_ids: list[str] = []
-
-
-@auth_router.get("/me/discord")
-def get_my_discord(auth: tuple = Depends(require_auth)):
-    """Discord-Konfiguration des eingeloggten Users abrufen."""
-    username, _ = auth
-    from .discord_agent import load_discord_config
-    cfg = load_discord_config(username)
-    if not cfg:
-        return {"configured": False}
-    return {
-        "configured":  True,
-        "guild_id":    cfg.get("guild_id", ""),
-        "channel_ids": cfg.get("channel_ids", []),
-        "connected":   _discord_client_connected(username),
-    }
-
-
-@auth_router.put("/me/discord", status_code=200)
-async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
-    """Discord-Bot-Token speichern und Bot starten."""
-    username, _ = auth
-    from .discord_agent import save_discord_config, AgentDiscordClient
-    from .tool_registry import _discord_clients
-
-    cfg = {
-        "bot_token":   req.bot_token.strip(),
-        "guild_id":    req.guild_id.strip(),
-        "channel_ids": [c.strip() for c in req.channel_ids if c.strip()],
-    }
-    save_discord_config(username, cfg)
-
-    personal_agent_id = f"personal_{username}"
-
-    # Test ob Token gültig ist
-    test_client = AgentDiscordClient(
-        agent_id    = personal_agent_id,
-        bot_token   = cfg["bot_token"],
-        guild_id    = cfg["guild_id"],
-        channel_ids = cfg["channel_ids"],
-        orchestrator = orchestrator,
-    )
-    test_result = await test_client.test_connection()
-    if not test_result.get("ok"):
-        from .discord_agent import delete_discord_config
-        delete_discord_config(username)
-        raise HTTPException(400, f"Discord-Token ungültig: {test_result.get('error', '')}")
-
-    # Alten Client stoppen und neuen starten
-    await runtime.detach_discord_client(username)
-    client = AgentDiscordClient(
-        agent_id    = personal_agent_id,
-        bot_token   = cfg["bot_token"],
-        guild_id    = cfg["guild_id"],
-        channel_ids = cfg["channel_ids"],
-        orchestrator = orchestrator,
-    )
-    _discord_clients[username] = client
-    await runtime.attach_discord_client(username, client)
-
-    audit_log("discord.configured", details={"user": username, "bot": test_result.get("bot_name", "")})
-    logger.info("Discord konfiguriert für %s: Bot '%s'", username, test_result.get("bot_name", ""))
-    return {"updated": True, "bot_name": test_result.get("bot_name", ""), "bot_id": test_result.get("bot_id", "")}
-
-
-@auth_router.delete("/me/discord", status_code=200)
-async def delete_my_discord(auth: tuple = Depends(require_auth)):
-    """Discord-Konfiguration löschen und Bot stoppen."""
-    username, _ = auth
-    from .discord_agent import delete_discord_config
-    from .tool_registry import _discord_clients
-    await runtime.detach_discord_client(username)
-    _discord_clients.pop(username, None)
-    delete_discord_config(username)
-    audit_log("discord.removed", details={"user": username})
-    return {"deleted": True}
-
-
-@auth_router.post("/me/discord/test")
-async def test_my_discord(auth: tuple = Depends(require_auth)):
-    """Discord-Token testen ohne zu speichern."""
-    username, _ = auth
-    from .discord_agent import load_discord_config, AgentDiscordClient
-    cfg = load_discord_config(username)
-    if not cfg:
-        raise HTTPException(400, "Discord nicht konfiguriert")
-    test_client = AgentDiscordClient(
-        agent_id    = f"personal_{username}",
-        bot_token   = cfg["bot_token"],
-        guild_id    = cfg["guild_id"],
-        channel_ids = cfg.get("channel_ids", []),
-        orchestrator = orchestrator,
-    )
-    result = await test_client.test_connection()
-    return result
-
-
-def _discord_client_connected(agent_id: str) -> bool:
-    from .tool_registry import _discord_clients
-    client = _discord_clients.get(agent_id)
-    return bool(client and getattr(client, "is_connected", False))
-
-
-async def _setup_discord_clients() -> None:
-    """Discord-Bots für alle konfigurierten User beim Start laden."""
-    from .discord_agent import load_discord_config, AgentDiscordClient
-    from .tool_registry import _discord_clients
-    users = _load_users()
-    for username in users:
-        cfg = load_discord_config(username)
-        if not cfg:
-            continue
-        personal_agent_id = f"personal_{username}"
-        client = AgentDiscordClient(
-            agent_id    = personal_agent_id,
-            bot_token   = cfg["bot_token"],
-            guild_id    = cfg.get("guild_id", ""),
-            channel_ids = cfg.get("channel_ids", []),
-            orchestrator = orchestrator,
-        )
-        _discord_clients[username] = client
-        await runtime.attach_discord_client(username, client)
-        logger.info("Discord-Bot für User '%s' (Agent: %s) gestartet", username, personal_agent_id)
+register_user_integration_routes(
+    auth_router,
+    require_auth=require_auth,
+    load_users=_load_users,
+    save_users=_save_users,
+    wks_keys_dir=WKS_KEYS_DIR,
+    runtime=runtime,
+    orchestrator=orchestrator,
+    audit_log=audit_log,
+    logger=logger,
+)
 
 
 # ================================================================== AgentLink
