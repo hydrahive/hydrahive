@@ -1,0 +1,17 @@
+[Unit]
+Description=OctopOS A-MEM Search UI
+After=network.target octopos-amem.service
+Wants=octopos-amem.service
+
+[Service]
+Type=simple
+User=octopos
+Group=octopos
+WorkingDirectory=/opt/amem-search
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/amem/.venv/bin/python /opt/amem-search/search_ui.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -18,9 +18,6 @@ GITHUB_REPO="https://github.com/tilleulenspiegel/octopos.git"
 GITEA_CONFIG="/etc/octopos/gitea_config.json"
 TOKEN_FILE="/etc/octopos/github_token"
 TMPDIR_BASE="/tmp/octopos-update-$$"
-AMEM_ENABLED="${AMEM_ENABLED:-1}"
-AMEM_URL="${AMEM_URL:-http://192.168.1.5:8020/sse}"
-AMEM_SEARCH_UI_URL="${AMEM_SEARCH_UI_URL:-http://192.168.1.5:8021}"
 
 # Log-Datei für Webhook-Deploy (damit GET /admin/update/status etwas zum Lesen hat)
 UPDATE_LOG="/var/log/octopos-update.log"
@@ -149,38 +146,11 @@ if systemctl is-enabled --quiet gitea 2>/dev/null; then
     fi
 fi
 
-# --- 9. MCP-Presets sicherstellen ---
-python3 - <<PY
-import json
-from pathlib import Path
-
-enabled = ${AMEM_ENABLED}
-amem_url = "${AMEM_URL}"
-amem_search_ui_url = "${AMEM_SEARCH_UI_URL}"
-path = Path("/etc/octopos/mcp_servers.json")
-path.parent.mkdir(parents=True, exist_ok=True)
-try:
-    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-except Exception:
-    data = {}
-servers = list(data.get("servers", []))
-if enabled and not any(s.get("id") == "amem" for s in servers):
-    servers.append({
-        "id": "amem",
-        "name": "A-MEM Shared Memory",
-        "transport": "sse",
-        "url": amem_url,
-        "headers": {},
-        "meta": {
-            "role": "shared_memory",
-            "search_ui_url": amem_search_ui_url,
-        },
-    })
-path.write_text(json.dumps({"servers": servers}, indent=2), encoding="utf-8")
-PY
-chown octopos:octopos /etc/octopos/mcp_servers.json 2>/dev/null || true
-chmod 600 /etc/octopos/mcp_servers.json 2>/dev/null || true
-success "MCP-Presets aktualisiert"
+# --- 9. A-MEM aktualisieren ---
+info "Aktualisiere A-MEM..."
+bash "${TMPDIR_BASE}/installer/amem/install_amem.sh" \
+    || error "A-MEM Update fehlgeschlagen"
+success "A-MEM aktualisiert"
 
 # --- 10. Versions-Info + Status-Datei ---
 COMMIT=$(git -C "${TMPDIR_BASE}" rev-parse --short HEAD 2>/dev/null || echo "unbekannt")
