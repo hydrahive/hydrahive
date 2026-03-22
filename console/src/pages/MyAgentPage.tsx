@@ -40,6 +40,8 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "gitea_repo_commits", label: "Gitea-Repo Commits" },
   { id: "gitea_repo_diff", label: "Gitea-Repo Diff" },
   { id: "gitea_create_issue", label: "Gitea-Issue erstellen" },
+  { id: "gitea_comment_issue", label: "Gitea-Issue kommentieren" },
+  { id: "gitea_update_issue", label: "Gitea-Issue aktualisieren" },
   { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
   { id: "wks_file_read",    label: "WKS Datei lesen" },
   { id: "wks_file_write",   label: "WKS Datei schreiben" },

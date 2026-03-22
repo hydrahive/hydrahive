@@ -88,6 +88,17 @@ class GiteaClient:
                     return {}
                 return await resp.json()
 
+    async def _patch(self, path: str, data: dict) -> dict:
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                f"{self.url}/api/v1{path}",
+                headers=self._headers(),
+                json=data,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+
     async def _delete(self, path: str) -> None:
         async with aiohttp.ClientSession() as session:
             async with session.delete(
@@ -197,6 +208,40 @@ class GiteaClient:
         if labels:
             data["labels"] = labels
         return await self._post(f"/repos/{owner}/{repo}/issues", data)
+
+    async def comment_issue_for_repo(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        body: str,
+    ) -> dict:
+        return await self._post(
+            f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+            {"body": body},
+        )
+
+    async def update_issue_for_repo(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: str | None = None,
+        labels: list[str] | None = None,
+    ) -> dict:
+        data: dict[str, Any] = {}
+        if title is not None:
+            data["title"] = title
+        if body is not None:
+            data["body"] = body
+        if state is not None:
+            data["state"] = state
+        if labels is not None:
+            data["labels"] = labels
+        return await self._patch(f"/repos/{owner}/{repo}/issues/{issue_number}", data)
 
     # ------------------------------------------------------------------ PRs
 

@@ -20,7 +20,7 @@ from octopos_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool
+from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -349,6 +349,66 @@ class SecurityRegressionTests(unittest.TestCase):
             "Test issue",
             body="Body",
             labels=["review"],
+        )
+
+    def test_gitea_comment_issue_tool_uses_repo_reference(self):
+        tool = GiteaCommentIssueTool()
+        fake_client = mock.Mock(org="octopos")
+        fake_client.comment_issue_for_repo = mock.AsyncMock(return_value={
+            "id": 99,
+            "html_url": "http://example.local/octopos/octopos/issues/1#issuecomment-99",
+        })
+
+        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+            result = asyncio.run(
+                tool.execute(
+                    "personal_till",
+                    "personal_till",
+                    repo="octopos/octopos",
+                    issue_number=138,
+                    body="Kommentar",
+                )
+            )
+
+        self.assertTrue(result["commented"])
+        fake_client.comment_issue_for_repo.assert_awaited_once_with(
+            "octopos",
+            "octopos",
+            138,
+            "Kommentar",
+        )
+
+    def test_gitea_update_issue_tool_can_close_issue(self):
+        tool = GiteaUpdateIssueTool()
+        fake_client = mock.Mock(org="octopos")
+        fake_client.update_issue_for_repo = mock.AsyncMock(return_value={
+            "number": 139,
+            "html_url": "http://example.local/octopos/octopos/issues/139",
+            "state": "closed",
+            "title": "Temp placeholder - ignore",
+        })
+
+        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+            result = asyncio.run(
+                tool.execute(
+                    "personal_till",
+                    "personal_till",
+                    repo="octopos/octopos",
+                    issue_number=139,
+                    state="closed",
+                )
+            )
+
+        self.assertTrue(result["updated"])
+        self.assertEqual(result["state"], "closed")
+        fake_client.update_issue_for_repo.assert_awaited_once_with(
+            "octopos",
+            "octopos",
+            139,
+            title=None,
+            body=None,
+            state="closed",
+            labels=None,
         )
 
     def test_resolve_repo_ref_accepts_url_and_short_forms(self):
