@@ -1,6 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FolderKanban, Plus, RefreshCw, HardDrive, Hash, Users, Webhook, GitMerge, Trash2, ArrowRight, Radar, Workflow } from "lucide-react";
+import {
+  FolderKanban,
+  Plus,
+  RefreshCw,
+  HardDrive,
+  Hash,
+  Users,
+  Webhook,
+  GitMerge,
+  Trash2,
+  ArrowRight,
+  Radar,
+  Workflow,
+  Server,
+  MessageSquare,
+  ShieldAlert,
+  Boxes,
+  GitBranch,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
@@ -112,10 +130,12 @@ export function ProjectsPage() {
   const stats = useMemo(() => {
     const swarm = projectList.filter(([, proj]) => proj.show_swarm).length;
     const workers = projectList.reduce((acc, [, proj]) => acc + proj.workers.length, 0);
+    const matrix = projectList.filter(([, proj]) => !!proj.matrix_room).length;
     return [
-      { label: "Projekte", value: projectList.length, note: "Konfigurierte Flaechen" },
-      { label: "Swarm", value: swarm, note: "Mit Worker-Sicht aktiv" },
-      { label: "Worker", value: workers, note: "Delegierte Agenten" },
+      { label: "Projekte", value: projectList.length, note: "Konfigurierte Arbeitsraeume" },
+      { label: "Swarm", value: swarm, note: "Mit sichtbarer Worker-Ebene" },
+      { label: "Worker", value: workers, note: "Gebundene Team-Agenten" },
+      { label: "Matrix", value: matrix, note: "Mit verbundenem Raum" },
     ];
   }, [projectList]);
 
@@ -131,15 +151,15 @@ export function ProjectsPage() {
               </span>
               <span className="status-pill">
                 <Workflow className="h-3.5 w-3.5" />
-                Queue-, Handoff- und Webhook-Flaechen gebuendelt
+                Arbeitsraeume mit Chat, AgentLink und Webhooks
               </span>
             </div>
 
             <div>
               <h1 className="shell-title">Projekte als steuerbare Arbeitsraeume</h1>
               <p className="shell-copy mt-3 max-w-2xl">
-                Projekte verbinden Agenten, Filesystem, Matrix, Handoffs und Webhooks. Diese Seite ist jetzt auf dieselbe
-                Shell gezogen wie das Dashboard: klarere Kopfstruktur, bessere Karten und weniger visuelles Rauschen.
+                Projekte verbinden Boss-Agenten, Worker, Filesystem, Matrix, Integrationen und den operativen Chat.
+                Diese Seite zeigt jetzt staerker den echten Arbeitsraum pro Projekt statt nur seine Konfiguration.
               </p>
             </div>
           </div>
@@ -174,7 +194,7 @@ export function ProjectsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => (
           <div key={item.label} className="metric-card">
             <p className="metric-kicker">{item.label}</p>
@@ -308,70 +328,178 @@ export function ProjectsPage() {
         <section className="space-y-4">
           {projectList.map(([id, proj]) => (
             <div key={id} className="app-panel overflow-hidden">
-              <div className="p-5">
+              <div className="p-5 space-y-5">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="flex items-start gap-4">
                     <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
                       <FolderKanban className="h-5 w-5" />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-lg font-semibold tracking-tight">{proj.name}</span>
                         <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{id}</span>
                         {proj.show_swarm && <span className="status-pill status-pill-ok">Swarm sichtbar</span>}
+                        {proj.matrix_room && <span className="status-pill">Matrix aktiv</span>}
                       </div>
                       {proj.description && <p className="max-w-2xl text-sm text-muted-foreground">{proj.description}</p>}
-                      <div className="grid gap-3 pt-1 text-sm text-muted-foreground md:grid-cols-3">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4" />
-                          <span>{proj.boss}{proj.workers.length > 0 ? ` + ${proj.workers.length} Worker` : ""}</span>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="status-pill">
+                          <Users className="h-3.5 w-3.5" />
+                          Boss {proj.boss}
+                        </span>
+                        <span className="status-pill">
+                          <Boxes className="h-3.5 w-3.5" />
+                          {proj.workers.length} Worker
+                        </span>
+                        <span className="status-pill">
+                          <HardDrive className="h-3.5 w-3.5" />
+                          {proj.system_user}
+                        </span>
+                        <span className="status-pill">
+                          <GitBranch className="h-3.5 w-3.5" />
+                          Filespace bereit
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[26rem]">
+                    <button
+                      onClick={() => navigate(`/chat/${id}`)}
+                      className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background"
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="rounded-2xl bg-primary/12 p-2 text-primary">
+                          <MessageSquare className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block font-medium">Chat</span>
+                          <span className="text-xs text-muted-foreground">Direkt in den Arbeitsraum</span>
+                        </span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    <button
+                      onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}
+                      className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${agentlinkProject === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`rounded-2xl p-2 ${agentlinkProject === id ? "bg-primary/15" : "bg-secondary"}`}>
+                          <GitMerge className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block font-medium">AgentLink</span>
+                          <span className="text-xs text-muted-foreground">Handoffs und Folgearbeit</span>
+                        </span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    <button
+                      onClick={() => setWebhookProject((p) => (p === id ? null : id))}
+                      className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${webhookProject === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`rounded-2xl p-2 ${webhookProject === id ? "bg-primary/15" : "bg-secondary"}`}>
+                          <Webhook className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block font-medium">Webhooks</span>
+                          <span className="text-xs text-muted-foreground">Push-, Wake- und Trigger-Events</span>
+                        </span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    <div className="rounded-3xl border bg-secondary/50 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-2xl bg-background p-2 text-foreground/75">
+                          <Server className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium">Runtime-Kontext</p>
+                          <p className="text-xs text-muted-foreground">Infrastruktur, Matrix und Benutzer kompakt</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <HardDrive className="h-4 w-4" />
-                          <span>{proj.system_user}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_0.9fr]">
+                  <div className="rounded-3xl border bg-background/55 p-4">
+                    <p className="metric-kicker">Arbeitsraum</p>
+                    <div className="mt-3 space-y-3 text-sm">
+                      <div className="flex items-start gap-3">
+                        <HardDrive className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="font-medium">Filesystem</p>
+                          <p className="break-all text-muted-foreground">{proj.filesystem}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Hash className="h-4 w-4" />
-                          <span className="truncate">{proj.matrix_room || "kein Room"}</span>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <Server className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="font-medium">System-User</p>
+                          <p className="text-muted-foreground">{proj.system_user}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <Hash className="mt-0.5 h-4 w-4 text-primary" />
+                        <div>
+                          <p className="font-medium">Matrix-Raum</p>
+                          <p className="break-all text-muted-foreground">{proj.matrix_room || "Noch kein Raum verbunden"}</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 xl:max-w-[24rem] xl:justify-end">
-                    <button
-                      onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}
-                      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${agentlinkProject === id ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}
-                    >
-                      <GitMerge className="h-4 w-4" />
-                      AgentLink
-                    </button>
-                    <button
-                      onClick={() => setWebhookProject((p) => (p === id ? null : id))}
-                      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${webhookProject === id ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}
-                    >
-                      <Webhook className="h-4 w-4" />
-                      Webhooks
-                    </button>
-                    <button onClick={() => navigate(`/chat/${id}`)} className="inline-flex items-center gap-2 rounded-2xl border bg-background/70 px-3 py-2 text-sm transition hover:bg-background">
-                      Chat oeffnen
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
-                    {isAdmin && (confirmDel === id ? (
-                      <span className="flex items-center gap-2">
-                        <button onClick={() => handleDelete(id)} disabled={deleting === id} className="rounded-2xl bg-destructive px-3 py-2 text-xs text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
-                          Ja, loeschen
+                  <div className="rounded-3xl border bg-background/55 p-4">
+                    <p className="metric-kicker">Team</p>
+                    <div className="mt-3 space-y-3 text-sm">
+                      <div className="rounded-2xl bg-secondary/60 px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Boss</p>
+                        <p className="mt-1 font-medium">{proj.boss}</p>
+                      </div>
+                      <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Worker</p>
+                        {proj.workers.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {proj.workers.map((worker) => (
+                              <span key={worker} className="rounded-full bg-background px-2.5 py-1 text-xs">
+                                {worker}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-muted-foreground">Keine Worker hinterlegt</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-destructive/15 bg-destructive/5 p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                      <ShieldAlert className="h-4 w-4" />
+                      Danger Zone
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Projektloeschung entfernt Arbeitsraum, Sessions und Integrationen. Diese Aktion bleibt bewusst getrennt.
+                    </p>
+                    <div className="mt-4">
+                      {isAdmin && (confirmDel === id ? (
+                        <div className="space-y-2">
+                          <button onClick={() => handleDelete(id)} disabled={deleting === id} className="w-full rounded-2xl bg-destructive px-3 py-2 text-sm text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
+                            Ja, Projekt endgueltig loeschen
+                          </button>
+                          <button onClick={() => setConfirmDel(null)} className="w-full rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
+                            Abbrechen
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDel(id)} disabled={!!deleting} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50">
+                          <Trash2 className="h-4 w-4" />
+                          Projekt loeschen
                         </button>
-                        <button onClick={() => setConfirmDel(null)} className="rounded-2xl border px-3 py-2 text-xs transition hover:bg-accent">
-                          Abbrechen
-                        </button>
-                      </span>
-                    ) : (
-                      <button onClick={() => setConfirmDel(id)} disabled={!!deleting} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm text-muted-foreground transition hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50">
-                        <Trash2 className="h-4 w-4" />
-                        Loeschen
-                      </button>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
