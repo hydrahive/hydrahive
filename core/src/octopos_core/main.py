@@ -3760,7 +3760,10 @@ def update_gitea_config(req: GiteaConfigRequest, _a: tuple = Depends(require_adm
     import json as _json
     from .gitea import reload_gitea_client
     data = req.model_dump()
-    Path(GITEA_CONFIG_FILE).write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    cfg_path = Path(GITEA_CONFIG_FILE)
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    cfg_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    cfg_path.chmod(0o600)
     reload_gitea_client()
     logger.info("Gitea-Config aktualisiert: url=%s org=%s", req.url, req.org)
     return {"updated": True}
