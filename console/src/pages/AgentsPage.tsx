@@ -278,13 +278,13 @@ export function AgentsPage() {
                 <Workflow className="h-4 w-4 text-primary" />
                 Agentaktionen
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={refresh} disabled={refreshing} className="inline-flex items-center gap-2 rounded-2xl border bg-background/70 px-4 py-2 text-sm transition hover:bg-background disabled:opacity-50">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <button onClick={refresh} disabled={refreshing} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-background/70 px-4 py-2 text-sm transition hover:bg-background disabled:opacity-50">
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
                   Aktualisieren
                 </button>
                 {isAdmin && (
-                  <button onClick={openNew} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90">
+                  <button onClick={openNew} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90">
                     <Plus className="h-3.5 w-3.5" />
                     Neuer Agent
                   </button>
@@ -309,7 +309,7 @@ export function AgentsPage() {
 
       {showForm && (
         <section className="section-card space-y-5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="metric-kicker">Konfiguration</p>
               <h2 className="mt-2 text-xl font-semibold tracking-tight">{editId ? `Agent bearbeiten: ${editId}` : "Neuen Agent anlegen"}</h2>
@@ -358,7 +358,7 @@ export function AgentsPage() {
                       ))
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       value={fallbackInput}
                       onChange={(e) => setFallbackInput(e.target.value)}
@@ -383,7 +383,7 @@ export function AgentsPage() {
                       const v = fallbackInput.trim();
                       if (v && !form.fallback_models.includes(v)) set("fallback_models", [...form.fallback_models, v]);
                       setFallbackInput("");
-                    }} disabled={!fallbackInput.trim()} className="rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent disabled:opacity-40">
+                    }} disabled={!fallbackInput.trim()} className="rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent disabled:opacity-40 sm:self-start">
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -455,7 +455,7 @@ export function AgentsPage() {
             </Field>
 
             {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
               <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                 <Save className="h-3.5 w-3.5" />
@@ -527,7 +527,7 @@ export function AgentsPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:w-[26rem]">
+                    <div className="grid gap-3 md:grid-cols-2 xl:w-[26rem]">
                       <button onClick={() => navigate(`/agents/${id}/chat`)} className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background">
                         <span className="flex items-center gap-3">
                           <span className="rounded-2xl bg-primary/12 p-2 text-primary"><MessageSquare className="h-4 w-4" /></span>
@@ -570,7 +570,7 @@ export function AgentsPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr_0.9fr]">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.1fr_1fr_0.9fr]">
                     <div className="rounded-3xl border bg-background/55 p-4">
                       <p className="metric-kicker">Runtime</p>
                       <div className="mt-3 space-y-3 text-sm">
@@ -600,7 +600,7 @@ export function AgentsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border bg-background/55 p-4">
+                    <div className="rounded-3xl border bg-background/55 p-4 md:col-span-2 xl:col-span-1">
                       <p className="metric-kicker">Profil</p>
                       <div className="mt-3 space-y-3 text-sm">
                         <div className="rounded-2xl bg-secondary/60 px-3 py-3">

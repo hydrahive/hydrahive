@@ -205,7 +205,7 @@ export function DashboardPage() {
 
       <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="section-card">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="metric-kicker">Lagebild</p>
               <h2 className="mt-2 text-xl font-semibold tracking-tight">Kompakte Betriebsansicht</h2>
@@ -244,7 +244,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_1fr_1fr]">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.15fr_1fr_1fr]">
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" />
@@ -295,7 +295,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="section-card">
+        <div className="section-card md:col-span-2 xl:col-span-1">
           <div className="flex items-center gap-2">
             <Layers3 className="h-4 w-4 text-primary" />
             <h2 className="text-lg font-semibold tracking-tight">Letzte Audit-Events</h2>
@@ -332,7 +332,7 @@ export function DashboardPage() {
             ) : (
               problemAgents.slice(0, 5).map((agent) => (
                 <div key={agent.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-sm font-medium text-foreground">{agent.id}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{agent.detail}</div>
@@ -358,7 +358,7 @@ export function DashboardPage() {
             ) : (
               projectSignals.slice(0, 5).map((project) => (
                 <div key={project.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <span className="font-medium text-foreground">{project.title}</span>
                     <span className={project.tone === "warn" ? "status-pill bg-accent/15 text-accent" : "status-pill status-pill-ok"}>
                       aktiv
