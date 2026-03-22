@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 
 
@@ -138,7 +138,7 @@ def register_user_routes(
 
     @auth_router.post("/me/agent/message/stream")
     async def my_agent_message_stream(
-        req: incoming_message_model,
+        body: dict = Body(...),
         auth: tuple[str, str] = Depends(require_auth),
     ):
         from fastapi.responses import StreamingResponse as _SR
@@ -146,6 +146,7 @@ def register_user_routes(
         from .project_config import ProjectConfig as _PC
         from .project_config import ProjectIdentity as _PI
 
+        req = incoming_message_model.model_validate(body)
         username, _role = auth
         agent_id, cfg = ensure_personal_agent(username)
         if cfg is None:
