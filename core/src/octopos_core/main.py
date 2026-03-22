@@ -30,6 +30,7 @@ from .orchestrator import Orchestrator
 from .project_config import ProjectConfig
 from .project_loader import ProjectLoader
 from .provisioner import Provisioner, get_admin_access_token
+from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .session_manager import MessageRole, SessionManager
 
@@ -572,330 +573,11 @@ def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost
     return {"ok": True}
 
 
-# ================================================================== Projekte
-
-@auth_router.get("/projects")
-def list_projects(_a: tuple[str, str] = Depends(require_auth)):
-    return {
-        pid: {
-            "name":        cfg.identity.name,
-            "description": cfg.identity.description,
-            "boss":        cfg.agents.boss,
-            "workers":     cfg.agents.workers,
-            "matrix_room": cfg.matrix.room,
-            "filesystem":  cfg.effective_filesystem_path(),
-            "system_user": cfg.effective_system_user(),
-            "show_swarm":  cfg.chat.show_swarm,
-        }
-        for pid, cfg in projects.projects.items()
-    }
-
-
-@auth_router.get("/projects/{project_id}")
-def get_project(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    known = set(discovery.agents.keys())
-    missing = [a for a in cfg.all_agents if a not in known]
-    return {
-        "config":          cfg.model_dump(exclude={"project_dir"}),
-        "missing_agents":  missing,
-        "system_user":     cfg.effective_system_user(),
-        "filesystem_path": cfg.effective_filesystem_path(),
-    }
-
-
-@auth_router.get("/projects/{project_id}/agents")
-def project_agents(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    running = runtime.status_all()
-    return {
-        agent_id: {
-            "role":    "boss" if agent_id == cfg.agents.boss else "worker",
-            "found":   discovery.get(agent_id) is not None,
-            "runtime": running.get(agent_id),
-        }
-        for agent_id in cfg.all_agents
-    }
-
-
-
-
-class CreateProjectRequest(BaseModel):
-    id:          str
-    name:        str
-    description: str = ""
-    boss:        str
-    workers:     list[str] = []
-    samba:       bool = True
-    nfs:         bool = False
-    show_swarm:  bool = False
-
-
-@admin_router.post("/projects", status_code=201)
-async def create_project(req: CreateProjectRequest, _a: tuple = Depends(require_admin)):
-    """
-    Neues Projekt anlegen — alles in einem Schritt:
-    1. Verzeichnis + project.yaml schreiben
-    2. Provisionieren (Linux-User, Samba-Share, Matrix-Room)
-    Das ist der Endpoint den die Webkonsole aufruft.
-    """
-    import re
-    import asyncio as _asyncio
-    import yaml as _yaml
-
-    if not re.match(r"^[a-z0-9_-]+$", req.id):
-        raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
-
-    if projects.get(req.id):
-        raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
-
-    if not discovery.get(req.boss):
-        raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht in Discovery")
-
-    project_dir = Path(PROJECTS_DIR) / req.id
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    project_data = {
-        "id": req.id, "version": "1.0.0",
-        "identity": {"name": req.name, "description": req.description},
-        "agents":   {"boss": req.boss, "workers": req.workers},
-        "matrix":   {"room": ""},
-        "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
-        "system":   {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
-        "chat":     {"show_swarm": req.show_swarm},
-    }
-    yaml_path = project_dir / "project.yaml"
-    yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-    logger.info("project.yaml geschrieben: %s", yaml_path)
-    audit_log("project.create", target=req.id, project_id=req.id, details={"boss": req.boss})
-
-    await _asyncio.sleep(0.3)
-
-    cfg = projects.get(req.id) or projects.register(project_dir)
-    if cfg is None:
-        raise HTTPException(500, "Projekt konnte nach Anlage nicht geladen werden")
-
-    if provisioner is None:
-        raise HTTPException(503, "Provisioner nicht initialisiert")
-
-    result = await provisioner.provision(cfg)
-    audit_log("project.provision", target=project_id, project_id=project_id)
-    if result.matrix_room and not cfg.matrix.room:
-        _update_project_matrix_room(req.id, result.matrix_room)
-
-    # Gitea-Repo anlegen (best-effort — kein harter Fehler wenn Gitea nicht verfügbar)
-    gitea_repo_url = ""
-    gitea_error    = ""
-    try:
-        from .gitea import get_gitea_client
-        gitea = get_gitea_client()
-        repo  = await gitea.create_repo(req.id, description=req.description or "")
-        gitea_repo_url = repo.get("html_url", "")
-        # Webhook einrichten: Gitea push auf main → /webhooks/gitea/{project_id}
-        webhook_url = f"http://127.0.0.1:8765/webhooks/gitea/{req.id}"
-        await gitea.create_webhook(req.id, webhook_url)
-        logger.info("Gitea-Repo '%s' angelegt: %s", req.id, gitea_repo_url)
-    except Exception as _ge:
-        gitea_error = str(_ge)
-        logger.warning("Gitea-Repo konnte nicht angelegt werden: %s", _ge)
-
-    return {
-        "created": True, "project_id": req.id,
-        "linux_user": result.linux_user, "files_dir": result.files_dir,
-        "samba_share": result.samba_share, "matrix_room": result.matrix_room,
-        "warnings": result.warnings, "ok": result.ok,
-        "gitea_repo": gitea_repo_url, "gitea_error": gitea_error,
-    }
-
-
-@admin_router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, remove_files: bool = False, _a: tuple = Depends(require_admin)):
-    """Projekt loeschen: Deprovisionieren + project.yaml entfernen."""
-    import shutil as _shutil
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    if provisioner is None:
-        raise HTTPException(503, "Provisioner nicht initialisiert")
-    warnings = await provisioner.deprovision(cfg)
-    project_dir = Path(PROJECTS_DIR) / project_id
-    if remove_files and project_dir.exists():
-        _shutil.rmtree(project_dir)
-    else:
-        yaml_path = project_dir / "project.yaml"
-        if yaml_path.exists():
-            yaml_path.unlink()
-
-    # Gitea-Repo löschen (best-effort)
-    try:
-        from .gitea import get_gitea_client
-        await get_gitea_client().delete_repo(project_id)
-    except Exception as _ge:
-        warnings.append(f"Gitea-Repo konnte nicht gelöscht werden: {_ge}")
-
-    return {"deleted": project_id, "files_removed": remove_files, "warnings": warnings}
-
-# ================================================================== Sessions
-
-@auth_router.get("/projects/{project_id}/session")
-def get_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    """Aktive Session eines Projekts."""
-    if not projects.get(project_id):
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    session = sessions.get_active(project_id)
-    if not session:
-        return {"active": False, "session": None}
-    return {
-        "active":      True,
-        "session_id":  session.id,
-        "started_at":  session.started_at,
-        "message_count": len(session.messages),
-    }
-
-
-@auth_router.post("/projects/{project_id}/session/start")
-def start_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    """Neue Session starten (beendet ggf. vorherige)."""
-    if not projects.get(project_id):
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    session = sessions.new_session(project_id)
-    return {"session_id": session.id, "started_at": session.started_at}
-
-
-@auth_router.post("/projects/{project_id}/session/end")
-def end_session(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    """Aktive Session beenden."""
-    if not projects.get(project_id):
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    session = sessions.end_session(project_id)
-    if not session:
-        return {"ended": False}
-    return {"ended": True, "session_id": session.id, "message_count": len(session.messages)}
-
-
-class MessageRequest(BaseModel):
-    role:     str
-    content:  str
-    agent_id: str | None = None
-
-
-@auth_router.post("/projects/{project_id}/session/message")
-def append_message(project_id: str, req: MessageRequest, _a: tuple[str, str] = Depends(require_auth)):
-    """Nachricht an aktive Session anhängen (Session wird ggf. angelegt)."""
-    if not projects.get(project_id):
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    try:
-        role = MessageRole(req.role)
-    except ValueError:
-        raise HTTPException(400, f"Ungültige Rolle: {req.role}. Erlaubt: user, assistant, system, tool")
-    msg = sessions.append(project_id, role, req.content, agent_id=req.agent_id)
-    session = sessions.get_active(project_id)
-    return {
-        "appended":      True,
-        "session_id":    session.id if session else None,
-        "message_count": len(session.messages) if session else 1,
-        "timestamp":     msg.timestamp,
-    }
-
-
-@auth_router.get("/projects/{project_id}/session/history")
-def session_history(project_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
-    """Nachrichten-History der aktiven Session."""
-    if not projects.get(project_id):
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    context = sessions.get_context(project_id, max_messages=limit)
-    session = sessions.get_active(project_id)
-    return {
-        "session_id": session.id if session else None,
-        "messages":   context,
-        "count":      len(context),
-    }
-
-
-# ================================================================== Orchestrator
+# ================================================================== Orchestrator / Agenten-Chat
 
 class IncomingMessage(BaseModel):
     content: str
     sender:  str = "user"
-
-
-
-@auth_router.post("/projects/{project_id}/message/stream")
-async def send_message_stream(
-    project_id: str,
-    req: IncomingMessage,
-    _a: tuple[str, str] = Depends(require_auth),
-):
-    """
-    Streaming-Version: SSE Token-für-Token.
-    Client: fetch + ReadableStream oder EventSource.
-    Format: data: {"text": "..."} / data: {"done": true} / data: {"error": "..."}
-    """
-    from fastapi.responses import StreamingResponse as _SR
-    import asyncio as _asyncio
-
-    # Rate-Limiting
-    _check_message_rate(req.sender, project_id)
-
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt nicht gefunden")
-    if not discovery.get(cfg.agents.boss):
-        raise HTTPException(503, f"Boss-Agent nicht verfügbar")
-
-    async def event_stream():
-        async for chunk in orchestrator.handle_message_stream(
-            project_id=project_id,
-            project_cfg=cfg,
-            content=req.content,
-            sender=req.sender,
-            execution_mode="safe",
-        ):
-            yield chunk
-
-    return _SR(event_stream(), media_type="text/event-stream",
-               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-@auth_router.post("/projects/{project_id}/message")
-async def send_message(
-    project_id: str,
-    req: IncomingMessage,
-    _a: tuple[str, str] = Depends(require_auth),
-):
-    """
-    User-Nachricht an Projekt senden — Boss-Agent verarbeitet und antwortet.
-    Das ist der Haupt-Einstiegspunkt für die Web-Chat-UI und Matrix-Integration.
-    """
-    # Rate-Limiting
-    _check_message_rate(req.sender, project_id)
-
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-
-    boss_id = cfg.agents.boss
-    if not discovery.get(boss_id):
-        raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
-
-    response, workers = await orchestrator.handle_message(
-        project_id=project_id,
-        project_cfg=cfg,
-        content=req.content,
-        sender=req.sender,
-        execution_mode="safe",
-    )
-    session = sessions.get_active(project_id)
-    return {
-        "response":      response,
-        "workers":       workers,
-        "session_id":    session.id if session else None,
-        "message_count": len(session.messages) if session else 0,
-    }
-
 
 
 
@@ -2659,6 +2341,24 @@ def _update_project_matrix_room(project_id: str, room_id: str) -> None:
     except OSError as e:
         logger.warning("project.yaml konnte nicht aktualisiert werden: %s", e)
 
+
+# ================================================================== Projekte / Sessions / Projekt-Chat
+
+register_project_routes(
+    auth_router,
+    admin_router,
+    projects=projects,
+    discovery=discovery,
+    runtime=runtime,
+    sessions=sessions,
+    orchestrator=orchestrator,
+    projects_dir=PROJECTS_DIR,
+    get_provisioner=lambda: provisioner,
+    update_project_matrix_room=_update_project_matrix_room,
+    audit_log=audit_log,
+    check_message_rate=_check_message_rate,
+    logger=logger,
+)
 
 
 # ================================================================== Tools
