@@ -6,6 +6,7 @@ FastAPI-App mit Lifespan-Management:
 - REST-Endpoints fuer Agenten, Projekte, Sessions und Nachrichten
 """
 
+import json
 import logging
 import os
 import secrets
