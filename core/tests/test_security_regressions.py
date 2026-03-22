@@ -142,6 +142,26 @@ class SecurityRegressionTests(unittest.TestCase):
                     "octopos-devmaster",
                 )
 
+    def test_network_profile_status_detects_unexpected_ports(self):
+        with mock.patch.object(main, "_read_network_profile", return_value="minimal"), \
+             mock.patch.object(main, "_list_public_listening_ports", return_value={"tcp": [22, 80, 3002, 8008, 445], "udp": [137]}), \
+             mock.patch.object(main, "_ufw_status_summary", return_value={"available": True, "active": False, "rules": []}):
+            status = main._network_profile_status()
+
+        self.assertEqual(status["profile"], "minimal")
+        self.assertIn("ufw_inactive_for_profile", status["deviations"])
+        self.assertIn("unexpected_tcp_ports:445", status["deviations"])
+        self.assertIn("unexpected_udp_ports:137", status["deviations"])
+
+    def test_network_profile_status_full_mode_allows_disabled_ufw(self):
+        with mock.patch.object(main, "_read_network_profile", return_value="full"), \
+             mock.patch.object(main, "_list_public_listening_ports", return_value={"tcp": [22, 80, 445], "udp": [137]}), \
+             mock.patch.object(main, "_ufw_status_summary", return_value={"available": True, "active": False, "rules": []}):
+            status = main._network_profile_status()
+
+        self.assertEqual(status["profile"], "full")
+        self.assertEqual(status["deviations"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
