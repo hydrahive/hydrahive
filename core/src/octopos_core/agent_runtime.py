@@ -103,6 +103,7 @@ class AgentRuntime:
     def __init__(self) -> None:
         self._handles: dict[str, AgentHandle] = {}
         self._watchdog_task: asyncio.Task | None = None
+        self._discord_tasks: dict[str, asyncio.Task] = {}
 
     # ------------------------------------------------------------------ public
 
@@ -153,32 +154,46 @@ class AgentRuntime:
         logger.info("Matrix-Client an Agent %s angehängt, Task neu gestartet", agent_id)
 
     async def attach_discord_client(self, agent_id: str, discord_client: object) -> None:
-        """Discord-Client an laufenden Agenten hängen und als eigenen Task starten."""
+        """Discord-Client starten (unabhängig vom Agent-Handle — auch für Personal Agents)."""
+        # Alten Client stoppen falls vorhanden (im Handle oder in _discord_tasks)
         handle = self._handles.get(agent_id)
-        if not handle:
-            logger.warning("attach_discord_client: Agent '%s' nicht gefunden", agent_id)
-            return
-        # Alten Discord-Client stoppen falls vorhanden
-        if handle.discord_client is not None:
+        if handle and handle.discord_client is not None:
             try:
                 await handle.discord_client.stop()
             except Exception:
                 pass
-        handle.discord_client = discord_client
-        asyncio.create_task(discord_client.start(), name=f"discord-{agent_id}")
-        logger.info("Discord-Client an Agent %s angehängt", agent_id)
+            handle.discord_client = discord_client
+        # Alten Task canceln falls vorhanden
+        old_task = self._discord_tasks.get(agent_id)
+        if old_task and not old_task.done():
+            old_task.cancel()
+            try:
+                await old_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        task = asyncio.create_task(discord_client.start(), name=f"discord-{agent_id}")
+        self._discord_tasks[agent_id] = task
+        logger.info("Discord-Client für '%s' gestartet", agent_id)
 
     async def detach_discord_client(self, agent_id: str) -> None:
-        """Discord-Client eines Agenten stoppen und entfernen."""
+        """Discord-Client stoppen und entfernen."""
+        # Task canceln
+        task = self._discord_tasks.pop(agent_id, None)
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        # Handle-Referenz bereinigen
         handle = self._handles.get(agent_id)
-        if not handle or handle.discord_client is None:
-            return
-        try:
-            await handle.discord_client.stop()
-        except Exception:
-            pass
-        handle.discord_client = None
-        logger.info("Discord-Client von Agent %s getrennt", agent_id)
+        if handle and handle.discord_client is not None:
+            try:
+                await handle.discord_client.stop()
+            except Exception:
+                pass
+            handle.discord_client = None
+        logger.info("Discord-Client für '%s' getrennt", agent_id)
 
     def heartbeat(self, agent_id: str) -> None:
         """Vom Agent-Loop oder REST-Endpoint aufgerufen um Liveness zu melden."""
