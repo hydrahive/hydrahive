@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from types import SimpleNamespace
 
 import yaml
 
@@ -235,6 +236,65 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(raw["execution_modes"]["safe"]["permissions"], ["filesystem.read", "memory.read", "memory.write"])
         self.assertEqual(raw["execution_modes"]["elevated"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write"])
         self.assertEqual(raw["execution_modes"]["root"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"])
+
+    def test_tool_loop_preserves_codex_item_id_in_history(self):
+        cfg = AgentConfig.model_validate(
+            {
+                "id": "personal_test",
+                "type": "specialist",
+                "identity": "Test",
+                "llm": {"model": "openai-codex/gpt-5.3-codex"},
+                "tools": ["file_read"],
+            }
+        )
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            SimpleNamespace(
+                                id="call_123",
+                                item_id="fc_123",
+                                function=SimpleNamespace(name="file_read", arguments='{"path":"README.md"}'),
+                            )
+                        ],
+                    )
+                )
+            ]
+        )
+
+        class FakeTool:
+            async def execute(self, **kwargs):
+                return {"ok": True}
+
+        captured = {}
+
+        async def fake_llm_call(agent_cfg, messages, tools=None):
+            captured["messages"] = messages
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="done", tool_calls=None))]
+            )
+
+        orchestrator._resolve_allowed_tool = mock.Mock(return_value=FakeTool())
+        orchestrator._llm_call = fake_llm_call
+
+        import asyncio
+        result, _workers = asyncio.run(
+            orchestrator._tool_loop(
+                cfg,
+                "project-test",
+                mock.MagicMock(),
+                [],
+                response,
+            )
+        )
+
+        self.assertEqual(result, "done")
+        assistant_msg = next(m for m in captured["messages"] if m.get("role") == "assistant")
+        self.assertEqual(assistant_msg["tool_calls"][0]["id"], "call_123")
+        self.assertEqual(assistant_msg["tool_calls"][0]["item_id"], "fc_123")
 
 
 if __name__ == "__main__":
