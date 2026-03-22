@@ -2658,8 +2658,8 @@ def _save_llm_config(config: dict) -> None:
     )
 
 
-@app.get("/llm/config")
-def get_llm_config(_a: tuple = Depends(require_admin)):
+@admin_router.get("/llm/config")
+def get_llm_config():
     """LLM-Provider-Config lesen (API-Keys maskiert)."""
     config = _load_llm_config()
     providers = config.get("providers", {})
@@ -2681,8 +2681,8 @@ class LlmProviderConfig(BaseModel):
 
 
 
-@app.put("/llm/config/claude_max")
-async def set_claude_oauth_token(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.put("/llm/config/claude_max")
+async def set_claude_oauth_token(body: dict):
     """
     Claude Max OAuth Token speichern.
     Token kommt von: claude setup-token (sk-ant-oat01-...)
@@ -2703,8 +2703,8 @@ async def set_claude_oauth_token(body: dict, _a: tuple = Depends(require_admin))
     return {"updated": True, "provider": "claude_max"}
 
 
-@app.put("/llm/config/{provider}")
-def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(require_admin)):
+@admin_router.put("/llm/config/{provider}")
+def set_llm_provider(provider: str, req: LlmProviderConfig):
     """API-Key fuer einen Provider setzen."""
     config = _load_llm_config()
     if "providers" not in config:
@@ -2735,7 +2735,7 @@ def set_llm_provider(provider: str, req: LlmProviderConfig, _a: tuple = Depends(
 
 
 
-@app.get("/llm/available-models")
+@auth_router.get("/llm/available-models")
 async def get_available_models(auth: tuple = Depends(require_auth)):
     """Gibt verfügbare LLM-Modelle zurück: Anthropic + OpenAI + Server-Ollama + WKS-Ollama."""
     import httpx as _httpx
@@ -2814,8 +2814,8 @@ async def get_available_models(auth: tuple = Depends(require_auth)):
     return {"models": models}
 
 
-@app.put("/llm/config/openai_codex")
-async def set_openai_codex_token(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.put("/llm/config/openai_codex")
+async def set_openai_codex_token(body: dict):
     """
     OpenAI Codex OAuth Token speichern (ChatGPT Plus/Pro).
     Erwartet: {access_token, account_id, refresh_token?}
@@ -2842,8 +2842,8 @@ async def set_openai_codex_token(body: dict, _a: tuple = Depends(require_admin))
     return {"updated": True, "provider": "openai_codex"}
 
 
-@app.get("/llm/openai_codex_status")
-def get_openai_codex_status(_a: tuple = Depends(require_admin)):
+@admin_router.get("/llm/openai_codex_status")
+def get_openai_codex_status():
     """OpenAI Codex Token Status — konfiguriert, Account-ID."""
     import json as _json
     token_file = Path("/etc/octopos/openai_codex_token.json")
@@ -2881,8 +2881,8 @@ def _pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-@app.post("/llm/oauth/anthropic/start")
-async def start_anthropic_oauth(_a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/anthropic/start")
+async def start_anthropic_oauth():
     """
     Startet Anthropic Claude Max PKCE OAuth Flow.
     Gibt Authorization-URL zurück — User oeffnet sie im Browser.
@@ -2908,8 +2908,8 @@ async def start_anthropic_oauth(_a: tuple = Depends(require_admin)):
     return {"auth_url": auth_url, "state": state}
 
 
-@app.post("/llm/oauth/anthropic/exchange")
-async def exchange_anthropic_code(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/anthropic/exchange")
+async def exchange_anthropic_code(body: dict):
     """
     Tauscht Anthropic Authorization Code gegen Token.
     body: {code_and_state: "code#state"} oder {code, state} getrennt.
@@ -2966,8 +2966,8 @@ async def exchange_anthropic_code(body: dict, _a: tuple = Depends(require_admin)
     return {"updated": True, "provider": "anthropic"}
 
 
-@app.post("/llm/oauth/openai_codex/start")
-async def start_openai_codex_oauth(_a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/openai_codex/start")
+async def start_openai_codex_oauth():
     """
     Startet OpenAI Codex PKCE OAuth Flow (ChatGPT Plus/Pro).
     Redirect geht auf localhost:1455 (schlägt im Browser fehl — das ist normal).
@@ -2995,8 +2995,8 @@ async def start_openai_codex_oauth(_a: tuple = Depends(require_admin)):
     return {"auth_url": auth_url, "state": state}
 
 
-@app.post("/llm/oauth/openai_codex/exchange")
-async def exchange_openai_codex_code(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/openai_codex/exchange")
+async def exchange_openai_codex_code(body: dict):
     """
     Tauscht OpenAI Codex Authorization Code gegen Token.
     body: {redirect_url: "http://localhost:1455/auth/callback?code=...&state=..."}
@@ -3073,8 +3073,8 @@ async def exchange_openai_codex_code(body: dict, _a: tuple = Depends(require_adm
     return {"updated": True, "account_id": account_id}
 
 
-@app.post("/llm/oauth/google_antigravity/start")
-async def start_google_antigravity_oauth(_a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/google_antigravity/start")
+async def start_google_antigravity_oauth():
     """
     Startet Google Antigravity PKCE OAuth Flow (Gemini 3 Flash/Pro).
     Redirect geht auf localhost:51121 (schlägt im Browser fehl — normal).
@@ -3108,8 +3108,8 @@ async def start_google_antigravity_oauth(_a: tuple = Depends(require_admin)):
     return {"auth_url": auth_url, "state": state}
 
 
-@app.post("/llm/oauth/google_antigravity/exchange")
-async def exchange_google_antigravity_code(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/oauth/google_antigravity/exchange")
+async def exchange_google_antigravity_code(body: dict):
     """
     Tauscht Google Antigravity Authorization Code gegen Token.
     body: {redirect_url: "http://localhost:51121/oauth-callback?code=...&state=..."}
@@ -3203,8 +3203,8 @@ async def exchange_google_antigravity_code(body: dict, _a: tuple = Depends(requi
     return {"updated": True, "email": email, "project_id": project_id}
 
 
-@app.get("/llm/google_antigravity_status")
-def get_google_antigravity_status(_a: tuple = Depends(require_admin)):
+@admin_router.get("/llm/google_antigravity_status")
+def get_google_antigravity_status():
     """Google Antigravity Token Status."""
     import json as _json
     token_file = Path("/etc/octopos/google_antigravity_token.json")
@@ -3224,8 +3224,8 @@ def get_google_antigravity_status(_a: tuple = Depends(require_admin)):
     return {"configured": False}
 
 
-@app.get("/llm/claude_token_status")
-def get_claude_token_status(_a: tuple[str, str] = Depends(require_admin)):
+@admin_router.get("/llm/claude_token_status")
+def get_claude_token_status():
     """
     Claude OAuth Token Status — Alter und Gueltigkeit.
     Liest sk-ant-oat01- Token aus /etc/octopos/claude_oauth_token.
@@ -3263,8 +3263,8 @@ def get_claude_token_status(_a: tuple[str, str] = Depends(require_admin)):
     }
 
 
-@app.get("/llm/ollama/models")
-async def get_ollama_models(_a: tuple[str, str] = Depends(require_auth)):
+@auth_router.get("/llm/ollama/models")
+async def get_ollama_models():
     """Verfuegbare Ollama-Modelle von lokalem Server abrufen."""
     import asyncio as _asyncio
     try:
@@ -3288,8 +3288,8 @@ async def get_ollama_models(_a: tuple[str, str] = Depends(require_auth)):
 
 
 
-@app.post("/llm/ollama/pull")
-async def pull_ollama_model(body: dict, _a: tuple = Depends(require_admin)):
+@admin_router.post("/llm/ollama/pull")
+async def pull_ollama_model(body: dict):
     """Ollama-Modell herunterladen (blockiert bis fertig)."""
     model = body.get("model","").strip()
     if not model:
@@ -3337,14 +3337,14 @@ def _save_mcp_servers(servers: list[dict]) -> None:
     )
 
 
-@app.get("/mcp/servers")
-def list_mcp_servers(_a: tuple = Depends(require_auth)):
+@auth_router.get("/mcp/servers")
+def list_mcp_servers():
     """Alle konfigurierten MCP-Server auflisten (alle eingeloggten User)."""
     return {"servers": _load_mcp_servers()}
 
 
-@app.post("/mcp/servers", status_code=201)
-def create_mcp_server(req: McpServerEntry, _a: tuple = Depends(require_admin)):
+@admin_router.post("/mcp/servers", status_code=201)
+def create_mcp_server(req: McpServerEntry):
     """Neuen MCP-Server anlegen."""
     import re as _re
     if not _re.match(r"^[a-z0-9_-]+$", req.id):
@@ -3358,8 +3358,8 @@ def create_mcp_server(req: McpServerEntry, _a: tuple = Depends(require_admin)):
     return {"created": True, "server": req.model_dump()}
 
 
-@app.put("/mcp/servers/{server_id}")
-def update_mcp_server(server_id: str, req: McpServerEntry, _a: tuple = Depends(require_admin)):
+@admin_router.put("/mcp/servers/{server_id}")
+def update_mcp_server(server_id: str, req: McpServerEntry):
     """MCP-Server aktualisieren."""
     servers = _load_mcp_servers()
     idx = next((i for i, s in enumerate(servers) if s["id"] == server_id), None)
@@ -3370,8 +3370,8 @@ def update_mcp_server(server_id: str, req: McpServerEntry, _a: tuple = Depends(r
     return {"updated": True, "server": req.model_dump()}
 
 
-@app.delete("/mcp/servers/{server_id}")
-def delete_mcp_server(server_id: str, _a: tuple = Depends(require_admin)):
+@admin_router.delete("/mcp/servers/{server_id}")
+def delete_mcp_server(server_id: str):
     """MCP-Server löschen."""
     servers = _load_mcp_servers()
     new_servers = [s for s in servers if s["id"] != server_id]
@@ -3405,14 +3405,14 @@ def _list_backups() -> list[dict]:
     return result
 
 
-@app.get("/admin/backups")
-def list_backups(_a: tuple = Depends(require_admin)):
+@admin_router.get("/admin/backups")
+def list_backups():
     """Alle vorhandenen Backups auflisten."""
     return {"backups": _list_backups()}
 
 
-@app.post("/admin/backup", status_code=201)
-def create_backup(_a: tuple = Depends(require_admin)):
+@admin_router.post("/admin/backup", status_code=201)
+def create_backup():
     """Backup von /etc/octopos, /agents, /projects erstellen."""
     import tarfile as _tar
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -3435,8 +3435,8 @@ def create_backup(_a: tuple = Depends(require_admin)):
             "created_at": datetime.now().isoformat()}
 
 
-@app.get("/admin/backups/{name}/download")
-def download_backup(name: str, _a: tuple = Depends(require_admin)):
+@admin_router.get("/admin/backups/{name}/download")
+def download_backup(name: str):
     """Backup-Datei herunterladen."""
     import re as _re
     from fastapi.responses import FileResponse
@@ -3448,8 +3448,8 @@ def download_backup(name: str, _a: tuple = Depends(require_admin)):
     return FileResponse(path, media_type="application/gzip", filename=name)
 
 
-@app.delete("/admin/backups/{name}")
-def delete_backup(name: str, _a: tuple = Depends(require_admin)):
+@admin_router.delete("/admin/backups/{name}")
+def delete_backup(name: str):
     """Backup löschen."""
     import re as _re
     if not _re.match(r"^octopos-backup-[\w\-]+\.tar\.gz$", name):
@@ -3462,7 +3462,7 @@ def delete_backup(name: str, _a: tuple = Depends(require_admin)):
     return {"deleted": True, "name": name}
 
 
-@app.post("/admin/restore/{name}")
+@admin_router.post("/admin/restore/{name}")
 def restore_backup(name: str, _a: tuple = Depends(require_admin)):
     """Backup einspielen — überschreibt /etc/octopos und /agents, startet Service neu."""
     import re as _re, tarfile as _tar, subprocess as _sub, shutil as _sh
@@ -3520,8 +3520,8 @@ def restore_backup(name: str, _a: tuple = Depends(require_admin)):
 
 # ================================================================== Status
 
-@app.get("/system/heartbeat-tasks")
-def heartbeat_tasks_status(_a: tuple = Depends(require_admin)):
+@admin_router.get("/system/heartbeat-tasks")
+def heartbeat_tasks_status():
     """Alle registrierten Heartbeat-Tasks mit letztem Lauf."""
     tasks = hb_scheduler.task_summary() if hb_scheduler else []
     return {"tasks": tasks}
@@ -3761,12 +3761,16 @@ def get_gitea_config():
     import json as _json
     p = Path(GITEA_CONFIG_FILE)
     if not p.exists():
-        return {"url": "http://127.0.0.1:3001", "token": "", "org": "octopos", "webhook_secret": ""}
+        return {"url": "http://127.0.0.1:3001", "org": "octopos", "webhook_secret": "", "has_token": False, "token_masked": ""}
     cfg = _json.loads(p.read_text(encoding="utf-8"))
-    # Token maskieren
-    if cfg.get("token"):
-        cfg["token_masked"] = cfg["token"][:8] + "..." + cfg["token"][-4:]
-    return cfg
+    token = cfg.get("token", "")
+    return {
+        "url": cfg.get("url", "http://127.0.0.1:3001"),
+        "org": cfg.get("org", "octopos"),
+        "webhook_secret": cfg.get("webhook_secret", ""),
+        "has_token": bool(token),
+        "token_masked": token[:8] + "..." + token[-4:] if token else "",
+    }
 
 
 @admin_router.put("/gitea/config")
@@ -3784,8 +3788,8 @@ def update_gitea_config(req: GiteaConfigRequest):
     return {"updated": True}
 
 
-@app.get("/gitea/repos")
-async def list_gitea_repos(_a: tuple = Depends(require_auth)):
+@auth_router.get("/gitea/repos")
+async def list_gitea_repos():
     """Alle Gitea-Repos des OctopOS-Owners (User oder Organisation)."""
     from .gitea import get_gitea_client
     import aiohttp as _aio
@@ -3813,8 +3817,8 @@ async def list_gitea_repos(_a: tuple = Depends(require_auth)):
         raise HTTPException(503, f"Gitea nicht erreichbar: {e}")
 
 
-@app.get("/gitea/repos/{project_id}/prs")
-async def list_project_prs(project_id: str, _a: tuple = Depends(require_auth)):
+@auth_router.get("/gitea/repos/{project_id}/prs")
+async def list_project_prs(project_id: str):
     """Offene Pull Requests eines Projekts."""
     from .gitea import get_gitea_client
     try:
