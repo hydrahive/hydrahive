@@ -1161,6 +1161,7 @@ def audit_log(
     Audit-Event schreiben — append-only JSONL.
     Nicht-blockierend: Fehler werden geloggt, nicht propagiert.
     """
+    import json
     import time as _time
     import secrets as _sec
 
