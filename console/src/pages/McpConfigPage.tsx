@@ -12,11 +12,11 @@ const AMEM_PRESET: McpServer = {
   id: "amem",
   name: "A-MEM Shared Memory",
   transport: "sse",
-  url: "http://192.168.178.5:8020/sse",
+  url: "http://127.0.0.1:8020/sse",
   headers: {},
   meta: {
     role: "shared_memory",
-    search_ui_url: "http://192.168.178.5:8021",
+    search_ui_url: "http://127.0.0.1:8021",
   },
 };
 
