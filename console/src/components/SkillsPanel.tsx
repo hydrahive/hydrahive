@@ -1,70 +1,94 @@
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
 
 const EMPTY_SKILL = {
-  filename: "", skill: "", version: "1.0",
+  filename: "",
+  skill: "",
+  version: "1.0",
   scope: "on-demand" as "always" | "on-demand",
   triggers: [] as string[],
-  priority: 50, content: "",
+  priority: 50,
+  content: "",
 };
 
 interface Props { agentId: string; }
 
 export function SkillsPanel({ agentId }: Props) {
-  const [skills,    setSkills]    = useState<AgentSkill[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState("");
-  const [expanded,  setExpanded]  = useState<string | null>(null);
-  const [showForm,  setShowForm]  = useState(false);
-  const [editFile,  setEditFile]  = useState<string | null>(null);
-  const [form,      setForm]      = useState({ ...EMPTY_SKILL });
+  const [skills, setSkills] = useState<AgentSkill[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editFile, setEditFile] = useState<string | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_SKILL });
   const [triggerInput, setTriggerInput] = useState("");
-  const [saving,    setSaving]    = useState(false);
-  const [saveErr,   setSaveErr]   = useState("");
-  const [deleting,  setDeleting]  = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   async function load() {
     try {
       const d = await api.agentSkills(agentId);
       setSkills(d.skills);
       setError("");
-    } catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [agentId]);
 
   function openNew() {
-    setForm({ ...EMPTY_SKILL }); setEditFile(null);
-    setTriggerInput(""); setSaveErr(""); setShowForm(true);
+    setForm({ ...EMPTY_SKILL });
+    setEditFile(null);
+    setTriggerInput("");
+    setSaveErr("");
+    setShowForm(true);
   }
 
   function openEdit(s: AgentSkill) {
     setForm({
-      filename: s.filename, skill: s.skill, version: s.version,
+      filename: s.filename,
+      skill: s.skill,
+      version: s.version,
       scope: s.scope as "always" | "on-demand",
-      triggers: [...s.triggers], priority: s.priority, content: s.content,
+      triggers: [...s.triggers],
+      priority: s.priority,
+      content: s.content,
     });
-    setEditFile(s.filename); setTriggerInput(""); setSaveErr(""); setShowForm(true);
+    setEditFile(s.filename);
+    setTriggerInput("");
+    setSaveErr("");
+    setShowForm(true);
   }
 
-  function closeForm() { setShowForm(false); setEditFile(null); setSaveErr(""); }
+  function closeForm() {
+    setShowForm(false);
+    setEditFile(null);
+    setSaveErr("");
+  }
 
-  function set(key: string, val: unknown) { setForm(f => ({ ...f, [key]: val })); }
+  function set(key: string, val: unknown) {
+    setForm((f) => ({ ...f, [key]: val }));
+  }
 
   function addTrigger() {
     const t = triggerInput.trim().toLowerCase();
-    if (t && !form.triggers.includes(t)) setForm(f => ({ ...f, triggers: [...f.triggers, t] }));
+    if (t && !form.triggers.includes(t)) setForm((f) => ({ ...f, triggers: [...f.triggers, t] }));
     setTriggerInput("");
   }
 
   function removeTrigger(t: string) {
-    setForm(f => ({ ...f, triggers: f.triggers.filter(x => x !== t) }));
+    setForm((f) => ({ ...f, triggers: f.triggers.filter((x) => x !== t) }));
   }
 
   async function handleSave(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setSaveErr("");
+    e.preventDefault();
+    setSaving(true);
+    setSaveErr("");
     try {
       const body = { ...form };
       if (editFile) {
@@ -72,154 +96,147 @@ export function SkillsPanel({ agentId }: Props) {
       } else {
         await api.createSkill(agentId, body);
       }
-      closeForm(); await load();
-    } catch(e) { setSaveErr(e instanceof Error ? e.message : "Fehler"); }
-    finally { setSaving(false); }
+      closeForm();
+      await load();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete(filename: string) {
-    if (!confirm(`Skill "${filename}" löschen?`)) return;
+    if (!confirm(`Skill "${filename}" loeschen?`)) return;
     setDeleting(filename);
-    try { await api.deleteSkill(agentId, filename); await load(); }
-    catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
-    finally { setDeleting(null); }
+    try {
+      await api.deleteSkill(agentId, filename);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setDeleting(null);
+    }
   }
 
   return (
-    <div className="border-t">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-muted/20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <BookOpen className="h-3.5 w-3.5" />
-          <span>Skills ({skills.length})</span>
+    <div className="border-t bg-muted/10 px-5 py-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-primary" />
+            <h3 className="text-base font-semibold tracking-tight">Skills</h3>
+            <span className="status-pill">{skills.length}</span>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">Skill-Dateien fuer den Agenten. Trigger, Scope und Prioritaet bleiben unveraendert, die Bearbeitung ist nur klarer strukturiert.</p>
         </div>
-        <button onClick={openNew}
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded border hover:bg-accent transition-colors">
-          <Plus className="h-3 w-3" />Neuer Skill
+        <button onClick={openNew} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
+          <Plus className="h-4 w-4" />
+          Neuer Skill
         </button>
       </div>
 
-      {error && <p className="px-4 py-2 text-xs text-destructive">{error}</p>}
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      {/* Formular */}
       {showForm && (
-        <div className="border-t bg-card px-4 py-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{editFile ? `Skill bearbeiten: ${editFile}` : "Neuer Skill"}</span>
-            <button onClick={closeForm}><X className="h-4 w-4 text-muted-foreground" /></button>
+        <div className="app-panel mt-5 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="metric-kicker">Skill</p>
+              <h4 className="mt-2 text-lg font-semibold tracking-tight">{editFile ? `Skill bearbeiten: ${editFile}` : "Neuen Skill anlegen"}</h4>
+            </div>
+            <button onClick={closeForm} className="rounded-xl p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><X className="h-4 w-4" /></button>
           </div>
-          <form onSubmit={handleSave} className="space-y-3">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Dateiname *</label>
-                <input value={form.filename} disabled={!!editFile}
-                  onChange={e => set("filename", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-                  placeholder="z.B. steuern" required
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50" />
+          <form onSubmit={handleSave} className="mt-5 space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Dateiname *</label>
+                <input value={form.filename} disabled={!!editFile} onChange={(e) => set("filename", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder="z.B. steuern" required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50" />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Skill-Name *</label>
-                <input value={form.skill} onChange={e => set("skill", e.target.value)}
-                  placeholder="z.B. Steuerberatung" required
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Skill-Name *</label>
+                <input value={form.skill} onChange={(e) => set("skill", e.target.value)} placeholder="z.B. Steuerberatung" required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Version</label>
-                <input value={form.version} onChange={e => set("version", e.target.value)}
-                  placeholder="1.0"
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Version</label>
+                <input value={form.version} onChange={(e) => set("version", e.target.value)} placeholder="1.0" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Scope</label>
-                <select value={form.scope} onChange={e => set("scope", e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Scope</label>
+                <select value={form.scope} onChange={(e) => set("scope", e.target.value)} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                   <option value="on-demand">on-demand</option>
                   <option value="always">always</option>
                 </select>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Priority (1-100)</label>
-                <input type="number" value={form.priority} min={1} max={100}
-                  onChange={e => set("priority", parseInt(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Priority (1-100)</label>
+                <input type="number" value={form.priority} min={1} max={100} onChange={(e) => set("priority", parseInt(e.target.value))} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
             </div>
 
             {form.scope === "on-demand" && (
-              <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Trigger-Keywords</label>
-                <div className="flex flex-wrap gap-1 mb-1">
-                  {form.triggers.map(t => (
-                    <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-primary/10 text-primary rounded">
-                      {t}<button type="button" onClick={() => removeTrigger(t)}><X className="h-2.5 w-2.5" /></button>
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Trigger-Keywords</label>
+                <div className="flex flex-wrap gap-2">
+                  {form.triggers.map((t) => (
+                    <span key={t} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                      {t}
+                      <button type="button" onClick={() => removeTrigger(t)}><X className="h-3 w-3" /></button>
                     </span>
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input value={triggerInput} onChange={e => setTriggerInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTrigger(); }}}
-                    placeholder="Keyword eingeben, Enter zum Hinzufügen"
-                    className="flex-1 px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
-                  <button type="button" onClick={addTrigger}
-                    className="px-3 py-1.5 text-xs border rounded hover:bg-accent transition-colors">+</button>
+                  <input value={triggerInput} onChange={(e) => setTriggerInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTrigger(); } }} placeholder="Keyword eingeben, Enter zum Hinzufuegen" className="flex-1 rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <button type="button" onClick={addTrigger} className="rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">+</button>
                 </div>
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Inhalt (Markdown)</label>
-              <textarea value={form.content} onChange={e => set("content", e.target.value)}
-                rows={6} placeholder="Beschreibe hier was der Agent in diesem Skill-Kontext wissen soll..."
-                className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none font-mono" />
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Inhalt (Markdown)</label>
+              <textarea value={form.content} onChange={(e) => set("content", e.target.value)} rows={6} placeholder="Beschreibe hier, was der Agent in diesem Skill-Kontext wissen soll..." className="w-full resize-none rounded-2xl border bg-background px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
 
-            {saveErr && <p className="text-xs text-destructive">{saveErr}</p>}
+            {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={closeForm}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-accent transition-colors">Abbrechen</button>
-              <button type="submit" disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                <Save className="h-3.5 w-3.5" />{saving ? "Speichern…" : editFile ? "Aktualisieren" : "Skill anlegen"}
+              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
+              <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                <Save className="h-4 w-4" />
+                {saving ? "Speichern..." : editFile ? "Aktualisieren" : "Skill anlegen"}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Skill-Liste */}
-      {loading
-        ? <div className="px-4 py-3 text-xs text-muted-foreground">Lade Skills…</div>
-        : skills.length === 0 && !showForm
-          ? <div className="px-4 py-3 text-xs text-muted-foreground">Keine Skills — leg den ersten an.</div>
-          : skills.map(s => (
-            <div key={s.filename} className="border-t">
-              <div className="flex items-center gap-2 px-4 py-2 hover:bg-muted/20 cursor-pointer"
-                onClick={() => setExpanded(e => e === s.filename ? null : s.filename)}>
-                {expanded === s.filename ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-                <span className="text-sm font-medium flex-1">{s.skill}</span>
-                <span className="text-xs text-muted-foreground">{s.filename}.md</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${s.scope === "always" ? "bg-primary/10 text-primary" : "bg-secondary text-secondary-foreground"}`}>
-                  {s.scope}
-                </span>
-                {s.triggers.length > 0 && (
-                  <span className="text-xs text-muted-foreground">{s.triggers.slice(0,3).join(", ")}{s.triggers.length > 3 ? "…" : ""}</span>
-                )}
-                <button onClick={e => { e.stopPropagation(); openEdit(s); }}
-                  className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
-                  <Pencil className="h-3 w-3" />
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDelete(s.filename); }}
-                  disabled={deleting === s.filename}
-                  className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-50 transition-colors">
-                  <Trash2 className="h-3 w-3" />
-                </button>
+      <div className="mt-5 space-y-3">
+        {loading ? (
+          <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="metric-card h-24 animate-pulse" />)}</div>
+        ) : skills.length === 0 && !showForm ? (
+          <div className="section-card py-10 text-center text-sm text-muted-foreground">
+            <Radar className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3">Keine Skills. Leg den ersten an.</p>
+          </div>
+        ) : (
+          skills.map((s) => (
+            <div key={s.filename} className="app-panel overflow-hidden">
+              <div className="flex cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-muted/10" onClick={() => setExpanded((e) => e === s.filename ? null : s.filename)}>
+                {expanded === s.filename ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">{s.skill}</span>
+                    <span className={`rounded-full px-2 py-1 text-xs ${s.scope === "always" ? "bg-primary/10 text-primary" : "bg-secondary text-secondary-foreground"}`}>{s.scope}</span>
+                    <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{s.filename}.md</span>
+                  </div>
+                  {s.triggers.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{s.triggers.slice(0, 3).join(", ")}{s.triggers.length > 3 ? "..." : ""}</p>}
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); openEdit(s); }} className="rounded-xl p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><Pencil className="h-4 w-4" /></button>
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(s.filename); }} disabled={deleting === s.filename} className="rounded-xl p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
               </div>
-              {expanded === s.filename && s.content && (
-                <pre className="mx-4 mb-3 p-3 text-xs bg-muted rounded font-mono whitespace-pre-wrap break-words text-muted-foreground">{s.content}</pre>
-              )}
+              {expanded === s.filename && s.content && <pre className="border-t bg-muted/10 mx-4 mb-4 rounded-2xl p-4 text-xs text-muted-foreground whitespace-pre-wrap break-words">{s.content}</pre>}
             </div>
           ))
-      }
+        )}
+      </div>
     </div>
   );
 }

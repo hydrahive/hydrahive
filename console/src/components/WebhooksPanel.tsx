@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { Webhook as WebhookIcon, Plus, Trash2, X, Save, Eye, EyeOff, Zap } from "lucide-react";
+import { Webhook as WebhookIcon, Plus, Trash2, X, Save, Eye, EyeOff, Zap, Radar } from "lucide-react";
 import { api, Webhook } from "@/lib/api";
 
 const ALL_EVENTS = ["message", "agent_error", "provision", "agent_start", "agent_stop"] as const;
 const EVENT_LABELS: Record<string, string> = {
-  message:     "Nachricht",
+  message: "Nachricht",
   agent_error: "Agent-Fehler",
-  provision:   "Provisionierung",
+  provision: "Provisionierung",
   agent_start: "Agent-Start",
-  agent_stop:  "Agent-Stop",
+  agent_stop: "Agent-Stop",
 };
 
 const EMPTY_FORM = { name: "", url: "", secret: "", events: ["message"] as string[] };
@@ -16,195 +16,208 @@ const EMPTY_FORM = { name: "", url: "", secret: "", events: ["message"] as strin
 interface Props { projectId: string; }
 
 export function WebhooksPanel({ projectId }: Props) {
-  const [webhooks,  setWebhooks]  = useState<Webhook[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState("");
-  const [showForm,  setShowForm]  = useState(false);
-  const [form,      setForm]      = useState({ ...EMPTY_FORM });
-  const [showSecret,setShowSecret]= useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [saveErr,   setSaveErr]   = useState("");
-  const [deleting,  setDeleting]  = useState<string | null>(null);
-  const [testing,   setTesting]   = useState<string | null>(null);
-  const [testResult,setTestResult]= useState<Record<string, string>>({});
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [showSecret, setShowSecret] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, string>>({});
 
   async function load() {
     try {
       const d = await api.projectWebhooks(projectId);
       setWebhooks(d.webhooks);
       setError("");
-    } catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [projectId]);
 
   function toggleEvent(ev: string) {
-    setForm(f => ({
+    setForm((f) => ({
       ...f,
-      events: f.events.includes(ev) ? f.events.filter(e => e !== ev) : [...f.events, ev],
+      events: f.events.includes(ev) ? f.events.filter((e) => e !== ev) : [...f.events, ev],
     }));
   }
 
-  function closeForm() { setShowForm(false); setSaveErr(""); setForm({ ...EMPTY_FORM }); setShowSecret(false); }
+  function closeForm() {
+    setShowForm(false);
+    setSaveErr("");
+    setForm({ ...EMPTY_FORM });
+    setShowSecret(false);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (form.events.length === 0) { setSaveErr("Mindestens ein Event wählen"); return; }
-    setSaving(true); setSaveErr("");
+    if (form.events.length === 0) {
+      setSaveErr("Mindestens ein Event waehlen");
+      return;
+    }
+    setSaving(true);
+    setSaveErr("");
     try {
       const body: Record<string, unknown> = { name: form.name, url: form.url, events: form.events };
       if (form.secret.trim()) body.secret = form.secret.trim();
       await api.createWebhook(projectId, body);
-      closeForm(); await load();
-    } catch(e) { setSaveErr(e instanceof Error ? e.message : "Fehler"); }
-    finally { setSaving(false); }
+      closeForm();
+      await load();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleTest(wid: string) {
     setTesting(wid);
     try {
       await api.testWebhook(projectId, { webhook_id: wid });
-      setTestResult(r => ({ ...r, [wid]: "✓ OK" }));
-    } catch(e) {
-      setTestResult(r => ({ ...r, [wid]: `✗ ${e instanceof Error ? e.message : "Fehler"}` }));
+      setTestResult((r) => ({ ...r, [wid]: "OK" }));
+    } catch (e) {
+      setTestResult((r) => ({ ...r, [wid]: e instanceof Error ? e.message : "Fehler" }));
     } finally {
       setTesting(null);
-      setTimeout(() => setTestResult(r => { const n = {...r}; delete n[wid]; return n; }), 4000);
+      setTimeout(() => setTestResult((r) => {
+        const n = { ...r };
+        delete n[wid];
+        return n;
+      }), 4000);
     }
   }
 
   async function handleDelete(wid: string, name: string) {
-    if (!confirm(`Webhook "${name}" löschen?`)) return;
+    if (!confirm(`Webhook "${name}" loeschen?`)) return;
     setDeleting(wid);
-    try { await api.deleteWebhook(projectId, wid); await load(); }
-    catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
-    finally { setDeleting(null); }
+    try {
+      await api.deleteWebhook(projectId, wid);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setDeleting(null);
+    }
   }
 
   return (
-    <div className="border-t">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-muted/20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <WebhookIcon className="h-3.5 w-3.5" />
-          <span>Webhooks ({webhooks.length})</span>
+    <div className="border-t bg-muted/10 px-5 py-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <WebhookIcon className="h-4 w-4 text-primary" />
+            <h3 className="text-base font-semibold tracking-tight">Webhooks</h3>
+            <span className="status-pill">{webhooks.length}</span>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">Externe Ziele fuer Projekt-Events. Test-Pings und HMAC-Signierung bleiben erhalten.</p>
         </div>
-        <button onClick={() => { setShowForm(s => !s); setSaveErr(""); }}
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded border hover:bg-accent transition-colors">
-          <Plus className="h-3 w-3" />Neuer Webhook
+        <button onClick={() => { setShowForm((s) => !s); setSaveErr(""); }} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
+          <Plus className="h-4 w-4" />
+          Neuer Webhook
         </button>
       </div>
 
-      {error && <p className="px-4 py-2 text-xs text-destructive">{error}</p>}
+      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      {/* Formular */}
       {showForm && (
-        <div className="border-t bg-card px-4 py-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Neuer Webhook</span>
-            <button onClick={closeForm}><X className="h-4 w-4 text-muted-foreground" /></button>
-          </div>
-          <form onSubmit={handleSave} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Name *</label>
-                <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                  placeholder="z.B. Git-Push Trigger" required
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">URL *</label>
-                <input value={form.url} onChange={e => setForm(f => ({...f, url: e.target.value}))}
-                  placeholder="https://example.com/hook" required type="url"
-                  className="w-full px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
-              </div>
+        <div className="app-panel mt-5 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="metric-kicker">Webhook</p>
+              <h4 className="mt-2 text-lg font-semibold tracking-tight">Neuen Endpoint anlegen</h4>
             </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Secret (optional — für HMAC-SHA256 Signierung)</label>
-              <div className="flex gap-2">
-                <input value={form.secret} onChange={e => setForm(f => ({...f, secret: e.target.value}))}
-                  type={showSecret ? "text" : "password"}
-                  placeholder="Leer lassen für keine Signierung"
-                  className="flex-1 px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary font-mono" />
-                <button type="button" onClick={() => setShowSecret(s => !s)}
-                  className="p-1.5 border rounded hover:bg-accent transition-colors text-muted-foreground">
-                  {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                </button>
+            <button onClick={closeForm} className="rounded-xl p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+          <form onSubmit={handleSave} className="mt-5 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Name *</label>
+                <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="z.B. Git-Push Trigger" required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">URL *</label>
+                <input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://example.com/hook" required type="url" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Events *</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Secret</label>
               <div className="flex gap-2">
-                {ALL_EVENTS.map(ev => (
-                  <button key={ev} type="button" onClick={() => toggleEvent(ev)}
-                    className={`px-2.5 py-1 text-xs rounded border transition-colors ${
-                      form.events.includes(ev)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border hover:bg-accent"
-                    }`}>
+                <input value={form.secret} onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))} type={showSecret ? "text" : "password"} placeholder="Leer lassen fuer keine Signierung" className="flex-1 rounded-2xl border bg-background px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                <button type="button" onClick={() => setShowSecret((s) => !s)} className="rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
+                  {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Events *</label>
+              <div className="flex flex-wrap gap-2">
+                {ALL_EVENTS.map((ev) => (
+                  <button key={ev} type="button" onClick={() => toggleEvent(ev)} className={`rounded-full border px-3 py-1.5 text-xs transition ${form.events.includes(ev) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
                     {EVENT_LABELS[ev]}
                   </button>
                 ))}
               </div>
             </div>
 
-            {saveErr && <p className="text-xs text-destructive">{saveErr}</p>}
+            {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={closeForm}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-accent transition-colors">Abbrechen</button>
-              <button type="submit" disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                <Save className="h-3.5 w-3.5" />{saving ? "Speichern…" : "Webhook anlegen"}
+              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
+              <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                <Save className="h-4 w-4" />
+                {saving ? "Speichern..." : "Webhook anlegen"}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Liste */}
-      {loading
-        ? <div className="px-4 py-3 text-xs text-muted-foreground">Lade Webhooks…</div>
-        : webhooks.length === 0 && !showForm
-          ? <div className="px-4 py-3 text-xs text-muted-foreground">Keine Webhooks — leg den ersten an.</div>
-          : webhooks.map(w => (
-            <div key={w.id} className="border-t flex items-center gap-3 px-4 py-2.5 hover:bg-muted/10">
-              <WebhookIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{w.name}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{w.url}</span>
+      <div className="mt-5 space-y-3">
+        {loading ? (
+          <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="metric-card h-24 animate-pulse" />)}</div>
+        ) : webhooks.length === 0 && !showForm ? (
+          <div className="section-card py-10 text-center text-sm text-muted-foreground">
+            <Radar className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3">Keine Webhooks. Leg den ersten an.</p>
+          </div>
+        ) : (
+          webhooks.map((w) => (
+            <div key={w.id} className="app-panel p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">{w.name}</span>
+                    <span className="status-pill">{new Date(w.created_at).toLocaleDateString("de-DE")}</span>
+                    {testResult[w.id] && <span className={testResult[w.id] === "OK" ? "status-pill status-pill-ok" : "status-pill bg-destructive/10 text-destructive"}>{testResult[w.id] === "OK" ? "Test OK" : testResult[w.id]}</span>}
+                  </div>
+                  <p className="mt-2 truncate text-sm text-muted-foreground">{w.url}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {w.events.map((ev) => <span key={ev} className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{EVENT_LABELS[ev] ?? ev}</span>)}
+                  </div>
                 </div>
-                <div className="flex gap-1 mt-0.5">
-                  {w.events.map(ev => (
-                    <span key={ev} className="text-xs px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-                      {EVENT_LABELS[ev] ?? ev}
-                    </span>
-                  ))}
+                <div className="flex gap-2 md:flex-col">
+                  <button onClick={() => handleTest(w.id)} disabled={testing === w.id} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent disabled:opacity-50">
+                    <Zap className="h-4 w-4" />
+                    Test
+                  </button>
+                  <button onClick={() => handleDelete(w.id, w.name)} disabled={deleting === w.id} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm text-muted-foreground transition hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50">
+                    <Trash2 className="h-4 w-4" />
+                    Loeschen
+                  </button>
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground flex-shrink-0">
-                {new Date(w.created_at).toLocaleDateString("de-DE")}
-              </span>
-              {testResult[w.id] && (
-                <span className={`text-xs flex-shrink-0 ${testResult[w.id].startsWith("✓") ? "text-green-500" : "text-destructive"}`}>
-                  {testResult[w.id]}
-                </span>
-              )}
-              <button onClick={() => handleTest(w.id)} disabled={testing === w.id}
-                title="Test-Ping senden"
-                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors">
-                <Zap className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={() => handleDelete(w.id, w.name)} disabled={deleting === w.id}
-                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-50 transition-colors">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
             </div>
           ))
-      }
+        )}
+      </div>
     </div>
   );
 }
