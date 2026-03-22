@@ -207,14 +207,39 @@ async def lifespan(app: FastAPI):
     logger.info("OctopOS Core gestoppt")
 
 
-def _read_server_name(toml_path: str = "/etc/conduwuit/conduwuit.toml") -> str:
+def _read_server_name(
+    toml_path: str = "/etc/conduwuit/conduwuit.toml",
+    config_path: str = "/etc/octopos/matrix_server_name",
+) -> str:
+    env_server_name = os.environ.get("OCTOPOS_MATRIX_SERVER_NAME", "").strip()
+    if env_server_name:
+        return env_server_name
+
+    cfg_path = Path(config_path)
+    if cfg_path.exists():
+        try:
+            configured_name = cfg_path.read_text(encoding="utf-8").strip()
+            if configured_name:
+                return configured_name
+        except OSError as e:
+            logger.warning("Matrix server_name Config konnte nicht gelesen werden: %s", e)
+
     try:
-        for line in open(toml_path).read().splitlines():
+        for line in Path(toml_path).read_text(encoding="utf-8").splitlines():
             if line.strip().startswith("server_name"):
-                return line.split("=", 1)[1].strip().strip('"')
-    except OSError:
-        pass
-    return "your-hostname"
+                server_name = line.split("=", 1)[1].strip().strip('"')
+                if server_name:
+                    return server_name
+    except OSError as e:
+        logger.warning("conduwuit server_name konnte nicht gelesen werden: %s", e)
+
+    fallback = "your-hostname"
+    logger.warning(
+        "Matrix server_name nicht konfiguriert, verwende Fallback '%s'. "
+        "Setze OCTOPOS_MATRIX_SERVER_NAME oder /etc/octopos/matrix_server_name fuer nicht-default Installationen.",
+        fallback,
+    )
+    return fallback
 
 
 def _load_or_create_jwt_secret(secret_file: str = "/etc/octopos/jwt_secret") -> str:

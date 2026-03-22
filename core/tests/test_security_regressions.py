@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from octopos_core import main
 
@@ -107,6 +108,39 @@ class SecurityRegressionTests(unittest.TestCase):
             ("/webhooks/gitea/{project_id}", ("POST",)),
         }
         self.assertEqual(direct_app_routes, expected)
+
+    def test_read_server_name_priority(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            toml_path = tmpdir / "conduwuit.toml"
+            config_path = tmpdir / "matrix_server_name"
+            toml_path.write_text('server_name = "from-toml"\n', encoding="utf-8")
+
+            with mock.patch.dict("os.environ", {}, clear=False):
+                self.assertEqual(
+                    main._read_server_name(str(toml_path), str(config_path)),
+                    "from-toml",
+                )
+
+                config_path.write_text("from-config\n", encoding="utf-8")
+                self.assertEqual(
+                    main._read_server_name(str(toml_path), str(config_path)),
+                    "from-config",
+                )
+
+                with mock.patch.dict("os.environ", {"OCTOPOS_MATRIX_SERVER_NAME": "from-env"}, clear=False):
+                    self.assertEqual(
+                        main._read_server_name(str(toml_path), str(config_path)),
+                        "from-env",
+                    )
+
+            toml_path.unlink()
+            config_path.unlink()
+            with mock.patch.dict("os.environ", {}, clear=False):
+                self.assertEqual(
+                    main._read_server_name(str(toml_path), str(config_path)),
+                    "your-hostname",
+                )
 
 
 if __name__ == "__main__":
