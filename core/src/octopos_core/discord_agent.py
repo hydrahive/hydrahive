@@ -249,6 +249,7 @@ class AgentDiscordClient(DiscordAgentClient):
                 project_cfg = _build_virtual_cfg(self.agent_id),
                 content     = content,
                 sender      = author,
+                execution_mode = "safe",
             ):
                 import json as _json
                 try:

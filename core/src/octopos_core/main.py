@@ -852,6 +852,7 @@ async def send_message_stream(
             project_cfg=cfg,
             content=req.content,
             sender=req.sender,
+            execution_mode="safe",
         ):
             yield chunk
 
@@ -884,6 +885,7 @@ async def send_message(
         project_cfg=cfg,
         content=req.content,
         sender=req.sender,
+        execution_mode="safe",
     )
     session = sessions.get_active(project_id)
     return {
@@ -1043,6 +1045,7 @@ async def agent_message_sync(
         project_cfg=virtual_cfg,
         content=req.content,
         sender=req.sender,
+        execution_mode="safe" if _a[0] != "internal" else None,
     )
     return {"response": response, "agent_id": agent_id}
 
@@ -1075,6 +1078,7 @@ async def agent_message_stream(
             project_cfg=virtual_cfg,
             content=req.content,
             sender=req.sender,
+            execution_mode="safe" if _a[0] != "internal" else None,
         ):
             yield chunk
 
@@ -1488,7 +1492,19 @@ def _create_personal_agent(username: str) -> str:
             "max_tokens":  4096,
         },
         "soul":  "./soul.md",
-        "tools": ["read_file", "write_file", "shell_exec"],
+        "tools": ["file_read", "file_write", "shell_exec"],
+        "execution_modes": {
+            "default": "safe",
+            "safe": {
+                "permissions": ["filesystem.read", "memory.read", "memory.write"],
+            },
+            "elevated": {
+                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write"],
+            },
+            "root": {
+                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"],
+            },
+        },
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
 
@@ -1554,6 +1570,7 @@ async def my_agent_message_stream(
             project_cfg=virtual_cfg,
             content=req.content,
             sender=req.sender,
+            execution_mode="safe",
         ):
             yield chunk
 
