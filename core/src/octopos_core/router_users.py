@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 
+from .execution_mode_policy import resolve_request_execution_mode
+
 
 class CreateUserRequest(BaseModel):
     username: str
@@ -151,6 +153,13 @@ def register_user_routes(
         agent_id, cfg = ensure_personal_agent(username)
         if cfg is None:
             raise HTTPException(503, "Persönlicher Agent nicht verfügbar")
+        execution_mode = resolve_request_execution_mode(
+            auth,
+            req.execution_mode,
+            audit_log=audit_log,
+            audit_target=agent_id,
+            audit_source="me.agent.message.stream",
+        )
 
         virtual_cfg = _PC(
             id=agent_id,
@@ -164,7 +173,7 @@ def register_user_routes(
                 project_cfg=virtual_cfg,
                 content=req.content,
                 sender=req.sender,
-                execution_mode="safe",
+                execution_mode=execution_mode,
             ):
                 yield chunk
 

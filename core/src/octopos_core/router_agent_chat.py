@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
 
+from .execution_mode_policy import resolve_request_execution_mode
+
 
 def register_agent_chat_routes(
     app: FastAPI,
@@ -16,6 +18,7 @@ def register_agent_chat_routes(
     agent_sessions,
     agent_orchestrator,
     agents_dir: str,
+    audit_log,
     logger,
     incoming_message_model,
 ) -> None:
@@ -136,6 +139,13 @@ def register_agent_chat_routes(
         from .project_config import ProjectIdentity as _PI
 
         req = incoming_message_model.model_validate(body)
+        execution_mode = resolve_request_execution_mode(
+            _a,
+            req.execution_mode,
+            audit_log=audit_log,
+            audit_target=agent_id,
+            audit_source="agents.message",
+        )
         check_message_rate(req.sender, agent_id)
         cfg = discovery.get(agent_id)
         if not cfg:
@@ -151,7 +161,7 @@ def register_agent_chat_routes(
             project_cfg=virtual_cfg,
             content=req.content,
             sender=req.sender,
-            execution_mode="safe" if _a[0] != "internal" else None,
+            execution_mode=execution_mode,
         )
         return {"response": response, "agent_id": agent_id}
 
@@ -167,6 +177,13 @@ def register_agent_chat_routes(
         from .project_config import ProjectIdentity as _PI
 
         req = incoming_message_model.model_validate(body)
+        execution_mode = resolve_request_execution_mode(
+            _a,
+            req.execution_mode,
+            audit_log=audit_log,
+            audit_target=agent_id,
+            audit_source="agents.message.stream",
+        )
         check_message_rate(req.sender, agent_id)
         cfg = discovery.get(agent_id)
         if not cfg:
@@ -184,7 +201,7 @@ def register_agent_chat_routes(
                 project_cfg=virtual_cfg,
                 content=req.content,
                 sender=req.sender,
-                execution_mode="safe" if _a[0] != "internal" else None,
+                execution_mode=execution_mode,
             ):
                 yield chunk
 

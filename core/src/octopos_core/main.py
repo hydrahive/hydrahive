@@ -13,6 +13,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Literal
 
 import asyncio
 import time
@@ -580,21 +581,7 @@ def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost
 class IncomingMessage(BaseModel):
     content: str
     sender:  str = "user"
-
-
-register_agent_chat_routes(
-    app,
-    auth_router,
-    require_auth=require_auth,
-    require_auth_or_localhost=require_auth_or_localhost,
-    check_message_rate=_check_message_rate,
-    discovery=discovery,
-    agent_sessions=agent_sessions,
-    agent_orchestrator=agent_orchestrator,
-    agents_dir=AGENTS_DIR,
-    logger=logger,
-    incoming_message_model=IncomingMessage,
-)
+    execution_mode: Literal["safe", "elevated", "root"] | None = None
 
 
 @admin_router.get("/logs/core")
@@ -717,6 +704,22 @@ def get_audit_logs(
     limit = max(10, min(limit, 1000))
     logs  = _read_audit_logs(limit, project_id, user, action)
     return {"logs": logs, "count": len(logs)}
+
+
+register_agent_chat_routes(
+    app,
+    auth_router,
+    require_auth=require_auth,
+    require_auth_or_localhost=require_auth_or_localhost,
+    check_message_rate=_check_message_rate,
+    discovery=discovery,
+    agent_sessions=agent_sessions,
+    agent_orchestrator=agent_orchestrator,
+    agents_dir=AGENTS_DIR,
+    audit_log=audit_log,
+    logger=logger,
+    incoming_message_model=IncomingMessage,
+)
 
 
 # ================================================================== User-Verwaltung

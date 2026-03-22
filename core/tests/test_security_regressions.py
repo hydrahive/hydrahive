@@ -8,6 +8,7 @@ import yaml
 
 from octopos_core import main
 from octopos_core.agent_config import AgentConfig
+from octopos_core.execution_mode_policy import resolve_request_execution_mode
 from octopos_core.orchestrator import Orchestrator
 
 
@@ -71,6 +72,34 @@ class SecurityRegressionTests(unittest.TestCase):
             query_param_names = {param.name for param in route.dependant.query_params}
             self.assertNotIn("req", query_param_names)
             self.assertNotIn("body", query_param_names)
+
+    def test_execution_mode_policy_defaults_and_internal_passthrough(self):
+        self.assertEqual(resolve_request_execution_mode(("alice", "user"), None), "safe")
+        self.assertEqual(resolve_request_execution_mode(("admin", "admin"), "elevated"), "elevated")
+        self.assertIsNone(resolve_request_execution_mode(("internal", "admin"), None))
+        self.assertEqual(resolve_request_execution_mode(("internal", "admin"), "root"), "root")
+
+    def test_execution_mode_policy_blocks_non_admin_and_audits_admin(self):
+        with self.assertRaises(main.HTTPException) as ctx:
+            resolve_request_execution_mode(("alice", "user"), "root")
+        self.assertEqual(ctx.exception.status_code, 403)
+
+        audit_log = mock.Mock()
+        mode = resolve_request_execution_mode(
+            ("admin", "admin"),
+            "root",
+            audit_log=audit_log,
+            audit_target="personal_admin",
+            audit_source="agents.message",
+        )
+
+        self.assertEqual(mode, "root")
+        audit_log.assert_called_once_with(
+            "agent.execution_mode",
+            user="admin",
+            target="personal_admin",
+            details={"requested_mode": "root", "source": "agents.message"},
+        )
 
     def test_audit_log_write_and_read_roundtrip(self):
         original_audit_log_file = main.AUDIT_LOG_FILE
