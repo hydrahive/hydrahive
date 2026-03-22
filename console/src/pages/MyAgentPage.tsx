@@ -47,6 +47,21 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "wks_file_write",   label: "WKS Datei schreiben" },
 ];
 
+const BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
+
+function resolveSearchUiUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      parsed.hostname = BROWSER_HOST;
+      return parsed.toString();
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
 const KNOWN_MODELS = [
   "claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6",
   "gpt-4o-mini","gpt-4o",
@@ -643,7 +658,7 @@ function McpTab({
               {typeof amemServer.meta?.search_ui_url === "string" && (
                 <div className="mt-2">
                   <a
-                    href={amemServer.meta.search_ui_url as string}
+                    href={resolveSearchUiUrl(amemServer.meta.search_ui_url as string)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-primary hover:underline"

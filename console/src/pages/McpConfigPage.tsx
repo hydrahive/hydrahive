@@ -3,6 +3,8 @@ import { Plus, Trash2, Edit2, Save, X, RefreshCw, Server, Brain, ExternalLink } 
 import { api, McpServer } from "@/lib/api";
 
 const TRANSPORTS = ["streamableHttp", "sse", "stdio"];
+const AMEM_BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
+const AMEM_SEARCH_UI_URL = `http://${AMEM_BROWSER_HOST}:8021`;
 
 const EMPTY: Omit<McpServer, "headers"> & { headers: string } = {
   id: "", name: "", transport: "streamableHttp", url: "", headers: "",
@@ -16,7 +18,7 @@ const AMEM_PRESET: McpServer = {
   headers: {},
   meta: {
     role: "shared_memory",
-    search_ui_url: "http://127.0.0.1:8021",
+    search_ui_url: AMEM_SEARCH_UI_URL,
   },
 };
 
