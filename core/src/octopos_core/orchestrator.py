@@ -1217,7 +1217,10 @@ class Orchestrator:
             current_messages.append({
                 "role": "assistant",
                 "tool_calls": [
-                    {"id": tc.id, "type": "function",
+                    {
+                     "id": tc.id,
+                     "item_id": getattr(tc, "item_id", tc.id),
+                     "type": "function",
                      "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
                     for tc in tool_calls
                 ],
