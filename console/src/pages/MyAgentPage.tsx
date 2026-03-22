@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles } from "lucide-react";
 import { api, McpServer, WksConfig, DiscordConfig } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
@@ -270,119 +270,265 @@ export function MyAgentPage() {
 
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
-        <>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center space-y-3 text-muted-foreground">
-                <Bot className="h-10 w-10" />
-                <p className="text-sm font-medium">Hallo! Ich bin <strong>{identity}</strong>.</p>
-                <p className="text-xs opacity-60">Tippe <code className="bg-muted px-1 rounded">/help</code> für Commands.</p>
-              </div>
-            )}
-            {messages.map(msg => {
-              if (msg.role === "system") return (
-                <div key={msg.id} className="flex justify-center">
-                  <div className="flex items-start gap-2 max-w-[85%] bg-muted/40 border rounded-lg px-3 py-2 text-xs text-muted-foreground">
-                    <Terminal className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-primary/60" />
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_22rem]">
+            <section className="space-y-4">
+              <div className="rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      <Bot className="h-3.5 w-3.5" />
+                      Mein Agent Chat
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">{identity}</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Direkter Arbeitskanal mit Streaming, Tool-Hinweisen und gespeicherter Session-History.
+                      </p>
                     </div>
                   </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 font-medium text-foreground">
+                      {agentInfo?.config?.llm?.model ?? "Kein Modell"}
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
+                      {sending ? "Streaming aktiv" : "Bereit"}
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
+                      {messages.filter((m) => m.role !== "system").length} Nachrichten
+                    </span>
+                  </div>
                 </div>
-              );
-              return (
-                <div key={msg.id} className={`flex gap-3 ${msg.role==="user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role==="assistant" && (
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Bot className="h-4 w-4 text-primary" />
+              </div>
+
+              <div className="rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+                <div className="border-b border-border/60 px-4 py-3 sm:px-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Verlauf</h3>
+                      <p className="text-xs text-muted-foreground">Streaming, Systemhinweise und Agentenantworten bleiben im Kontext sichtbar.</p>
+                    </div>
+                    {activeTool && (
+                      <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <code className="max-w-[10rem] truncate font-mono">{activeTool.name}</code>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4 px-4 py-5 sm:px-5">
+                  {messages.length === 0 && (
+                    <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-muted/20 px-6 text-center text-muted-foreground">
+                      <Bot className="h-10 w-10 opacity-70" />
+                      <p className="mt-4 text-sm font-medium text-foreground">Hallo. Ich bin <strong>{identity}</strong>.</p>
+                      <p className="mt-2 max-w-md text-xs">Tippe <code className="rounded bg-background px-1.5 py-0.5">/help</code> fuer Commands oder starte direkt mit einer Arbeitsanweisung.</p>
                     </div>
                   )}
-                  <div className="max-w-[75%]">
-                    <div className={`rounded-lg px-3 py-2 text-sm break-words ${
-                      msg.role==="user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-card border prose prose-sm max-w-none dark:prose-invert"
-                    }`}>
-                      {msg.role==="user"
-                        ? <span className="whitespace-pre-wrap">{msg.content}</span>
-                        : streamingMsgId === msg.id && !msg.content
-                          ? <div className="flex gap-1 items-center h-5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
-                            </div>
-                          : <><ReactMarkdown>{msg.content}</ReactMarkdown>
-                              {streamingMsgId === msg.id
-                                ? <span className="inline-block w-2 h-4 bg-primary/70 animate-pulse ml-0.5 align-text-bottom rounded-sm" />
-                                : doneMsgId === msg.id && <span className="inline-block text-xs text-green-500 ml-1 align-text-bottom">✓</span>
-                              }
-                            </>
-                      }
-                    </div>
-                  </div>
-                  {msg.role==="user" && (
-                    <div className="w-7 h-7 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <User className="h-4 w-4" />
+
+                  {messages.map((msg) => {
+                    if (msg.role === "system") return (
+                      <div key={msg.id} className="flex justify-center">
+                        <div className="flex max-w-[90%] items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                          <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary/60" />
+                          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        {msg.role === "assistant" && (
+                          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                            <Bot className="h-4 w-4 text-primary" />
+                          </div>
+                        )}
+                        <div className="max-w-[85%]">
+                          <div className={`rounded-[22px] px-4 py-3 text-sm break-words shadow-sm ${
+                            msg.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "border border-border/60 bg-background/90 prose prose-sm max-w-none dark:prose-invert"
+                          }`}>
+                            {msg.role === "user"
+                              ? <span className="whitespace-pre-wrap">{msg.content}</span>
+                              : streamingMsgId === msg.id && !msg.content
+                                ? <div className="flex h-5 items-center gap-1">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                                  </div>
+                                : <>
+                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    {streamingMsgId === msg.id
+                                      ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" />
+                                      : doneMsgId === msg.id && <span className="ml-1 inline-block align-text-bottom text-xs text-green-500">✓</span>
+                                    }
+                                  </>
+                            }
+                          </div>
+                        </div>
+                        {msg.role === "user" && (
+                          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">
+                            <User className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {sending && messages[messages.length - 1]?.role !== "assistant" && (
+                    <div className="flex justify-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="rounded-[22px] border border-border/60 bg-background/90 px-4 py-3 shadow-sm">
+                        <div className="flex h-5 items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                        </div>
+                      </div>
                     </div>
                   )}
+
+                  <div ref={bottomRef} />
                 </div>
-              );
-            })}
-            {sending && messages[messages.length-1]?.role !== "assistant" && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-                <div className="bg-card border rounded-lg px-3 py-2">
-                  <div className="flex gap-1 items-center h-5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+
+                {activeTool && (
+                  <div className="border-t border-border/60 bg-muted/30 px-4 py-2 text-xs text-muted-foreground sm:px-5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex flex-shrink-0 gap-0.5">
+                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
+                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
+                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
+                      </span>
+                      <code className="flex-shrink-0 font-mono text-primary">{activeTool.name}</code>
+                      {activeTool.detail && <span className="truncate">{activeTool.detail}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {chatError && (
+                  <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive sm:px-5">
+                    {chatError}
+                  </div>
+                )}
+
+                <div className="border-t border-border/60 px-4 py-4 sm:px-5">
+                  <div className="relative">
+                    {showSuggest && suggestions.length > 0 && (
+                      <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">
+                        {suggestions.map((s, i) => (
+                          <button key={s.cmd}
+                            onMouseDown={(e) => { e.preventDefault(); setInput(s.cmd + " "); setShowSuggest(false); textareaRef.current?.focus(); }}
+                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${i === suggestIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}>
+                            <span className="font-mono text-xs text-primary">{s.cmd}</span>
+                            <span className="text-xs text-muted-foreground">{s.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="rounded-[24px] border border-border/70 bg-background/90 p-3 shadow-sm">
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {SLASH_COMMANDS.map((cmd) => (
+                          <button key={cmd.cmd}
+                            type="button"
+                            onClick={() => { setInput(`${cmd.cmd} `); textareaRef.current?.focus(); }}
+                            className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+                            {cmd.cmd}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-end gap-3">
+                        <textarea ref={textareaRef} value={input}
+                          onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
+                          onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                          placeholder="Nachricht … Enter sendet, Shift+Enter macht einen Umbruch" rows={1} disabled={sending}
+                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                          style={{ maxHeight: "160px", overflowY: "auto" }} />
+                        <button onClick={send} disabled={sending || !input.trim()}
+                          className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                          <Send className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-          {activeTool && (
-            <div className="px-4 py-1.5 text-xs text-muted-foreground bg-muted/50 border-t flex-shrink-0 flex items-center gap-2 min-w-0">
-              <span className="flex gap-0.5 flex-shrink-0">
-                <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
-                <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
-                <span className="w-1 h-1 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
-              </span>
-              <code className="font-mono text-primary flex-shrink-0">{activeTool.name}</code>
-              {activeTool.detail && <span className="truncate text-muted-foreground">{activeTool.detail}</span>}
-            </div>
-          )}
-          {chatError && <div className="px-4 py-2 text-xs text-destructive bg-destructive/10 border-t flex-shrink-0">{chatError}</div>}
-          <div className="px-4 py-3 border-t flex-shrink-0 relative">
-            {showSuggest && suggestions.length > 0 && (
-              <div className="absolute bottom-full left-4 right-4 mb-1 bg-card border rounded-md shadow-lg overflow-hidden z-10">
-                {suggestions.map((s,i) => (
-                  <button key={s.cmd}
-                    onMouseDown={e => { e.preventDefault(); setInput(s.cmd+" "); setShowSuggest(false); textareaRef.current?.focus(); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${i===suggestIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}>
-                    <span className="font-mono text-primary text-xs">{s.cmd}</span>
-                    <span className="text-muted-foreground text-xs">{s.desc}</span>
-                  </button>
-                ))}
+            </section>
+
+            <aside className="xl:sticky xl:top-24 xl:self-start">
+              <div className="space-y-4 rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold">Kontext</h3>
+                  <p className="text-xs text-muted-foreground">Direkte Sicht auf Modell, Werkzeuge und Session-Hinweise.</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Modell
+                    </div>
+                    <div className="mt-3 text-sm font-medium">{agentInfo?.config?.llm?.model ?? "Nicht gesetzt"}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Fallbacks: {agentInfo?.config?.llm?.fallback_models?.length ?? 0}</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      <Settings className="h-3.5 w-3.5" />
+                      Status
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      {sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
+                      <span>{sending ? "Antwort wird gestreamt" : "Agent ist bereit"}</span>
+                    </div>
+                    {activeTool && <div className="mt-2 text-xs text-muted-foreground">Aktives Tool: <code className="font-mono text-foreground">{activeTool.name}</code></div>}
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Commands
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {SLASH_COMMANDS.map((cmd) => (
+                        <div key={cmd.cmd} className="flex items-start justify-between gap-3 text-xs">
+                          <code className="rounded bg-muted px-1.5 py-0.5 text-primary">{cmd.cmd}</code>
+                          <span className="text-right text-muted-foreground">{cmd.desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      <Terminal className="h-3.5 w-3.5" />
+                      Session
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Verlauf</span>
+                        <span className="font-medium text-foreground">{messages.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Aktive Tools</span>
+                        <span className="font-medium text-foreground">{activeTool ? 1 : 0}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>Fehlerstatus</span>
+                        <span className={`font-medium ${chatError ? "text-destructive" : "text-foreground"}`}>{chatError ? "Fehler" : "Sauber"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="flex gap-2 items-end">
-              <textarea ref={textareaRef} value={input}
-                onChange={e => setInput(e.target.value)} onKeyDown={onKeyDown}
-                onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                placeholder="Nachricht… (Enter senden, Shift+Enter Umbruch)" rows={1} disabled={sending}
-                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50"
-                style={{ maxHeight: "120px", overflowY: "auto" }} />
-              <button onClick={send} disabled={sending||!input.trim()}
-                className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
+            </aside>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Einstellungen Tab ─────────────────────────────────────────────── */}
