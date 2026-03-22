@@ -47,6 +47,27 @@ class HeartbeatTask(BaseModel):
     active_hours: str | None = None    # z.B. "07:00-22:00"
 
 
+class ExecutionModeProfile(BaseModel):
+    """Permissions-Profil fuer einen technischen Ausfuehrungsmodus."""
+    model_config = {"extra": "ignore"}
+
+    permissions: list[str] = Field(default_factory=list)
+
+
+class ExecutionModesConfig(BaseModel):
+    """Technische Tool-Permissions pro Modus.
+
+    Phase 1 haelt die Struktur bewusst klein: globale Tool-Liste aus agent.yaml
+    bleibt bestehen, Modi filtern nur ueber Permissions.
+    """
+    model_config = {"extra": "ignore"}
+
+    default: Literal["safe", "elevated", "root"] = "safe"
+    safe: ExecutionModeProfile = Field(default_factory=ExecutionModeProfile)
+    elevated: ExecutionModeProfile | None = None
+    root: ExecutionModeProfile | None = None
+
+
 class AgentConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
@@ -62,6 +83,7 @@ class AgentConfig(BaseModel):
     max_tool_rounds: int       = 20
     heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
     heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)
+    execution_modes: ExecutionModesConfig | None = None
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
@@ -70,6 +92,31 @@ class AgentConfig(BaseModel):
     def _heartbeat_raw(self) -> dict[str, Any]:
         """Fuer agent_runtime.HeartbeatConfig.from_agent_config()."""
         return self.heartbeat.model_dump(exclude_none=True)
+
+    def effective_execution_mode(
+        self,
+        execution_mode: Literal["safe", "elevated", "root"] | None = None,
+    ) -> Literal["safe", "elevated", "root"] | None:
+        """Aktiven Modus bestimmen, ohne Legacy-Agenten zu beeinflussen."""
+        if self.execution_modes is None:
+            return None
+        return execution_mode or self.execution_modes.default
+
+    def effective_permissions(
+        self,
+        execution_mode: Literal["safe", "elevated", "root"] | None = None,
+    ) -> list[str] | None:
+        """Permissions fuer den aktiven Modus.
+
+        None bedeutet Legacy-Verhalten: keine technische Permission-Filterung.
+        """
+        mode = self.effective_execution_mode(execution_mode)
+        if mode is None or self.execution_modes is None:
+            return None
+        profile = getattr(self.execution_modes, mode, None)
+        if profile is None:
+            return []
+        return list(profile.permissions)
 
 
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
