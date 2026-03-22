@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .execution_mode_policy import resolve_request_execution_mode
 
@@ -20,11 +21,70 @@ class MyAgentUpdateRequest(BaseModel):
     model: str
     temperature: float = 0.7
     max_tokens: int = 4096
-    fallback_models: list[str] = []
-    tools: list[str] = []
-    allowed_agents: list[str] = []
-    mcp_servers: list[str] = []
+    fallback_models: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    allowed_agents: list[str] = Field(default_factory=list)
+    mcp_servers: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None
+
+
+def build_personal_agent_llm_data(req: MyAgentUpdateRequest) -> dict:
+    llm_data: dict = {
+        "model": req.model,
+        "temperature": req.temperature,
+        "max_tokens": req.max_tokens,
+        "fallback_models": list(req.fallback_models),
+    }
+    if req.ollama_base_url:
+        llm_data["ollama_base_url"] = req.ollama_base_url
+    return llm_data
+
+
+def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
+    agent_data: dict = {
+        "id": agent_id,
+        "type": "specialist",
+        "identity": req.identity,
+        "llm": build_personal_agent_llm_data(req),
+        "soul": "./soul.md",
+        "tools": list(req.tools),
+        "allowed_agents": list(req.allowed_agents),
+        "mcp_servers": list(req.mcp_servers),
+        "execution_modes": {
+            "default": "safe",
+            "safe": {
+                "permissions": ["filesystem.read", "memory.read", "memory.write"],
+            },
+            "elevated": {
+                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write"],
+            },
+            "root": {
+                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"],
+            },
+        },
+        "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
+    }
+    return agent_data
+
+
+def persist_personal_agent_config(
+    agent_dir: Path,
+    agent_id: str,
+    req: MyAgentUpdateRequest,
+    *,
+    load_agent_config_direct: Callable[[Path], object] | None = None,
+) -> dict:
+    import yaml as _yaml
+
+    agent_data = build_personal_agent_data(agent_id, req)
+    (agent_dir / "agent.yaml").write_text(
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
+    )
+    if req.soul is not None:
+        (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
+    if load_agent_config_direct is not None:
+        load_agent_config_direct(agent_dir)
+    return agent_data
 
 
 def register_user_routes(
@@ -46,6 +106,7 @@ def register_user_routes(
     audit_log,
     logger,
     incoming_message_model,
+    load_agent_config_direct=None,
 ) -> None:
     @admin_router.get("/users")
     def list_users():
@@ -206,53 +267,16 @@ def register_user_routes(
         req: MyAgentUpdateRequest,
         auth: tuple[str, str] = Depends(require_auth),
     ):
-        import yaml as _yaml
-
         username, _role = auth
         agent_id, _cfg = ensure_personal_agent(username)
         agent_dir = Path(agents_dir) / agent_id
 
-        llm_data: dict = {
-            "model": req.model,
-            "temperature": req.temperature,
-            "max_tokens": req.max_tokens,
-        }
-        if req.fallback_models:
-            llm_data["fallback_models"] = req.fallback_models
-        if req.ollama_base_url:
-            llm_data["ollama_base_url"] = req.ollama_base_url
-
-        agent_data: dict = {
-            "id": agent_id,
-            "type": "specialist",
-            "identity": req.identity,
-            "llm": llm_data,
-            "soul": "./soul.md",
-            "tools": req.tools,
-            "execution_modes": {
-                "default": "safe",
-                "safe": {
-                    "permissions": ["filesystem.read", "memory.read", "memory.write"],
-                },
-                "elevated": {
-                    "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write"],
-                },
-                "root": {
-                    "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"],
-                },
-            },
-            "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
-        }
-        if req.allowed_agents:
-            agent_data["allowed_agents"] = req.allowed_agents
-        if req.mcp_servers:
-            agent_data["mcp_servers"] = req.mcp_servers
-
-        (agent_dir / "agent.yaml").write_text(
-            _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
+        persist_personal_agent_config(
+            agent_dir,
+            agent_id,
+            req,
+            load_agent_config_direct=load_agent_config_direct,
         )
-        if req.soul is not None:
-            (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
 
         logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
