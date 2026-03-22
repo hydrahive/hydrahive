@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor } from "lucide-react";
-import { api, McpServer, WksConfig } from "@/lib/api";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { api, McpServer, WksConfig, DiscordConfig } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -60,7 +60,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"wks">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"wks"|"discord">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -246,6 +246,7 @@ export function MyAgentPage() {
             { id: "skills",   label: "Skills",         icon: BookOpen },
             { id: "mcp",      label: "MCP",            icon: Plug },
             { id: "wks",      label: "WKS",            icon: Monitor },
+            { id: "discord",  label: "Discord",         icon: MessageSquare },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -400,6 +401,11 @@ export function MyAgentPage() {
       {/* ── WKS Tab ───────────────────────────────────────────────────────── */}
       {tab === "wks" && (
         <WksTab />
+      )}
+
+      {/* ── Discord Tab ───────────────────────────────────────────────────── */}
+      {tab === "discord" && (
+        <DiscordTab />
       )}
     </div>
   );
@@ -900,6 +906,163 @@ function WksTab() {
           {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
         </div>
       </form>
+    </div>
+  );
+}
+
+
+// ── Discord Tab ───────────────────────────────────────────────────────────────
+
+function DiscordTab() {
+  const [cfg,        setCfg]        = useState<DiscordConfig | null>(null);
+  const [botToken,   setBotToken]   = useState("");
+  const [guildId,    setGuildId]    = useState("");
+  const [channelIds, setChannelIds] = useState("");  // kommagetrennt
+  const [saving,     setSaving]     = useState(false);
+  const [testing,    setTesting]    = useState(false);
+  const [msg,        setMsg]        = useState("");
+
+  useEffect(() => {
+    api.getDiscord().then(d => {
+      setCfg(d);
+      setGuildId(d.guild_id ?? "");
+      setChannelIds((d.channel_ids ?? []).join(", "));
+    }).catch(() => {});
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setMsg("");
+    try {
+      const ids = channelIds.split(",").map(s => s.trim()).filter(Boolean);
+      const res = await api.updateDiscord({ bot_token: botToken.trim(), guild_id: guildId.trim(), channel_ids: ids });
+      setMsg(`✓ Bot "${res.bot_name}" verbunden`);
+      setBotToken("");
+      const updated = await api.getDiscord();
+      setCfg(updated);
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setSaving(false); }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Discord-Bot entfernen?")) return;
+    await api.deleteDiscord();
+    setCfg({ configured: false });
+    setGuildId(""); setChannelIds("");
+    setMsg("Bot entfernt");
+  }
+
+  async function handleTest() {
+    setTesting(true); setMsg("");
+    try {
+      const res = await api.testDiscord();
+      setMsg(res.ok ? `✓ Bot "${res.bot_name}" erreichbar` : `Fehler: ${res.error}`);
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setTesting(false); }
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div>
+        <h2 className="text-sm font-semibold mb-1">Discord Bot</h2>
+        <p className="text-xs text-muted-foreground">
+          Verbinde deinen persönlichen Agenten mit einem Discord-Bot. Der Bot empfängt Nachrichten in konfigurierten Channels und antwortet darauf.
+        </p>
+      </div>
+
+      {cfg?.configured && (
+        <div className={`flex items-center gap-2 p-3 rounded-md text-xs border ${cfg.connected ? "bg-green-50 border-green-200 text-green-700" : "bg-yellow-50 border-yellow-200 text-yellow-700"}`}>
+          {cfg.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+          {cfg.connected ? "Bot ist online" : "Bot konfiguriert, aber nicht verbunden"}
+          {cfg.guild_id && <span className="ml-auto text-muted-foreground">Guild: {cfg.guild_id}</span>}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        <section className="space-y-3">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bot-Token</h3>
+          <div>
+            <label className="text-xs font-medium block mb-1">
+              Bot-Token {cfg?.configured && <span className="text-green-600">(bereits konfiguriert)</span>}
+            </label>
+            <input
+              type="password"
+              value={botToken}
+              onChange={e => setBotToken(e.target.value)}
+              placeholder={cfg?.configured ? "Neuen Token eingeben um zu ändern" : "Bot-Token von Discord Developer Portal"}
+              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Discord Developer Portal → Deine App → Bot → Token
+            </p>
+          </div>
+          <div>
+            <label className="text-xs font-medium block mb-1">Server (Guild) ID</label>
+            <input
+              type="text"
+              value={guildId}
+              onChange={e => setGuildId(e.target.value)}
+              placeholder="z.B. 1234567890123456789"
+              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium block mb-1">Channel IDs (kommagetrennt)</label>
+            <input
+              type="text"
+              value={channelIds}
+              onChange={e => setChannelIds(e.target.value)}
+              placeholder="z.B. 1111111111, 2222222222"
+              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Leer lassen = Bot reagiert in allen Channels des Servers
+            </p>
+          </div>
+        </section>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={saving || (!botToken.trim() && !cfg?.configured)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? "Speichern…" : "Speichern & Verbinden"}
+          </button>
+          {cfg?.configured && (
+            <>
+              <button type="button" onClick={handleTest} disabled={testing}
+                className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 transition-colors">
+                {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+                Testen
+              </button>
+              <button type="button" onClick={handleDelete}
+                className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
+                <X className="h-3.5 w-3.5" />
+                Entfernen
+              </button>
+            </>
+          )}
+          {msg && (
+            <span className={`text-xs flex items-center gap-1 ${msg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>
+              {msg.startsWith("✓") ? <CheckCircle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+              {msg}
+            </span>
+          )}
+        </div>
+      </form>
+
+      <section className="space-y-2 border-t pt-4">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">So richtest du einen Discord Bot ein</h3>
+        <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+          <li>Discord Developer Portal öffnen: discord.com/developers/applications</li>
+          <li>„New Application" → Name wählen → Erstellen</li>
+          <li>Links „Bot" → Token kopieren</li>
+          <li>„Message Content Intent" aktivieren</li>
+          <li>OAuth2 → URL Generator: Scopes „bot" + Perms „Read/Send Messages" → Bot einladen</li>
+          <li>Token und Server/Channel IDs hier einfügen</li>
+        </ol>
+      </section>
     </div>
   );
 }

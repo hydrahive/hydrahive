@@ -117,6 +117,10 @@ export const api = {
   getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
   testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
+  getDiscord:         () => api.get<DiscordConfig>("/me/discord"),
+  updateDiscord:      (d: DiscordConfigPayload) => api.put<{updated:boolean;bot_name:string;bot_id:string}>("/me/discord", d),
+  deleteDiscord:      () => api.delete<{deleted:boolean}>("/me/discord"),
+  testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
 };
 
 export interface AuditEntry {
@@ -200,6 +204,19 @@ export interface WksConfigPayload {
   ssh_user:    string;
   ollama_port: number;
   ssh_key?:    string;
+}
+
+export interface DiscordConfig {
+  configured:  boolean;
+  guild_id?:   string;
+  channel_ids?: string[];
+  connected?:  boolean;
+}
+
+export interface DiscordConfigPayload {
+  bot_token:   string;
+  guild_id:    string;
+  channel_ids: string[];
 }
 
 export interface UpdateStatus {
