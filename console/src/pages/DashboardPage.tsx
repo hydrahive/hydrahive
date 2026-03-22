@@ -1,20 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow } from "lucide-react";
-import { api } from "@/lib/api";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3 } from "lucide-react";
+import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 
 export function DashboardPage() {
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
+  const [gpu, setGpu] = useState<GpuInfo | null>(null);
+  const [heartbeatTasks, setHeartbeatTasks] = useState<HeartbeatTaskStatus[]>([]);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
 
   useEffect(() => {
-    api.health().then(() => setHealthy(true)).catch(() => setHealthy(false));
-    api.status().then(setStatus).catch(console.error);
+    let alive = true;
+    Promise.allSettled([
+      api.health(),
+      api.status(),
+      api.gpuInfo(),
+      api.heartbeatTasks(),
+      api.updateStatus(),
+      api.auditLogs({ limit: 5 }),
+    ]).then((results) => {
+      if (!alive) return;
+      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes] = results;
+      setHealthy(healthRes.status === "fulfilled");
+      if (statusRes.status === "fulfilled") setStatus(statusRes.value);
+      if (gpuRes.status === "fulfilled") setGpu(gpuRes.value);
+      if (hbRes.status === "fulfilled") setHeartbeatTasks(hbRes.value.tasks);
+      if (updateRes.status === "fulfilled") setUpdate(updateRes.value);
+      if (auditRes.status === "fulfilled") setAudit(auditRes.value.logs);
+    });
+    return () => { alive = false; };
   }, []);
 
   const runtime = status?.runtime as Record<string, any> | undefined;
   const running = runtime ? Object.values(runtime).filter((a: any) => a.status === "running").length : 0;
   const agents = status?.discovery?.count ?? null;
   const projects = status?.projects?.count ?? null;
+  const gpuList = gpu?.available && gpu.gpus ? gpu.gpus : [];
+  const hottestGpu = gpuList.length > 0 ? [...gpuList].sort((a, b) => (b.temp_c ?? -1) - (a.temp_c ?? -1))[0] : null;
+  const updateState = update?.status ?? "unknown";
+  const runningHeartbeats = heartbeatTasks.length;
 
   const cards = [
     {
@@ -53,8 +78,9 @@ export function DashboardPage() {
       { label: "Discovery", value: agents ?? "...", note: "Agentprofile geladen" },
       { label: "Projects", value: projects ?? "...", note: "Projektflaechen aktiv" },
       { label: "Runtime", value: running, note: "Workloads in Ausfuehrung" },
+      { label: "Heartbeats", value: runningHeartbeats, note: "Geplante Systemaufgaben" },
     ],
-    [agents, projects, running],
+    [agents, projects, running, runningHeartbeats],
   );
 
   return (
@@ -65,19 +91,19 @@ export function DashboardPage() {
             <div className="flex flex-wrap items-center gap-3">
               <span className={healthTone + " status-pill"}>
                 <span className={"dot " + (healthy === false ? "bg-destructive" : "bg-primary")} />
-                {healthy === false ? "Core gestoe rt" : "Core erreichbar"}
+                {healthy === false ? "Core gestoert" : "Core erreichbar"}
               </span>
               <span className="status-pill">
                 <Radar className="h-3.5 w-3.5" />
-                Design System Baseline in Arbeit
+                Dashboard jetzt als Operations-Flaeche
               </span>
             </div>
 
             <div>
               <h1 className="shell-title">Operations-Dashboard fuer den laufenden OctopOS-Stack</h1>
               <p className="shell-copy mt-3 max-w-2xl">
-                Diese Flaeche ist die Referenz fuer die neue App-Shell: klares Lagebild, schnell erfassbare Zustandskarten und
-                ein konsistenter visueller Rahmen fuer die Folge-Issues in Projects, Agents und Chat.
+                Diese Flaeche zeigt jetzt nicht nur Basiszahlen, sondern die fuer den Betrieb wichtigsten Signale:
+                Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivitaet.
               </p>
             </div>
           </div>
@@ -90,15 +116,15 @@ export function DashboardPage() {
               </div>
               <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-start justify-between gap-3">
-                  <span>App Shell vereinheitlichen</span>
+                  <span>Runtime- und Update-Lage schneller erfassen</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span>Dashboard als Referenzflaeche modernisieren</span>
+                  <span>GPU- und Heartbeat-Signale ohne Seitenwechsel sehen</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span>Grundlage fuer Projects, Agents und Chat legen</span>
+                  <span>letzte Admin-/Systemereignisse direkt im Dashboard</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
               </div>
@@ -128,12 +154,12 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="metric-kicker">Systembild</p>
+              <p className="metric-kicker">Lagebild</p>
               <h2 className="mt-2 text-xl font-semibold tracking-tight">Kompakte Betriebsansicht</h2>
             </div>
-            <span className="status-pill status-pill-ok">Stabil</span>
+            <span className="status-pill status-pill-ok">Uebersicht</span>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {systemFacts.map((item) => (
               <div key={item.label} className="rounded-2xl border bg-background/55 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
@@ -146,15 +172,123 @@ export function DashboardPage() {
 
         <div className="section-card">
           <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Update-Status</h2>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span>Status</span>
+                <span className={updateState === "ok" ? "status-pill status-pill-ok" : updateState === "running" ? "status-pill bg-accent/15 text-accent" : "status-pill"}>{updateState}</span>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Commit</div>
+              <div className="mt-2 font-mono text-foreground">{update?.commit ?? "unbekannt"}</div>
+            </div>
+            {update?.error && <div className="rounded-2xl bg-destructive/10 px-4 py-3 text-destructive">{update.error}</div>}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_1fr_1fr]">
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">GPU / Systemsignal</h2>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            {!gpu?.available || gpuList.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">Keine GPU-Daten verfuegbar.</div>
+            ) : (
+              gpuList.slice(0, 2).map((entry) => (
+                <div key={entry.name} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{entry.name}</span>
+                    <span className="status-pill">{entry.temp_c ?? "-"}°C</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div>GPU: {entry.util_gpu_pct ?? "-"}%</div>
+                    <div>VRAM: {entry.util_mem_pct ?? "-"}%</div>
+                    <div>Power: {entry.power_draw_w ?? "-"}W</div>
+                    <div>Used: {entry.mem_used_mb ?? "-"} MB</div>
+                  </div>
+                </div>
+              ))
+            )}
+            {hottestGpu && <div className="text-xs text-muted-foreground">Heisseste GPU: {hottestGpu.name} bei {hottestGpu.temp_c ?? "-"}°C</div>}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Heartbeat-Tasks</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {heartbeatTasks.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">Keine Heartbeat-Tasks aktiv.</div>
+            ) : (
+              heartbeatTasks.slice(0, 4).map((task) => (
+                <div key={task.task_id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{task.agent_id}</span>
+                    <span className="status-pill">{task.interval ? `${task.interval}s` : task.schedule ?? "manuell"}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{task.message}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Layers3 className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Letzte Audit-Events</h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            {audit.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">Keine Audit-Events geladen.</div>
+            ) : (
+              audit.map((entry) => (
+                <div key={entry.id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{entry.action}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(entry.timestamp).toLocaleTimeString("de-DE")}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{entry.user} to {entry.target}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <div className="section-card">
+          <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Naechste UX-Bloecke</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Naechste Dashboard-Ausbaustufen</h2>
           </div>
           <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Projects: klarere Status- und Queue-Ansicht</li>
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Agents: Runtime, Kanaele und Tools staerker gruppieren</li>
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Chat: besseres Streaming- und Kontextlayout</li>
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Mobile: Shell und Navigation fuer kleine Screens abschliessen</li>
+            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Projektbezogene Aktivitaet und Warteschlangen direkt im Dashboard</li>
+            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Agenten mit Fehlern oder ausbleibenden Heartbeats priorisiert hervorheben</li>
+            <li className="rounded-2xl bg-secondary/55 px-4 py-3">System-/GPU-Signal weiter verdichten, falls mehrere GPUs vorhanden sind</li>
           </ul>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h2 className="text-lg font-semibold tracking-tight">Kurzfazit</h2>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Core: {healthy === false ? "kritisch" : "erreichbar"}</div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Update: {updateState}</div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">GPU: {gpu?.available ? `${gpuList.length} erkannt` : "nicht aktiv"}</div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Heartbeat-Tasks: {runningHeartbeats}</div>
+          </div>
         </div>
       </section>
     </div>
