@@ -408,21 +408,34 @@ async def resolve_git_target(
         }
 
     last_error: Exception | None = None
+    matches: list[dict[str, str]] = []
     for candidate in _candidate_repo_names(project_id):
         try:
             info = await client.get_repo_by_full_name(client.org, candidate)
-            return {
-                "owner": client.org,
-                "repo": candidate,
-                "full_name": info.get("full_name") or f"{client.org}/{candidate}",
-                "workspace_key": repo_workspace_key(client.org, candidate),
-                "source": "project_id",
-            }
+            matches.append(
+                {
+                    "owner": client.org,
+                    "repo": candidate,
+                    "full_name": info.get("full_name") or f"{client.org}/{candidate}",
+                    "workspace_key": repo_workspace_key(client.org, candidate),
+                    "source": "project_id",
+                }
+            )
         except aiohttp.ClientResponseError as e:
             if e.status == 404:
                 last_error = e
                 continue
             raise
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) > 1:
+        choices = ", ".join(match["full_name"] for match in matches)
+        raise ValueError(
+            f"Repository-Aufloesung mehrdeutig fuer '{project_id}'. "
+            f"Bitte repo explizit angeben. Treffer: {choices}"
+        )
 
     hint = project_id
     if project_id.startswith("personal_"):

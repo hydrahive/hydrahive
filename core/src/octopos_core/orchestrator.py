@@ -430,7 +430,40 @@ class Orchestrator:
             if active_skills:
                 parts.append(skills_to_system_prompt(active_skills))
 
+        repo_guidance = self._repo_review_guidance(boss_cfg, user_text)
+        if repo_guidance:
+            parts.append(repo_guidance)
+
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _repo_review_guidance(agent_cfg: AgentConfig, user_text: str) -> str:
+        text = (user_text or "").lower()
+        triggers = (
+            "repo", "repository", "review", "commit", "diff", "issue",
+            "gitea", "github", "pull request", "pr ", "datei", "file",
+            "struktur", "tree", "deep dive", "http://", "https://",
+        )
+        if not any(token in text for token in triggers):
+            return ""
+
+        available = set(agent_cfg.tools or [])
+        repo_tools = {"gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits"}
+        if not available.intersection(repo_tools) and "git_status" not in available and "git_diff" not in available:
+            return ""
+
+        return (
+            "## Repo-Review-Arbeitsrahmen\n"
+            "- Bei Repo-, Review-, Commit- oder Datei-Anfragen zuerst das Zielrepo sauber aufloesen.\n"
+            "- Fuer Gitea-Repo-Links repo-aware Tools bevorzugen, nicht mit einem rohen http_request nach dem ersten 404 aufhoeren.\n"
+            "- Sinnvolle Reihenfolge:\n"
+            "  1. gitea_repo_inspect fuer Repo-Metadaten und Grundzustand\n"
+            "  2. gitea_repo_tree fuer Struktur und relevante Verzeichnisse\n"
+            "  3. gitea_repo_file fuer konkrete Dateien\n"
+            "  4. git_status oder git_diff nur wenn lokaler Workspace-Zustand oder Aenderungen wirklich relevant sind\n"
+            "- Keine breite Bewertung ohne mindestens Struktur oder konkrete Dateien geprueft zu haben.\n"
+            "- Wenn ein Repo-Link nicht direkt oeffnet, ueber Repo-Aufloesung, API oder owner/repo weiterarbeiten statt abzubrechen."
+        )
 
     @staticmethod
     def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str, str | None]:

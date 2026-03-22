@@ -1439,6 +1439,66 @@ class GiteaRepoFileTool(BaseTool):
         }
 
 
+class GiteaRepoCommitsTool(BaseTool):
+    """Listet Commits eines Repositories fuer Review-/Deep-Dive-Arbeit."""
+
+    @property
+    def id(self) -> str:   return "gitea_repo_commits"
+    @property
+    def name(self) -> str: return "Gitea Repo Commits"
+    @property
+    def description(self) -> str:
+        return (
+            "Listet die letzten Commits eines Gitea-Repositories. "
+            "Nutze dieses Tool fuer Aenderungsserien, Review-Kontext und Verlauf."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "limit": {"type": "integer", "description": "Anzahl der Commits (Standard: 10, max: 30)"},
+            },
+            "required": ["repo"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 10) -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            commits = await client.list_commits(owner, name, limit=max(1, min(limit, 30)))
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "limit": limit}
+
+        items = []
+        for item in commits:
+            commit = item.get("commit", {})
+            author = commit.get("author", {}) or {}
+            items.append(
+                {
+                    "sha": (item.get("sha") or "")[:12],
+                    "message": (commit.get("message") or "").splitlines()[0],
+                    "author": author.get("name") or item.get("author", {}).get("login"),
+                    "date": author.get("date"),
+                }
+            )
+
+        return {
+            "owner": owner,
+            "repo": name,
+            "count": len(items),
+            "commits": items,
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -2117,6 +2177,7 @@ registry.register(GitStatusTool())
 registry.register(GiteaRepoInspectTool())
 registry.register(GiteaRepoTreeTool())
 registry.register(GiteaRepoFileTool())
+registry.register(GiteaRepoCommitsTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
