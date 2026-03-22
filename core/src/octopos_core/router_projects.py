@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .execution_mode_policy import resolve_request_execution_mode
 from .session_manager import MessageRole
 
 
@@ -29,12 +30,14 @@ class MessageRequest(BaseModel):
 class ProjectIncomingMessage(BaseModel):
     content: str
     sender: str = "user"
+    execution_mode: str | None = None
 
 
 def register_project_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
     *,
+    require_auth,
     projects,
     discovery,
     runtime,
@@ -224,7 +227,11 @@ def register_project_routes(
         }
 
     @auth_router.post("/projects/{project_id}/message/stream")
-    async def send_message_stream(project_id: str, req: ProjectIncomingMessage):
+    async def send_message_stream(
+        project_id: str,
+        req: ProjectIncomingMessage,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
         from fastapi.responses import StreamingResponse as _SR
 
         check_message_rate(req.sender, project_id)
@@ -233,6 +240,13 @@ def register_project_routes(
             raise HTTPException(404, "Projekt nicht gefunden")
         if not discovery.get(cfg.agents.boss):
             raise HTTPException(503, "Boss-Agent nicht verfügbar")
+        execution_mode = resolve_request_execution_mode(
+            auth,
+            req.execution_mode,
+            audit_log=audit_log,
+            audit_target=project_id,
+            audit_source="projects.message.stream",
+        )
 
         async def event_stream():
             async for chunk in orchestrator.handle_message_stream(
@@ -240,7 +254,7 @@ def register_project_routes(
                 project_cfg=cfg,
                 content=req.content,
                 sender=req.sender,
-                execution_mode="safe",
+                execution_mode=execution_mode,
             ):
                 yield chunk
 
@@ -248,7 +262,11 @@ def register_project_routes(
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @auth_router.post("/projects/{project_id}/message")
-    async def send_message(project_id: str, req: ProjectIncomingMessage):
+    async def send_message(
+        project_id: str,
+        req: ProjectIncomingMessage,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
         check_message_rate(req.sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
@@ -257,13 +275,20 @@ def register_project_routes(
         boss_id = cfg.agents.boss
         if not discovery.get(boss_id):
             raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+        execution_mode = resolve_request_execution_mode(
+            auth,
+            req.execution_mode,
+            audit_log=audit_log,
+            audit_target=project_id,
+            audit_source="projects.message",
+        )
 
         response, workers = await orchestrator.handle_message(
             project_id=project_id,
             project_cfg=cfg,
             content=req.content,
             sender=req.sender,
-            execution_mode="safe",
+            execution_mode=execution_mode,
         )
         session = sessions.get_active(project_id)
         return {

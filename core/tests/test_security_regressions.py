@@ -66,12 +66,24 @@ class SecurityRegressionTests(unittest.TestCase):
             "/agents/{agent_id}/message",
             "/agents/{agent_id}/message/stream",
             "/me/agent/message/stream",
+            "/projects/{project_id}/message",
+            "/projects/{project_id}/message/stream",
         ):
             route = self._route(path, "POST")
-            self.assertEqual([param.name for param in route.dependant.body_params], ["body"])
+            body_param_names = [param.name for param in route.dependant.body_params]
+            self.assertEqual(len(body_param_names), 1)
+            self.assertIn(body_param_names[0], {"body", "req"})
             query_param_names = {param.name for param in route.dependant.query_params}
             self.assertNotIn("req", query_param_names)
             self.assertNotIn("body", query_param_names)
+
+    def test_project_message_routes_use_auth_execution_mode_path(self):
+        for path in (
+            "/projects/{project_id}/message",
+            "/projects/{project_id}/message/stream",
+        ):
+            deps = self._dependency_names(path, "POST")
+            self.assertIn("require_auth", deps)
 
     def test_execution_mode_policy_defaults_and_internal_passthrough(self):
         self.assertEqual(resolve_request_execution_mode(("alice", "user"), None), "safe")
