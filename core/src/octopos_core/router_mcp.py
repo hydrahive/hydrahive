@@ -12,6 +12,7 @@ class McpServerEntry(BaseModel):
     transport: str = "streamableHttp"
     url: str
     headers: dict = {}
+    meta: dict = {}
 
 
 def _load_mcp_servers(mcp_servers_file: str) -> list[dict]:

@@ -1,11 +1,23 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Edit2, Save, X, RefreshCw, Server } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, Edit2, Save, X, RefreshCw, Server, Brain, ExternalLink } from "lucide-react";
 import { api, McpServer } from "@/lib/api";
 
 const TRANSPORTS = ["streamableHttp", "sse", "stdio"];
 
 const EMPTY: Omit<McpServer, "headers"> & { headers: string } = {
   id: "", name: "", transport: "streamableHttp", url: "", headers: "",
+};
+
+const AMEM_PRESET: McpServer = {
+  id: "amem",
+  name: "A-MEM Shared Memory",
+  transport: "sse",
+  url: "http://192.168.1.5:8020/sse",
+  headers: {},
+  meta: {
+    role: "shared_memory",
+    search_ui_url: "http://192.168.1.5:8021",
+  },
 };
 
 export function McpConfigPage() {
@@ -15,6 +27,7 @@ export function McpConfigPage() {
   const [form,     setForm]     = useState<typeof EMPTY>({ ...EMPTY });
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState<string | null>(null);
+  const hasAmem = useMemo(() => servers.some((s) => s.id === "amem"), [servers]);
 
   async function load() {
     try {
@@ -28,6 +41,18 @@ export function McpConfigPage() {
 
   function startNew() {
     setForm({ ...EMPTY });
+    setEditing("new");
+    setError(null);
+  }
+
+  function startAmemPreset() {
+    setForm({
+      id: AMEM_PRESET.id,
+      name: AMEM_PRESET.name,
+      transport: AMEM_PRESET.transport,
+      url: AMEM_PRESET.url,
+      headers: "",
+    });
     setEditing("new");
     setError(null);
   }
@@ -54,7 +79,14 @@ export function McpConfigPage() {
         try { headers = JSON.parse(form.headers); }
         catch { throw new Error("Headers müssen gültiges JSON sein"); }
       }
-      const payload = { id: form.id, name: form.name, transport: form.transport, url: form.url, headers };
+      const payload = {
+        id: form.id,
+        name: form.name,
+        transport: form.transport,
+        url: form.url,
+        headers,
+        meta: form.id === "amem" ? AMEM_PRESET.meta : {},
+      };
       if (editing === "new") {
         await api.createMcpServer(payload);
       } else {
@@ -87,9 +119,38 @@ export function McpConfigPage() {
           <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors">
             <RefreshCw className="h-3.5 w-3.5"/>Aktualisieren
           </button>
+          <button onClick={startAmemPreset} disabled={hasAmem}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
+            <Brain className="h-3.5 w-3.5"/>A-MEM Preset
+          </button>
           <button onClick={startNew} className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
             <Plus className="h-3.5 w-3.5"/>Server hinzufügen
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Brain className="h-4 w-4 text-primary" />
+              A-MEM Shared Memory
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Zentrale agentenuebergreifende Langzeit-Wissensdatenbank fuer Fehler, Loesungen, Learnings und Betriebswissen.
+            </p>
+            <p className="text-xs font-mono text-muted-foreground">{AMEM_PRESET.url}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <a href={String(AMEM_PRESET.meta?.search_ui_url ?? "#")} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs hover:bg-accent transition-colors">
+              Search UI
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+            <span className={`rounded-full px-2.5 py-1 text-[11px] ${hasAmem ? "bg-emerald-500/15 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+              {hasAmem ? "konfiguriert" : "noch nicht konfiguriert"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -173,6 +234,7 @@ export function McpConfigPage() {
                     <span className="font-medium text-sm">{s.name}</span>
                     <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{s.id}</span>
                     <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{s.transport}</span>
+                    {s.id === "amem" && <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">shared memory</span>}
                   </div>
                   <p className="text-xs text-muted-foreground font-mono truncate">{s.url}</p>
                 </div>

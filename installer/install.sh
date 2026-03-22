@@ -6,6 +6,9 @@ set -euo pipefail
 OCTOPOS_VERSION="0.1.0"
 export OCTOPOS_DIR="/opt/octopos"
 MODULES_DIR="$(dirname "${BASH_SOURCE[0]}")/modules"
+AMEM_ENABLED="${AMEM_ENABLED:-1}"
+AMEM_URL="${AMEM_URL:-http://192.168.1.5:8020/sse}"
+AMEM_SEARCH_UI_URL="${AMEM_SEARCH_UI_URL:-http://192.168.1.5:8021}"
 
 # Farben — zentral definiert, alle Module nutzen diese
 export RED="\033[0;31m"
@@ -78,6 +81,38 @@ for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
         chmod 600 "${_path}"
     fi
 done
+
+python3 - <<PY
+import json
+from pathlib import Path
+
+enabled = ${AMEM_ENABLED}
+amem_url = "${AMEM_URL}"
+amem_search_ui_url = "${AMEM_SEARCH_UI_URL}"
+path = Path("/etc/octopos/mcp_servers.json")
+path.parent.mkdir(parents=True, exist_ok=True)
+try:
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+except Exception:
+    data = {}
+servers = list(data.get("servers", []))
+if enabled and not any(s.get("id") == "amem" for s in servers):
+    servers.append({
+        "id": "amem",
+        "name": "A-MEM Shared Memory",
+        "transport": "sse",
+        "url": amem_url,
+        "headers": {},
+        "meta": {
+            "role": "shared_memory",
+            "search_ui_url": amem_search_ui_url,
+        },
+    })
+path.write_text(json.dumps({"servers": servers}, indent=2), encoding="utf-8")
+PY
+chown octopos:octopos /etc/octopos/mcp_servers.json
+chmod 600 /etc/octopos/mcp_servers.json
+success "MCP-Server-Konfiguration vorbereitet"
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"

@@ -174,6 +174,7 @@ export interface McpServer {
   transport: string;
   url:       string;
   headers:   Record<string, string>;
+  meta?:     Record<string, unknown>;
 }
 
 export interface GiteaConfig {
