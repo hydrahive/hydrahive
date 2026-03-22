@@ -9,8 +9,9 @@ AMEM_REPO_URL="${AMEM_REPO_URL:-https://github.com/agiresearch/A-mem.git}"
 AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/octopos/amem.env}"
 MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/octopos/mcp_servers.json}"
 AMEM_MCP_URL="${AMEM_MCP_URL:-http://127.0.0.1:8020/sse}"
-AMEM_SEARCH_UI_URL="${AMEM_SEARCH_UI_URL:-http://127.0.0.1:8021}"
 AMEM_BIND_HOST="${AMEM_BIND_HOST:-0.0.0.0}"
+AMEM_PUBLIC_HOST="${AMEM_PUBLIC_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}' || echo 127.0.0.1)}"
+AMEM_SEARCH_UI_URL="${AMEM_SEARCH_UI_URL:-http://${AMEM_PUBLIC_HOST}:8021}"
 
 info()    { echo "[A-MEM] $1"; }
 success() { echo "[A-MEM] OK: $1"; }
