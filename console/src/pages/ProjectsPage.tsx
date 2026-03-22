@@ -170,11 +170,11 @@ export function ProjectsPage() {
                 <FolderKanban className="h-4 w-4 text-primary" />
                 Projektaktionen
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button
                   onClick={refresh}
                   disabled={refreshing}
-                  className="inline-flex items-center gap-2 rounded-2xl border bg-background/70 px-4 py-2 text-sm transition hover:bg-background disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-background/70 px-4 py-2 text-sm transition hover:bg-background disabled:opacity-50"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
                   Aktualisieren
@@ -182,7 +182,7 @@ export function ProjectsPage() {
                 {isAdmin && (
                   <button
                     onClick={() => setShowForm(true)}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Neues Projekt
@@ -280,7 +280,7 @@ export function ProjectsPage() {
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <div className="md:col-span-2 flex items-center gap-2 rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
+            <div className="md:col-span-2 flex items-start gap-2 rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
               <input
                 type="checkbox"
                 id="samba"
@@ -291,7 +291,7 @@ export function ProjectsPage() {
               <label htmlFor="samba">Samba-Freigabe einrichten</label>
             </div>
             {createErr && <p className="md:col-span-2 text-sm text-destructive">{createErr}</p>}
-            <div className="md:col-span-2 flex justify-end gap-2">
+            <div className="md:col-span-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY); }} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">
                 Abbrechen
               </button>
@@ -423,7 +423,7 @@ export function ProjectsPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr_0.9fr]">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_0.9fr]">
                   <div className="rounded-3xl border bg-background/55 p-4">
                     <p className="metric-kicker">Arbeitsraum</p>
                     <div className="mt-3 space-y-3 text-sm">
@@ -451,7 +451,7 @@ export function ProjectsPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border bg-background/55 p-4">
+                  <div className="rounded-3xl border bg-background/55 p-4 md:col-span-2 xl:col-span-1">
                     <p className="metric-kicker">Team</p>
                     <div className="mt-3 space-y-3 text-sm">
                       <div className="rounded-2xl bg-secondary/60 px-3 py-3">
