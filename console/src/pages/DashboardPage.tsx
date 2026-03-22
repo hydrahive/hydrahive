@@ -9,6 +9,8 @@ export function DashboardPage() {
   const [heartbeatTasks, setHeartbeatTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [projectMap, setProjectMap] = useState<Record<string, any>>({});
+  const [agentMap, setAgentMap] = useState<Record<string, any>>({});
 
   useEffect(() => {
     let alive = true;
@@ -19,15 +21,19 @@ export function DashboardPage() {
       api.heartbeatTasks(),
       api.updateStatus(),
       api.auditLogs({ limit: 5 }),
+      api.projects(),
+      api.agents(),
     ]).then((results) => {
       if (!alive) return;
-      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes] = results;
+      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes] = results;
       setHealthy(healthRes.status === "fulfilled");
       if (statusRes.status === "fulfilled") setStatus(statusRes.value);
       if (gpuRes.status === "fulfilled") setGpu(gpuRes.value);
       if (hbRes.status === "fulfilled") setHeartbeatTasks(hbRes.value.tasks);
       if (updateRes.status === "fulfilled") setUpdate(updateRes.value);
       if (auditRes.status === "fulfilled") setAudit(auditRes.value.logs);
+      if (projectsRes.status === "fulfilled") setProjectMap(projectsRes.value as Record<string, any>);
+      if (agentsRes.status === "fulfilled") setAgentMap(agentsRes.value as Record<string, any>);
     });
     return () => { alive = false; };
   }, []);
@@ -36,10 +42,56 @@ export function DashboardPage() {
   const running = runtime ? Object.values(runtime).filter((a: any) => a.status === "running").length : 0;
   const agents = status?.discovery?.count ?? null;
   const projects = status?.projects?.count ?? null;
+  const activeProjects = (status?.sessions?.active_projects as string[] | undefined) ?? [];
   const gpuList = gpu?.available && gpu.gpus ? gpu.gpus : [];
   const hottestGpu = gpuList.length > 0 ? [...gpuList].sort((a, b) => (b.temp_c ?? -1) - (a.temp_c ?? -1))[0] : null;
   const updateState = update?.status ?? "unknown";
   const runningHeartbeats = heartbeatTasks.length;
+  const problemAgents = useMemo(() => {
+    return Object.entries(agentMap)
+      .map(([id, entry]) => {
+        const runtimeState = entry?.runtime;
+        if (!runtimeState) {
+          return { id, severity: "warn", summary: "Keine Runtime aktiv", detail: "Agent ist konfiguriert, aber aktuell nicht gestartet." };
+        }
+        if (runtimeState.status !== "running") {
+          return { id, severity: "critical", summary: `Runtime ${runtimeState.status}`, detail: "Agent meldet keinen laufenden Zustand." };
+        }
+        if (runtimeState.restart_count > 0) {
+          return { id, severity: "warn", summary: `${runtimeState.restart_count} Restarts`, detail: "Runtime wurde bereits neu gestartet." };
+        }
+        const heartbeatAge = Number(runtimeState.last_heartbeat_age ?? 0);
+        const heartbeatTimeout = Number(runtimeState.heartbeat_timeout ?? 0);
+        if (heartbeatTimeout > 0 && heartbeatAge > heartbeatTimeout * 0.75) {
+          return { id, severity: "warn", summary: "Heartbeat spaet", detail: `${heartbeatAge.toFixed(0)}s seit letztem Heartbeat.` };
+        }
+        return null;
+      })
+      .filter((entry): entry is { id: string; severity: "warn" | "critical"; summary: string; detail: string } => entry !== null)
+      .sort((a, b) => (a.severity === b.severity ? a.id.localeCompare(b.id) : a.severity === "critical" ? -1 : 1));
+  }, [agentMap]);
+  const projectSignals = useMemo(() => {
+    return activeProjects.map((id) => {
+      const entry = projectMap[id];
+      if (!entry) {
+        return {
+          id,
+          title: id,
+          summary: "Aktive Session ohne Projektdefinition",
+          meta: "Der Session-Manager meldet Aktivitaet, aber es gibt kein passendes Projektobjekt.",
+          tone: "warn",
+        };
+      }
+      const workerCount = Array.isArray(entry.workers) ? entry.workers.length : 0;
+      return {
+        id,
+        title: entry.name || id,
+        summary: `Boss ${entry.boss || "-"}`,
+        meta: `${workerCount} Worker · ${entry.matrix_room ? "Matrix aktiv" : "keine Matrix-Room-ID"}`,
+        tone: "ok",
+      };
+    });
+  }, [activeProjects, projectMap]);
 
   const cards = [
     {
@@ -79,8 +131,9 @@ export function DashboardPage() {
       { label: "Projects", value: projects ?? "...", note: "Projektflaechen aktiv" },
       { label: "Runtime", value: running, note: "Workloads in Ausfuehrung" },
       { label: "Heartbeats", value: runningHeartbeats, note: "Geplante Systemaufgaben" },
+      { label: "Sessions", value: activeProjects.length, note: "Aktive Projekt- oder Agent-Sessions" },
     ],
-    [agents, projects, running, runningHeartbeats],
+    [activeProjects.length, agents, projects, running, runningHeartbeats],
   );
 
   return (
@@ -269,25 +322,53 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Naechste Dashboard-Ausbaustufen</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Priorisierte Agenten-Signale</h2>
           </div>
-          <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Projektbezogene Aktivitaet und Warteschlangen direkt im Dashboard</li>
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">Agenten mit Fehlern oder ausbleibenden Heartbeats priorisiert hervorheben</li>
-            <li className="rounded-2xl bg-secondary/55 px-4 py-3">System-/GPU-Signal weiter verdichten, falls mehrere GPUs vorhanden sind</li>
-          </ul>
+          <div className="mt-4 space-y-3">
+            {problemAgents.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">
+                Aktuell keine auffaelligen Agenten. Runtime und Heartbeats wirken stabil.
+              </div>
+            ) : (
+              problemAgents.slice(0, 5).map((agent) => (
+                <div key={agent.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{agent.id}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{agent.detail}</div>
+                    </div>
+                    <span className={agent.severity === "critical" ? "status-pill bg-destructive/12 text-destructive" : "status-pill bg-accent/15 text-accent"}>
+                      {agent.summary}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Workflow className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Kurzfazit</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Aktive Projekte</h2>
           </div>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Core: {healthy === false ? "kritisch" : "erreichbar"}</div>
-            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Update: {updateState}</div>
-            <div className="rounded-2xl bg-secondary/55 px-4 py-3">GPU: {gpu?.available ? `${gpuList.length} erkannt` : "nicht aktiv"}</div>
-            <div className="rounded-2xl bg-secondary/55 px-4 py-3">Heartbeat-Tasks: {runningHeartbeats}</div>
+            {projectSignals.length === 0 ? (
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">Keine aktiven Sessions gemeldet.</div>
+            ) : (
+              projectSignals.slice(0, 5).map((project) => (
+                <div key={project.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{project.title}</span>
+                    <span className={project.tone === "warn" ? "status-pill bg-accent/15 text-accent" : "status-pill status-pill-ok"}>
+                      aktiv
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{project.summary}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{project.meta}</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
