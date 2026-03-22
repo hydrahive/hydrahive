@@ -1657,6 +1657,139 @@ class GiteaCreateIssueTool(BaseTool):
         }
 
 
+class GiteaCommentIssueTool(BaseTool):
+    """Kommentiert ein bestehendes Gitea-Issue."""
+
+    @property
+    def id(self) -> str:   return "gitea_comment_issue"
+    @property
+    def name(self) -> str: return "Gitea Issue kommentieren"
+    @property
+    def description(self) -> str:
+        return "Schreibt einen Kommentar in ein bestehendes Gitea-Issue."
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.issue"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
+                "body": {"type": "string", "description": "Kommentar in Markdown"},
+            },
+            "required": ["repo", "issue_number", "body"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        repo: str,
+        issue_number: int,
+        body: str,
+    ) -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            comment = await client.comment_issue_for_repo(owner, name, issue_number, body)
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "issue_number": issue_number}
+
+        return {
+            "commented": True,
+            "owner": owner,
+            "repo": name,
+            "full_name": f"{owner}/{name}",
+            "issue_number": issue_number,
+            "comment_id": comment.get("id"),
+            "comment_url": comment.get("html_url"),
+        }
+
+
+class GiteaUpdateIssueTool(BaseTool):
+    """Aktualisiert oder schliesst ein bestehendes Gitea-Issue."""
+
+    @property
+    def id(self) -> str:   return "gitea_update_issue"
+    @property
+    def name(self) -> str: return "Gitea Issue aktualisieren"
+    @property
+    def description(self) -> str:
+        return "Aktualisiert Titel/Body/Labels oder schliesst ein bestehendes Gitea-Issue."
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.issue"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
+                "title": {"type": "string", "description": "Neuer Titel (optional)"},
+                "body": {"type": "string", "description": "Neuer Body (optional)"},
+                "state": {
+                    "type": "string",
+                    "enum": ["open", "closed"],
+                    "description": "Issue-Status (optional)",
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optionale Label-Liste",
+                },
+            },
+            "required": ["repo", "issue_number"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        repo: str,
+        issue_number: int,
+        title: str = "",
+        body: str = "",
+        state: str = "",
+        labels: list[str] | None = None,
+    ) -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            issue = await client.update_issue_for_repo(
+                owner,
+                name,
+                issue_number,
+                title=title or None,
+                body=body or None,
+                state=state or None,
+                labels=labels,
+            )
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "issue_number": issue_number}
+
+        return {
+            "updated": True,
+            "owner": owner,
+            "repo": name,
+            "full_name": f"{owner}/{name}",
+            "issue_number": issue.get("number"),
+            "issue_url": issue.get("html_url"),
+            "state": issue.get("state"),
+            "title": issue.get("title"),
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -2338,6 +2471,8 @@ registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
 registry.register(GiteaRepoDiffTool())
 registry.register(GiteaCreateIssueTool())
+registry.register(GiteaCommentIssueTool())
+registry.register(GiteaUpdateIssueTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
