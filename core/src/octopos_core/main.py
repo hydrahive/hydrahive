@@ -35,6 +35,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_llm import register_llm_routes
+from .router_mcp import register_mcp_routes
 from .router_project_integrations import register_project_integration_routes
 from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room
 from .router_projects import register_project_routes
@@ -1037,75 +1038,12 @@ register_llm_routes(
 )
 
 # ================================================================== MCP-Server
-
-class McpServerEntry(BaseModel):
-    id:        str
-    name:      str
-    transport: str = "streamableHttp"   # streamableHttp | sse | stdio
-    url:       str
-    headers:   dict = {}
-
-
-def _load_mcp_servers() -> list[dict]:
-    import json as _json
-    try:
-        data = _json.loads(Path(MCP_SERVERS_FILE).read_text())
-        return data.get("servers", [])
-    except (OSError, ValueError):
-        return []
-
-
-def _save_mcp_servers(servers: list[dict]) -> None:
-    import json as _json
-    Path(MCP_SERVERS_FILE).parent.mkdir(parents=True, exist_ok=True)
-    Path(MCP_SERVERS_FILE).write_text(
-        _json.dumps({"servers": servers}, indent=2), encoding="utf-8"
-    )
-
-
-@auth_router.get("/mcp/servers")
-def list_mcp_servers():
-    """Alle konfigurierten MCP-Server auflisten (alle eingeloggten User)."""
-    return {"servers": _load_mcp_servers()}
-
-
-@admin_router.post("/mcp/servers", status_code=201)
-def create_mcp_server(req: McpServerEntry):
-    """Neuen MCP-Server anlegen."""
-    import re as _re
-    if not _re.match(r"^[a-z0-9_-]+$", req.id):
-        raise HTTPException(400, "ID darf nur a-z, 0-9, _ und - enthalten")
-    servers = _load_mcp_servers()
-    if any(s["id"] == req.id for s in servers):
-        raise HTTPException(409, f"MCP-Server '{req.id}' existiert bereits")
-    servers.append(req.model_dump())
-    _save_mcp_servers(servers)
-    audit_log("mcp.create", target=req.id, details={"url": req.url})
-    return {"created": True, "server": req.model_dump()}
-
-
-@admin_router.put("/mcp/servers/{server_id}")
-def update_mcp_server(server_id: str, req: McpServerEntry):
-    """MCP-Server aktualisieren."""
-    servers = _load_mcp_servers()
-    idx = next((i for i, s in enumerate(servers) if s["id"] == server_id), None)
-    if idx is None:
-        raise HTTPException(404, f"MCP-Server '{server_id}' nicht gefunden")
-    servers[idx] = req.model_dump()
-    _save_mcp_servers(servers)
-    return {"updated": True, "server": req.model_dump()}
-
-
-@admin_router.delete("/mcp/servers/{server_id}")
-def delete_mcp_server(server_id: str):
-    """MCP-Server löschen."""
-    servers = _load_mcp_servers()
-    new_servers = [s for s in servers if s["id"] != server_id]
-    if len(new_servers) == len(servers):
-        raise HTTPException(404, f"MCP-Server '{server_id}' nicht gefunden")
-    _save_mcp_servers(new_servers)
-    audit_log("mcp.delete", target=server_id)
-    return {"deleted": True, "server_id": server_id}
+register_mcp_routes(
+    auth_router,
+    admin_router,
+    mcp_servers_file=MCP_SERVERS_FILE,
+    audit_log=audit_log,
+)
 
 
 # ================================================================== Backup & Restore
