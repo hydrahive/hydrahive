@@ -180,6 +180,17 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(status["allowed"]["udp"], [])
         self.assertEqual(status["deviations"], [])
 
+    def test_ufw_status_summary_accepts_localized_inactive_status(self):
+        class Result:
+            returncode = 0
+            stdout = "Status: Inaktiv\n"
+            stderr = ""
+
+        with mock.patch("subprocess.run", return_value=Result()):
+            status = main._ufw_status_summary()
+
+        self.assertEqual(status, {"available": True, "active": False, "rules": []})
+
 
 if __name__ == "__main__":
     unittest.main()

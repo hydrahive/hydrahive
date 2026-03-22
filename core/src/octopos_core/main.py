@@ -3643,7 +3643,8 @@ def _ufw_status_summary() -> dict:
     output = (result.stdout or "").strip()
     if not output:
         return {"available": True, "active": False, "rules": []}
-    if output.startswith("Status: inactive"):
+    output_lower = output.lower()
+    if output_lower.startswith("status: inactive") or output_lower.startswith("status: inaktiv"):
         return {"available": True, "active": False, "rules": []}
 
     rules = []
