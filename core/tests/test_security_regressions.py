@@ -23,11 +23,17 @@ class SecurityRegressionTests(unittest.TestCase):
     def test_sensitive_routes_keep_auth_guards(self):
         self.assertIn("require_auth", self._dependency_names("/tools", "GET"))
         self.assertIn("require_auth", self._dependency_names("/system/gpu", "GET"))
+        self.assertIn("require_auth", self._dependency_names("/llm/available-models", "GET"))
+        self.assertIn("require_auth", self._dependency_names("/gitea/repos", "GET"))
+        self.assertIn("require_auth", self._dependency_names("/mcp/servers", "GET"))
         self.assertIn("require_admin", self._dependency_names("/audit/logs", "GET"))
         self.assertIn("require_admin", self._dependency_names("/admin/update/status", "GET"))
         self.assertIn("require_admin", self._dependency_names("/admin/update/trigger", "POST"))
         self.assertIn("require_admin", self._dependency_names("/gitea/config", "GET"))
         self.assertIn("require_admin", self._dependency_names("/gitea/config", "PUT"))
+        self.assertIn("require_admin", self._dependency_names("/llm/config", "GET"))
+        self.assertIn("require_admin", self._dependency_names("/mcp/servers/{server_id}", "DELETE"))
+        self.assertIn("require_admin", self._dependency_names("/admin/backups", "GET"))
 
     def test_public_routes_stay_public(self):
         self.assertNotIn("require_auth", self._dependency_names("/setup/status", "GET"))
@@ -53,6 +59,23 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(logs[0]["action"], "security.regression")
         self.assertEqual(logs[0]["user"], "tester")
         self.assertEqual(logs[0]["target"], "unit")
+
+    def test_gitea_config_get_masks_token(self):
+        original_config_file = main.GITEA_CONFIG_FILE
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "gitea_config.json"
+            config_path.write_text(
+                '{"url":"http://127.0.0.1:3001","org":"octopos","token":"1234567890abcdef","webhook_secret":"secret"}',
+                encoding="utf-8",
+            )
+            main.GITEA_CONFIG_FILE = str(config_path)
+            cfg = main.get_gitea_config()
+
+        main.GITEA_CONFIG_FILE = original_config_file
+
+        self.assertTrue(cfg["has_token"])
+        self.assertEqual(cfg["token_masked"], "12345678...cdef")
+        self.assertNotIn("token", cfg)
 
 
 if __name__ == "__main__":
