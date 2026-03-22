@@ -121,6 +121,9 @@ async def lifespan(app: FastAPI):
     JWT_SECRET = _load_or_create_jwt_secret()
     logger.info("JWT-Secret geladen")
 
+    # Audit-Log-Pfad vorbereiten
+    _ensure_audit_log_path()
+
     # Admin-Token für Matrix-Operationen holen
     try:
         cred_lines = {}
@@ -1133,6 +1136,19 @@ def get_core_logs(lines: int = 200, _a: tuple[str, str] = Depends(require_admin)
 AUDIT_LOG_FILE = Path("/var/log/octopos/audit.jsonl")
 
 
+def _ensure_audit_log_path() -> None:
+    """Audit-Log-Verzeichnis/Datei vorbereiten und sinnvolle Modes setzen."""
+    try:
+        AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if AUDIT_LOG_FILE.parent.exists():
+            AUDIT_LOG_FILE.parent.chmod(0o750)
+        if not AUDIT_LOG_FILE.exists():
+            AUDIT_LOG_FILE.touch()
+        AUDIT_LOG_FILE.chmod(0o640)
+    except OSError as e:
+        logger.warning("Audit-Log Initialisierung fehlgeschlagen: %s", e)
+
+
 def audit_log(
     action:     str,
     user:       str = "system",
@@ -1160,7 +1176,7 @@ def audit_log(
     }
 
     try:
-        AUDIT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_audit_log_path()
         with AUDIT_LOG_FILE.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError as e:
