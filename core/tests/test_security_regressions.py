@@ -201,6 +201,24 @@ class SecurityRegressionTests(unittest.TestCase):
             endpoint = getattr(route, "endpoint", None)
             self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_backup_restore")
 
+    def test_core_misc_routes_are_registered_from_router_core_misc(self):
+        for path, method in (
+            ("/setup/status", "GET"),
+            ("/setup", "POST"),
+            ("/auth/login", "POST"),
+            ("/auth/me", "GET"),
+            ("/health", "GET"),
+            ("/agents", "GET"),
+            ("/agents/{agent_id}", "GET"),
+            ("/agents/{agent_id}/llm", "PATCH"),
+            ("/logs/core", "GET"),
+            ("/audit/logs", "GET"),
+            ("/tools", "GET"),
+        ):
+            route = self._route(path, method)
+            endpoint = getattr(route, "endpoint", None)
+            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_core_misc")
+
     def test_read_server_name_priority(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)

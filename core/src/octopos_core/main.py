@@ -13,7 +13,6 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
 
 import asyncio
 import time
@@ -35,6 +34,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_backup_restore import register_backup_restore_routes
+from .router_core_misc import register_core_misc_routes
 from .router_llm import register_llm_routes
 from .router_mcp import register_mcp_routes
 from .router_project_integrations import register_project_integration_routes
@@ -413,159 +413,26 @@ app = FastAPI(
 
 
 # ================================================================== Auth (#56)
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-@public_router.get("/setup/status")
-def setup_status():
-    """Gibt zurück ob der Setup-Wizard noch ausgeführt werden muss."""
-    users = _load_users()
-    return {"needs_setup": len(users) == 0}
-
-
-class SetupRequest(BaseModel):
-    username: str
-    password: str
-
-
-@public_router.post("/setup", status_code=201)
-async def run_setup(req: SetupRequest):
-    """
-    Ersteinrichtung — legt den ersten Admin-User an.
-    Nur verfügbar wenn noch keine User existieren.
-    Lock verhindert parallele Requests (#71).
-    """
-    import re as _re
-    from datetime import datetime as _dt
-
-    async with _setup_lock:
-        users = _load_users()
-        if users:
-            raise HTTPException(403, "Setup bereits abgeschlossen")
-        if not _re.match(r"^[a-z0-9_.-]+$", req.username):
-            raise HTTPException(400, "Username darf nur a-z, 0-9, _ . - enthalten")
-        if len(req.password) < 8:
-            raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
-
-        server_name = _read_server_name()
-        matrix_ok   = await _matrix_register(req.username, req.password, server_name)
-
-        users[req.username] = {
-            "password_hash": _hash_password(req.password),
-            "role":          "admin",
-            "matrix_id":     f"@{req.username}:{server_name}",
-            "matrix_ok":     matrix_ok,
-            "created_at":    _dt.now().isoformat(),
-        }
-        _save_users(users)
-        logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
-        return {"created": True, "username": req.username, "role": "admin"}
-
-
-@public_router.post("/auth/login")
-def login(req: LoginRequest, request: Request):
-    """
-    Login: prüft zuerst users.json, dann Fallback auf admin_credentials.
-    Gibt JWT-Bearer-Token zurück.
-    """
-    _check_login_rate(request.client.host if request.client else "unknown")
-    # Primär: users.json
-    users = _load_users()
-    if users:
-        user = users.get(req.username)
-        if user and _verify_password(req.password, user.get("password_hash", "")):
-            role  = user.get("role", "user")
-            token = _make_jwt(req.username, role)
-            logger.info("Login erfolgreich (users.json): %s", req.username)
-            return {"access_token": token, "token_type": "bearer", "role": role, "username": req.username}
-        raise HTTPException(401, "Ungültige Zugangsdaten")
-
-    # Fallback: admin_credentials (vor Setup oder Legacy-Betrieb)
-    admin_pass = _read_admin_password()
-    if not admin_pass:
-        raise HTTPException(503, "Kein Admin-Passwort konfiguriert — Setup erforderlich")
-    if req.username != "admin" or req.password != admin_pass:
-        raise HTTPException(401, "Ungültige Zugangsdaten")
-    token = _make_jwt(req.username, "admin")
-    logger.info("Login erfolgreich (admin_credentials): %s", req.username)
-    return {"access_token": token, "token_type": "bearer", "role": "admin", "username": req.username}
-
-
-@auth_router.get("/auth/me")
-def whoami(auth: tuple[str,str] = Depends(require_auth)):
-    """Token-Validierung — gibt aktuellen User + Role zurück."""
-    username, role = auth
-    return {"username": username, "role": role}
-
-
-# ================================================================== Agenten
-
-@public_router.get("/health")
-def health():
-    return {"status": "ok", "service": "octopos-core"}
-
-
-@auth_router.get("/agents")
-def list_agents(_a: tuple[str, str] = Depends(require_auth)):
-    registered = discovery.agents
-    running    = runtime.status_all()
-    return {
-        agent_id: {
-            "config": {
-                "type":            cfg.type,
-                "identity":        cfg.identity,
-                "model":           cfg.llm.model,
-                "fallback_models": cfg.llm.fallback_models,
-            },
-            "runtime": running.get(agent_id),
-        }
-        for agent_id, cfg in registered.items()
-    }
-
-
-@auth_router.get("/agents/{agent_id}")
-def get_agent(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
-    cfg = discovery.get(agent_id)
-    if not cfg:
-        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-    return {
-        "config":  cfg.model_dump(exclude={"agent_dir"}),
-        "runtime": runtime.status_all().get(agent_id),
-    }
-
-
-class AgentLlmPatchRequest(BaseModel):
-    fallback_models: list[str]
-
-
-@admin_router.patch("/agents/{agent_id}/llm")
-def patch_agent_llm(
-    agent_id: str,
-    req: AgentLlmPatchRequest,
-    _a: tuple = Depends(require_admin),
-):
-    """Aktualisiert llm.fallback_models in agent.yaml."""
-    cfg = discovery.get(agent_id)
-    if not cfg or not cfg.agent_dir:
-        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-    yaml_path = cfg.agent_dir / "agent.yaml"
-    try:
-        import yaml as _yaml
-        raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-        if "llm" not in raw:
-            raw["llm"] = {}
-        if req.fallback_models:
-            raw["llm"]["fallback_models"] = req.fallback_models
-        else:
-            raw["llm"].pop("fallback_models", None)
-        yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        # watchdog lädt agent.yaml automatisch neu (on_modified)
-    except Exception as e:
-        raise HTTPException(500, f"Fehler beim Speichern: {e}")
-    return {"ok": True, "agent_id": agent_id, "fallback_models": req.fallback_models}
+IncomingMessage = register_core_misc_routes(
+    public_router,
+    auth_router,
+    admin_router,
+    require_auth=require_auth,
+    setup_lock=_setup_lock,
+    load_users=lambda: _load_users(),
+    save_users=lambda users: _save_users(users),
+    read_server_name=_read_server_name,
+    matrix_register=lambda username, password, server_name: _matrix_register(username, password, server_name),
+    hash_password=lambda password: _hash_password(password),
+    verify_password=lambda password, stored: _verify_password(password, stored),
+    make_jwt=_make_jwt,
+    read_admin_password=_read_admin_password,
+    check_login_rate=_check_login_rate,
+    discovery=discovery,
+    runtime=runtime,
+    read_audit_logs=lambda limit, project_id="", user="", action="": _read_audit_logs(limit, project_id, user, action),
+    logger=logger,
+)
 
 
 class SpawnRequest(BaseModel):
@@ -588,33 +455,7 @@ def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost
     runtime.heartbeat(agent_id)
     return {"ok": True}
 
-
 # ================================================================== Orchestrator / Agenten-Chat
-
-class IncomingMessage(BaseModel):
-    content: str
-    sender:  str = "user"
-    execution_mode: Literal["safe", "elevated", "root"] | None = None
-
-
-@admin_router.get("/logs/core")
-def get_core_logs(lines: int = 200, _a: tuple[str, str] = Depends(require_admin)):
-    """
-    Core-Logs gesamt — fuer System-Screen.
-    """
-    import subprocess as _sub
-    lines = max(10, min(lines, 2000))
-    try:
-        result = _sub.run(
-            ["journalctl", "-u", "octopos-core", "-n", str(lines),
-             "--no-pager", "--output=short-iso"],
-            capture_output=True, text=True, timeout=5
-        )
-        log_lines = result.stdout.splitlines()
-        return {"lines": log_lines, "count": len(log_lines)}
-    except Exception as e:
-        return {"lines": [str(e)], "count": 1}
-
 
 # ================================================================== Audit-Log
 
@@ -704,20 +545,6 @@ def _read_audit_logs(
 
     # Neueste zuerst, limit anwenden
     return list(reversed(logs))[:limit]
-
-
-@admin_router.get("/audit/logs")
-def get_audit_logs(
-    limit:      int = 100,
-    project_id: str = "",
-    user:       str = "",
-    action:     str = "",
-):
-    """Audit-Log lesen mit optionalen Filtern."""
-    limit = max(10, min(limit, 1000))
-    logs  = _read_audit_logs(limit, project_id, user, action)
-    return {"logs": logs, "count": len(logs)}
-
 
 register_agent_chat_routes(
     app,
@@ -1008,26 +835,6 @@ register_project_routes(
     check_message_rate=_check_message_rate,
     logger=logger,
 )
-
-
-# ================================================================== Tools
-
-@auth_router.get("/tools")
-def list_tools():
-    """Alle registrierten Tools mit Schema — fuer die Webkonsole."""
-    from .tool_registry import registry
-    result = {}
-    for tool_id in registry.all_ids():
-        tool = registry.get(tool_id)
-        if tool:
-            result[tool_id] = {
-                "name":                 tool.name,
-                "description":          tool.description,
-                "permissions_required": tool.permissions_required,
-                "parameters":           tool.parameters,
-            }
-    return result
-
 
 register_llm_routes(
     auth_router,
