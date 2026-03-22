@@ -9,6 +9,7 @@ import yaml
 from octopos_core import main
 from octopos_core.agent_config import AgentConfig
 from octopos_core.execution_mode_policy import resolve_request_execution_mode
+from octopos_core.gitea import resolve_repo_ref
 from octopos_core.orchestrator import Orchestrator
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
 from octopos_core.router_users import (
@@ -297,6 +298,14 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn("git.write", execution_modes["elevated"]["permissions"])
         self.assertIn("git.push", execution_modes["root"]["permissions"])
         self.assertIn("shell.exec", execution_modes["root"]["permissions"])
+
+    def test_resolve_repo_ref_accepts_url_and_short_forms(self):
+        self.assertEqual(
+            resolve_repo_ref("http://YOUR-VM-IP:3002/octopos/octopos"),
+            ("octopos", "octopos"),
+        )
+        self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))
+        self.assertEqual(resolve_repo_ref("octopos", default_owner="octopos"), ("octopos", "octopos"))
 
     def test_personal_agent_update_reloads_discovery_after_write(self):
         req = MyAgentUpdateRequest(

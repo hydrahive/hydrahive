@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   heartbeat_on_failure: "restart",
 };
 
-const KNOWN_TOOLS = ["file_read", "file_write", "web_search", "http_request", "dispatch_task", "spawn_agent"];
+const KNOWN_TOOLS = ["file_read", "file_write", "web_search", "http_request", "dispatch_task", "spawn_agent", "git_status", "git_diff", "gitea_repo_inspect"];
 const KNOWN_MODELS = ["llama3.2:3b", "llama3.1:8b", "mistral-nemo:12b", "claude-sonnet-4-20250514", "gpt-4o"];
 const STATUS_COLORS: Record<string, string> = {
   running: "text-green-500",

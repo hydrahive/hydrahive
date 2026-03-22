@@ -17,6 +17,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -151,6 +152,12 @@ class GiteaClient:
         """Repo-Metadaten: URL, default branch, letzte Commits etc."""
         return await self._get(f"/repos/{self.org}/{project_id}")  # type: ignore[return-value]
 
+    async def get_repo_by_full_name(self, owner: str, repo: str) -> dict:
+        return await self._get(f"/repos/{owner}/{repo}")  # type: ignore[return-value]
+
+    async def list_commits(self, owner: str, repo: str, limit: int = 5) -> list:
+        return await self._get(f"/repos/{owner}/{repo}/commits?limit={limit}")  # type: ignore[return-value]
+
     # ------------------------------------------------------------------ PRs
 
     async def create_pr(
@@ -280,3 +287,31 @@ def reload_gitea_client() -> None:
     """Zwingt den Client beim nächsten get_gitea_client() zur Neukonfiguration."""
     global _client
     _client = None
+
+
+def resolve_repo_ref(repo: str, default_owner: str | None = None) -> tuple[str, str]:
+    candidate = (repo or "").strip()
+    if not candidate:
+        raise ValueError("Repo-Referenz fehlt")
+
+    if "://" in candidate:
+        parsed = urlparse(candidate)
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) >= 2:
+            owner, name = parts[0], parts[1]
+            if name.endswith(".git"):
+                name = name[:-4]
+            return owner, name
+        raise ValueError(f"Repo-URL konnte nicht aufgeloest werden: {candidate}")
+
+    parts = [part for part in candidate.split("/") if part]
+    if len(parts) >= 2:
+        owner, name = parts[0], parts[1]
+    elif len(parts) == 1 and default_owner:
+        owner, name = default_owner, parts[0]
+    else:
+        raise ValueError(f"Repo-Referenz ungueltig: {candidate}")
+
+    if name.endswith(".git"):
+        name = name[:-4]
+    return owner, name

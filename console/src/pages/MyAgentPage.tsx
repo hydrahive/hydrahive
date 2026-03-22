@@ -34,6 +34,7 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "delegate_agent",   label: "Agent beauftragen (async)" },
   { id: "write_handoff",    label: "AgentLink Handoff schreiben" },
   { id: "read_handoff",     label: "AgentLink Handoff lesen" },
+  { id: "gitea_repo_inspect", label: "Gitea-Repo pruefen" },
   { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
   { id: "wks_file_read",    label: "WKS Datei lesen" },
   { id: "wks_file_write",   label: "WKS Datei schreiben" },
