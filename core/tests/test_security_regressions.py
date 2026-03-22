@@ -296,6 +296,77 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(assistant_msg["tool_calls"][0]["id"], "call_123")
         self.assertEqual(assistant_msg["tool_calls"][0]["item_id"], "fc_123")
 
+    def test_openai_codex_call_repairs_missing_item_id_from_history(self):
+        cfg = AgentConfig.model_validate(
+            {
+                "id": "personal_test",
+                "type": "specialist",
+                "identity": "Test",
+                "llm": {"model": "openai-codex/gpt-5.3-codex"},
+            }
+        )
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        captured = {}
+
+        class FakeStream:
+            def __init__(self, payload):
+                self.payload = payload
+                self.status_code = 200
+
+            async def __aenter__(self):
+                captured["payload"] = self.payload
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def aiter_lines(self):
+                if False:
+                    yield ""
+                return
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def stream(self, method, url, headers=None, json=None):
+                return FakeStream(json)
+
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_legacy123",
+                        "type": "function",
+                        "function": {"name": "file_read", "arguments": '{"path":"README.md"}'},
+                    }
+                ],
+            }
+        ]
+
+        with mock.patch("httpx.AsyncClient", FakeClient):
+            import asyncio
+            asyncio.run(
+                orchestrator._openai_codex_call(
+                    cfg,
+                    messages,
+                    tools=None,
+                    token_data={"access_token": "x", "account_id": "y"},
+                    model_name="openai-codex/gpt-5.3-codex",
+                )
+            )
+
+        function_call = captured["payload"]["input"][0]
+        self.assertEqual(function_call["id"], "fc_legacy123")
+        self.assertEqual(function_call["call_id"], "call_legacy123")
+
 
 if __name__ == "__main__":
     unittest.main()

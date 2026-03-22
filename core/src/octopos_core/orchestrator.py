@@ -672,6 +672,19 @@ class Orchestrator:
         account_id   = token_data["account_id"]
 
         # Chat Completions Messages → Responses API input konvertieren
+        def _codex_item_id(tool_call: dict) -> str:
+            item_id = str(tool_call.get("item_id") or "").strip()
+            if item_id.startswith("fc_"):
+                return item_id
+            call_id = str(tool_call.get("id") or "").strip()
+            if call_id.startswith("fc_"):
+                return call_id
+            if call_id.startswith("call_"):
+                return "fc_" + call_id[len("call_"):]
+            if call_id:
+                return "fc_" + call_id.replace(" ", "_")
+            return "fc_unknown"
+
         system_prompt = ""
         input_items: list = []
         for m in messages:
@@ -698,7 +711,7 @@ class Orchestrator:
                     fn = tc.get("function", {})
                     input_items.append({
                         "type":      "function_call",
-                        "id":        tc.get("item_id") or tc.get("id", ""),
+                        "id":        _codex_item_id(tc),
                         "call_id":   tc.get("id", ""),
                         "name":      fn.get("name", ""),
                         "arguments": fn.get("arguments", "{}"),
