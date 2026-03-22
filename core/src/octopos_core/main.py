@@ -3675,7 +3675,7 @@ async def _run_self_update(pusher: str, commits: int) -> None:
             return
 
         proc = await _asyncio.create_subprocess_exec(
-            "sudo", "systemctl", "start", "octopos-selfupdate.service",
+            "sudo", "systemctl", "start", "--no-block", "octopos-selfupdate.service",
             stdout=_asyncio.subprocess.PIPE,
             stderr=_asyncio.subprocess.STDOUT,
         )

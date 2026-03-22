@@ -1,2 +1,1 @@
-octopos ALL=(root) NOPASSWD: /usr/bin/systemctl start octopos-selfupdate.service
-
+octopos ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block octopos-selfupdate.service
