@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 
 export function DashboardPage() {
@@ -11,9 +11,12 @@ export function DashboardPage() {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [projectMap, setProjectMap] = useState<Record<string, any>>({});
   const [agentMap, setAgentMap] = useState<Record<string, any>>({});
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadDashboard = useCallback(async (silent = false) => {
     let alive = true;
+    if (!silent) setIsRefreshing(true);
     Promise.allSettled([
       api.health(),
       api.status(),
@@ -34,9 +37,23 @@ export function DashboardPage() {
       if (auditRes.status === "fulfilled") setAudit(auditRes.value.logs);
       if (projectsRes.status === "fulfilled") setProjectMap(projectsRes.value as Record<string, any>);
       if (agentsRes.status === "fulfilled") setAgentMap(agentsRes.value as Record<string, any>);
+      setLastUpdated(new Date());
+      setIsRefreshing(false);
     });
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    loadDashboard(false);
+    const timer = setInterval(() => {
+      if (!disposed) loadDashboard(true);
+    }, 15000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [loadDashboard]);
 
   const runtime = status?.runtime as Record<string, any> | undefined;
   const running = runtime ? Object.values(runtime).filter((a: any) => a.status === "running").length : 0;
@@ -135,6 +152,41 @@ export function DashboardPage() {
     ],
     [activeProjects.length, agents, projects, running, runningHeartbeats],
   );
+  const attentionItems = useMemo(() => {
+    const items: { tone: "critical" | "warn" | "info"; title: string; detail: string }[] = [];
+    if (healthy === false) {
+      items.push({ tone: "critical", title: "Core gestört", detail: "Healthcheck oder API-Antwort ist aktuell nicht stabil." });
+    }
+    if (updateState === "error") {
+      items.push({ tone: "critical", title: "Update-Fehler", detail: update?.error || "Der letzte Update-Lauf hat einen Fehler gemeldet." });
+    } else if (updateState === "running") {
+      items.push({ tone: "info", title: "Update läuft", detail: "Ein Rollout oder Self-Update ist gerade aktiv." });
+    }
+    if (problemAgents.length > 0) {
+      const critical = problemAgents.filter((entry) => entry.severity === "critical").length;
+      items.push({
+        tone: critical > 0 ? "critical" : "warn",
+        title: `${problemAgents.length} Agentensignal${problemAgents.length !== 1 ? "e" : ""}`,
+        detail: critical > 0 ? `${critical} kritisch, Rest mit Warnstatus.` : "Auffällige Heartbeats oder Restarts erkannt.",
+      });
+    }
+    if (hottestGpu && (hottestGpu.temp_c ?? 0) >= 80) {
+      items.push({
+        tone: "warn",
+        title: `GPU heiß (${hottestGpu.temp_c ?? "-"}°C)`,
+        detail: `${hottestGpu.name} liegt über dem normalen Temperaturfenster.`,
+      });
+    }
+    if (items.length === 0) {
+      items.push({ tone: "info", title: "Keine akuten Auffälligkeiten", detail: "Core, Runtime und Update-Lage wirken im Moment stabil." });
+    }
+    return items.slice(0, 4);
+  }, [healthy, hottestGpu, problemAgents, update?.error, updateState]);
+  const attentionTone = attentionItems.some((item) => item.tone === "critical")
+    ? "bg-destructive/12 text-destructive"
+    : attentionItems.some((item) => item.tone === "warn")
+      ? "bg-accent/15 text-accent"
+      : "status-pill-ok";
 
   return (
     <div className="space-y-6">
@@ -181,6 +233,78 @@ export function DashboardPage() {
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
               </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className={`status-pill ${attentionTone}`}>
+                  <Radar className="h-3.5 w-3.5" />
+                  {attentionItems[0]?.title}
+                </span>
+                <span className="status-pill">
+                  <TimerReset className="h-3.5 w-3.5" />
+                  {lastUpdated ? `Update ${lastUpdated.toLocaleTimeString("de-DE")}` : "Erster Sync läuft"}
+                </span>
+                {isRefreshing && (
+                  <span className="status-pill">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Live Refresh
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <div className="section-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="metric-kicker">Attention</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">Was gerade Aufmerksamkeit braucht</h2>
+            </div>
+            <span className={`status-pill ${attentionTone}`}>
+              <Siren className="h-3.5 w-3.5" />
+              {attentionItems.some((item) => item.tone === "critical") ? "kritisch" : attentionItems.some((item) => item.tone === "warn") ? "warn" : "stabil"}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {attentionItems.map((item) => (
+              <div key={`${item.title}-${item.detail}`} className={`rounded-2xl border px-4 py-4 ${item.tone === "critical" ? "border-destructive/20 bg-destructive/5" : item.tone === "warn" ? "border-accent/20 bg-accent/5" : "bg-background/55"}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-2xl p-2 ${item.tone === "critical" ? "bg-destructive/10 text-destructive" : item.tone === "warn" ? "bg-accent/15 text-accent" : "bg-primary/10 text-primary"}`}>
+                    {item.tone === "critical" ? <AlertTriangle className="h-4 w-4" /> : item.tone === "warn" ? <Siren className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="metric-kicker">Live</p>
+              <h2 className="mt-2 text-lg font-semibold tracking-tight">Realtime-Lage</h2>
+            </div>
+            <span className="status-pill status-pill-ok">15s</span>
+          </div>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span>Polling</span>
+                <span className="status-pill">{isRefreshing ? "läuft" : "bereit"}</span>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Letzter Sync</div>
+              <div className="mt-2 font-medium text-foreground">{lastUpdated ? lastUpdated.toLocaleTimeString("de-DE") : "noch kein Sync"}</div>
+            </div>
+            <div className="rounded-2xl bg-secondary/55 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Aktive Beobachter</div>
+              <div className="mt-2 text-foreground">{runningHeartbeats} Heartbeats · {activeProjects.length} Sessions · {problemAgents.length} Signale</div>
             </div>
           </div>
         </div>
