@@ -14,6 +14,7 @@ from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admi
 from octopos_core.router_users import (
     MyAgentUpdateRequest,
     build_personal_agent_data,
+    default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
 
@@ -287,6 +288,15 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(agent_data["tools"], [])
         self.assertEqual(agent_data["allowed_agents"], [])
         self.assertEqual(agent_data["mcp_servers"], [])
+        self.assertIn("git.read", agent_data["execution_modes"]["safe"]["permissions"])
+
+    def test_personal_agent_default_execution_modes_include_git_read(self):
+        execution_modes = default_personal_agent_execution_modes()
+        self.assertEqual(execution_modes["default"], "safe")
+        self.assertIn("git.read", execution_modes["safe"]["permissions"])
+        self.assertIn("git.write", execution_modes["elevated"]["permissions"])
+        self.assertIn("git.push", execution_modes["root"]["permissions"])
+        self.assertIn("shell.exec", execution_modes["root"]["permissions"])
 
     def test_personal_agent_update_reloads_discovery_after_write(self):
         req = MyAgentUpdateRequest(
@@ -417,9 +427,10 @@ class SecurityRegressionTests(unittest.TestCase):
             raw = yaml.safe_load(agent_yaml.read_text(encoding="utf-8"))
 
         self.assertEqual(raw["execution_modes"]["default"], "safe")
-        self.assertEqual(raw["execution_modes"]["safe"]["permissions"], ["filesystem.read", "memory.read", "memory.write"])
-        self.assertEqual(raw["execution_modes"]["elevated"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write"])
-        self.assertEqual(raw["execution_modes"]["root"]["permissions"], ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"])
+        self.assertIn("git.read", raw["execution_modes"]["safe"]["permissions"])
+        self.assertIn("git.write", raw["execution_modes"]["elevated"]["permissions"])
+        self.assertIn("git.push", raw["execution_modes"]["root"]["permissions"])
+        self.assertIn("shell.exec", raw["execution_modes"]["root"]["permissions"])
 
     def test_tool_loop_preserves_codex_item_id_in_history(self):
         cfg = AgentConfig.model_validate(

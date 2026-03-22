@@ -9,6 +9,69 @@ from pydantic import BaseModel, Field
 from .execution_mode_policy import resolve_request_execution_mode
 
 
+def default_personal_agent_execution_modes() -> dict:
+    return {
+        "default": "safe",
+        "safe": {
+            "permissions": [
+                "filesystem.read",
+                "system.read",
+                "memory.read",
+                "memory.write",
+                "handoff.read",
+                "handoff.write",
+                "agents.ask",
+                "agents.delegate",
+                "git.read",
+                "workstation.read",
+                "discord",
+            ],
+        },
+        "elevated": {
+            "permissions": [
+                "filesystem.read",
+                "filesystem.write",
+                "system.read",
+                "system.write",
+                "memory.read",
+                "memory.write",
+                "handoff.read",
+                "handoff.write",
+                "agents.ask",
+                "agents.delegate",
+                "git.read",
+                "git.write",
+                "workstation.read",
+                "workstation.write",
+                "discord",
+            ],
+        },
+        "root": {
+            "permissions": [
+                "filesystem.read",
+                "filesystem.write",
+                "system.read",
+                "system.write",
+                "memory.read",
+                "memory.write",
+                "handoff.read",
+                "handoff.write",
+                "agents.ask",
+                "agents.delegate",
+                "git.read",
+                "git.write",
+                "git.push",
+                "git.pr",
+                "shell.exec",
+                "workstation.read",
+                "workstation.write",
+                "workstation.shell",
+                "discord",
+            ],
+        },
+    }
+
+
 class CreateUserRequest(BaseModel):
     username: str
     password: str
@@ -50,18 +113,7 @@ def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
         "tools": list(req.tools),
         "allowed_agents": list(req.allowed_agents),
         "mcp_servers": list(req.mcp_servers),
-        "execution_modes": {
-            "default": "safe",
-            "safe": {
-                "permissions": ["filesystem.read", "memory.read", "memory.write"],
-            },
-            "elevated": {
-                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write"],
-            },
-            "root": {
-                "permissions": ["filesystem.read", "filesystem.write", "memory.read", "memory.write", "shell.exec"],
-            },
-        },
+        "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
     return agent_data
