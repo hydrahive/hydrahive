@@ -59,6 +59,10 @@ cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${OCTOPOS_DIR}/update.sh"
 chmod +x "${OCTOPOS_DIR}/update.sh"
 success "Update-Script: sudo bash ${OCTOPOS_DIR}/update.sh"
 
+install -m 755 "$(dirname "${BASH_SOURCE[0]}")/apply-network-profile.sh" "${OCTOPOS_DIR}/apply-network-profile.sh"
+install -m 440 "$(dirname "${BASH_SOURCE[0]}")/octopos-network-profile.sudoers" /etc/sudoers.d/octopos-network-profile
+success "Network-Profile-Skript installiert"
+
 # Self-Update Service + sudo-Regel installieren
 install -m 644 "$(dirname "${BASH_SOURCE[0]}")/octopos-selfupdate.service" /etc/systemd/system/octopos-selfupdate.service
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/octopos-update.sudoers" /etc/sudoers.d/octopos-update

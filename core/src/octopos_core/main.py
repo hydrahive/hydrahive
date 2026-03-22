@@ -3546,6 +3546,178 @@ def restore_backup(name: str, _a: tuple = Depends(require_admin)):
 
 # ================================================================== Status
 
+NETWORK_PROFILE_FILE = Path("/etc/octopos/network_profile")
+NETWORK_PROFILE_SCRIPT = "/opt/octopos/apply-network-profile.sh"
+NETWORK_PROFILES: dict[str, dict[str, list[int] | bool]] = {
+    "full": {
+        "tcp_ports": [],
+        "udp_ports": [],
+        "ufw_enabled": False,
+    },
+    "lan": {
+        "tcp_ports": [22, 80, 3002, 8008, 139, 445],
+        "udp_ports": [137, 138],
+        "ufw_enabled": True,
+    },
+    "minimal": {
+        "tcp_ports": [22, 80, 3002, 8008],
+        "udp_ports": [],
+        "ufw_enabled": True,
+    },
+}
+
+
+def _normalize_network_profile(profile: str) -> str:
+    normalized = (profile or "").strip().lower()
+    if normalized not in NETWORK_PROFILES:
+        raise HTTPException(400, f"Ungültiges Network-Profil: {profile}")
+    return normalized
+
+
+def _read_network_profile() -> str:
+    try:
+        return _normalize_network_profile(NETWORK_PROFILE_FILE.read_text(encoding="utf-8"))
+    except OSError:
+        return "full"
+
+
+def _write_network_profile(profile: str) -> None:
+    NETWORK_PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    NETWORK_PROFILE_FILE.write_text(profile + "\n", encoding="utf-8")
+    NETWORK_PROFILE_FILE.chmod(0o600)
+
+
+def _list_public_listening_ports() -> dict[str, list[int]]:
+    import subprocess as _sub
+
+    ports: dict[str, set[int]] = {"tcp": set(), "udp": set()}
+    try:
+        result = _sub.run(
+            ["ss", "-tulpnH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return {"tcp": [], "udp": []}
+
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        proto = parts[0].lower()
+        local = parts[4]
+        if proto not in ("tcp", "udp"):
+            continue
+        try:
+            host, port_str = local.rsplit(":", 1)
+            port = int(port_str)
+        except ValueError:
+            continue
+        host = host.strip("[]")
+        if host.startswith("127.") or host == "::1":
+            continue
+        if host not in ("0.0.0.0", "*", "::") and not host.startswith("192.") and not host.startswith("10.") and not host.startswith("172."):
+            continue
+        ports[proto].add(port)
+
+    return {"tcp": sorted(ports["tcp"]), "udp": sorted(ports["udp"])}
+
+
+def _ufw_status_summary() -> dict:
+    import re as _re
+    import subprocess as _sub
+
+    try:
+        result = _sub.run(
+            ["sudo", "ufw", "status", "numbered"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as e:
+        return {"available": False, "active": False, "rules": [], "error": str(e)}
+
+    output = (result.stdout or "").strip()
+    if not output:
+        return {"available": True, "active": False, "rules": []}
+    if output.startswith("Status: inactive"):
+        return {"available": True, "active": False, "rules": []}
+
+    rules = []
+    for line in output.splitlines():
+        if line.startswith("Status:"):
+            continue
+        match = _re.search(r"\[\s*\d+\]\s+(.+?)\s+ALLOW IN\s+(.+)$", line)
+        if not match:
+            continue
+        rules.append({"rule": match.group(1).strip(), "from": match.group(2).strip()})
+    return {"available": True, "active": True, "rules": rules}
+
+
+def _network_profile_status() -> dict:
+    profile = _read_network_profile()
+    spec = NETWORK_PROFILES[profile]
+    exposed = _list_public_listening_ports()
+    ufw = _ufw_status_summary()
+
+    expected_tcp = sorted(spec["tcp_ports"])  # type: ignore[index]
+    expected_udp = sorted(spec["udp_ports"])  # type: ignore[index]
+    deviations: list[str] = []
+
+    if spec["ufw_enabled"] and not ufw["active"]:  # type: ignore[index]
+        deviations.append("ufw_inactive_for_profile")
+    if not spec["ufw_enabled"] and ufw["active"]:  # type: ignore[index]
+        deviations.append("ufw_active_while_profile_is_full")
+
+    unexpected_tcp: list[int] = []
+    unexpected_udp: list[int] = []
+    if profile != "full":
+        unexpected_tcp = sorted(p for p in exposed["tcp"] if p not in expected_tcp and p not in {22, 80})
+        unexpected_udp = sorted(p for p in exposed["udp"] if p not in expected_udp)
+        if unexpected_tcp:
+            deviations.append(f"unexpected_tcp_ports:{','.join(map(str, unexpected_tcp))}")
+        if unexpected_udp:
+            deviations.append(f"unexpected_udp_ports:{','.join(map(str, unexpected_udp))}")
+
+    return {
+        "profile": profile,
+        "ufw": ufw,
+        "expected": {"tcp": expected_tcp, "udp": expected_udp},
+        "exposed": exposed,
+        "deviations": deviations,
+    }
+
+
+class NetworkProfileRequest(BaseModel):
+    profile: str
+
+
+@admin_router.get("/admin/network/profile")
+def get_network_profile_status():
+    return _network_profile_status()
+
+
+@admin_router.put("/admin/network/profile")
+def apply_network_profile(req: NetworkProfileRequest):
+    import subprocess as _sub
+
+    profile = _normalize_network_profile(req.profile)
+    proc = _sub.run(
+        ["sudo", NETWORK_PROFILE_SCRIPT, profile],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise HTTPException(500, f"Network-Profil konnte nicht angewendet werden: {(proc.stderr or proc.stdout).strip()[:300]}")
+
+    _write_network_profile(profile)
+    return {"updated": True, "profile": profile, "status": _network_profile_status()}
+
 @admin_router.get("/system/heartbeat-tasks")
 def heartbeat_tasks_status():
     """Alle registrierten Heartbeat-Tasks mit letztem Lauf."""
@@ -3609,6 +3781,10 @@ def system_status():
         },
         "sessions": {
             "active_projects": sessions.active_projects(),
+        },
+        "network": {
+            "profile": _read_network_profile(),
+            "deviations": _network_profile_status()["deviations"],
         },
         "runtime": runtime.status_all(),
     }
