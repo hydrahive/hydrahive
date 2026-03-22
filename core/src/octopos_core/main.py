@@ -35,6 +35,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_project_integrations import register_project_integration_routes
+from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
@@ -970,149 +971,19 @@ register_agent_admin_routes(
 
 # ================================================================== Provisioning
 
-
-@admin_router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, _a: tuple = Depends(require_admin)):
-    """
-    Projekt deprovisionieren und deaktivieren.
-    - Agenten stoppen
-    - Samba-Share entfernen
-    - Verzeichnis umbenennen (_deleted_)
-    - project.yaml als disabled markieren
-    Kein Datenverlust: Verzeichnis bleibt als _deleted_ erhalten.
-    """
-    import shutil as _shutil, time as _time
-
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-
-    project_dir = Path(PROJECTS_DIR) / project_id
-    if not project_dir.exists():
-        raise HTTPException(404, f"Projektverzeichnis nicht gefunden")
-
-    # 1. Laufende Agenten stoppen
-    stopped_agents = []
-    boss_id = cfg.agents.boss
-    handle = runtime.get_handle(boss_id)
-    if handle:
-        await runtime.stop_agent(boss_id)
-        stopped_agents.append(boss_id)
-
-    # 2. Samba-Share entfernen
-    smb_conf = Path("/etc/samba/smb.conf")
-    if smb_conf.exists():
-        try:
-            smb_content = smb_conf.read_text(encoding="utf-8")
-            # Sektion [project_id] entfernen
-            import re as _re
-            smb_content = _re.sub(
-                rf"\[{_re.escape(project_id)}\][^\[]*",
-                "", smb_content, flags=_re.DOTALL
-            )
-            smb_conf.write_text(smb_content, encoding="utf-8")
-            import subprocess as _sub
-            _sub.run(["systemctl", "reload", "smbd"], check=False, timeout=5)
-        except Exception as e:
-            logger.warning("Samba-Share Entfernung fehlgeschlagen: %s", e)
-
-    # 3. Verzeichnis umbenennen
-    timestamp = int(_time.time())
-    deleted_dir = Path(PROJECTS_DIR) / f"_deleted_{project_id}_{timestamp}"
-    project_dir.rename(deleted_dir)
-
-    audit_log("project.delete", target=project_id, project_id=project_id,
-              details={"moved_to": str(deleted_dir), "stopped_agents": stopped_agents})
-    logger.info("Projekt gelöscht: %s → %s", project_id, deleted_dir)
-
-    return {
-        "deleted":      True,
-        "project_id":   project_id,
-        "moved_to":     str(deleted_dir),
-        "stopped_agents": stopped_agents,
-    }
-
-
-@admin_router.post("/projects/{project_id}/provision")
-async def provision_project(project_id: str, _a: tuple = Depends(require_admin)):
-    """
-    Projekt provisionieren: Linux-User + Samba-Share + Matrix-Room.
-    Idempotent — kann mehrfach aufgerufen werden.
-    """
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    if provisioner is None:
-        raise HTTPException(503, "Provisioner nicht initialisiert")
-
-    result = await provisioner.provision(cfg)
-
-    # project.yaml mit Matrix-Room-ID aktualisieren wenn neu angelegt
-    if result.matrix_room and not cfg.matrix.room:
-        _update_project_matrix_room(project_id, result.matrix_room)
-
-    # Matrix-Client für Boss starten wenn Room vorhanden (neu oder bereits konfiguriert)
-    room_id = result.matrix_room or cfg.matrix.room
-    if room_id:
-        boss_cfg = discovery.get(cfg.agents.boss)
-        if boss_cfg:
-            matrix_client = BossMatrixAgent(
-                config       = boss_cfg,
-                server_name  = _read_server_name(),
-                rooms        = [room_id],
-                orchestrator = orchestrator,
-                project_cfg  = cfg,
-            )
-            await runtime.attach_matrix_client(boss_cfg.id, matrix_client)
-            logger.info("Matrix-Client nach Provisioning gestartet: %s → %s", boss_cfg.id, room_id)
-
-    return {
-        "project_id":  result.project_id,
-        "linux_user":  result.linux_user,
-        "files_dir":   result.files_dir,
-        "samba_share": result.samba_share,
-        "matrix_room": result.matrix_room,
-        "warnings":    result.warnings,
-        "ok":          result.ok,
-    }
-
-
-@admin_router.delete("/projects/{project_id}/provision")
-async def deprovision_project(project_id: str, _a: tuple = Depends(require_admin)):
-    """Projekt-Ressourcen entfernen (User, Samba-Share)."""
-    cfg = projects.get(project_id)
-    if not cfg:
-        raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-    if provisioner is None:
-        raise HTTPException(503, "Provisioner nicht initialisiert")
-
-    warnings = await provisioner.deprovision(cfg)
-    return {"project_id": project_id, "deprovisioned": True, "warnings": warnings}
-
-
-def _update_project_matrix_room(project_id: str, room_id: str) -> None:
-    """Matrix-Room-ID in project.yaml zurückschreiben."""
-    import re
-    project_yaml = Path(PROJECTS_DIR) / project_id / "project.yaml"
-    if not project_yaml.exists():
-        return
-    try:
-        content = project_yaml.read_text(encoding="utf-8")
-        # Fall 1: room: "" vorhanden → ersetzen
-        updated = re.sub(r'(room:\s*)""', f'\\1"{room_id}"', content)
-        if updated != content:
-            project_yaml.write_text(updated, encoding="utf-8")
-            return
-        # Fall 2: matrix: Sektion vorhanden aber ohne room → room: einfügen
-        updated = re.sub(r"(matrix:\s*\n)", f'\\1  room: "{room_id}"\n', content)
-        if updated != content:
-            project_yaml.write_text(updated, encoding="utf-8")
-            return
-        # Fall 3: gar keine matrix: Sektion → ans Ende anhängen
-        updated = content.rstrip() + f'\nmatrix:\n  room: "{room_id}"\n'
-        project_yaml.write_text(updated, encoding="utf-8")
-    except OSError as e:
-        logger.warning("project.yaml konnte nicht aktualisiert werden: %s", e)
+register_project_lifecycle_routes(
+    admin_router,
+    require_admin=require_admin,
+    projects=projects,
+    runtime=runtime,
+    discovery=discovery,
+    orchestrator=orchestrator,
+    projects_dir=PROJECTS_DIR,
+    get_provisioner=lambda: provisioner,
+    read_server_name=_read_server_name,
+    audit_log=audit_log,
+    logger=logger,
+)
 
 
 # ================================================================== Projekte / Sessions / Projekt-Chat
@@ -1127,7 +998,9 @@ register_project_routes(
     orchestrator=orchestrator,
     projects_dir=PROJECTS_DIR,
     get_provisioner=lambda: provisioner,
-    update_project_matrix_room=_update_project_matrix_room,
+    update_project_matrix_room=lambda project_id, room_id: update_project_matrix_room(
+        PROJECTS_DIR, project_id, room_id, logger=logger
+    ),
     audit_log=audit_log,
     check_message_rate=_check_message_rate,
     logger=logger,
