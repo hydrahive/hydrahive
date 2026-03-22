@@ -1206,7 +1206,8 @@ class GitStatusTool(BaseTool):
         return (
             "Zeigt den aktuellen Git-Status des Projekt-Workspaces: "
             "geänderte, neue und gelöschte Dateien, aktueller Branch. "
-            "project_id: Welches Projekt (z.B. 'testprojekt')."
+            "repo: optionales Ziel-Repo als URL, owner/repo oder Repo-Name, "
+            "wenn das Ziel nicht dem aktuellen Projektkontext entspricht."
         )
 
     @property
@@ -1219,21 +1220,31 @@ class GitStatusTool(BaseTool):
             "type": "object",
             "properties": {
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
             },
             "required": [],
         }
 
     async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
         pid = kwargs.get("project_id") or project_id
-        from .gitea import GiteaClient
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
         try:
-            ws = await GiteaClient.git_workspace(pid)
+            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(
+                target["workspace_key"],
+                owner=target["owner"],
+                repo=target["repo"],
+            )
         except Exception as e:
             return {"error": str(e)}
         stdout, stderr, rc = await GiteaClient._git(["status", "--short", "--branch"], ws)
         branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
         return {
             "project_id": pid,
+            "repo":      target["repo"],
+            "owner":     target["owner"],
+            "full_name": target["full_name"],
             "status":    stdout.strip(),
             "branch":    branch_out.strip(),
             "clean":     stdout.strip() == "" or stdout.strip().startswith("##") and "\n" not in stdout.strip(),
@@ -1319,6 +1330,115 @@ class GiteaRepoInspectTool(BaseTool):
         }
 
 
+class GiteaRepoTreeTool(BaseTool):
+    """Listet eine Repo-Struktur oder einen Unterordner via Gitea-API."""
+
+    @property
+    def id(self) -> str:   return "gitea_repo_tree"
+    @property
+    def name(self) -> str: return "Gitea Repo Struktur"
+    @property
+    def description(self) -> str:
+        return (
+            "Listet Dateien und Ordner eines Gitea-Repositories. "
+            "Nutze dieses Tool fuer Deep-Dives in die Repo-Struktur."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "path": {"type": "string", "description": "Optionaler Unterpfad im Repo"},
+                "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
+            },
+            "required": ["repo"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, repo: str, path: str = "", ref: str = "") -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            entries = await client.list_repo_tree(owner, name, path=path, ref=ref)
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "path": path, "ref": ref}
+
+        normalized = entries if isinstance(entries, list) else [entries]
+        return {
+            "owner": owner,
+            "repo": name,
+            "path": path.strip("/"),
+            "ref": ref or "",
+            "entries": [
+                {
+                    "name": item.get("name"),
+                    "path": item.get("path"),
+                    "type": item.get("type"),
+                    "size": item.get("size"),
+                    "sha": (item.get("sha") or "")[:12],
+                }
+                for item in normalized
+            ],
+        }
+
+
+class GiteaRepoFileTool(BaseTool):
+    """Liest eine konkrete Datei aus einem Gitea-Repo."""
+
+    @property
+    def id(self) -> str:   return "gitea_repo_file"
+    @property
+    def name(self) -> str: return "Gitea Repo Datei"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest eine konkrete Datei aus einem Gitea-Repository. "
+            "Nutze dieses Tool fuer gezielte Dateiansichten bei Reviews oder Deep-Dives."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "path": {"type": "string", "description": "Dateipfad im Repo"},
+                "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
+            },
+            "required": ["repo", "path"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, repo: str, path: str, ref: str = "") -> dict:
+        from .gitea import get_gitea_client, resolve_repo_ref
+
+        client = get_gitea_client()
+        try:
+            owner, name = resolve_repo_ref(repo, default_owner=client.org)
+            content = await client.get_repo_file(owner, name, path, ref=ref)
+        except Exception as e:
+            return {"error": str(e), "repo": repo, "path": path, "ref": ref}
+
+        return {
+            "owner": owner,
+            "repo": name,
+            "path": path.strip("/"),
+            "ref": ref or "",
+            "content": content[:20000],
+            "truncated": len(content) > 20000,
+        }
+
+
 class GitDiffTool(BaseTool):
     """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
 
@@ -1330,7 +1450,8 @@ class GitDiffTool(BaseTool):
     def description(self) -> str:
         return (
             "Zeigt die Unterschiede zwischen dem aktuellen Workspace und dem letzten Commit. "
-            "path: optional — nur Diff für diese Datei/Verzeichnis."
+            "path: optional — nur Diff für diese Datei/Verzeichnis. "
+            "repo: optionales Ziel-Repo wenn es vom Projektkontext abweicht."
         )
 
     @property
@@ -1343,6 +1464,7 @@ class GitDiffTool(BaseTool):
             "type": "object",
             "properties": {
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
                 "path": {
                     "type":        "string",
                     "description": "Optionaler Pfad (relativ zum Workspace-Root)",
@@ -1360,9 +1482,15 @@ class GitDiffTool(BaseTool):
         path: str = "", staged: bool = False, **kwargs,
     ) -> dict:
         pid = kwargs.get("project_id") or project_id
-        from .gitea import GiteaClient
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
         try:
-            ws = await GiteaClient.git_workspace(pid)
+            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(
+                target["workspace_key"],
+                owner=target["owner"],
+                repo=target["repo"],
+            )
         except Exception as e:
             return {"error": str(e)}
         args = ["diff"]
@@ -1374,6 +1502,10 @@ class GitDiffTool(BaseTool):
         # Diff auf 10000 Zeichen begrenzen
         diff = stdout[:10000]
         return {
+            "project_id": pid,
+            "repo":      target["repo"],
+            "owner":     target["owner"],
+            "full_name": target["full_name"],
             "diff":      diff,
             "truncated": len(stdout) > 10000,
             "exit_code": rc,
@@ -1429,6 +1561,7 @@ class GitCommitTool(BaseTool):
                     "description": "Branch-Name (Standard: feature/agent-<agent_id>)",
                 },
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
             },
             "required": ["files", "message"],
         }
@@ -1438,15 +1571,20 @@ class GitCommitTool(BaseTool):
         files: list, message: str, branch: str = "", **kwargs,
     ) -> dict:
         pid = kwargs.get("project_id") or project_id
-        from .gitea import GiteaClient
-        import asyncio
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
 
         if not branch:
             safe_id = agent_id.replace("_", "-").replace(" ", "-")[:30]
             branch = f"feature/agent-{safe_id}"
 
         try:
-            ws = await GiteaClient.git_workspace(pid)
+            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(
+                target["workspace_key"],
+                owner=target["owner"],
+                repo=target["repo"],
+            )
         except Exception as e:
             return {"error": str(e)}
 
@@ -1483,6 +1621,10 @@ class GitCommitTool(BaseTool):
 
         return {
             "committed": True,
+            "project_id": pid,
+            "repo":      target["repo"],
+            "owner":     target["owner"],
+            "full_name": target["full_name"],
             "branch":    branch,
             "files":     written,
             "commit":    hash_out.strip(),
@@ -1527,6 +1669,7 @@ class GitPushTool(BaseTool):
                     "description": "Beschreibung des PRs (optional)",
                 },
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
             },
             "required": [],
         }
@@ -1536,16 +1679,22 @@ class GitPushTool(BaseTool):
         create_pr: bool = False, pr_title: str = "", pr_body: str = "", **kwargs,
     ) -> dict:
         pid = kwargs.get("project_id") or project_id
-        from .gitea import GiteaClient, get_gitea_client, _load_config
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import GiteaClient, get_gitea_client, _load_config, resolve_git_target
         cfg = _load_config()
 
         try:
-            ws = await GiteaClient.git_workspace(pid)
+            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(
+                target["workspace_key"],
+                owner=target["owner"],
+                repo=target["repo"],
+            )
         except Exception as e:
             return {"error": str(e)}
 
         # Remote-URL mit Token setzen
-        remote_url = f"{cfg['url']}/octopos/{pid}.git"
+        remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
         token_url  = remote_url.replace("://", f"://octopos:{cfg['token']}@")
         await GiteaClient._git(["remote", "set-url", "origin", token_url], ws)
 
@@ -1560,13 +1709,20 @@ class GitPushTool(BaseTool):
         if rc != 0:
             return {"error": f"git push fehlgeschlagen: {err[:300]}", "branch": branch}
 
-        result: dict = {"pushed": True, "branch": branch}
+        result: dict = {
+            "pushed": True,
+            "branch": branch,
+            "project_id": pid,
+            "repo": target["repo"],
+            "owner": target["owner"],
+            "full_name": target["full_name"],
+        }
 
         if create_pr and branch != "main":
             title = pr_title or f"Agent-Änderung: {branch}"
             try:
                 client = get_gitea_client()
-                pr = await client.create_pr(project_id, title, branch, body=pr_body)
+                pr = await client.create_pr_for_repo(target["owner"], target["repo"], title, branch, body=pr_body)
                 result["pr"] = {
                     "number": pr.get("number"),
                     "url":    pr.get("html_url"),
@@ -1618,6 +1774,7 @@ class GitCreatePRTool(BaseTool):
                     "description": "Beschreibung / Changelog des PRs",
                 },
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
             },
             "required": ["title", "head"],
         }
@@ -1626,13 +1783,19 @@ class GitCreatePRTool(BaseTool):
         self, agent_id: str, project_id: str,
         title: str, head: str, base: str = "main", body: str = "", **kwargs,
     ) -> dict:
-        project_id = kwargs.get("project_id") or project_id
-        from .gitea import get_gitea_client
+        pid = kwargs.get("project_id") or project_id
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import get_gitea_client, resolve_git_target
         try:
             client = get_gitea_client()
-            pr = await client.create_pr(project_id, title, head, base, body)
+            target = await resolve_git_target(client, project_id=pid, repo=repo_ref)
+            pr = await client.create_pr_for_repo(target["owner"], target["repo"], title, head, base, body)
             return {
                 "created": True,
+                "project_id": pid,
+                "repo": target["repo"],
+                "owner": target["owner"],
+                "full_name": target["full_name"],
                 "pr_number": pr.get("number"),
                 "pr_url":    pr.get("html_url"),
                 "title":     pr.get("title"),
@@ -1952,6 +2115,8 @@ registry.register(AskAgentTool())
 registry.register(DelegateAgentTool())
 registry.register(GitStatusTool())
 registry.register(GiteaRepoInspectTool())
+registry.register(GiteaRepoTreeTool())
+registry.register(GiteaRepoFileTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())

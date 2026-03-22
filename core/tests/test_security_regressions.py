@@ -6,11 +6,12 @@ from types import SimpleNamespace
 import asyncio
 
 import yaml
+import aiohttp
 
 from octopos_core import main
 from octopos_core.agent_config import AgentConfig
 from octopos_core.execution_mode_policy import resolve_request_execution_mode
-from octopos_core.gitea import resolve_repo_ref
+from octopos_core.gitea import resolve_git_target, resolve_repo_ref
 from octopos_core.orchestrator import Orchestrator
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
 from octopos_core.router_users import (
@@ -19,6 +20,7 @@ from octopos_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
+from octopos_core.tool_registry import GitStatusTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -307,6 +309,54 @@ class SecurityRegressionTests(unittest.TestCase):
         )
         self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))
         self.assertEqual(resolve_repo_ref("octopos", default_owner="octopos"), ("octopos", "octopos"))
+
+    def test_resolve_git_target_uses_project_heuristics(self):
+        client = mock.Mock(org="octopos")
+        client.get_repo_by_full_name = mock.AsyncMock(
+            side_effect=[
+                Exception("should not be called"),
+            ]
+        )
+        async def fake_get_repo(owner, repo):
+            if (owner, repo) == ("octopos", "octopos_dev"):
+                response = mock.Mock()
+                response.status = 404
+                raise aiohttp.ClientResponseError(
+                    mock.Mock(real_url="http://test"),
+                    (),
+                    status=404,
+                    message="not found",
+                )
+            return {"full_name": f"{owner}/{repo}"}
+
+        client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
+        target = asyncio.run(resolve_git_target(client, project_id="octopos_dev"))
+        self.assertEqual(target["owner"], "octopos")
+        self.assertEqual(target["repo"], "octopos")
+        self.assertEqual(target["workspace_key"], "octopos__octopos")
+
+    def test_git_status_accepts_explicit_repo_reference(self):
+        tool = GitStatusTool()
+        with mock.patch("octopos_core.gitea.get_gitea_client") as get_client, \
+             mock.patch("octopos_core.gitea.resolve_git_target", new=mock.AsyncMock(return_value={
+                 "owner": "octopos",
+                 "repo": "octopos",
+                 "full_name": "octopos/octopos",
+                 "workspace_key": "octopos__octopos",
+                 "source": "repo",
+             })), \
+             mock.patch("octopos_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("octopos_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
+                 ("## main\n", "", 0),
+                 ("main\n", "", 0),
+             ])):
+            get_client.return_value = mock.Mock(org="octopos")
+            result = asyncio.run(
+                tool.execute("personal_admin", "personal_admin", repo="octopos/octopos")
+            )
+
+        self.assertEqual(result["full_name"], "octopos/octopos")
+        self.assertEqual(result["branch"], "main")
 
     def test_execute_tool_uses_project_id_override_without_duplicate_kwarg(self):
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
