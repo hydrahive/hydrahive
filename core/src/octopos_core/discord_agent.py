@@ -110,7 +110,18 @@ class DiscordAgentClient(ABC):
 
         logger.info("Discord-Client für Agent '%s' gestartet", self.agent_id)
         # Blockiert bis close() aufgerufen wird
-        await self._client.start(self.bot_token)
+        try:
+            await self._client.start(self.bot_token)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Discord-Client für Agent '%s' Fehler: %s — "
+                "Falls 'PrivilegedIntentsRequired': Message Content Intent im "
+                "Discord Developer Portal aktivieren (Applications → Bot → Privileged Gateway Intents)",
+                self.agent_id, e,
+            )
+            raise
 
     async def stop(self) -> None:
         """Discord-Client sauber beenden."""
