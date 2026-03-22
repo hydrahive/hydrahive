@@ -310,30 +310,68 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))
         self.assertEqual(resolve_repo_ref("octopos", default_owner="octopos"), ("octopos", "octopos"))
 
+    def test_repo_review_guidance_is_added_for_repo_queries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir)
+            soul = agent_dir / "soul.md"
+            soul.write_text("Basis-Soul", encoding="utf-8")
+            cfg = AgentConfig.model_validate(
+                {
+                    "id": "personal_test",
+                    "type": "specialist",
+                    "identity": "Test",
+                    "soul": "soul.md",
+                    "llm": {"model": "openai-codex/gpt-5.3-codex"},
+                    "tools": ["gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "git_status"],
+                }
+            )
+            cfg.agent_dir = agent_dir
+            orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+            prompt = orchestrator._build_system_prompt(cfg, "Schau dir das octopos repo an und reviewe die Aenderungen")
+
+        self.assertIn("Repo-Review-Arbeitsrahmen", prompt)
+        self.assertIn("gitea_repo_tree", prompt)
+        self.assertIn("gitea_repo_file", prompt)
+
     def test_resolve_git_target_uses_project_heuristics(self):
         client = mock.Mock(org="octopos")
-        client.get_repo_by_full_name = mock.AsyncMock(
-            side_effect=[
-                Exception("should not be called"),
-            ]
-        )
         async def fake_get_repo(owner, repo):
-            if (owner, repo) == ("octopos", "octopos_dev"):
-                response = mock.Mock()
-                response.status = 404
-                raise aiohttp.ClientResponseError(
-                    mock.Mock(real_url="http://test"),
-                    (),
-                    status=404,
-                    message="not found",
-                )
-            return {"full_name": f"{owner}/{repo}"}
+            if (owner, repo) == ("octopos", "octopos"):
+                return {"full_name": f"{owner}/{repo}"}
+            raise aiohttp.ClientResponseError(
+                mock.Mock(real_url="http://test"),
+                (),
+                status=404,
+                message="not found",
+            )
 
         client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
         target = asyncio.run(resolve_git_target(client, project_id="octopos_dev"))
         self.assertEqual(target["owner"], "octopos")
         self.assertEqual(target["repo"], "octopos")
         self.assertEqual(target["workspace_key"], "octopos__octopos")
+
+    def test_resolve_git_target_fails_on_ambiguous_matches(self):
+        client = mock.Mock(org="octopos")
+
+        async def fake_get_repo(owner, repo):
+            if repo in {"octopos", "octopos-dev"}:
+                return {"full_name": f"{owner}/{repo}"}
+            raise aiohttp.ClientResponseError(
+                mock.Mock(real_url="http://test"),
+                (),
+                status=404,
+                message="not found",
+            )
+
+        client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
+
+        with self.assertRaises(ValueError) as ctx:
+            asyncio.run(resolve_git_target(client, project_id="octopos_dev"))
+
+        self.assertIn("mehrdeutig", str(ctx.exception))
+        self.assertIn("octopos/octopos", str(ctx.exception))
+        self.assertIn("octopos/octopos-dev", str(ctx.exception))
 
     def test_git_status_accepts_explicit_repo_reference(self):
         tool = GitStatusTool()
