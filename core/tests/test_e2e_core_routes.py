@@ -88,6 +88,7 @@ def _build_smoke_patches() -> list:
         mock.patch.object(main.runtime,        "stop",  return_value=None),
         mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
         mock.patch("octopos_core.main.USERS_FILE", Path("/dev/null")),
+        mock.patch.object(main.rate_limiter,   "check_login"),   # verhindert 10-Login-Limit über Test-Sessions
     ]
 
 
@@ -169,7 +170,8 @@ class PersonalAgentE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-e2e"):
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-e2e"), \
+             mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
                  mock.patch.object(main.projects,       "start", return_value=None), \
@@ -243,7 +245,8 @@ class RuntimeAuditE2ETests(unittest.TestCase):
             agents_dir.mkdir()
 
             with mock.patch.multiple(main, USERS_FILE=users_path, JWT_SECRET="test-rt"), \
-                 mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-rt"):
+                 mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-rt"), \
+                 mock.patch.object(main.rate_limiter, "check_login"):
                 with mock.patch.object(main.discovery,      "start", return_value=None), \
                      mock.patch.object(main.discovery,      "stop",  return_value=None), \
                      mock.patch.object(main.projects,       "start", return_value=None), \
@@ -381,7 +384,8 @@ class AgentMemoryE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-mem"):
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-mem"), \
+             mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
                  mock.patch.object(main.projects,       "start", return_value=None), \
@@ -449,7 +453,8 @@ class WksConfigE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-wks"):
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-wks"), \
+             mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
                  mock.patch.object(main.projects,       "start", return_value=None), \
