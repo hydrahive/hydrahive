@@ -85,6 +85,7 @@ def register_project_integration_routes(
     orchestrator,
     audit_log,
     logger,
+    run_self_update,
 ) -> None:
     @auth_router.get("/projects/{project_id}/agentlink")
     def list_agentlink(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
@@ -217,3 +218,49 @@ def register_project_integration_routes(
             name=f"webhook-wake-{project_id}",
         )
         return {"triggered": True, "project_id": project_id, "message": message}
+
+    @public_router.post("/webhooks/gitea/{project_id}")
+    async def gitea_webhook(project_id: str, request: Request):
+        import hmac
+        import hashlib
+        import shutil as _shutil
+
+        body = await request.body()
+
+        from .gitea import _load_config as _gitea_cfg
+        cfg = _gitea_cfg()
+        webhook_secret = cfg.get("webhook_secret", "")
+        if webhook_secret:
+            sig = request.headers.get("X-Gitea-Signature", "")
+            expected = hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()  # type: ignore[attr-defined]
+            if not hmac.compare_digest(sig, expected):
+                raise HTTPException(403, "Webhook-Signatur ungültig")
+
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+
+        ref     = payload.get("ref", "")
+        pusher  = payload.get("pusher", {}).get("login", "unknown")
+        commits = len(payload.get("commits", []))
+
+        logger.info("Gitea Webhook: project=%s ref=%s pusher=%s commits=%d",
+                    project_id, ref, pusher, commits)
+
+        if ref != "refs/heads/main":
+            return {"status": "ignored", "reason": "not main branch", "ref": ref}
+
+        audit_log("gitea.webhook.push", target=project_id, project_id=project_id,
+                  details={"ref": ref, "pusher": pusher, "commits": commits})
+
+        ws = Path(f"/tmp/octopos-git/{project_id}")
+        if ws.exists():
+            _shutil.rmtree(ws)
+            logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
+
+        if project_id == "octopos-core":
+            asyncio.create_task(run_self_update(pusher, commits))
+            return {"status": "deploying", "project": project_id, "ref": ref}
+
+        return {"status": "ok", "project": project_id, "ref": ref}

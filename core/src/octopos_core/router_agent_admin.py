@@ -50,13 +50,20 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
     return agent_data
 
 
+class SpawnRequest(BaseModel):
+    agent_id: str
+
+
 def register_agent_admin_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
     *,
     require_auth,
     require_admin,
+    require_admin_or_localhost,
+    require_auth_or_localhost,
     discovery,
+    runtime,
     agents_dir: str,
     audit_log,
     logger,
@@ -138,3 +145,18 @@ def register_agent_admin_routes(
         if not soul_path.exists():
             return {"soul": "", "exists": False}
         return {"soul": soul_path.read_text(encoding="utf-8"), "exists": True}
+
+    @admin_router.post("/agents/spawn")
+    async def spawn_task_agent(req: SpawnRequest, _a: tuple = Depends(require_admin_or_localhost)):
+        cfg = discovery.get(req.agent_id)
+        if not cfg:
+            raise HTTPException(404, f"Agent '{req.agent_id}' nicht in Discovery")
+        if cfg.type != "worker":
+            raise HTTPException(400, f"Nur worker koennen gespawnt werden, nicht {cfg.type}")
+        await runtime.spawn_task_agent(cfg)
+        return {"spawned": req.agent_id}
+
+    @auth_router.post("/agents/{agent_id}/heartbeat")
+    def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost)):
+        runtime.heartbeat(agent_id)
+        return {"ok": True}
