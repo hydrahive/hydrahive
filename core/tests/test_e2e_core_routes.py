@@ -18,8 +18,8 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from octopos_core import main
-from octopos_core.router_core_misc import summarize_core_journal_lines
+from hydrahive_core import main
+from hydrahive_core.router_core_misc import summarize_core_journal_lines
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ def _client_with_isolation(tmpdir: str, users_path: Path, agents_dir: Path, proj
 def _all_lifecycle_patches():
     """Gemeinsamer Context-Manager: patcht alle Lifecycle-Methoden die Dateisystem-Zugriff brauchen."""
     return mock.patch.multiple(
-        "octopos_core.main",
+        "hydrahive_core.main",
         **{},  # Platzhalter — kombiniert mit patch.object unten
     )
 
@@ -86,8 +86,8 @@ def _build_smoke_patches() -> list:
         mock.patch.object(main.agent_sessions, "start", return_value=None),
         mock.patch.object(main.runtime,        "start", return_value=None),
         mock.patch.object(main.runtime,        "stop",  return_value=None),
-        mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
-        mock.patch("octopos_core.main.USERS_FILE", Path("/dev/null")),
+        mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
+        mock.patch("hydrahive_core.main.USERS_FILE", Path("/dev/null")),
         mock.patch.object(main.rate_limiter,   "check_login"),   # verhindert 10-Login-Limit über Test-Sessions
     ]
 
@@ -170,7 +170,7 @@ class PersonalAgentE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-e2e"), \
+             mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-e2e"), \
              mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
@@ -245,7 +245,7 @@ class RuntimeAuditE2ETests(unittest.TestCase):
             agents_dir.mkdir()
 
             with mock.patch.multiple(main, USERS_FILE=users_path, JWT_SECRET="test-rt"), \
-                 mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-rt"), \
+                 mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-rt"), \
                  mock.patch.object(main.rate_limiter, "check_login"):
                 with mock.patch.object(main.discovery,      "start", return_value=None), \
                      mock.patch.object(main.discovery,      "stop",  return_value=None), \
@@ -286,9 +286,9 @@ class JournalNoiseFilterTests(unittest.TestCase):
 
     def _real_lines(self) -> list[str]:
         return [
-            "Mar 23 10:01:00 host core[1]: ERROR octopos_core.orchestrator: LLM timeout",
-            "Mar 23 10:01:01 host core[1]: WARNING octopos_core.main: Rate limit hit",
-            "Mar 23 10:01:02 host core[1]: INFO octopos_core.agent_runtime: Agent started: personal_admin",
+            "Mar 23 10:01:00 host core[1]: ERROR hydrahive_core.orchestrator: LLM timeout",
+            "Mar 23 10:01:01 host core[1]: WARNING hydrahive_core.main: Rate limit hit",
+            "Mar 23 10:01:02 host core[1]: INFO hydrahive_core.agent_runtime: Agent started: personal_admin",
         ]
 
     def test_nio_rooms_not_in_top_signatures(self):
@@ -384,7 +384,7 @@ class AgentMemoryE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-mem"), \
+             mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-mem"), \
              mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
@@ -453,7 +453,7 @@ class WksConfigE2ETests(unittest.TestCase):
             "PROJECTS_DIR": str(projects_dir),
         }
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-wks"), \
+             mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-wks"), \
              mock.patch.object(main.rate_limiter, "check_login"):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
@@ -525,8 +525,8 @@ class DiscordConfigE2ETests(unittest.TestCase):
         }
         token_dir = discord_token_dir or Path(tmpdir) / "discord_tokens"
         with mock.patch.multiple(main, **patches), \
-             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-discord"), \
-             mock.patch("octopos_core.discord_agent.TOKEN_DIR", token_dir):
+             mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-discord"), \
+             mock.patch("hydrahive_core.discord_agent.TOKEN_DIR", token_dir):
             with mock.patch.object(main.discovery,      "start", return_value=None), \
                  mock.patch.object(main.discovery,      "stop",  return_value=None), \
                  mock.patch.object(main.projects,       "start", return_value=None), \
@@ -596,14 +596,14 @@ class GiteaToolsE2ETests(_SmokeClientMixin, unittest.TestCase):
     """Verification gap #150 — Gitea-Endpunkte erreichbar, Tool-Registry vollständig."""
 
     def test_gitea_issue_text_validation(self):
-        from octopos_core.tool_registry import _validate_gitea_issue_text
+        from hydrahive_core.tool_registry import _validate_gitea_issue_text
 
         self.assertIsNone(_validate_gitea_issue_text("Normaler Titel"))
         self.assertIsNotNone(_validate_gitea_issue_text("x" * 257))
         self.assertIsNotNone(_validate_gitea_issue_text("ok", "y" * 20001))
 
     def test_gitea_tools_registered(self):
-        from octopos_core.tool_registry import registry
+        from hydrahive_core.tool_registry import registry
 
         for tool_id in ("gitea_create_issue", "gitea_comment_issue", "gitea_update_issue"):
             self.assertIsNotNone(registry.get(tool_id), f"Tool '{tool_id}' nicht registriert")
@@ -634,10 +634,10 @@ class ConsoleApiE2ETests(_SmokeClientMixin, unittest.TestCase):
         self.assertIn(self._client.get("/tools").status_code, (401, 403))
 
     def test_health_endpoint_public(self):
-        """GET /health ist öffentlich und liefert service=octopos-core."""
+        """GET /health ist öffentlich und liefert service=hydrahive-core."""
         resp = self._client.get("/health")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json().get("service"), "octopos-core")
+        self.assertEqual(resp.json().get("service"), "hydrahive-core")
 
     def test_setup_status_public(self):
         """GET /setup/status ist öffentlich."""

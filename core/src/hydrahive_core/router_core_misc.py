@@ -64,7 +64,7 @@ def _normalize_journal_signature(message: str) -> str:
     return signature[:220]
 
 
-def summarize_core_journal_lines(lines: list[str], *, source: str = "journalctl -u octopos-core") -> dict:
+def summarize_core_journal_lines(lines: list[str], *, source: str = "journalctl -u hydrahive-core") -> dict:
     timestamps: list[str] = []
     signatures: Counter[str] = Counter()
     error_count = 0
@@ -126,7 +126,7 @@ def collect_core_journal_report(*, lines: int = 200) -> dict:
             [
                 "journalctl",
                 "-u",
-                "octopos-core",
+                "hydrahive-core",
                 "-n",
                 str(lines),
                 "--no-pager",
@@ -141,7 +141,7 @@ def collect_core_journal_report(*, lines: int = 200) -> dict:
         summary = summarize_core_journal_lines(journal_lines)
         report = {
             "available": True,
-            "source": "journalctl -u octopos-core",
+            "source": "journalctl -u hydrahive-core",
             "count": len(journal_lines),
             "lines": journal_lines,
             "summary": summary,
@@ -151,11 +151,11 @@ def collect_core_journal_report(*, lines: int = 200) -> dict:
     except Exception as e:
         return {
             "available": False,
-            "source": "journalctl -u octopos-core",
+            "source": "journalctl -u hydrahive-core",
             "count": 0,
             "lines": [str(e)],
             "summary": {
-                "source": "journalctl -u octopos-core",
+                "source": "journalctl -u hydrahive-core",
                 "available": False,
                 "count": 0,
                 "error_count": 0,
@@ -250,7 +250,7 @@ def register_core_misc_routes(
 
     @public_router.get("/health")
     def health():
-        return {"status": "ok", "service": "octopos-core"}
+        return {"status": "ok", "service": "hydrahive-core"}
 
     @auth_router.get("/agents")
     def list_agents():

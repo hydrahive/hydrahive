@@ -1,4 +1,4 @@
-# OctopOS Review — Session 7
+# HydraHive Review — Session 7
 
 > Datum: 20. März 2026  
 > Teilnehmer: Till · Claude Web · Local Claude  
@@ -56,8 +56,8 @@
 - [ ] Keine Audit-Logs: wer hat wann was geändert?
 
 ### Stabilität / Betrieb
-- [ ] Update-Mechanismus fehlt — wie bekommt OctopOS neue Versionen?
-- [ ] Backup/Restore fehlt — /agents/, /projects/, /etc/octopos/ sichern
+- [ ] Update-Mechanismus fehlt — wie bekommt HydraHive neue Versionen?
+- [ ] Backup/Restore fehlt — /agents/, /projects/, /etc/hydrahive/ sichern
 - [ ] Kein Health-Dashboard für Matrix-Rooms (sind Agenten wirklich online?)
 - [ ] Core-Neustart verliert laufende Task-Agenten ohne Cleanup
 - [ ] Keine Limits: ein Agent kann alle VRAM-Ressourcen blockieren
@@ -111,9 +111,9 @@
 ## 3. Ideen die noch einfallen (Brainstorming)
 
 ### Produkt-Vision
-- [ ] OctopOS als Proxmox-App (One-Click-Install)
-- [ ] OctopOS als TrueNAS-App (du kennst das System)
-- [ ] OctopOS Community Edition (kostenlos) vs Pro Edition (Support, mehr Features)
+- [ ] HydraHive als Proxmox-App (One-Click-Install)
+- [ ] HydraHive als TrueNAS-App (du kennst das System)
+- [ ] HydraHive Community Edition (kostenlos) vs Pro Edition (Support, mehr Features)
 - [ ] Agent-Marketplace: vorgefertigte Agenten herunterladen
 
 ### Technisch interessant
@@ -133,7 +133,7 @@
 - HTTPS/TLS für nginx
 - JWT Secret persistent (nicht bei jedem Core-Neustart neu)
 - Update-Mechanismus (git pull + pip install + npm build)
-- Backup-Script für /agents/, /projects/, /etc/octopos/
+- Backup-Script für /agents/, /projects/, /etc/hydrahive/
 - Streaming in Chat (Server-Sent Events)
 - Markdown-Rendering in Chat
 
@@ -157,9 +157,9 @@
 
 ## 5. Offene Fragen für das Review-Gespräch
 
-1. Soll OctopOS eine eigene Domain bekommen (octopos.io)?
+1. Soll HydraHive eine eigene Domain bekommen (hydrahive.io)?
 2. Wann ist der richtige Zeitpunkt für Session 7 (Monetarisierung)?
-3. Welche OpenClaw-Features sind wirklich relevant für OctopOS-Zielgruppe?
+3. Welche OpenClaw-Features sind wirklich relevant für HydraHive-Zielgruppe?
 4. Plugin-System: lohnt sich das vor dem ersten Release?
 5. AgentLink: vor oder nach dem ersten öffentlichen Release?
 

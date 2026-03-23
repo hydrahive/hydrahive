@@ -1,12 +1,12 @@
-# OctopOS Handbuch
+# HydraHive Handbuch
 
-OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen VM oder einem Server, verwaltet KI-Agenten, Projekte und Dateisysteme — ohne externe Cloud-Abhängigkeit.
+HydraHive ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen VM oder einem Server, verwaltet KI-Agenten, Projekte und Dateisysteme — ohne externe Cloud-Abhängigkeit.
 
 ---
 
 ## Aktueller Betriebsmodus
 
-OctopOS ist inzwischen mehr als nur Agenten- und Projektverwaltung. Der aktuelle Arbeitsstand ist:
+HydraHive ist inzwischen mehr als nur Agenten- und Projektverwaltung. Der aktuelle Arbeitsstand ist:
 
 - **Lokales Memory** bleibt agentenspezifisch: `soul.md`, `memory/`, Skills und Session-Kontext
 - **A-MEM** ist die gemeinsame Langzeit-Wissensdatenbank fuer alle Agenten
@@ -57,15 +57,15 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 ### Installer ausführen
 
 ```bash
-git clone https://github.com/tilleulenspiegel/octopos.git
-cd octopos
+git clone https://github.com/tilleulenspiegel/hydrahive.git
+cd hydrahive
 sudo bash installer/install.sh
 ```
 
 Der Installer läuft vollautomatisch und richtet ein:
 - conduwuit (Matrix-Homeserver)
-- OctopOS Core (Python-Backend)
-- OctopOS Console (React-Frontend via nginx)
+- HydraHive Core (Python-Backend)
+- HydraHive Console (React-Frontend via nginx)
 - HTTPS mit self-signed Zertifikat
 - Optional: Ollama (bei `PROFILE=full`)
 
@@ -88,10 +88,10 @@ certbot --nginx -d mein.domain.de
 Nach der Installation ist die Konsole sofort nutzbar. Der Installer hat einen Admin-Account angelegt:
 
 - **Benutzername:** `admin`
-- **Passwort:** steht in `/etc/octopos/admin_credentials` auf dem Server
+- **Passwort:** steht in `/etc/hydrahive/admin_credentials` auf dem Server
 
 ```bash
-sudo cat /etc/octopos/admin_credentials
+sudo cat /etc/hydrahive/admin_credentials
 # matrix_admin_password=<generiertes-passwort>
 ```
 
@@ -183,7 +183,7 @@ tools:
   - write_memory
 
 mcp_servers:
-  - qmd                  # MCP-Server-IDs aus /etc/octopos/mcp_servers.json
+  - qmd                  # MCP-Server-IDs aus /etc/hydrahive/mcp_servers.json
 
 heartbeat:
   interval: 30s
@@ -256,10 +256,10 @@ Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werd
 |---|---|
 | Rekursives Löschen | `rm -r`, `rm -rf`, `rm` auf `/opt/` |
 | Disk-Destruktion | `dd of=/dev/…`, `mkfs`, `fdisk`, `parted`, `shred`, `wipefs` |
-| OctopOS-Sabotage | `systemctl stop/disable/mask/kill octopos`, `killall uvicorn` |
-| Geschützte Pfade | Redirects (`>`) nach `/etc/`, `/bin/`, `/usr/`, `/lib`, `/boot/`, `/dev/`, `/sys/`, `/proc/`, `/opt/octopos/` |
+| HydraHive-Sabotage | `systemctl stop/disable/mask/kill hydrahive`, `killall uvicorn` |
+| Geschützte Pfade | Redirects (`>`) nach `/etc/`, `/bin/`, `/usr/`, `/lib`, `/boot/`, `/dev/`, `/sys/`, `/proc/`, `/opt/hydrahive/` |
 | Rechteänderungen | `chmod`/`chown` auf `/opt/`, `/etc/`, `/bin/` |
-| Git in Systempfaden | `git clone`/`reset --hard` nach/in `/opt/octopos/` |
+| Git in Systempfaden | `git clone`/`reset --hard` nach/in `/opt/hydrahive/` |
 | Shell-Escapes | `$()` Command Substitution, Backticks `` ` ``, `eval`, Subshell über `bash -c` |
 | Fork-Bomben | `:() { …` |
 
@@ -282,7 +282,7 @@ Ein Projekt ist ein isolierter Arbeitsbereich: eigener Linux-User, eigenes Verze
    - **Samba-Freigabe:** Ob ein Windows-Share eingerichtet wird
 3. **Projekt anlegen** klicken
 
-OctopOS richtet automatisch ein:
+HydraHive richtet automatisch ein:
 - Linux-User `proj_<id>` mit eigenem Home-Verzeichnis
 - Verzeichnis `/projects/<id>/` für Agenten-Dateien
 - Matrix-Room (wenn Matrix konfiguriert)
@@ -547,7 +547,7 @@ Persönliche Agenten können via SSH auf die eigene Workstation des Users zugrei
 ```bash
 # Auf der Workstation:
 # Den Public Key in authorized_keys eintragen
-echo "ssh-ed25519 AAAA... octopos-wks@octopos" >> ~/.ssh/authorized_keys
+echo "ssh-ed25519 AAAA... hydrahive-wks@hydrahive" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 
 # SSH-Daemon aktivieren (falls nicht aktiv)
@@ -590,14 +590,14 @@ Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits er
 
 ### Gitea konfigurieren
 
-1. **LLM-Config** → **Gitea** (oder direkt in `/etc/octopos/gitea_config.json`)
+1. **LLM-Config** → **Gitea** (oder direkt in `/etc/hydrahive/gitea_config.json`)
 2. Gitea-URL, Token, Organisation eintragen
 
 ```json
 {
   "url": "http://192.168.1.100:3001",
   "token": "dein-gitea-token",
-  "org": "octopos"
+  "org": "hydrahive"
 }
 ```
 
@@ -625,7 +625,7 @@ Alle Git-Tools akzeptieren einen optionalen `project_id`-Parameter. Standardmä�
 
 ## 13. MCP-Server
 
-MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. OctopOS unterstützt streamableHttp-Transport.
+MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. HydraHive unterstützt streamableHttp-Transport.
 
 ### MCP-Server konfigurieren (Admin)
 
@@ -633,7 +633,7 @@ MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Se
 2. **Neuer MCP-Server**
 3. Felder ausfüllen: ID, Name, Transport (`streamableHttp`), URL
 
-Oder direkt in `/etc/octopos/mcp_servers.json`:
+Oder direkt in `/etc/hydrahive/mcp_servers.json`:
 
 ```json
 [
@@ -671,7 +671,7 @@ Agenten mit `qmd` in `mcp_servers` können gezielt in ihren Memory-Dateien suche
 
 ## 14. Webhooks
 
-Webhooks ermöglichen externe Systeme OctopOS zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.
+Webhooks ermöglichen externe Systeme HydraHive zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.
 
 ### Webhook anlegen (Konsole)
 
@@ -691,19 +691,19 @@ Dieser Endpoint ist öffentlich zugänglich (kein Auth nötig) und startet den B
 
 ### Signierung
 
-Wenn ein Secret gesetzt ist, wird jeder ausgehende Webhook-Request mit `X-OctopOS-Signature: sha256=<hmac>` signiert. Prüfung auf Empfänger-Seite:
+Wenn ein Secret gesetzt ist, wird jeder ausgehende Webhook-Request mit `X-HydraHive-Signature: sha256=<hmac>` signiert. Prüfung auf Empfänger-Seite:
 
 ```python
 import hmac, hashlib
 expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]
+assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]
 ```
 
 ---
 
 ## 15. Benutzer und Rollen
 
-Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. OctopOS kennt zwei Rollen:
+Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. HydraHive kennt zwei Rollen:
 
 | Rolle | Rechte |
 |---|---|
@@ -725,7 +725,7 @@ Unter **Backup** (Admin only) können vollständige System-Backups erstellt und 
 ### Was wird gesichert?
 
 Ein Backup enthält als `tar.gz`:
-- `/etc/octopos/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials, WKS-Keys)
+- `/etc/hydrahive/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials, WKS-Keys)
 - `/agents/` — alle Agenten-Definitionen, Skills und Memory-Dateien
 - `/projects/` — Projekt-Konfigurationen und Agenten-Dateien
 
@@ -736,7 +736,7 @@ Ein Backup enthält als `tar.gz`:
 1. **Backup** → **Backup erstellen**
 2. Das Backup erscheint sofort in der Liste mit Zeitstempel und Dateigröße
 
-Backups liegen auf dem Server unter `/opt/octopos/backups/`.
+Backups liegen auf dem Server unter `/opt/hydrahive/backups/`.
 
 ### Backup herunterladen
 
@@ -766,8 +766,8 @@ curl https://<ip>/api/admin/backups \
 ### Automatisches Backup
 
 ```bash
-# Skript liegt in scripts/octopos-backup.sh
-./scripts/octopos-backup.sh
+# Skript liegt in scripts/hydrahive-backup.sh
+./scripts/hydrahive-backup.sh
 ```
 
 ---
@@ -785,7 +785,7 @@ Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
 - LLM-Token setzen
 - WKS-Konfiguration ändern
 
-Gespeichert in `/var/log/octopos/audit.jsonl` — append-only, ein JSON-Objekt pro Zeile.
+Gespeichert in `/var/log/hydrahive/audit.jsonl` — append-only, ein JSON-Objekt pro Zeile.
 
 **Filter:** Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.
 
@@ -793,7 +793,7 @@ Gespeichert in `/var/log/octopos/audit.jsonl` — append-only, ein JSON-Objekt p
 
 ## 18. Matrix-Integration
 
-OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.
+HydraHive kann Nachrichten über Matrix (Element) empfangen und beantworten.
 
 ### Element-Client verbinden
 
@@ -801,7 +801,7 @@ Matrix-Server läuft auf Port 8008 (nginx-Proxy → conduwuit auf 6167):
 
 - **Homeserver:** `https://<ip>:8008` oder `http://<ip>:8008`
 - **Benutzer:** `@admin:<hostname>`
-- **Passwort:** aus `/etc/octopos/admin_credentials`
+- **Passwort:** aus `/etc/hydrahive/admin_credentials`
 
 ### Agenten-Bot im Room
 
@@ -833,7 +833,7 @@ NVIDIA-Treiber und `nvidia-smi` müssen installiert sein. Ohne GPU oder ohne Tre
 
 ## 20. System-Update
 
-OctopOS kann sich selbst aktualisieren — entweder manuell über die Console oder automatisch per Webhook.
+HydraHive kann sich selbst aktualisieren — entweder manuell über die Console oder automatisch per Webhook.
 
 ### Update über die Console
 
@@ -844,7 +844,7 @@ Admins sehen in der Sidebar einen **Update**-Button mit dem aktuellen Commit-Has
 3. Python-Dependencies neu installieren (`pip install -e .`)
 4. Console bauen (`npm ci && npm run build`)
 5. Console deployen
-6. `octopos-core` neustarten
+6. `hydrahive-core` neustarten
 7. QMD Memory re-indexieren
 
 Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann sich selbst neustarten ohne den Prozess zu unterbrechen.
@@ -854,7 +854,7 @@ Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann s
 ### Update per Kommandozeile
 
 ```bash
-sudo bash /opt/octopos/update.sh
+sudo bash /opt/hydrahive/update.sh
 ```
 
 ---
@@ -872,8 +872,8 @@ sudo journalctl -u nginx -n 50
 ### Core reagiert nicht
 
 ```bash
-sudo systemctl status octopos-core
-sudo journalctl -u octopos-core -n 100 --no-pager
+sudo systemctl status hydrahive-core
+sudo journalctl -u hydrahive-core -n 100 --no-pager
 ```
 
 ### Agent antwortet nicht
@@ -885,8 +885,8 @@ sudo journalctl -u octopos-core -n 100 --no-pager
 ### WKS-Verbindung schlägt fehl
 
 ```bash
-# SSH manuell testen (vom OctopOS-Server):
-sudo ssh -i /etc/octopos/wks_keys/<username> <ssh_user>@<wks_ip> hostname
+# SSH manuell testen (vom HydraHive-Server):
+sudo ssh -i /etc/hydrahive/wks_keys/<username> <ssh_user>@<wks_ip> hostname
 
 # Häufige Ursachen:
 # - SSH-Daemon auf WKS nicht aktiv: sudo systemctl enable --now ssh
@@ -897,10 +897,10 @@ sudo ssh -i /etc/octopos/wks_keys/<username> <ssh_user>@<wks_ip> hostname
 ### Matrix-Bot antwortet nicht
 
 ```bash
-sudo journalctl -u octopos-core -n 50 | grep -i matrix
+sudo journalctl -u hydrahive-core -n 50 | grep -i matrix
 ```
 
-Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler: `sudo systemctl restart octopos-core`
+Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler: `sudo systemctl restart hydrahive-core`
 
 ### OAuth-Token abgelaufen
 
@@ -923,13 +923,13 @@ sudo systemctl restart qmd-mcp
 
 ```bash
 # Core-Logs
-sudo journalctl -u octopos-core -f
+sudo journalctl -u hydrahive-core -f
 
 # Update-Log
-sudo tail -f /var/log/octopos-update.log
+sudo tail -f /var/log/hydrahive-update.log
 
 # Audit-Log
-sudo tail -f /var/log/octopos/audit.jsonl | python3 -m json.tool
+sudo tail -f /var/log/hydrahive/audit.jsonl | python3 -m json.tool
 
 # nginx-Logs
 sudo tail -f /var/log/nginx/error.log

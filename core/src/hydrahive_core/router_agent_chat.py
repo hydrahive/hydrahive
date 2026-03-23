@@ -285,7 +285,7 @@ def register_agent_chat_routes(
             result = _sub.run(
                 [
                     "journalctl",
-                    "-u", "octopos-core",
+                    "-u", "hydrahive-core",
                     "-n", str(lines),
                     "--no-pager",
                     "--output=short-iso",
@@ -300,7 +300,7 @@ def register_agent_chat_routes(
                 l for l in all_lines
                 if agent_lower in l.lower()
                 or agent_id.lower() in l.lower()
-                or "octopos_core" in l.lower()
+                or "hydrahive_core" in l.lower()
             ]
             if len(filtered) < 5:
                 filtered = all_lines
@@ -308,7 +308,7 @@ def register_agent_chat_routes(
                 "agent_id": agent_id,
                 "lines": filtered[-lines:],
                 "count": len(filtered),
-                "source": "journalctl -u octopos-core",
+                "source": "journalctl -u hydrahive-core",
             }
         except FileNotFoundError:
             return {

@@ -1,8 +1,8 @@
-# OctopOS
+# HydraHive
 
 **Selbst-gehosteter KI-Agent-Server** — Agenten-Swarms, Matrix-Kommunikation, Projekt-Isolation.
 
-> Installiere Linux → Installiere OctopOS → Verwalte alles über die Webkonsole.
+> Installiere Linux → Installiere HydraHive → Verwalte alles über die Webkonsole.
 
 ---
 
@@ -41,8 +41,8 @@ Referenz-Setup: GTX 1080 Ti (11GB VRAM) auf Proxmox VM, Ubuntu 24.04
 ## Schnellstart
 
 ```bash
-git clone https://github.com/tilleulenspiegel/octopos.git
-cd octopos
+git clone https://github.com/tilleulenspiegel/hydrahive.git
+cd hydrahive
 sudo bash installer/install.sh
 # → https://<IP> öffnen → Setup-Wizard
 ```

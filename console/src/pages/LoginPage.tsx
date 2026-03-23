@@ -20,7 +20,7 @@ export function LoginPage() {
           <div className="w-12 h-12 rounded-xl bg-primary mx-auto flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-xl">O</span>
           </div>
-          <h1 className="text-2xl font-semibold">OctopOS Console</h1>
+          <h1 className="text-2xl font-semibold">HydraHive Console</h1>
           <p className="text-sm text-muted-foreground">Melde dich an um fortzufahren</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 bg-card border rounded-lg p-6">

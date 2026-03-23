@@ -1,7 +1,7 @@
 {
-  "name": "octopos-console",
+  "name": "hydrahive-console",
   "version": "0.1.0",
-  "description": "OctopOS Web Console",
+  "description": "HydraHive Web Console",
   "private": true,
   "scripts": {
     "dev": "vite",

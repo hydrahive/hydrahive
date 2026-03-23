@@ -1,22 +1,22 @@
 #!/bin/bash
-# octopos-setup-cron.sh — Cronjob fuer automatisches Backup einrichten
-# Einmalig ausfuehren: bash scripts/octopos-setup-cron.sh
+# hydrahive-setup-cron.sh — Cronjob fuer automatisches Backup einrichten
+# Einmalig ausfuehren: bash scripts/hydrahive-setup-cron.sh
 #
 # Ergebnis: taegliches Backup um 03:00 Uhr
-# Log: ~/octopos-backups/cron.log
+# Log: ~/hydrahive-backups/cron.log
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_SCRIPT="$SCRIPT_DIR/octopos-backup.sh"
-LOG_FILE="$HOME/octopos-backups/cron.log"
+BACKUP_SCRIPT="$SCRIPT_DIR/hydrahive-backup.sh"
+LOG_FILE="$HOME/hydrahive-backups/cron.log"
 CRON_JOB="0 3 * * * $BACKUP_SCRIPT >> $LOG_FILE 2>&1"
 
 # Backup-Dir anlegen
-mkdir -p "$HOME/octopos-backups"
+mkdir -p "$HOME/hydrahive-backups"
 
 # Cronjob nur einmal eintragen
-if crontab -l 2>/dev/null | grep -q "octopos-backup"; then
+if crontab -l 2>/dev/null | grep -q "hydrahive-backup"; then
     echo "Cronjob bereits eingetragen:"
-    crontab -l | grep octopos-backup
+    crontab -l | grep hydrahive-backup
 else
     (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
     echo "Cronjob eingetragen: täglich um 03:00 Uhr"

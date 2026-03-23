@@ -133,9 +133,9 @@ success "conduwuit Konfiguration geschrieben (server_name: $SERVER_NAME)"
 info "Registration-Token: $REG_TOKEN"
 
 # Systemd-Unit schreiben
-cat > /etc/systemd/system/octopos-conduwuit.service << UNIT
+cat > /etc/systemd/system/hydrahive-conduwuit.service << UNIT
 [Unit]
-Description=OctopOS conduwuit Matrix Homeserver
+Description=HydraHive conduwuit Matrix Homeserver
 After=network.target
 Documentation=https://github.com/girlbossceo/conduwuit
 
@@ -148,7 +148,7 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=octopos-conduwuit
+SyslogIdentifier=hydrahive-conduwuit
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
@@ -159,13 +159,13 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable octopos-conduwuit
+systemctl enable hydrahive-conduwuit
 
-if systemctl is-active --quiet octopos-conduwuit; then
-  systemctl restart octopos-conduwuit
+if systemctl is-active --quiet hydrahive-conduwuit; then
+  systemctl restart hydrahive-conduwuit
   success "conduwuit neugestartet"
 else
-  systemctl start octopos-conduwuit
+  systemctl start hydrahive-conduwuit
   success "conduwuit gestartet"
 fi
 
@@ -181,5 +181,5 @@ for i in 1 2 3; do
   info "Warte auf conduwuit... ($i/3)"
 done
 if [ "$HEALTH_OK" -eq 0 ]; then
-  warn "conduwuit antwortet nicht — pruefe: journalctl -u octopos-conduwuit -n 30"
+  warn "conduwuit antwortet nicht — pruefe: journalctl -u hydrahive-conduwuit -n 30"
 fi

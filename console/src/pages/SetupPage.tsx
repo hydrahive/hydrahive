@@ -31,7 +31,7 @@ export function SetupPage() {
           <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto">
             <span className="text-primary-foreground font-bold text-xl">O</span>
           </div>
-          <h1 className="text-2xl font-semibold">OctopOS einrichten</h1>
+          <h1 className="text-2xl font-semibold">HydraHive einrichten</h1>
           <p className="text-sm text-muted-foreground">Lege deinen Admin-Account an</p>
         </div>
 
@@ -77,7 +77,7 @@ export function SetupPage() {
             disabled={loading || !username || !password || !password2}
             className="w-full py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Wird eingerichtet…" : "OctopOS einrichten"}
+            {loading ? "Wird eingerichtet…" : "HydraHive einrichten"}
           </button>
         </form>
 

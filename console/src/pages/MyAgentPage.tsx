@@ -216,7 +216,7 @@ export function MyAgentPage() {
     setMessages(ms => [...ms, userMsg]);
     setSending(true);
     try {
-      const token = localStorage.getItem("octopos_token") || "";
+      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/me/agent/message/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

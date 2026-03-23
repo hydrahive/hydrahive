@@ -141,7 +141,7 @@ export function AdminLayout() {
             </div>
             <div>
               <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">Control Fabric</p>
-              <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">OctopOS</h1>
+              <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">HydraHive</h1>
             </div>
           </div>
           <button
@@ -249,7 +249,7 @@ export function AdminLayout() {
               </button>
               <div>
                 <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">Operations Console</p>
-                <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "OctopOS"}</h2>
+                <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "HydraHive"}</h2>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">

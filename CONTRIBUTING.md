@@ -1,4 +1,4 @@
-# Contributing to OctopOS
+# Contributing to HydraHive
 
 Thanks for your interest in contributing!
 
@@ -6,8 +6,8 @@ Thanks for your interest in contributing!
 
 1. Fork the repository and clone locally
 2. Set up a local VM or test environment (see `installer/install.sh`)
-3. Copy `scripts/octopos.conf.example` → `scripts/octopos.conf` and fill in your VM details
-4. Use `./scripts/octopos-update.sh` to deploy changes to your test VM
+3. Copy `scripts/hydrahive.conf.example` → `scripts/hydrahive.conf` and fill in your VM details
+4. Use `./scripts/hydrahive-update.sh` to deploy changes to your test VM
 
 ## Development Setup
 
@@ -35,7 +35,7 @@ console/    React frontend (Vite + Tailwind)
 installer/  install.sh / update.sh for VM setup
 scripts/    Dev helper scripts (deploy, backup)
 docs/       Handbook (handbook.md → handbuch.html)
-website/    Static landing page (octopos.luckydevs.net)
+website/    Static landing page (hydrahive.luckydevs.net)
 ```
 
 ## Conventions
@@ -57,4 +57,4 @@ Please open an issue before starting large features so we can discuss the design
 
 ## Security
 
-Do not include credentials, private IPs, or API keys in your PR. See [SECURITY.md](SECURITY.md) for the secrets architecture. Use the `octopos.conf` pattern for local config that should never be committed.
+Do not include credentials, private IPs, or API keys in your PR. See [SECURITY.md](SECURITY.md) for the secrets architecture. Use the `hydrahive.conf` pattern for local config that should never be committed.

@@ -72,7 +72,7 @@ export function UserPage() {
         <div>
           <h1 className="text-xl font-semibold">Benutzer</h1>
           <p className="text-sm text-muted-foreground">
-            {userList.length} Benutzer · OctopOS-Login + Matrix-Account
+            {userList.length} Benutzer · HydraHive-Login + Matrix-Account
           </p>
         </div>
         <div className="flex gap-2">
@@ -207,7 +207,7 @@ export function UserPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Jeder Benutzer erhält automatisch einen Matrix-Account auf dem OctopOS-Homeserver.
+        Jeder Benutzer erhält automatisch einen Matrix-Account auf dem HydraHive-Homeserver.
         Login für die Console und Element mit denselben Zugangsdaten.
       </p>
     </div>
