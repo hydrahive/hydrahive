@@ -639,11 +639,11 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
       <tr><td><code>write_memory</code></td><td>Gedächtnis-Datei schreiben oder aktualisieren (<code>filename</code>, <code>content</code>)</td></tr>
     </table>
 
-    <h3>QMD Memory Search</h3>
-    <p>Wenn der Agent <code>qmd</code> als MCP-Server konfiguriert hat, kann er gezielt in Memory-Dateien suchen statt alles zu laden — spart erheblich Tokens:</p>
+    <h3>A-MEM Memory Search</h3>
+    <p>Wenn der Agent <code>amem</code> als MCP-Server konfiguriert hat, kann er gezielt in der gemeinsamen Wissensdatenbank suchen statt alles lokal zu laden — spart erheblich Tokens:</p>
     <pre><code># Im Chat:
 "Was weißt du über das AgentLink-Projekt?"
-→ Agent: qmd_query("AgentLink Projekt")
+→ Agent: amem_search("AgentLink Projekt")
 → Liefert nur relevante Abschnitte</code></pre>
   </section>
 
@@ -721,21 +721,21 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
       <li><span class="step-num">2</span><span>ID, Name, Transport (<code>streamableHttp</code>), URL eintragen</span></li>
     </ol>
 
-    <h3>QMD — Memory Search MCP</h3>
-    <p>OctopOS wird mit einem QMD-MCP-Server ausgeliefert (Port 8181). Er ermöglicht semantische Suche in Agent-Memory und Skills:</p>
+    <h3>A-MEM — Shared Memory MCP</h3>
+    <p>OctopOS wird mit einem A-MEM-MCP-Server ausgeliefert (Port 8020). Er ermöglicht semantische Suche in der gemeinsamen Wissensdatenbank und im A-MEM-Index. Die Web-UI läuft auf Port 8021:</p>
     <pre><code>[
   {
-    "id": "qmd",
-    "name": "QMD Memory Search",
+    "id": "amem",
+    "name": "A-MEM Shared Memory",
     "transport": "streamableHttp",
-    "url": "http://127.0.0.1:8181/mcp"
+    "url": "http://127.0.0.1:8020/sse"
   }
 ]</code></pre>
 
     <h3>MCP im Agenten aktivieren</h3>
     <p>MCP-Server werden pro Agent in <code>agent.yaml</code> eingetragen:</p>
     <pre><code>mcp_servers:
-  - qmd</code></pre>
+  - amem</code></pre>
     <p>Oder unter <strong>Mein Agent → MCP</strong> für den persönlichen Agenten.</p>
   </section>
 

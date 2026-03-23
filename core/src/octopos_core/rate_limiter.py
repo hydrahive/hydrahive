@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+import logging
+import os
+import secrets
+import time
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Any
+
+from fastapi import HTTPException
+
+RATE_LIMIT_LUA = """
+local key = KEYS[1]
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+local ttl_s = tonumber(ARGV[5])
+
+redis.call("ZREMRANGEBYSCORE", key, "-inf", now_ms - window_ms)
+local count = redis.call("ZCARD", key)
+if count >= limit then
+    return 0
+end
+
+redis.call("ZADD", key, now_ms, member)
+redis.call("EXPIRE", key, ttl_s)
+return 1
+"""
+
+
+@dataclass(frozen=True)
+class RateLimitSettings:
+    login_max: int = 10
+    login_window_s: int = 60
+    message_max: int = 50
+    message_window_s: int = 60
+    max_login_keys: int = 10000
+    max_message_keys: int = 50000
+
+
+class RateLimiter:
+    def __init__(
+        self,
+        *,
+        settings: RateLimitSettings | None = None,
+        backend: str = "auto",
+        redis_url: str = "",
+        redis_timeout_s: float = 0.5,
+        logger: logging.Logger | None = None,
+        redis_client: Any | None = None,
+        redis_script: Any | None = None,
+    ) -> None:
+        self.settings = settings or RateLimitSettings()
+        self.backend = backend
+        self.redis_url = redis_url.strip()
+        self.redis_timeout_s = redis_timeout_s
+        self.logger = logger or logging.getLogger(__name__)
+        self._redis_client = redis_client
+        self._redis_script = redis_script
+        self._redis_failed = False
+        self._login_attempts: dict[str, list[float]] = defaultdict(list)
+        self._message_attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
+
+        if self._redis_client is None and self._redis_script is None:
+            self._configure_redis_backend()
+
+    @classmethod
+    def from_env(cls, logger: logging.Logger | None = None) -> "RateLimiter":
+        backend = os.environ.get("OCTOPOS_RATE_LIMIT_BACKEND", "auto").strip().lower()
+        redis_url = os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_URL", "").strip()
+        redis_timeout_s = float(os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5"))
+        return cls(
+            backend=backend,
+            redis_url=redis_url,
+            redis_timeout_s=redis_timeout_s,
+            logger=logger,
+        )
+
+    def _configure_redis_backend(self) -> None:
+        use_redis = self.backend == "redis" or (self.backend == "auto" and self.redis_url)
+        if not use_redis or not self.redis_url:
+            return
+
+        try:
+            import redis as redis_lib
+        except Exception as exc:  # pragma: no cover - optional dependency fallback
+            self.logger.warning("Redis-Paket nicht verfuegbar, nutze lokales Rate-Limiting: %s", exc)
+            return
+
+        try:
+            self._redis_client = redis_lib.Redis.from_url(
+                self.redis_url,
+                decode_responses=True,
+                socket_timeout=self.redis_timeout_s,
+                socket_connect_timeout=self.redis_timeout_s,
+                health_check_interval=30,
+            )
+            self._redis_script = self._redis_client.register_script(RATE_LIMIT_LUA)
+            self.logger.info("Distributed rate limiting aktiviert via Redis: %s", self.redis_url)
+        except Exception as exc:
+            self.logger.warning("Redis-Rate-Limiter nicht aktivierbar, nutze lokales Fallback: %s", exc)
+            self._redis_client = None
+            self._redis_script = None
+
+    def _redis_check(self, key: str, limit: int, window_s: int) -> bool | None:
+        if self._redis_client is None or self._redis_script is None or self._redis_failed:
+            return None
+
+        now_ms = int(time.time() * 1000)
+        ttl_s = max(window_s + 60, 120)
+        member = f"{now_ms}:{secrets.token_hex(8)}"
+        try:
+            result = self._redis_script(
+                keys=[key],
+                args=[now_ms, window_s * 1000, limit, member, ttl_s],
+            )
+            return bool(int(result))
+        except Exception as exc:
+            self._redis_failed = True
+            self.logger.warning("Redis-Rate-Limiter nicht erreichbar, wechsle auf lokales Fallback: %s", exc)
+            return None
+
+    def _prune_local(self, attempts: dict[Any, list[float]], window_s: int) -> None:
+        now = time.time()
+        remove_keys = [k for k, ts in attempts.items() if not any(now - t < window_s for t in ts)]
+        for key in remove_keys:
+            attempts.pop(key, None)
+
+    def cleanup_local(self) -> None:
+        self._prune_local(self._login_attempts, self.settings.login_window_s)
+        self._prune_local(self._message_attempts, self.settings.message_window_s)
+
+    def _check_local(
+        self,
+        attempts: dict[Any, list[float]],
+        key: Any,
+        *,
+        limit: int,
+        window_s: int,
+    ) -> bool:
+        now = time.time()
+        max_keys = self.settings.max_login_keys if attempts is self._login_attempts else self.settings.max_message_keys
+        if len(attempts) > max_keys:
+            self._prune_local(attempts, window_s)
+            if len(attempts) > max_keys:
+                overflow = len(attempts) - max_keys
+                for old_key in list(attempts.keys())[:overflow]:
+                    attempts.pop(old_key, None)
+
+        attempts[key] = [t for t in attempts[key] if now - t < window_s]
+        if len(attempts[key]) >= limit:
+            return False
+        attempts[key].append(now)
+        return True
+
+    def check_login(self, ip: str) -> None:
+        key = f"octopos:rate:login:{ip}"
+        redis_allowed = self._redis_check(key, self.settings.login_max, self.settings.login_window_s)
+        if redis_allowed is not None:
+            if not redis_allowed:
+                raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
+            return
+
+        if not self._check_local(
+            self._login_attempts,
+            ip,
+            limit=self.settings.login_max,
+            window_s=self.settings.login_window_s,
+        ):
+            raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
+
+    def check_message(self, user_id: str, project_id: str) -> None:
+        key = (user_id, project_id)
+        redis_key = f"octopos:rate:message:{user_id}:{project_id}"
+        redis_allowed = self._redis_check(redis_key, self.settings.message_max, self.settings.message_window_s)
+        if redis_allowed is not None:
+            if not redis_allowed:
+                raise HTTPException(429, f"Zu viele Nachrichten — max. {self.settings.message_max} pro Minute")
+            return
+
+        if not self._check_local(
+            self._message_attempts,
+            key,
+            limit=self.settings.message_max,
+            window_s=self.settings.message_window_s,
+        ):
+            raise HTTPException(429, f"Zu viele Nachrichten — max. {self.settings.message_max} pro Minute")
