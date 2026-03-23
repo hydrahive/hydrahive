@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
 
 from .execution_mode_policy import resolve_request_execution_mode
+from .learning_memory import append_learning_snapshot
 
 
 def register_agent_chat_routes(
@@ -125,8 +126,22 @@ def register_agent_chat_routes(
             "Verstanden. Ich habe die Zusammenfassung der bisherigen Konversation gelesen und kann nahtlos weiterarbeiten.",
         )
         agent_sessions.replace_messages(agent_id, [summary_user, summary_asst])
+        learning_snapshot = None
+        try:
+            learning_snapshot = append_learning_snapshot(
+                Path(agents_dir) / agent_id,
+                summary,
+                logger=logger,
+            )
+        except Exception as e:
+            logger.warning("compact: Lernnotiz konnte nicht gespeichert werden: %s", e)
         logger.info("compact: %s — %d Nachrichten → 2 (Zusammenfassung)", agent_id, msg_count)
-        return {"compacted": True, "original_count": msg_count, "summary": summary}
+        return {
+            "compacted": True,
+            "original_count": msg_count,
+            "summary": summary,
+            "learning_snapshot": str(learning_snapshot) if learning_snapshot else None,
+        }
 
     @app.post("/agents/{agent_id}/message")
     async def agent_message_sync(

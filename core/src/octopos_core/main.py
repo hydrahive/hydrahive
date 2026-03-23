@@ -15,8 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import asyncio
-import time
-from collections import defaultdict
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -30,6 +28,7 @@ from .orchestrator import Orchestrator
 from .project_config import ProjectConfig
 from .project_loader import ProjectLoader
 from .provisioner import Provisioner, get_admin_access_token
+from .rate_limiter import RateLimiter
 from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
@@ -64,52 +63,16 @@ JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
 
-# Rate-Limiting für /auth/login (#70)
-_LOGIN_ATTEMPTS: dict[str, list[float]] = defaultdict(list)
-_LOGIN_MAX      = 10     # max. Versuche
-_LOGIN_WIN_S    = 60     # pro Minute
-_LOGIN_MAX_KEYS = 10000  # harte Obergrenze unterschiedlicher IP-Keys
+rate_limiter = RateLimiter.from_env(logger)
 
-# Rate-Limiting für /message Endpoints (#72)
-_MESSAGE_ATTEMPTS: dict[tuple[str, str], list[float]] = defaultdict(list)
-_MESSAGE_MAX      = 50     # max. Nachrichten pro Fenster
-_MESSAGE_WIN_S    = 60     # pro Minute
-_MESSAGE_MAX_KEYS = 50000  # harte Obergrenze unterschiedlicher user+project-Keys
-
-def _prune_attempt_map[K](attempts: dict[K, list[float]], window_s: float) -> int:
-    """Entfernt abgelaufene Einträge. Gibt Anzahl entfernter Keys zurück."""
-    now = time.monotonic()
-    remove_keys: list[K] = [k for k, ts in attempts.items() if not any(now - t < window_s for t in ts)]
-    for k in remove_keys:
-        attempts.pop(k, None)
-    return len(remove_keys)
 
 def _check_login_rate(ip: str) -> None:
-    now = time.monotonic()
-    if len(_LOGIN_ATTEMPTS) > _LOGIN_MAX_KEYS:
-        _prune_attempt_map(_LOGIN_ATTEMPTS, _LOGIN_WIN_S)
-        if len(_LOGIN_ATTEMPTS) > _LOGIN_MAX_KEYS:
-            for k in list(_LOGIN_ATTEMPTS.keys())[:len(_LOGIN_ATTEMPTS) - _LOGIN_MAX_KEYS]:
-                _LOGIN_ATTEMPTS.pop(k, None)
-    _LOGIN_ATTEMPTS[ip] = [t for t in _LOGIN_ATTEMPTS[ip] if now - t < _LOGIN_WIN_S]
-    if len(_LOGIN_ATTEMPTS[ip]) >= _LOGIN_MAX:
-        raise HTTPException(429, "Zu viele Login-Versuche — bitte eine Minute warten")
-    _LOGIN_ATTEMPTS[ip].append(now)
+    rate_limiter.check_login(ip)
 
 
 def _check_message_rate(user_id: str, project_id: str) -> None:
-    """Rate-Limit für Nachrichten pro User+Projekt"""
-    key = (user_id, project_id)
-    now = time.monotonic()
-    if len(_MESSAGE_ATTEMPTS) > _MESSAGE_MAX_KEYS:
-        _prune_attempt_map(_MESSAGE_ATTEMPTS, _MESSAGE_WIN_S)
-        if len(_MESSAGE_ATTEMPTS) > _MESSAGE_MAX_KEYS:
-            for k in list(_MESSAGE_ATTEMPTS.keys())[:len(_MESSAGE_ATTEMPTS) - _MESSAGE_MAX_KEYS]:
-                _MESSAGE_ATTEMPTS.pop(k, None)
-    _MESSAGE_ATTEMPTS[key] = [t for t in _MESSAGE_ATTEMPTS[key] if now - t < _MESSAGE_WIN_S]
-    if len(_MESSAGE_ATTEMPTS[key]) >= _MESSAGE_MAX:
-        raise HTTPException(429, f"Zu viele Nachrichten — max. {_MESSAGE_MAX} pro Minute")
-    _MESSAGE_ATTEMPTS[key].append(now)
+    """Rate-Limit fuer Nachrichten pro User+Projekt"""
+    rate_limiter.check_message(user_id, project_id)
 
 
 _setup_lock = asyncio.Lock()   # verhindert parallele Setup-Requests (#71)
@@ -245,8 +208,7 @@ async def lifespan(app: FastAPI):
         while True:
             try:
                 await asyncio.sleep(300)  # alle 5 Minuten
-                _prune_attempt_map(_LOGIN_ATTEMPTS, _LOGIN_WIN_S)
-                _prune_attempt_map(_MESSAGE_ATTEMPTS, _MESSAGE_WIN_S)
+                rate_limiter.cleanup_local()
             except asyncio.CancelledError:
                 break
             except Exception as e:

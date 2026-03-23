@@ -1,8 +1,11 @@
 import tempfile
 import unittest
+import time
+import json
 from pathlib import Path
 from unittest import mock
 from types import SimpleNamespace
+import types
 import asyncio
 
 import yaml
@@ -13,7 +16,9 @@ from octopos_core.agent_config import AgentConfig
 from octopos_core.execution_mode_policy import resolve_request_execution_mode
 from octopos_core.gitea import resolve_git_target, resolve_repo_ref
 from octopos_core.orchestrator import Orchestrator
+from octopos_core.learning_memory import append_learning_snapshot, build_learning_prompt_snippet
 from octopos_core.project_config import load_project_config
+from octopos_core.rate_limiter import RateLimitSettings, RateLimiter
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
 from octopos_core.router_users import (
     MyAgentUpdateRequest,
@@ -318,6 +323,189 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn("git.write", execution_modes["elevated"]["permissions"])
         self.assertIn("git.push", execution_modes["root"]["permissions"])
         self.assertIn("shell.exec", execution_modes["root"]["permissions"])
+
+    def test_rate_limiter_local_fallback_enforces_and_prunes(self):
+        limiter = RateLimiter(
+            settings=RateLimitSettings(login_max=2, login_window_s=60, message_max=2, message_window_s=60),
+            backend="memory",
+            logger=mock.Mock(),
+        )
+
+        limiter.check_login("127.0.0.1")
+        limiter.check_login("127.0.0.1")
+        with self.assertRaises(main.HTTPException) as ctx:
+            limiter.check_login("127.0.0.1")
+        self.assertEqual(ctx.exception.status_code, 429)
+
+        limiter._login_attempts["198.51.100.1"] = [time.time() - 120]
+        limiter.cleanup_local()
+        self.assertNotIn("198.51.100.1", limiter._login_attempts)
+
+    def test_rate_limiter_redis_backend_uses_shared_script(self):
+        class FakeScript:
+            def __init__(self, results):
+                self.results = list(results)
+                self.calls = []
+
+            def __call__(self, *, keys=None, args=None):
+                self.calls.append((keys, args))
+                return self.results.pop(0)
+
+        script = FakeScript([1, 0])
+        limiter = RateLimiter(
+            settings=RateLimitSettings(login_max=1, login_window_s=60, message_max=1, message_window_s=60),
+            redis_client=object(),
+            redis_script=script,
+            logger=mock.Mock(),
+        )
+
+        limiter.check_login("203.0.113.10")
+        with self.assertRaises(main.HTTPException) as ctx:
+            limiter.check_login("203.0.113.10")
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(script.calls[0][0][0], "octopos:rate:login:203.0.113.10")
+
+    def test_rate_limiter_redis_failure_falls_back_to_local_state(self):
+        script = mock.Mock(side_effect=RuntimeError("redis down"))
+        limiter = RateLimiter(
+            settings=RateLimitSettings(login_max=1, login_window_s=60, message_max=1, message_window_s=60),
+            redis_client=object(),
+            redis_script=script,
+            logger=mock.Mock(),
+        )
+
+        limiter.check_message("alice", "project-x")
+        with self.assertRaises(main.HTTPException) as ctx:
+            limiter.check_message("alice", "project-x")
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertTrue(limiter._redis_failed)
+        self.assertGreaterEqual(script.call_count, 1)
+
+    def test_append_learning_snapshot_writes_human_readable_memory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir) / "agents" / "personal_test"
+            target = append_learning_snapshot(
+                agent_dir,
+                "Wichtige Erkenntnis: Die Session wird kompaktiert und als Lernnotiz gesichert.",
+                source="test.compact",
+            )
+
+            self.assertEqual(target, agent_dir / "memory" / "learned-facts.md")
+            content = target.read_text(encoding="utf-8")
+            self.assertIn("source: test.compact", content)
+            self.assertIn("- hash:", content)
+            self.assertIn("Wichtige Erkenntnis", content)
+            index_path = agent_dir / "memory" / "learning-index.jsonl"
+            index_lines = index_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(index_lines), 1)
+            record = json.loads(index_lines[0])
+            self.assertEqual(record["source"], "test.compact")
+            self.assertEqual(record["source_group"], "test")
+            self.assertEqual(record["project"], "personal_test")
+            self.assertEqual(record["topic"], "chat")
+            self.assertIn("session", record["tags"])
+
+    def test_append_learning_snapshot_truncates_long_summaries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir) / "agents" / "personal_test"
+            long_summary = "A" * 10000
+            target = append_learning_snapshot(agent_dir, long_summary, source="test.compact")
+
+            content = target.read_text(encoding="utf-8")
+            self.assertIn("[gekürzt]", content)
+            self.assertLessEqual(len(content), 2600)
+
+    def test_append_learning_snapshot_skips_exact_duplicates(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir) / "agents" / "personal_test"
+            summary = "Exakte Wiederholung fuer Dedup"
+            first = append_learning_snapshot(agent_dir, summary, source="test.compact")
+            second = append_learning_snapshot(agent_dir, summary, source="test.compact")
+
+            self.assertEqual(first, second)
+            content = first.read_text(encoding="utf-8")
+            self.assertEqual(content.count("Exakte Wiederholung fuer Dedup"), 1)
+            index_path = agent_dir / "memory" / "learning-index.jsonl"
+            self.assertEqual(len(index_path.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_learning_prompt_snippet_prioritizes_latest_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir) / "agents" / "personal_test"
+            memory_dir = agent_dir / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "learned-facts.md").write_text(
+                "## 2026-01-01T00:00:00+00:00\n- source: old\n\nAlte Erkenntnis\n\n---\n\n"
+                "## 2026-01-02T00:00:00+00:00\n- source: new\n\nNeue Erkenntnis\n\n---\n\n",
+                encoding="utf-8",
+            )
+
+            snippet = build_learning_prompt_snippet(agent_dir, max_entries=1, max_chars=2000)
+
+        self.assertIn("Neue Erkenntnis", snippet)
+        self.assertNotIn("Alte Erkenntnis", snippet)
+
+    def test_session_compact_persists_learning_snapshot(self):
+        route = next(
+            route
+            for route in main.app.routes
+            if getattr(route, "path", None) == "/agents/{agent_id}/session/compact"
+            and "POST" in getattr(route, "methods", set())
+        )
+        endpoint = getattr(route, "endpoint")
+
+        class FakeMessages:
+            async def create(self, **kwargs):
+                return SimpleNamespace(content=[SimpleNamespace(text="Zusammenfassung aus dem Test")])
+
+        class FakeAnthropicClient:
+            def __init__(self, *args, **kwargs):
+                self.messages = FakeMessages()
+
+        fake_anthropic = types.ModuleType("anthropic")
+        fake_anthropic.AsyncAnthropic = FakeAnthropicClient
+
+        with mock.patch.object(main.agent_sessions, "get_context", return_value=[
+            {"role": "user", "content": "Hallo"},
+            {"role": "assistant", "content": "Antwort"},
+        ]), mock.patch.object(main.agent_sessions, "replace_messages") as replace_mock, \
+            mock.patch("octopos_core.orchestrator._load_claude_oauth_token", return_value="token"), \
+            mock.patch("octopos_core.router_agent_chat.append_learning_snapshot", return_value=Path("/tmp/learned-facts.md")) as append_mock, \
+            mock.patch.dict("sys.modules", {"anthropic": fake_anthropic}):
+            result = asyncio.run(endpoint("personal_test", _a=("admin", "admin")))
+
+        self.assertTrue(result["compacted"])
+        self.assertEqual(result["learning_snapshot"], "/tmp/learned-facts.md")
+        append_mock.assert_called_once()
+        write_path = append_mock.call_args.args[0]
+        self.assertEqual(Path(write_path).name, "personal_test")
+        replace_mock.assert_called_once()
+
+    def test_system_prompt_prioritizes_learning_memory_before_general_memory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_dir = Path(tmpdir)
+            (agent_dir / "memory").mkdir(parents=True, exist_ok=True)
+            (agent_dir / "memory" / "learned-facts.md").write_text(
+                "## 2026-01-02T00:00:00+00:00\n- source: compact\n\nLernfakt\n\n---\n\n",
+                encoding="utf-8",
+            )
+            (agent_dir / "memory" / "project-context.md").write_text(
+                "Allgemeiner Kontext",
+                encoding="utf-8",
+            )
+            cfg = AgentConfig.model_validate(
+                {
+                    "id": "personal_test",
+                    "type": "specialist",
+                    "identity": "Test",
+                    "llm": {"model": "openai-codex/gpt-5.3-codex"},
+                }
+            )
+            cfg.agent_dir = agent_dir
+            orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+            prompt = orchestrator._build_system_prompt(cfg, "Sag mir, was wichtig ist")
+
+        self.assertIn("## Lernfakten (zuletzt)", prompt)
+        self.assertLess(prompt.index("## Lernfakten (zuletzt)"), prompt.index("### project-context"))
 
     def test_upgrade_personal_agent_data_backfills_issue_tool_and_permission(self):
         agent_data = {
@@ -755,6 +943,7 @@ class SecurityRegressionTests(unittest.TestCase):
     def test_create_personal_agent_writes_default_execution_modes(self):
         with tempfile.TemporaryDirectory() as tmpdir, \
              mock.patch.object(main, "AGENTS_DIR", tmpdir), \
+             mock.patch.object(main, "PROJECTS_DIR", tmpdir), \
              mock.patch.object(main.discovery, "_register"), \
              mock.patch.object(main, "audit_log"):
             agent_id = main._create_personal_agent("alice")

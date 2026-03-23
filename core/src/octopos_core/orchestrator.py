@@ -24,6 +24,7 @@ import litellm
 from .agent_config import AgentConfig
 from .agent_discovery import AgentDiscovery
 from .agent_runtime import AgentRuntime
+from .learning_memory import build_learning_prompt_snippet
 from .project_config import ProjectConfig
 from .session_manager import MessageRole, SessionManager
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt
@@ -444,7 +445,12 @@ class Orchestrator:
             memory_dir = boss_cfg.agent_dir / "memory"
             if memory_dir.exists():
                 mem_parts = []
+                learning_snippet = build_learning_prompt_snippet(boss_cfg.agent_dir)
+                if learning_snippet:
+                    mem_parts.append(learning_snippet)
                 for mf in sorted(memory_dir.glob("*.md")):
+                    if mf.name == "learned-facts.md":
+                        continue
                     try:
                         text = mf.read_text(encoding="utf-8").strip()
                         if text:
