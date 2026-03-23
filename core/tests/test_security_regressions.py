@@ -29,7 +29,7 @@ from octopos_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool
+from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -611,6 +611,38 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(limiter._redis_failed)
         self.assertGreaterEqual(script.call_count, 1)
 
+    def test_rate_limiter_recovers_after_redis_cooldown(self):
+        class FakeScript:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, *, keys=None, args=None):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("redis down")
+                return 1
+
+        script = FakeScript()
+        limiter = RateLimiter(
+            settings=RateLimitSettings(
+                login_max=1,
+                login_window_s=60,
+                message_max=1,
+                message_window_s=60,
+                redis_retry_after_s=1,
+            ),
+            redis_client=object(),
+            redis_script=script,
+            logger=mock.Mock(),
+        )
+
+        limiter.check_login("203.0.113.99")
+        self.assertTrue(limiter._redis_failed)
+        limiter._redis_failed_at -= 2
+        limiter.check_login("203.0.113.99")
+        self.assertFalse(limiter._redis_failed)
+        self.assertEqual(script.calls, 2)
+
     def test_append_learning_snapshot_writes_human_readable_memory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             agent_dir = Path(tmpdir) / "agents" / "personal_test"
@@ -697,6 +729,16 @@ class SecurityRegressionTests(unittest.TestCase):
 
             with mock.patch("octopos_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
                 self.assertFalse(user_integrations._wks_connected("till", wks, wks_keys_dir))
+
+    def test_wks_shell_exec_blocks_destructive_commands(self):
+        from octopos_core.tool_registry import WksShellExecTool
+
+        tool = WksShellExecTool()
+        with mock.patch("octopos_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+            result = asyncio.run(tool.execute("till", "personal_till", "rm -rf /"))
+
+        self.assertTrue(result["blocked"])
+        self.assertIn("blockiert", result["error"])
 
     def test_discord_connected_helper_accepts_callable_is_connected(self):
         class CallableDiscordClient:
@@ -832,6 +874,27 @@ class SecurityRegressionTests(unittest.TestCase):
             body="Body",
             labels=["review"],
         )
+
+    def test_gitea_create_issue_tool_rejects_overlong_title(self):
+        tool = GiteaCreateIssueTool()
+        result = asyncio.run(
+            tool.execute(
+                "personal_till",
+                "personal_till",
+                repo="octopos/octopos",
+                title="T" * 300,
+                body="Body",
+            )
+        )
+
+        self.assertIn("zu lang", result["error"])
+
+    def test_shell_exec_blocks_nested_destructive_shells(self):
+        tool = ShellExecTool()
+        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c "rm -rf /"'))
+
+        self.assertTrue(result["blocked"])
+        self.assertIn("blockiert", result["error"])
 
     def test_gitea_comment_issue_tool_uses_repo_reference(self):
         tool = GiteaCommentIssueTool()

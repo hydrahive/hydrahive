@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,7 @@ MAX_LEARNING_SUMMARY_CHARS = 2048
 MAX_LEARNING_PROMPT_CHARS = 4096
 MAX_LEARNING_PROMPT_ENTRIES = 12
 MAX_DEDUP_LOOKBACK_ENTRIES = 12
+_LEARNING_WRITE_LOCK = threading.Lock()
 
 
 def _normalize_source_group(source: str) -> str:
@@ -195,26 +197,28 @@ def append_learning_snapshot(
     target = memory_dir / filename
     summary_text = _truncate_text(summary, MAX_LEARNING_SUMMARY_CHARS)
     entry_hash = _hash_learning_text(summary_text)
-    if entry_hash in _recent_learning_hashes(target):
-        if logger is not None:
-            logger.info("learning-memory: exakter Duplikat-Shadow skip (%s)", entry_hash[:12])
-        return target
 
-    now = datetime.now(timezone.utc).isoformat()
-    entry = _learning_entry_body(summary_text, source, entry_hash, now)
-    existing = target.read_text(encoding="utf-8") if target.exists() else ""
-    target.write_text(existing + entry, encoding="utf-8")
+    with _LEARNING_WRITE_LOCK:
+        if entry_hash in _recent_learning_hashes(target):
+            if logger is not None:
+                logger.info("learning-memory: exakter Duplikat-Shadow skip (%s)", entry_hash[:12])
+            return target
 
-    try:
-        _append_learning_index_record(
-            agent_path,
-            summary=summary_text,
-            source=source,
-            entry_hash=entry_hash,
-            filename=index_filename,
-        )
-    except Exception as e:
-        if logger is not None:
-            logger.warning("learning-memory: Index konnte nicht gespeichert werden: %s", e)
+        now = datetime.now(timezone.utc).isoformat()
+        entry = _learning_entry_body(summary_text, source, entry_hash, now)
+        existing = target.read_text(encoding="utf-8") if target.exists() else ""
+        target.write_text(existing + entry, encoding="utf-8")
+
+        try:
+            _append_learning_index_record(
+                agent_path,
+                summary=summary_text,
+                source=source,
+                entry_hash=entry_hash,
+                filename=index_filename,
+            )
+        except Exception as e:
+            if logger is not None:
+                logger.warning("learning-memory: Index konnte nicht gespeichert werden: %s", e)
 
     return target
