@@ -22,6 +22,8 @@ warn()    { echo "[A-MEM] WARN: $1"; }
 mkdir -p /etc/octopos /var/log/octopos /var/lib/octopos/amem
 chown -R "${OCTOPOS_USER}:${OCTOPOS_GROUP}" /var/lib/octopos/amem
 
+git config --global --add safe.directory "${AMEM_DIR}" >/dev/null 2>&1 || true
+
 if [ -d "${AMEM_DIR}/.git" ]; then
   info "Aktualisiere A-MEM Repo..."
   git -C "${AMEM_DIR}" fetch --depth 1 origin main
