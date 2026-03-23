@@ -1356,7 +1356,8 @@ function DiscordTab() {
   const [changeToken,  setChangeToken]  = useState(false);
   const [guildId,      setGuildId]      = useState("");
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
-  const [ignoreBots,   setIgnoreBots]   = useState(true);
+  const [ignoreBots,      setIgnoreBots]      = useState(true);
+  const [requireMention,  setRequireMention]  = useState(false);
   const [channels,     setChannels]     = useState<{id:string;name:string}[]>([]);
   const [loadingCh,    setLoadingCh]    = useState(false);
   const [saving,       setSaving]       = useState(false);
@@ -1369,6 +1370,7 @@ function DiscordTab() {
       setGuildId(d.guild_id ?? "");
       setSelectedIds(new Set(d.channel_ids ?? []));
       setIgnoreBots(d.ignore_bots ?? true);
+      setRequireMention(d.require_mention ?? false);
     }).catch(() => {});
   }, []);
 
@@ -1400,6 +1402,7 @@ function DiscordTab() {
         guild_id: guildId.trim(),
         channel_ids: [...selectedIds],
         ignore_bots: ignoreBots,
+        require_mention: requireMention,
       });
       setMsg(`✓ Bot "${res.bot_name}" verbunden`);
       setBotToken(""); setChangeToken(false);
@@ -1512,6 +1515,13 @@ function DiscordTab() {
           <input type="checkbox" checked={ignoreBots} onChange={e => setIgnoreBots(e.target.checked)}
             className="accent-primary" />
           <span>Nachrichten von anderen Bots ignorieren</span>
+        </label>
+
+        {/* Nur bei @Mention */}
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={requireMention} onChange={e => setRequireMention(e.target.checked)}
+            className="accent-primary" />
+          <span>Nur bei @Mention antworten (für geteilte Channels)</span>
         </label>
 
         <div className="flex flex-wrap items-center gap-2">

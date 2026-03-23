@@ -222,18 +222,20 @@ export interface WksConfigPayload {
 }
 
 export interface DiscordConfig {
-  configured:   boolean;
-  guild_id?:    string;
-  channel_ids?: string[];
-  ignore_bots?: boolean;
-  connected?:   boolean;
+  configured:      boolean;
+  guild_id?:       string;
+  channel_ids?:    string[];
+  ignore_bots?:    boolean;
+  require_mention?: boolean;
+  connected?:      boolean;
 }
 
 export interface DiscordConfigPayload {
-  bot_token:   string;
-  guild_id:    string;
-  channel_ids: string[];
-  ignore_bots: boolean;
+  bot_token:       string;
+  guild_id:        string;
+  channel_ids:     string[];
+  ignore_bots:     boolean;
+  require_mention: boolean;
 }
 
 export interface PlatformOverviewEntry {

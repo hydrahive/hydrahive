@@ -19,10 +19,11 @@ class WksConfigRequest(BaseModel):
 
 
 class DiscordConfigRequest(BaseModel):
-    bot_token: str = ""          # leer = bestehenden Token behalten
+    bot_token: str = ""           # leer = bestehenden Token behalten
     guild_id: str = ""
     channel_ids: list[str] = []
-    ignore_bots: bool = True     # Nachrichten von anderen Bots ignorieren
+    ignore_bots: bool = True      # Nachrichten von anderen Bots ignorieren
+    require_mention: bool = False  # Nur bei @Mention antworten
 
 
 SUPPORTED_PLATFORMS = {
@@ -379,6 +380,7 @@ def register_user_integration_routes(
             "guild_id": cfg.get("guild_id", ""),
             "channel_ids": cfg.get("channel_ids", []),
             "ignore_bots": cfg.get("ignore_bots", True),
+            "require_mention": cfg.get("require_mention", False),
             "connected": discord_client_connected(username),
         }
 
@@ -433,6 +435,7 @@ def register_user_integration_routes(
             "guild_id": req.guild_id.strip(),
             "channel_ids": [c.strip() for c in req.channel_ids if c.strip()],
             "ignore_bots": req.ignore_bots,
+            "require_mention": req.require_mention,
         }
         save_discord_config(username, cfg)
         personal_agent_id = f"personal_{username}"
