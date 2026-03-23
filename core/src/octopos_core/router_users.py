@@ -303,6 +303,7 @@ def register_user_routes(
             audit_log=audit_log,
             audit_target=agent_id,
             audit_source="me.agent.message.stream",
+            personal_agent=True,
         )
 
         virtual_cfg = _PC(
