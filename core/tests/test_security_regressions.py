@@ -20,6 +20,7 @@ from octopos_core.learning_memory import append_learning_snapshot, build_learnin
 from octopos_core.project_config import load_project_config
 from octopos_core.rate_limiter import RateLimitSettings, RateLimiter
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
+from octopos_core import router_user_integrations as user_integrations
 from octopos_core.router_users import (
     MyAgentUpdateRequest,
     build_personal_agent_data,
@@ -101,6 +102,11 @@ class SecurityRegressionTests(unittest.TestCase):
         ):
             deps = self._dependency_names(path, "POST")
             self.assertIn("require_auth", deps)
+
+    def test_me_platforms_route_is_registered(self):
+        route = self._route("/me/platforms", "GET")
+        endpoint = getattr(route, "endpoint", None)
+        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_user_integrations")
 
     def test_execution_mode_policy_defaults_and_internal_passthrough(self):
         self.assertEqual(resolve_request_execution_mode(("alice", "user"), None), "safe")
@@ -427,6 +433,29 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertEqual(content.count("Exakte Wiederholung fuer Dedup"), 1)
             index_path = agent_dir / "memory" / "learning-index.jsonl"
             self.assertEqual(len(index_path.read_text(encoding="utf-8").splitlines()), 1)
+
+    def test_platform_overview_includes_supported_and_planned_channels(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wks_keys_dir = Path(tmpdir) / "wks-keys"
+            overview_users = {
+                "till": {
+                    "matrix_id": "@till:matrix.local",
+                    "wks": {"ip": "192.168.1.50", "ssh_user": "till", "ollama_port": 11434},
+                }
+            }
+            with mock.patch.object(user_integrations, "discord_client_connected", return_value=True), \
+                mock.patch("octopos_core.discord_agent.load_discord_config", return_value={"guild_id": "guild-1", "channel_ids": ["1", "2"]}):
+                overview = user_integrations._build_platform_overview("till", overview_users, wks_keys_dir)
+
+        by_platform = {entry["platform"]: entry for entry in overview}
+        self.assertTrue(by_platform["matrix"]["supported"])
+        self.assertTrue(by_platform["discord"]["supported"])
+        self.assertTrue(by_platform["wks"]["supported"])
+        self.assertFalse(by_platform["telegram"]["supported"])
+        self.assertEqual(by_platform["telegram"]["details"]["status"], "planned")
+        self.assertEqual(by_platform["whatsapp"]["details"]["status"], "planned")
+        self.assertEqual(by_platform["signal"]["details"]["status"], "planned")
+        self.assertTrue(by_platform["discord"]["connected"])
 
     def test_learning_prompt_snippet_prioritizes_latest_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
