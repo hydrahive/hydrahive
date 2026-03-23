@@ -6,9 +6,10 @@ OCTOPOS_GROUP="${OCTOPOS_GROUP:-octopos}"
 AMEM_DIR="${AMEM_DIR:-/opt/amem}"
 AMEM_SEARCH_DIR="${AMEM_SEARCH_DIR:-/opt/amem-search}"
 AMEM_REPO_URL="${AMEM_REPO_URL:-https://github.com/agiresearch/A-mem.git}"
-# Optionaler Commit-Pin (SHA oder Tag). Leer = kein Pin, es wird origin/main verwendet.
-# Setze AMEM_COMMIT=<sha> um einen reproduzierbaren Build zu erzwingen.
-AMEM_COMMIT="${AMEM_COMMIT:-}"
+# Commit-Pin für reproduzierbare Builds (Issue #159).
+# Geprüfter Stand: 2026-03-23, A-MEM HEAD zum Zeitpunkt der OctopOS-Zertifizierung.
+# Um auf einen neueren Stand zu aktualisieren: AMEM_COMMIT=<neuer-sha> prüfen und hier setzen.
+AMEM_COMMIT="${AMEM_COMMIT:-ceffb860f0712bbae97b184d440df62bc910ca8d}"
 AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/octopos/amem.env}"
 MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/octopos/mcp_servers.json}"
 AMEM_MCP_URL="${AMEM_MCP_URL:-http://127.0.0.1:8020/sse}"

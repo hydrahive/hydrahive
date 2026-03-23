@@ -85,3 +85,10 @@
 - A-MEM-Installationen sind nachvollziehbar und können auf einen getesteten Commit gepinnt werden.
 - Test-Teardown-Hygiene ist gewährleistet: kein dirty State bei Test-Fehlern.
 - journalctl-Subprocess wird maximal alle 30s aufgerufen; redundante Calls innerhalb des Fensters kosten nichts.
+
+## 2026-03-23 — fix(amem): A-MEM Commit-Pin gesetzt (Issue #159 geschlossen)
+
+- Geprüfter A-MEM-Stand zum Zeitpunkt der OctopOS-Zertifizierung: `ceffb860f0712bbae97b184d440df62bc910ca8d`
+- `AMEM_COMMIT` im Installer auf diesen SHA als Default gesetzt — neue Installationen verwenden ab sofort diesen verifizierten Stand.
+- Überschreibbar per Umgebungsvariable `AMEM_COMMIT=<sha>` für kontrollierte Updates.
+- Issue #159 damit vollständig geschlossen.
