@@ -55,6 +55,26 @@ def register_agent_chat_routes(
 
     @auth_router.delete("/agents/{agent_id}/session")
     def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
+        # Letzte Session als _last_session.md speichern (Session-Inject für nächsten Start)
+        context = agent_sessions.get_context(agent_id, max_messages=40)
+        if context:
+            import datetime
+            agent_dir = Path(agents_dir) / agent_id
+            memory_dir = agent_dir / "memory"
+            memory_dir.mkdir(exist_ok=True)
+            lines = [f"# Letzte Session (vor Clear, {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')})\n"]
+            for msg in context:
+                role = msg.get("role", "")
+                content = msg.get("content", "") or ""
+                if isinstance(content, list):
+                    content = " ".join(
+                        p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
+                    )
+                if role in ("user", "assistant") and content.strip():
+                    prefix = "**Bibi:**" if role == "user" else "**Rowena:**"
+                    snippet = content.strip()[:400]
+                    lines.append(f"{prefix} {snippet}")
+            (memory_dir / "_last_session.md").write_text("\n\n".join(lines), encoding="utf-8")
         agent_sessions.end_session(agent_id)
         return {"cleared": True}
 

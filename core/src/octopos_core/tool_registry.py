@@ -965,10 +965,10 @@ class WriteSystemFileTool(BaseTool):
 # ============================================================= Memory Tools (#85)
 
 def _safe_memory_filename(filename: str) -> str:
-    """Normalisiert Dateinamen: nur a-z0-9_- erlaubt, erzwingt .md Extension."""
+    """Normalisiert Dateinamen: a-z, A-Z, 0-9, _ und - erlaubt, erzwingt .md Extension."""
     base = filename.removesuffix(".md").strip()
-    if not _re_shell.match(r"^[a-z0-9_-]+$", base):
-        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, 0-9, _ und - erlaubt.")
+    if not _re_shell.match(r"^[a-zA-Z0-9_-]+$", base):
+        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, A-Z, 0-9, _ und - erlaubt.")
     return base + ".md"
 
 
