@@ -181,7 +181,7 @@ def register_system_routes(
         journal_report = collect_core_journal_report(lines=200)
         return {
             "service": {
-                "name": "octopos-core",
+                "name": "hydrahive-core",
                 "version": app_version,
             },
             "deployment": update_status,

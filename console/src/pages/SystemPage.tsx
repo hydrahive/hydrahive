@@ -167,9 +167,9 @@ export function SystemPage() {
         {/* Services */}
         <div className="bg-card border rounded-lg p-4 space-y-1">
           <h2 className="text-sm font-medium mb-3">Systemd-Services</h2>
-          <ServiceRow name="octopos-core"      status={healthy ? "ok" : "error"} />
-          <ServiceRow name="octopos-conduwuit" status="ok" />
-          <ServiceRow name="octopos-console"   status="ok" />
+          <ServiceRow name="hydrahive-core"      status={healthy ? "ok" : "error"} />
+          <ServiceRow name="hydrahive-conduwuit" status="ok" />
+          <ServiceRow name="hydrahive-console"   status="ok" />
           <ServiceRow name="ollama"            status="ok" />
         </div>
 

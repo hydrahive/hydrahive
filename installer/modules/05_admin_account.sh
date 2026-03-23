@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OctopOS Installer - Modul 05: Matrix Admin-Account
+# HydraHive Installer - Modul 05: Matrix Admin-Account
 # Legt @admin:<server_name> an und verifiziert Admin-Room-Mitgliedschaft.
 # Idempotent: bereits existierender Account wird nur neu eingeloggt.
 
@@ -17,13 +17,13 @@ ADMIN_USER="admin"
 ADMIN_MXID="@${ADMIN_USER}:${SERVER_NAME}"
 
 # Admin-Passwort aus Datei lesen oder neu generieren
-CRED_FILE="/etc/octopos/admin_credentials"
+CRED_FILE="/etc/hydrahive/admin_credentials"
 if [ -f "$CRED_FILE" ]; then
     ADMIN_PASS=$(grep -E '^matrix_admin_password=' "$CRED_FILE" | cut -d= -f2-)
 fi
 if [ -z "${ADMIN_PASS:-}" ]; then
     ADMIN_PASS="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
-    mkdir -p /etc/octopos
+    mkdir -p /etc/hydrahive
     echo "matrix_admin_password=${ADMIN_PASS}" >> "$CRED_FILE"
     chmod 600 "$CRED_FILE"
     info "Neues Admin-Passwort generiert und in $CRED_FILE gespeichert"

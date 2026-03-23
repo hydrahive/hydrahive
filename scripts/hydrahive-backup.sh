@@ -1,24 +1,24 @@
 #!/bin/bash
-# octopos-backup.sh — OctopOS-Daten von der VM sichern
+# hydrahive-backup.sh — HydraHive-Daten von der VM sichern
 # Läuft auf Lilith, zieht Backup per rsync/ssh
-# Backups landen in: ~/octopos-backups/YYYY-MM-DD_HH-MM/
-# Verwendung: ./scripts/octopos-backup.sh
+# Backups landen in: ~/hydrahive-backups/YYYY-MM-DD_HH-MM/
+# Verwendung: ./scripts/hydrahive-backup.sh
 
 set -e
 
-# Konfiguration: scripts/octopos.conf anlegen um Defaults zu überschreiben
-CONF="$(dirname "$0")/octopos.conf"
+# Konfiguration: scripts/hydrahive.conf anlegen um Defaults zu überschreiben
+CONF="$(dirname "$0")/hydrahive.conf"
 VM="octopos@192.168.1.100"
 SSH_KEY="$HOME/.ssh/id_rsa"
 [ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"
-BACKUP_BASE="$HOME/octopos-backups"
+BACKUP_BASE="$HOME/hydrahive-backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
 DEST="$BACKUP_BASE/$TIMESTAMP"
 
 mkdir -p "$DEST"
 
-echo "==> OctopOS Backup — $TIMESTAMP"
+echo "==> HydraHive Backup — $TIMESTAMP"
 echo "    Ziel: $DEST"
 echo ""
 

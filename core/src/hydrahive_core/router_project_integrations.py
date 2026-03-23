@@ -259,7 +259,7 @@ def register_project_integration_routes(
             _shutil.rmtree(ws)
             logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
 
-        if project_id == "octopos-core":
+        if project_id == "hydrahive-core":
             asyncio.create_task(run_self_update(pusher, commits))
             return {"status": "deploying", "project": project_id, "ref": ref}
 

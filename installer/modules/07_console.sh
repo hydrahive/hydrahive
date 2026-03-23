@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# OctopOS Installer - Modul 07: octopos-console (React + nginx)
+# HydraHive Installer - Modul 07: hydrahive-console (React + nginx)
 #
 # - Baut die Console aus dem Repo-Verzeichnis (npm ci + npm run build)
-# - Kopiert dist/ nach /opt/octopos/console/
+# - Kopiert dist/ nach /opt/hydrahive/console/
 # - Schreibt nginx-Konfiguration (Port 80, Proxy /api/ → Core :8765)
 # - Idempotent: erneuter Aufruf aktualisiert Build + Konfiguration
 
 CONSOLE_SRC="$(realpath "$(dirname "${BASH_SOURCE[0]}")/../../console")"
-CONSOLE_DIST="/opt/octopos/console"
-NGINX_CONF="/etc/nginx/sites-available/octopos-console"
-NGINX_ENABLED="/etc/nginx/sites-enabled/octopos-console"
+CONSOLE_DIST="/opt/hydrahive/console"
+NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
+NGINX_ENABLED="/etc/nginx/sites-enabled/hydrahive-console"
 NGINX_DEFAULT="/etc/nginx/sites-enabled/default"
 
-info "Installiere octopos-console..."
+info "Installiere hydrahive-console..."
 
 # --- Port 80 pruefen ---
 if ss -tlnp 2>/dev/null | grep -q ':80 '; then
@@ -61,7 +61,7 @@ npm run build --silent
 popd > /dev/null
 success "Console gebaut: ${CONSOLE_SRC}/dist/"
 
-# --- Build nach /opt/octopos/console/ kopieren ---
+# --- Build nach /opt/hydrahive/console/ kopieren ---
 mkdir -p "${CONSOLE_DIST}"
 rm -rf "${CONSOLE_DIST:?}"/*
 cp -r "${CONSOLE_SRC}/dist/." "${CONSOLE_DIST}/"
@@ -74,7 +74,7 @@ server {
     listen 80;
     server_name _;
 
-    root /opt/octopos/console;
+    root /opt/hydrahive/console;
     index index.html;
 
     # SPA-Fallback: alle nicht gefundenen Routen an index.html
@@ -82,7 +82,7 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # API-Proxy → OctopOS Core
+    # API-Proxy → HydraHive Core
     location /api/ {
         proxy_pass         http://127.0.0.1:8765/;
         proxy_http_version 1.1;

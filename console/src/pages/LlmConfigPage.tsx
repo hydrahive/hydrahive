@@ -399,7 +399,7 @@ export function LlmConfigPage() {
 
       <div className="bg-muted/30 border rounded-lg p-4 text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground">Wie werden Keys verwendet?</p>
-        <p>API-Keys in <code>/etc/octopos/llm_config.json</code>, OAuth-Tokens in <code>/etc/octopos/*.json</code>. Jeder Agent wählt sein Modell in <code>agent.yaml</code>.</p>
+        <p>API-Keys in <code>/etc/hydrahive/llm_config.json</code>, OAuth-Tokens in <code>/etc/hydrahive/*.json</code>. Jeder Agent wählt sein Modell in <code>agent.yaml</code>.</p>
       </div>
     </div>
   );

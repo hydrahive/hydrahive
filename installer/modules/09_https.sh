@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# OctopOS Installer - Modul 09: HTTPS / TLS (#66)
+# HydraHive Installer - Modul 09: HTTPS / TLS (#66)
 #
-# - Erzeugt self-signed Zertifikat (2048 RSA, 3650 Tage) unter /etc/octopos/tls/
+# - Erzeugt self-signed Zertifikat (2048 RSA, 3650 Tage) unter /etc/hydrahive/tls/
 # - Idempotent: bestehendes Zertifikat wird nicht überschrieben
 # - Aktualisiert nginx-Konfiguration: Port 443 (TLS) + HTTP→HTTPS Redirect
 # - Optionaler Let's Encrypt Hinweis wenn DOMAIN gesetzt ist
 
-CERT_DIR="/etc/octopos/tls"
-CERT_FILE="${CERT_DIR}/octopos.crt"
-KEY_FILE="${CERT_DIR}/octopos.key"
-NGINX_CONF="/etc/nginx/sites-available/octopos-console"
+CERT_DIR="/etc/hydrahive/tls"
+CERT_FILE="${CERT_DIR}/hydrahive.crt"
+KEY_FILE="${CERT_DIR}/hydrahive.key"
+NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 SERVER_HOST="${DOMAIN:-${SERVER_IP}}"
 
@@ -35,7 +35,7 @@ else
     openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
         -keyout "${KEY_FILE}" \
         -out    "${CERT_FILE}" \
-        -subj   "/CN=${SERVER_HOST}/O=OctopOS/C=DE" \
+        -subj   "/CN=${SERVER_HOST}/O=HydraHive/C=DE" \
         -addext "subjectAltName=IP:${SERVER_IP},DNS:${SERVER_HOST}" \
         2>/dev/null
     chmod 600 "${KEY_FILE}"
@@ -64,7 +64,7 @@ server {
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 10m;
 
-    root /opt/octopos/console;
+    root /opt/hydrahive/console;
     index index.html;
 
     # SPA-Fallback
@@ -72,7 +72,7 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    # API-Proxy → OctopOS Core
+    # API-Proxy → HydraHive Core
     location /api/ {
         proxy_pass         http://127.0.0.1:8765/;
         proxy_http_version 1.1;

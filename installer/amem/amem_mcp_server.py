@@ -63,7 +63,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler(os.environ.get("AMEM_LOG_FILE", "/var/log/octopos/amem_mcp.log")),
+        logging.FileHandler(os.environ.get("AMEM_LOG_FILE", "/var/log/hydrahive/amem_mcp.log")),
         logging.StreamHandler(),
     ],
 )
@@ -95,7 +95,7 @@ from agentic_memory.memory_system import AgenticMemorySystem
 from agentic_memory.retrievers import PersistentChromaRetriever
 
 # ChromaDB Persistenz-Verzeichnis
-CHROMADB_DIR = os.environ.get("AMEM_CHROMADB_DIR", "/var/lib/octopos/amem/chromadb_data")
+CHROMADB_DIR = os.environ.get("AMEM_CHROMADB_DIR", "/var/lib/hydrahive/amem/chromadb_data")
 
 memory = AgenticMemorySystem(
     model_name=EMBEDDING_MODEL,

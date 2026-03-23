@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OCTOPOS_USER="${OCTOPOS_USER:-octopos}"
-OCTOPOS_GROUP="${OCTOPOS_GROUP:-octopos}"
+HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
+HYDRAHIVE_GROUP="${HYDRAHIVE_GROUP:-hydrahive}"
 AMEM_DIR="${AMEM_DIR:-/opt/amem}"
 AMEM_SEARCH_DIR="${AMEM_SEARCH_DIR:-/opt/amem-search}"
 AMEM_REPO_URL="${AMEM_REPO_URL:-https://github.com/agiresearch/A-mem.git}"
 # Commit-Pin für reproduzierbare Builds (Issue #159).
-# Geprüfter Stand: 2026-03-23, A-MEM HEAD zum Zeitpunkt der OctopOS-Zertifizierung.
+# Geprüfter Stand: 2026-03-23, A-MEM HEAD zum Zeitpunkt der HydraHive-Zertifizierung.
 # Um auf einen neueren Stand zu aktualisieren: AMEM_COMMIT=<neuer-sha> prüfen und hier setzen.
 AMEM_COMMIT="${AMEM_COMMIT:-ceffb860f0712bbae97b184d440df62bc910ca8d}"
-AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/octopos/amem.env}"
-MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/octopos/mcp_servers.json}"
+AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/hydrahive/amem.env}"
+MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/hydrahive/mcp_servers.json}"
 AMEM_MCP_URL="${AMEM_MCP_URL:-http://127.0.0.1:8020/sse}"
 AMEM_BIND_HOST="${AMEM_BIND_HOST:-0.0.0.0}"
 AMEM_PUBLIC_HOST="${AMEM_PUBLIC_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}' || echo 127.0.0.1)}"
@@ -23,8 +23,8 @@ warn()    { echo "[A-MEM] WARN: $1"; }
 
 [ "$(id -u)" -eq 0 ] || { echo "Bitte als root ausfuehren"; exit 1; }
 
-mkdir -p /etc/octopos /var/log/octopos /var/lib/octopos/amem
-chown -R "${OCTOPOS_USER}:${OCTOPOS_GROUP}" /var/lib/octopos/amem
+mkdir -p /etc/hydrahive /var/log/hydrahive /var/lib/hydrahive/amem
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" /var/lib/hydrahive/amem
 
 git config --global --add safe.directory "${AMEM_DIR}" >/dev/null 2>&1 || true
 
@@ -49,7 +49,7 @@ fi
 # Tatsächlichen HEAD-Commit loggen (Supply-Chain-Transparenz)
 AMEM_ACTUAL_COMMIT="$(git -C "${AMEM_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
 info "A-MEM HEAD-Commit: ${AMEM_ACTUAL_COMMIT}"
-echo "${AMEM_ACTUAL_COMMIT}" > /var/lib/octopos/amem/installed_commit.txt
+echo "${AMEM_ACTUAL_COMMIT}" > /var/lib/hydrahive/amem/installed_commit.txt
 
 python3.12 -m venv "${AMEM_DIR}/.venv"
 "${AMEM_DIR}/.venv/bin/pip" install -q --upgrade pip setuptools wheel
@@ -60,7 +60,7 @@ python3.12 -m venv "${AMEM_DIR}/.venv"
 install -d -m 755 "${AMEM_SEARCH_DIR}"
 install -m 755 "$(dirname "$0")/amem_mcp_server.py" "${AMEM_DIR}/amem_mcp_server.py"
 install -m 755 "$(dirname "$0")/search_ui.py" "${AMEM_SEARCH_DIR}/search_ui.py"
-chown -R "${OCTOPOS_USER}:${OCTOPOS_GROUP}" "${AMEM_DIR}" "${AMEM_SEARCH_DIR}"
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" "${AMEM_DIR}" "${AMEM_SEARCH_DIR}"
 
 AMEM_MODEL="$(python3 - <<'PY'
 import json
@@ -99,8 +99,8 @@ entries["AMEM_LLM_MODEL"] = "${AMEM_MODEL}"
 entries["AMEM_EMBEDDING_MODEL"] = entries.get("AMEM_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 entries["AMEM_HOST"] = "${AMEM_BIND_HOST}"
 entries["AMEM_PORT"] = entries.get("AMEM_PORT", "8020")
-entries["AMEM_CHROMADB_DIR"] = entries.get("AMEM_CHROMADB_DIR", "/var/lib/octopos/amem/chromadb_data")
-entries["AMEM_LOG_FILE"] = entries.get("AMEM_LOG_FILE", "/var/log/octopos/amem_mcp.log")
+entries["AMEM_CHROMADB_DIR"] = entries.get("AMEM_CHROMADB_DIR", "/var/lib/hydrahive/amem/chromadb_data")
+entries["AMEM_LOG_FILE"] = entries.get("AMEM_LOG_FILE", "/var/log/hydrahive/amem_mcp.log")
 
 ordered = [
     "OLLAMA_HOST",
@@ -122,18 +122,18 @@ AMEM_LLM_MODEL=${AMEM_MODEL}
 AMEM_EMBEDDING_MODEL=all-MiniLM-L6-v2
 AMEM_HOST=${AMEM_BIND_HOST}
 AMEM_PORT=8020
-AMEM_CHROMADB_DIR=/var/lib/octopos/amem/chromadb_data
-AMEM_LOG_FILE=/var/log/octopos/amem_mcp.log
+AMEM_CHROMADB_DIR=/var/lib/hydrahive/amem/chromadb_data
+AMEM_LOG_FILE=/var/log/hydrahive/amem_mcp.log
 ENV
 fi
-chown "${OCTOPOS_USER}:${OCTOPOS_GROUP}" "${AMEM_ENV_FILE}"
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" "${AMEM_ENV_FILE}"
 chmod 600 "${AMEM_ENV_FILE}"
 
-install -m 644 "$(dirname "$0")/octopos-amem.service" /etc/systemd/system/octopos-amem.service
-install -m 644 "$(dirname "$0")/octopos-amem-search-ui.service" /etc/systemd/system/octopos-amem-search-ui.service
+install -m 644 "$(dirname "$0")/hydrahive-amem.service" /etc/systemd/system/hydrahive-amem.service
+install -m 644 "$(dirname "$0")/hydrahive-amem-search-ui.service" /etc/systemd/system/hydrahive-amem-search-ui.service
 systemctl daemon-reload
-systemctl enable --now octopos-amem.service
-systemctl enable --now octopos-amem-search-ui.service
+systemctl enable --now hydrahive-amem.service
+systemctl enable --now hydrahive-amem-search-ui.service
 
 python3 - <<PY
 import json
@@ -155,7 +155,7 @@ servers.append({
 })
 path.write_text(json.dumps({'servers': servers}, indent=2), encoding='utf-8')
 PY
-chown "${OCTOPOS_USER}:${OCTOPOS_GROUP}" "${MCP_CONFIG_FILE}"
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" "${MCP_CONFIG_FILE}"
 chmod 600 "${MCP_CONFIG_FILE}"
 
 success "A-MEM lokal installiert"

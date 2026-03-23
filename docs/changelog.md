@@ -1,4 +1,4 @@
-# OctopOS Changelog
+# HydraHive Changelog
 
 ## 2026-03-23
 
@@ -23,7 +23,7 @@
 - WKS wird im Plattform-Überblick nicht mehr nur über die konfigurierte IP als verbunden markiert.
 - Discord-Status behandelt `is_connected` jetzt robust als Property oder Callable.
 - Betroffene Bereiche:
-  - `core/src/octopos_core/router_user_integrations.py`
+  - `core/src/hydrahive_core/router_user_integrations.py`
   - `core/tests/test_security_regressions.py`
 
 ### Result
@@ -52,7 +52,7 @@
 - Shell- und WKS-Shell-Ausführung blockieren jetzt Command Substitution (`$(...)`), Backticks und rekursive Wrapper wie `bash -c` sauberer.
 - Die Blockliste greift damit auch bei verschachtelten Shell-Aufrufen, die destructive Kommandos verstecken würden.
 - Betroffene Bereiche:
-  - `core/src/octopos_core/tool_registry.py`
+  - `core/src/hydrahive_core/tool_registry.py`
   - `core/tests/test_security_regressions.py`
 
 ### Result
@@ -67,7 +67,7 @@
 - `fix(amem): add commit-pin support and HEAD-hash logging to install_amem.sh`
 - `git clone --depth 1 origin/main` ohne Commit-Pin ist ein Supply-Chain-Risiko: der Installer zieht immer den aktuellen HEAD, ohne dass der installierte Commit nachvollziehbar ist.
 - Neu: optionale Umgebungsvariable `AMEM_COMMIT=<sha>` ermöglicht reproduzierbaren Builds mit exaktem Commit-Pin.
-- Neu: nach jedem Clone/Update wird der tatsächliche HEAD-Commit nach `/var/lib/octopos/amem/installed_commit.txt` geschrieben (Supply-Chain-Transparenz).
+- Neu: nach jedem Clone/Update wird der tatsächliche HEAD-Commit nach `/var/lib/hydrahive/amem/installed_commit.txt` geschrieben (Supply-Chain-Transparenz).
 - Ohne gesetztes `AMEM_COMMIT` bleibt das bisherige Verhalten erhalten (origin/main), aber der Commit ist jetzt auditierbar.
 
 - `fix(tests): add try/finally teardown to test_agent_lifecycle_end_to_end_roundtrip`
@@ -88,7 +88,7 @@
 
 ## 2026-03-23 — fix(amem): A-MEM Commit-Pin gesetzt (Issue #159 geschlossen)
 
-- Geprüfter A-MEM-Stand zum Zeitpunkt der OctopOS-Zertifizierung: `ceffb860f0712bbae97b184d440df62bc910ca8d`
+- Geprüfter A-MEM-Stand zum Zeitpunkt der HydraHive-Zertifizierung: `ceffb860f0712bbae97b184d440df62bc910ca8d`
 - `AMEM_COMMIT` im Installer auf diesen SHA als Default gesetzt — neue Installationen verwenden ab sofort diesen verifizierten Stand.
 - Überschreibbar per Umgebungsvariable `AMEM_COMMIT=<sha>` für kontrollierte Updates.
 - Issue #159 damit vollständig geschlossen.

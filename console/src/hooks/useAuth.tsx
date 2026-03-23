@@ -13,9 +13,9 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const t = localStorage.getItem("octopos_token");
-    const u = localStorage.getItem("octopos_user");
-    const r = localStorage.getItem("octopos_role") ?? "user";
+    const t = localStorage.getItem("hydrahive_token");
+    const u = localStorage.getItem("hydrahive_user");
+    const r = localStorage.getItem("hydrahive_role") ?? "user";
     return t && u ? { token: t, username: u, role: r } : null;
   });
 
@@ -34,22 +34,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const role  = data.role ?? "user";
 
     setUser({ username: data.username ?? username, token, role });
-    localStorage.setItem("octopos_token", token);
-    localStorage.setItem("octopos_user", username);
-    localStorage.setItem("octopos_role", role);
+    localStorage.setItem("hydrahive_token", token);
+    localStorage.setItem("hydrahive_user", username);
+    localStorage.setItem("hydrahive_role", role);
   }
 
   function logout() {
     setUser(null);
-    localStorage.removeItem("octopos_token");
-    localStorage.removeItem("octopos_user");
-    localStorage.removeItem("octopos_role");
+    localStorage.removeItem("hydrahive_token");
+    localStorage.removeItem("hydrahive_user");
+    localStorage.removeItem("hydrahive_role");
   }
 
   useEffect(() => {
     const onAuthExpired = () => logout();
-    window.addEventListener("octopos-auth-expired", onAuthExpired);
-    return () => window.removeEventListener("octopos-auth-expired", onAuthExpired);
+    window.addEventListener("hydrahive-auth-expired", onAuthExpired);
+    return () => window.removeEventListener("hydrahive-auth-expired", onAuthExpired);
   }, []);
 
   return (

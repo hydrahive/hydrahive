@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# OctopOS Update-Script — direkt auf der VM ausführen
-# Usage: sudo bash /opt/octopos/update.sh
+# HydraHive Update-Script — direkt auf der VM ausführen
+# Usage: sudo bash /opt/hydrahive/update.sh
 #
 # Ablauf:
 #   1. Repo klonen: lokales Gitea (primär) → GitHub (Fallback)
-#   2. Core rsync → /opt/octopos/core/
+#   2. Core rsync → /opt/hydrahive/core/
 #   3. pip install -e . im venv
 #   4. Console npm ci + build
-#   5. dist/ → /opt/octopos/console/
-#   6. octopos-core neustarten
+#   5. dist/ → /opt/hydrahive/console/
+#   6. hydrahive-core neustarten
 
 set -euo pipefail
 
-OCTOPOS_DIR="/opt/octopos"
-VENV="${OCTOPOS_DIR}/venv"
-GITHUB_REPO="https://github.com/tilleulenspiegel/octopos.git"
-GITEA_CONFIG="/etc/octopos/gitea_config.json"
-TOKEN_FILE="/etc/octopos/github_token"
-TMPDIR_BASE="/tmp/octopos-update-$$"
+HYDRAHIVE_DIR="/opt/hydrahive"
+VENV="${HYDRAHIVE_DIR}/venv"
+GITHUB_REPO="https://github.com/tilleulenspiegel/hydrahive.git"
+GITEA_CONFIG="/etc/hydrahive/gitea_config.json"
+TOKEN_FILE="/etc/hydrahive/github_token"
+TMPDIR_BASE="/tmp/hydrahive-update-$$"
 
 # Log-Datei für Webhook-Deploy (damit GET /admin/update/status etwas zum Lesen hat)
-UPDATE_LOG="/var/log/octopos-update.log"
-UPDATE_STATUS_FILE="/var/run/octopos-update.json"
+UPDATE_LOG="/var/log/hydrahive-update.log"
+UPDATE_STATUS_FILE="/var/run/hydrahive-update.json"
 
 # Farben
 GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; RED="\033[0;31m"; NC="\033[0m"
@@ -37,7 +37,7 @@ CLONE_URL=""
 if [ -f "${GITEA_CONFIG}" ]; then
     GITEA_URL=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('url',''))" 2>/dev/null || echo "")
     GITEA_TOKEN=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('token',''))" 2>/dev/null || echo "")
-    GITEA_ORG=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('org','octopos'))" 2>/dev/null || echo "octopos")
+    GITEA_ORG=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('org','hydrahive'))" 2>/dev/null || echo "hydrahive")
     if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
         # Interne URL umbauen: http://127.0.0.1:3001 → mit Token
         CLONE_URL="${GITEA_URL}/octopos/octopos.git"
@@ -50,7 +50,7 @@ if [ -z "${CLONE_URL}" ]; then
     CLONE_URL="${GITHUB_REPO}"
     if [ -f "${TOKEN_FILE}" ]; then
         GH_TOKEN=$(cat "${TOKEN_FILE}" | tr -d '[:space:]')
-        CLONE_URL="https://${GH_TOKEN}@github.com/tilleulenspiegel/octopos.git"
+        CLONE_URL="https://${GH_TOKEN}@github.com/tilleulenspiegel/hydrahive.git"
     fi
     info "Fallback: klone von GitHub"
 fi
@@ -75,7 +75,7 @@ echo "=== Self-Update $(date -Iseconds) ==="
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "   OctopOS Update"
+echo "   HydraHive Update"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -93,12 +93,12 @@ success "Repo geklont"
 info "Aktualisiere Core..."
 rsync -a --delete \
     --exclude='__pycache__' --exclude='*.pyc' \
-    "${TMPDIR_BASE}/core/" "${OCTOPOS_DIR}/core/"
+    "${TMPDIR_BASE}/core/" "${HYDRAHIVE_DIR}/core/"
 success "Core-Dateien aktualisiert"
 
 # --- 3. Python-Dependencies ---
 info "Installiere Python-Dependencies..."
-"${VENV}/bin/pip" install -e "${OCTOPOS_DIR}/core/" -q \
+"${VENV}/bin/pip" install -e "${HYDRAHIVE_DIR}/core/" -q \
     || error "pip install fehlgeschlagen"
 success "Python-Dependencies aktualisiert"
 
@@ -112,27 +112,27 @@ success "Console gebaut"
 
 # --- 5. Console deployen ---
 info "Deploye Console..."
-mkdir -p "${OCTOPOS_DIR}/console"
-rsync -a --delete "${CONSOLE_SRC}/dist/" "${OCTOPOS_DIR}/console/"
-chown -R www-data:www-data "${OCTOPOS_DIR}/console/"
+mkdir -p "${HYDRAHIVE_DIR}/console"
+rsync -a --delete "${CONSOLE_SRC}/dist/" "${HYDRAHIVE_DIR}/console/"
+chown -R www-data:www-data "${HYDRAHIVE_DIR}/console/"
 success "Console deployed"
 
 # --- 6. Service neustarten ---
-info "Starte octopos-core neu..."
+info "Starte hydrahive-core neu..."
 systemctl daemon-reload
-systemctl restart octopos-core
+systemctl restart hydrahive-core
 sleep 3
 
-if systemctl is-active --quiet octopos-core; then
-    success "octopos-core läuft"
+if systemctl is-active --quiet hydrahive-core; then
+    success "hydrahive-core läuft"
 else
-    error "octopos-core konnte nicht starten — prüfe: journalctl -u octopos-core -n 30"
+    error "hydrahive-core konnte nicht starten — prüfe: journalctl -u hydrahive-core -n 30"
 fi
 
 # --- 7. QMD re-indexieren ---
 if command -v qmd &>/dev/null; then
     info "QMD: re-indexiere Memory..."
-    sudo -u octopos bash -c "HOME=/home/octopos qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
+    sudo -u hydrahive bash -c "HOME=/home/octopos qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
     success "QMD aktualisiert"
 fi
 

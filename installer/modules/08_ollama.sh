@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OctopOS Installer - Modul 08: Ollama (Full Profile only)
+# HydraHive Installer - Modul 08: Ollama (Full Profile only)
 # Installiert Ollama, richtet Systemd-Unit ein, zieht Default-Modelle.
 # Idempotent: bereits installierte Version und Modelle werden übersprungen.
 

@@ -26,12 +26,12 @@ export interface GpuInfo {
 }
 
 const BASE = "/api";
-function getToken() { return localStorage.getItem("octopos_token") || ""; }
+function getToken() { return localStorage.getItem("hydrahive_token") || ""; }
 
 function notifyAuthExpired(path: string) {
   if (typeof window === "undefined") return;
   if (!getToken()) return;
-  window.dispatchEvent(new CustomEvent("octopos-auth-expired", {
+  window.dispatchEvent(new CustomEvent("hydrahive-auth-expired", {
     detail: { path },
   }));
 }

@@ -160,7 +160,7 @@ export function ChatPage() {
     setSending(true);
 
     try {
-      const token = localStorage.getItem("octopos_token") || "";
+      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch(`/api/projects/${id}/message/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

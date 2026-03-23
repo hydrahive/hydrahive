@@ -1,6 +1,6 @@
-# OctopOS — Technische Dokumentation
+# HydraHive — Technische Dokumentation
 
-Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern oder deployen wollen.
+Diese Dokumentation richtet sich an Entwickler die HydraHive verstehen, erweitern oder deployen wollen.
 
 ---
 
@@ -32,13 +32,13 @@ Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern 
                          ▼
 ┌─────────────────────────────────────────────────────┐
 │              nginx (Port 443 / 80→443)               │
-│   Static: /opt/octopos/console/                      │
+│   Static: /opt/hydrahive/console/                      │
 │   Proxy:  /api/ → localhost:8765                     │
 └────────────────────────┬────────────────────────────┘
                          │ HTTP
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│           OctopOS Core (FastAPI, Port 8765)          │
+│           HydraHive Core (FastAPI, Port 8765)          │
 │                                                      │
 │  ┌──────────┐  ┌─────────────┐  ┌───────────────┐  │
 │  │  Agent   │  │  Project    │  │   Session     │  │
@@ -79,9 +79,9 @@ Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern 
 ### Repository
 
 ```
-octopos/
+hydrahive/
 ├── core/                          # Python-Backend
-│   └── src/octopos_core/
+│   └── src/hydrahive_core/
 │       ├── main.py                # FastAPI-App, Kern-Endpoints, Router-Wiring
 │       ├── orchestrator.py        # Boss-Agent, Task-Dispatching
 │       ├── agent_runtime.py       # Agent-Lifecycle, Watchdog
@@ -129,8 +129,8 @@ octopos/
 ### Laufzeit (auf dem Server)
 
 ```
-/opt/octopos/
-├── core/src/octopos_core/     # Core-Quellcode (wird deployed)
+/opt/hydrahive/
+├── core/src/hydrahive_core/     # Core-Quellcode (wird deployed)
 ├── console/                   # Gebaute React-App
 └── venv/                      # Python-Virtualenv
 
@@ -146,7 +146,7 @@ octopos/
 │   ├── webhooks.json
 │   └── sessions/              # Chat-History
 
-/etc/octopos/                  # Secrets und Config
+/etc/hydrahive/                  # Secrets und Config
 ├── admin_credentials          # Matrix-Admin-Passwort
 ├── jwt_secret                 # JWT-Signing-Key
 ├── llm_config.json            # LLM-Konfiguration
@@ -156,7 +156,7 @@ octopos/
 ├── agent_tokens/              # Matrix-Bot-Tokens
 └── tls/                       # TLS-Zertifikate
 
-/var/log/octopos/
+/var/log/hydrahive/
 └── audit.jsonl                # Audit-Log (append-only)
 ```
 
@@ -542,7 +542,7 @@ class MatrixAgent(ABC):
 
 ### Authentifizierung
 
-Bot-Accounts werden beim ersten Start automatisch auf conduwuit registriert. Der Access-Token wird in `/etc/octopos/agent_tokens/<id>.json` gespeichert. Bei Neustart wird der gespeicherte Token verwendet — kein Re-Login nötig.
+Bot-Accounts werden beim ersten Start automatisch auf conduwuit registriert. Der Access-Token wird in `/etc/hydrahive/agent_tokens/<id>.json` gespeichert. Bei Neustart wird der gespeicherte Token verwendet — kein Re-Login nötig.
 
 ### Watchdog
 
@@ -584,7 +584,7 @@ class Session:
 ### Authentifizierung
 
 - JWT HS256, 24h Gültigkeit
-- Secret wird in `/etc/octopos/jwt_secret` gespeichert (600, `octopos:octopos`)
+- Secret wird in `/etc/hydrahive/jwt_secret` gespeichert (600, `hydrahive:hydrahive`)
 - Bei fehlendem Secret → `503` (kein stilles Akzeptieren des leeren Secrets)
 - Rate-Limiting: 10 Login-Versuche pro Minute pro IP
 
@@ -602,7 +602,7 @@ Jedes Projekt läuft als eigener Linux-User `proj_<id>`. Agenten können nur auf
 
 ### Audit-Log
 
-Alle sicherheitsrelevanten Aktionen werden in `/var/log/octopos/audit.jsonl` protokolliert. Append-only, non-blocking (Fehler beim Schreiben unterbrechen die Hauptoperation nicht).
+Alle sicherheitsrelevanten Aktionen werden in `/var/log/hydrahive/audit.jsonl` protokolliert. Append-only, non-blocking (Fehler beim Schreiben unterbrechen die Hauptoperation nicht).
 
 ---
 

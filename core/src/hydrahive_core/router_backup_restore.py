@@ -141,7 +141,7 @@ def register_backup_restore_routes(
             import time as _time
 
             _time.sleep(1)
-            _sub.run(["systemctl", "restart", "octopos-core"], check=False)
+            _sub.run(["systemctl", "restart", "hydrahive-core"], check=False)
 
         _thr.Thread(target=_restart, daemon=True).start()
         return {"restored": True, "name": name, "restarting": True}

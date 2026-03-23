@@ -1,4 +1,4 @@
-# OctopOS API-Referenz
+# HydraHive API-Referenz
 
 Basis-URL: `https://<server>/api`
 
@@ -116,7 +116,7 @@ Runtime-Fingerprint für Audits und Support. Liefert Deploy-Metadaten, Laufzeits
 **Response 200:**
 ```json
 {
-  "service": { "name": "octopos-core", "version": "0.1.0" },
+  "service": { "name": "hydrahive-core", "version": "0.1.0" },
   "deployment": {
     "status": "ok",
     "started_at": "2026-03-20T11:00:00Z",
@@ -240,10 +240,10 @@ Logs eines Agenten aus journalctl.
 {
   "agent_id": "boss-main",
   "lines": [
-    "2026-03-20T11:23:45+0100 octopos octopos-core[123]: INFO orchestrator: ..."
+    "2026-03-20T11:23:45+0100 hydrahive hydrahive-core[123]: INFO orchestrator: ..."
   ],
   "count": 42,
-  "source": "journalctl -u octopos-core"
+  "source": "journalctl -u hydrahive-core"
 }
 ```
 
@@ -851,7 +851,7 @@ Discord-Bot und Zielkanäle konfigurieren.
 
 **Response 200:**
 ```json
-{ "updated": true, "bot_name": "OctopOS", "bot_id": "9876543210" }
+{ "updated": true, "bot_name": "HydraHive", "bot_id": "9876543210" }
 ```
 
 ---
@@ -873,7 +873,7 @@ Verbindung und Bot-Token testen, ohne zu speichern.
 
 **Response 200:**
 ```json
-{ "ok": true, "bot_name": "OctopOS", "bot_id": "9876543210" }
+{ "ok": true, "bot_name": "HydraHive", "bot_id": "9876543210" }
 ```
 
 ---
@@ -1018,7 +1018,7 @@ Gitea-Konfiguration abrufen (Token maskiert).
 {
   "url": "http://192.168.1.100:3001",
   "token": "***",
-  "org": "octopos",
+  "org": "hydrahive",
   "webhook_secret": "***"
 }
 ```
@@ -1034,7 +1034,7 @@ Gitea-Konfiguration speichern.
 {
   "url": "http://192.168.1.100:3001",
   "token": "gitea-token-abc",
-  "org": "octopos",
+  "org": "hydrahive",
   "webhook_secret": "optional-secret"
 }
 ```
@@ -1050,9 +1050,9 @@ Alle Gitea-Repos der konfigurierten Organisation auflisten.
 {
   "repos": [
     {
-      "name": "octopos",
+      "name": "hydrahive",
       "description": "AI Agent Server",
-      "html_url": "http://192.168.1.100:3001/octopos/octopos",
+      "html_url": "http://192.168.1.100:3001/hydrahive/hydrahive",
       "default_branch": "main",
       "updated": "2026-03-20T12:00:00Z"
     }

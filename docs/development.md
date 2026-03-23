@@ -1,6 +1,6 @@
-# OctopOS — Entwickler-Guide
+# HydraHive — Entwickler-Guide
 
-Wie man OctopOS erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.
+Wie man HydraHive erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.
 
 ---
 
@@ -23,7 +23,7 @@ Wie man OctopOS erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.
 
 - Python 3.12+
 - Node.js 22+
-- Ein laufendes OctopOS auf der VM (für Integration-Tests)
+- Ein laufendes HydraHive auf der VM (für Integration-Tests)
 
 ### Console lokal entwickeln
 
@@ -57,8 +57,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev]"
 
-# Core starten (braucht /agents, /projects, /etc/octopos)
-uvicorn octopos_core.main:app --reload --port 8765
+# Core starten (braucht /agents, /projects, /etc/hydrahive)
+uvicorn hydrahive_core.main:app --reload --port 8765
 ```
 
 Für lokale Entwicklung ohne vollständige Installation: Verzeichnisse manuell anlegen und `AGENTS_DIR`/`PROJECTS_DIR` in `main.py` temporär anpassen.
@@ -72,7 +72,7 @@ Tools sind Python-Klassen die `BaseTool` erben.
 ### Minimalbeispiel
 
 ```python
-# core/src/octopos_core/tools/my_tool.py
+# core/src/hydrahive_core/tools/my_tool.py
 from ..tool_registry import BaseTool
 
 class MyTool(BaseTool):
@@ -367,7 +367,7 @@ export function MyPanel({ entityId }: Props) {
 ```bash
 # installer/modules/10_my_module.sh
 #!/usr/bin/env bash
-# OctopOS Installer - Modul 10: Mein Feature
+# HydraHive Installer - Modul 10: Mein Feature
 # Kurze Beschreibung was dieses Modul macht
 
 info "Installiere Mein Feature..."
@@ -410,15 +410,15 @@ source "${MODULES_DIR}/10_my_module.sh"
 
 ```bash
 # Einzelne Datei
-scp core/src/octopos_core/main.py octopos@192.168.1.100:/tmp/main.py
-ssh octopos@192.168.1.100 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"
+scp core/src/hydrahive_core/main.py hydrahive@192.168.1.100:/tmp/main.py
+ssh hydrahive@192.168.1.100 "sudo cp /tmp/main.py /opt/hydrahive/core/src/hydrahive_core/main.py && sudo systemctl restart hydrahive-core"
 
 # Ganzes Core-Verzeichnis
-ssh octopos@192.168.1.100 "sudo cp -r /tmp/core_src/. /opt/octopos/core/src/octopos_core/"
+ssh hydrahive@192.168.1.100 "sudo cp -r /tmp/core_src/. /opt/hydrahive/core/src/hydrahive_core/"
 
 # Router-Module oder A-MEM-Installer aktualisieren
-scp core/src/octopos_core/router_*.py octopos@192.168.1.100:/tmp/
-scp -r installer/amem/ octopos@192.168.1.100:/tmp/amem/
+scp core/src/hydrahive_core/router_*.py hydrahive@192.168.1.100:/tmp/
+scp -r installer/amem/ hydrahive@192.168.1.100:/tmp/amem/
 ```
 
 ### Console deployen
@@ -426,14 +426,14 @@ scp -r installer/amem/ octopos@192.168.1.100:/tmp/amem/
 ```bash
 cd console
 npm run build                                                    # dist/ bauen
-scp -r dist/* octopos@192.168.1.100:/tmp/console_dist/         # übertragen
-ssh octopos@192.168.1.100 "sudo cp -r /tmp/console_dist/. /opt/octopos/console/"
+scp -r dist/* hydrahive@192.168.1.100:/tmp/console_dist/         # übertragen
+ssh hydrahive@192.168.1.100 "sudo cp -r /tmp/console_dist/. /opt/hydrahive/console/"
 ```
 
 ### Core-Status prüfen
 
 ```bash
-ssh octopos@192.168.1.100 "sudo systemctl is-active octopos-core && sudo journalctl -u octopos-core -n 20 --no-pager"
+ssh hydrahive@192.168.1.100 "sudo systemctl is-active hydrahive-core && sudo journalctl -u hydrahive-core -n 20 --no-pager"
 ```
 
 ### Git-Workflow
@@ -486,7 +486,7 @@ git pull --rebase
 AgentLink ermöglicht State-Transfer zwischen Agenten — ein Agent übergibt seinem Nachfolger vollständigen Kontext.
 
 ### Aktueller Status
-AgentLink-Backend läuft als separater Service (FastAPI + PostgreSQL). OctopOS hat #13 als offenes Issue für die Integration.
+AgentLink-Backend läuft als separater Service (FastAPI + PostgreSQL). HydraHive hat #13 als offenes Issue für die Integration.
 
 ### Geplante Integration
 ```python
@@ -506,7 +506,7 @@ state = await client.create_state({
 
 ## 10. Mehrsprachigkeit
 
-OctopOS ist auf Deutsch optimiert aber modellunabhängig. Für andere Sprachen:
+HydraHive ist auf Deutsch optimiert aber modellunabhängig. Für andere Sprachen:
 
 1. `soul.md` in der gewünschten Sprache schreiben
 2. QMD-Skills in der gewünschten Sprache schreiben  
@@ -581,11 +581,11 @@ Agent 'lilith' nicht in Discovery
 
 ### Matrix-Bot joint nicht
 ```
-MatrixAgent @boss:octopos.local — join fehlgeschlagen
+MatrixAgent @boss:hydrahive.local — join fehlgeschlagen
 ```
 → conduwuit nicht erreichbar oder Registration-Token falsch  
-→ Prüfen: `systemctl status octopos-conduwuit`
+→ Prüfen: `systemctl status hydrahive-conduwuit`
 
 ### Hot-Reload greift nicht
 → Watchdog überwacht nur oberste Ebene von `/agents/` und `/projects/`  
-→ Bei Änderungen in Unterverzeichnissen: `systemctl restart octopos-core`
+→ Bei Änderungen in Unterverzeichnissen: `systemctl restart hydrahive-core`

@@ -205,7 +205,7 @@ export function DashboardPage() {
             </div>
 
             <div>
-              <h1 className="shell-title">Operations-Dashboard fuer den laufenden OctopOS-Stack</h1>
+              <h1 className="shell-title">Operations-Dashboard fuer den laufenden HydraHive-Stack</h1>
               <p className="shell-copy mt-3 max-w-2xl">
                 Diese Flaeche zeigt jetzt nicht nur Basiszahlen, sondern die fuer den Betrieb wichtigsten Signale:
                 Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivitaet.

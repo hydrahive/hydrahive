@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# OctopOS Installer — Hauptskript
-# Usage: curl -sSL https://get.octopos.io | bash
+# HydraHive Installer — Hauptskript
+# Usage: curl -sSL https://get.hydrahive.org | bash
 set -euo pipefail
 
-OCTOPOS_VERSION="0.1.0"
-export OCTOPOS_DIR="/opt/octopos"
+HYDRAHIVE_VERSION="0.1.0"
+export HYDRAHIVE_DIR="/opt/hydrahive"
 MODULES_DIR="$(dirname "${BASH_SOURCE[0]}")/modules"
 
 # Farben — zentral definiert, alle Module nutzen diese
@@ -14,7 +14,7 @@ export YELLOW="\033[1;33m"
 export BLUE="\033[0;34m"
 export NC="\033[0m"
 
-info()    { echo -e "${BLUE}[OctopOS]${NC} $1"; }
+info()    { echo -e "${BLUE}[HydraHive]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
@@ -23,7 +23,7 @@ export -f info success warn error
 
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║     OctopOS Installer v${OCTOPOS_VERSION}          ║${NC}"
+echo -e "${BLUE}║     HydraHive Installer v${HYDRAHIVE_VERSION}          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════╝${NC}"
 echo ""
 
@@ -54,32 +54,32 @@ echo ""
 echo -e "${BLUE}--- Phase 4: Git-Integration ---${NC}"
 source "${MODULES_DIR}/10_gitea.sh"
 
-# Update-Script nach /opt/octopos/ kopieren
-cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${OCTOPOS_DIR}/update.sh"
-chmod +x "${OCTOPOS_DIR}/update.sh"
-success "Update-Script: sudo bash ${OCTOPOS_DIR}/update.sh"
+# Update-Script nach /opt/hydrahive/ kopieren
+cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
+chmod +x "${HYDRAHIVE_DIR}/update.sh"
+success "Update-Script: sudo bash ${HYDRAHIVE_DIR}/update.sh"
 
-install -m 755 "$(dirname "${BASH_SOURCE[0]}")/apply-network-profile.sh" "${OCTOPOS_DIR}/apply-network-profile.sh"
-install -m 440 "$(dirname "${BASH_SOURCE[0]}")/octopos-network-profile.sudoers" /etc/sudoers.d/octopos-network-profile
+install -m 755 "$(dirname "${BASH_SOURCE[0]}")/apply-network-profile.sh" "${HYDRAHIVE_DIR}/apply-network-profile.sh"
+install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-network-profile.sudoers" /etc/sudoers.d/hydrahive-network-profile
 success "Network-Profile-Skript installiert"
 
 # Self-Update Service + sudo-Regel installieren
-install -m 644 "$(dirname "${BASH_SOURCE[0]}")/octopos-selfupdate.service" /etc/systemd/system/octopos-selfupdate.service
-install -m 440 "$(dirname "${BASH_SOURCE[0]}")/octopos-update.sudoers" /etc/sudoers.d/octopos-update
+install -m 644 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-selfupdate.service" /etc/systemd/system/hydrahive-selfupdate.service
+install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-update.sudoers" /etc/sudoers.d/hydrahive-update
 systemctl daemon-reload
 success "Self-Update-Service installiert"
 
-# Konfig-Dateien vorbereiten (octopos-core braucht Schreibrechte)
+# Konfig-Dateien vorbereiten (hydrahive-core braucht Schreibrechte)
 for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
-    _path="/etc/octopos/${_f}"
+    _path="/etc/hydrahive/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"
-        chown octopos:octopos "${_path}"
+        chown hydrahive:octopos "${_path}"
         chmod 600 "${_path}"
     fi
 done
 
-install -m 755 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh" "${OCTOPOS_DIR}/install_amem.sh"
+install -m 755 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh" "${HYDRAHIVE_DIR}/install_amem.sh"
 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh"
 success "A-MEM installiert"
 
@@ -95,9 +95,9 @@ info "Console:       https://$(hostname -I | awk '{print $1}')  (self-signed Cer
 info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
 info "Login:         admin / ${CONSOLE_PASS}"
-info "Credentials:   /etc/octopos/admin_credentials"
+info "Credentials:   /etc/hydrahive/admin_credentials"
 info "Agenten-Dir:   /agents"
 if systemctl is-active --quiet gitea 2>/dev/null; then
   SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
-  info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / ${GITEA_ADMIN_PASS:-siehe /etc/octopos/gitea_config.json})"
+  info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / ${GITEA_ADMIN_PASS:-siehe /etc/hydrahive/gitea_config.json})"
 fi

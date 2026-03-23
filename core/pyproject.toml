@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "octopos-core"
+name = "hydrahive-core"
 version = "0.1.0"
-description = "OctopOS Core Runtime — Agent Orchestrator"
+description = "HydraHive Core Runtime — Agent Orchestrator"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
@@ -25,4 +25,4 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/octopos_core"]
+packages = ["src/hydrahive_core"]

@@ -62,7 +62,7 @@ export function BackupPage() {
       await api.restoreBackup(name);
       setError("");
       // Service startet neu — kurze Info
-      alert(`Restore von "${name}" gestartet. OctopOS startet neu — bitte in 10 Sekunden neu laden.`);
+      alert(`Restore von "${name}" gestartet. HydraHive startet neu — bitte in 10 Sekunden neu laden.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Restore fehlgeschlagen");
     } finally { setRestoring(null); }
@@ -75,7 +75,7 @@ export function BackupPage() {
         <div>
           <h1 className="text-xl font-semibold">Backup & Restore</h1>
           <p className="text-sm text-muted-foreground">
-            Sichert /etc/octopos, /agents und /projects
+            Sichert /etc/hydrahive, /agents und /projects
           </p>
         </div>
         <div className="flex gap-2">
@@ -192,7 +192,7 @@ export function BackupPage() {
       {backups.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-orange-400" />
-          <span>Restore überschreibt Konfiguration und startet OctopOS neu. Laufende Chats werden unterbrochen.</span>
+          <span>Restore überschreibt Konfiguration und startet HydraHive neu. Laufende Chats werden unterbrochen.</span>
         </div>
       )}
     </div>

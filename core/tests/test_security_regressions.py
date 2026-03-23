@@ -12,24 +12,24 @@ import yaml
 import aiohttp
 from fastapi.testclient import TestClient
 
-from octopos_core import main
-from octopos_core.agent_config import AgentConfig
-from octopos_core.execution_mode_policy import resolve_request_execution_mode
-from octopos_core.gitea import resolve_git_target, resolve_repo_ref
-from octopos_core.orchestrator import Orchestrator
-from octopos_core.learning_memory import append_learning_snapshot, build_learning_prompt_snippet
-from octopos_core.project_config import load_project_config
-from octopos_core.rate_limiter import RateLimitSettings, RateLimiter
-from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
-from octopos_core import router_user_integrations as user_integrations
-from octopos_core.router_core_misc import summarize_core_journal_lines
-from octopos_core.router_users import (
+from hydrahive_core import main
+from hydrahive_core.agent_config import AgentConfig
+from hydrahive_core.execution_mode_policy import resolve_request_execution_mode
+from hydrahive_core.gitea import resolve_git_target, resolve_repo_ref
+from hydrahive_core.orchestrator import Orchestrator
+from hydrahive_core.learning_memory import append_learning_snapshot, build_learning_prompt_snippet
+from hydrahive_core.project_config import load_project_config
+from hydrahive_core.rate_limiter import RateLimitSettings, RateLimiter
+from hydrahive_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
+from hydrahive_core import router_user_integrations as user_integrations
+from hydrahive_core.router_core_misc import summarize_core_journal_lines
+from hydrahive_core.router_users import (
     MyAgentUpdateRequest,
     build_personal_agent_data,
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool, WksShellExecTool
+from hydrahive_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool, WksShellExecTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -112,7 +112,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
                 mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-login-e2e"), \
                 mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
-                mock.patch("octopos_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
+                mock.patch("hydrahive_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
                 mock.patch.object(main, "setup_discord_clients", return_value=None):
                 with TestClient(main.app) as client:
                     login = client.post(
@@ -184,9 +184,9 @@ class SecurityRegressionTests(unittest.TestCase):
                 with mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
                     mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-agent-e2e"), \
                     mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
-                    mock.patch("octopos_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
+                    mock.patch("hydrahive_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
                     mock.patch.object(main, "setup_discord_clients", return_value=None), \
-                    mock.patch("octopos_core.router_agent_admin.Path", side_effect=_redirect_agent_path):
+                    mock.patch("hydrahive_core.router_agent_admin.Path", side_effect=_redirect_agent_path):
                     with TestClient(main.app) as client:
                         login = client.post(
                             "/auth/login",
@@ -307,7 +307,7 @@ class SecurityRegressionTests(unittest.TestCase):
     def test_me_platforms_route_is_registered(self):
         route = self._route("/me/platforms", "GET")
         endpoint = getattr(route, "endpoint", None)
-        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_user_integrations")
+        self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_user_integrations")
 
     def test_execution_mode_policy_defaults_and_internal_passthrough(self):
         self.assertEqual(resolve_request_execution_mode(("alice", "user"), None), "safe")
@@ -416,7 +416,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         endpoint = getattr(matches[0], "endpoint", None)
         self.assertEqual(getattr(endpoint, "__name__", None), "delete_project")
-        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_project_lifecycle")
+        self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_project_lifecycle")
 
     def test_llm_routes_are_registered_from_router_llm(self):
         for path, method in (
@@ -427,7 +427,7 @@ class SecurityRegressionTests(unittest.TestCase):
         ):
             route = self._route(path, method)
             endpoint = getattr(route, "endpoint", None)
-            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_llm")
+            self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_llm")
 
     def test_mcp_routes_are_registered_from_router_mcp(self):
         for path, method in (
@@ -438,7 +438,7 @@ class SecurityRegressionTests(unittest.TestCase):
         ):
             route = self._route(path, method)
             endpoint = getattr(route, "endpoint", None)
-            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_mcp")
+            self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_mcp")
 
     def test_backup_routes_are_registered_from_router_backup_restore(self):
         for path, method in (
@@ -450,7 +450,7 @@ class SecurityRegressionTests(unittest.TestCase):
         ):
             route = self._route(path, method)
             endpoint = getattr(route, "endpoint", None)
-            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_backup_restore")
+            self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_backup_restore")
 
     def test_core_misc_routes_are_registered_from_router_core_misc(self):
         for path, method in (
@@ -469,20 +469,20 @@ class SecurityRegressionTests(unittest.TestCase):
         ):
             route = self._route(path, method)
             endpoint = getattr(route, "endpoint", None)
-            self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_core_misc")
+            self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_core_misc")
 
     def test_system_routes_are_registered_from_router_system(self):
         route = self._route("/admin/runtime/status", "GET")
         endpoint = getattr(route, "endpoint", None)
-        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_system")
+        self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_system")
 
     def test_core_journal_summary_extracts_counts_and_signatures(self):
         report = summarize_core_journal_lines(
             [
-                "2026-03-23 01:00:00 host octopos-core[123]: INFO startup complete",
-                "2026-03-23 01:01:00 host octopos-core[123]: WARN retrying connection",
-                "2026-03-23 01:02:00 host octopos-core[123]: ERROR retrying connection",
-                "2026-03-23 01:03:00 host octopos-core[123]: ERROR retrying connection",
+                "2026-03-23 01:00:00 host hydrahive-core[123]: INFO startup complete",
+                "2026-03-23 01:01:00 host hydrahive-core[123]: WARN retrying connection",
+                "2026-03-23 01:02:00 host hydrahive-core[123]: ERROR retrying connection",
+                "2026-03-23 01:03:00 host hydrahive-core[123]: ERROR retrying connection",
             ]
         )
         self.assertEqual(report["available"], True)
@@ -704,7 +704,7 @@ class SecurityRegressionTests(unittest.TestCase):
             }
             with mock.patch.object(user_integrations, "_wks_connected", return_value=True), \
                 mock.patch.object(user_integrations, "discord_client_connected", return_value=True), \
-                mock.patch("octopos_core.discord_agent.load_discord_config", return_value={"guild_id": "guild-1", "channel_ids": ["1", "2"]}):
+                mock.patch("hydrahive_core.discord_agent.load_discord_config", return_value={"guild_id": "guild-1", "channel_ids": ["1", "2"]}):
                 overview = user_integrations._build_platform_overview("till", overview_users, wks_keys_dir)
 
         by_platform = {entry["platform"]: entry for entry in overview}
@@ -724,18 +724,18 @@ class SecurityRegressionTests(unittest.TestCase):
             (wks_keys_dir / "till").write_text("dummy-key", encoding="utf-8")
             wks = {"ip": "192.168.1.50", "ssh_user": "till"}
 
-            with mock.patch("octopos_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=0)) as run_mock:
+            with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=0)) as run_mock:
                 self.assertTrue(user_integrations._wks_connected("till", wks, wks_keys_dir))
                 run_mock.assert_called_once()
 
-            with mock.patch("octopos_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
+            with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
                 self.assertFalse(user_integrations._wks_connected("till", wks, wks_keys_dir))
 
     def test_wks_shell_exec_blocks_destructive_commands(self):
-        from octopos_core.tool_registry import WksShellExecTool
+        from hydrahive_core.tool_registry import WksShellExecTool
 
         tool = WksShellExecTool()
-        with mock.patch("octopos_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+        with mock.patch("hydrahive_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
             result = asyncio.run(tool.execute("till", "personal_till", "rm -rf /"))
 
         self.assertTrue(result["blocked"])
@@ -746,7 +746,7 @@ class SecurityRegressionTests(unittest.TestCase):
             def is_connected(self):
                 return True
 
-        with mock.patch("octopos_core.tool_registry._discord_clients", {"till": CallableDiscordClient()}):
+        with mock.patch("hydrahive_core.tool_registry._discord_clients", {"till": CallableDiscordClient()}):
             self.assertTrue(user_integrations.discord_client_connected("till"))
 
     def test_learning_prompt_snippet_prioritizes_latest_entries(self):
@@ -789,8 +789,8 @@ class SecurityRegressionTests(unittest.TestCase):
             {"role": "user", "content": "Hallo"},
             {"role": "assistant", "content": "Antwort"},
         ]), mock.patch.object(main.agent_sessions, "replace_messages") as replace_mock, \
-            mock.patch("octopos_core.orchestrator._load_claude_oauth_token", return_value="token"), \
-            mock.patch("octopos_core.router_agent_chat.append_learning_snapshot", return_value=Path("/tmp/learned-facts.md")) as append_mock, \
+            mock.patch("hydrahive_core.orchestrator._load_claude_oauth_token", return_value="token"), \
+            mock.patch("hydrahive_core.router_agent_chat.append_learning_snapshot", return_value=Path("/tmp/learned-facts.md")) as append_mock, \
             mock.patch.dict("sys.modules", {"anthropic": fake_anthropic}):
             result = asyncio.run(endpoint("personal_test", _a=("admin", "admin")))
 
@@ -854,7 +854,7 @@ class SecurityRegressionTests(unittest.TestCase):
             "title": "Test issue",
         })
 
-        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
             result = asyncio.run(
                 tool.execute(
                     "personal_till",
@@ -906,7 +906,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_wks_shell_exec_blocks_command_substitution_bypass(self):
         tool = WksShellExecTool()
-        with mock.patch("octopos_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+        with mock.patch("hydrahive_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
             result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\''))
 
         self.assertTrue(result["blocked"])
@@ -920,7 +920,7 @@ class SecurityRegressionTests(unittest.TestCase):
             "html_url": "http://example.local/octopos/octopos/issues/1#issuecomment-99",
         })
 
-        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
             result = asyncio.run(
                 tool.execute(
                     "personal_till",
@@ -949,7 +949,7 @@ class SecurityRegressionTests(unittest.TestCase):
             "title": "Temp placeholder - ignore",
         })
 
-        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client):
+        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
             result = asyncio.run(
                 tool.execute(
                     "personal_till",
@@ -1045,16 +1045,16 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_git_status_accepts_explicit_repo_reference(self):
         tool = GitStatusTool()
-        with mock.patch("octopos_core.gitea.get_gitea_client") as get_client, \
-             mock.patch("octopos_core.gitea.resolve_git_target", new=mock.AsyncMock(return_value={
+        with mock.patch("hydrahive_core.gitea.get_gitea_client") as get_client, \
+             mock.patch("hydrahive_core.gitea.resolve_git_target", new=mock.AsyncMock(return_value={
                  "owner": "octopos",
                  "repo": "octopos",
                  "full_name": "octopos/octopos",
                  "workspace_key": "octopos__octopos",
                  "source": "repo",
              })), \
-             mock.patch("octopos_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
-             mock.patch("octopos_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
+             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("## main\n", "", 0),
                  ("main\n", "", 0),
              ])):
@@ -1067,7 +1067,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(result["branch"], "main")
 
     def test_gitea_repo_diff_defaults_to_latest_two_commits(self):
-        from octopos_core.tool_registry import GiteaRepoDiffTool
+        from hydrahive_core.tool_registry import GiteaRepoDiffTool
 
         tool = GiteaRepoDiffTool()
         fake_client = mock.Mock(org="octopos")
@@ -1075,9 +1075,9 @@ class SecurityRegressionTests(unittest.TestCase):
             {"sha": "headsha123456"},
             {"sha": "basesha654321"},
         ])
-        with mock.patch("octopos_core.gitea.get_gitea_client", return_value=fake_client), \
-             mock.patch("octopos_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
-             mock.patch("octopos_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
+        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client), \
+             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("", "", 0),
                  (" file1 | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)", "", 0),
                  ("diff --git a/file1 b/file1\n--- a/file1\n+++ b/file1\n@@ -1 +1 @@\n-old\n+new\n", "", 0),

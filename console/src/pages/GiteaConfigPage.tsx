@@ -3,7 +3,7 @@ import { api, GiteaConfig, GiteaRepo } from "../lib/api";
 import { GitBranch, RefreshCw, Save, ExternalLink } from "lucide-react";
 
 export default function GiteaConfigPage() {
-  const [config, setConfig]   = useState<GiteaConfig>({ url: "http://127.0.0.1:3001", token: "", org: "octopos", webhook_secret: "" });
+  const [config, setConfig]   = useState<GiteaConfig>({ url: "http://127.0.0.1:3001", token: "", org: "hydrahive", webhook_secret: "" });
   const [repos, setRepos]     = useState<GiteaRepo[]>([]);
   const [saving, setSaving]   = useState(false);
   const [loading, setLoading] = useState(true);
