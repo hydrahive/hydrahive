@@ -44,23 +44,6 @@ def _pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-_GOOGLE_ANTIGRAVITY_CONFIG = Path("/etc/octopos/google_antigravity_oauth.json")
-
-
-def _google_antigravity_client_id() -> str:
-    if _GOOGLE_ANTIGRAVITY_CONFIG.exists():
-        import json as _j
-        return _j.loads(_GOOGLE_ANTIGRAVITY_CONFIG.read_text())["client_id"]
-    return ""
-
-
-def _google_antigravity_client_secret() -> str:
-    if _GOOGLE_ANTIGRAVITY_CONFIG.exists():
-        import json as _j
-        return _j.loads(_GOOGLE_ANTIGRAVITY_CONFIG.read_text())["client_secret"]
-    return ""
-
-
 def register_llm_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -141,22 +124,6 @@ def register_llm_routes(
         if providers.get("openai", {}).get("enabled"):
             for model in ["gpt-4o-mini", "gpt-4o"]:
                 models.append({"id": model, "label": model, "provider": "openai"})
-
-        ga_file = Path("/etc/octopos/google_antigravity_token.json")
-        if ga_file.exists():
-            try:
-                import json as _json
-
-                ga_data = _json.loads(ga_file.read_text(encoding="utf-8"))
-                if ga_data.get("access_token"):
-                    for model in ["gemini-3.0-flash", "gemini-3.0-pro", "gemini-3.5-pro"]:
-                        models.append({
-                            "id": f"google-antigravity/{model}",
-                            "label": f"Antigravity: {model}",
-                            "provider": "google_antigravity",
-                        })
-            except Exception:
-                pass
 
         codex_file = Path("/etc/octopos/openai_codex_token.json")
         if codex_file.exists():
@@ -444,150 +411,6 @@ def register_llm_routes(
         logger.info("OpenAI Codex Token via PKCE gespeichert (account: %s…)", account_id[:12])
         audit_log("llm.token_set", details={"provider": "openai_codex", "via": "pkce_oauth"})
         return {"updated": True, "account_id": account_id}
-
-    @admin_router.post("/llm/oauth/google_antigravity/start")
-    async def start_google_antigravity_oauth():
-        import time
-        import urllib.parse
-
-        verifier, challenge = _pkce_pair()
-        state = verifier
-        _oauth_pending[state] = {"verifier": verifier, "provider": "google_antigravity", "expires": time.time() + 600}
-        scopes = " ".join([
-            "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/cclog",
-            "https://www.googleapis.com/auth/experimentsandconfigs",
-        ])
-        params = {
-            "client_id": _google_antigravity_client_id(),
-            "response_type": "code",
-            "redirect_uri": "http://localhost:51121/oauth-callback",
-            "scope": scopes,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-            "state": state,
-            "access_type": "offline",
-            "prompt": "consent",
-        }
-        auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
-        return {"auth_url": auth_url, "state": state}
-
-    @admin_router.post("/llm/oauth/google_antigravity/exchange")
-    async def exchange_google_antigravity_code(body: dict):
-        import json as _json
-        import time
-        from urllib.parse import parse_qs, urlparse
-
-        import httpx as _httpx
-
-        redirect_url = body.get("redirect_url", "").strip()
-        if redirect_url:
-            parsed = urlparse(redirect_url)
-            qs = parse_qs(parsed.query)
-            code = qs.get("code", [""])[0]
-            state = qs.get("state", [""])[0]
-        else:
-            code = body.get("code", "").strip()
-            state = body.get("state", "").strip()
-
-        if not code or not state:
-            raise HTTPException(400, "code und state erforderlich")
-
-        pending = _oauth_pending.pop(state, None)
-        if not pending:
-            raise HTTPException(400, "Ungültiger oder abgelaufener State — bitte OAuth neu starten")
-        if pending["expires"] < time.time():
-            raise HTTPException(400, "OAuth-Session abgelaufen")
-
-        async with _httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": _google_antigravity_client_id(),
-                    "client_secret": _google_antigravity_client_secret(),
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": "http://localhost:51121/oauth-callback",
-                    "code_verifier": pending["verifier"],
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-
-        if resp.status_code != 200:
-            raise HTTPException(400, f"Token-Exchange fehlgeschlagen: {resp.text[:300]}")
-
-        token_data = resp.json()
-        access_token = token_data.get("access_token", "")
-        refresh_token = token_data.get("refresh_token", "")
-        if not access_token:
-            raise HTTPException(400, "Kein access_token in Response")
-
-        email = ""
-        try:
-            async with _httpx.AsyncClient(timeout=10) as client:
-                ui = await client.get(
-                    "https://www.googleapis.com/oauth2/v1/userinfo",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                )
-                if ui.status_code == 200:
-                    email = ui.json().get("email", "")
-        except Exception:
-            pass
-
-        project_id = ""
-        try:
-            async with _httpx.AsyncClient(timeout=10) as client:
-                ca = await client.post(
-                    "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
-                    headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-                    json={"cloudaiCompanionClient": {"clientVersion": ""}},
-                )
-                if ca.status_code == 200:
-                    project_id = ca.json().get("currentProject", {}).get("projectId", project_id)
-        except Exception:
-            pass
-
-        token_file = Path("/etc/octopos/google_antigravity_token.json")
-        token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(
-            _json.dumps(
-                {
-                    "access_token": access_token,
-                    "refresh_token": refresh_token,
-                    "email": email,
-                    "project_id": project_id,
-                    "expires": token_data.get("expires_in", 3600) + int(time.time()),
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        token_file.chmod(0o600)
-        logger.info("Google Antigravity Token via PKCE gespeichert (email: %s, project: %s)", email, project_id)
-        audit_log("llm.token_set", details={"provider": "google_antigravity", "via": "pkce_oauth"})
-        return {"updated": True, "email": email, "project_id": project_id}
-
-    @admin_router.get("/llm/google_antigravity_status")
-    def get_google_antigravity_status():
-        import json as _json
-
-        token_file = Path("/etc/octopos/google_antigravity_token.json")
-        if not token_file.exists():
-            return {"configured": False}
-        try:
-            data = _json.loads(token_file.read_text(encoding="utf-8"))
-            if data.get("access_token"):
-                return {
-                    "configured": True,
-                    "email": data.get("email", ""),
-                    "project_id": data.get("project_id", ""),
-                    "models": ["gemini-3.0-flash", "gemini-3.0-pro", "gemini-3.5-pro"],
-                }
-        except Exception:
-            pass
-        return {"configured": False}
 
     @admin_router.get("/llm/claude_token_status")
     def get_claude_token_status():

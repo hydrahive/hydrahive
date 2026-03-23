@@ -116,7 +116,6 @@ export const api = {
   claudeTokenStatus:         () => api.get<{configured:boolean;token_age_days:number|null;remaining_days:number|null;warning:string|null;ttl_days:number}>("/llm/claude_token_status"),
   openaiCodexStatus:         () => api.get<{configured:boolean;account_id:string|null;models?:string[]}>("/llm/openai_codex_status"),
   setOpenaiCodexToken:       (d: {access_token:string;account_id:string;refresh_token?:string}) => api.put("/llm/config/openai_codex", d),
-  googleAntigravityStatus:   () => api.get<{configured:boolean;email?:string;project_id?:string;models?:string[]}>("/llm/google_antigravity_status"),
   // OAuth PKCE Flow
   startOAuth:    (provider: string) => api.post<{auth_url:string;state:string}>(`/llm/oauth/${provider}/start`, {}),
   exchangeOAuth: (provider: string, body: {redirect_url?:string;code?:string;state?:string;code_and_state?:string}) =>
