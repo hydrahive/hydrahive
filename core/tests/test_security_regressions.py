@@ -661,13 +661,16 @@ class SecurityRegressionTests(unittest.TestCase):
     def test_platform_overview_includes_supported_and_planned_channels(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             wks_keys_dir = Path(tmpdir) / "wks-keys"
+            wks_keys_dir.mkdir(parents=True, exist_ok=True)
+            (wks_keys_dir / "till").write_text("dummy-key", encoding="utf-8")
             overview_users = {
                 "till": {
                     "matrix_id": "@till:matrix.local",
                     "wks": {"ip": "192.168.1.50", "ssh_user": "till", "ollama_port": 11434},
                 }
             }
-            with mock.patch.object(user_integrations, "discord_client_connected", return_value=True), \
+            with mock.patch.object(user_integrations, "_wks_connected", return_value=True), \
+                mock.patch.object(user_integrations, "discord_client_connected", return_value=True), \
                 mock.patch("octopos_core.discord_agent.load_discord_config", return_value={"guild_id": "guild-1", "channel_ids": ["1", "2"]}):
                 overview = user_integrations._build_platform_overview("till", overview_users, wks_keys_dir)
 
@@ -680,6 +683,28 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(by_platform["whatsapp"]["details"]["status"], "planned")
         self.assertEqual(by_platform["signal"]["details"]["status"], "planned")
         self.assertTrue(by_platform["discord"]["connected"])
+
+    def test_wks_connected_helper_requires_real_probe_result(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wks_keys_dir = Path(tmpdir) / "wks-keys"
+            wks_keys_dir.mkdir(parents=True, exist_ok=True)
+            (wks_keys_dir / "till").write_text("dummy-key", encoding="utf-8")
+            wks = {"ip": "192.168.1.50", "ssh_user": "till"}
+
+            with mock.patch("octopos_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=0)) as run_mock:
+                self.assertTrue(user_integrations._wks_connected("till", wks, wks_keys_dir))
+                run_mock.assert_called_once()
+
+            with mock.patch("octopos_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
+                self.assertFalse(user_integrations._wks_connected("till", wks, wks_keys_dir))
+
+    def test_discord_connected_helper_accepts_callable_is_connected(self):
+        class CallableDiscordClient:
+            def is_connected(self):
+                return True
+
+        with mock.patch("octopos_core.tool_registry._discord_clients", {"till": CallableDiscordClient()}):
+            self.assertTrue(user_integrations.discord_client_connected("till"))
 
     def test_learning_prompt_snippet_prioritizes_latest_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:

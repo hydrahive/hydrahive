@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
+import subprocess as _sp
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+
+logger = logging.getLogger(__name__)
 
 
 class WksConfigRequest(BaseModel):
@@ -33,7 +38,55 @@ def discord_client_connected(username: str) -> bool:
     from .tool_registry import _discord_clients
 
     client = _discord_clients.get(username)
-    return bool(client and getattr(client, "is_connected", False))
+    if not client:
+        return False
+
+    connected = getattr(client, "is_connected", False)
+    if callable(connected):
+        try:
+            return bool(connected())
+        except Exception as e:
+            logger.debug("Discord is_connected() für %s fehlgeschlagen: %s", username, e)
+            return False
+    return bool(connected)
+
+
+def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
+    ip = str(wks.get("ip", "")).strip()
+    if not ip:
+        return False
+
+    key_file = wks_keys_dir / username
+    if not key_file.exists():
+        return False
+
+    ssh_user = str(wks.get("ssh_user", username)).strip() or username
+    try:
+        result = _sp.run(
+            [
+                "ssh",
+                "-i",
+                str(key_file),
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "ConnectTimeout=3",
+                f"{ssh_user}@{ip}",
+                "true",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        logger.debug("ssh nicht gefunden für WKS-Connectivity-Check (%s)", username)
+        return False
+    except Exception as e:
+        logger.debug("WKS-Connectivity-Check für %s fehlgeschlagen: %s", username, e)
+        return False
 
 
 def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> list[dict]:
@@ -69,7 +122,7 @@ def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> 
             "label": SUPPORTED_PLATFORMS["wks"]["label"],
             "supported": True,
             "configured": bool(wks.get("ip")),
-            "connected": bool(wks.get("ip")),
+            "connected": _wks_connected(username, wks, wks_keys_dir),
             "details": {
                 "ip": wks.get("ip", ""),
                 "ssh_user": wks.get("ssh_user", username),
