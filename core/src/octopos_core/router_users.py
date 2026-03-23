@@ -340,25 +340,11 @@ def register_user_routes(
 
     @auth_router.delete("/me/agent/session")
     def my_agent_session_clear(auth: tuple[str, str] = Depends(require_auth)):
-        import datetime
+        from .router_agent_chat import _save_session_transcript
         username, _role = auth
         agent_id = f"personal_{username}"
-        context = agent_sessions.get_context(agent_id, max_messages=40)
-        if context:
-            memory_dir = Path(agents_dir) / agent_id / "memory"
-            memory_dir.mkdir(exist_ok=True)
-            lines = [f"# Letzte Session (vor Clear, {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')})\n"]
-            for msg in context:
-                role = msg.get("role", "")
-                content = msg.get("content", "") or ""
-                if isinstance(content, list):
-                    content = " ".join(
-                        p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
-                    )
-                if role in ("user", "assistant") and content.strip():
-                    prefix = f"**{username}:**" if role == "user" else "**Agent:**"
-                    lines.append(f"{prefix} {content.strip()[:400]}")
-            (memory_dir / "_last_session.md").write_text("\n\n".join(lines), encoding="utf-8")
+        context = agent_sessions.get_context(agent_id, max_messages=200)
+        _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
         agent_sessions.end_session(agent_id)
         return {"cleared": True}
 

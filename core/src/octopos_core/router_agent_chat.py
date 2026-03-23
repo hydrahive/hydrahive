@@ -1,11 +1,59 @@
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .learning_memory import append_learning_snapshot
+
+
+def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str) -> None:
+    """Speichert vollständiges Transkript + kurzen Session-Inject (analog OpenClaw)."""
+    if not context:
+        return
+
+    now = datetime.datetime.now()
+    ts = now.strftime("%Y-%m-%d_%H-%M")
+
+    # Vollständiges Transkript → transcripts/
+    transcripts_dir = agent_dir / "transcripts"
+    transcripts_dir.mkdir(exist_ok=True)
+    lines = [f"# Session-Transkript {ts}\n"]
+    for msg in context:
+        role = msg.get("role", "")
+        content = msg.get("content", "") or ""
+        if isinstance(content, list):
+            content = " ".join(
+                p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
+            )
+        content = content.strip()
+        if not content:
+            continue
+        if role == "user":
+            lines.append(f"**User:** {content}")
+        elif role == "assistant":
+            lines.append(f"**{agent_id}:** {content}")
+    (transcripts_dir / f"{ts}.md").write_text("\n\n".join(lines), encoding="utf-8")
+
+    # Kurzfassung → memory/_last_session.md (Session-Inject)
+    memory_dir = agent_dir / "memory"
+    memory_dir.mkdir(exist_ok=True)
+    short = [f"# Letzte Session (vor Clear, {now.strftime('%Y-%m-%d %H:%M')})\n"]
+    for msg in context:
+        role = msg.get("role", "")
+        content = msg.get("content", "") or ""
+        if isinstance(content, list):
+            content = " ".join(
+                p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
+            )
+        content = content.strip()
+        if role == "user" and content:
+            short.append(f"**User:** {content[:400]}")
+        elif role == "assistant" and content:
+            short.append(f"**{agent_id}:** {content[:400]}")
+    (memory_dir / "_last_session.md").write_text("\n\n".join(short), encoding="utf-8")
 
 
 def register_agent_chat_routes(
@@ -55,26 +103,8 @@ def register_agent_chat_routes(
 
     @auth_router.delete("/agents/{agent_id}/session")
     def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
-        # Letzte Session als _last_session.md speichern (Session-Inject für nächsten Start)
-        context = agent_sessions.get_context(agent_id, max_messages=40)
-        if context:
-            import datetime
-            agent_dir = Path(agents_dir) / agent_id
-            memory_dir = agent_dir / "memory"
-            memory_dir.mkdir(exist_ok=True)
-            lines = [f"# Letzte Session (vor Clear, {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')})\n"]
-            for msg in context:
-                role = msg.get("role", "")
-                content = msg.get("content", "") or ""
-                if isinstance(content, list):
-                    content = " ".join(
-                        p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"
-                    )
-                if role in ("user", "assistant") and content.strip():
-                    prefix = "**Bibi:**" if role == "user" else "**Rowena:**"
-                    snippet = content.strip()[:400]
-                    lines.append(f"{prefix} {snippet}")
-            (memory_dir / "_last_session.md").write_text("\n\n".join(lines), encoding="utf-8")
+        context = agent_sessions.get_context(agent_id, max_messages=200)
+        _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
         agent_sessions.end_session(agent_id)
         return {"cleared": True}
 
