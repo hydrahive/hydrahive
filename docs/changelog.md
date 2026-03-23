@@ -45,3 +45,17 @@
 - Redis-Recovery bleibt nach einem Ausfall nicht dauerhaft im lokalen Fallback hängen.
 - Lernnotizen sind robuster bei parallelen Writes.
 - Issue-Erstellung und WKS-Shell-Ausführung sind gegen offensichtliche Missbrauchsfälle besser abgesichert.
+
+### Fixed
+
+- `fix(core): block shell subshell bypasses in shell tools`
+- Shell- und WKS-Shell-Ausführung blockieren jetzt Command Substitution (`$(...)`), Backticks und rekursive Wrapper wie `bash -c` sauberer.
+- Die Blockliste greift damit auch bei verschachtelten Shell-Aufrufen, die destructive Kommandos verstecken würden.
+- Betroffene Bereiche:
+  - `core/src/octopos_core/tool_registry.py`
+  - `core/tests/test_security_regressions.py`
+
+### Result
+
+- Der letzte offene Security-Punkt aus dem Deep-Dive ist geschlossen.
+- Subshell-basierte Umgehungsversuche greifen nicht mehr durch die bisherige Blocklisten-Lücke.

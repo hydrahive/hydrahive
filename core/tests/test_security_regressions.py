@@ -29,7 +29,7 @@ from octopos_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool
+from octopos_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool, WksShellExecTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -892,6 +892,21 @@ class SecurityRegressionTests(unittest.TestCase):
     def test_shell_exec_blocks_nested_destructive_shells(self):
         tool = ShellExecTool()
         result = asyncio.run(tool.execute("till", "personal_till", 'bash -c "rm -rf /"'))
+
+        self.assertTrue(result["blocked"])
+        self.assertIn("blockiert", result["error"])
+
+    def test_shell_exec_blocks_command_substitution_bypass(self):
+        tool = ShellExecTool()
+        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\''))
+
+        self.assertTrue(result["blocked"])
+        self.assertIn("blockiert", result["error"])
+
+    def test_wks_shell_exec_blocks_command_substitution_bypass(self):
+        tool = WksShellExecTool()
+        with mock.patch("octopos_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+            result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\''))
 
         self.assertTrue(result["blocked"])
         self.assertIn("blockiert", result["error"])
