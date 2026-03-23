@@ -677,7 +677,7 @@ def _create_personal_agent(username: str) -> str:
     }
 
     (agent_dir / "agent.yaml").write_text(
-        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
+        _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False), encoding="utf-8"
     )
     (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
     _ensure_personal_project_manifest(username)
@@ -702,7 +702,7 @@ def _ensure_personal_agent(username: str):
             agent_data, changed = upgrade_personal_agent_data(agent_data)
             if changed:
                 agent_yaml.write_text(
-                    _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
+                    _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
                     encoding="utf-8",
                 )
         except Exception:
