@@ -449,26 +449,6 @@ IncomingMessage = register_core_misc_routes(
 )
 
 
-class SpawnRequest(BaseModel):
-    agent_id: str
-
-
-@app.post("/agents/spawn")
-async def spawn_task_agent(req: SpawnRequest, _a: tuple = Depends(require_admin_or_localhost)):
-    cfg = discovery.get(req.agent_id)
-    if not cfg:
-        raise HTTPException(404, f"Agent '{req.agent_id}' nicht in Discovery")
-    if cfg.type != "worker":
-        raise HTTPException(400, f"Nur worker koennen gespawnt werden, nicht {cfg.type}")
-    await runtime.spawn_task_agent(cfg)
-    return {"spawned": req.agent_id}
-
-
-@app.post("/agents/{agent_id}/heartbeat")
-def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost)):
-    runtime.heartbeat(agent_id)
-    return {"ok": True}
-
 # ================================================================== Orchestrator / Agenten-Chat
 
 # ================================================================== Audit-Log
@@ -784,6 +764,64 @@ register_user_integration_routes(
 )
 
 
+async def _run_self_update(pusher: str, commits: int) -> None:
+    """Übergibt den Self-Update-Job an eine dedizierte systemd-Service-Unit."""
+    import asyncio as _asyncio
+    STATUS_FILE   = "/var/run/octopos-update.json"
+
+    logger.info("Self-Update gestartet (pusher=%s commits=%d)", pusher, commits)
+
+    try:
+        import json as _json
+        from datetime import datetime as _dt
+        Path(STATUS_FILE).write_text(_json.dumps({
+            "status": "running",
+            "started_at": _dt.now().isoformat(),
+            "pusher": pusher,
+            "commits": commits,
+            "commit": "",
+        }))
+    except Exception:
+        pass
+
+    try:
+        check = await _asyncio.create_subprocess_exec(
+            "sudo", "systemctl", "is-active", "--quiet", "octopos-selfupdate.service",
+            stdout=_asyncio.subprocess.DEVNULL,
+            stderr=_asyncio.subprocess.DEVNULL,
+        )
+        await check.wait()
+        if check.returncode == 0:
+            logger.info("Self-Update läuft bereits")
+            return
+
+        proc = await _asyncio.create_subprocess_exec(
+            "sudo", "systemctl", "start", "--no-block", "octopos-selfupdate.service",
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=30)
+        output = stdout.decode(errors="replace") if stdout else ""
+
+        if proc.returncode == 0:
+            logger.info("Self-Update an systemd uebergeben (pusher=%s)", pusher)
+        else:
+            logger.error("Self-Update Start fehlgeschlagen (rc=%d): %s", proc.returncode, output[-500:])
+            try:
+                Path(STATUS_FILE).write_text(_json.dumps({
+                    "status": "error",
+                    "finished_at": _dt.now().isoformat(),
+                    "error": output[-500:],
+                }))
+            except Exception:
+                pass
+
+    except _asyncio.TimeoutError:
+        logger.error("Self-Update Start-Timeout nach 30s")
+    except Exception as e:
+        logger.error("Self-Update Fehler: %s", e)
+
+
 register_project_integration_routes(
     auth_router,
     admin_router,
@@ -796,6 +834,7 @@ register_project_integration_routes(
     orchestrator=orchestrator,
     audit_log=audit_log,
     logger=logger,
+    run_self_update=_run_self_update,
 )
 
 
@@ -813,7 +852,10 @@ register_agent_admin_routes(
     admin_router,
     require_auth=require_auth,
     require_admin=require_admin,
+    require_admin_or_localhost=require_admin_or_localhost,
+    require_auth_or_localhost=require_auth_or_localhost,
     discovery=discovery,
+    runtime=runtime,
     agents_dir=AGENTS_DIR,
     audit_log=audit_log,
     logger=logger,
@@ -1070,122 +1112,6 @@ def _network_profile_status() -> dict:
         "exposed": exposed,
         "deviations": deviations,
     }
-
-
-# ================================================================== Gitea Webhook + Config
-
-@app.post("/webhooks/gitea/{project_id}")
-async def gitea_webhook(project_id: str, request: Request):
-    """
-    Gitea Push-Webhook: bei Push auf main wird der OctopOS-Core-Service neu gestartet
-    wenn es sich um das octopos-core Repo handelt, sonst nur geloggt.
-    Kein Auth — Gitea-Secret wird in der Gitea-Config gesetzt.
-    """
-    import hmac
-    import hashlib
-
-    body = await request.body()
-
-    # Optional: Webhook-Secret prüfen
-    from .gitea import _load_config as _gitea_cfg
-    cfg = _gitea_cfg()
-    webhook_secret = cfg.get("webhook_secret", "")
-    if webhook_secret:
-        sig = request.headers.get("X-Gitea-Signature", "")
-        expected = hmac.new(webhook_secret.encode(), body, hashlib.sha256).hexdigest()  # type: ignore[attr-defined]
-        if not hmac.compare_digest(sig, expected):
-            raise HTTPException(403, "Webhook-Signatur ungültig")
-
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    ref    = payload.get("ref", "")
-    pusher = payload.get("pusher", {}).get("login", "unknown")
-    commits = len(payload.get("commits", []))
-
-    logger.info("Gitea Webhook: project=%s ref=%s pusher=%s commits=%d",
-                project_id, ref, pusher, commits)
-
-    if ref != "refs/heads/main":
-        return {"status": "ignored", "reason": "not main branch", "ref": ref}
-
-    audit_log("gitea.webhook.push", target=project_id, project_id=project_id,
-              details={"ref": ref, "pusher": pusher, "commits": commits})
-
-    # Workspace-Cache löschen damit nächste Tool-Nutzung frisch clont
-    import shutil as _shutil
-    ws = Path(f"/tmp/octopos-git/{project_id}")
-    if ws.exists():
-        _shutil.rmtree(ws)
-        logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
-
-    # OctopOS-Core selbst deployen wenn das octopos-Core-Repo gepusht wurde
-    if project_id == "octopos-core":
-        asyncio.create_task(_run_self_update(pusher, commits))
-        return {"status": "deploying", "project": project_id, "ref": ref}
-
-    return {"status": "ok", "project": project_id, "ref": ref}
-
-
-async def _run_self_update(pusher: str, commits: int) -> None:
-    """Übergibt den Self-Update-Job an eine dedizierte systemd-Service-Unit."""
-    import asyncio as _asyncio
-    STATUS_FILE   = "/var/run/octopos-update.json"
-
-    logger.info("Self-Update gestartet (pusher=%s commits=%d)", pusher, commits)
-
-    # Status: running
-    try:
-        import json as _json
-        from datetime import datetime as _dt
-        Path(STATUS_FILE).write_text(_json.dumps({
-            "status": "running",
-            "started_at": _dt.now().isoformat(),
-            "pusher": pusher,
-            "commits": commits,
-            "commit": "",
-        }))
-    except Exception:
-        pass
-
-    try:
-        check = await _asyncio.create_subprocess_exec(
-            "sudo", "systemctl", "is-active", "--quiet", "octopos-selfupdate.service",
-            stdout=_asyncio.subprocess.DEVNULL,
-            stderr=_asyncio.subprocess.DEVNULL,
-        )
-        await check.wait()
-        if check.returncode == 0:
-            logger.info("Self-Update läuft bereits")
-            return
-
-        proc = await _asyncio.create_subprocess_exec(
-            "sudo", "systemctl", "start", "--no-block", "octopos-selfupdate.service",
-            stdout=_asyncio.subprocess.PIPE,
-            stderr=_asyncio.subprocess.STDOUT,
-        )
-        stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=30)
-        output = stdout.decode(errors="replace") if stdout else ""
-
-        if proc.returncode == 0:
-            logger.info("Self-Update an systemd uebergeben (pusher=%s)", pusher)
-        else:
-            logger.error("Self-Update Start fehlgeschlagen (rc=%d): %s", proc.returncode, output[-500:])
-            try:
-                Path(STATUS_FILE).write_text(_json.dumps({
-                    "status": "error",
-                    "finished_at": _dt.now().isoformat(),
-                    "error": output[-500:],
-                }))
-            except Exception:
-                pass
-
-    except _asyncio.TimeoutError:
-        logger.error("Self-Update Start-Timeout nach 30s")
-    except Exception as e:
-        logger.error("Self-Update Fehler: %s", e)
 
 
 GITEA_CONFIG_FILE = "/etc/octopos/gitea_config.json"
