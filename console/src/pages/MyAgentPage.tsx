@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield } from "lucide-react";
 import { api, McpServer, WksConfig, DiscordConfig } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
@@ -14,6 +14,12 @@ interface AgentCfg {
   tools?:          string[];
   allowed_agents?: string[];
   mcp_servers?:    string[];
+  execution_modes?: {
+    default?: "safe" | "elevated" | "root";
+    safe?: { permissions?: string[] };
+    elevated?: { permissions?: string[] };
+    root?: { permissions?: string[] };
+  };
   soul?:           string;
 }
 interface AgentInfo { agent_id: string; config: AgentCfg; }
@@ -60,6 +66,16 @@ function resolveSearchUiUrl(url: string) {
     return url;
   }
   return url;
+}
+
+function modeSummary(cfg?: AgentCfg["execution_modes"]) {
+  const defaultMode = cfg?.default ?? "safe";
+  const counts = {
+    safe: cfg?.safe?.permissions?.length ?? 0,
+    elevated: cfg?.elevated?.permissions?.length ?? 0,
+    root: cfg?.root?.permissions?.length ?? 0,
+  };
+  return { defaultMode, counts };
 }
 
 const KNOWN_MODELS = [
@@ -247,6 +263,7 @@ export function MyAgentPage() {
 
   const identity = agentInfo?.config?.identity ?? "Mein Agent";
   const model    = agentInfo?.config?.llm?.model ?? "";
+  const exec     = modeSummary(agentInfo?.config?.execution_modes);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -305,6 +322,9 @@ export function MyAgentPage() {
                   <div className="flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 font-medium text-foreground">
                       {agentInfo?.config?.llm?.model ?? "Kein Modell"}
+                    </span>
+                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
+                      Modus: {exec.defaultMode}
                     </span>
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
                       {sending ? "Streaming aktiv" : "Bereit"}
@@ -502,6 +522,30 @@ export function MyAgentPage() {
                       <span>{sending ? "Antwort wird gestreamt" : "Agent ist bereit"}</span>
                     </div>
                     {activeTool && <div className="mt-2 text-xs text-muted-foreground">Aktives Tool: <code className="font-mono text-foreground">{activeTool.name}</code></div>}
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      <Shield className="h-3.5 w-3.5" />
+                      Execution Modes
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">Default: {exec.defaultMode}</span>
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>safe</span>
+                        <span className="font-medium text-foreground">{exec.counts.safe} Permissions</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>elevated</span>
+                        <span className="font-medium text-foreground">{exec.counts.elevated} Permissions</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span>root</span>
+                        <span className="font-medium text-foreground">{exec.counts.root} Permissions</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
