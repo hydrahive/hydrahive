@@ -293,7 +293,7 @@ npm run dev   # Vite Dev-Server auf Port 5173</code></pre>
     <pre><code>// vite.config.ts
 export default defineConfig({
   plugins: [react()],
-  server: { proxy: { "/api": "http://192.168.178.181" } }
+  server: { proxy: { "/api": "http://192.168.1.100" } }
 })</code></pre>
 
     <h3>Core — lokale Entwicklung</h3>
@@ -557,25 +557,25 @@ install_my_component</code></pre>
 
     <h3>Core — schnelles Deployment (einzelne Datei)</h3>
     <pre><code># Einzelne Datei auf die VM kopieren und Service neu starten
-scp core/src/octopos_core/main.py octopos@192.168.178.181:/tmp/main.py
-ssh octopos@192.168.178.181 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"</code></pre>
+scp core/src/octopos_core/main.py octopos@192.168.1.100:/tmp/main.py
+ssh octopos@192.168.1.100 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"</code></pre>
 
     <h3>Core — vollständiges Verzeichnis</h3>
-    <pre><code>scp -r core/src/octopos_core octopos@192.168.178.181:/tmp/octopos_core
-ssh octopos@192.168.178.181 "sudo cp -r /tmp/octopos_core /opt/octopos/core/src/ && sudo systemctl restart octopos-core"</code></pre>
+    <pre><code>scp -r core/src/octopos_core octopos@192.168.1.100:/tmp/octopos_core
+ssh octopos@192.168.1.100 "sudo cp -r /tmp/octopos_core /opt/octopos/core/src/ && sudo systemctl restart octopos-core"</code></pre>
 
     <h3>Console — Deploy</h3>
     <pre><code># Build erstellen
 cd console && npm run build
 
 # Dist auf die VM kopieren
-scp -r dist/ octopos@192.168.178.181:/tmp/console_dist/
+scp -r dist/ octopos@192.168.1.100:/tmp/console_dist/
 
 # Auf der VM installieren
-ssh octopos@192.168.178.181 "sudo cp -r /tmp/console_dist/. /var/www/octopos/"</code></pre>
+ssh octopos@192.168.1.100 "sudo cp -r /tmp/console_dist/. /var/www/octopos/"</code></pre>
 
     <h3>Status prüfen</h3>
-    <pre><code>ssh octopos@192.168.178.181 \
+    <pre><code>ssh octopos@192.168.1.100 \
   "systemctl is-active octopos-core && journalctl -u octopos-core -n 20 --no-pager"</code></pre>
 
     <h3>Git-Workflow</h3>

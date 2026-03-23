@@ -536,7 +536,7 @@ Persönliche Agenten können via SSH auf die eigene Workstation des Users zugrei
 ### Einrichten
 
 1. **Mein Agent → WKS-Tab** öffnen
-2. **IP-Adresse** der Workstation eintragen (z.B. `192.168.178.197`)
+2. **IP-Adresse** der Workstation eintragen (z.B. `192.168.1.101`)
 3. **SSH-Benutzer** eintragen (z.B. `till`)
 4. **SSH Private Key** (PEM) einfügen
 5. **Ollama-Port** (Standard: `11434`)
@@ -595,7 +595,7 @@ Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits er
 
 ```json
 {
-  "url": "http://192.168.178.181:3001",
+  "url": "http://192.168.1.100:3001",
   "token": "dein-gitea-token",
   "org": "octopos"
 }

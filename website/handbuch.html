@@ -679,7 +679,7 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
     <h3>WKS einrichten</h3>
     <ol class="steps">
       <li><span class="step-num">1</span><span><strong>Mein Agent → WKS</strong> öffnen</span></li>
-      <li><span class="step-num">2</span><span>IP-Adresse der Workstation eintragen (z.B. <code>192.168.178.197</code>)</span></li>
+      <li><span class="step-num">2</span><span>IP-Adresse der Workstation eintragen (z.B. <code>192.168.1.101</code>)</span></li>
       <li><span class="step-num">3</span><span>SSH-Benutzer eintragen (z.B. <code>till</code>)</span></li>
       <li><span class="step-num">4</span><span>SSH Private Key (PEM) einfügen</span></li>
       <li><span class="step-num">5</span><span>Ollama-Port eintragen (Standard: <code>11434</code>) → Speichern</span></li>
@@ -718,7 +718,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
     <h3>Gitea konfigurieren</h3>
     <p>Unter <strong>LLM-Config → Gitea</strong> oder direkt in <code>/etc/octopos/gitea_config.json</code>:</p>
     <pre><code>{
-  "url": "http://192.168.178.181:3001",
+  "url": "http://192.168.1.100:3001",
   "token": "dein-gitea-token",
   "org": "octopos"
 }</code></pre>

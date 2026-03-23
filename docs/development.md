@@ -43,7 +43,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": "http://192.168.178.181"
+      "/api": "http://192.168.1.100"
     }
   }
 })
@@ -410,15 +410,15 @@ source "${MODULES_DIR}/10_my_module.sh"
 
 ```bash
 # Einzelne Datei
-scp core/src/octopos_core/main.py octopos@192.168.178.181:/tmp/main.py
-ssh octopos@192.168.178.181 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"
+scp core/src/octopos_core/main.py octopos@192.168.1.100:/tmp/main.py
+ssh octopos@192.168.1.100 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"
 
 # Ganzes Core-Verzeichnis
-ssh octopos@192.168.178.181 "sudo cp -r /tmp/core_src/. /opt/octopos/core/src/octopos_core/"
+ssh octopos@192.168.1.100 "sudo cp -r /tmp/core_src/. /opt/octopos/core/src/octopos_core/"
 
 # Router-Module oder A-MEM-Installer aktualisieren
-scp core/src/octopos_core/router_*.py octopos@192.168.178.181:/tmp/
-scp -r installer/amem/ octopos@192.168.178.181:/tmp/amem/
+scp core/src/octopos_core/router_*.py octopos@192.168.1.100:/tmp/
+scp -r installer/amem/ octopos@192.168.1.100:/tmp/amem/
 ```
 
 ### Console deployen
@@ -426,14 +426,14 @@ scp -r installer/amem/ octopos@192.168.178.181:/tmp/amem/
 ```bash
 cd console
 npm run build                                                    # dist/ bauen
-scp -r dist/* octopos@192.168.178.181:/tmp/console_dist/         # übertragen
-ssh octopos@192.168.178.181 "sudo cp -r /tmp/console_dist/. /opt/octopos/console/"
+scp -r dist/* octopos@192.168.1.100:/tmp/console_dist/         # übertragen
+ssh octopos@192.168.1.100 "sudo cp -r /tmp/console_dist/. /opt/octopos/console/"
 ```
 
 ### Core-Status prüfen
 
 ```bash
-ssh octopos@192.168.178.181 "sudo systemctl is-active octopos-core && sudo journalctl -u octopos-core -n 20 --no-pager"
+ssh octopos@192.168.1.100 "sudo systemctl is-active octopos-core && sudo journalctl -u octopos-core -n 20 --no-pager"
 ```
 
 ### Git-Workflow
