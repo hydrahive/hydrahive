@@ -34,6 +34,25 @@ logger = logging.getLogger(__name__)
 
 # drop_params per-call via kwargs, nicht global (verhindert cross-module side effects)
 
+def _truncate_tool_result(result_str: str) -> str:
+    """
+    Kürzt Tool-Ergebnisse typ-abhängig — spart Input-Tokens ohne nützliche Struktur zu verlieren.
+    Diffs/Patches bekommen mehr Platz als reine Logs oder JSON-Blobs.
+    """
+    low = result_str.lstrip()
+    # Diffs/Patches: Zeilenstruktur ist wichtig → großzügiger
+    if low.startswith(("diff --git", "---", "@@")) or "\n@@" in result_str[:200]:
+        limit = 6000
+    # Repo-Tree (typischerweise JSON-Array mit Pfaden)
+    elif low.startswith("[") and '"path"' in result_str[:300]:
+        limit = 3000
+    # JSON-Blobs und Log-Ausgaben → knapper
+    else:
+        limit = 4000
+    if len(result_str) > limit:
+        return result_str[:limit] + f"\n...[gekürzt bei {limit} Zeichen]"
+    return result_str
+
 
 @dataclass
 class DispatchResult:
@@ -348,7 +367,13 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._sessions.get_context(project_id, max_messages=40))
+        messages.extend(self._sessions.get_context(project_id, max_messages=20))
+        logger.debug(
+            "token-budget [sync] proj=%s sys≈%d hist≈%d",
+            project_id,
+            len(system_prompt) // 4,
+            sum(len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4 for m in messages[1:]),
+        )
 
         # 5. Verfügbare Tools für Boss ermitteln
         boss_tools = self._allowed_tools(boss_cfg, execution_mode)
@@ -384,8 +409,8 @@ class Orchestrator:
         self,
         project_id: str,
         boss_cfg: AgentConfig,
-        token_threshold: int = 6000,
-        keep_last: int = 10,
+        token_threshold: int = 4000,
+        keep_last: int = 8,
     ) -> None:
         """
         Context-Kompaktierung (#74): wenn Session zu gross wird, aelteren Kontext
@@ -418,7 +443,7 @@ class Orchestrator:
             resp = await _llm_with_retry(lambda: litellm.acompletion(
                 model=boss_cfg.llm.model,
                 messages=summary_prompt,
-                max_tokens=600,
+                max_tokens=400,
                 drop_params=True,
             ))
             summary = resp.choices[0].message.content or ""
@@ -956,8 +981,14 @@ class Orchestrator:
         self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
         user_msg_saved = True
         system_prompt = self._build_system_prompt(boss_cfg, content)
-        history       = self._sessions.get_context(project_id, max_messages=20)
+        history       = self._sessions.get_context(project_id, max_messages=12)
         messages      = [{"role": "system", "content": system_prompt}] + history
+        logger.debug(
+            "token-budget [stream] proj=%s sys≈%d hist≈%d",
+            project_id,
+            len(system_prompt) // 4,
+            sum(len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4 for m in history),
+        )
 
         # Tool-Schema
         boss_tools    = self._allowed_tools(boss_cfg, execution_mode)
@@ -1027,9 +1058,7 @@ class Orchestrator:
                                         )
                                     except Exception as te:
                                         result = {"error": str(te)}
-                                    result_str = _json.dumps(result, ensure_ascii=False)
-                                    if len(result_str) > 8000:
-                                        result_str = result_str[:8000] + "\n...[gekürzt]"
+                                    result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
                                     tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
                                 cur_messages.extend(tool_results)
                                 next_resp = await self._openai_codex_call(
@@ -1171,9 +1200,7 @@ class Orchestrator:
                                         result = {"error": str(te)}
                                 else:
                                     result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
-                                result_str = _json.dumps(result, ensure_ascii=False)
-                                if len(result_str) > 8000:
-                                    result_str = result_str[:8000] + "\n...[gekürzt, zu groß]"
+                                result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
                                 tool_results.append({
                                     "type":        "tool_result",
                                     "tool_use_id": block.id,
@@ -1472,10 +1499,7 @@ class Orchestrator:
                         tool_name=tc.function.name,
                         tool_input=args,
                     )
-                    result_str = json.dumps(result, ensure_ascii=False)
-                    if len(result_str) > 8000:
-                        result_str = result_str[:8000] + "\n...[gekürzt, zu groß]"
-                    tool_results[tc.id] = result_str
+                    tool_results[tc.id] = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
                 except Exception as e:
                     logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
                     tool_results[tc.id] = f"[Fehler] {e}"
