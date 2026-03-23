@@ -66,11 +66,13 @@ class DiscordAgentClient(ABC):
         bot_token:   str,
         guild_id:    str,
         channel_ids: list[str],
+        ignore_bots: bool = True,
     ) -> None:
         self.agent_id    = agent_id
         self.bot_token   = bot_token
         self.guild_id    = guild_id
         self.channel_ids = set(channel_ids)
+        self.ignore_bots = ignore_bots
         self._client     = None
         self._running    = False
 
@@ -93,6 +95,9 @@ class DiscordAgentClient(ABC):
         async def on_message(message):
             # Eigene Nachrichten ignorieren
             if message.author == self._client.user:
+                return
+            # Bots ignorieren wenn konfiguriert
+            if self.ignore_bots and message.author.bot:
                 return
             # Nur in konfigurierten Channels
             if self.channel_ids and str(message.channel.id) not in self.channel_ids:

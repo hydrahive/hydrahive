@@ -131,6 +131,7 @@ export const api = {
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
   testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
   getDiscord:         () => api.get<DiscordConfig>("/me/discord"),
+  getDiscordChannels: () => api.get<{channels:{id:string;name:string}[]}>("/me/discord/channels"),
   updateDiscord:      (d: DiscordConfigPayload) => api.put<{updated:boolean;bot_name:string;bot_id:string}>("/me/discord", d),
   deleteDiscord:      () => api.delete<{deleted:boolean}>("/me/discord"),
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
@@ -221,16 +222,18 @@ export interface WksConfigPayload {
 }
 
 export interface DiscordConfig {
-  configured:  boolean;
-  guild_id?:   string;
+  configured:   boolean;
+  guild_id?:    string;
   channel_ids?: string[];
-  connected?:  boolean;
+  ignore_bots?: boolean;
+  connected?:   boolean;
 }
 
 export interface DiscordConfigPayload {
   bot_token:   string;
   guild_id:    string;
   channel_ids: string[];
+  ignore_bots: boolean;
 }
 
 export interface PlatformOverviewEntry {

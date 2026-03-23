@@ -19,9 +19,10 @@ class WksConfigRequest(BaseModel):
 
 
 class DiscordConfigRequest(BaseModel):
-    bot_token: str
+    bot_token: str = ""          # leer = bestehenden Token behalten
     guild_id: str = ""
     channel_ids: list[str] = []
+    ignore_bots: bool = True     # Nachrichten von anderen Bots ignorieren
 
 
 SUPPORTED_PLATFORMS = {
@@ -174,6 +175,7 @@ async def setup_discord_clients(*, load_users, runtime, orchestrator, logger) ->
             bot_token=cfg["bot_token"],
             guild_id=cfg.get("guild_id", ""),
             channel_ids=cfg.get("channel_ids", []),
+            ignore_bots=cfg.get("ignore_bots", True),
             orchestrator=orchestrator,
         )
         _discord_clients[username] = client
@@ -376,19 +378,61 @@ def register_user_integration_routes(
             "configured": True,
             "guild_id": cfg.get("guild_id", ""),
             "channel_ids": cfg.get("channel_ids", []),
+            "ignore_bots": cfg.get("ignore_bots", True),
             "connected": discord_client_connected(username),
         }
+
+    @auth_router.get("/me/discord/channels")
+    async def get_my_discord_channels(auth: tuple = Depends(require_auth)):
+        """Channels der konfigurierten Guild per Discord REST API abrufen."""
+        import httpx
+        username, _ = auth
+        from .discord_agent import load_discord_config
+
+        cfg = load_discord_config(username)
+        if not cfg:
+            raise HTTPException(400, "Discord nicht konfiguriert")
+        token = cfg.get("bot_token", "")
+        guild_id = cfg.get("guild_id", "")
+        if not guild_id:
+            raise HTTPException(400, "Keine Guild-ID konfiguriert")
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    f"https://discord.com/api/v10/guilds/{guild_id}/channels",
+                    headers={"Authorization": f"Bot {token}"},
+                )
+            if r.status_code != 200:
+                raise HTTPException(400, f"Discord API Fehler: {r.status_code}")
+            channels = [
+                {"id": ch["id"], "name": ch["name"]}
+                for ch in r.json()
+                if ch.get("type") == 0   # 0 = GUILD_TEXT
+            ]
+            channels.sort(key=lambda c: c["name"])
+            return {"channels": channels}
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"Discord-Fehler: {e}")
 
     @auth_router.put("/me/discord", status_code=200)
     async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
         username, _ = auth
-        from .discord_agent import AgentDiscordClient, delete_discord_config, save_discord_config
+        from .discord_agent import AgentDiscordClient, delete_discord_config, load_discord_config, save_discord_config
         from .tool_registry import _discord_clients
 
+        # Token: neu wenn angegeben, sonst bestehenden behalten
+        existing = load_discord_config(username) or {}
+        token = req.bot_token.strip() or existing.get("bot_token", "")
+        if not token:
+            raise HTTPException(400, "Kein Bot-Token angegeben und kein bestehender Token vorhanden")
+
         cfg = {
-            "bot_token": req.bot_token.strip(),
+            "bot_token": token,
             "guild_id": req.guild_id.strip(),
             "channel_ids": [c.strip() for c in req.channel_ids if c.strip()],
+            "ignore_bots": req.ignore_bots,
         }
         save_discord_config(username, cfg)
         personal_agent_id = f"personal_{username}"
@@ -398,6 +442,7 @@ def register_user_integration_routes(
             bot_token=cfg["bot_token"],
             guild_id=cfg["guild_id"],
             channel_ids=cfg["channel_ids"],
+            ignore_bots=cfg.get("ignore_bots", True),
             orchestrator=orchestrator,
         )
         test_result = await test_client.test_connection()
@@ -411,6 +456,7 @@ def register_user_integration_routes(
             bot_token=cfg["bot_token"],
             guild_id=cfg["guild_id"],
             channel_ids=cfg["channel_ids"],
+            ignore_bots=cfg.get("ignore_bots", True),
             orchestrator=orchestrator,
         )
         _discord_clients[username] = client
