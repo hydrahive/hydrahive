@@ -39,7 +39,7 @@ export default function GiteaConfigPage() {
     }
   }
 
-  const externalUrl = config.url.replace("127.0.0.1", "YOUR-VM-IP").replace(":3001", ":3002");
+  const externalUrl = config.url.replace("127.0.0.1", window.location.hostname).replace(":3001", ":3002");
 
   return (
     <div className="p-6">
@@ -136,7 +136,7 @@ export default function GiteaConfigPage() {
                     <p className="text-xs text-gray-500 mt-0.5">Branch: {r.default_branch}</p>
                   </div>
                   <a
-                    href={r.html_url.replace("127.0.0.1:3001", "YOUR-VM-IP:3002")}
+                    href={r.html_url.replace("127.0.0.1:3001", `${window.location.hostname}:3002`)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 hover:text-blue-300"

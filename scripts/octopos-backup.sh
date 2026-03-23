@@ -6,8 +6,11 @@
 
 set -e
 
-VM="hydrahive@YOUR-VM-IP"
-SSH_KEY="$HOME/.ssh/your-ssh-key"
+# Konfiguration: scripts/octopos.conf anlegen um Defaults zu überschreiben
+CONF="$(dirname "$0")/octopos.conf"
+VM="octopos@192.168.1.100"
+SSH_KEY="$HOME/.ssh/id_rsa"
+[ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"
 BACKUP_BASE="$HOME/octopos-backups"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")

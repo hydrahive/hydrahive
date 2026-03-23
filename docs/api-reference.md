@@ -240,7 +240,7 @@ Logs eines Agenten aus journalctl.
 {
   "agent_id": "boss-main",
   "lines": [
-    "2026-03-20T11:23:45+0100 your-hostname octopos-core[123]: INFO orchestrator: ..."
+    "2026-03-20T11:23:45+0100 octopos octopos-core[123]: INFO orchestrator: ..."
   ],
   "count": 42,
   "source": "journalctl -u octopos-core"
@@ -659,7 +659,7 @@ Eigenen persönlichen Agenten konfigurieren.
   "max_tokens": 4096,
   "fallback_models": ["ollama/llama3.1:8b"],
   "tools": ["file_read", "web_search", "wks_shell_exec"],
-  "ollama_base_url": "http://192.168.1.197:11434"
+  "ollama_base_url": "http://192.168.1.101:11434"
 }
 ```
 
@@ -774,7 +774,7 @@ WKS-Konfiguration des eingeloggten Users abrufen.
 ```json
 {
   "configured": true,
-  "ip": "192.168.1.197",
+  "ip": "192.168.1.101",
   "ssh_user": "till",
   "ollama_port": 11434,
   "has_ssh_key": true
@@ -790,7 +790,7 @@ WKS-Konfiguration speichern.
 **Body:**
 ```json
 {
-  "ip": "192.168.1.197",
+  "ip": "192.168.1.101",
   "ssh_user": "till",
   "ollama_port": 11434,
   "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n..."
@@ -811,7 +811,7 @@ Verfügbare Ollama-Modelle auf der WKS abfragen.
   "models": [
     { "id": "ollama/llama3.1:8b", "label": "WKS: llama3.1:8b", "provider": "wks" }
   ],
-  "wks_url": "http://192.168.1.197:11434",
+  "wks_url": "http://192.168.1.101:11434",
   "error": null
 }
 ```
@@ -948,7 +948,7 @@ Alle verfügbaren Modelle abrufen (Server-Ollama + konfigurierte Cloud-Provider 
   "models": [
     { "id": "ollama/llama3.1:8b", "label": "llama3.1:8b", "provider": "ollama" },
     { "id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6", "provider": "anthropic" },
-    { "id": "ollama/qwen2.5:7b", "label": "WKS: qwen2.5:7b", "provider": "wks", "wks_base_url": "http://192.168.1.197:11434" }
+    { "id": "ollama/qwen2.5:7b", "label": "WKS: qwen2.5:7b", "provider": "wks", "wks_base_url": "http://192.168.1.101:11434" }
   ]
 }
 ```
@@ -1016,7 +1016,7 @@ Gitea-Konfiguration abrufen (Token maskiert).
 **Response 200:**
 ```json
 {
-  "url": "http://YOUR-VM-IP:3001",
+  "url": "http://192.168.1.100:3001",
   "token": "***",
   "org": "octopos",
   "webhook_secret": "***"
@@ -1032,7 +1032,7 @@ Gitea-Konfiguration speichern.
 **Body:**
 ```json
 {
-  "url": "http://YOUR-VM-IP:3001",
+  "url": "http://192.168.1.100:3001",
   "token": "gitea-token-abc",
   "org": "octopos",
   "webhook_secret": "optional-secret"
@@ -1052,7 +1052,7 @@ Alle Gitea-Repos der konfigurierten Organisation auflisten.
     {
       "name": "octopos",
       "description": "AI Agent Server",
-      "html_url": "http://YOUR-VM-IP:3001/octopos/octopos",
+      "html_url": "http://192.168.1.100:3001/octopos/octopos",
       "default_branch": "main",
       "updated": "2026-03-20T12:00:00Z"
     }

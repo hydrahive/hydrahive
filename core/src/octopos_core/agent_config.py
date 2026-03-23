@@ -23,7 +23,7 @@ class LlmConfig(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     fallback_models: list[str] = Field(default_factory=list)
-    ollama_base_url: str | None = None   # WKS-Ollama: z.B. "http://192.168.1.197:11434"
+    ollama_base_url: str | None = None   # WKS-Ollama: z.B. "http://192.168.1.101:11434"
 
 
 class HeartbeatRaw(BaseModel):

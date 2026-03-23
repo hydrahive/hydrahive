@@ -1,0 +1,5 @@
+# octopos.conf — Lokale Deploy-Konfiguration
+# Kopieren nach octopos.conf und anpassen (wird nicht eingecheckt)
+
+VM="octopos@192.168.1.10"       # IP/Hostname der OctopOS VM
+SSH_KEY="$HOME/.ssh/id_rsa"       # SSH-Key für Verbindung zur VM

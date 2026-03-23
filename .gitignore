@@ -30,3 +30,6 @@ Thumbs.db
 /agents/
 /projects/
 *.log
+
+# Lokale Deploy-Konfiguration (enthält IP + SSH-Key-Pfad)
+scripts/octopos.conf

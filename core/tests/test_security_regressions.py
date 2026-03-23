@@ -525,7 +525,7 @@ class SecurityRegressionTests(unittest.TestCase):
             with mock.patch.dict("os.environ", {}, clear=False):
                 self.assertEqual(
                     main._read_server_name(str(toml_path), str(config_path)),
-                    "your-hostname",
+                    "octopos",
                 )
 
     def test_personal_agent_update_persists_empty_lists(self):
@@ -974,7 +974,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_resolve_repo_ref_accepts_url_and_short_forms(self):
         self.assertEqual(
-            resolve_repo_ref("http://YOUR-VM-IP:3002/octopos/octopos"),
+            resolve_repo_ref("http://192.168.1.100:3002/octopos/octopos"),
             ("octopos", "octopos"),
         )
         self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))

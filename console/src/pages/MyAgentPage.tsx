@@ -1248,7 +1248,7 @@ function WksTab() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">IP-Adresse</label>
-              <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.10"
+              <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.100"
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="space-y-1">

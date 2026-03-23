@@ -167,7 +167,7 @@ async def lifespan(app: FastAPI):
         logger.info("Matrix Admin-Token geladen (server: %s)", server_name)
     except Exception as e:
         logger.warning("Matrix Admin-Token konnte nicht geladen werden: %s", e)
-        provisioner = Provisioner("", "your-hostname")
+        provisioner = Provisioner("", "octopos")
 
     # Matrix-Clients für Boss-Agenten mit konfigurierten Rooms starten
     server_name = _read_server_name()
@@ -265,7 +265,7 @@ def _read_server_name(
     except OSError as e:
         logger.warning("conduwuit server_name konnte nicht gelesen werden: %s", e)
 
-    fallback = "your-hostname"
+    fallback = "octopos"
     logger.warning(
         "Matrix server_name nicht konfiguriert, verwende Fallback '%s'. "
         "Setze OCTOPOS_MATRIX_SERVER_NAME oder /etc/octopos/matrix_server_name fuer nicht-default Installationen.",
