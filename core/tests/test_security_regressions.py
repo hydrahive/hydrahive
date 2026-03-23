@@ -10,6 +10,7 @@ import asyncio
 
 import yaml
 import aiohttp
+from fastapi.testclient import TestClient
 
 from octopos_core import main
 from octopos_core.agent_config import AgentConfig
@@ -76,6 +77,60 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertNotIn("require_admin", self._dependency_names("/setup/status", "GET"))
         self.assertNotIn("require_auth", self._dependency_names("/webhooks/gitea/{project_id}", "POST"))
         self.assertNotIn("require_admin", self._dependency_names("/webhooks/gitea/{project_id}", "POST"))
+
+    def test_auth_login_end_to_end_roundtrip(self):
+        original_users_file = main.USERS_FILE
+        original_jwt_secret = main.JWT_SECRET
+        with tempfile.TemporaryDirectory() as tmpdir:
+            users_path = Path(tmpdir) / "users.json"
+            users_path.write_text(
+                json.dumps(
+                    {
+                        "alice": {
+                            "password_hash": main._hash_password("sicheres-passwort"),
+                            "role": "admin",
+                            "matrix_id": "@alice:matrix.local",
+                            "matrix_ok": True,
+                            "created_at": "2026-03-23T10:00:00",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            main.USERS_FILE = users_path
+            main.JWT_SECRET = "test-secret-for-login-e2e"
+
+            with mock.patch.object(main.discovery, "start", return_value=None), \
+                mock.patch.object(main.projects, "start", return_value=None), \
+                mock.patch.object(main.sessions, "start", return_value=None), \
+                mock.patch.object(main.agent_sessions, "start", return_value=None), \
+                mock.patch.object(main.runtime, "start", return_value=None), \
+                mock.patch.object(main.runtime, "stop", return_value=None), \
+                mock.patch.object(main.discovery, "stop", return_value=None), \
+                mock.patch.object(main.projects, "stop", return_value=None), \
+                mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
+                mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-login-e2e"), \
+                mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
+                mock.patch("octopos_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
+                mock.patch.object(main, "setup_discord_clients", return_value=None):
+                with TestClient(main.app) as client:
+                    login = client.post(
+                        "/auth/login",
+                        json={"username": "alice", "password": "sicheres-passwort"},
+                    )
+                    self.assertEqual(login.status_code, 200)
+                    token = login.json()["access_token"]
+                    self.assertTrue(token)
+                    whoami = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+                    self.assertEqual(whoami.status_code, 200)
+                    self.assertEqual(whoami.json()["username"], "alice")
+                    self.assertEqual(whoami.json()["role"], "admin")
+                    missing = client.get("/auth/me")
+                    self.assertEqual(missing.status_code, 401)
+
+        main.USERS_FILE = original_users_file
+        main.JWT_SECRET = original_jwt_secret
 
     def test_localhost_internal_route_keeps_local_bypass(self):
         deps = self._dependency_names("/agents/{agent_id}/message", "POST")
