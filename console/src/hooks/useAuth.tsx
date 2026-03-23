@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 interface AuthUser { username: string; token: string; role: string; }
 interface AuthCtx  {
@@ -45,6 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("octopos_user");
     localStorage.removeItem("octopos_role");
   }
+
+  useEffect(() => {
+    const onAuthExpired = () => logout();
+    window.addEventListener("octopos-auth-expired", onAuthExpired);
+    return () => window.removeEventListener("octopos-auth-expired", onAuthExpired);
+  }, []);
 
   return (
     <Ctx.Provider value={{
