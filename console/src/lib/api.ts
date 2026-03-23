@@ -27,9 +27,22 @@ export interface GpuInfo {
 
 const BASE = "/api";
 function getToken() { return localStorage.getItem("octopos_token") || ""; }
+
+function notifyAuthExpired(path: string) {
+  if (typeof window === "undefined") return;
+  if (!getToken()) return;
+  window.dispatchEvent(new CustomEvent("octopos-auth-expired", {
+    detail: { path },
+  }));
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}`, ...(options.headers||{}) } });
-  if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail||`HTTP ${res.status}`); }
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({detail:res.statusText}));
+    if (res.status === 401) notifyAuthExpired(path);
+    throw new Error(e.detail||`HTTP ${res.status}`);
+  }
   return res.json();
 }
 export const api = {

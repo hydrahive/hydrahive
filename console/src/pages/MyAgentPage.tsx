@@ -104,6 +104,7 @@ export function MyAgentPage() {
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
   const [chatError,  setChatError]  = useState("");
+  const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
   const [showSuggest,setShowSuggest]= useState(false);
   const [suggestIdx, setSuggestIdx] = useState(0);
@@ -135,13 +136,17 @@ export function MyAgentPage() {
 
   // ── Daten laden ──────────────────────────────────────────────────────────
   async function loadAgent() {
+    setLoadError("");
     try {
       const d = await api.get<AgentInfo>("/me/agent");
       // Soul nachladen
       const soul = await api.get<{soul:string;exists:boolean}>(`/agents/${d.agent_id}/soul`)
         .catch(() => ({ soul: "", exists: false }));
       setAgentInfo({ ...d, config: { ...d.config, soul: soul.soul } });
-    } catch { /* ignore */ }
+    } catch (e) {
+      setAgentInfo(null);
+      setLoadError(e instanceof Error ? e.message : "Fehler beim Laden des Agenten");
+    }
   }
 
   useEffect(() => {
@@ -306,6 +311,13 @@ export function MyAgentPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_22rem]">
             <section className="space-y-4">
+              {loadError && (
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  {loadError.includes("Token")
+                    ? "Deine Sitzung ist abgelaufen oder ungültig. Bitte neu anmelden."
+                    : loadError}
+                </div>
+              )}
               <div className="rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-2">
@@ -599,6 +611,16 @@ export function MyAgentPage() {
           onSaved={loadAgent}
         />
       )}
+      {tab === "settings" && !agentInfo && (
+        <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
+          <div className="max-w-md space-y-3">
+            <p className="text-sm font-medium text-foreground">Agenten-Konfiguration nicht geladen</p>
+            <p className="text-xs">
+              Wenn dein Token abgelaufen ist, melde dich neu an. Falls das Problem bleibt, ist die Agenten-Konfiguration auf dem Server nicht verfügbar.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Skills Tab ────────────────────────────────────────────────────── */}
       {tab === "skills" && agentInfo && (
@@ -606,10 +628,26 @@ export function MyAgentPage() {
           <SkillsPanel agentId={agentInfo.agent_id} />
         </div>
       )}
+      {tab === "skills" && !agentInfo && (
+        <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
+          <div className="max-w-md space-y-3">
+            <p className="text-sm font-medium text-foreground">Skills nicht geladen</p>
+            <p className="text-xs">Die Agentendaten fehlen oder die Sitzung ist nicht mehr gültig.</p>
+          </div>
+        </div>
+      )}
 
       {/* ── MCP Tab ───────────────────────────────────────────────────────── */}
       {tab === "mcp" && agentInfo && (
         <McpTab agentInfo={agentInfo} mcpServers={mcpServers} onSaved={loadAgent} />
+      )}
+      {tab === "mcp" && !agentInfo && (
+        <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
+          <div className="max-w-md space-y-3">
+            <p className="text-sm font-medium text-foreground">MCP-Konfiguration nicht geladen</p>
+            <p className="text-xs">Ohne gültige Sitzung kann die persönliche MCP-Liste nicht angezeigt werden.</p>
+          </div>
+        </div>
       )}
 
       {/* ── Platforms Tab ───────────────────────────────────────────────── */}
