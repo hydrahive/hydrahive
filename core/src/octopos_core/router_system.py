@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .router_core_misc import collect_core_journal_report
+
 
 class NetworkProfileRequest(BaseModel):
     profile: str
@@ -39,8 +41,28 @@ def register_system_routes(
     network_profile_script: str,
     run_self_update,
     gitea_config_file: str,
+    app_version: str,
     logger: logging.Logger,
 ) -> None:
+    def _load_update_status(status_file: str = "/var/run/octopos-update.json") -> dict:
+        p = Path(status_file)
+        if p.exists():
+            try:
+                status = json.loads(p.read_text())
+            except Exception:
+                status = {"status": "unknown"}
+        else:
+            status = {"status": "never"}
+        if status.get("status") == "running" and status.get("started_at"):
+            try:
+                started = datetime.fromisoformat(status["started_at"])
+                if datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc) > timedelta(minutes=10):
+                    status["status"] = "ok"
+                    status["stale"] = True
+            except Exception:
+                pass
+        return status
+
     @admin_router.get("/admin/network/profile")
     def get_network_profile_status():
         return network_profile_status()
@@ -144,31 +166,30 @@ def register_system_routes(
 
     @admin_router.get("/admin/update/status")
     def get_update_status():
-        status_file = "/var/run/octopos-update.json"
         log_file = "/var/log/octopos-update.log"
-        p = Path(status_file)
-        status = {}
-        if p.exists():
-            try:
-                status = json.loads(p.read_text())
-            except Exception:
-                status = {"status": "unknown"}
-        else:
-            status = {"status": "never"}
-        if status.get("status") == "running" and status.get("started_at"):
-            try:
-                started = datetime.fromisoformat(status["started_at"])
-                if datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc) > timedelta(minutes=10):
-                    status["status"] = "ok"
-                    status["stale"] = True
-            except Exception:
-                pass
+        status = _load_update_status()
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()
             status["log_tail"] = lines[-20:]
         except Exception:
             status["log_tail"] = []
         return status
+
+    @admin_router.get("/admin/runtime/status")
+    def get_runtime_status():
+        update_status = _load_update_status()
+        journal_report = collect_core_journal_report(lines=200)
+        return {
+            "service": {
+                "name": "octopos-core",
+                "version": app_version,
+            },
+            "deployment": update_status,
+            "runtime": runtime.status_all(),
+            "audit": {
+                "core_journal": journal_report["summary"],
+            },
+        }
 
     @admin_router.post("/admin/update/trigger")
     async def trigger_update():

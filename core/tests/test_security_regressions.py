@@ -21,6 +21,7 @@ from octopos_core.project_config import load_project_config
 from octopos_core.rate_limiter import RateLimitSettings, RateLimiter
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
 from octopos_core import router_user_integrations as user_integrations
+from octopos_core.router_core_misc import summarize_core_journal_lines
 from octopos_core.router_users import (
     MyAgentUpdateRequest,
     build_personal_agent_data,
@@ -62,6 +63,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn("require_auth", self._dependency_names("/mcp/servers", "GET"))
         self.assertIn("require_admin", self._dependency_names("/audit/logs", "GET"))
         self.assertIn("require_admin", self._dependency_names("/admin/update/status", "GET"))
+        self.assertIn("require_admin", self._dependency_names("/admin/runtime/status", "GET"))
         self.assertIn("require_admin", self._dependency_names("/admin/update/trigger", "POST"))
         self.assertIn("require_admin", self._dependency_names("/gitea/config", "GET"))
         self.assertIn("require_admin", self._dependency_names("/gitea/config", "PUT"))
@@ -262,12 +264,36 @@ class SecurityRegressionTests(unittest.TestCase):
             ("/agents/{agent_id}", "GET"),
             ("/agents/{agent_id}/llm", "PATCH"),
             ("/logs/core", "GET"),
+            ("/logs/core/summary", "GET"),
             ("/audit/logs", "GET"),
             ("/tools", "GET"),
         ):
             route = self._route(path, method)
             endpoint = getattr(route, "endpoint", None)
             self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_core_misc")
+
+    def test_system_routes_are_registered_from_router_system(self):
+        route = self._route("/admin/runtime/status", "GET")
+        endpoint = getattr(route, "endpoint", None)
+        self.assertEqual(getattr(endpoint, "__module__", None), "octopos_core.router_system")
+
+    def test_core_journal_summary_extracts_counts_and_signatures(self):
+        report = summarize_core_journal_lines(
+            [
+                "2026-03-23 01:00:00 host octopos-core[123]: INFO startup complete",
+                "2026-03-23 01:01:00 host octopos-core[123]: WARN retrying connection",
+                "2026-03-23 01:02:00 host octopos-core[123]: ERROR retrying connection",
+                "2026-03-23 01:03:00 host octopos-core[123]: ERROR retrying connection",
+            ]
+        )
+        self.assertEqual(report["available"], True)
+        self.assertEqual(report["count"], 4)
+        self.assertEqual(report["warn_count"], 1)
+        self.assertEqual(report["error_count"], 2)
+        self.assertEqual(report["first_timestamp"], "2026-03-23 01:00:00")
+        self.assertEqual(report["last_timestamp"], "2026-03-23 01:03:00")
+        self.assertEqual(report["top_signatures"][0]["signature"], "retrying connection")
+        self.assertEqual(report["top_signatures"][0]["count"], 3)
 
     def test_read_server_name_priority(self):
         with tempfile.TemporaryDirectory() as tmpdir:

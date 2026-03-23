@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from collections import Counter
 from datetime import datetime
 from typing import Literal
 
@@ -27,6 +29,130 @@ class IncomingMessage(BaseModel):
     content: str
     sender: str = "user"
     execution_mode: Literal["safe", "elevated", "root"] | None = None
+
+
+_JOURNAL_TIMESTAMP_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)\b")
+_JOURNAL_MESSAGE_RE = re.compile(
+    r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?\s+\S+\s+\S+(?:\[\d+\])?:\s*(?P<msg>.*)$"
+)
+
+
+def _extract_journal_timestamp(line: str) -> str | None:
+    match = _JOURNAL_TIMESTAMP_RE.match(line)
+    if not match:
+        return None
+    return match.group("ts")
+
+
+def _extract_journal_message(line: str) -> str:
+    match = _JOURNAL_MESSAGE_RE.search(line)
+    if match:
+        return match.group("msg").strip()
+    fallback = line.strip()
+    if "]: " in fallback:
+        return fallback.split("]: ", 1)[-1].strip()
+    return fallback
+
+
+def _normalize_journal_signature(message: str) -> str:
+    signature = re.sub(r"^(?:INFO|WARN(?:ING)?|ERROR|DEBUG|TRACE|FATAL)\s+", "", message, flags=re.IGNORECASE)
+    signature = re.sub(r"^[a-z0-9_.-]+:\s+", "", signature, flags=re.IGNORECASE)
+    signature = re.sub(r"\b[0-9a-f]{7,}\b", "#", signature, flags=re.IGNORECASE)
+    signature = re.sub(r"\b\d+\b", "#", signature)
+    signature = re.sub(r"\s+", " ", signature).strip()
+    return signature[:220]
+
+
+def summarize_core_journal_lines(lines: list[str], *, source: str = "journalctl -u octopos-core") -> dict:
+    timestamps: list[str] = []
+    signatures: Counter[str] = Counter()
+    error_count = 0
+    warn_count = 0
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        timestamp = _extract_journal_timestamp(line)
+        if timestamp:
+            timestamps.append(timestamp)
+
+        message = _extract_journal_message(line)
+        lowered = message.lower()
+        if any(keyword in lowered for keyword in (" error ", " error:", "error", " fehler", " fehler:", "failed", " failure", " exception", " traceback")):
+            error_count += 1
+        if any(keyword in lowered for keyword in (" warn ", " warn:", "warn", " warning", " warnung", " warnung:")):
+            warn_count += 1
+
+        signature = _normalize_journal_signature(message)
+        if signature:
+            signatures[signature] += 1
+
+    top_signatures = [
+        {"signature": signature, "count": count}
+        for signature, count in signatures.most_common(5)
+    ]
+    return {
+        "source": source,
+        "available": bool(lines),
+        "count": len([line for line in lines if line.strip()]),
+        "error_count": error_count,
+        "warn_count": warn_count,
+        "first_timestamp": min(timestamps) if timestamps else None,
+        "last_timestamp": max(timestamps) if timestamps else None,
+        "top_signatures": top_signatures,
+    }
+
+
+def collect_core_journal_report(*, lines: int = 200) -> dict:
+    import subprocess as _sub
+
+    lines = max(10, min(lines, 1000))
+    try:
+        result = _sub.run(
+            [
+                "journalctl",
+                "-u",
+                "octopos-core",
+                "-n",
+                str(lines),
+                "--no-pager",
+                "--output=short-iso",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        journal_lines = result.stdout.splitlines()
+        summary = summarize_core_journal_lines(journal_lines)
+        return {
+            "available": True,
+            "source": "journalctl -u octopos-core",
+            "count": len(journal_lines),
+            "lines": journal_lines,
+            "summary": summary,
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "source": "journalctl -u octopos-core",
+            "count": 0,
+            "lines": [str(e)],
+            "summary": {
+                "source": "journalctl -u octopos-core",
+                "available": False,
+                "count": 0,
+                "error_count": 0,
+                "warn_count": 0,
+                "first_timestamp": None,
+                "last_timestamp": None,
+                "top_signatures": [],
+                "reason": str(e),
+            },
+            "reason": str(e),
+        }
 
 
 def register_core_misc_routes(
@@ -162,20 +288,24 @@ def register_core_misc_routes(
 
     @admin_router.get("/logs/core")
     def get_core_logs(lines: int = 200):
-        import subprocess as _sub
+        report = collect_core_journal_report(lines=lines)
+        return {
+            "source": report["source"],
+            "lines": report["lines"],
+            "count": report["count"],
+            "available": report["available"],
+            "summary": report["summary"],
+        }
 
-        lines = max(10, min(lines, 2000))
-        try:
-            result = _sub.run(
-                ["journalctl", "-u", "octopos-core", "-n", str(lines), "--no-pager", "--output=short-iso"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            log_lines = result.stdout.splitlines()
-            return {"lines": log_lines, "count": len(log_lines)}
-        except Exception as e:
-            return {"lines": [str(e)], "count": 1}
+    @admin_router.get("/logs/core/summary")
+    def get_core_log_summary(lines: int = 200):
+        report = collect_core_journal_report(lines=lines)
+        return {
+            "source": report["source"],
+            "count": report["count"],
+            "available": report["available"],
+            "summary": report["summary"],
+        }
 
     @admin_router.get("/audit/logs")
     def get_audit_logs(limit: int = 100, project_id: str = "", user: str = "", action: str = ""):
