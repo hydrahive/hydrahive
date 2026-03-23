@@ -5,9 +5,10 @@ import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
-  id:      string;
-  role:    "user" | "assistant" | "system";
-  content: string;
+  id:         string;
+  role:       "user" | "assistant" | "system";
+  content:    string;
+  tokenUsage?: { input: number; output: number };
 }
 
 const SLASH_COMMANDS = [
@@ -193,6 +194,8 @@ export function AgentChatPage() {
                   m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m
                 ));
               } else if (evt.done) {
+                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+                  setMessages(ms => ms.map(m => m.id === assistantMsg.id ? { ...m, tokenUsage: evt.usage } : m));
                 break outer;
               } else if (evt.error) {
                 throw new Error(evt.error);
@@ -284,6 +287,13 @@ export function AgentChatPage() {
                     ? <span className="whitespace-pre-wrap">{msg.content}</span>
                     : <ReactMarkdown>{msg.content}</ReactMarkdown>
                   }
+                  {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
+                    <div className="flex gap-1 px-1 pt-1">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort">
+                        ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               {msg.role === "user" && (
