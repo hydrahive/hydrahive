@@ -82,7 +82,7 @@ Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern 
 octopos/
 ├── core/                          # Python-Backend
 │   └── src/octopos_core/
-│       ├── main.py                # FastAPI-App, alle Endpoints (1178 Zeilen)
+│       ├── main.py                # FastAPI-App, Kern-Endpoints, Router-Wiring
 │       ├── orchestrator.py        # Boss-Agent, Task-Dispatching
 │       ├── agent_runtime.py       # Agent-Lifecycle, Watchdog
 │       ├── agent_discovery.py     # /agents/ Verzeichnis beobachten
@@ -93,6 +93,8 @@ octopos/
 │       ├── matrix_agent.py        # Matrix-Bot Basisklasse + BossMatrixAgent
 │       ├── skill_loader.py        # QMD Skill-Parsing
 │       ├── tool_registry.py       # Tool-Interface, Path-Safety
+│       ├── router_*.py            # Ausgelagerte API-Routen (Auth, Projekte, Chat, MCP, Gitea, ...)
+│       ├── execution_mode_policy.py # safe/elevated/root fuer Agenten
 │       └── provisioner.py         # Matrix-User, Samba-Share anlegen
 ├── console/                       # React-Frontend
 │   ├── src/
@@ -106,6 +108,7 @@ octopos/
 │   └── package.json
 ├── installer/
 │   ├── install.sh                 # Haupt-Installer
+│   ├── amem/                      # A-MEM Shared Memory Installer + Services
 │   └── modules/
 │       ├── 01_os_check.sh
 │       ├── 02_gpu_detect.sh
@@ -163,7 +166,19 @@ octopos/
 
 ### main.py
 
-FastAPI-Applikation mit Lifespan-Management. Enthält alle REST-Endpoints.
+FastAPI-Applikation mit Lifespan-Management. Enthält die Kern-Endpoints und bindet die ausgelagerten Router-Module ein.
+
+**Wichtige Router-Module:**
+- `router_system.py` — Status, Update, Logs, Health
+- `router_projects.py` — Projekt-Workflows
+- `router_agent_chat.py` — direkter Agent-Chat, Session-History
+- `router_user_integrations.py` — WKS und Discord
+- `router_project_integrations.py` — Webhooks und AgentLink
+- `router_project_lifecycle.py` — Provisioning und Deprovisioning
+- `router_llm.py` — Modell- und OAuth-Konfiguration
+- `router_mcp.py` — MCP-Server
+- `router_backup_restore.py` — Backups und Restore
+- `router_core_misc.py` — Setup, Auth, Tools, Logs
 
 **Startup-Reihenfolge:**
 1. `AgentDiscovery.start()` — beobachtet `/agents/` mit watchdog
@@ -682,9 +697,8 @@ Wie läuft eine User-Nachricht durch das gesamte System?
 | Bereich | Limitation | Workaround |
 |---|---|---|
 | Claude OAuth | Token läuft nach ~30 Tagen ab | `claude setup-token` wiederholen |
-| main.py | 1000+ Zeilen, alle Endpoints in einer Datei | #60 Router-Refactoring geplant |
+| main.py | Kern-Endpoints + Router-Wiring, nicht mehr alle Routen in einer Datei | Router-Refactoring weitgehend umgesetzt |
 | Worker-Agenten | Keine eigene Matrix-Identität | Nur Boss ist Matrix-Bot |
 | Task-Agent TTL | Nicht per Projekt konfigurierbar | 300s hardcoded in agent_runtime.py |
 | Sessions | Kein Memory zwischen Sessions | QMD-Skills als persistentes Wissen nutzen |
 | AgentLink | State-Transfer noch nicht produktiv | #13 offen |
-

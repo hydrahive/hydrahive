@@ -4,8 +4,23 @@ OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen V
 
 ---
 
+## Aktueller Betriebsmodus
+
+OctopOS ist inzwischen mehr als nur Agenten- und Projektverwaltung. Der aktuelle Arbeitsstand ist:
+
+- **Lokales Memory** bleibt agentenspezifisch: `soul.md`, `memory/`, Skills und Session-Kontext
+- **A-MEM** ist die gemeinsame Langzeit-Wissensdatenbank fuer alle Agenten
+- **Execution Modes** steuern Agentenrechte in `safe`, `elevated` und `root`
+- **Discord** ist ein untrusted Eingangskanal und wird wie andere externe Inputs kontrolliert behandelt
+- **Gitea** ist nicht nur Git-Remote, sondern auch Issue-, Review- und Arbeitskanal fuer Agenten
+
+Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Host-IP, lokal weiter ueber `127.0.0.1`.
+
+---
+
 ## Inhaltsverzeichnis
 
+0. [Aktueller Betriebsmodus](#aktueller-betriebsmodus)
 1. [Installation](#1-installation)
 2. [Erster Login](#2-erster-login)
 3. [Die Webkonsole](#3-die-webkonsole)

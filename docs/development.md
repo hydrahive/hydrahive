@@ -212,7 +212,7 @@ Skills werden bei jedem Request neu eingelesen. Keine Neustart-Notwendigkeit.
 
 ## 4. Core-Endpoint hinzufügen
 
-Alle Endpoints sind in `main.py`. Für neue Features:
+Globale Kern-Endpoints hängen weiterhin in `main.py`, fachlich zusammengehörige Features sollten aber in ein passendes `router_*.py` ausgelagert werden. Für neue Features:
 
 ```python
 # main.py
@@ -400,6 +400,7 @@ source "${MODULES_DIR}/10_my_module.sh"
 - Idempotent: Wiederholter Aufruf darf nichts kaputt machen
 - `info`/`success`/`warn`/`error` statt `echo` verwenden
 - Fehler mit `error "Meldung"` → beendet den Installer (exit 1)
+- Für neue systemnahe Komponenten eigene Unterordner verwenden, z. B. `installer/amem/`
 
 ---
 
@@ -414,6 +415,10 @@ ssh hydrahive@YOUR-VM-IP "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_cor
 
 # Ganzes Core-Verzeichnis
 ssh hydrahive@YOUR-VM-IP "sudo cp -r /tmp/core_src/. /opt/octopos/core/src/octopos_core/"
+
+# Router-Module oder A-MEM-Installer aktualisieren
+scp core/src/octopos_core/router_*.py hydrahive@YOUR-VM-IP:/tmp/
+scp -r installer/amem/ hydrahive@YOUR-VM-IP:/tmp/amem/
 ```
 
 ### Console deployen
@@ -471,7 +476,7 @@ git pull --rebase
 
 ### Dateigröße
 
-`main.py` ist aktuell ~1180 Zeilen. Neue Endpoints sollten sparsam sein. Bei >1500 Zeilen: Router-Module aufteilen (`/agents` → `routers/agents.py` etc.).
+`main.py` ist inzwischen nur noch der Kern-Eintrittspunkt. Neue Endpoints sollten bevorzugt in Router-Module ausgelagert werden (`router_projects.py`, `router_mcp.py`, `router_users.py` usw.), statt den monolithischen Teil wieder aufzublähen.
 
 
 ---
@@ -584,4 +589,3 @@ MatrixAgent @boss:octopos.local — join fehlgeschlagen
 ### Hot-Reload greift nicht
 → Watchdog überwacht nur oberste Ebene von `/agents/` und `/projects/`  
 → Bei Änderungen in Unterverzeichnissen: `systemctl restart octopos-core`
-

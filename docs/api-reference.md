@@ -745,6 +745,66 @@ Verfügbare Ollama-Modelle auf der WKS abfragen.
 
 ---
 
+## Discord
+
+### GET /me/discord
+
+Discord-Konfiguration des eingeloggten Users abrufen.
+
+**Response 200:**
+```json
+{
+  "configured": true,
+  "guild_id": "1234567890",
+  "channel_ids": ["111", "222"],
+  "connected": true
+}
+```
+
+---
+
+### PUT /me/discord
+
+Discord-Bot und Zielkanäle konfigurieren.
+
+**Body:**
+```json
+{
+  "bot_token": "discord-bot-token",
+  "guild_id": "1234567890",
+  "channel_ids": ["111", "222"]
+}
+```
+
+**Response 200:**
+```json
+{ "updated": true, "bot_name": "OctopOS", "bot_id": "9876543210" }
+```
+
+---
+
+### DELETE /me/discord
+
+Discord-Anbindung des eingeloggten Users entfernen.
+
+**Response 200:**
+```json
+{ "deleted": true }
+```
+
+---
+
+### POST /me/discord/test
+
+Verbindung und Bot-Token testen, ohne zu speichern.
+
+**Response 200:**
+```json
+{ "ok": true, "bot_name": "OctopOS", "bot_id": "9876543210" }
+```
+
+---
+
 ## LLM-Konfiguration
 
 ### GET /llm/config
