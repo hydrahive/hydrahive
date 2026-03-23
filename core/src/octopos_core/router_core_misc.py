@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from collections import Counter
 from datetime import datetime
 from typing import Literal
@@ -105,10 +106,18 @@ def summarize_core_journal_lines(lines: list[str], *, source: str = "journalctl 
     }
 
 
+_journal_cache: dict[int, tuple[float, dict]] = {}
+_JOURNAL_CACHE_TTL_S: float = 30.0
+
+
 def collect_core_journal_report(*, lines: int = 200) -> dict:
     import subprocess as _sub
 
     lines = max(10, min(lines, 1000))
+    now = time.monotonic()
+    cached_ts, cached_result = _journal_cache.get(lines, (0.0, {}))
+    if cached_result and (now - cached_ts) < _JOURNAL_CACHE_TTL_S:
+        return cached_result
     try:
         result = _sub.run(
             [
@@ -127,13 +136,15 @@ def collect_core_journal_report(*, lines: int = 200) -> dict:
         )
         journal_lines = result.stdout.splitlines()
         summary = summarize_core_journal_lines(journal_lines)
-        return {
+        report = {
             "available": True,
             "source": "journalctl -u octopos-core",
             "count": len(journal_lines),
             "lines": journal_lines,
             "summary": summary,
         }
+        _journal_cache[lines] = (time.monotonic(), report)
+        return report
     except Exception as e:
         return {
             "available": False,

@@ -6,6 +6,9 @@ OCTOPOS_GROUP="${OCTOPOS_GROUP:-octopos}"
 AMEM_DIR="${AMEM_DIR:-/opt/amem}"
 AMEM_SEARCH_DIR="${AMEM_SEARCH_DIR:-/opt/amem-search}"
 AMEM_REPO_URL="${AMEM_REPO_URL:-https://github.com/agiresearch/A-mem.git}"
+# Optionaler Commit-Pin (SHA oder Tag). Leer = kein Pin, es wird origin/main verwendet.
+# Setze AMEM_COMMIT=<sha> um einen reproduzierbaren Build zu erzwingen.
+AMEM_COMMIT="${AMEM_COMMIT:-}"
 AMEM_ENV_FILE="${AMEM_ENV_FILE:-/etc/octopos/amem.env}"
 MCP_CONFIG_FILE="${MCP_CONFIG_FILE:-/etc/octopos/mcp_servers.json}"
 AMEM_MCP_URL="${AMEM_MCP_URL:-http://127.0.0.1:8020/sse}"
@@ -33,6 +36,19 @@ else
   rm -rf "${AMEM_DIR}"
   git clone --depth 1 "${AMEM_REPO_URL}" "${AMEM_DIR}"
 fi
+
+# Optionaler Commit-Pin: wenn AMEM_COMMIT gesetzt, auf den exakten Commit wechseln
+if [ -n "${AMEM_COMMIT}" ]; then
+  info "Pinne A-MEM auf Commit ${AMEM_COMMIT}..."
+  git -C "${AMEM_DIR}" fetch --depth 1 origin "${AMEM_COMMIT}" 2>/dev/null || \
+    git -C "${AMEM_DIR}" fetch origin 2>/dev/null || true
+  git -C "${AMEM_DIR}" checkout "${AMEM_COMMIT}"
+fi
+
+# Tatsächlichen HEAD-Commit loggen (Supply-Chain-Transparenz)
+AMEM_ACTUAL_COMMIT="$(git -C "${AMEM_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)"
+info "A-MEM HEAD-Commit: ${AMEM_ACTUAL_COMMIT}"
+echo "${AMEM_ACTUAL_COMMIT}" > /var/lib/octopos/amem/installed_commit.txt
 
 python3.12 -m venv "${AMEM_DIR}/.venv"
 "${AMEM_DIR}/.venv/bin/pip" install -q --upgrade pip setuptools wheel
