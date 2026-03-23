@@ -62,6 +62,7 @@ MCP_SERVERS_FILE = "/etc/octopos/mcp_servers.json"
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
+APP_VERSION  = "0.1.0"
 
 rate_limiter = RateLimiter.from_env(logger)
 
@@ -420,7 +421,7 @@ async def _setup_matrix_clients(server_name: str) -> None:
 
 app = FastAPI(
     title="OctopOS Core",
-    version="0.1.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -1222,6 +1223,7 @@ register_system_routes(
     network_profile_script=NETWORK_PROFILE_SCRIPT,
     run_self_update=_run_self_update,
     gitea_config_file=GITEA_CONFIG_FILE,
+    app_version=APP_VERSION,
     logger=logger,
 )
 

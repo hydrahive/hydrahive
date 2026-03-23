@@ -371,6 +371,28 @@
   "sessions": { ... },
   "runtime": { ... }
 }</code></pre>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/admin/runtime/status</span></h3>
+    <p>Runtime-Fingerprint für Audits und Support mit Deploy-Metadaten, Laufzeitstatus und verdichteter Core-Log-Zusammenfassung.</p>
+    <p><strong>Response 200:</strong></p>
+    <pre><code>{
+  "service": { "name": "octopos-core", "version": "0.1.0" },
+  "deployment": { ... },
+  "runtime": { ... },
+  "audit": {
+    "core_journal": {
+      "available": true,
+      "count": 200,
+      "error_count": 2,
+      "warn_count": 4,
+      "first_timestamp": "2026-03-20 10:00:01",
+      "last_timestamp": "2026-03-20 11:01:30",
+      "top_signatures": [
+        { "signature": "restart loop detected", "count": 3 }
+      ]
+    }
+  }
+}</code></pre>
   </section>
 
   <!-- AGENTEN -->
@@ -707,6 +729,13 @@ data: {"error": "LLM nicht erreichbar"}</code></pre>
     <table>
       <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
       <tr><td><code>lines</code></td><td>int</td><td>Anzahl Zeilen (Standard: 200, Maximum: 1000)</td></tr>
+    </table>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/logs/core/summary</span></h3>
+    <p>Gibt eine verdichtete Core-Journal-Zusammenfassung mit ERROR/WARN-Zählung und Signaturen zurück.</p>
+    <table>
+      <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><code>lines</code></td><td>int</td><td>Anzahl analysierter Zeilen (Standard: 200, Maximum: 1000)</td></tr>
     </table>
   </section>
 

@@ -109,6 +109,40 @@ Detaillierter System-Status.
 
 ---
 
+### GET /admin/runtime/status
+
+Runtime-Fingerprint für Audits und Support. Liefert Deploy-Metadaten, Laufzeitstatus und eine verdichtete Core-Log-Zusammenfassung.
+
+**Response 200:**
+```json
+{
+  "service": { "name": "octopos-core", "version": "0.1.0" },
+  "deployment": {
+    "status": "ok",
+    "started_at": "2026-03-20T11:00:00Z",
+    "finished_at": "2026-03-20T11:01:30Z",
+    "commit": "abc1234",
+    "commit_full": "abc1234def5678..."
+  },
+  "runtime": { "boss-main": { "...": "..." } },
+  "audit": {
+    "core_journal": {
+      "available": true,
+      "count": 200,
+      "error_count": 2,
+      "warn_count": 4,
+      "first_timestamp": "2026-03-20 10:00:01",
+      "last_timestamp": "2026-03-20 11:01:30",
+      "top_signatures": [
+        { "signature": "restart loop detected", "count": 3 }
+      ]
+    }
+  }
+}
+```
+
+---
+
 ## Agenten
 
 ### GET /agents
@@ -1148,3 +1182,29 @@ Core-Logs aus journalctl (alle, ungefiltert).
 - `lines` (int, default 200, max 1000)
 
 **Response:** Gleich wie `/agents/{id}/logs`
+
+---
+
+### GET /logs/core/summary
+
+Verdichtete Core-Journal-Zusammenfassung für Audits.
+
+**Query-Parameter:**
+- `lines` (int, default 200, max 1000)
+
+**Response 200:**
+```json
+{
+  "available": true,
+  "count": 200,
+  "summary": {
+    "error_count": 2,
+    "warn_count": 4,
+    "first_timestamp": "2026-03-20 10:00:01",
+    "last_timestamp": "2026-03-20 11:01:30",
+    "top_signatures": [
+      { "signature": "restart loop detected", "count": 3 }
+    ]
+  }
+}
+```
