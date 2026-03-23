@@ -1351,32 +1351,61 @@ function WksTab() {
 // ── Discord Tab ───────────────────────────────────────────────────────────────
 
 function DiscordTab() {
-  const [cfg,        setCfg]        = useState<DiscordConfig | null>(null);
-  const [botToken,   setBotToken]   = useState("");
-  const [guildId,    setGuildId]    = useState("");
-  const [channelIds, setChannelIds] = useState("");  // kommagetrennt
-  const [saving,     setSaving]     = useState(false);
-  const [testing,    setTesting]    = useState(false);
-  const [msg,        setMsg]        = useState("");
+  const [cfg,          setCfg]          = useState<DiscordConfig | null>(null);
+  const [botToken,     setBotToken]     = useState("");
+  const [changeToken,  setChangeToken]  = useState(false);
+  const [guildId,      setGuildId]      = useState("");
+  const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
+  const [ignoreBots,   setIgnoreBots]   = useState(true);
+  const [channels,     setChannels]     = useState<{id:string;name:string}[]>([]);
+  const [loadingCh,    setLoadingCh]    = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [testing,      setTesting]      = useState(false);
+  const [msg,          setMsg]          = useState("");
 
   useEffect(() => {
     api.getDiscord().then(d => {
       setCfg(d);
       setGuildId(d.guild_id ?? "");
-      setChannelIds((d.channel_ids ?? []).join(", "));
+      setSelectedIds(new Set(d.channel_ids ?? []));
+      setIgnoreBots(d.ignore_bots ?? true);
     }).catch(() => {});
   }, []);
+
+  async function loadChannels() {
+    setLoadingCh(true); setMsg("");
+    try {
+      const res = await api.getDiscordChannels();
+      setChannels(res.channels ?? []);
+      if ((res.channels ?? []).length === 0) setMsg("Keine Text-Channels gefunden");
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setLoadingCh(false); }
+  }
+
+  function toggleChannel(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setMsg("");
     try {
-      const ids = channelIds.split(",").map(s => s.trim()).filter(Boolean);
-      const res = await api.updateDiscord({ bot_token: botToken.trim(), guild_id: guildId.trim(), channel_ids: ids });
+      const res = await api.updateDiscord({
+        bot_token: changeToken ? botToken.trim() : "",
+        guild_id: guildId.trim(),
+        channel_ids: [...selectedIds],
+        ignore_bots: ignoreBots,
+      });
       setMsg(`✓ Bot "${res.bot_name}" verbunden`);
-      setBotToken("");
+      setBotToken(""); setChangeToken(false);
       const updated = await api.getDiscord();
       setCfg(updated);
+      setSelectedIds(new Set(updated.channel_ids ?? []));
     } catch (err: unknown) {
       setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
     } finally { setSaving(false); }
@@ -1386,7 +1415,7 @@ function DiscordTab() {
     if (!confirm("Discord-Bot entfernen?")) return;
     await api.deleteDiscord();
     setCfg({ configured: false });
-    setGuildId(""); setChannelIds("");
+    setGuildId(""); setSelectedIds(new Set()); setChannels([]);
     setMsg("Bot entfernt");
   }
 
@@ -1405,7 +1434,7 @@ function DiscordTab() {
       <div>
         <h2 className="text-sm font-semibold mb-1">Discord Bot</h2>
         <p className="text-xs text-muted-foreground">
-          Verbinde deinen persönlichen Agenten mit einem Discord-Bot. Der Bot empfängt Nachrichten in konfigurierten Channels und antwortet darauf.
+          Verbinde deinen persönlichen Agenten mit einem Discord-Bot.
         </p>
       </div>
 
@@ -1418,50 +1447,75 @@ function DiscordTab() {
       )}
 
       <form onSubmit={handleSave} className="space-y-4">
-        <section className="space-y-3">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bot-Token</h3>
-          <div>
-            <label className="text-xs font-medium block mb-1">
-              Bot-Token {cfg?.configured && <span className="text-green-600">(bereits konfiguriert)</span>}
-            </label>
-            <input
-              type="password"
-              value={botToken}
-              onChange={e => setBotToken(e.target.value)}
-              placeholder={cfg?.configured ? "Neuen Token eingeben um zu ändern" : "Bot-Token von Discord Developer Portal"}
-              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Discord Developer Portal → Deine App → Bot → Token
+        {/* Token */}
+        <div>
+          <label className="text-xs font-medium block mb-1">Bot-Token</label>
+          {cfg?.configured && !changeToken ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-mono">••••••••••••••••••••</span>
+              <button type="button" onClick={() => setChangeToken(true)}
+                className="text-xs text-primary underline">ändern</button>
+            </div>
+          ) : (
+            <>
+              <input type="password" value={botToken} onChange={e => setBotToken(e.target.value)}
+                placeholder="Bot-Token von Discord Developer Portal"
+                className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+              {cfg?.configured && (
+                <button type="button" onClick={() => { setChangeToken(false); setBotToken(""); }}
+                  className="text-xs text-muted-foreground underline mt-1">abbrechen</button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Guild ID */}
+        <div>
+          <label className="text-xs font-medium block mb-1">Server (Guild) ID</label>
+          <input type="text" value={guildId} onChange={e => setGuildId(e.target.value)}
+            placeholder="z.B. 1234567890123456789"
+            className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+        </div>
+
+        {/* Channels */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium">Channels</label>
+            <button type="button" onClick={loadChannels} disabled={loadingCh || !cfg?.configured}
+              className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-40">
+              {loadingCh ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Channels laden
+            </button>
+          </div>
+          {channels.length > 0 ? (
+            <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+              {channels.map(ch => (
+                <label key={ch.id} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-accent">
+                  <input type="checkbox" checked={selectedIds.has(ch.id)} onChange={() => toggleChannel(ch.id)}
+                    className="accent-primary" />
+                  <span className="font-medium">#{ch.name}</span>
+                  <span className="text-muted-foreground font-mono ml-auto">{ch.id}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {selectedIds.size > 0
+                ? `${selectedIds.size} Channel(s) gespeichert — "Channels laden" um sie anzuzeigen`
+                : "Keine Auswahl = Bot reagiert in allen Channels"}
             </p>
-          </div>
-          <div>
-            <label className="text-xs font-medium block mb-1">Server (Guild) ID</label>
-            <input
-              type="text"
-              value={guildId}
-              onChange={e => setGuildId(e.target.value)}
-              placeholder="z.B. 1234567890123456789"
-              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium block mb-1">Channel IDs (kommagetrennt)</label>
-            <input
-              type="text"
-              value={channelIds}
-              onChange={e => setChannelIds(e.target.value)}
-              placeholder="z.B. 1111111111, 2222222222"
-              className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Leer lassen = Bot reagiert in allen Channels des Servers
-            </p>
-          </div>
-        </section>
+          )}
+        </div>
+
+        {/* Bots ignorieren */}
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={ignoreBots} onChange={e => setIgnoreBots(e.target.checked)}
+            className="accent-primary" />
+          <span>Nachrichten von anderen Bots ignorieren</span>
+        </label>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button type="submit" disabled={saving || (!botToken.trim() && !cfg?.configured)}
+          <button type="submit" disabled={saving || (!cfg?.configured && !botToken.trim())}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5" />
             {saving ? "Speichern…" : "Speichern & Verbinden"}
@@ -1497,7 +1551,7 @@ function DiscordTab() {
           <li>Links „Bot" → Token kopieren</li>
           <li>„Message Content Intent" aktivieren</li>
           <li>OAuth2 → URL Generator: Scopes „bot" + Perms „Read/Send Messages" → Bot einladen</li>
-          <li>Token und Server/Channel IDs hier einfügen</li>
+          <li>Token und Guild-ID eintragen, dann Channels laden</li>
         </ol>
       </section>
     </div>
