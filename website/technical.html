@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OctopOS — Technische Dokumentation</title>
+  <title>HydraHive — Technische Dokumentation</title>
   <style>
     :root {
       --bg: #0a0e1a; --bg2: #111827; --accent: #06b6d4;
@@ -77,7 +77,7 @@
 
 <main class="content">
   <h1 class="page-title">Technische Dokumentation</h1>
-  <p class="page-intro">Diese Dokumentation richtet sich an Entwickler die OctopOS verstehen, erweitern oder deployen wollen.</p>
+  <p class="page-intro">Diese Dokumentation richtet sich an Entwickler die HydraHive verstehen, erweitern oder deployen wollen.</p>
 
   <section class="chapter" id="architektur">
     <h2>1. Architektur-Übersicht</h2>
@@ -89,13 +89,13 @@
                          ▼
 ┌─────────────────────────────────────────────────────┐
 │              nginx (Port 443 / 80→443)               │
-│   Static: /opt/octopos/console/                      │
+│   Static: /opt/hydrahive/console/                      │
 │   Proxy:  /api/ → localhost:8765                     │
 └────────────────────────┬────────────────────────────┘
                          │ HTTP
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│           OctopOS Core (FastAPI, Port 8765)          │
+│           HydraHive Core (FastAPI, Port 8765)          │
 │  ┌──────────┐  ┌─────────────┐  ┌───────────────┐  │
 │  │  Agent   │  │  Project    │  │   Session     │  │
 │  │Discovery │  │  Loader     │  │   Manager     │  │
@@ -128,9 +128,9 @@
   <section class="chapter" id="verzeichnisse">
     <h2>2. Verzeichnisstruktur</h2>
     <h3>Repository</h3>
-    <pre><code>octopos/
+    <pre><code>hydrahive/
 ├── core/
-│   └── src/octopos_core/
+│   └── src/hydrahive_core/
 │       ├── main.py                # FastAPI-App, alle Endpoints
 │       ├── orchestrator.py        # Boss-Agent, Task-Dispatching
 │       ├── agent_runtime.py       # Agent-Lifecycle, Watchdog
@@ -166,9 +166,9 @@
 └── docs/</code></pre>
 
     <h3>Laufzeit (auf dem Server)</h3>
-    <pre><code>/opt/octopos/core/src/octopos_core/   # Core-Quellcode
-/opt/octopos/console/                  # Gebaute React-App
-/opt/octopos/venv/                     # Python-Virtualenv
+    <pre><code>/opt/hydrahive/core/src/hydrahive_core/   # Core-Quellcode
+/opt/hydrahive/console/                  # Gebaute React-App
+/opt/hydrahive/venv/                     # Python-Virtualenv
 
 /agents/boss-main/
 │   ├── agent.yaml
@@ -180,7 +180,7 @@
 │   ├── webhooks.json
 │   └── sessions/
 
-/etc/octopos/
+/etc/hydrahive/
 │   ├── jwt_secret
 │   ├── llm_config.json
 │   ├── claude_oauth_token
@@ -188,7 +188,7 @@
 │   ├── agent_tokens/
 │   └── tls/
 
-/var/log/octopos/audit.jsonl</code></pre>
+/var/log/hydrahive/audit.jsonl</code></pre>
   </section>
 
   <section class="chapter" id="module">
@@ -411,7 +411,7 @@ BossMatrixAgent (pro Projekt mit Room)</code></pre>
     async def on_user_message(self, room, text, sender): ...</code></pre>
 
     <h3>Authentifizierung</h3>
-    <p>Bot-Accounts werden beim ersten Start automatisch auf conduwuit registriert. Der Access-Token wird in <code>/etc/octopos/agent_tokens/&lt;id&gt;.json</code> gespeichert.</p>
+    <p>Bot-Accounts werden beim ersten Start automatisch auf conduwuit registriert. Der Access-Token wird in <code>/etc/hydrahive/agent_tokens/&lt;id&gt;.json</code> gespeichert.</p>
 
     <h3>Watchdog</h3>
     <p>Bei Exception in <code>run()</code>: 15s warten → <code>start()</code> + <code>run()</code> neu starten. Endlosschleife bis CancelledError.</p>
@@ -441,7 +441,7 @@ class Session:
     <h3>Authentifizierung</h3>
     <ul>
       <li>JWT HS256, 24h Gültigkeit</li>
-      <li>Secret in <code>/etc/octopos/jwt_secret</code> (600, <code>octopos:octopos</code>)</li>
+      <li>Secret in <code>/etc/hydrahive/jwt_secret</code> (600, <code>hydrahive:hydrahive</code>)</li>
       <li>Bei fehlendem Secret → <code>503</code> (kein stilles Akzeptieren des leeren Secrets)</li>
       <li>Rate-Limiting: 10 Login-Versuche pro Minute pro IP</li>
     </ul>
@@ -450,7 +450,7 @@ class Session:
     <h3>Setup-Schutz</h3>
     <p><code>POST /setup</code> ist nur verfügbar solange <code>users.json</code> leer ist. Race Condition verhindert durch <code>asyncio.Lock</code>. Atomares Schreiben via <code>tmp.replace(target)</code>.</p>
     <h3>Audit-Log</h3>
-    <p>Alle sicherheitsrelevanten Aktionen in <code>/var/log/octopos/audit.jsonl</code>. Append-only, non-blocking.</p>
+    <p>Alle sicherheitsrelevanten Aktionen in <code>/var/log/hydrahive/audit.jsonl</code>. Append-only, non-blocking.</p>
   </section>
 
   <section class="chapter" id="installer">

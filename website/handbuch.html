@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OctopOS Handbuch</title>
+  <title>HydraHive Handbuch</title>
   <style>
     :root {
       --bg: #0a0e1a;
@@ -287,8 +287,8 @@
 
 <!-- CONTENT -->
 <main class="content">
-  <h1 class="page-title">OctopOS Handbuch</h1>
-  <p class="page-intro">OctopOS ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen VM oder einem Server, verwaltet KI-Agenten, Projekte und Dateisysteme — ohne externe Cloud-Abhängigkeit.</p>
+  <h1 class="page-title">HydraHive Handbuch</h1>
+  <p class="page-intro">HydraHive ist ein selbst-gehosteter KI-Agent-Server. Er läuft auf einer eigenen VM oder einem Server, verwaltet KI-Agenten, Projekte und Dateisysteme — ohne externe Cloud-Abhängigkeit.</p>
 
   <!-- 1. INSTALLATION -->
   <section class="chapter" id="installation">
@@ -303,15 +303,15 @@
     </ul>
 
     <h3>Installer ausführen</h3>
-    <pre><code>git clone https://github.com/tilleulenspiegel/octopos.git
-cd octopos
+    <pre><code>git clone https://github.com/tilleulenspiegel/hydrahive.git
+cd hydrahive
 sudo bash installer/install.sh</code></pre>
 
     <p>Der Installer läuft vollautomatisch und richtet ein:</p>
     <ul>
       <li>conduwuit (Matrix-Homeserver)</li>
-      <li>OctopOS Core (Python-Backend)</li>
-      <li>OctopOS Console (React-Frontend via nginx)</li>
+      <li>HydraHive Core (Python-Backend)</li>
+      <li>HydraHive Console (React-Frontend via nginx)</li>
       <li>HTTPS mit self-signed Zertifikat</li>
       <li>Optional: Ollama (bei <code>PROFILE=full</code>)</li>
     </ul>
@@ -331,9 +331,9 @@ certbot --nginx -d mein.domain.de</code></pre>
     <p>Nach der Installation ist die Konsole sofort nutzbar. Der Installer hat einen Admin-Account angelegt:</p>
     <ul>
       <li><strong>Benutzername:</strong> <code>admin</code></li>
-      <li><strong>Passwort:</strong> steht in <code>/etc/octopos/admin_credentials</code> auf dem Server</li>
+      <li><strong>Passwort:</strong> steht in <code>/etc/hydrahive/admin_credentials</code> auf dem Server</li>
     </ul>
-    <pre><code>sudo cat /etc/octopos/admin_credentials
+    <pre><code>sudo cat /etc/hydrahive/admin_credentials
 # matrix_admin_password=&lt;generiertes-passwort&gt;</code></pre>
     <div class="note">Nach dem ersten Login empfiehlt sich das Anlegen eines persönlichen Admin-Accounts unter <strong>Benutzer</strong> → <strong>Neuer Benutzer</strong>.</div>
   </section>
@@ -461,10 +461,10 @@ heartbeat_tasks:
       <tr><th>Kategorie</th><th>Blockiert</th></tr>
       <tr><td>Rekursives Löschen</td><td><code>rm -r</code>, <code>rm -rf</code>, <code>rm</code> auf <code>/opt/</code></td></tr>
       <tr><td>Disk-Destruktion</td><td><code>dd of=/dev/…</code>, <code>mkfs</code>, <code>fdisk</code>, <code>parted</code>, <code>shred</code>, <code>wipefs</code></td></tr>
-      <tr><td>OctopOS-Sabotage</td><td><code>systemctl stop/disable/mask/kill octopos</code>, <code>killall uvicorn</code></td></tr>
-      <tr><td>Geschützte Pfade</td><td>Redirects (<code>&gt;</code>) nach <code>/etc/</code>, <code>/bin/</code>, <code>/usr/</code>, <code>/lib</code>, <code>/boot/</code>, <code>/dev/</code>, <code>/sys/</code>, <code>/proc/</code>, <code>/opt/octopos/</code></td></tr>
+      <tr><td>HydraHive-Sabotage</td><td><code>systemctl stop/disable/mask/kill hydrahive</code>, <code>killall uvicorn</code></td></tr>
+      <tr><td>Geschützte Pfade</td><td>Redirects (<code>&gt;</code>) nach <code>/etc/</code>, <code>/bin/</code>, <code>/usr/</code>, <code>/lib</code>, <code>/boot/</code>, <code>/dev/</code>, <code>/sys/</code>, <code>/proc/</code>, <code>/opt/hydrahive/</code></td></tr>
       <tr><td>Rechteänderungen</td><td><code>chmod</code>/<code>chown</code> auf <code>/opt/</code>, <code>/etc/</code>, <code>/bin/</code></td></tr>
-      <tr><td>Git in Systempfaden</td><td><code>git clone</code>/<code>reset --hard</code> nach/in <code>/opt/octopos/</code></td></tr>
+      <tr><td>Git in Systempfaden</td><td><code>git clone</code>/<code>reset --hard</code> nach/in <code>/opt/hydrahive/</code></td></tr>
       <tr><td>Shell-Escapes</td><td><code>$()</code> Command Substitution, Backticks, <code>eval</code>, Subshell über <code>bash -c</code></td></tr>
       <tr><td>Fork-Bomben</td><td><code>:() { …</code></td></tr>
     </table>
@@ -483,7 +483,7 @@ heartbeat_tasks:
       <li><span class="step-num">3</span><span><strong>Projekt anlegen</strong> klicken</span></li>
     </ol>
 
-    <p>OctopOS richtet automatisch ein:</p>
+    <p>HydraHive richtet automatisch ein:</p>
     <ul>
       <li>Linux-User <code>proj_&lt;id&gt;</code> mit eigenem Home-Verzeichnis</li>
       <li>Verzeichnis <code>/projects/&lt;id&gt;/</code> für Agenten-Dateien</li>
@@ -686,7 +686,7 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
     </ol>
 
     <p><strong>Public Key auf der Workstation hinterlegen:</strong></p>
-    <pre><code>echo "ssh-ed25519 AAAA... octopos-wks@octopos" >> ~/.ssh/authorized_keys
+    <pre><code>echo "ssh-ed25519 AAAA... hydrahive-wks@hydrahive" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 sudo systemctl enable --now ssh</code></pre>
 
@@ -716,11 +716,11 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
     <p>Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits erstellen und Pull Requests öffnen.</p>
 
     <h3>Gitea konfigurieren</h3>
-    <p>Unter <strong>LLM-Config → Gitea</strong> oder direkt in <code>/etc/octopos/gitea_config.json</code>:</p>
+    <p>Unter <strong>LLM-Config → Gitea</strong> oder direkt in <code>/etc/hydrahive/gitea_config.json</code>:</p>
     <pre><code>{
   "url": "http://192.168.1.100:3001",
   "token": "dein-gitea-token",
-  "org": "octopos"
+  "org": "hydrahive"
 }</code></pre>
 
     <h3>Git-Tools</h3>
@@ -737,7 +737,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
   <!-- 13. MCP -->
   <section class="chapter" id="mcp">
     <h2>13. MCP-Server</h2>
-    <p>MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. OctopOS unterstützt <code>streamableHttp</code>-Transport.</p>
+    <p>MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. HydraHive unterstützt <code>streamableHttp</code>-Transport.</p>
 
     <h3>MCP-Server konfigurieren (Admin)</h3>
     <ol class="steps">
@@ -746,7 +746,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
     </ol>
 
     <h3>A-MEM — Shared Memory MCP</h3>
-    <p>OctopOS wird mit einem A-MEM-MCP-Server ausgeliefert (Port 8020). Er ermöglicht semantische Suche in der gemeinsamen Wissensdatenbank und im A-MEM-Index. Die Web-UI läuft auf Port 8021:</p>
+    <p>HydraHive wird mit einem A-MEM-MCP-Server ausgeliefert (Port 8020). Er ermöglicht semantische Suche in der gemeinsamen Wissensdatenbank und im A-MEM-Index. Die Web-UI läuft auf Port 8021:</p>
     <pre><code>[
   {
     "id": "amem",
@@ -766,7 +766,7 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
   <!-- 14. WEBHOOKS (was 9) -->
   <section class="chapter" id="webhooks">
     <h2>14. Webhooks</h2>
-    <p>Webhooks ermöglichen externen Systemen OctopOS zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.</p>
+    <p>Webhooks ermöglichen externen Systemen HydraHive zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.</p>
 
     <h3>Webhook anlegen (Konsole)</h3>
     <ol class="steps">
@@ -784,16 +784,16 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
     <div class="note">Dieser Endpoint ist öffentlich zugänglich (kein Auth nötig) und startet den Boss-Agenten asynchron.</div>
 
     <h3>HMAC-Signierung</h3>
-    <p>Wenn ein Secret gesetzt ist, wird jeder ausgehende Webhook-Request mit <code>X-OctopOS-Signature: sha256=&lt;hmac&gt;</code> signiert.</p>
+    <p>Wenn ein Secret gesetzt ist, wird jeder ausgehende Webhook-Request mit <code>X-HydraHive-Signature: sha256=&lt;hmac&gt;</code> signiert.</p>
     <pre><code>import hmac, hashlib
 expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pre>
+assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></pre>
   </section>
 
   <!-- 15. BENUTZER (was 10) -->
   <section class="chapter" id="benutzer">
     <h2>15. Benutzer und Rollen</h2>
-    <p>Unter <strong>Benutzer</strong> (Admin only) werden Accounts verwaltet. OctopOS kennt zwei Rollen:</p>
+    <p>Unter <strong>Benutzer</strong> (Admin only) werden Accounts verwaltet. HydraHive kennt zwei Rollen:</p>
     <table>
       <tr><th>Rolle</th><th>Rechte</th></tr>
       <tr><td><strong>admin</strong></td><td>Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, Backup, Benutzerverwaltung</td></tr>
@@ -814,7 +814,7 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
     <h3>Was wird gesichert?</h3>
     <p>Ein Backup enthält als <code>tar.gz</code>:</p>
     <ul>
-      <li><code>/etc/octopos/</code> — Konfigurationsdateien (JWT-Secret, Users, LLM-Config)</li>
+      <li><code>/etc/hydrahive/</code> — Konfigurationsdateien (JWT-Secret, Users, LLM-Config)</li>
       <li><code>/agents/</code> — alle Agenten-Definitionen und Skills</li>
       <li><code>/projects/</code> — Projekt-Konfigurationen und Agenten-Dateien</li>
     </ul>
@@ -850,21 +850,21 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
       <li>Webhooks anlegen/löschen/auslösen</li>
       <li>LLM-Token setzen</li>
     </ul>
-    <p>Gespeichert in <code>/var/log/octopos/audit.jsonl</code> — append-only, ein JSON-Objekt pro Zeile.</p>
+    <p>Gespeichert in <code>/var/log/hydrahive/audit.jsonl</code> — append-only, ein JSON-Objekt pro Zeile.</p>
     <p><strong>Filter:</strong> Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.</p>
   </section>
 
   <!-- 18. MATRIX (was 13) -->
   <section class="chapter" id="matrix">
     <h2>18. Matrix-Integration</h2>
-    <p>OctopOS kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
+    <p>HydraHive kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
 
     <h3>Element-Client verbinden</h3>
     <p>Matrix-Server läuft auf Port 8008 (nginx-Proxy → conduwuit auf 6167):</p>
     <ul>
       <li><strong>Homeserver:</strong> <code>https://&lt;ip&gt;:8008</code> oder <code>http://&lt;ip&gt;:8008</code></li>
       <li><strong>Benutzer:</strong> <code>@admin:&lt;hostname&gt;</code></li>
-      <li><strong>Passwort:</strong> aus <code>/etc/octopos/admin_credentials</code></li>
+      <li><strong>Passwort:</strong> aus <code>/etc/hydrahive/admin_credentials</code></li>
     </ul>
 
     <h3>Agenten-Bot im Room</h3>
@@ -895,7 +895,7 @@ assert f"sha256={expected}" == request.headers["X-OctopOS-Signature"]</code></pr
   <!-- 20. SYSTEM-UPDATE -->
   <section class="chapter" id="update">
     <h2>20. System-Update</h2>
-    <p>OctopOS kann sich selbst aus der Webkonsole heraus auf den neuesten Stand bringen — ohne SSH.</p>
+    <p>HydraHive kann sich selbst aus der Webkonsole heraus auf den neuesten Stand bringen — ohne SSH.</p>
 
     <h3>Update starten</h3>
     <ol class="steps">
@@ -919,8 +919,8 @@ sudo nginx -t
 sudo journalctl -u nginx -n 50</code></pre>
 
     <h3>Core reagiert nicht</h3>
-    <pre><code>sudo systemctl status octopos-core
-sudo journalctl -u octopos-core -n 100 --no-pager</code></pre>
+    <pre><code>sudo systemctl status hydrahive-core
+sudo journalctl -u hydrahive-core -n 100 --no-pager</code></pre>
 
     <h3>Agent antwortet nicht</h3>
     <ol class="steps">
@@ -930,9 +930,9 @@ sudo journalctl -u octopos-core -n 100 --no-pager</code></pre>
     </ol>
 
     <h3>Matrix-Bot antwortet nicht</h3>
-    <pre><code>sudo journalctl -u octopos-core -n 50 | grep -i matrix</code></pre>
+    <pre><code>sudo journalctl -u hydrahive-core -n 50 | grep -i matrix</code></pre>
     <p>Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler:</p>
-    <pre><code>sudo systemctl restart octopos-core</code></pre>
+    <pre><code>sudo systemctl restart hydrahive-core</code></pre>
 
     <h3>OAuth-Token abgelaufen</h3>
     <p><strong>LLM-Config</strong> → <strong>Claude Max</strong> → Token-Status prüfen. Neuen Token über <code>claude setup</code> holen und eintragen.</p>
@@ -942,10 +942,10 @@ sudo journalctl -u octopos-core -n 100 --no-pager</code></pre>
 
     <h3>Logs direkt auf dem Server</h3>
     <pre><code># Core-Logs
-sudo journalctl -u octopos-core -f
+sudo journalctl -u hydrahive-core -f
 
 # Audit-Log
-sudo tail -f /var/log/octopos/audit.jsonl | python3 -m json.tool
+sudo tail -f /var/log/hydrahive/audit.jsonl | python3 -m json.tool
 
 # nginx-Logs
 sudo tail -f /var/log/nginx/error.log</code></pre>
