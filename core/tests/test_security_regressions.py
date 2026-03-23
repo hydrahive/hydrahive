@@ -13,6 +13,7 @@ from octopos_core.agent_config import AgentConfig
 from octopos_core.execution_mode_policy import resolve_request_execution_mode
 from octopos_core.gitea import resolve_git_target, resolve_repo_ref
 from octopos_core.orchestrator import Orchestrator
+from octopos_core.project_config import load_project_config
 from octopos_core.router_agent_admin import CreateAgentRequest, build_agent_admin_data
 from octopos_core.router_users import (
     MyAgentUpdateRequest,
@@ -155,6 +156,21 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(cfg["has_token"])
         self.assertEqual(cfg["token_masked"], "12345678...cdef")
         self.assertNotIn("token", cfg)
+
+    def test_personal_agent_project_manifest_is_created(self):
+        original_projects_dir = main.PROJECTS_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                main.PROJECTS_DIR = tmpdir
+                project_yaml = main._ensure_personal_project_manifest("alice")
+                self.assertTrue(project_yaml.exists())
+                cfg = load_project_config(project_yaml.parent)
+                self.assertIsNotNone(cfg)
+                self.assertEqual(cfg.id, "personal_alice")
+                self.assertEqual(cfg.agents.boss, "personal_alice")
+                self.assertEqual(cfg.identity.name, "Personal Agent")
+        finally:
+            main.PROJECTS_DIR = original_projects_dir
 
     def test_only_special_cases_remain_direct_app_routes(self):
         direct_app_routes = {

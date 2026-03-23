@@ -114,6 +114,53 @@ def _check_message_rate(user_id: str, project_id: str) -> None:
 
 _setup_lock = asyncio.Lock()   # verhindert parallele Setup-Requests (#71)
 
+
+def _ensure_personal_project_manifest(username: str):
+    """Legt für einen Personal-Agenten ein minimales project.yaml an."""
+    import yaml as _yaml
+
+    project_id = f"personal_{username}"
+    project_dir = Path(PROJECTS_DIR) / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    project_yaml = project_dir / "project.yaml"
+    if not project_yaml.exists():
+        project_data = {
+            "id": project_id,
+            "version": "1.0.0",
+            "identity": {
+                "name": "Personal Agent",
+                "description": f"Persönlicher Assistent von {username}",
+            },
+            "agents": {
+                "boss": project_id,
+                "workers": [],
+            },
+            "matrix": {"room": ""},
+            "filesystem": {
+                "path": f"/projects/{project_id}",
+                "samba": False,
+                "nfs": False,
+            },
+            "system": {
+                "user": f"proj_{project_id}",
+                "group": f"proj_{project_id}",
+            },
+            "chat": {"show_swarm": False},
+        }
+        tmp_yaml = project_yaml.with_suffix(".yaml.tmp")
+        tmp_yaml.write_text(
+            _yaml.dump(project_data, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+        tmp_yaml.replace(project_yaml)
+        logger.info("Personal-Projekt angelegt: %s", project_id)
+
+    cfg = projects.get(project_id)
+    if cfg is None:
+        projects.register(project_dir)
+    return project_yaml
+
 discovery        = AgentDiscovery(AGENTS_DIR)
 runtime          = AgentRuntime()
 projects         = ProjectLoader(PROJECTS_DIR)
@@ -690,6 +737,7 @@ def _create_personal_agent(username: str) -> str:
         _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
     )
     (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
+    _ensure_personal_project_manifest(username)
     discovery._register(agent_dir)
     logger.info("Persönlicher Agent angelegt: %s (model=%s)", agent_id, model)
     audit_log("personal_agent.create", user=username, target=agent_id)
@@ -716,6 +764,7 @@ def _ensure_personal_agent(username: str):
                 )
         except Exception:
             pass
+    _ensure_personal_project_manifest(username)
     cfg = discovery.get(agent_id)
     if cfg is None and agent_dir.exists():
         cfg = load_agent_config_direct(agent_dir)
