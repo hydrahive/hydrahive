@@ -9,9 +9,11 @@ set -e
 CONF="$(dirname "$0")/hydrahive.conf"
 VM="octopos@192.168.1.100"
 SSH_KEY="$HOME/.ssh/id_rsa"
+INSTALL_DIR="/opt/hydrahive"
+INSTALL_USER="hydrahive"
+SERVICE_NAME="hydrahive-core"
 [ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"
-RSYNC="rsync -av --exclude='__pycache__' --exclude='*.pyc' -e \"ssh -i $SSH_KEY\""
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> [1/5] git pull"
@@ -20,16 +22,16 @@ git pull
 
 echo ""
 echo "==> [2/5] Core rsync → VM"
-$SSH "$VM" "sudo chown -R hydrahive:octopos /opt/hydrahive/core/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
 rsync -av --delete \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
   -e "ssh -i $SSH_KEY" \
   "$REPO/core/" \
-  "$VM:/opt/hydrahive/core/"
+  "$VM:${INSTALL_DIR}/core/"
 
 echo ""
 echo "==> [3/5] pip install auf VM"
-$SSH "$VM" "cd /opt/hydrahive/core && /opt/hydrahive/venv/bin/pip install -e . -q"
+$SSH "$VM" "cd ${INSTALL_DIR}/core && ${INSTALL_DIR}/venv/bin/pip install -e . -q"
 
 echo ""
 echo "==> [4/5] Console bauen"
@@ -37,21 +39,21 @@ npm --prefix "$REPO/console" run build
 
 echo ""
 echo "==> [4b/5] Console-Permissions für rsync setzen"
-$SSH "$VM" "sudo chown -R hydrahive:octopos /opt/hydrahive/console/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/console/"
 
 echo ""
 echo "==> [5/5] Console rsync → VM + restart"
 rsync -av --delete \
   -e "ssh -i $SSH_KEY" \
   "$REPO/console/dist/" \
-  "$VM:/opt/hydrahive/console/"
+  "$VM:${INSTALL_DIR}/console/"
 
-$SSH "$VM" "sudo chown -R www-data:www-data /opt/hydrahive/console/ && sudo systemctl restart hydrahive-core"
+$SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/ && sudo systemctl restart ${SERVICE_NAME}"
 
 echo ""
 echo "==> Warte auf Start..."
 sleep 3
-$SSH "$VM" "sudo systemctl status hydrahive-core --no-pager | head -4"
+$SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"
 
 echo ""
 echo "==> [6/5] Gitea-Status prüfen"
