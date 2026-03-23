@@ -10,6 +10,7 @@ Path-Traversal und Zugriff ausserhalb des Projekt-Verzeichnisses werden verweige
 """
 
 import logging
+import shlex as _shlex_shell
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -700,7 +701,12 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
     (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
     (r"cd\s+/opt/octopos\b.*&&.*\bgit\b", "git in /opt/octopos/ verboten"),
+    # Subshell-/Command-Substitution-Gefahr
+    (r"\$\(",                     "Command Substitution $(...) verboten"),
+    (r"`",                        "Backticks verboten"),
 ]
+
+_SHELL_WRAPPERS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
 
 
 def _check_shell_blocklist(command: str) -> str | None:
@@ -708,6 +714,26 @@ def _check_shell_blocklist(command: str) -> str | None:
     for pattern, reason in _SHELL_BLOCKLIST:
         if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
             return reason
+
+    try:
+        tokens = _shlex_shell.split(command)
+    except ValueError:
+        return None
+
+    if not tokens:
+        return None
+
+    for token in tokens:
+        if token == "eval":
+            return "eval verboten"
+
+    shell_name = Path(tokens[0]).name.lower()
+    if shell_name in _SHELL_WRAPPERS:
+        for idx, token in enumerate(tokens[1:], start=1):
+            if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+                if idx + 1 < len(tokens):
+                    return _check_shell_blocklist(tokens[idx + 1])
+                break
     return None
 
 
