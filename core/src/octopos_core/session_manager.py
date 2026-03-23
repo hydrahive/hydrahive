@@ -77,7 +77,7 @@ class Session:
     def end(self) -> None:
         self.ended_at = datetime.now(timezone.utc).isoformat()
 
-    def llm_context(self, max_messages: int = 50, prune_tool_results: int = 8) -> list[dict]:
+    def llm_context(self, max_messages: int = 50, prune_tool_results: int = 5) -> list[dict]:
         """
         Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning)
         Tool-Results die aelter als prune_tool_results Positionen sind werden
