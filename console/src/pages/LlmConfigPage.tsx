@@ -164,7 +164,6 @@ export function LlmConfigPage() {
   const [refreshing,     setRefreshing]     = useState(false);
   const [claudeStatus,   setClaudeStatus]   = useState<ClaudeStatus|null>(null);
   const [codexStatus,    setCodexStatus]    = useState<OAuthStatus|null>(null);
-  const [googleStatus,   setGoogleStatus]   = useState<OAuthStatus|null>(null);
   const [oauthFlow,      setOauthFlow]      = useState<OAuthFlow|null>(null);
 
   // Ref so exchange handler always sees current flow state
@@ -173,16 +172,14 @@ export function LlmConfigPage() {
 
   async function load() {
     try {
-      const [cfg, ollama, claudeSt, codexSt, googleSt] = await Promise.allSettled([
+      const [cfg, ollama, claudeSt, codexSt] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
         api.claudeTokenStatus(),
         api.openaiCodexStatus(),
-        api.googleAntigravityStatus(),
       ]);
       if (claudeSt.status  === "fulfilled") setClaudeStatus(claudeSt.value);
       if (codexSt.status   === "fulfilled") setCodexStatus(codexSt.value);
-      if (googleSt.status  === "fulfilled") setGoogleStatus(googleSt.value);
       if (cfg.status       === "fulfilled") setProviderStatus(cfg.value.providers ?? {});
       if (ollama.status    === "fulfilled") {
         setOllamaOk(ollama.value.available);
@@ -315,23 +312,6 @@ export function LlmConfigPage() {
         ) : undefined}
         models={codexStatus?.configured ? codexStatus.models : undefined}
         modelPrefix="openai-codex"
-        onStartOAuth={startOAuth}
-      />
-
-      {/* Google Antigravity OAuth */}
-      <OAuthCard
-        id="google_antigravity"
-        label="Google Antigravity (Gemini 3)"
-        description="Gemini 3 Flash/Pro via Google Cloud Code Assist OAuth. Kein API-Key nötig."
-        configured={!!googleStatus?.configured}
-        statusExtra={googleStatus?.configured ? (
-          <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200">
-            <CheckCircle className="h-3.5 w-3.5"/>
-            Verbunden — {googleStatus.email} · Projekt: {googleStatus.project_id}
-          </div>
-        ) : undefined}
-        models={googleStatus?.configured ? googleStatus.models : undefined}
-        modelPrefix="google-antigravity"
         onStartOAuth={startOAuth}
       />
 
