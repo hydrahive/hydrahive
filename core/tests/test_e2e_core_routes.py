@@ -350,5 +350,229 @@ class DocsConsistencyTests(unittest.TestCase):
         self.assertIn("2026", content, "Kein 2026-Eintrag im Changelog")
 
 
+# ---------------------------------------------------------------------------
+# Agent Memory E2E  (#147)
+# ---------------------------------------------------------------------------
+
+class AgentMemoryE2ETests(unittest.TestCase):
+    """Verification gap #147 — POST /agents/{id}/memory schreibt Datei."""
+
+    def _run_with_client(self, tmpdir: str, fn):
+        agents_dir   = Path(tmpdir) / "agents"
+        projects_dir = Path(tmpdir) / "projects"
+        agents_dir.mkdir()
+        projects_dir.mkdir()
+        _make_agent_yaml(agents_dir, "personal_testuser")
+
+        users_path = _make_users_file(tmpdir)
+        patches = {
+            "USERS_FILE":   users_path,
+            "JWT_SECRET":   "test-jwt-mem",
+            "AGENTS_DIR":   str(agents_dir),
+            "PROJECTS_DIR": str(projects_dir),
+        }
+        with mock.patch.multiple(main, **patches), \
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-mem"):
+            with mock.patch.object(main.discovery,      "start", return_value=None), \
+                 mock.patch.object(main.discovery,      "stop",  return_value=None), \
+                 mock.patch.object(main.projects,       "start", return_value=None), \
+                 mock.patch.object(main.projects,       "stop",  return_value=None), \
+                 mock.patch.object(main.sessions,       "start", return_value=None), \
+                 mock.patch.object(main.agent_sessions, "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "stop",  return_value=None):
+                main.discovery._dir = agents_dir
+                main.discovery._agents.clear()
+                try:
+                    with TestClient(main.app) as client:
+                        fn(client)
+                finally:
+                    main.discovery._agents.clear()
+
+    def test_write_memory_returns_404_for_unknown_agent(self):
+        """Endpoint erreichbar und verarbeitet Request — 404 wenn Agent unbekannt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                self.assertEqual(resp.status_code, 200, resp.text)
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.post(
+                    "/agents/nonexistent_xyz/memory",
+                    headers=headers,
+                    json={"filename": "test_fact", "content": "# Test\nOctopOS ist toll."},
+                )
+                # 404 beweist: Endpoint existiert, Auth funktioniert, Agent-Lookup läuft
+                self.assertEqual(resp.status_code, 404, resp.text)
+
+            self._run_with_client(tmpdir, check)
+
+    def test_write_memory_requires_auth(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post(
+                    "/agents/personal_testuser/memory",
+                    json={"filename": "x", "content": "y"},
+                )
+                self.assertIn(resp.status_code, (401, 403))
+            self._run_with_client(tmpdir, check)
+
+
+# ---------------------------------------------------------------------------
+# WKS Config E2E  (#148)
+# ---------------------------------------------------------------------------
+
+class WksConfigE2ETests(unittest.TestCase):
+    """Verification gap #148 — /me/wks GET/PUT Struktur."""
+
+    def _run_with_client(self, tmpdir: str, fn):
+        agents_dir   = Path(tmpdir) / "agents"
+        projects_dir = Path(tmpdir) / "projects"
+        agents_dir.mkdir()
+        projects_dir.mkdir()
+
+        users_path = _make_users_file(tmpdir)
+        patches = {
+            "USERS_FILE":   users_path,
+            "JWT_SECRET":   "test-jwt-wks",
+            "AGENTS_DIR":   str(agents_dir),
+            "PROJECTS_DIR": str(projects_dir),
+        }
+        with mock.patch.multiple(main, **patches), \
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-wks"):
+            with mock.patch.object(main.discovery,      "start", return_value=None), \
+                 mock.patch.object(main.discovery,      "stop",  return_value=None), \
+                 mock.patch.object(main.projects,       "start", return_value=None), \
+                 mock.patch.object(main.projects,       "stop",  return_value=None), \
+                 mock.patch.object(main.sessions,       "start", return_value=None), \
+                 mock.patch.object(main.agent_sessions, "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "stop",  return_value=None):
+                main.discovery._agents.clear()
+                try:
+                    with TestClient(main.app) as client:
+                        fn(client)
+                finally:
+                    main.discovery._agents.clear()
+
+    def test_wks_get_returns_structure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.get("/me/wks", headers=headers)
+                self.assertEqual(resp.status_code, 200, resp.text)
+                body = resp.json()
+                for key in ("configured", "ip", "ssh_user", "ollama_port", "has_ssh_key"):
+                    self.assertIn(key, body, f"Schlüssel '{key}' fehlt in /me/wks")
+                self.assertFalse(body["configured"])
+                self.assertFalse(body["has_ssh_key"])
+
+            self._run_with_client(tmpdir, check)
+
+    def test_platforms_returns_overview(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.get("/me/platforms", headers=headers)
+                self.assertEqual(resp.status_code, 200, resp.text)
+                body = resp.json()
+                self.assertIn("platforms", body)
+                self.assertIn("username", body)
+
+            self._run_with_client(tmpdir, check)
+
+
+# ---------------------------------------------------------------------------
+# Discord Config E2E  (#149)
+# ---------------------------------------------------------------------------
+
+class DiscordConfigE2ETests(unittest.TestCase):
+    """Verification gap #149 — /me/discord GET/DELETE ohne echten Bot-Token."""
+
+    def _run_with_client(self, tmpdir: str, fn, discord_token_dir: Path = None):
+        agents_dir   = Path(tmpdir) / "agents"
+        projects_dir = Path(tmpdir) / "projects"
+        agents_dir.mkdir()
+        projects_dir.mkdir()
+
+        users_path = _make_users_file(tmpdir)
+        patches = {
+            "USERS_FILE":   users_path,
+            "JWT_SECRET":   "test-jwt-discord",
+            "AGENTS_DIR":   str(agents_dir),
+            "PROJECTS_DIR": str(projects_dir),
+        }
+        token_dir = discord_token_dir or Path(tmpdir) / "discord_tokens"
+        with mock.patch.multiple(main, **patches), \
+             mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-discord"), \
+             mock.patch("octopos_core.discord_agent.TOKEN_DIR", token_dir):
+            with mock.patch.object(main.discovery,      "start", return_value=None), \
+                 mock.patch.object(main.discovery,      "stop",  return_value=None), \
+                 mock.patch.object(main.projects,       "start", return_value=None), \
+                 mock.patch.object(main.projects,       "stop",  return_value=None), \
+                 mock.patch.object(main.sessions,       "start", return_value=None), \
+                 mock.patch.object(main.agent_sessions, "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "start", return_value=None), \
+                 mock.patch.object(main.runtime,        "stop",  return_value=None):
+                main.discovery._agents.clear()
+                try:
+                    with TestClient(main.app) as client:
+                        fn(client)
+                finally:
+                    main.discovery._agents.clear()
+
+    def test_discord_get_unconfigured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.get("/me/discord", headers=headers)
+                self.assertEqual(resp.status_code, 200, resp.text)
+                body = resp.json()
+                self.assertIn("configured", body)
+                self.assertFalse(body["configured"])
+
+            self._run_with_client(tmpdir, check)
+
+    def test_discord_delete_unconfigured_ok(self):
+        """DELETE /me/discord auf unkonfigurierten Bot soll nicht crashen."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.delete("/me/discord", headers=headers)
+                self.assertIn(resp.status_code, (200, 204), resp.text)
+
+            self._run_with_client(tmpdir, check)
+
+    def test_discord_put_rejects_invalid_token(self):
+        """PUT /me/discord mit ungültigem Token → 400."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            def check(client):
+                resp = client.post("/auth/login", json={"username": "testuser", "password": "testpass"})
+                token = resp.json()["access_token"]
+                headers = {"Authorization": f"Bearer {token}"}
+
+                resp = client.put(
+                    "/me/discord",
+                    headers=headers,
+                    json={"bot_token": "invalid-token", "guild_id": "123", "channel_ids": []},
+                )
+                self.assertEqual(resp.status_code, 400, resp.text)
+
+            self._run_with_client(tmpdir, check)
+
+
 if __name__ == "__main__":
     unittest.main()
