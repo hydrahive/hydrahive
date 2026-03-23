@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
-interface Message { id: string; role: "user"|"assistant"|"system"; content: string; }
+interface Message { id: string; role: "user"|"assistant"|"system"; content: string; tokenUsage?: { input: number; output: number }; }
 
 interface AgentCfg {
   identity:        string;
@@ -238,7 +238,11 @@ export function MyAgentPage() {
               const evt = JSON.parse(line.slice(6));
               if (evt.text !== undefined) { setActiveTool(null); setMessages(ms => ms.map(m => m.id===asstMsg.id ? {...m,content:m.content+evt.text} : m)); }
               else if (evt.tool_call !== undefined) setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
-              else if (evt.done) break outer;
+              else if (evt.done) {
+                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+                  setMessages(ms => ms.map(m => m.id===asstMsg.id ? {...m, tokenUsage: evt.usage} : m));
+                break outer;
+              }
               else if (evt.error) throw new Error(evt.error);
             } catch(pe) { if (pe instanceof Error && pe.message !== "Unexpected end of JSON input") throw pe; }
           }
@@ -416,6 +420,13 @@ export function MyAgentPage() {
                                   </>
                             }
                           </div>
+                          {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
+                            <div className="flex gap-1 px-1 pt-1">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort">
+                                ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                              </span>
+                            </div>
+                          )}
                         </div>
                         {msg.role === "user" && (
                           <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">

@@ -1012,6 +1012,9 @@ class Orchestrator:
             yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
             return
 
+        # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
+        _usage: dict[str, int] = {"input": 0, "output": 0}
+
         # Session + System-Prompt aufbauen
         user_msg_saved = False
         self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
@@ -1181,6 +1184,9 @@ class Orchestrator:
                                     streamed_any   = True
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 final_msg = await stream.get_final_message()
+                            if hasattr(final_msg, "usage"):
+                                _usage["input"]  += getattr(final_msg.usage, "input_tokens", 0)
+                                _usage["output"] += getattr(final_msg.usage, "output_tokens", 0)
 
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
@@ -1213,6 +1219,10 @@ class Orchestrator:
                                         full_response += text
                                         streamed_any = True
                                         yield f"data: {_json.dumps({'text': text})}\n\n"
+                                    _fm = await stream.get_final_message()
+                                if hasattr(_fm, "usage"):
+                                    _usage["input"]  += getattr(_fm.usage, "input_tokens", 0)
+                                    _usage["output"] += getattr(_fm.usage, "output_tokens", 0)
                                 break
                             if _round == boss_cfg.max_tool_rounds - 2:
                                 # Vorletzter Durchlauf — Agent soll jetzt abschließen
@@ -1263,6 +1273,10 @@ class Orchestrator:
                                     full_response += text
                                     streamed_any   = True
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
+                                _fm2 = await stream.get_final_message()
+                            if hasattr(_fm2, "usage"):
+                                _usage["input"]  += getattr(_fm2.usage, "input_tokens", 0)
+                                _usage["output"] += getattr(_fm2.usage, "output_tokens", 0)
 
                     else:
                         # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
@@ -1289,6 +1303,10 @@ class Orchestrator:
                             accumulated_tcs: dict = {}  # index → {id, name, arguments}
 
                             async for chunk in await litellm.acompletion(**kwargs, drop_params=True):
+                                # litellm liefert usage im letzten Chunk (stream_options)
+                                if getattr(chunk, "usage", None):
+                                    _usage["input"]  += getattr(chunk.usage, "prompt_tokens", 0)
+                                    _usage["output"] += getattr(chunk.usage, "completion_tokens", 0)
                                 choice = chunk.choices[0]
                                 delta  = choice.delta
                                 if delta.content:
@@ -1414,7 +1432,7 @@ class Orchestrator:
                 project_id, MessageRole.ASSISTANT,
                 full_response, agent_id=boss_cfg.id
             )
-            yield f"data: {_json.dumps({'done': True, 'session_id': None})}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'session_id': None, 'usage': _usage})}\n\n"
 
         except Exception as e:
             logger.error("Streaming-Fehler: %s", e)

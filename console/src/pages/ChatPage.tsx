@@ -9,6 +9,7 @@ interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   workers?: string[];
+  tokenUsage?: { input: number; output: number };
 }
 
 const SLASH_COMMANDS = [
@@ -193,6 +194,11 @@ export function ChatPage() {
               } else if (evt.tool_call !== undefined) {
                 setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
               } else if (evt.done) {
+                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0)) {
+                  setMessages((ms) => ms.map((m) =>
+                    m.id === assistantMsg.id ? { ...m, tokenUsage: evt.usage } : m
+                  ));
+                }
                 break outer;
               } else if (evt.error) {
                 throw new Error(evt.error);
@@ -346,6 +352,13 @@ export function ChatPage() {
                           {msg.workers.map((w) => (
                             <span key={w} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"><Network className="h-2.5 w-2.5" />{w}</span>
                           ))}
+                        </div>
+                      )}
+                      {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
+                        <div className="flex gap-1 px-1">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort">
+                            ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                          </span>
                         </div>
                       )}
                     </div>
