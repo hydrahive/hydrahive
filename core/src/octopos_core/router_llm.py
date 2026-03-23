@@ -44,6 +44,23 @@ def _pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
+_GOOGLE_ANTIGRAVITY_CONFIG = Path("/etc/octopos/google_antigravity_oauth.json")
+
+
+def _google_antigravity_client_id() -> str:
+    if _GOOGLE_ANTIGRAVITY_CONFIG.exists():
+        import json as _j
+        return _j.loads(_GOOGLE_ANTIGRAVITY_CONFIG.read_text())["client_id"]
+    return ""
+
+
+def _google_antigravity_client_secret() -> str:
+    if _GOOGLE_ANTIGRAVITY_CONFIG.exists():
+        import json as _j
+        return _j.loads(_GOOGLE_ANTIGRAVITY_CONFIG.read_text())["client_secret"]
+    return ""
+
+
 def register_llm_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -444,7 +461,7 @@ def register_llm_routes(
             "https://www.googleapis.com/auth/experimentsandconfigs",
         ])
         params = {
-            "client_id": "REDACTED_GOOGLE_CLIENT_ID",
+            "client_id": _google_antigravity_client_id(),
             "response_type": "code",
             "redirect_uri": "http://localhost:51121/oauth-callback",
             "scope": scopes,
@@ -488,8 +505,8 @@ def register_llm_routes(
             resp = await client.post(
                 "https://oauth2.googleapis.com/token",
                 data={
-                    "client_id": "REDACTED_GOOGLE_CLIENT_ID",
-                    "client_secret": "REDACTED_GOOGLE_SECRET",
+                    "client_id": _google_antigravity_client_id(),
+                    "client_secret": _google_antigravity_client_secret(),
                     "code": code,
                     "grant_type": "authorization_code",
                     "redirect_uri": "http://localhost:51121/oauth-callback",
@@ -519,7 +536,7 @@ def register_llm_routes(
         except Exception:
             pass
 
-        project_id = "REDACTED_GOOGLE_PROJECT"
+        project_id = ""
         try:
             async with _httpx.AsyncClient(timeout=10) as client:
                 ca = await client.post(
