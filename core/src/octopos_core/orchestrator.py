@@ -456,10 +456,31 @@ class Orchestrator:
         except Exception as e:
             logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
 
+    @staticmethod
+    def _context_mode(user_text: str) -> str:
+        """
+        Bestimmt den Kontext-Modus anhand des Inhalts der User-Nachricht.
+
+        normal  — Standard: kompakter Kontext (5 Learning-Einträge, max 2 Memory-Dateien)
+        full    — Vollständiger Kontext: alle Memory-Dateien, 12 Learning-Einträge
+
+        full wird ausgelöst bei expliziten Repo-/Audit-/Deep-Dive-Anfragen —
+        Trigger-Wörter sind bewusst eng gewählt, um unnötige full-Aufrufe zu vermeiden.
+        """
+        text = (user_text or "").lower()
+        full_triggers = (
+            "diff ", "diff\n", "patch", "pull request", " pr #", " pr:",
+            "audit", "deep dive", "deep-dive", "vollständig", "alles zeigen",
+            "review mein", "review den", "review die", "analysiere alles",
+            "zeig mir alle", "komplett analysier",
+        )
+        return "full" if any(t in text for t in full_triggers) else "normal"
+
     def _build_system_prompt(self, boss_cfg: AgentConfig, user_text: str) -> str:
+        mode = self._context_mode(user_text)
         parts = [f"Du bist {boss_cfg.identity}."]
 
-        # Soul laden wenn vorhanden
+        # Soul laden wenn vorhanden (immer — klein und identitätskritisch)
         if boss_cfg.soul and boss_cfg.agent_dir:
             soul_path = boss_cfg.agent_dir / boss_cfg.soul
             if soul_path.exists():
@@ -470,12 +491,26 @@ class Orchestrator:
             memory_dir = boss_cfg.agent_dir / "memory"
             if memory_dir.exists():
                 mem_parts = []
-                learning_snippet = build_learning_prompt_snippet(boss_cfg.agent_dir)
+
+                # Learning-Snippet: normal=5/2048, full=12/4096
+                if mode == "full":
+                    learning_snippet = build_learning_prompt_snippet(boss_cfg.agent_dir)
+                else:
+                    learning_snippet = build_learning_prompt_snippet(
+                        boss_cfg.agent_dir, max_entries=5, max_chars=2048
+                    )
                 if learning_snippet:
                     mem_parts.append(learning_snippet)
-                for mf in sorted(memory_dir.glob("*.md")):
-                    if mf.name == "learned-facts.md":
-                        continue
+
+                # Memory-Dateien: full=alle, normal=max 2 (neueste zuerst)
+                mem_files = sorted(
+                    (mf for mf in memory_dir.glob("*.md") if mf.name != "learned-facts.md"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+                if mode != "full":
+                    mem_files = mem_files[:2]
+                for mf in mem_files:
                     try:
                         text = mf.read_text(encoding="utf-8").strip()
                         if text:
@@ -496,6 +531,7 @@ class Orchestrator:
         if repo_guidance:
             parts.append(repo_guidance)
 
+        logger.debug("context-mode=%s agent=%s", mode, boss_cfg.id)
         return "\n\n".join(parts)
 
     @staticmethod
