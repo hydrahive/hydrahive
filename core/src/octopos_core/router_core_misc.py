@@ -90,10 +90,13 @@ def summarize_core_journal_lines(lines: list[str], *, source: str = "journalctl 
         if signature:
             signatures[signature] += 1
 
+    # Bekannte Noise-Patterns aus Top-Signatures herausfiltern (#153)
+    _NOISE_PATTERNS = ("nio.rooms", "snap", "firmware", "handling event of type")
     top_signatures = [
         {"signature": signature, "count": count}
-        for signature, count in signatures.most_common(5)
-    ]
+        for signature, count in signatures.most_common(20)
+        if not any(p in signature for p in _NOISE_PATTERNS)
+    ][:5]
     return {
         "source": source,
         "available": bool(lines),
