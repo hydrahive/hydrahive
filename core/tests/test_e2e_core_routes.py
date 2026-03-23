@@ -75,23 +75,28 @@ def _all_lifecycle_patches():
     )
 
 
-class AuthGuardSmokeTests(unittest.TestCase):
-    """Schnelle Checks: alle neuen Endpoints erfordern Auth."""
+def _build_smoke_patches() -> list:
+    """Erstellt alle benötigten Patches für einen isolierten TestClient."""
+    return [
+        mock.patch.object(main.discovery,      "start", return_value=None),
+        mock.patch.object(main.discovery,      "stop",  return_value=None),
+        mock.patch.object(main.projects,       "start", return_value=None),
+        mock.patch.object(main.projects,       "stop",  return_value=None),
+        mock.patch.object(main.sessions,       "start", return_value=None),
+        mock.patch.object(main.agent_sessions, "start", return_value=None),
+        mock.patch.object(main.runtime,        "start", return_value=None),
+        mock.patch.object(main.runtime,        "stop",  return_value=None),
+        mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
+        mock.patch("octopos_core.main.USERS_FILE", Path("/dev/null")),
+    ]
+
+
+class _SmokeClientMixin:
+    """Mixin: stellt einen isolierten TestClient als cls._client bereit."""
 
     @classmethod
     def setUpClass(cls):
-        cls._patches = [
-            mock.patch.object(main.discovery,      "start", return_value=None),
-            mock.patch.object(main.discovery,      "stop",  return_value=None),
-            mock.patch.object(main.projects,       "start", return_value=None),
-            mock.patch.object(main.projects,       "stop",  return_value=None),
-            mock.patch.object(main.sessions,       "start", return_value=None),
-            mock.patch.object(main.agent_sessions, "start", return_value=None),
-            mock.patch.object(main.runtime,        "start", return_value=None),
-            mock.patch.object(main.runtime,        "stop",  return_value=None),
-            mock.patch("octopos_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
-            mock.patch("octopos_core.main.USERS_FILE", Path("/dev/null")),
-        ]
+        cls._patches = _build_smoke_patches()
         for p in cls._patches:
             p.start()
         main.JWT_SECRET = "test-jwt-secret"
@@ -105,6 +110,10 @@ class AuthGuardSmokeTests(unittest.TestCase):
         main.discovery._agents.clear()
         for p in reversed(cls._patches):
             p.stop()
+
+
+class AuthGuardSmokeTests(_SmokeClientMixin, unittest.TestCase):
+    """Schnelle Checks: alle neuen Endpoints erfordern Auth."""
 
     def _get_unauthenticated(self, path: str) -> int:
         return self._client.get(path).status_code
@@ -572,6 +581,70 @@ class DiscordConfigE2ETests(unittest.TestCase):
                 self.assertEqual(resp.status_code, 400, resp.text)
 
             self._run_with_client(tmpdir, check)
+
+
+# ---------------------------------------------------------------------------
+# Gitea Tools E2E  (#150)
+# ---------------------------------------------------------------------------
+
+class GiteaToolsE2ETests(_SmokeClientMixin, unittest.TestCase):
+    """Verification gap #150 — Gitea-Endpunkte erreichbar, Tool-Registry vollständig."""
+
+    def test_gitea_issue_text_validation(self):
+        from octopos_core.tool_registry import _validate_gitea_issue_text
+
+        self.assertIsNone(_validate_gitea_issue_text("Normaler Titel"))
+        self.assertIsNotNone(_validate_gitea_issue_text("x" * 257))
+        self.assertIsNotNone(_validate_gitea_issue_text("ok", "y" * 20001))
+
+    def test_gitea_tools_registered(self):
+        from octopos_core.tool_registry import registry
+
+        for tool_id in ("gitea_create_issue", "gitea_comment_issue", "gitea_update_issue"):
+            self.assertIsNotNone(registry.get(tool_id), f"Tool '{tool_id}' nicht registriert")
+
+    def test_gitea_repos_requires_auth(self):
+        """GET /gitea/repos erfordert Auth."""
+        self.assertIn(self._client.get("/gitea/repos").status_code, (401, 403))
+
+    def test_gitea_config_requires_admin(self):
+        """GET /gitea/config ist Admin-Route → ohne Auth 401/403."""
+        self.assertIn(self._client.get("/gitea/config").status_code, (401, 403))
+
+
+# ---------------------------------------------------------------------------
+# Console API E2E  (#151)
+# ---------------------------------------------------------------------------
+
+class ConsoleApiE2ETests(_SmokeClientMixin, unittest.TestCase):
+    """Verification gap #151 — Backend-Endpunkte die die Console nutzt."""
+
+    def test_projects_endpoint_requires_auth(self):
+        self.assertIn(self._client.get("/projects").status_code, (401, 403))
+
+    def test_agents_endpoint_requires_auth(self):
+        self.assertIn(self._client.get("/agents").status_code, (401, 403))
+
+    def test_tools_endpoint_requires_auth(self):
+        self.assertIn(self._client.get("/tools").status_code, (401, 403))
+
+    def test_health_endpoint_public(self):
+        """GET /health ist öffentlich und liefert service=octopos-core."""
+        resp = self._client.get("/health")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json().get("service"), "octopos-core")
+
+    def test_setup_status_public(self):
+        """GET /setup/status ist öffentlich."""
+        resp = self._client.get("/setup/status")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("needs_setup", resp.json())
+
+    def test_admin_backup_requires_auth(self):
+        self.assertIn(self._client.get("/admin/backups").status_code, (401, 403))
+
+    def test_mcp_servers_requires_auth(self):
+        self.assertIn(self._client.get("/mcp/servers").status_code, (401, 403))
 
 
 if __name__ == "__main__":
