@@ -19,11 +19,90 @@ class DiscordConfigRequest(BaseModel):
     channel_ids: list[str] = []
 
 
+SUPPORTED_PLATFORMS = {
+    "matrix": {"supported": True, "label": "Matrix"},
+    "discord": {"supported": True, "label": "Discord"},
+    "wks": {"supported": True, "label": "WKS"},
+    "telegram": {"supported": False, "label": "Telegram"},
+    "whatsapp": {"supported": False, "label": "WhatsApp"},
+    "signal": {"supported": False, "label": "Signal"},
+}
+
+
 def discord_client_connected(username: str) -> bool:
     from .tool_registry import _discord_clients
 
     client = _discord_clients.get(username)
     return bool(client and getattr(client, "is_connected", False))
+
+
+def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> list[dict]:
+    from .discord_agent import load_discord_config
+
+    user = users.get(username, {})
+    wks = user.get("wks", {})
+    discord_cfg = load_discord_config(username)
+    matrix_id = user.get("matrix_id", "")
+
+    overview = [
+        {
+            "platform": "matrix",
+            "label": SUPPORTED_PLATFORMS["matrix"]["label"],
+            "supported": True,
+            "configured": bool(matrix_id),
+            "connected": bool(matrix_id),
+            "details": {"matrix_id": matrix_id} if matrix_id else {},
+        },
+        {
+            "platform": "discord",
+            "label": SUPPORTED_PLATFORMS["discord"]["label"],
+            "supported": True,
+            "configured": bool(discord_cfg),
+            "connected": discord_client_connected(username),
+            "details": {
+                "guild_id": discord_cfg.get("guild_id", "") if discord_cfg else "",
+                "channel_ids": discord_cfg.get("channel_ids", []) if discord_cfg else [],
+            },
+        },
+        {
+            "platform": "wks",
+            "label": SUPPORTED_PLATFORMS["wks"]["label"],
+            "supported": True,
+            "configured": bool(wks.get("ip")),
+            "connected": bool(wks.get("ip")),
+            "details": {
+                "ip": wks.get("ip", ""),
+                "ssh_user": wks.get("ssh_user", username),
+                "ollama_port": wks.get("ollama_port", 11434),
+                "has_ssh_key": (wks_keys_dir / username).exists(),
+            },
+        },
+        {
+            "platform": "telegram",
+            "label": SUPPORTED_PLATFORMS["telegram"]["label"],
+            "supported": False,
+            "configured": False,
+            "connected": False,
+            "details": {"status": "planned"},
+        },
+        {
+            "platform": "whatsapp",
+            "label": SUPPORTED_PLATFORMS["whatsapp"]["label"],
+            "supported": False,
+            "configured": False,
+            "connected": False,
+            "details": {"status": "planned"},
+        },
+        {
+            "platform": "signal",
+            "label": SUPPORTED_PLATFORMS["signal"]["label"],
+            "supported": False,
+            "configured": False,
+            "connected": False,
+            "details": {"status": "planned"},
+        },
+    ]
+    return overview
 
 
 async def setup_discord_clients(*, load_users, runtime, orchestrator, logger) -> None:
@@ -72,6 +151,15 @@ def register_user_integration_routes(
             "ssh_user": wks.get("ssh_user", username),
             "ollama_port": wks.get("ollama_port", 11434),
             "has_ssh_key": (wks_keys_dir / username).exists(),
+        }
+
+    @auth_router.get("/me/platforms")
+    def get_my_platforms(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        users = load_users()
+        return {
+            "username": username,
+            "platforms": _build_platform_overview(username, users, wks_keys_dir),
         }
 
     @auth_router.put("/me/wks")
