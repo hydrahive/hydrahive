@@ -12,13 +12,17 @@
 - **Projekt-Isolation** — Jedes Projekt bekommt eigenen Linux-User, Samba-Share und Matrix-Room
 - **Multi-LLM** — Ollama (lokal), Claude Max (OAuth), OpenAI — pro Agent konfigurierbar; Fallback-Ketten
 - **Matrix-Integration** — Agenten sind echte Matrix-Bots, du kannst mit Element eingreifen
+- **Discord-Integration** — Persönliche Agenten können auf Discord lesen und antworten
 - **QMD-Skills** — Angelerntes Wissen in Markdown-Dateien mit YAML-Frontmatter
 - **Persönlicher Agent** — Jeder User bekommt einen eigenen privaten Agenten (`personal_<username>`)
 - **Memory-System** — Agenten speichern Wissen persistent in Markdown-Dateien, auto-injiziert in System-Prompt
+- **A-MEM Shared Memory** — Zentrale agentenuebergreifende Wissensdatenbank fuer Fehler, Loesungen und Learnings
 - **WKS-Zugang** — Persönliche Agenten verbinden sich per SSH/SFTP mit der eigenen Workstation
 - **WKS-Ollama** — Ollama auf der Workstation wird automatisch im Modell-Dropdown angeboten
 - **Git-Tools** — Agenten können committen, pushen und Pull Requests auf Gitea erstellen
+- **Gitea-Issues** — Agenten können Issues anlegen, kommentieren, updaten und schliessen
 - **MCP-Server** — Externe Tool-Server per streamableHttp einbinden (z.B. QMD Memory Search)
+- **Execution Modes** — safe/elevated/root fuer kontrollierte Eskalation von Agentenrechten
 - **Webkonsole** — Vollständige Verwaltung ohne SSH: Agenten, Projekte, Users, Logs, Skills, MCP
 - **Streaming** — Antworten erscheinen Token für Token
 - **Webhook-System** — Externe Trigger für Agenten (`/hooks/{project}/wake`)
@@ -70,9 +74,16 @@ Browser (React) → nginx (HTTPS) → FastAPI Core → Orchestrator
 - **LLM:** Ollama + Anthropic OAuth + OpenAI
 - **Installer:** Bash + Systemd (kein Docker)
 
+## Aktueller Stand
+
+- Produktiv nutzbar und aktiv weiterentwickelt
+- Router- und Auth-Architektur ist modularisiert statt monolithisch
+- Persönliche Agenten arbeiten mit klaren Sicherheitsstufen und A-MEM als Shared Memory
+- Die Webkonsole deckt Agenten, Projekte, MCP, Gitea, WKS, Discord, Audit und Updates ab
+
 ## Status
 
-🚧 Aktive Entwicklung — produktiv nutzbar, API noch nicht stabil
+🚧 Aktive Entwicklung — produktiv nutzbar
 
 ## Lizenz
 
