@@ -11,7 +11,7 @@ from .execution_mode_policy import resolve_request_execution_mode
 
 def default_personal_agent_execution_modes() -> dict:
     return {
-        "default": "safe",
+        "default": "elevated",
         "safe": {
             "permissions": [
                 "filesystem.read",
@@ -45,6 +45,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "git.write",
                 "workstation.read",
                 "workstation.write",
+                "workstation.shell",
                 "discord",
             ],
         },
