@@ -154,14 +154,14 @@ class ToolRegistry:
         Schnittmenge: agent.yaml ∩ Registry ∩ permissions (TL4).
         Tools die nicht in der Registry sind werden stillschweigend ignoriert (TL5).
         """
-        perms  = set(agent_permissions or [])
+        perms  = set(agent_permissions) if agent_permissions is not None else None
         result = []
         for tool_id in agent_tool_ids:
             tool = self._tools.get(tool_id)
             if tool is None:
                 logger.debug("Tool '%s' nicht in Registry — ignoriert", tool_id)
                 continue
-            if tool.permissions_required and not perms.issuperset(tool.permissions_required):
+            if perms is not None and tool.permissions_required and not perms.issuperset(tool.permissions_required):
                 logger.debug("Tool '%s' fehlen Berechtigungen — ignoriert", tool_id)
                 continue
             result.append(tool)
