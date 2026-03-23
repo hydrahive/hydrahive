@@ -38,6 +38,7 @@ class RateLimitSettings:
     message_window_s: int = 60
     max_login_keys: int = 10000
     max_message_keys: int = 50000
+    redis_retry_after_s: int = 30
 
 
 class RateLimiter:
@@ -60,6 +61,7 @@ class RateLimiter:
         self._redis_client = redis_client
         self._redis_script = redis_script
         self._redis_failed = False
+        self._redis_failed_at = 0.0
         self._login_attempts: dict[str, list[float]] = defaultdict(list)
         self._message_attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
 
@@ -105,8 +107,13 @@ class RateLimiter:
             self._redis_script = None
 
     def _redis_check(self, key: str, limit: int, window_s: int) -> bool | None:
-        if self._redis_client is None or self._redis_script is None or self._redis_failed:
+        if self._redis_client is None or self._redis_script is None:
             return None
+
+        if self._redis_failed:
+            retry_after = max(int(self.settings.redis_retry_after_s), 1)
+            if time.time() - self._redis_failed_at < retry_after:
+                return None
 
         now_ms = int(time.time() * 1000)
         ttl_s = max(window_s + 60, 120)
@@ -116,9 +123,12 @@ class RateLimiter:
                 keys=[key],
                 args=[now_ms, window_s * 1000, limit, member, ttl_s],
             )
+            self._redis_failed = False
+            self._redis_failed_at = 0.0
             return bool(int(result))
         except Exception as exc:
             self._redis_failed = True
+            self._redis_failed_at = time.time()
             self.logger.warning("Redis-Rate-Limiter nicht erreichbar, wechsle auf lokales Fallback: %s", exc)
             return None
 

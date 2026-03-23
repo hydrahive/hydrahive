@@ -317,7 +317,8 @@ class FileWriteTool(BaseTool):
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             write_mode = "a" if mode == "append" else "w"
-            safe_path.open(write_mode, encoding="utf-8").write(content)
+            with safe_path.open(write_mode, encoding="utf-8") as handle:
+                handle.write(content)
             logger.info(
                 "file_write: %s schreibt %s (%s, Projekt: %s)",
                 agent_id, safe_path, mode, project_id,
@@ -710,6 +711,15 @@ def _check_shell_blocklist(command: str) -> str | None:
     return None
 
 
+def _validate_gitea_issue_text(title: str, body: str = "") -> str | None:
+    title = title.strip()
+    if len(title) > 256:
+        return "Issue-Titel zu lang (max. 256 Zeichen)"
+    if len(body) > 20000:
+        return "Issue-Body zu lang (max. 20000 Zeichen)"
+    return None
+
+
 class ShellExecTool(BaseTool):
     """
     Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
@@ -919,7 +929,8 @@ class WriteSystemFileTool(BaseTool):
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             write_mode = "a" if mode == "append" else "w"
-            p.open(write_mode, encoding="utf-8").write(content)
+            with p.open(write_mode, encoding="utf-8") as handle:
+                handle.write(content)
             return {"written": True, "path": str(p), "bytes": len(content.encode())}
         except OSError as e:
             return {"error": str(e)}
@@ -1037,7 +1048,8 @@ class WriteMemoryTool(BaseTool):
         memory_dir.mkdir(parents=True, exist_ok=True)
         p = memory_dir / safe
         write_mode = "a" if mode == "append" else "w"
-        p.open(write_mode, encoding="utf-8").write(content)
+        with p.open(write_mode, encoding="utf-8") as handle:
+            handle.write(content)
         logger.info("write_memory [%s]: %s (%s, %d bytes)", agent_id, safe, mode, len(content))
         return {"saved": True, "filename": safe, "bytes": len(content.encode())}
 
@@ -1639,6 +1651,10 @@ class GiteaCreateIssueTool(BaseTool):
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
+        invalid = _validate_gitea_issue_text(title, body)
+        if invalid:
+            return {"error": invalid, "repo": repo, "title": title}
+
         client = get_gitea_client()
         try:
             owner, name = resolve_repo_ref(repo, default_owner=client.org)
@@ -1693,6 +1709,10 @@ class GiteaCommentIssueTool(BaseTool):
         body: str,
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
+
+        invalid = _validate_gitea_issue_text("", body)
+        if invalid:
+            return {"error": invalid, "repo": repo, "issue_number": issue_number}
 
         client = get_gitea_client()
         try:
@@ -1762,6 +1782,10 @@ class GiteaUpdateIssueTool(BaseTool):
         labels: list[str] | None = None,
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
+
+        invalid = _validate_gitea_issue_text(title or "", body or "")
+        if invalid:
+            return {"error": invalid, "repo": repo, "issue_number": issue_number}
 
         client = get_gitea_client()
         try:
@@ -2209,6 +2233,16 @@ class WksShellExecTool(BaseTool):
         wks = _get_wks_config(project_id)
         if not wks:
             return {"error": "Keine WKS-Konfiguration für diesen Agenten — bitte in Mein Agent → WKS einrichten"}
+
+        blocked = _check_shell_blocklist(command)
+        if blocked:
+            logger.warning("wks_shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
+            return {
+                "error": f"Befehl blockiert: {blocked}",
+                "command": command,
+                "exit_code": -1,
+                "blocked": True,
+            }
 
         def _run():
             import paramiko

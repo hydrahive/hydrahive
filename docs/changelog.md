@@ -30,3 +30,18 @@
 
 - Der Plattform-Überblick zeigt Konfiguration und echte Verbindung sauberer getrennt an.
 - WKS und Discord liefern keine falschen Positivstatus mehr durch reine Konfigurationswerte.
+
+### Fixed
+
+- `fix(core): harden rate limiter, learning memory and issue tooling`
+- Redis-Failover im Rate-Limiter kann nach einer Abklingzeit wieder in den Redis-Modus zurückkehren.
+- Lern-Memory-Schreibvorgänge sind jetzt serialisiert, damit parallele Kompaktionen keine widersprüchlichen Einträge erzeugen.
+- Projekt-, System- und Memory-Schreibtools schließen ihre Dateihandles sauber.
+- Gitea-Issue-Tools prüfen Titel- und Body-Längen vor dem Senden.
+- WKS Shell-Execution übernimmt die Shell-Blockliste, damit destruktive Kommandos dort nicht ungefiltert durchrutschen.
+
+### Result
+
+- Redis-Recovery bleibt nach einem Ausfall nicht dauerhaft im lokalen Fallback hängen.
+- Lernnotizen sind robuster bei parallelen Writes.
+- Issue-Erstellung und WKS-Shell-Ausführung sind gegen offensichtliche Missbrauchsfälle besser abgesichert.
