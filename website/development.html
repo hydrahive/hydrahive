@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OctopOS — Entwickler-Guide</title>
+  <title>HydraHive — Entwickler-Guide</title>
   <style>
     :root {
       --bg: #0a0e1a;
@@ -271,8 +271,8 @@
 
 <!-- CONTENT -->
 <main class="content">
-  <h1 class="page-title">OctopOS — Entwickler-Guide</h1>
-  <p class="page-intro">Wie man OctopOS erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.</p>
+  <h1 class="page-title">HydraHive — Entwickler-Guide</h1>
+  <p class="page-intro">Wie man HydraHive erweitert: neue Tools, Skills, Console-Seiten, Installer-Module.</p>
 
   <!-- 1. ENTWICKLUNGSUMGEBUNG -->
   <section class="chapter" id="dev-env">
@@ -282,7 +282,7 @@
     <ul>
       <li>Python 3.12+</li>
       <li>Node.js 22+</li>
-      <li>Laufende OctopOS-VM für Integrationstests</li>
+      <li>Laufende HydraHive-VM für Integrationstests</li>
     </ul>
 
     <h3>Console — lokale Entwicklung</h3>
@@ -301,7 +301,7 @@ export default defineConfig({
 python3 -m venv venv
 source venv/bin/activate
 pip install -e ".[dev]"
-uvicorn octopos_core.main:app --reload --port 8765</code></pre>
+uvicorn hydrahive_core.main:app --reload --port 8765</code></pre>
     <p>Mit <code>--reload</code> startet der Server bei Dateiänderungen automatisch neu.</p>
   </section>
 
@@ -312,7 +312,7 @@ uvicorn octopos_core.main:app --reload --port 8765</code></pre>
     <p>Tools sind Python-Klassen die von <code>BaseTool</code> erben. Sie werden im <code>tool_registry</code> registriert und können dann in <code>agent.yaml</code> aktiviert werden.</p>
 
     <h3>Minimales Beispiel</h3>
-    <pre><code># core/src/octopos_core/tools/my_tool.py
+    <pre><code># core/src/hydrahive_core/tools/my_tool.py
 from ..tool_registry import BaseTool
 
 class MyTool(BaseTool):
@@ -557,26 +557,26 @@ install_my_component</code></pre>
 
     <h3>Core — schnelles Deployment (einzelne Datei)</h3>
     <pre><code># Einzelne Datei auf die VM kopieren und Service neu starten
-scp core/src/octopos_core/main.py octopos@192.168.1.100:/tmp/main.py
-ssh octopos@192.168.1.100 "sudo cp /tmp/main.py /opt/octopos/core/src/octopos_core/main.py && sudo systemctl restart octopos-core"</code></pre>
+scp core/src/hydrahive_core/main.py hydrahive@192.168.1.100:/tmp/main.py
+ssh hydrahive@192.168.1.100 "sudo cp /tmp/main.py /opt/hydrahive/core/src/hydrahive_core/main.py && sudo systemctl restart hydrahive-core"</code></pre>
 
     <h3>Core — vollständiges Verzeichnis</h3>
-    <pre><code>scp -r core/src/octopos_core octopos@192.168.1.100:/tmp/octopos_core
-ssh octopos@192.168.1.100 "sudo cp -r /tmp/octopos_core /opt/octopos/core/src/ && sudo systemctl restart octopos-core"</code></pre>
+    <pre><code>scp -r core/src/hydrahive_core hydrahive@192.168.1.100:/tmp/hydrahive_core
+ssh hydrahive@192.168.1.100 "sudo cp -r /tmp/hydrahive_core /opt/hydrahive/core/src/ && sudo systemctl restart hydrahive-core"</code></pre>
 
     <h3>Console — Deploy</h3>
     <pre><code># Build erstellen
 cd console && npm run build
 
 # Dist auf die VM kopieren
-scp -r dist/ octopos@192.168.1.100:/tmp/console_dist/
+scp -r dist/ hydrahive@192.168.1.100:/tmp/console_dist/
 
 # Auf der VM installieren
-ssh octopos@192.168.1.100 "sudo cp -r /tmp/console_dist/. /var/www/octopos/"</code></pre>
+ssh hydrahive@192.168.1.100 "sudo cp -r /tmp/console_dist/. /var/www/hydrahive/"</code></pre>
 
     <h3>Status prüfen</h3>
-    <pre><code>ssh octopos@192.168.1.100 \
-  "systemctl is-active octopos-core && journalctl -u octopos-core -n 20 --no-pager"</code></pre>
+    <pre><code>ssh hydrahive@192.168.1.100 \
+  "systemctl is-active hydrahive-core && journalctl -u hydrahive-core -n 20 --no-pager"</code></pre>
 
     <h3>Git-Workflow</h3>
     <div class="note"><strong>Regel:</strong> Immer <code>git pull --rebase</code> vor einem Push. Commits sollten Feature + Console + Core zusammen bündeln wenn möglich.</div>

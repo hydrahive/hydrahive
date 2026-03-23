@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OctopOS API-Referenz</title>
+  <title>HydraHive API-Referenz</title>
   <style>
     :root {
       --bg: #0a0e1a;
@@ -303,7 +303,7 @@
 
 <!-- CONTENT -->
 <main class="content">
-  <h1 class="page-title">OctopOS API-Referenz</h1>
+  <h1 class="page-title">HydraHive API-Referenz</h1>
   <div class="page-intro">
     <p style="margin-bottom:0.5rem;">Basis-URL: <code>https://&lt;server&gt;/api</code> — Alle Endpoints außer <code>/health</code>, <code>/setup/*</code>, <code>/auth/*</code> und <code>/hooks/*</code> erfordern einen JWT-Bearer-Token.</p>
     <pre style="margin:0.8rem 0;"><code>Authorization: Bearer &lt;token&gt;</code></pre>
@@ -376,7 +376,7 @@
     <p>Runtime-Fingerprint für Audits und Support mit Deploy-Metadaten, Laufzeitstatus und verdichteter Core-Log-Zusammenfassung.</p>
     <p><strong>Response 200:</strong></p>
     <pre><code>{
-  "service": { "name": "octopos-core", "version": "0.1.0" },
+  "service": { "name": "hydrahive-core", "version": "0.1.0" },
   "deployment": { ... },
   "runtime": { ... },
   "audit": {
