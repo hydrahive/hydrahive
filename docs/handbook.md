@@ -226,7 +226,7 @@ Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werd
 | `file_write` | Datei im Projektverzeichnis schreiben |
 | `web_search` | Websuche durchführen |
 | `http_request` | HTTP-Anfragen an externe APIs |
-| `shell_exec` | Shell-Befehl auf dem Server ausführen (Blocklist beachten) |
+| `shell_exec` | Shell-Befehl auf dem Server ausführen (siehe Blocklist unten) |
 | `read_system_file` | Systemdatei außerhalb des Projekts lesen (z.B. Konfigurationen) |
 | `write_system_file` | Systemdatei schreiben (eingeschränkt) |
 | `dispatch_task` | Andere Agenten beauftragen (nur boss) |
@@ -247,6 +247,23 @@ Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werd
 | `wks_file_write` | Datei auf die Workstation schreiben (SFTP) |
 
 > Alle Filesystem-Operationen sind auf `/projects/<projekt-id>/` beschränkt. Zugriff darüber hinaus wird verweigert.
+
+### shell_exec Blocklist
+
+`shell_exec` läuft ohne Sandbox mit vollem Systemzugriff, ist aber gegen destruktive Aktionen gesichert. Folgende Kommandos werden **immer blockiert**, unabhängig vom Agenten:
+
+| Kategorie | Blockiert |
+|---|---|
+| Rekursives Löschen | `rm -r`, `rm -rf`, `rm` auf `/opt/` |
+| Disk-Destruktion | `dd of=/dev/…`, `mkfs`, `fdisk`, `parted`, `shred`, `wipefs` |
+| OctopOS-Sabotage | `systemctl stop/disable/mask/kill octopos`, `killall uvicorn` |
+| Geschützte Pfade | Redirects (`>`) nach `/etc/`, `/bin/`, `/usr/`, `/lib`, `/boot/`, `/dev/`, `/sys/`, `/proc/`, `/opt/octopos/` |
+| Rechteänderungen | `chmod`/`chown` auf `/opt/`, `/etc/`, `/bin/` |
+| Git in Systempfaden | `git clone`/`reset --hard` nach/in `/opt/octopos/` |
+| Shell-Escapes | `$()` Command Substitution, Backticks `` ` ``, `eval`, Subshell über `bash -c` |
+| Fork-Bomben | `:() { …` |
+
+Geblockte Befehle werden mit einer Fehlermeldung abgelehnt und im Log protokolliert.
 
 ---
 
@@ -317,6 +334,19 @@ task_agents:
 ### Swarm-Ansicht
 
 Das **Netzwerk-Symbol** (oben rechts im Chat) schaltet die Swarm-Ansicht um. Bei aktivierter Ansicht wird unter jeder Antwort angezeigt welche Worker-Agenten beteiligt waren.
+
+### Token-Anzeige
+
+Unter jeder Assistenten-Antwort erscheint eine kleine Anzeige mit dem Tokenverbrauch der aktuellen Anfrage:
+
+```
+↑ 12.450 ↓ 380 Tokens
+```
+
+- **↑** = Input-Tokens (gesendeter Kontext inkl. System-Prompt und History)
+- **↓** = Output-Tokens (erzeugte Antwort)
+
+Die Anzeige hilft dabei, den LLM-Ressourcenverbrauch im Blick zu behalten — besonders bei kostenpflichtigen Modellen (Claude, GPT-4 etc.).
 
 ### Chat-History
 

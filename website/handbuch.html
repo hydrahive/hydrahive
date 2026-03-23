@@ -437,7 +437,7 @@ heartbeat_tasks:
       <tr><td><code>file_write</code></td><td>Datei im Projektverzeichnis schreiben</td></tr>
       <tr><td><code>web_search</code></td><td>Websuche durchführen</td></tr>
       <tr><td><code>http_request</code></td><td>HTTP-Anfragen an externe APIs</td></tr>
-      <tr><td><code>shell_exec</code></td><td>Shell-Befehl auf dem Server ausführen (Blocklist beachten)</td></tr>
+      <tr><td><code>shell_exec</code></td><td>Shell-Befehl auf dem Server ausführen (siehe Blocklist unten)</td></tr>
       <tr><td><code>dispatch_task</code></td><td>Andere Agenten beauftragen (nur boss)</td></tr>
       <tr><td><code>spawn_agent</code></td><td>Kurzlebigen Worker-Agenten erstellen</td></tr>
       <tr><td><code>ask_agent</code></td><td>Synchron einen anderen Agenten befragen</td></tr>
@@ -454,6 +454,21 @@ heartbeat_tasks:
       <tr><td><code>wks_file_write</code></td><td>Datei auf die Workstation schreiben (SFTP)</td></tr>
     </table>
     <div class="note">Alle Filesystem-Operationen sind auf <code>/projects/&lt;projekt-id&gt;/</code> beschränkt. Zugriff darüber hinaus wird verweigert.</div>
+
+    <h3>shell_exec Blocklist</h3>
+    <p><code>shell_exec</code> läuft ohne Sandbox mit vollem Systemzugriff, ist aber gegen destruktive Aktionen gesichert. Folgende Kommandos werden <strong>immer blockiert</strong>, unabhängig vom Agenten:</p>
+    <table>
+      <tr><th>Kategorie</th><th>Blockiert</th></tr>
+      <tr><td>Rekursives Löschen</td><td><code>rm -r</code>, <code>rm -rf</code>, <code>rm</code> auf <code>/opt/</code></td></tr>
+      <tr><td>Disk-Destruktion</td><td><code>dd of=/dev/…</code>, <code>mkfs</code>, <code>fdisk</code>, <code>parted</code>, <code>shred</code>, <code>wipefs</code></td></tr>
+      <tr><td>OctopOS-Sabotage</td><td><code>systemctl stop/disable/mask/kill octopos</code>, <code>killall uvicorn</code></td></tr>
+      <tr><td>Geschützte Pfade</td><td>Redirects (<code>&gt;</code>) nach <code>/etc/</code>, <code>/bin/</code>, <code>/usr/</code>, <code>/lib</code>, <code>/boot/</code>, <code>/dev/</code>, <code>/sys/</code>, <code>/proc/</code>, <code>/opt/octopos/</code></td></tr>
+      <tr><td>Rechteänderungen</td><td><code>chmod</code>/<code>chown</code> auf <code>/opt/</code>, <code>/etc/</code>, <code>/bin/</code></td></tr>
+      <tr><td>Git in Systempfaden</td><td><code>git clone</code>/<code>reset --hard</code> nach/in <code>/opt/octopos/</code></td></tr>
+      <tr><td>Shell-Escapes</td><td><code>$()</code> Command Substitution, Backticks, <code>eval</code>, Subshell über <code>bash -c</code></td></tr>
+      <tr><td>Fork-Bomben</td><td><code>:() { …</code></td></tr>
+    </table>
+    <p>Geblockte Befehle werden mit einer Fehlermeldung abgelehnt und im Log protokolliert.</p>
   </section>
 
   <!-- 5. PROJEKTE -->
@@ -512,6 +527,15 @@ chat:
 
     <h3>Swarm-Ansicht</h3>
     <p>Das <strong>Netzwerk-Symbol</strong> oben rechts im Chat schaltet die Swarm-Ansicht um. Bei aktivierter Ansicht wird unter jeder Antwort angezeigt welche Worker-Agenten beteiligt waren.</p>
+
+    <h3>Token-Anzeige</h3>
+    <p>Unter jeder Assistenten-Antwort erscheint eine kleine Anzeige mit dem Tokenverbrauch der aktuellen Anfrage:</p>
+    <pre><code>↑ 12.450 ↓ 380 Tokens</code></pre>
+    <ul>
+      <li><strong>↑</strong> = Input-Tokens (gesendeter Kontext inkl. System-Prompt und History)</li>
+      <li><strong>↓</strong> = Output-Tokens (erzeugte Antwort)</li>
+    </ul>
+    <p>Die Anzeige hilft dabei, den LLM-Ressourcenverbrauch im Blick zu behalten — besonders bei kostenpflichtigen Modellen (Claude, GPT-4 etc.).</p>
 
     <h3>Chat-History</h3>
     <p>Die Nachrichten einer Session bleiben erhalten und werden beim nächsten Öffnen automatisch geladen.</p>
