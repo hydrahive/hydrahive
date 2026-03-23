@@ -59,3 +59,29 @@
 
 - Der letzte offene Security-Punkt aus dem Deep-Dive ist geschlossen.
 - Subshell-basierte Umgehungsversuche greifen nicht mehr durch die bisherige Blocklisten-Lücke.
+
+## 2026-03-23 — Hygiene-Block: Supply-Chain, Test-Teardown, Runtime-Audit
+
+### Fixed
+
+- `fix(amem): add commit-pin support and HEAD-hash logging to install_amem.sh`
+- `git clone --depth 1 origin/main` ohne Commit-Pin ist ein Supply-Chain-Risiko: der Installer zieht immer den aktuellen HEAD, ohne dass der installierte Commit nachvollziehbar ist.
+- Neu: optionale Umgebungsvariable `AMEM_COMMIT=<sha>` ermöglicht reproduzierbaren Builds mit exaktem Commit-Pin.
+- Neu: nach jedem Clone/Update wird der tatsächliche HEAD-Commit nach `/var/lib/octopos/amem/installed_commit.txt` geschrieben (Supply-Chain-Transparenz).
+- Ohne gesetztes `AMEM_COMMIT` bleibt das bisherige Verhalten erhalten (origin/main), aber der Commit ist jetzt auditierbar.
+
+- `fix(tests): add try/finally teardown to test_agent_lifecycle_end_to_end_roundtrip`
+- Der Test manipulierte globale App-State (USERS_FILE, JWT_SECRET, AGENTS_DIR, discovery._dir etc.) ohne `try/finally`-Schutz.
+- Bei einem Test-Fehler blieb der State dauerhaft verändert und hätte folgende Tests korrumpiert.
+- Fix: gesamter Test-Body in `try/finally` eingebettet; Cleanup ist jetzt garantiert auch bei Exception.
+
+- `fix(core): add 30s in-memory cache to collect_core_journal_report`
+- `/admin/runtime/status` und `/logs/core/summary` riefen `collect_core_journal_report()` bei jedem Request neu auf (subprocess + journalctl).
+- Timeout (5s) und Zeilenlimit (-n 200) waren bereits vorhanden, aber bei schnellen aufeinanderfolgenden Admin-Requests entstand unnötiger Overhead.
+- Fix: einfacher In-Memory-Cache mit 30s TTL; Fehlerfall (journalctl nicht verfügbar) wird nicht gecacht.
+
+### Result
+
+- A-MEM-Installationen sind nachvollziehbar und können auf einen getesteten Commit gepinnt werden.
+- Test-Teardown-Hygiene ist gewährleistet: kein dirty State bei Test-Fehlern.
+- journalctl-Subprocess wird maximal alle 30s aufgerufen; redundante Calls innerhalb des Fensters kosten nichts.

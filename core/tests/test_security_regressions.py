@@ -141,139 +141,140 @@ class SecurityRegressionTests(unittest.TestCase):
         original_projects_loader_dir = main.projects._dir
         original_sessions_projects_dir = main.sessions._projects_dir
         original_agent_sessions_projects_dir = main.agent_sessions._projects_dir
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            agents_dir = tmpdir / "agents"
-            projects_dir = tmpdir / "projects"
-            users_path = tmpdir / "users.json"
-            agents_dir.mkdir()
-            projects_dir.mkdir()
-            users_path.write_text(
-                json.dumps(
-                    {
-                        "alice": {
-                            "password_hash": main._hash_password("sicheres-passwort"),
-                            "role": "admin",
-                            "matrix_id": "@alice:matrix.local",
-                            "matrix_ok": True,
-                            "created_at": "2026-03-23T10:00:00",
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir = Path(tmpdir)
+                agents_dir = tmpdir / "agents"
+                projects_dir = tmpdir / "projects"
+                users_path = tmpdir / "users.json"
+                agents_dir.mkdir()
+                projects_dir.mkdir()
+                users_path.write_text(
+                    json.dumps(
+                        {
+                            "alice": {
+                                "password_hash": main._hash_password("sicheres-passwort"),
+                                "role": "admin",
+                                "matrix_id": "@alice:matrix.local",
+                                "matrix_ok": True,
+                                "created_at": "2026-03-23T10:00:00",
+                            }
                         }
-                    }
-                ),
-                encoding="utf-8",
-            )
+                    ),
+                    encoding="utf-8",
+                )
 
-            main.USERS_FILE = users_path
-            main.JWT_SECRET = "test-secret-for-agent-e2e"
-            main.AGENTS_DIR = str(agents_dir)
-            main.PROJECTS_DIR = str(projects_dir)
-            main.discovery._dir = agents_dir
-            main.projects._dir = projects_dir
-            main.sessions._projects_dir = projects_dir
-            main.agent_sessions._projects_dir = projects_dir
+                main.USERS_FILE = users_path
+                main.JWT_SECRET = "test-secret-for-agent-e2e"
+                main.AGENTS_DIR = str(agents_dir)
+                main.PROJECTS_DIR = str(projects_dir)
+                main.discovery._dir = agents_dir
+                main.projects._dir = projects_dir
+                main.sessions._projects_dir = projects_dir
+                main.agent_sessions._projects_dir = projects_dir
+                main.discovery._agents.clear()
+                main.projects._projects.clear()
+                main.runtime._handles.clear()
+
+                def _redirect_agent_path(value="."):
+                    if str(value) == "/agents":
+                        return agents_dir
+                    return Path(value)
+
+                with mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
+                    mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-agent-e2e"), \
+                    mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
+                    mock.patch("octopos_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
+                    mock.patch.object(main, "setup_discord_clients", return_value=None), \
+                    mock.patch("octopos_core.router_agent_admin.Path", side_effect=_redirect_agent_path):
+                    with TestClient(main.app) as client:
+                        login = client.post(
+                            "/auth/login",
+                            json={"username": "alice", "password": "sicheres-passwort"},
+                        )
+                        self.assertEqual(login.status_code, 200)
+                        token = login.json()["access_token"]
+                        headers = {"Authorization": f"Bearer {token}"}
+
+                        create = client.post(
+                            "/agents",
+                            headers=headers,
+                            json={
+                                "id": "worker_one",
+                                "type": "worker",
+                                "identity": "Worker Eins",
+                                "model": "gpt-4o",
+                                "temperature": 0.2,
+                                "max_tokens": 1024,
+                                "soul": "# Worker Eins\n\nArbeitet zuverlässig.",
+                                "tools": ["git.read"],
+                                "fallback_models": ["gpt-4o-mini"],
+                                "mcp_servers": [],
+                                "heartbeat_interval": "1s",
+                                "heartbeat_timeout": "10s",
+                                "heartbeat_on_failure": "restart",
+                            },
+                        )
+                        self.assertEqual(create.status_code, 201)
+                        self.assertTrue(create.json()["created"])
+                        self.assertTrue((agents_dir / "worker_one" / "agent.yaml").exists())
+                        self.assertTrue((agents_dir / "worker_one" / "soul.md").exists())
+
+                        agent_get = client.get("/agents/worker_one", headers=headers)
+                        self.assertEqual(agent_get.status_code, 200)
+                        self.assertEqual(agent_get.json()["config"]["id"], "worker_one")
+
+                        update = client.put(
+                            "/agents/worker_one",
+                            headers=headers,
+                            json={
+                                "id": "worker_one",
+                                "type": "worker",
+                                "identity": "Worker Zwei",
+                                "model": "gpt-4o-mini",
+                                "temperature": 0.4,
+                                "max_tokens": 2048,
+                                "soul": "# Worker Zwei\n\nAktualisiert.",
+                                "tools": ["git.read", "git.write"],
+                                "fallback_models": [],
+                                "mcp_servers": [],
+                                "heartbeat_interval": "1s",
+                                "heartbeat_timeout": "10s",
+                                "heartbeat_on_failure": "restart",
+                            },
+                        )
+                        self.assertEqual(update.status_code, 200)
+                        soul = client.get("/agents/worker_one/soul", headers=headers)
+                        self.assertEqual(soul.status_code, 200)
+                        self.assertIn("Worker Zwei", soul.json()["soul"])
+
+                        spawn = client.post("/agents/spawn", headers=headers, json={"agent_id": "worker_one"})
+                        self.assertEqual(spawn.status_code, 200)
+                        runtime_before = client.get("/agents/worker_one", headers=headers).json()["runtime"]
+                        self.assertIsNotNone(runtime_before)
+
+                        heartbeat = client.post("/agents/worker_one/heartbeat", headers=headers)
+                        self.assertEqual(heartbeat.status_code, 200)
+                        runtime_after = client.get("/agents/worker_one", headers=headers).json()["runtime"]
+                        self.assertIsNotNone(runtime_after)
+                        self.assertEqual(runtime_after["status"], "running")
+
+                        delete = client.delete("/agents/worker_one", headers=headers)
+                        self.assertEqual(delete.status_code, 200)
+                        self.assertTrue(delete.json()["disabled"])
+                        self.assertTrue((agents_dir / "_worker_one_disabled").exists())
+        finally:
+            main.USERS_FILE = original_users_file
+            main.JWT_SECRET = original_jwt_secret
+            main.AGENTS_DIR = original_agents_dir
+            main.PROJECTS_DIR = original_projects_dir
+            main.discovery._dir = original_discovery_dir
+            main.projects._dir = original_projects_loader_dir
+            main.sessions._projects_dir = original_sessions_projects_dir
+            main.agent_sessions._projects_dir = original_agent_sessions_projects_dir
             main.discovery._agents.clear()
             main.projects._projects.clear()
             main.runtime._handles.clear()
-
-            def _redirect_agent_path(value="."):
-                if str(value) == "/agents":
-                    return agents_dir
-                return Path(value)
-
-            with mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
-                mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-agent-e2e"), \
-                mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
-                mock.patch("octopos_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
-                mock.patch.object(main, "setup_discord_clients", return_value=None), \
-                mock.patch("octopos_core.router_agent_admin.Path", side_effect=_redirect_agent_path):
-                with TestClient(main.app) as client:
-                    login = client.post(
-                        "/auth/login",
-                        json={"username": "alice", "password": "sicheres-passwort"},
-                    )
-                    self.assertEqual(login.status_code, 200)
-                    token = login.json()["access_token"]
-                    headers = {"Authorization": f"Bearer {token}"}
-
-                    create = client.post(
-                        "/agents",
-                        headers=headers,
-                        json={
-                            "id": "worker_one",
-                            "type": "worker",
-                            "identity": "Worker Eins",
-                            "model": "gpt-4o",
-                            "temperature": 0.2,
-                            "max_tokens": 1024,
-                            "soul": "# Worker Eins\n\nArbeitet zuverlässig.",
-                            "tools": ["git.read"],
-                            "fallback_models": ["gpt-4o-mini"],
-                            "mcp_servers": [],
-                            "heartbeat_interval": "1s",
-                            "heartbeat_timeout": "10s",
-                            "heartbeat_on_failure": "restart",
-                        },
-                    )
-                    self.assertEqual(create.status_code, 201)
-                    self.assertTrue(create.json()["created"])
-                    self.assertTrue((agents_dir / "worker_one" / "agent.yaml").exists())
-                    self.assertTrue((agents_dir / "worker_one" / "soul.md").exists())
-
-                    agent_get = client.get("/agents/worker_one", headers=headers)
-                    self.assertEqual(agent_get.status_code, 200)
-                    self.assertEqual(agent_get.json()["config"]["id"], "worker_one")
-
-                    update = client.put(
-                        "/agents/worker_one",
-                        headers=headers,
-                        json={
-                            "id": "worker_one",
-                            "type": "worker",
-                            "identity": "Worker Zwei",
-                            "model": "gpt-4o-mini",
-                            "temperature": 0.4,
-                            "max_tokens": 2048,
-                            "soul": "# Worker Zwei\n\nAktualisiert.",
-                            "tools": ["git.read", "git.write"],
-                            "fallback_models": [],
-                            "mcp_servers": [],
-                            "heartbeat_interval": "1s",
-                            "heartbeat_timeout": "10s",
-                            "heartbeat_on_failure": "restart",
-                        },
-                    )
-                    self.assertEqual(update.status_code, 200)
-                    soul = client.get("/agents/worker_one/soul", headers=headers)
-                    self.assertEqual(soul.status_code, 200)
-                    self.assertIn("Worker Zwei", soul.json()["soul"])
-
-                    spawn = client.post("/agents/spawn", headers=headers, json={"agent_id": "worker_one"})
-                    self.assertEqual(spawn.status_code, 200)
-                    runtime_before = client.get("/agents/worker_one", headers=headers).json()["runtime"]
-                    self.assertIsNotNone(runtime_before)
-
-                    heartbeat = client.post("/agents/worker_one/heartbeat", headers=headers)
-                    self.assertEqual(heartbeat.status_code, 200)
-                    runtime_after = client.get("/agents/worker_one", headers=headers).json()["runtime"]
-                    self.assertIsNotNone(runtime_after)
-                    self.assertEqual(runtime_after["status"], "running")
-
-                    delete = client.delete("/agents/worker_one", headers=headers)
-                    self.assertEqual(delete.status_code, 200)
-                    self.assertTrue(delete.json()["disabled"])
-                    self.assertTrue((agents_dir / "_worker_one_disabled").exists())
-
-        main.USERS_FILE = original_users_file
-        main.JWT_SECRET = original_jwt_secret
-        main.AGENTS_DIR = original_agents_dir
-        main.PROJECTS_DIR = original_projects_dir
-        main.discovery._dir = original_discovery_dir
-        main.projects._dir = original_projects_loader_dir
-        main.sessions._projects_dir = original_sessions_projects_dir
-        main.agent_sessions._projects_dir = original_agent_sessions_projects_dir
-        main.discovery._agents.clear()
-        main.projects._projects.clear()
-        main.runtime._handles.clear()
 
     def test_localhost_internal_route_keeps_local_bypass(self):
         deps = self._dependency_names("/agents/{agent_id}/message", "POST")
