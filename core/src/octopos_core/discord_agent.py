@@ -62,19 +62,21 @@ class DiscordAgentClient(ABC):
 
     def __init__(
         self,
-        agent_id:    str,
-        bot_token:   str,
-        guild_id:    str,
-        channel_ids: list[str],
-        ignore_bots: bool = True,
+        agent_id:       str,
+        bot_token:      str,
+        guild_id:       str,
+        channel_ids:    list[str],
+        ignore_bots:    bool = True,
+        require_mention: bool = False,
     ) -> None:
-        self.agent_id    = agent_id
-        self.bot_token   = bot_token
-        self.guild_id    = guild_id
-        self.channel_ids = set(channel_ids)
-        self.ignore_bots = ignore_bots
-        self._client     = None
-        self._running    = False
+        self.agent_id        = agent_id
+        self.bot_token       = bot_token
+        self.guild_id        = guild_id
+        self.channel_ids     = set(channel_ids)
+        self.ignore_bots     = ignore_bots
+        self.require_mention = require_mention
+        self._client         = None
+        self._running        = False
 
     async def start(self) -> None:
         """Discord-Client initialisieren und verbinden (blockiert bis stop())."""
@@ -102,10 +104,17 @@ class DiscordAgentClient(ABC):
             # Nur in konfigurierten Channels
             if self.channel_ids and str(message.channel.id) not in self.channel_ids:
                 return
+            # @Mention erforderlich wenn konfiguriert
+            if self.require_mention and self._client.user not in message.mentions:
+                return
+            # @Mention aus Content entfernen bevor weitergegeben
+            content = message.content
+            if self._client.user in message.mentions:
+                content = content.replace(f"<@{self._client.user.id}>", "").replace(f"<@!{self._client.user.id}>", "").strip()
             try:
                 await self.on_user_message(
                     channel_id=str(message.channel.id),
-                    content=message.content,
+                    content=content,
                     author=str(message.author),
                     message_id=str(message.id),
                 )
