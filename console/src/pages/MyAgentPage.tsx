@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield } from "lucide-react";
-import { api, McpServer, WksConfig, DiscordConfig } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -99,7 +99,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"wks"|"discord">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -285,6 +285,7 @@ export function MyAgentPage() {
             { id: "settings", label: "Einstellungen",  icon: Settings },
             { id: "skills",   label: "Skills",         icon: BookOpen },
             { id: "mcp",      label: "MCP",            icon: Plug },
+            { id: "platforms", label: "Integrationen", icon: Wifi },
             { id: "wks",      label: "WKS",            icon: Monitor },
             { id: "discord",  label: "Discord",         icon: MessageSquare },
           ].map(({ id, label, icon: Icon }) => (
@@ -611,6 +612,11 @@ export function MyAgentPage() {
         <McpTab agentInfo={agentInfo} mcpServers={mcpServers} onSaved={loadAgent} />
       )}
 
+      {/* ── Platforms Tab ───────────────────────────────────────────────── */}
+      {tab === "platforms" && (
+        <PlatformsTab />
+      )}
+
       {/* ── WKS Tab ───────────────────────────────────────────────────────── */}
       {tab === "wks" && (
         <WksTab />
@@ -744,6 +750,138 @@ function McpTab({
         </button>
         {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
       </div>
+    </div>
+  );
+}
+
+// ── Platform Overview Tab ────────────────────────────────────────────────────
+
+function PlatformsTab() {
+  const [username, setUsername] = useState("");
+  const [platforms, setPlatforms] = useState<PlatformOverviewEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    api.myPlatforms()
+      .then(d => {
+        if (!mounted) return;
+        setUsername(d.username);
+        setPlatforms(d.platforms);
+      })
+      .catch(e => {
+        if (!mounted) return;
+        setError(e instanceof Error ? e.message : "Fehler");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const supported = platforms.filter(p => p.supported);
+  const planned = platforms.filter(p => !p.supported);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-5xl">
+      <div className="space-y-1">
+        <h2 className="text-sm font-semibold flex items-center gap-2">
+          <Wifi className="h-4 w-4" />
+          Integrationen
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Einheitlicher Status deiner Plattform-Anbindungen. Matrix, Discord und WKS sind aktiv integriert; weitere Kanäle sind als Ziel sichtbar.
+        </p>
+      </div>
+
+      {loading && (
+        <div className="rounded-2xl border border-border/60 bg-card/70 p-6 text-sm text-muted-foreground">
+          Lade Integrationsstatus…
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {supported.map(entry => (
+              <PlatformCard key={entry.platform} entry={entry} />
+            ))}
+          </div>
+
+          {planned.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Geplant</h3>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {planned.map(entry => (
+                  <PlatformCard key={entry.platform} entry={entry} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-5 space-y-3">
+            <h3 className="text-sm font-semibold">Kurzüberblick</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>Benutzer: <span className="font-mono text-foreground">{username || "?"}</span></li>
+              <li>Aktive Integrationen: <span className="text-foreground font-medium">{supported.filter(p => p.connected).length}</span></li>
+              <li>Geplante Kanäle: <span className="text-foreground font-medium">{planned.length}</span></li>
+            </ul>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PlatformCard({ entry }: { entry: PlatformOverviewEntry }) {
+  const statusLabel = entry.supported
+    ? (entry.connected ? "Verbunden" : (entry.configured ? "Konfiguriert" : "Nicht konfiguriert"))
+    : "Geplant";
+  const statusClass = entry.supported
+    ? (entry.connected ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-700")
+    : "bg-muted text-muted-foreground";
+
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card/80 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold">{entry.label}</h4>
+          <p className="text-xs text-muted-foreground font-mono">{entry.platform}</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>{statusLabel}</span>
+      </div>
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Unterstützt</span>
+          <span className={entry.supported ? "text-emerald-700" : "text-muted-foreground"}>{entry.supported ? "Ja" : "Nein"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Konfiguriert</span>
+          <span className={entry.configured ? "text-foreground" : "text-muted-foreground"}>{entry.configured ? "Ja" : "Nein"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted-foreground">Verbunden</span>
+          <span className={entry.connected ? "text-foreground" : "text-muted-foreground"}>{entry.connected ? "Ja" : "Nein"}</span>
+        </div>
+      </div>
+      {Object.keys(entry.details || {}).length > 0 && (
+        <div className="rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+          {Object.entries(entry.details).map(([key, value]) => (
+            <div key={key} className="flex items-start justify-between gap-3">
+              <span className="font-medium">{key}</span>
+              <span className="text-right break-all">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

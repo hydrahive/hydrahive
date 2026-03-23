@@ -691,6 +691,45 @@ Chat-Session des persönlichen Agenten zurücksetzen.
 
 ---
 
+### GET /me/platforms
+
+Einheitlichen Status der persönlichen Plattform-Integrationen abrufen.
+
+**Response 200:**
+```json
+{
+  "username": "till",
+  "platforms": [
+    {
+      "platform": "matrix",
+      "label": "Matrix",
+      "supported": true,
+      "configured": true,
+      "connected": true,
+      "details": { "matrix_id": "@till:matrix.local" }
+    },
+    {
+      "platform": "discord",
+      "label": "Discord",
+      "supported": true,
+      "configured": true,
+      "connected": true,
+      "details": { "guild_id": "123", "channel_ids": ["111", "222"] }
+    },
+    {
+      "platform": "telegram",
+      "label": "Telegram",
+      "supported": false,
+      "configured": false,
+      "connected": false,
+      "details": { "status": "planned" }
+    }
+  ]
+}
+```
+
+---
+
 ## WKS (Workstation)
 
 ### GET /me/wks

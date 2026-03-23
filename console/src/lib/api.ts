@@ -84,6 +84,7 @@ export const api = {
   updateMyAgent: (d: unknown) => api.put("/me/agent", d),
   myAgentHistory: (limit = 50) => api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/me/agent/session/history?limit=${limit}`),
   clearMyAgentSession: () => api.delete("/me/agent/session"),
+  myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
   updateMcpServer: (id: string, d: unknown) => api.put<{server: McpServer}>(`/mcp/servers/${id}`, d),
@@ -218,6 +219,15 @@ export interface DiscordConfigPayload {
   bot_token:   string;
   guild_id:    string;
   channel_ids: string[];
+}
+
+export interface PlatformOverviewEntry {
+  platform:   string;
+  label:      string;
+  supported:  boolean;
+  configured: boolean;
+  connected:  boolean;
+  details:    Record<string, unknown>;
 }
 
 export interface UpdateStatus {

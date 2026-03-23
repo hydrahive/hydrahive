@@ -292,6 +292,7 @@
     <a href="#audit">Audit-Log</a>
     <a href="#llm">LLM-Konfiguration</a>
     <a href="#tools">Tools</a>
+    <a href="#platforms">Integrationen</a>
     <a href="#logs">System-Logs</a>
     <a href="#gitea">Gitea &amp; Git Tools</a>
     <a href="#personal-agent">Personal Agent</a>
@@ -504,6 +505,43 @@ data: {"error": "LLM nicht erreichbar"}</code></pre>
       <tr><th>Query-Parameter</th><th>Typ</th><th>Beschreibung</th></tr>
       <tr><td><code>limit</code></td><td>int</td><td>Maximale Anzahl zurückgegebener Nachrichten (optional)</td></tr>
     </table>
+  </section>
+
+  <!-- PLATFORMS -->
+  <section class="chapter" id="platforms">
+    <h2>Integrationen</h2>
+
+    <h3><span class="method method-get">GET</span><span class="endpoint-path">/me/platforms</span></h3>
+    <p>Einheitlichen Status der persönlichen Plattform-Integrationen abrufen.</p>
+    <pre><code>{
+  "username": "till",
+  "platforms": [
+    {
+      "platform": "matrix",
+      "label": "Matrix",
+      "supported": true,
+      "configured": true,
+      "connected": true,
+      "details": { "matrix_id": "@till:matrix.local" }
+    },
+    {
+      "platform": "discord",
+      "label": "Discord",
+      "supported": true,
+      "configured": true,
+      "connected": true,
+      "details": { "guild_id": "123", "channel_ids": ["111", "222"] }
+    },
+    {
+      "platform": "telegram",
+      "label": "Telegram",
+      "supported": false,
+      "configured": false,
+      "connected": false,
+      "details": { "status": "planned" }
+    }
+  ]
+}</code></pre>
   </section>
 
   <!-- WEBHOOKS -->
