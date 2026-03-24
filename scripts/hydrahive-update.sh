@@ -14,6 +14,7 @@ INSTALL_USER="hydrahive"
 SERVICE_NAME="hydrahive-core"
 [ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"
+SSH_USER="${VM%%@*}"   # Login-User aus VM-String (z.B. "octopos" aus "octopos@host")
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> [1/5] git pull (hydrahive remote)"
@@ -23,16 +24,19 @@ git pull hydrahive main 2>/dev/null || git pull gitea-local main 2>/dev/null || 
 
 echo ""
 echo "==> [2/5] Core rsync → VM"
-$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
-rsync -av --delete \
+# Vor rsync: SSH-User als Owner setzen damit rsync schreiben kann
+$SSH "$VM" "sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/core/"
+rsync -av --delete --no-owner --no-group \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
   -e "ssh -i $SSH_KEY" \
   "$REPO/core/" \
   "$VM:${INSTALL_DIR}/core/"
+# Nach rsync: Owner auf Service-User zurücksetzen
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
 
 echo ""
 echo "==> [3/5] pip install auf VM"
-$SSH "$VM" "cd ${INSTALL_DIR}/core && ${INSTALL_DIR}/venv/bin/pip install -e . -q"
+$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e ${INSTALL_DIR}/core -q"
 
 echo ""
 echo "==> [4/5] Console bauen"
@@ -40,11 +44,11 @@ npm --prefix "$REPO/console" run build
 
 echo ""
 echo "==> [4b/5] Console-Permissions für rsync setzen"
-$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/console/"
+$SSH "$VM" "sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/console/"
 
 echo ""
 echo "==> [5/5] Console rsync → VM + restart"
-rsync -av --delete \
+rsync -av --delete --no-owner --no-group \
   -e "ssh -i $SSH_KEY" \
   "$REPO/console/dist/" \
   "$VM:${INSTALL_DIR}/console/"
