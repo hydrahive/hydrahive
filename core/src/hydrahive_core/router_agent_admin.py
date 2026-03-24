@@ -54,6 +54,13 @@ class SpawnRequest(BaseModel):
     agent_id: str
 
 
+class HeartbeatPatchRequest(BaseModel):
+    enabled:    bool  = True
+    interval:   str   = "30s"
+    timeout:    str   = "90s"
+    on_failure: str   = "restart"
+
+
 def register_agent_admin_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -160,3 +167,25 @@ def register_agent_admin_routes(
     def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost)):
         runtime.heartbeat(agent_id)
         return {"ok": True}
+
+    @admin_router.patch("/agents/{agent_id}/heartbeat")
+    def patch_agent_heartbeat(agent_id: str, req: HeartbeatPatchRequest, _a: tuple = Depends(require_admin)):
+        import yaml as _yaml
+
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        yaml_path = agent_dir / "agent.yaml"
+        try:
+            raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            raw["heartbeat"] = {
+                "enabled":    req.enabled,
+                "interval":   req.interval,
+                "timeout":    req.timeout,
+                "on_failure": req.on_failure,
+            }
+            yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except Exception as e:
+            raise HTTPException(500, f"Fehler beim Speichern: {e}")
+        load_agent_config_direct(agent_dir)
+        return {"ok": True, "agent_id": agent_id}

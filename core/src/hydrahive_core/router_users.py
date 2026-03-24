@@ -26,6 +26,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "git.issue",
                 "workstation.read",
                 "discord",
+                "mail",
             ],
         },
         "elevated": {
@@ -47,6 +48,7 @@ def default_personal_agent_execution_modes() -> dict:
                 "workstation.write",
                 "workstation.shell",
                 "discord",
+                "mail",
             ],
         },
         "root": {
@@ -71,12 +73,13 @@ def default_personal_agent_execution_modes() -> dict:
                 "workstation.write",
                 "workstation.shell",
                 "discord",
+                "mail",
             ],
         },
     }
 
 
-def upgrade_personal_agent_data(agent_data: dict) -> tuple[dict, bool]:
+def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None) -> tuple[dict, bool]:
     changed = False
     defaults = default_personal_agent_execution_modes()
     execution_modes = agent_data.setdefault("execution_modes", {})
@@ -99,6 +102,13 @@ def upgrade_personal_agent_data(agent_data: dict) -> tuple[dict, bool]:
         tools.append("gitea_create_issue")
         agent_data["tools"] = tools
         changed = True
+
+    if agent_dir is not None and (agent_dir / "mail.json").exists():
+        for tool_id in ("send_mail", "receive_mail"):
+            if tool_id not in tools:
+                tools.append(tool_id)
+                agent_data["tools"] = tools
+                changed = True
 
     return agent_data, changed
 
@@ -367,4 +377,30 @@ def register_user_routes(
         )
 
         logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
+        return {"updated": True, "agent_id": agent_id}
+
+    @auth_router.patch("/me/agent/heartbeat")
+    async def patch_my_agent_heartbeat(
+        body: dict = Body(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        import yaml as _yaml
+
+        username, _role = auth
+        agent_id, _cfg = ensure_personal_agent(username)
+        agent_dir = Path(agents_dir) / agent_id
+        yaml_path = agent_dir / "agent.yaml"
+        try:
+            raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            if "heartbeat" in body:
+                raw["heartbeat"] = body["heartbeat"]
+            if "heartbeat_tasks" in body:
+                raw["heartbeat_tasks"] = body["heartbeat_tasks"]
+            yaml_path.write_text(
+                _yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8"
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Fehler beim Speichern: {e}")
+        load_agent_config_direct(agent_dir)
+        logger.info("Heartbeat konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}

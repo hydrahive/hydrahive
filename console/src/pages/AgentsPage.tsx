@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -11,7 +11,9 @@ interface AgentRuntime {
   restart_count: number;
   last_heartbeat_age: number;
   heartbeat_timeout: number;
+  heartbeat_interval: number;
   on_failure: string;
+  heartbeat_enabled: boolean;
 }
 interface AgentEntry {
   config: { type: string; identity: string; model: string };
@@ -80,6 +82,10 @@ export function AgentsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [fallbackInput, setFallbackInput] = useState("");
   const [skillsAgent, setSkillsAgent] = useState<string | null>(null);
+  const [hbEditAgent, setHbEditAgent] = useState<string | null>(null);
+  const [hbForm, setHbForm] = useState({ enabled: true, interval: "30s", timeout: "90s", on_failure: "restart" });
+  const [hbSaving, setHbSaving] = useState(false);
+  const [hbErr, setHbErr] = useState("");
   const [logAgent, setLogAgent] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logErr, setLogErr] = useState("");
@@ -234,6 +240,32 @@ export function AgentsPage() {
       setError(e instanceof Error ? e.message : "Fehler beim Loeschen");
     } finally {
       setDeleting(null);
+    }
+  }
+
+  function openHbEdit(id: string, rt: AgentRuntime | null) {
+    if (hbEditAgent === id) { setHbEditAgent(null); return; }
+    setHbErr("");
+    setHbForm({
+      enabled:    rt?.heartbeat_enabled ?? true,
+      interval:   rt ? `${Math.round(rt.heartbeat_interval)}s` : "30s",
+      timeout:    rt ? `${Math.round(rt.heartbeat_timeout)}s` : "90s",
+      on_failure: rt?.on_failure ?? "restart",
+    });
+    setHbEditAgent(id);
+  }
+
+  async function saveHbForm(id: string) {
+    setHbSaving(true);
+    setHbErr("");
+    try {
+      await api.patchAgentHeartbeat(id, hbForm);
+      setHbEditAgent(null);
+      await load();
+    } catch (e) {
+      setHbErr(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setHbSaving(false);
     }
   }
 
@@ -558,15 +590,18 @@ export function AgentsPage() {
                         </span>
                         <ArrowRight className="h-4 w-4 text-muted-foreground" />
                       </button>
-                      <div className="rounded-3xl border bg-secondary/50 px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="rounded-2xl bg-background p-2 text-foreground/75"><Cpu className="h-4 w-4" /></span>
-                          <div>
-                            <p className="text-sm font-medium">Ops-Kontext</p>
-                            <p className="text-xs text-muted-foreground">Rolle, Runtime und Heartbeat kompakt</p>
-                          </div>
-                        </div>
-                      </div>
+                      {isAdmin && (
+                        <button onClick={() => openHbEdit(id, rt)} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${hbEditAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
+                          <span className="flex items-center gap-3">
+                            <span className={`rounded-2xl p-2 ${hbEditAgent === id ? "bg-primary/15" : "bg-secondary"}`}><Activity className="h-4 w-4" /></span>
+                            <span>
+                              <span className="block font-medium">Heartbeat</span>
+                              <span className="text-xs text-muted-foreground">{rt?.heartbeat_enabled === false ? "deaktiviert" : `alle ${Math.round(rt?.heartbeat_interval ?? 30)}s`}</span>
+                            </span>
+                          </span>
+                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -634,6 +669,43 @@ export function AgentsPage() {
                   </div>
                 </div>
                 {skillsAgent === id && <SkillsPanel agentId={id} />}
+                {hbEditAgent === id && (
+                  <div className="border-t p-5 space-y-4">
+                    <p className="metric-kicker flex items-center gap-2"><Activity className="h-3.5 w-3.5" />Heartbeat konfigurieren</p>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={hbForm.enabled} onChange={(e) => setHbForm((f) => ({ ...f, enabled: e.target.checked }))} className="h-4 w-4 rounded" />
+                        <span className="text-sm font-medium">Heartbeat aktiv</span>
+                      </label>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Interval</label>
+                        <input value={hbForm.interval} onChange={(e) => setHbForm((f) => ({ ...f, interval: e.target.value }))} placeholder="30s" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Timeout</label>
+                        <input value={hbForm.timeout} onChange={(e) => setHbForm((f) => ({ ...f, timeout: e.target.value }))} placeholder="90s" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bei Fehler</label>
+                        <select value={hbForm.on_failure} onChange={(e) => setHbForm((f) => ({ ...f, on_failure: e.target.value }))} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                          <option value="restart">restart</option>
+                          <option value="stop">stop</option>
+                          <option value="alert">alert</option>
+                          <option value="ignore">ignore</option>
+                        </select>
+                      </div>
+                    </div>
+                    {hbErr && <p className="text-sm text-destructive">{hbErr}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={() => saveHbForm(id)} disabled={hbSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                        <Save className="h-3.5 w-3.5" />{hbSaving ? "Speichern..." : "Speichern"}
+                      </button>
+                      <button onClick={() => setHbEditAgent(null)} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

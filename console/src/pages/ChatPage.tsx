@@ -416,18 +416,20 @@ export function ChatPage() {
                   {sending && <span className="status-pill status-pill-ok">Streaming aktiv</span>}
                 </div>
                 {showEmoji && (
+                  <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowEmoji(false)} />
                   <div className="absolute bottom-24 right-4 z-50">
                     <EmojiPicker
                       theme={Theme.DARK}
                       onEmojiClick={(e: EmojiClickData) => {
                         setInput(prev => prev + e.emoji);
-                        setShowEmoji(false);
                         textareaRef.current?.focus();
                       }}
                       height={380}
                       width={320}
                     />
                   </div>
+                  </>
                 )}
                 <div className="flex items-end gap-3">
                   <textarea

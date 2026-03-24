@@ -93,6 +93,18 @@ async def bridge_send(agent_id: str, to: str, message: str) -> dict:
         return r.json()
 
 
+async def bridge_send_voice(agent_id: str, to: str, audio_b64: str) -> dict:
+    """Voice-Note (OGG/Opus) über WhatsApp senden."""
+    import httpx
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"{BRIDGE_URL}/sessions/{agent_id}/send-voice",
+            json={"to": to, "audio_data": audio_b64},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def bridge_health() -> bool:
     """Prüfen ob die Bridge erreichbar ist."""
     import httpx
