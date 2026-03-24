@@ -105,12 +105,12 @@ class DiscordConfigRequest(BaseModel):
 
 
 SUPPORTED_PLATFORMS = {
-    "matrix": {"supported": True, "label": "Matrix"},
-    "discord": {"supported": True, "label": "Discord"},
-    "wks": {"supported": True, "label": "WKS"},
+    "matrix":   {"supported": True,  "label": "Matrix"},
+    "discord":  {"supported": True,  "label": "Discord"},
+    "wks":      {"supported": True,  "label": "WKS"},
+    "whatsapp": {"supported": True,  "label": "WhatsApp"},
     "telegram": {"supported": False, "label": "Telegram"},
-    "whatsapp": {"supported": False, "label": "WhatsApp"},
-    "signal": {"supported": False, "label": "Signal"},
+    "signal":   {"supported": False, "label": "Signal"},
 }
 
 
@@ -171,10 +171,12 @@ def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
 
 def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> list[dict]:
     from .discord_agent import load_discord_config
+    from .whatsapp_agent import load_whatsapp_config
 
     user = users.get(username, {})
     wks = user.get("wks", {})
-    discord_cfg = load_discord_config(username)
+    discord_cfg  = load_discord_config(username)
+    whatsapp_cfg = load_whatsapp_config(username)
     matrix_id = user.get("matrix_id", "")
 
     overview = [
@@ -211,16 +213,16 @@ def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> 
             },
         },
         {
-            "platform": "telegram",
-            "label": SUPPORTED_PLATFORMS["telegram"]["label"],
-            "supported": False,
-            "configured": False,
-            "connected": False,
-            "details": {"status": "planned"},
-        },
-        {
             "platform": "whatsapp",
             "label": SUPPORTED_PLATFORMS["whatsapp"]["label"],
+            "supported": True,
+            "configured": bool(whatsapp_cfg and whatsapp_cfg.get("enabled")),
+            "connected": whatsapp_cfg.get("status") == "connected" if whatsapp_cfg else False,
+            "details": {"phone": whatsapp_cfg.get("phone", "") if whatsapp_cfg else ""},
+        },
+        {
+            "platform": "telegram",
+            "label": SUPPORTED_PLATFORMS["telegram"]["label"],
             "supported": False,
             "configured": False,
             "connected": False,
@@ -273,6 +275,7 @@ def register_user_integration_routes(
     orchestrator,
     audit_log,
     logger,
+    internal_router: APIRouter | None = None,
 ) -> None:
     @auth_router.get("/me/wks")
     def get_my_wks(auth: tuple = Depends(require_auth)):
@@ -575,6 +578,105 @@ def register_user_integration_routes(
             orchestrator=orchestrator,
         )
         return await test_client.test_connection()
+
+    # ── WhatsApp ─────────────────────────────────────────────────────────────
+
+    @auth_router.get("/me/whatsapp")
+    async def get_my_whatsapp(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        from .whatsapp_agent import bridge_get_status, load_whatsapp_config
+        cfg = load_whatsapp_config(username)
+        if not cfg or not cfg.get("enabled"):
+            return {"configured": False, "status": "disconnected", "qr": None, "phone": None}
+        agent_id = f"personal_{username}"
+        bridge = await bridge_get_status(agent_id)
+        return {
+            "configured": True,
+            "status": bridge.get("status", "disconnected"),
+            "qr": bridge.get("qr"),
+            "phone": bridge.get("phone") or cfg.get("phone", ""),
+        }
+
+    @auth_router.post("/me/whatsapp/connect")
+    async def connect_my_whatsapp(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        from .whatsapp_agent import bridge_start_session, save_whatsapp_config
+        save_whatsapp_config(username, {"enabled": True})
+        agent_id = f"personal_{username}"
+        result = await bridge_start_session(agent_id)
+        audit_log("whatsapp.connect", details={"user": username})
+        return {"status": result.get("status"), "qr": result.get("qr"), "phone": result.get("phone")}
+
+    @auth_router.delete("/me/whatsapp")
+    async def delete_my_whatsapp(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        from .whatsapp_agent import bridge_disconnect, delete_whatsapp_config
+        agent_id = f"personal_{username}"
+        await bridge_disconnect(agent_id)
+        delete_whatsapp_config(username)
+        audit_log("whatsapp.removed", details={"user": username})
+        return {"disconnected": True}
+
+    # ── WhatsApp Interner Webhook (Bridge → Core) ─────────────────────────────
+
+    _internal = internal_router or auth_router  # Fallback; wird von main.py mit echtem Router befüllt
+
+    @_internal.post("/whatsapp/incoming")
+    async def whatsapp_incoming(request: Request):
+        """Eingehende WhatsApp-Nachrichten vom Bridge-Dienst verarbeiten."""
+        import os as _os
+        secret = _os.environ.get("WHATSAPP_BRIDGE_SECRET", "")
+        if secret:
+            req_secret = request.headers.get("X-Bridge-Secret", "")
+            if req_secret != secret:
+                raise HTTPException(403, "Ungültiges Bridge-Secret")
+
+        body = await request.json()
+        agent_id = body.get("agent_id", "")
+        from_jid = body.get("from", "")
+        message  = body.get("message", "").strip()
+        if not agent_id or not message:
+            return {"ok": False, "error": "Fehlende Felder"}
+
+        # Rufnummer aus JID extrahieren (123456789@s.whatsapp.net → +123456789)
+        sender = from_jid.split("@")[0] if "@" in from_jid else from_jid
+
+        from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
+
+        virtual_cfg = _PC(
+            id=agent_id,
+            identity=_PI(name=agent_id),
+            agents=_PA(boss=agent_id, workers=[]),
+        )
+
+        response_parts: list[str] = []
+        try:
+            async for chunk in orchestrator.handle_message_stream(
+                project_id   = agent_id,
+                project_cfg  = virtual_cfg,
+                content      = message,
+                sender       = f"whatsapp:{sender}",
+                execution_mode = "safe",
+            ):
+                import json as _json
+                try:
+                    data = _json.loads(chunk[6:]) if chunk.startswith("data: ") else {}
+                    if "text" in data:
+                        response_parts.append(data["text"])
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error("Orchestrator-Fehler für WhatsApp-Agent %s: %s", agent_id, e)
+            return {"ok": False, "error": str(e)}
+
+        response_text = "".join(response_parts).strip()
+        if response_text:
+            from .whatsapp_agent import bridge_send
+            # Antwort zurück an Absender senden (max 4096 Zeichen pro Nachricht)
+            for i in range(0, len(response_text), 4096):
+                await bridge_send(agent_id, from_jid, response_text[i:i+4096])
+
+        return {"ok": True}
 
     # ── Mail ────────────────────────────────────────────────────────────────
 

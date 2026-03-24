@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
-import { api, McpServer, WksConfig, DiscordConfig, MailConfig, PlatformOverviewEntry } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -102,7 +102,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"mail">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"mail">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -300,8 +300,9 @@ export function MyAgentPage() {
             { id: "mcp",      label: "MCP",            icon: Plug },
             { id: "platforms", label: "Integrationen", icon: Wifi },
             { id: "wks",      label: "WKS",            icon: Monitor },
-            { id: "discord",  label: "Discord",         icon: MessageSquare },
-            { id: "mail",     label: "Mail",            icon: Mail },
+            { id: "discord",   label: "Discord",          icon: MessageSquare },
+            { id: "whatsapp",  label: "WhatsApp",         icon: Phone },
+            { id: "mail",      label: "Mail",             icon: Mail },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -699,6 +700,11 @@ export function MyAgentPage() {
       {/* ── Discord Tab ───────────────────────────────────────────────────── */}
       {tab === "discord" && (
         <DiscordTab />
+      )}
+
+      {/* ── WhatsApp Tab ──────────────────────────────────────────────────── */}
+      {tab === "whatsapp" && (
+        <WhatsAppTab />
       )}
 
       {/* ── Mail Tab ──────────────────────────────────────────────────────── */}
@@ -1593,6 +1599,143 @@ function DiscordTab() {
           <li>OAuth2 → URL Generator: Scopes „bot" + Perms „Read/Send Messages" → Bot einladen</li>
           <li>Token und Guild-ID eintragen, dann Channels laden</li>
         </ol>
+      </section>
+    </div>
+  );
+}
+
+// ── WhatsApp Tab ──────────────────────────────────────────────────────────────
+
+function WhatsAppTab() {
+  const [status,  setStatus]  = useState<WhatsAppStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [msg,     setMsg]     = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function fetchStatus() {
+    try {
+      const s = await api.getWhatsApp();
+      setStatus(s);
+      // Polling stoppen wenn verbunden oder Fehler
+      if (s.status === "connected" || s.status === "bridge_unavailable" || s.status === "disconnected") {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchStatus();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  async function handleConnect() {
+    setLoading(true); setMsg("");
+    try {
+      const s = await api.connectWhatsApp();
+      setStatus(s);
+      // Polling starten bis verbunden
+      if (s.status === "waiting_qr" || s.status === "connecting") {
+        pollRef.current = setInterval(fetchStatus, 2500);
+      }
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setLoading(false); }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("WhatsApp-Verbindung trennen?")) return;
+    try {
+      await api.disconnectWhatsApp();
+      setStatus({ configured: false, status: "disconnected", qr: null, phone: null });
+      setMsg("Verbindung getrennt");
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  const connected   = status?.status === "connected";
+  const waitingQr   = status?.status === "waiting_qr";
+  const reconnecting = status?.status === "reconnecting" || status?.status === "connecting";
+  const bridgeDown  = status?.status === "bridge_unavailable";
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div>
+        <h2 className="text-sm font-semibold mb-1">WhatsApp</h2>
+        <p className="text-xs text-muted-foreground">
+          Verbinde deinen persönlichen Agenten mit WhatsApp über einen QR-Code-Login.
+        </p>
+      </div>
+
+      {/* Status-Badge */}
+      {status && (
+        <div className={`flex items-center gap-2 p-3 rounded-md text-xs border ${
+          connected   ? "bg-green-50 border-green-200 text-green-700" :
+          waitingQr   ? "bg-yellow-50 border-yellow-200 text-yellow-700" :
+          bridgeDown  ? "bg-red-50 border-red-200 text-red-700" :
+                        "bg-muted border-border text-muted-foreground"
+        }`}>
+          {connected   ? <CheckCircle className="h-3.5 w-3.5" /> :
+           waitingQr   ? <Sparkles className="h-3.5 w-3.5 animate-pulse" /> :
+           bridgeDown  ? <AlertCircle className="h-3.5 w-3.5" /> :
+                         <WifiOff className="h-3.5 w-3.5" />}
+          <span>
+            {connected    ? `Verbunden${status.phone ? ` · +${status.phone}` : ""}` :
+             waitingQr    ? "QR-Code scannen …" :
+             reconnecting ? "Verbindung wird hergestellt …" :
+             bridgeDown   ? "WhatsApp Bridge nicht erreichbar" :
+                            "Nicht verbunden"}
+          </span>
+          {(waitingQr || reconnecting) && (
+            <span className="ml-auto text-xs opacity-60 animate-pulse">●</span>
+          )}
+        </div>
+      )}
+
+      {/* QR-Code */}
+      {waitingQr && status?.qr && (
+        <div className="flex flex-col items-center gap-3 p-4 border rounded-md bg-white">
+          <p className="text-xs text-muted-foreground">
+            WhatsApp öffnen → Verknüpfte Geräte → Gerät hinzufügen → QR-Code scannen
+          </p>
+          <img src={status.qr} alt="WhatsApp QR-Code" className="w-56 h-56 rounded" />
+          <p className="text-xs text-muted-foreground animate-pulse">Warte auf Scan …</p>
+        </div>
+      )}
+
+      {/* Aktionen */}
+      <div className="flex flex-wrap items-center gap-2">
+        {!connected && !waitingQr && !reconnecting && (
+          <button onClick={handleConnect} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Phone className="h-3.5 w-3.5" />
+            {loading ? "Verbinden …" : "Verbinden"}
+          </button>
+        )}
+        {(connected || waitingQr || reconnecting) && (
+          <button onClick={handleDisconnect}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
+            <X className="h-3.5 w-3.5" />
+            Trennen
+          </button>
+        )}
+        {msg && (
+          <span className={`text-xs flex items-center gap-1 ${msg.startsWith("✓") || msg === "Verbindung getrennt" ? "text-green-600" : "text-destructive"}`}>
+            <AlertCircle className="h-3 w-3" />
+            {msg}
+          </span>
+        )}
+      </div>
+
+      <section className="space-y-2 border-t pt-4">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hinweise</h3>
+        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+          <li>Die Verbindung läuft über Baileys (WhatsApp Web-Protokoll) auf dem Server.</li>
+          <li>Nach dem Scannen bleibt die Session aktiv bis du sie manuell trennst.</li>
+          <li>Eingehende WhatsApp-Nachrichten werden direkt an deinen Agenten weitergeleitet.</li>
+          <li>Erfordert den WhatsApp Bridge Service auf dem Server (<code className="font-mono bg-muted px-1 rounded">octopos-whatsapp-bridge</code>).</li>
+        </ul>
       </section>
     </div>
   );

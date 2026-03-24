@@ -130,6 +130,9 @@ export const api = {
   getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
   testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
+  getWhatsApp:        () => api.get<WhatsAppStatus>("/me/whatsapp"),
+  connectWhatsApp:    () => api.post<WhatsAppStatus>("/me/whatsapp/connect", {}),
+  disconnectWhatsApp: () => api.delete<{disconnected:boolean}>("/me/whatsapp"),
   getMail:            () => api.get<MailConfig>("/me/mail"),
   updateMail:         (d: MailConfigPayload) => api.put<{configured:boolean;mail_address:string;created:boolean}>("/me/mail", d),
   deleteMail:         () => api.delete("/me/mail"),
@@ -239,6 +242,13 @@ export interface DiscordConfigPayload {
   channel_ids:     string[];
   ignore_bots:     boolean;
   require_mention: boolean;
+}
+
+export interface WhatsAppStatus {
+  configured: boolean;
+  status:     "disconnected" | "connecting" | "waiting_qr" | "connected" | "reconnecting" | "bridge_unavailable" | "saved";
+  qr:         string | null;
+  phone:      string | null;
 }
 
 export interface MailConfig {
