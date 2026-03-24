@@ -62,6 +62,8 @@ export const api = {
   createAgent:  (d: unknown) => api.post("/agents", d),
   updateAgent:  (id: string, d: unknown) => api.put(`/agents/${id}`, d),
   deleteAgent:  (id: string) => api.delete(`/agents/${id}`),
+  patchAgentHeartbeat: (id: string, d: {enabled: boolean; interval: string; timeout: string; on_failure: string}) =>
+    api.patch<{ok: boolean}>(`/agents/${id}/heartbeat`, d),
   getAgentSoul: (id: string) => api.get<{soul:string;exists:boolean}>(`/agents/${id}/soul`),
   tools:        ()           => api.get<Record<string,unknown>>("/tools"),
   sendMessage:   (id: string, content: string) =>
@@ -96,6 +98,8 @@ export const api = {
   myAgent:       () => api.get<{agent_id:string;config:Record<string,unknown>}>("/me/agent"),
   updateMyAgent: (d: unknown) => api.put("/me/agent", d),
   myAgentHistory: (limit = 50) => api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(`/me/agent/session/history?limit=${limit}`),
+  patchMyAgentHeartbeat: (d: {heartbeat?: Record<string,unknown>; heartbeat_tasks?: unknown[]}) =>
+    api.patch<{updated:boolean}>("/me/agent/heartbeat", d),
   clearMyAgentSession: () => api.delete("/me/agent/session"),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
@@ -130,9 +134,14 @@ export const api = {
   getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
   testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
-  getWhatsApp:        () => api.get<WhatsAppStatus>("/me/whatsapp"),
-  connectWhatsApp:    () => api.post<WhatsAppStatus>("/me/whatsapp/connect", {}),
-  disconnectWhatsApp: () => api.delete<{disconnected:boolean}>("/me/whatsapp"),
+  getWhatsApp:           () => api.get<WhatsAppStatus>("/me/whatsapp"),
+  connectWhatsApp:       () => api.post<WhatsAppStatus>("/me/whatsapp/connect", {}),
+  disconnectWhatsApp:    () => api.delete<{disconnected:boolean}>("/me/whatsapp"),
+  updateWhatsAppConfig:  (d: WhatsAppConfig) => api.put<{updated:boolean}>("/me/whatsapp/config", d),
+  getTelegram:           () => api.get<TelegramStatus>("/me/telegram"),
+  connectTelegram:       (d: {bot_token: string} & Partial<TelegramConfig>) => api.post<TelegramStatus>("/me/telegram/connect", d),
+  disconnectTelegram:    () => api.delete<{disconnected:boolean}>("/me/telegram"),
+  updateTelegramConfig:  (d: Partial<TelegramConfig>) => api.put<{updated:boolean}>("/me/telegram/config", d),
   getMail:            () => api.get<MailConfig>("/me/mail"),
   updateMail:         (d: MailConfigPayload) => api.put<{configured:boolean;mail_address:string;created:boolean}>("/me/mail", d),
   deleteMail:         () => api.delete("/me/mail"),
@@ -244,11 +253,36 @@ export interface DiscordConfigPayload {
   require_mention: boolean;
 }
 
-export interface WhatsAppStatus {
+export interface WhatsAppConfig {
+  private_chats_enabled: boolean;
+  group_chats_enabled:   boolean;
+  require_keyword:       string;
+  allowed_numbers:       string[];
+  blocked_numbers:       string[];
+  owner_numbers:         string[];
+}
+
+export interface WhatsAppStatus extends Partial<WhatsAppConfig> {
   configured: boolean;
   status:     "disconnected" | "connecting" | "waiting_qr" | "connected" | "reconnecting" | "bridge_unavailable" | "saved";
   qr:         string | null;
   phone:      string | null;
+}
+
+export interface TelegramConfig {
+  allow_private:    boolean;
+  allow_groups:     boolean;
+  require_keyword:  string;
+  allowed_user_ids: string[];
+  blocked_user_ids: string[];
+  admin_user_ids:   string[];
+}
+
+export interface TelegramStatus extends Partial<TelegramConfig> {
+  configured:   boolean;
+  enabled:      boolean;
+  status:       "running" | "stopped" | "error";
+  bot_username: string;
 }
 
 export interface MailConfig {
