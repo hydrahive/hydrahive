@@ -688,7 +688,7 @@ def _create_personal_agent(username: str) -> str:
             "max_tokens": 4096,
         },
         "soul": "./soul.md",
-        "tools": ["file_read", "file_write", "shell_exec"],
+        "tools": ["file_read", "file_write", "read_memory", "write_memory"],
         "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
@@ -716,7 +716,7 @@ def _ensure_personal_agent(username: str):
     if agent_yaml.exists():
         try:
             agent_data = _yaml.safe_load(agent_yaml.read_text(encoding="utf-8")) or {}
-            agent_data, changed = upgrade_personal_agent_data(agent_data)
+            agent_data, changed = upgrade_personal_agent_data(agent_data, agent_dir)
             if changed:
                 agent_yaml.write_text(
                     _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
