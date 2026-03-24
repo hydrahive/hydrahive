@@ -207,6 +207,9 @@ for old_name in "${!SERVICE_MAP[@]}"; do
                     -e "s|/opt/octopos/|/opt/hydrahive/|g" \
                     -e "s|User=octopos|User=hydrahive|g" \
                     -e "s|Group=octopos|Group=hydrahive|g" \
+                    -e "s|octopos-conduwuit|hydrahive-conduwuit|g" \
+                    -e "s|octopos-amem|hydrahive-amem|g" \
+                    -e "s|octopos-whatsapp-bridge|hydrahive-whatsapp-bridge|g" \
                     -e "s|octopos-core|hydrahive-core|g" \
                     "$new_file"
                 info "Pfade in ${new_name}.service aktualisiert"
