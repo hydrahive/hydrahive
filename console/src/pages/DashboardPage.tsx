@@ -67,6 +67,8 @@ export function DashboardPage() {
   const problemAgents = useMemo(() => {
     return Object.entries(agentMap)
       .map(([id, entry]) => {
+        // Template-Agenten werden nicht gestartet — kein Problem
+        if (id.endsWith("_template") || id.endsWith("-template")) return null;
         const runtimeState = entry?.runtime;
         if (!runtimeState) {
           return { id, severity: "warn", summary: "Keine Runtime aktiv", detail: "Agent ist konfiguriert, aber aktuell nicht gestartet." };
