@@ -87,7 +87,7 @@ systemctl daemon-reload
 success "Self-Update-Service installiert"
 
 # Konfig-Dateien vorbereiten (hydrahive-core braucht Schreibrechte)
-for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
+for _f in jwt_secret internal_secret llm_env llm_config.json gitea_config.json; do
     _path="/etc/hydrahive/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"

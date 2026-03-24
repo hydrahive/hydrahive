@@ -1157,9 +1157,16 @@ class AskAgentTool(BaseTool):
     ) -> dict:
         import aiohttp as _aio
 
+        import hmac as _hmac
+        import time as _time
+
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
-        headers = {"X-Internal-Secret": _internal_secret} if _internal_secret else {}
+        headers: dict = {}
+        if _internal_secret:
+            ts = str(int(_time.time()))
+            sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
+            headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
         try:
             async with _aio.ClientSession() as session:
                 async with session.post(
