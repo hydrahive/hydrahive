@@ -124,6 +124,13 @@ export const api = {
   startOAuth:    (provider: string) => api.post<{auth_url:string;state:string}>(`/llm/oauth/${provider}/start`, {}),
   exchangeOAuth: (provider: string, body: {redirect_url?:string;code?:string;state?:string;code_and_state?:string}) =>
     api.post<{updated:boolean;[key:string]:unknown}>(`/llm/oauth/${provider}/exchange`, body),
+  // VPN (Tailscale / Headscale)
+  vpnStatus:            () => api.get<VpnStatus>("/admin/vpn/status"),
+  vpnConnect:           (d: {auth_key: string; login_server?: string; hostname?: string}) =>
+    api.post<{connected: boolean; tailscale_ip: string | null; mode: string}>("/admin/vpn/connect", d),
+  vpnDown:              () => api.post<{disconnected: boolean}>("/admin/vpn/down", {}),
+  vpnPeers:             () => api.get<{peers: VpnPeer[]; count: number}>("/admin/vpn/peers"),
+  vpnHeadscaleAuthkey:  () => api.post<{auth_key: string; expiration: string; reusable: boolean}>("/admin/vpn/headscale/authkey", {}),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
@@ -309,6 +316,28 @@ export interface PlatformOverviewEntry {
   configured: boolean;
   connected:  boolean;
   details:    Record<string, unknown>;
+}
+
+export interface VpnPeer {
+  id:        string;
+  hostname:  string;
+  ip:        string;
+  online:    boolean;
+  os:        string;
+  last_seen: string;
+}
+
+export interface VpnStatus {
+  mode:              "tailscale" | "headscale" | "none";
+  configured:        boolean;
+  connected:         boolean;
+  backend_state?:    string;
+  tailscale_ip?:     string | null;
+  login_server?:     string;
+  hostname?:         string;
+  peers?:            VpnPeer[];
+  headscale_running?: boolean | null;
+  error?:            string;
 }
 
 export interface UpdateStatus {

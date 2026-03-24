@@ -17,6 +17,7 @@ const ChatPage = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m
 const AgentChatPage = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
 const AuditPage = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
 const BackupPage = lazy(() => import("@/pages/BackupPage").then((m) => ({ default: m.BackupPage })));
+const VpnPage = lazy(() => import("@/pages/VpnPage").then((m) => ({ default: m.VpnPage })));
 const MyAgentPage = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const McpConfigPage = lazy(() => import("@/pages/McpConfigPage").then((m) => ({ default: m.McpConfigPage })));
 const GiteaConfigPage = lazy(() => import("@/pages/GiteaConfigPage"));
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="mcp"               element={<McpConfigPage />} />
             <Route path="gitea"             element={<GiteaConfigPage />} />
+            <Route path="vpn"               element={<VpnPage />} />
           </Route>
         </Routes>
       </Suspense>
