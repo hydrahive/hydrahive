@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User, Terminal } from "lucide-react";
+import { ArrowLeft, Send, Bot, User, Terminal, Smile } from "lucide-react";
+import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 
@@ -36,6 +37,7 @@ export function AgentChatPage() {
   const [agentName,   setAgentName]   = useState(id ?? "");
   const [agentModel,  setAgentModel]  = useState<{ model?: string; temperature?: number }>({});
   const [showSuggest, setShowSuggest] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [suggestIdx,  setSuggestIdx]  = useState(0);
 
   const bottomRef   = useRef<HTMLDivElement>(null);
@@ -343,6 +345,20 @@ export function AgentChatPage() {
             ))}
           </div>
         )}
+        {showEmoji && (
+          <div className="absolute bottom-16 right-4 z-50">
+            <EmojiPicker
+              theme={Theme.DARK}
+              onEmojiClick={(e: EmojiClickData) => {
+                setInput(prev => prev + e.emoji);
+                setShowEmoji(false);
+                textareaRef.current?.focus();
+              }}
+              height={380}
+              width={320}
+            />
+          </div>
+        )}
         <div className="flex gap-2 items-end">
           <textarea ref={textareaRef} value={input}
             onChange={e => setInput(e.target.value)}
@@ -352,6 +368,10 @@ export function AgentChatPage() {
             rows={1} disabled={sending}
             className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
+          <button onClick={() => setShowEmoji(v => !v)} type="button"
+            className="p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0">
+            <Smile className="h-4 w-4 text-muted-foreground" />
+          </button>
           <button onClick={send} disabled={sending || !input.trim()}
             className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
             <Send className="h-4 w-4" />

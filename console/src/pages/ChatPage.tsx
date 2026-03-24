@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles, Smile } from "lucide-react";
 import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
+import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 
 interface Message {
   id: string;
@@ -38,6 +39,7 @@ export function ChatPage() {
   const [projectData, setProjectData] = useState<Record<string, unknown>>({});
   const [bossModel, setBossModel] = useState<{ model?: string; temperature?: number }>({});
   const [showSuggest, setShowSuggest] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [suggestIdx, setSuggestIdx] = useState(0);
   const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
@@ -404,7 +406,7 @@ export function ChatPage() {
                   ))}
                 </div>
               )}
-              <div className="rounded-3xl border bg-muted/20 p-3">
+              <div className="relative rounded-3xl border bg-muted/20 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span className="status-pill">Enter senden</span>
@@ -413,6 +415,20 @@ export function ChatPage() {
                   </div>
                   {sending && <span className="status-pill status-pill-ok">Streaming aktiv</span>}
                 </div>
+                {showEmoji && (
+                  <div className="absolute bottom-24 right-4 z-50">
+                    <EmojiPicker
+                      theme={Theme.DARK}
+                      onEmojiClick={(e: EmojiClickData) => {
+                        setInput(prev => prev + e.emoji);
+                        setShowEmoji(false);
+                        textareaRef.current?.focus();
+                      }}
+                      height={380}
+                      width={320}
+                    />
+                  </div>
+                )}
                 <div className="flex items-end gap-3">
                   <textarea
                     ref={textareaRef}
@@ -426,6 +442,9 @@ export function ChatPage() {
                     className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                     style={{ maxHeight: "140px", overflowY: "auto" }}
                   />
+                  <button onClick={() => setShowEmoji(v => !v)} type="button" className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted">
+                    <Smile className="h-5 w-5 text-muted-foreground" />
+                  </button>
                   <button onClick={send} disabled={!input.trim() || sending} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
                     <Send className="h-4 w-4" />
                   </button>
