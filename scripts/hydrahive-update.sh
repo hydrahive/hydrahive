@@ -16,9 +16,10 @@ SERVICE_NAME="hydrahive-core"
 SSH="ssh -i $SSH_KEY"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "==> [1/5] git pull"
+echo "==> [1/5] git pull (hydrahive remote)"
 cd "$REPO"
-git pull
+# Versuche hydrahive-Remote, dann gitea-local, dann origin
+git pull hydrahive main 2>/dev/null || git pull gitea-local main 2>/dev/null || git pull 2>/dev/null || echo "   (kein Remote erreichbar — lokalen Stand deployen)"
 
 echo ""
 echo "==> [2/5] Core rsync → VM"
