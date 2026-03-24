@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile } from "lucide-react";
+import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
@@ -107,6 +108,7 @@ export function MyAgentPage() {
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
   const [showSuggest,setShowSuggest]= useState(false);
+  const [showEmoji,  setShowEmoji]  = useState(false);
   const [suggestIdx, setSuggestIdx] = useState(0);
   const [agents,     setAgents]     = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
@@ -501,6 +503,20 @@ export function MyAgentPage() {
                           </button>
                         ))}
                       </div>
+                      {showEmoji && (
+                        <div className="absolute bottom-16 right-0 z-50">
+                          <EmojiPicker
+                            theme={Theme.DARK}
+                            onEmojiClick={(e: EmojiClickData) => {
+                              setInput(prev => prev + e.emoji);
+                              setShowEmoji(false);
+                              textareaRef.current?.focus();
+                            }}
+                            height={380}
+                            width={320}
+                          />
+                        </div>
+                      )}
                       <div className="flex items-end gap-3">
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
@@ -508,6 +524,10 @@ export function MyAgentPage() {
                           placeholder="Nachricht … Enter sendet, Shift+Enter macht einen Umbruch" rows={1} disabled={sending}
                           className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
+                        <button onClick={() => setShowEmoji(v => !v)} type="button"
+                          className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
+                          <Smile className="h-5 w-5 text-muted-foreground" />
+                        </button>
                         <button onClick={send} disabled={sending || !input.trim()}
                           className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                           <Send className="h-4 w-4" />
