@@ -46,7 +46,7 @@ def _parse_skill_file(path: Path) -> dict:
     except Exception:
         meta = {}
 
-    return {
+    result: dict = {
         "filename": path.stem,
         "skill": meta.get("skill", path.stem),
         "version": str(meta.get("version", "1.0")),
@@ -55,6 +55,9 @@ def _parse_skill_file(path: Path) -> dict:
         "priority": int(meta.get("priority", 50)),
         "content": text[m.end():].strip(),
     }
+    if "author" in meta:
+        result["author"] = str(meta["author"])
+    return result
 
 
 def _write_skill_file(skills_dir: Path, filename: str, data: dict) -> Path:

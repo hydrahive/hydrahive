@@ -346,18 +346,20 @@ export function AgentChatPage() {
           </div>
         )}
         {showEmoji && (
+          <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowEmoji(false)} />
           <div className="absolute bottom-16 right-4 z-50">
             <EmojiPicker
               theme={Theme.DARK}
               onEmojiClick={(e: EmojiClickData) => {
                 setInput(prev => prev + e.emoji);
-                setShowEmoji(false);
                 textareaRef.current?.focus();
               }}
               height={380}
               width={320}
             />
           </div>
+          </>
         )}
         <div className="flex gap-2 items-end">
           <textarea ref={textareaRef} value={input}

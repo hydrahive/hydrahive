@@ -30,6 +30,7 @@ class HeartbeatRaw(BaseModel):
     """Rohe Heartbeat-Config aus YAML — Parsing in agent_runtime.py."""
     model_config = {"extra": "ignore"}
 
+    enabled:    bool = True
     interval:   str | int | float | None = None   # z.B. "30s", 30, "2m"
     timeout:    str | int | float | None = None   # z.B. "90s"
     on_failure: str = "restart"                   # restart | stop | alert

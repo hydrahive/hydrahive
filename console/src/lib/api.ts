@@ -202,6 +202,7 @@ export interface AgentSkill {
   triggers: string[];
   priority: number;
   content:  string;
+  author?:  string;  // "agent" = selbst angelegt, "system" oder leer = systemseitig
 }
 
 export interface McpServer {

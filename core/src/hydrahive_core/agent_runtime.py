@@ -62,6 +62,7 @@ class HeartbeatConfig:
     interval: float = DEFAULT_INTERVAL
     timeout: float  = DEFAULT_TIMEOUT
     on_failure: str = DEFAULT_ON_FAILURE   # restart | stop | alert
+    enabled: bool   = True
 
     @classmethod
     def from_agent_config(cls, config: AgentConfig) -> "HeartbeatConfig":
@@ -71,6 +72,7 @@ class HeartbeatConfig:
             interval   = _parse_duration(raw.get("interval"),   DEFAULT_INTERVAL),
             timeout    = _parse_duration(raw.get("timeout"),    DEFAULT_TIMEOUT),
             on_failure = raw.get("on_failure", DEFAULT_ON_FAILURE),
+            enabled    = bool(raw.get("enabled", True)),
         )
 
 
@@ -212,6 +214,7 @@ class AgentRuntime:
                 "heartbeat_timeout":  h.heartbeat_cfg.timeout,
                 "heartbeat_interval": h.heartbeat_cfg.interval,
                 "on_failure":         h.heartbeat_cfg.on_failure,
+                "heartbeat_enabled":  h.heartbeat_cfg.enabled,
             }
             for aid, h in self._handles.items()
         }
@@ -330,6 +333,9 @@ class AgentRuntime:
                     if handle.config.type not in CORE_TYPES:
                         continue
                     if handle.status != AgentStatus.RUNNING:
+                        continue
+
+                    if not handle.heartbeat_cfg.enabled:
                         continue
 
                     age = now - handle.last_heartbeat

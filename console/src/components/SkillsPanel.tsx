@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
 
 const EMPTY_SKILL = {
@@ -226,6 +226,12 @@ export function SkillsPanel({ agentId }: Props) {
                     <span className="text-sm font-semibold">{s.skill}</span>
                     <span className={`rounded-full px-2 py-1 text-xs ${s.scope === "always" ? "bg-primary/10 text-primary" : "bg-secondary text-secondary-foreground"}`}>{s.scope}</span>
                     <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{s.filename}.md</span>
+                    {s.author === "agent" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-accent/30 px-2 py-1 text-xs text-accent-foreground" title="Vom Agenten erstellt">
+                        <Bot className="h-3 w-3" />
+                        Agent
+                      </span>
+                    )}
                   </div>
                   {s.triggers.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{s.triggers.slice(0, 3).join(", ")}{s.triggers.length > 3 ? "..." : ""}</p>}
                 </div>
