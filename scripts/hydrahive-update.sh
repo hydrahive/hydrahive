@@ -60,4 +60,11 @@ echo "==> [6/5] Gitea-Status prüfen"
 $SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
 
 echo ""
+echo "==> Commit-Stand in Update-Status schreiben"
+COMMIT=$(git rev-parse --short HEAD)
+DEPLOY_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
+$SSH "$VM" "sudo bash -c 'echo \"{\\\"status\\\":\\\"ok\\\",\\\"commit\\\":\\\"${COMMIT}\\\",\\\"finished_at\\\":\\\"${DEPLOY_DATE}\\\"}\" > /var/run/octopos-update.json && chown ${INSTALL_USER}:${INSTALL_USER} /var/run/octopos-update.json'"
+echo "   Commit: $COMMIT"
+
+echo ""
 echo "✓ Update abgeschlossen"
