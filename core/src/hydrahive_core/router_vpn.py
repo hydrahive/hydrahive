@@ -63,16 +63,19 @@ def _get_tailscale_ip() -> str | None:
     return out if rc == 0 and out else None
 
 
+# ── Schemas ────────────────────────────────────────────────────────────────────
+
+class VpnConnectRequest(BaseModel):
+    auth_key:     str
+    login_server: str | None = None
+    hostname:     str | None = None
+
+
 # ── Router ─────────────────────────────────────────────────────────────────────
 
 def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
 
-    class ConnectRequest(BaseModel):
-        auth_key: str
-        login_server: str | None = None  # None = Tailscale Standard
-        hostname:     str | None = None
-
-    @admin_router.get("/vpn/status")
+    @admin_router.get("/admin/vpn/status")
     async def vpn_status(_=require_admin):
         cfg = _load_vpn_config()
         mode = cfg.get("mode", "none")
@@ -120,8 +123,8 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
             "headscale_running": headscale_running if mode == "headscale" else None,
         }
 
-    @admin_router.post("/vpn/connect")
-    async def vpn_connect(body: ConnectRequest, _=require_admin):
+    @admin_router.post("/admin/vpn/connect")
+    async def vpn_connect(body: VpnConnectRequest, _=require_admin):
         cfg = _load_vpn_config()
         mode = cfg.get("mode", "tailscale")
 
@@ -156,7 +159,7 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
 
         return {"connected": True, "tailscale_ip": tailscale_ip, "mode": mode}
 
-    @admin_router.post("/vpn/down")
+    @admin_router.post("/admin/vpn/down")
     async def vpn_down(_=require_admin):
         rc, out, err = _run(["tailscale", "down"])
         if rc != 0:
@@ -167,7 +170,7 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
         _save_vpn_config(cfg)
         return {"disconnected": True}
 
-    @admin_router.get("/vpn/peers")
+    @admin_router.get("/admin/vpn/peers")
     async def vpn_peers(_=require_admin):
         ts = _tailscale_status()
         peers = []
@@ -182,7 +185,7 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
             })
         return {"peers": peers, "count": len(peers)}
 
-    @admin_router.post("/vpn/headscale/authkey")
+    @admin_router.post("/admin/vpn/headscale/authkey")
     async def headscale_create_authkey(_=require_admin):
         """Erstellt einen neuen Headscale Auth-Key für neue Nodes."""
         cfg = _load_vpn_config()
