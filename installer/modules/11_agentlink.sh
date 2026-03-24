@@ -1,124 +1,170 @@
 #!/usr/bin/env bash
-# HydraHive Installer — Modul 11: AgentLink
-# Installiert AgentLink (Docker Compose) als zentralen Agent-Koordinations-Hub.
-# Idempotent: bereits laufende Container werden neu gestartet.
+# HydraHive Installer — Modul 11: AgentLink (native, kein Docker)
+# Installiert PostgreSQL, Redis und AgentLink als native systemd-Services.
+# Idempotent: bereits vorhandene Installationen werden sicher übersprungen/aktualisiert.
 
 AGENTLINK_DIR="${HYDRAHIVE_DIR}/agentlink"
 AGENTLINK_PORT="${AGENTLINK_PORT:-8010}"
 AGENTLINK_CONFIG="/etc/hydrahive/agentlink.json"
+AGENTLINK_DATA="/var/lib/hydrahive/agentlink"
 AGENTLINK_DB_PASS="${AGENTLINK_DB_PASS:-$(openssl rand -hex 16)}"
+AGENTLINK_REPO="https://github.com/tilleulenspiegel/agentlink.git"
+HYDRAHIVE_USER="hydrahive"
 
-info "Installiere AgentLink..."
+info "Installiere AgentLink (nativ)..."
 
-# --- Docker installieren (idempotent) ---
-if ! command -v docker &>/dev/null; then
-    info "Installiere Docker..."
-    curl -fsSL https://get.docker.com | sh
-    systemctl enable docker
-    systemctl start docker
-    success "Docker installiert"
-else
-    success "Docker bereits vorhanden ($(docker --version | cut -d' ' -f3 | tr -d ','))"
+# --- DB-Passwort aus bestehender Config lesen (idempotent) ---
+if [ -f "${AGENTLINK_CONFIG}" ]; then
+    _existing=$(python3 -c "import json; d=json.load(open('${AGENTLINK_CONFIG}')); print(d.get('db_password',''))" 2>/dev/null || true)
+    [ -n "${_existing}" ] && AGENTLINK_DB_PASS="${_existing}"
 fi
 
-# --- Docker Compose Plugin prüfen ---
-if ! docker compose version &>/dev/null; then
-    info "Installiere Docker Compose Plugin..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-compose-plugin
-    success "Docker Compose Plugin installiert"
-else
-    success "Docker Compose bereits vorhanden"
-fi
+# ─── 1. PostgreSQL ───────────────────────────────────────────────────────────
+info "PostgreSQL..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql postgresql-contrib
+systemctl enable postgresql --now
+systemctl is-active postgresql -q || { error "PostgreSQL startet nicht"; }
 
-# --- AgentLink-Repo klonen / updaten ---
+# DB + User anlegen (idempotent via DO $$ IF NOT EXISTS)
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='agentlink'" \
+    | grep -q 1 || sudo -u postgres psql -c \
+    "CREATE USER agentlink WITH PASSWORD '${AGENTLINK_DB_PASS}';"
+
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='agentlink'" \
+    | grep -q 1 || sudo -u postgres psql -c \
+    "CREATE DATABASE agentlink OWNER agentlink;"
+
+sudo -u postgres psql -c \
+    "GRANT ALL PRIVILEGES ON DATABASE agentlink TO agentlink;" -q
+
+success "PostgreSQL bereit"
+
+# ─── 2. Redis ────────────────────────────────────────────────────────────────
+info "Redis..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server
+systemctl enable redis-server --now
+systemctl is-active redis-server -q || { error "Redis startet nicht"; }
+success "Redis bereit"
+
+# ─── 3. AgentLink-Repo ───────────────────────────────────────────────────────
 if [ -d "${AGENTLINK_DIR}/.git" ]; then
-    info "AgentLink-Repo updaten..."
+    info "AgentLink-Repo aktualisieren..."
     git -C "${AGENTLINK_DIR}" pull -q
     success "AgentLink-Repo aktuell"
 else
     info "Klone AgentLink-Repo..."
-    git clone -q https://github.com/tilleulenspiegel/agentlink.git "${AGENTLINK_DIR}"
+    git clone -q "${AGENTLINK_REPO}" "${AGENTLINK_DIR}"
     success "AgentLink geklont"
 fi
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DIR}"
 
-# --- DB-Passwort aus bestehender Config lesen (idempotent) ---
-if [ -f "${AGENTLINK_CONFIG}" ]; then
-    EXISTING_PASS=$(python3 -c "import json; d=json.load(open('${AGENTLINK_CONFIG}')); print(d.get('db_password',''))" 2>/dev/null || echo "")
-    if [ -n "${EXISTING_PASS}" ]; then
-        AGENTLINK_DB_PASS="${EXISTING_PASS}"
-    fi
-fi
+# ─── 4. Python venv + Abhängigkeiten ─────────────────────────────────────────
+info "Python-Abhängigkeiten installieren (dauert etwas)..."
+python3 -m venv "${AGENTLINK_DIR}/venv"
+"${AGENTLINK_DIR}/venv/bin/pip" install -q --upgrade pip
+"${AGENTLINK_DIR}/venv/bin/pip" install -q -r "${AGENTLINK_DIR}/backend/requirements.txt"
+success "Python-Abhängigkeiten installiert"
 
-# --- .env für Docker Compose schreiben ---
-cat > "${AGENTLINK_DIR}/.env" << ENV
-POSTGRES_PASSWORD=${AGENTLINK_DB_PASS}
-POSTGRES_DB=agentlink
-AGENTLINK_PORT=${AGENTLINK_PORT}
+# ─── 5. Datenverzeichnis + .env ──────────────────────────────────────────────
+mkdir -p "${AGENTLINK_DATA}/chromadb"
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DATA}"
+
+cat > "${AGENTLINK_DIR}/backend/.env" << ENV
+DATABASE_URL=postgresql://agentlink:${AGENTLINK_DB_PASS}@localhost:5432/agentlink
+REDIS_URL=redis://localhost:6379
+CHROMA_HOST=localhost
+CHROMA_PORT=8011
 ENV
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DIR}/backend/.env"
+chmod 640 "${AGENTLINK_DIR}/backend/.env"
 
-# --- docker-compose.yml anpassen: Port auf AGENTLINK_PORT ---
-# Backend-Port von 8000 auf konfigurierten Port mappen
-if grep -q '"8000:8000"' "${AGENTLINK_DIR}/docker-compose.yml" 2>/dev/null; then
-    sed -i "s/\"8000:8000\"/\"${AGENTLINK_PORT}:8000\"/g" "${AGENTLINK_DIR}/docker-compose.yml"
-fi
+# ─── 6. DB-Schema initialisieren ─────────────────────────────────────────────
+info "Datenbank-Schema..."
+cd "${AGENTLINK_DIR}/backend"
+DATABASE_URL="postgresql://agentlink:${AGENTLINK_DB_PASS}@localhost:5432/agentlink" \
+    "${AGENTLINK_DIR}/venv/bin/python" -c \
+    "from database import Base, engine; Base.metadata.create_all(bind=engine); print('OK')" \
+    && success "DB-Schema bereit" \
+    || warn "DB-Schema konnte nicht initialisiert werden — ggf. beim ersten Start nachholen"
 
-# --- Container starten ---
-info "Starte AgentLink-Container..."
-cd "${AGENTLINK_DIR}"
-docker compose up -d --remove-orphans postgres redis backend 2>&1 | grep -E "Started|Running|Created|Error" || true
+# ─── 7. ChromaDB-Service ─────────────────────────────────────────────────────
+cat > /etc/systemd/system/hydrahive-chromadb.service << UNIT
+[Unit]
+Description=HydraHive ChromaDB (Vektordatenbank)
+After=network.target
 
-# --- Warten bis Backend erreichbar ---
+[Service]
+Type=simple
+User=${HYDRAHIVE_USER}
+ExecStart=${AGENTLINK_DIR}/venv/bin/chroma run \
+    --host 127.0.0.1 \
+    --port 8011 \
+    --path ${AGENTLINK_DATA}/chromadb
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# ─── 8. AgentLink-Backend-Service ────────────────────────────────────────────
+cat > /etc/systemd/system/hydrahive-agentlink.service << UNIT
+[Unit]
+Description=HydraHive AgentLink Hub
+After=network.target postgresql.service redis-server.service hydrahive-chromadb.service
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=${HYDRAHIVE_USER}
+WorkingDirectory=${AGENTLINK_DIR}/backend
+EnvironmentFile=${AGENTLINK_DIR}/backend/.env
+ExecStart=${AGENTLINK_DIR}/venv/bin/uvicorn main:app \
+    --host 127.0.0.1 \
+    --port ${AGENTLINK_PORT} \
+    --workers 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable hydrahive-chromadb hydrahive-agentlink
+systemctl start hydrahive-chromadb
+sleep 2
+systemctl start hydrahive-agentlink
+
+# ─── 9. Warten bis Backend erreichbar ────────────────────────────────────────
 info "Warte auf AgentLink Backend..."
-for i in $(seq 1 20); do
+for i in $(seq 1 15); do
     if curl -sf "http://127.0.0.1:${AGENTLINK_PORT}/health" &>/dev/null; then
         success "AgentLink Backend erreichbar auf Port ${AGENTLINK_PORT}"
         break
     fi
     sleep 2
-    if [ "$i" -eq 20 ]; then
-        warn "AgentLink Backend nicht erreichbar nach 40s — prüfe: docker compose -f ${AGENTLINK_DIR}/docker-compose.yml logs backend"
+    if [ "$i" -eq 15 ]; then
+        warn "AgentLink Backend nicht erreichbar nach 30s"
+        warn "Logs: journalctl -u hydrahive-agentlink -n 30"
     fi
 done
 
-# --- Config speichern ---
+# ─── 10. Config für HydraHive-Core schreiben ─────────────────────────────────
 if [ ! -f "${AGENTLINK_CONFIG}" ]; then
     cat > "${AGENTLINK_CONFIG}" << CFG
 {
-  "url": "http://127.0.0.1:${AGENTLINK_PORT}",
+  "base_url": "http://127.0.0.1:${AGENTLINK_PORT}",
+  "ws_url": "ws://127.0.0.1:${AGENTLINK_PORT}",
   "db_password": "${AGENTLINK_DB_PASS}",
   "enabled": true
 }
 CFG
     chmod 640 "${AGENTLINK_CONFIG}"
-    chown hydrahive:hydrahive "${AGENTLINK_CONFIG}" 2>/dev/null || true
-    success "AgentLink-Config geschrieben: ${AGENTLINK_CONFIG}"
+    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_CONFIG}" 2>/dev/null || true
+    success "AgentLink-Config: ${AGENTLINK_CONFIG}"
 else
     success "AgentLink-Config bereits vorhanden"
-fi
-
-# --- Systemd-Override damit AgentLink beim Boot startet ---
-DOCKER_OVERRIDE="/etc/systemd/system/hydrahive-agentlink.service"
-if [ ! -f "${DOCKER_OVERRIDE}" ]; then
-    cat > "${DOCKER_OVERRIDE}" << UNIT
-[Unit]
-Description=HydraHive AgentLink Hub
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=${AGENTLINK_DIR}
-ExecStart=/usr/bin/docker compose up -d --remove-orphans postgres redis backend
-ExecStop=/usr/bin/docker compose stop postgres redis backend
-TimeoutStartSec=60
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-    systemctl daemon-reload
-    systemctl enable hydrahive-agentlink
-    success "Systemd-Service hydrahive-agentlink aktiviert"
 fi
 
 info "AgentLink URL:  http://127.0.0.1:${AGENTLINK_PORT}"
