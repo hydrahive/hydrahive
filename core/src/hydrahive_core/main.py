@@ -196,6 +196,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Discord-Setup fehlgeschlagen: %s", e)
 
+    # Systemtopologie in alle persönlichen Agenten schreiben (bei jedem Start aktuell halten)
+    for _agent_dir in Path(AGENTS_DIR).iterdir():
+        _mem_dir = _agent_dir / "memory"
+        if _mem_dir.is_dir():
+            try:
+                _write_system_topology(_mem_dir / "system_topology.md")
+            except Exception as _e:
+                logger.debug("system_topology für %s: %s", _agent_dir.name, _e)
+
     # WhatsApp-Sessions für User mit konfiguriertem Account wiederherstellen
     try:
         await setup_whatsapp_sessions(load_users=_load_users, logger_=logger)
@@ -689,6 +698,101 @@ async def _matrix_register(username: str, password: str, server_name: str) -> bo
         return False
 
 
+def _write_system_topology(dest: Path) -> None:
+    """Schreibt eine aktuelle Systemtopologie-Beschreibung in dest."""
+    import socket as _socket
+
+    hostname = _socket.gethostname()
+    try:
+        local_ip = _socket.gethostbyname(hostname)
+    except Exception:
+        local_ip = "127.0.0.1"
+
+    users = _load_users()
+    wks_table_rows = []
+    for uname, udata in users.items():
+        wks_cfg = udata.get("wks") or {}
+        wks_ip  = wks_cfg.get("ip", "nicht konfiguriert")
+        wks_table_rows.append(f"| {uname} | {wks_ip} |")
+    wks_table = "\n".join(wks_table_rows) or "| — | — |"
+
+    content = f"""# HydraHive — Systemtopologie
+
+> Automatisch generiert beim Agent-Start. Nicht manuell bearbeiten.
+> Aktualisierung: bei jedem Deploy und bei neuen Agenten.
+
+## Wo läuft was
+
+**Dieser Agent** läuft auf dem **HydraHive-Server**:
+- Hostname: `{hostname}`
+- IP: `{local_ip}` (intern: `192.168.178.181`)
+
+`wks_shell_exec` führt Befehle auf der **Workstation des Users** aus — NICHT auf dem Server.
+`shell_exec` läuft auf dem Server selbst (mit Einschränkungen durch die Blocklist).
+
+---
+
+## HydraHive-Server (.181)
+
+| Service | Port | Health-Check | Hinweis |
+|---------|------|-------------|---------|
+| HydraHive Core | `127.0.0.1:8765` | `curl http://127.0.0.1:8765/health` → `{{"status":"ok"}}` | Kein `/api`-Prefix beim direkten Check |
+| nginx (Proxy) | `0.0.0.0:80` | Leitet → 8765 weiter | Öffentlicher Zugang |
+| A-MEM MCP | `0.0.0.0:8020` | **Kein REST-Health-Endpoint!** MCP/SSE: `/sse` | `GET /` → 404 ist normal |
+| A-MEM Search UI | `0.0.0.0:8021` | Web-UI | |
+| AgentLink | `0.0.0.0:8000` | `curl http://127.0.0.1:8000/health` | |
+| Matrix (Tuwunel) | `0.0.0.0:8008` | `/_matrix/client/versions` | |
+| qmd MCP | `[::1]:8181` | MCP-Server | |
+| Redis | `127.0.0.1:6379` | Intern | |
+
+### systemd-Services auf dem Server
+```
+octopos-core   — HydraHive Core (systemctl is-active octopos-core)
+octopos-amem   — A-MEM MCP Server
+redis          — Redis
+gitea          — Gitea Git-Server
+```
+
+---
+
+## Workstations (WKS) — wks_shell_exec läuft hier
+
+| User | WKS-IP |
+|------|--------|
+{wks_table}
+
+Die WKS sind keine Server — dort laufen keine HydraHive-Services.
+
+---
+
+## A-MEM — Wichtige Hinweise
+
+- **Protokoll**: MCP über SSE — kein REST-API
+- **Endpoint**: `http://127.0.0.1:8020/sse`
+- **`GET /` auf Port 8020 → 404** — das ist kein Fehler, sondern normal
+- Zugriff nur über MCP-Tools: `amem_add_note`, `amem_search`, `amem_read` etc.
+
+---
+
+## Wichtige Pfade auf dem Server
+
+```
+/agents/{{id}}/          — Agent-Daten (soul.md, agent.yaml, memory/, skills/)
+/agents/{{id}}/memory/   — Auto-injizierte Memory-Dateien (diese Datei!)
+/etc/octopos/            — Konfiguration (JWT, LLM, WKS, etc.)
+/etc/hydrahive/          — Secrets
+/opt/octopos/            — HydraHive-Code + venv
+/opt/amem/               — A-MEM Code
+/opt/agentlink/          — AgentLink Code
+```
+"""
+    dest.write_text(content, encoding="utf-8")
+    try:
+        dest.chmod(0o600)
+    except Exception:
+        pass
+
+
 def _create_personal_agent(username: str) -> str:
     """Persönlichen Agenten für einen User anlegen. Gibt agent_id zurück."""
     import yaml as _yaml
@@ -738,6 +842,7 @@ def _create_personal_agent(username: str) -> str:
         _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False), encoding="utf-8"
     )
     (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
+    _write_system_topology(agent_dir / "memory" / "system_topology.md")
     _ensure_personal_project_manifest(username)
     discovery._register(agent_dir)
     logger.info("Persönlicher Agent angelegt: %s (model=%s)", agent_id, model)
