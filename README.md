@@ -41,7 +41,7 @@ Referenz-Setup: GTX 1080 Ti (11GB VRAM) auf Proxmox VM, Ubuntu 24.04
 ## Schnellstart
 
 ```bash
-git clone https://github.com/tilleulenspiegel/hydrahive.git
+git clone https://github.com/hydrahive/hydrahive.git
 cd hydrahive
 sudo bash installer/install.sh
 # → https://<IP> öffnen → Setup-Wizard

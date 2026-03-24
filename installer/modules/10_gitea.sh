@@ -222,7 +222,7 @@ cat > "${GITEA_CONFIG_FILE}" << GITCFG
   "webhook_secret": ""
 }
 GITCFG
-chown hydrahive:octopos "${GITEA_CONFIG_FILE}" 2>/dev/null || true
+chown hydrahive:hydrahive "${GITEA_CONFIG_FILE}" 2>/dev/null || true
 chmod 600 "${GITEA_CONFIG_FILE}"
 success "Gitea-Config: ${GITEA_CONFIG_FILE}"
 

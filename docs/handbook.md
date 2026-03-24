@@ -57,7 +57,7 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 ### Installer ausführen
 
 ```bash
-git clone https://github.com/tilleulenspiegel/hydrahive.git
+git clone https://github.com/hydrahive/hydrahive.git
 cd hydrahive
 sudo bash installer/install.sh
 ```

@@ -95,7 +95,7 @@ cat > "${SERVICE_FILE}" << UNIT
 Description=HydraHive Core Runtime
 After=network.target hydrahive-conduwuit.service
 Requires=hydrahive-conduwuit.service
-Documentation=https://github.com/tilleulenspiegel/hydrahive
+Documentation=https://github.com/hydrahive/hydrahive
 
 [Service]
 Type=simple

@@ -14,7 +14,7 @@ set -euo pipefail
 
 HYDRAHIVE_DIR="/opt/hydrahive"
 VENV="${HYDRAHIVE_DIR}/venv"
-GITHUB_REPO="https://github.com/tilleulenspiegel/hydrahive.git"
+GITHUB_REPO="https://github.com/hydrahive/hydrahive.git"
 GITEA_CONFIG="/etc/hydrahive/gitea_config.json"
 TOKEN_FILE="/etc/hydrahive/github_token"
 TMPDIR_BASE="/tmp/hydrahive-update-$$"
@@ -40,9 +40,9 @@ if [ -f "${GITEA_CONFIG}" ]; then
     GITEA_ORG=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('org','hydrahive'))" 2>/dev/null || echo "hydrahive")
     if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
         # Interne URL umbauen: http://127.0.0.1:3001 → mit Token
-        CLONE_URL="${GITEA_URL}/octopos/octopos.git"
+        CLONE_URL="${GITEA_URL}/hydrahive/hydrahive.git"
         CLONE_URL="${CLONE_URL/http:\/\//http:\/\/${GITEA_ORG}:${GITEA_TOKEN}@}"
-        info "Klone von lokalem Gitea: ${GITEA_URL}/octopos/octopos"
+        info "Klone von lokalem Gitea: ${GITEA_URL}/hydrahive/hydrahive"
     fi
 fi
 
@@ -50,7 +50,7 @@ if [ -z "${CLONE_URL}" ]; then
     CLONE_URL="${GITHUB_REPO}"
     if [ -f "${TOKEN_FILE}" ]; then
         GH_TOKEN=$(cat "${TOKEN_FILE}" | tr -d '[:space:]')
-        CLONE_URL="https://${GH_TOKEN}@github.com/tilleulenspiegel/hydrahive.git"
+        CLONE_URL="https://${GH_TOKEN}@github.com/hydrahive/hydrahive.git"
     fi
     info "Fallback: klone von GitHub"
 fi

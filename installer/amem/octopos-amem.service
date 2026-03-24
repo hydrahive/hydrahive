@@ -1,14 +1,14 @@
 [Unit]
-Description=OctopOS A-MEM MCP Server
+Description=HydraHive A-MEM MCP Server
 After=network.target ollama.service
 Wants=ollama.service
 
 [Service]
 Type=simple
-User=octopos
-Group=octopos
+User=hydrahive
+Group=hydrahive
 WorkingDirectory=/opt/amem
-EnvironmentFile=/etc/octopos/amem.env
+EnvironmentFile=/etc/hydrahive/amem.env
 ExecStart=/opt/amem/.venv/bin/python /opt/amem/amem_mcp_server.py
 Restart=on-failure
 RestartSec=5
