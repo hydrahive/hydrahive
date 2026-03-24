@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
-import { api, McpServer, WksConfig, DiscordConfig, PlatformOverviewEntry } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, MailConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -52,6 +52,8 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
   { id: "wks_file_read",    label: "WKS Datei lesen" },
   { id: "wks_file_write",   label: "WKS Datei schreiben" },
+  { id: "send_mail",        label: "Mail senden" },
+  { id: "receive_mail",     label: "Mail empfangen" },
 ];
 
 const BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
@@ -100,7 +102,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"mail">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -299,6 +301,7 @@ export function MyAgentPage() {
             { id: "platforms", label: "Integrationen", icon: Wifi },
             { id: "wks",      label: "WKS",            icon: Monitor },
             { id: "discord",  label: "Discord",         icon: MessageSquare },
+            { id: "mail",     label: "Mail",            icon: Mail },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -504,18 +507,20 @@ export function MyAgentPage() {
                         ))}
                       </div>
                       {showEmoji && (
+                        <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowEmoji(false)} />
                         <div className="absolute bottom-16 right-0 z-50">
                           <EmojiPicker
                             theme={Theme.DARK}
                             onEmojiClick={(e: EmojiClickData) => {
                               setInput(prev => prev + e.emoji);
-                              setShowEmoji(false);
                               textareaRef.current?.focus();
                             }}
                             height={380}
                             width={320}
                           />
                         </div>
+                        </>
                       )}
                       <div className="flex items-end gap-3">
                         <textarea ref={textareaRef} value={input}
@@ -694,6 +699,11 @@ export function MyAgentPage() {
       {/* ── Discord Tab ───────────────────────────────────────────────────── */}
       {tab === "discord" && (
         <DiscordTab />
+      )}
+
+      {/* ── Mail Tab ──────────────────────────────────────────────────────── */}
+      {tab === "mail" && (
+        <MailTab />
       )}
     </div>
   );
@@ -1583,6 +1593,188 @@ function DiscordTab() {
           <li>OAuth2 → URL Generator: Scopes „bot" + Perms „Read/Send Messages" → Bot einladen</li>
           <li>Token und Guild-ID eintragen, dann Channels laden</li>
         </ol>
+      </section>
+    </div>
+  );
+}
+
+// ── Mail Tab ───────────────────────────────────────────────────────────────────
+
+function MailTab() {
+  const [cfg,          setCfg]         = useState<MailConfig | null>(null);
+  const [mailAddress,  setMailAddress] = useState("");
+  const [domain,       setDomain]      = useState("");
+  const [createAcc,    setCreateAcc]   = useState(true);
+  // manuelle SMTP-Felder
+  const [smtpHost,     setSmtpHost]    = useState("");
+  const [smtpPort,     setSmtpPort]    = useState("587");
+  const [smtpUser,     setSmtpUser]    = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [imapHost,     setImapHost]    = useState("");
+  const [saving,       setSaving]      = useState(false);
+  const [msg,          setMsg]         = useState("");
+
+  useEffect(() => {
+    api.getMail().then(d => {
+      setCfg(d);
+      setMailAddress(d.mail_address ?? "");
+    }).catch(() => {});
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setMsg("");
+    try {
+      const payload: Parameters<typeof api.updateMail>[0] = {
+        mail_address: mailAddress.trim(),
+        domain: domain.trim(),
+        create_account: createAcc,
+      };
+      if (!createAcc && smtpHost.trim()) {
+        payload.smtp_host     = smtpHost.trim();
+        payload.smtp_port     = parseInt(smtpPort) || 587;
+        payload.smtp_user     = smtpUser.trim();
+        payload.smtp_password = smtpPassword;
+        payload.imap_host     = imapHost.trim();
+      }
+      const res = await api.updateMail(payload);
+      setMsg(`✓ Mail-Adresse ${res.mail_address} ${res.created ? "angelegt" : "gespeichert"}`);
+      const updated = await api.getMail();
+      setCfg(updated);
+      setMailAddress(updated.mail_address ?? "");
+      setDomain(""); setSmtpPassword("");
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setSaving(false); }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Mail-Konfiguration entfernen?")) return;
+    try {
+      await api.deleteMail();
+      setCfg({ configured: false, mail_address: "", smtp_host: "" });
+      setMailAddress(""); setDomain(""); setSmtpHost(""); setSmtpPassword("");
+      setMsg("Mail-Konfiguration entfernt");
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div>
+        <h2 className="text-sm font-semibold mb-1">Mail-Konto</h2>
+        <p className="text-xs text-muted-foreground">
+          Verknüpfe deinen persönlichen Agenten mit einem E-Mail-Postfach.
+        </p>
+      </div>
+
+      {cfg?.configured && (
+        <div className="flex items-center gap-2 p-3 rounded-md text-xs border bg-green-50 border-green-200 text-green-700">
+          <CheckCircle className="h-3.5 w-3.5" />
+          <span>Konfiguriert: <strong>{cfg.mail_address}</strong></span>
+          {cfg.smtp_host && <span className="ml-auto text-muted-foreground font-mono">{cfg.smtp_host}</span>}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={createAcc} onChange={e => setCreateAcc(e.target.checked)}
+            className="accent-primary" />
+          <span>Postfach automatisch bei All-Inkl anlegen (KAS API)</span>
+        </label>
+
+        {createAcc ? (
+          <>
+            <div>
+              <label className="text-xs font-medium block mb-1">Mail-Adresse (Localpart)</label>
+              <input type="text" value={mailAddress} onChange={e => setMailAddress(e.target.value)}
+                placeholder="z.B. meinagent"
+                className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+              <p className="text-xs text-muted-foreground mt-1">Nur den Teil vor dem @-Zeichen eingeben.</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1">Domain</label>
+              <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
+                placeholder="z.B. hydrahive.org (leer = Server-Standard)"
+                className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="text-xs font-medium block mb-1">Vollständige Mail-Adresse</label>
+              <input type="email" value={mailAddress} onChange={e => setMailAddress(e.target.value)}
+                placeholder="agent@example.com"
+                className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+            </div>
+            <div className="space-y-3 p-3 border rounded-md bg-muted/30">
+              <p className="text-xs font-medium">SMTP-Konfiguration</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="text-xs text-muted-foreground block mb-1">SMTP-Host</label>
+                  <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)}
+                    placeholder="smtp.example.com"
+                    className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Port</label>
+                  <input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)}
+                    placeholder="587"
+                    className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Benutzername (leer = Mail-Adresse)</label>
+                <input type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)}
+                  placeholder="agent@example.com"
+                  className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Passwort</label>
+                <input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)}
+                  placeholder="SMTP-Passwort"
+                  className="w-full text-xs border rounded-md px-3 py-2 bg-background" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">IMAP-Host (leer = smtp. → imap.)</label>
+                <input type="text" value={imapHost} onChange={e => setImapHost(e.target.value)}
+                  placeholder="imap.example.com"
+                  className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={saving || !mailAddress.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? "Speichern…" : "Speichern"}
+          </button>
+          {cfg?.configured && (
+            <button type="button" onClick={handleDelete}
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
+              <X className="h-3.5 w-3.5" />
+              Entfernen
+            </button>
+          )}
+          {msg && (
+            <span className={`text-xs flex items-center gap-1 ${msg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>
+              {msg.startsWith("✓") ? <CheckCircle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+              {msg}
+            </span>
+          )}
+        </div>
+      </form>
+
+      <section className="space-y-2 border-t pt-4">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hinweise</h3>
+        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+          <li>Mit KAS API wird das Postfach automatisch bei All-Inkl angelegt.</li>
+          <li>Ohne KAS kannst du beliebige SMTP-Zugangsdaten manuell eingeben.</li>
+          <li>Der Agent kann danach E-Mails versenden (Tool: <code className="font-mono bg-muted px-1 rounded">send_mail</code>) und empfangen (<code className="font-mono bg-muted px-1 rounded">receive_mail</code>).</li>
+        </ul>
       </section>
     </div>
   );
