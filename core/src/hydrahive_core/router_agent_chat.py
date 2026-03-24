@@ -35,7 +35,9 @@ def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str
             lines.append(f"**User:** {content}")
         elif role == "assistant":
             lines.append(f"**{agent_id}:** {content}")
-    (transcripts_dir / f"{ts}.md").write_text("\n\n".join(lines), encoding="utf-8")
+    transcript_file = transcripts_dir / f"{ts}.md"
+    transcript_file.write_text("\n\n".join(lines), encoding="utf-8")
+    transcript_file.chmod(0o600)
 
     # Kurzfassung → memory/_last_session.md (Session-Inject)
     memory_dir = agent_dir / "memory"
@@ -53,7 +55,9 @@ def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str
             short.append(f"**User:** {content[:400]}")
         elif role == "assistant" and content:
             short.append(f"**{agent_id}:** {content[:400]}")
-    (memory_dir / "_last_session.md").write_text("\n\n".join(short), encoding="utf-8")
+    last_session = memory_dir / "_last_session.md"
+    last_session.write_text("\n\n".join(short), encoding="utf-8")
+    last_session.chmod(0o600)
 
 
 def register_agent_chat_routes(
@@ -99,6 +103,7 @@ def register_agent_chat_routes(
         memory_dir.mkdir(exist_ok=True)
         p = memory_dir / f"{filename}.md"
         p.open("a" if mode == "append" else "w", encoding="utf-8").write(content)
+        p.chmod(0o600)
         return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
 
     @auth_router.delete("/agents/{agent_id}/session")
