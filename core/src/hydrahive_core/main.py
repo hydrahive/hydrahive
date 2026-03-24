@@ -793,6 +793,85 @@ Die WKS sind keine Server — dort laufen keine HydraHive-Services.
         pass
 
 
+_SKILL_SYSTEMCHECK = """\
+---
+skill: hydrahive-systemcheck
+version: "1.0"
+scope: on-demand
+triggers:
+  - systemtest
+  - system test
+  - systemcheck
+  - health check
+  - healthcheck
+  - services prüfen
+  - services laufen
+  - octopos läuft
+  - hydrahive läuft
+  - server status
+  - diagnose
+  - systembericht
+priority: 10
+---
+
+# HydraHive Systemcheck — Anleitung
+
+## KRITISCH: Richtiges Tool für Server-Diagnose
+
+**`shell_exec`** → läuft LOKAL auf dem HydraHive-Server (192.168.178.181). Benutze dies für alle Server-Checks.
+**`wks_shell_exec`** → läuft auf der WORKSTATION des Users. NIEMALS für Server-Diagnose verwenden — dort laufen keine HydraHive-Services.
+
+## Korrekte Befehle für einen Systemtest (alle via `shell_exec`)
+
+### 1. Services prüfen
+```
+systemctl is-active octopos-core octopos-amem redis gitea
+```
+
+### 2. HydraHive Core Health
+```
+curl -s http://127.0.0.1:8765/health
+```
+Erwartete Antwort: `{"status":"ok","service":"hydrahive-core"}`
+Pfad ist `/health`, NICHT `/api/health`.
+
+### 3. AgentLink Health
+```
+curl -s http://127.0.0.1:8000/health
+```
+
+### 4. A-MEM — KEIN REST-Health-Endpoint
+A-MEM ist ein MCP/SSE-Server. `GET /` → 404 ist NORMAL.
+A-MEM läuft wenn: `systemctl is-active octopos-amem` → `active`.
+Nie per curl testen.
+
+### 5. Redis
+```
+redis-cli ping
+```
+Erwartete Antwort: `PONG`
+
+### 6. Ports
+```
+ss -tlnp | grep -E '8765|8020|8000|6379'
+```
+
+Führe alle Checks via `shell_exec` aus, niemals via `wks_shell_exec`.
+"""
+
+
+def _write_default_skills(skills_dir: Path) -> None:
+    """Standard-Skills für neue persönliche Agenten anlegen."""
+    skills_dir.mkdir(exist_ok=True)
+    p = skills_dir / "hydrahive_systemcheck.md"
+    if not p.exists():
+        p.write_text(_SKILL_SYSTEMCHECK, encoding="utf-8")
+        try:
+            p.chmod(0o600)
+        except Exception:
+            pass
+
+
 def _create_personal_agent(username: str) -> str:
     """Persönlichen Agenten für einen User anlegen. Gibt agent_id zurück."""
     import yaml as _yaml
@@ -843,6 +922,7 @@ def _create_personal_agent(username: str) -> str:
     )
     (agent_dir / "soul.md").write_text(soul_text, encoding="utf-8")
     _write_system_topology(agent_dir / "memory" / "system_topology.md")
+    _write_default_skills(agent_dir / "skills")
     _ensure_personal_project_manifest(username)
     discovery._register(agent_dir)
     logger.info("Persönlicher Agent angelegt: %s (model=%s)", agent_id, model)
