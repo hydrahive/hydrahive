@@ -503,44 +503,59 @@
       <p data-i18n="f6-p">Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
     </div>
     <div class="card">
+      <div class="card-icon">🧑‍💻</div>
+      <h3 data-i18n="f7-h">Personal Agent</h3>
+      <p data-i18n="f7-p">Every user gets a private agent (personal_&lt;username&gt;) with its own chat, skills, memory and workstation access — completely independent of projects.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <h3 data-i18n="f8-h">Memory System</h3>
+      <p data-i18n="f8-p">Agents store knowledge in Markdown files, auto-injected into every session. Combine with QMD semantic search to save tokens on large memory sets.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💻</div>
+      <h3 data-i18n="f9-h">WKS Access</h3>
+      <p data-i18n="f9-p">Personal agents SSH into your workstation — run commands, read and write files. WKS Ollama models appear automatically in the model dropdown.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔧</div>
+      <h3 data-i18n="f10-h">Git Integration</h3>
+      <p data-i18n="f10-p">Agents commit, push, and create pull requests on Gitea. Full git workflow from chat — no terminal needed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔌</div>
+      <h3 data-i18n="f11-h">MCP Servers</h3>
+      <p data-i18n="f11-p">Connect external tool servers via streamableHttp (Model Context Protocol). Ships with QMD — semantic memory search built in.</p>
+    </div>
+    <div class="card">
       <div class="card-icon">🔗</div>
-      <h3 data-i18n="f7-h">Webhook System</h3>
-      <p data-i18n="f7-p">Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
+      <h3 data-i18n="f12-h">Webhook System</h3>
+      <p data-i18n="f12-p">Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
     </div>
     <div class="card">
       <div class="card-icon">🛡️</div>
-      <h3 data-i18n="f8-h">Security &amp; Audit</h3>
-      <p data-i18n="f8-p">JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
+      <h3 data-i18n="f13-h">Security &amp; Audit</h3>
+      <p data-i18n="f13-p">JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
     </div>
     <div class="card">
       <div class="card-icon">🖥️</div>
-      <h3 data-i18n="f9-h">Full Web Console</h3>
-      <p data-i18n="f9-p">Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Live token usage shown per response. Built with React + Tailwind.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">👤</div>
-      <h3 data-i18n="f10-h">Personal Agent per User</h3>
-      <p data-i18n="f10-p">Every user gets their own persistent AI agent — reachable via Discord, Matrix or web chat. Configurable personality, memory and skills. Always on, always in context.</p>
+      <h3 data-i18n="f14-h">Full Web Console</h3>
+      <p data-i18n="f14-p">Manage agents, projects, users, skills, webhooks, MCP servers and LLM config — all without SSH. One-click system update included.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔄</div>
-      <h3 data-i18n="f11-h">Heartbeat Monitoring</h3>
-      <p data-i18n="f11-p">Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.</p>
+      <h3 data-i18n="f15-h">Heartbeat Monitoring</h3>
+      <p data-i18n="f15-p">Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.</p>
     </div>
     <div class="card">
       <div class="card-icon">💾</div>
-      <h3 data-i18n="f12-h">Backup &amp; Restore</h3>
-      <p data-i18n="f12-p">One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.</p>
-    </div>
-    <div class="card">
-      <div class="card-icon">🗄️</div>
-      <h3 data-i18n="f13-h">Built-in Git Server</h3>
-      <p data-i18n="f13-p">Gitea ships with the installer. Every project gets its own repository. Agents can push, pull and review code directly — no external Git service needed.</p>
+      <h3 data-i18n="f16-h">Backup &amp; Restore</h3>
+      <p data-i18n="f16-p">One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.</p>
     </div>
     <div class="card">
       <div class="card-icon">🕸️</div>
-      <h3 data-i18n="f14-h">AgentLink Hub</h3>
-      <p data-i18n="f14-p">Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.</p>
+      <h3 data-i18n="f17-h">AgentLink Hub</h3>
+      <p data-i18n="f17-p">Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.</p>
     </div>
   </div>
 </section>
@@ -845,22 +860,28 @@
       'f5-p': 'Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.',
       'f6-h': 'Project Isolation',
       'f6-p': 'Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.',
-      'f7-h': 'Webhook System',
-      'f7-p': 'Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.',
-      'f8-h': 'Security & Audit',
-      'f8-p': 'JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.',
-      'f9-h': 'Full Web Console',
-      'f9-p': 'Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Live token usage shown per response. Built with React + Tailwind.',
-      'f10-h': 'Personal Agent per User',
-      'f10-p': 'Every user gets their own persistent AI agent — reachable via Discord, Matrix or web chat. Configurable personality, memory and skills. Always on, always in context.',
-      'f11-h': 'Heartbeat Monitoring',
-      'f11-p': 'Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.',
-      'f12-h': 'Backup & Restore',
-      'f12-p': 'One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.',
-      'f13-h': 'Built-in Git Server',
-      'f13-p': 'Gitea ships with the installer. Every project gets its own repository. Agents can push, pull and review code directly — no external Git service needed.',
-      'f14-h': 'AgentLink Hub',
-      'f14-p': 'Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.',
+      'f7-h': 'Personal Agent',
+      'f7-p': 'Every user gets a private agent (personal_&lt;username&gt;) with its own chat, skills, memory and workstation access — completely independent of projects.',
+      'f8-h': 'Memory System',
+      'f8-p': 'Agents store knowledge in Markdown files, auto-injected into every session. Combine with QMD semantic search to save tokens on large memory sets.',
+      'f9-h': 'WKS Access',
+      'f9-p': 'Personal agents SSH into your workstation — run commands, read and write files. WKS Ollama models appear automatically in the model dropdown.',
+      'f10-h': 'Git Integration',
+      'f10-p': 'Agents commit, push, and create pull requests on Gitea. Full git workflow from chat — no terminal needed.',
+      'f11-h': 'MCP Servers',
+      'f11-p': 'Connect external tool servers via streamableHttp (Model Context Protocol). Ships with QMD — semantic memory search built in.',
+      'f12-h': 'Webhook System',
+      'f12-p': 'Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.',
+      'f13-h': 'Security & Audit',
+      'f13-p': 'JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.',
+      'f14-h': 'Full Web Console',
+      'f14-p': 'Manage agents, projects, users, skills, webhooks, MCP servers and LLM config — all without SSH. One-click system update included.',
+      'f15-h': 'Heartbeat Monitoring',
+      'f15-p': 'Schedule recurring tasks for any agent — system checks, log scans, API pings. Non-trivial findings automatically escalated to another agent via AgentLink.',
+      'f16-h': 'Backup & Restore',
+      'f16-p': 'One-click full-system backup from the web console. Agents, projects, config and skills — all in one archive. Restore to any point with a single upload.',
+      'f17-h': 'AgentLink Hub',
+      'f17-p': 'Built-in agent coordination bus. Agents hand off tasks, share context and escalate findings across projects — or across machines in a multi-node setup.',
       'how-title': 'How it works',
       'how-sub':   'A message travels through 10 layers in under a second.',
       'how-note':  'The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.',
@@ -948,22 +969,28 @@
       'f5-p': 'Agenten zusätzliches Wissen geben via Markdown-Dateien mit YAML-Frontmatter. Scope: immer aktiv oder per Keyword on-demand. Hot-Reload, kein Neustart.',
       'f6-h': 'Projekt-Isolation',
       'f6-p': 'Jedes Projekt bekommt einen Linux-User, isoliertes Dateisystem, Samba-Share und Matrix-Room. Agenten können nur auf ihr eigenes Projektverzeichnis zugreifen.',
-      'f7-h': 'Webhook-System',
-      'f7-p': 'Agenten von externen Systemen triggern — Git-Pushes, CI-Pipelines, Monitoring-Alerts. HMAC-signierte ausgehende Webhooks inklusive.',
-      'f8-h': 'Sicherheit & Audit',
-      'f8-p': 'JWT-Auth, Login-Rate-Limiting, atomare Config-Writes, dreischichtiges Tool-Permission-Modell. Vollständiges Audit-Log aller Nutzeraktionen.',
-      'f9-h': 'Vollständige Web-Konsole',
-      'f9-p': 'Agenten, Projekte, Nutzer, Skills, Webhooks, Logs und LLM-Config verwalten — alles ohne SSH. Live Token-Verbrauch pro Antwort. Gebaut mit React + Tailwind.',
-      'f10-h': 'Persönlicher Agent pro Nutzer',
-      'f10-p': 'Jeder Nutzer bekommt seinen eigenen persistenten KI-Agenten — erreichbar via Discord, Matrix oder Web-Chat. Konfigurierbare Persönlichkeit, Memory und Skills. Immer an, immer im Kontext.',
-      'f11-h': 'Heartbeat-Monitoring',
-      'f11-p': 'Wiederkehrende Tasks für jeden Agenten planen — System-Checks, Log-Scans, API-Pings. Nicht-triviale Befunde werden automatisch per AgentLink an einen anderen Agenten eskaliert.',
-      'f12-h': 'Backup & Restore',
-      'f12-p': 'Vollständiges System-Backup per Knopfdruck aus der Web-Konsole. Agenten, Projekte, Config und Skills — alles in einem Archiv. Wiederherstellung per einfachem Upload.',
-      'f13-h': 'Eingebauter Git-Server',
-      'f13-p': 'Gitea wird mit dem Installer mitgeliefert. Jedes Projekt bekommt sein eigenes Repository. Agenten können direkt pushen, pullen und Code reviewen — kein externer Git-Dienst nötig.',
-      'f14-h': 'AgentLink Hub',
-      'f14-p': 'Eingebauter Agent-Koordinations-Bus. Agenten übergeben Tasks, teilen Kontext und eskalieren Befunde projektübergreifend — oder über mehrere Maschinen in einem Multi-Node-Setup.',
+      'f7-h': 'Persönlicher Agent',
+      'f7-p': 'Jeder Nutzer bekommt einen privaten Agenten (personal_&lt;username&gt;) mit eigenem Chat, Skills, Memory und Workstation-Zugriff — völlig unabhängig von Projekten.',
+      'f8-h': 'Memory-System',
+      'f8-p': 'Agenten speichern Wissen in Markdown-Dateien, die automatisch in jede Session injiziert werden. Mit QMD-Semantiksuche kombiniert spart das Tokens bei großen Memory-Sets.',
+      'f9-h': 'WKS-Zugriff',
+      'f9-p': 'Persönliche Agenten verbinden sich per SSH mit deiner Workstation — Befehle ausführen, Dateien lesen und schreiben. WKS-Ollama-Modelle erscheinen automatisch im Modell-Dropdown.',
+      'f10-h': 'Git-Integration',
+      'f10-p': 'Agenten committen, pushen und erstellen Pull Requests auf Gitea. Vollständiger Git-Workflow aus dem Chat — kein Terminal nötig.',
+      'f11-h': 'MCP-Server',
+      'f11-p': 'Externe Tool-Server via streamableHttp verbinden (Model Context Protocol). Wird mit QMD geliefert — semantische Memory-Suche direkt eingebaut.',
+      'f12-h': 'Webhook-System',
+      'f12-p': 'Agenten von externen Systemen triggern — Git-Pushes, CI-Pipelines, Monitoring-Alerts. HMAC-signierte ausgehende Webhooks inklusive.',
+      'f13-h': 'Sicherheit & Audit',
+      'f13-p': 'JWT-Auth, Login-Rate-Limiting, atomare Config-Writes, dreischichtiges Tool-Permission-Modell. Vollständiges Audit-Log aller Nutzeraktionen.',
+      'f14-h': 'Vollständige Web-Konsole',
+      'f14-p': 'Agenten, Projekte, Nutzer, Skills, Webhooks, MCP-Server und LLM-Config verwalten — alles ohne SSH. System-Update per Knopfdruck inklusive.',
+      'f15-h': 'Heartbeat-Monitoring',
+      'f15-p': 'Wiederkehrende Tasks für jeden Agenten planen — System-Checks, Log-Scans, API-Pings. Nicht-triviale Befunde werden automatisch per AgentLink eskaliert.',
+      'f16-h': 'Backup & Restore',
+      'f16-p': 'Vollständiges System-Backup per Knopfdruck. Agenten, Projekte, Config und Skills — alles in einem Archiv. Wiederherstellung per einfachem Upload.',
+      'f17-h': 'AgentLink Hub',
+      'f17-p': 'Eingebauter Agent-Koordinations-Bus. Agenten übergeben Tasks, teilen Kontext und eskalieren Befunde projektübergreifend — oder über mehrere Maschinen hinweg.',
       'how-title': 'Wie es funktioniert',
       'how-sub':   'Eine Nachricht durchläuft 10 Schichten in unter einer Sekunde.',
       'how-note':  'Der Nutzer sieht einen sauberen Streaming-Chat. Die Agenten erledigen den Rest — mit vollem Matrix-Audit-Trail.',
