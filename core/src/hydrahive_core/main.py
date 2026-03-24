@@ -41,6 +41,7 @@ from .router_project_lifecycle import register_project_lifecycle_routes, update_
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
+from .whatsapp_agent import setup_whatsapp_sessions
 from .router_users import (
     default_personal_agent_execution_modes,
     register_user_routes,
@@ -183,6 +184,12 @@ async def lifespan(app: FastAPI):
         )
     except Exception as e:
         logger.warning("Discord-Setup fehlgeschlagen: %s", e)
+
+    # WhatsApp-Sessions für User mit konfiguriertem Account wiederherstellen
+    try:
+        await setup_whatsapp_sessions(load_users=_load_users, logger_=logger)
+    except Exception as e:
+        logger.warning("WhatsApp-Setup fehlgeschlagen: %s", e)
 
     # Heartbeat-Scheduler starten (#77)
     from .heartbeat import AgentHeartbeatScheduler as _HBS
@@ -761,6 +768,8 @@ register_user_routes(
 WKS_KEYS_DIR = Path("/etc/octopos/wks_keys")
 
 
+internal_router = APIRouter(prefix="/internal", tags=["internal"])
+
 register_user_integration_routes(
     auth_router,
     require_auth=require_auth,
@@ -771,6 +780,7 @@ register_user_integration_routes(
     orchestrator=orchestrator,
     audit_log=audit_log,
     logger=logger,
+    internal_router=internal_router,
 )
 
 
@@ -1166,3 +1176,4 @@ register_system_routes(
 app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(internal_router)
