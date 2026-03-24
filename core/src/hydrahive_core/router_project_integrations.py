@@ -190,17 +190,26 @@ def register_project_integration_routes(
         body_bytes = await request.body()
         sig_header = request.headers.get("X-OctopOS-Signature", "")
 
-        if wake_hooks and sig_header:
-            import hashlib as _hl
-            import hmac as _hm
-
-            for wh in wake_hooks:
-                secret = wh.get("secret", "")
-                if secret:
+        if wake_hooks:
+            # Wenn Wake-Hooks konfiguriert sind, ist Signatur verpflichtend
+            hooks_with_secret = [w for w in wake_hooks if w.get("secret", "")]
+            if hooks_with_secret:
+                if not sig_header:
+                    raise HTTPException(401, "Signatur erforderlich (X-OctopOS-Signature fehlt)")
+                import hashlib as _hl
+                import hmac as _hm
+                valid = False
+                for wh in hooks_with_secret:
+                    secret = wh.get("secret", "")
                     expected = "sha256=" + _hm.new(secret.encode(), body_bytes, _hl.sha256).hexdigest()
-                    if not _hm.compare_digest(sig_header, expected):
-                        raise HTTPException(401, "Ungueltige Signatur")
-                    break
+                    if _hm.compare_digest(sig_header, expected):
+                        valid = True
+                        break
+                if not valid:
+                    raise HTTPException(401, "Ungueltige Signatur")
+        else:
+            # Keine Hooks konfiguriert → Wake-Endpoint gesperrt
+            raise HTTPException(403, "Wake-Endpoint nicht konfiguriert")
 
         try:
             data = json.loads(body_bytes) if body_bytes else {}

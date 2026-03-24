@@ -2247,6 +2247,27 @@ def _get_wks_config(project_id: str) -> dict | None:
     return None
 
 
+def _make_ssh_client(wks: dict):
+    """Erstellt einen paramiko SSHClient mit Host-Key-Verifikation (RejectPolicy)."""
+    import paramiko
+    client = paramiko.SSHClient()
+    client.load_system_host_keys()
+    known_hosts = Path.home() / ".ssh" / "known_hosts"
+    if known_hosts.exists():
+        client.load_host_keys(str(known_hosts))
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    connect_kw: dict = {
+        "hostname": wks["ip"],
+        "username": wks.get("ssh_user", ""),
+        "timeout":  30,
+    }
+    key_path = wks.get("ssh_key_path", "")
+    if key_path and Path(key_path).exists():
+        connect_kw["key_filename"] = key_path
+    client.connect(**connect_kw)
+    return client
+
+
 class WksShellExecTool(BaseTool):
     """Führt einen Shell-Befehl auf der Workstation des Users aus (via SSH)."""
 
@@ -2293,18 +2314,7 @@ class WksShellExecTool(BaseTool):
             }
 
         def _run():
-            import paramiko
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            connect_kw: dict = {
-                "hostname": wks["ip"],
-                "username": wks.get("ssh_user", ""),
-                "timeout":  30,
-            }
-            key_path = wks.get("ssh_key_path", "")
-            if key_path and Path(key_path).exists():
-                connect_kw["key_filename"] = key_path
-            client.connect(**connect_kw)
+            client = _make_ssh_client(wks)
             full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
             _, stdout, stderr = client.exec_command(full_cmd, timeout=60)
             out      = stdout.read().decode("utf-8", errors="replace")
@@ -2351,14 +2361,7 @@ class WksFileReadTool(BaseTool):
             return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
 
         def _run():
-            import paramiko
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            connect_kw: dict = {"hostname": wks["ip"], "username": wks.get("ssh_user", ""), "timeout": 30}
-            key_path = wks.get("ssh_key_path", "")
-            if key_path and Path(key_path).exists():
-                connect_kw["key_filename"] = key_path
-            client.connect(**connect_kw)
+            client = _make_ssh_client(wks)
             sftp = client.open_sftp()
             buf = io.BytesIO()
             sftp.getfo(path, buf)
@@ -2405,14 +2408,7 @@ class WksFileWriteTool(BaseTool):
             return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
 
         def _run():
-            import paramiko
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            connect_kw: dict = {"hostname": wks["ip"], "username": wks.get("ssh_user", ""), "timeout": 30}
-            key_path = wks.get("ssh_key_path", "")
-            if key_path and Path(key_path).exists():
-                connect_kw["key_filename"] = key_path
-            client.connect(**connect_kw)
+            client = _make_ssh_client(wks)
             sftp = client.open_sftp()
             buf = io.BytesIO(content.encode("utf-8"))
             sftp.putfo(buf, path)
@@ -2429,6 +2425,154 @@ class WksFileWriteTool(BaseTool):
 
 # _discord_clients: {agent_id: AgentDiscordClient} — wird von main.py befüllt
 _discord_clients: dict[str, object] = {}
+
+
+class SendMailTool(BaseTool):
+    """E-Mail über den konfigurierten Agenten-Mailaccount senden."""
+
+    @property
+    def id(self) -> str:          return "send_mail"
+    @property
+    def name(self) -> str:        return "Send Mail"
+    @property
+    def description(self) -> str: return "Sendet eine E-Mail vom konfigurierten Agenten-Mailaccount."
+    @property
+    def permissions_required(self) -> list[str]: return ["mail"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "to":      {"type": "string",  "description": "Empfänger-Adresse"},
+                "subject": {"type": "string",  "description": "Betreff"},
+                "body":    {"type": "string",  "description": "Nachrichtentext (plain text)"},
+                "cc":      {"type": "string",  "description": "CC-Adresse (optional)"},
+            },
+            "required": ["to", "subject", "body"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str,
+                      to: str, subject: str, body: str, cc: str = "", **kwargs) -> dict:
+        import json, smtplib
+        from email.mime.text import MIMEText
+        from pathlib import Path
+        from .main import AGENTS_DIR
+
+        cfg_path = Path(AGENTS_DIR) / agent_id / "mail.json"
+        if not cfg_path.exists():
+            return {"error": "Kein Mailaccount konfiguriert für diesen Agenten"}
+        try:
+            cfg = json.loads(cfg_path.read_text())
+        except Exception:
+            return {"error": "Mail-Config konnte nicht gelesen werden"}
+
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["From"]    = cfg["mail_address"]
+        msg["To"]      = to
+        msg["Subject"] = subject
+        if cc:
+            msg["Cc"] = cc
+
+        try:
+            with smtplib.SMTP(cfg["smtp_host"], cfg.get("smtp_port", 587), timeout=15) as s:
+                s.starttls()
+                s.login(cfg["smtp_user"], cfg["smtp_password"])
+                recipients = [to] + ([cc] if cc else [])
+                s.sendmail(cfg["mail_address"], recipients, msg.as_string())
+            return {"sent": True, "from": cfg["mail_address"], "to": to}
+        except Exception as e:
+            return {"error": str(e)}
+
+
+class ReceiveMailTool(BaseTool):
+    """E-Mails vom konfigurierten Agenten-Mailaccount abrufen (IMAP)."""
+
+    @property
+    def id(self) -> str:          return "receive_mail"
+    @property
+    def name(self) -> str:        return "Receive Mail"
+    @property
+    def description(self) -> str: return "Ruft E-Mails vom konfigurierten Agenten-Mailaccount ab (IMAP). Gibt Betreff, Absender, Datum und Text zurück."
+    @property
+    def permissions_required(self) -> list[str]: return ["mail"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "folder":  {"type": "string",  "description": "IMAP-Ordner (default: INBOX)"},
+                "limit":   {"type": "integer", "description": "Maximale Anzahl Mails (default: 10, max: 50)"},
+                "unread_only": {"type": "boolean", "description": "Nur ungelesene Mails (default: false)"},
+            },
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str,
+                      folder: str = "INBOX", limit: int = 10, unread_only: bool = False, **kwargs) -> dict:
+        import json, imaplib, email
+        from email.header import decode_header
+        from pathlib import Path
+        from .main import AGENTS_DIR
+
+        cfg_path = Path(AGENTS_DIR) / agent_id / "mail.json"
+        if not cfg_path.exists():
+            return {"error": "Kein Mailaccount konfiguriert für diesen Agenten"}
+        try:
+            cfg = json.loads(cfg_path.read_text())
+        except Exception:
+            return {"error": "Mail-Config konnte nicht gelesen werden"}
+
+        imap_host = cfg.get("imap_host", cfg.get("smtp_host", "").replace("smtp.", "imap."))
+        imap_port = cfg.get("imap_port", 993)
+        limit = min(int(limit), 50)
+
+        def _decode_header(value: str) -> str:
+            parts = decode_header(value)
+            result = []
+            for part, enc in parts:
+                if isinstance(part, bytes):
+                    result.append(part.decode(enc or "utf-8", errors="replace"))
+                else:
+                    result.append(part)
+            return "".join(result)
+
+        def _get_body(msg) -> str:
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+            else:
+                payload = msg.get_payload(decode=True)
+                if payload:
+                    return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
+            return ""
+
+        try:
+            with imaplib.IMAP4_SSL(imap_host, imap_port) as imap:
+                imap.login(cfg["smtp_user"], cfg["smtp_password"])
+                imap.select(folder)
+                search = "UNSEEN" if unread_only else "ALL"
+                _, data = imap.search(None, search)
+                ids = data[0].split()
+                ids = ids[-limit:]  # neueste zuerst
+                mails = []
+                for mid in reversed(ids):
+                    _, raw = imap.fetch(mid, "(RFC822)")
+                    msg = email.message_from_bytes(raw[0][1])
+                    mails.append({
+                        "id":      mid.decode(),
+                        "from":    _decode_header(msg.get("From", "")),
+                        "subject": _decode_header(msg.get("Subject", "")),
+                        "date":    msg.get("Date", ""),
+                        "body":    _get_body(msg)[:2000],
+                    })
+            return {"mails": mails, "count": len(mails), "folder": folder}
+        except Exception as e:
+            return {"error": str(e)}
 
 
 class DiscordSendTool(BaseTool):
@@ -2562,6 +2706,8 @@ registry.register(GitCreatePRTool())
 registry.register(WksShellExecTool())
 registry.register(WksFileReadTool())
 registry.register(WksFileWriteTool())
+registry.register(SendMailTool())
+registry.register(ReceiveMailTool())
 registry.register(DiscordSendTool())
 registry.register(DiscordReadTool())
 registry.register(DiscordListChannelsTool())

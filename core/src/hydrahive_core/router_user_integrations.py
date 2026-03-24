@@ -4,7 +4,7 @@ import logging
 import subprocess as _sp
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 
@@ -587,25 +587,58 @@ def register_user_integration_routes(
         from .whatsapp_agent import bridge_get_status, load_whatsapp_config
         cfg = load_whatsapp_config(username)
         if not cfg or not cfg.get("enabled"):
-            return {"configured": False, "status": "disconnected", "qr": None, "phone": None}
+            return {"configured": False, "status": "disconnected", "qr": None, "phone": None,
+                    "private_chats_enabled": True, "group_chats_enabled": False,
+                    "require_keyword": "", "allowed_numbers": [], "blocked_numbers": []}
         agent_id = f"personal_{username}"
         bridge = await bridge_get_status(agent_id)
+        # Telefonnummer in Config speichern (für Loop-Schutz)
+        bridge_phone = bridge.get("phone") or ""
+        if bridge_phone and cfg.get("phone") != bridge_phone:
+            from .whatsapp_agent import save_whatsapp_config as _save_wa
+            cfg["phone"] = bridge_phone
+            _save_wa(username, cfg)
+
         return {
             "configured": True,
             "status": bridge.get("status", "disconnected"),
             "qr": bridge.get("qr"),
-            "phone": bridge.get("phone") or cfg.get("phone", ""),
+            "phone": bridge_phone or cfg.get("phone", ""),
+            "private_chats_enabled": cfg.get("private_chats_enabled", True),
+            "group_chats_enabled":   cfg.get("group_chats_enabled", False),
+            "require_keyword":       cfg.get("require_keyword", ""),
+            "allowed_numbers":       cfg.get("allowed_numbers", []),
+            "blocked_numbers":       cfg.get("blocked_numbers", []),
+            "owner_numbers":         cfg.get("owner_numbers", []),
         }
+
+    @auth_router.put("/me/whatsapp/config")
+    async def update_my_whatsapp_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        from .whatsapp_agent import load_whatsapp_config, save_whatsapp_config
+        cfg = load_whatsapp_config(username) or {"enabled": True}
+        cfg.update({
+            "private_chats_enabled": bool(body.get("private_chats_enabled", cfg.get("private_chats_enabled", True))),
+            "group_chats_enabled":   bool(body.get("group_chats_enabled",   cfg.get("group_chats_enabled", False))),
+            "require_keyword":       str(body.get("require_keyword", cfg.get("require_keyword", ""))).strip(),
+            "allowed_numbers":       list(body.get("allowed_numbers", cfg.get("allowed_numbers", []))),
+            "blocked_numbers":       list(body.get("blocked_numbers", cfg.get("blocked_numbers", []))),
+            "owner_numbers":         list(body.get("owner_numbers",   cfg.get("owner_numbers", []))),
+        })
+        save_whatsapp_config(username, cfg)
+        return {"updated": True}
 
     @auth_router.post("/me/whatsapp/connect")
     async def connect_my_whatsapp(auth: tuple = Depends(require_auth)):
         username, _ = auth
-        from .whatsapp_agent import bridge_start_session, save_whatsapp_config
-        save_whatsapp_config(username, {"enabled": True})
+        from .whatsapp_agent import bridge_start_session, load_whatsapp_config, save_whatsapp_config
+        existing = load_whatsapp_config(username) or {}
+        existing["enabled"] = True
+        save_whatsapp_config(username, existing)
         agent_id = f"personal_{username}"
         result = await bridge_start_session(agent_id)
         audit_log("whatsapp.connect", details={"user": username})
-        return {"status": result.get("status"), "qr": result.get("qr"), "phone": result.get("phone")}
+        return {"configured": True, "status": result.get("status"), "qr": result.get("qr"), "phone": result.get("phone")}
 
     @auth_router.delete("/me/whatsapp")
     async def delete_my_whatsapp(auth: tuple = Depends(require_auth)):
@@ -621,25 +654,122 @@ def register_user_integration_routes(
 
     _internal = internal_router or auth_router  # Fallback; wird von main.py mit echtem Router befüllt
 
+    @_internal.post("/whatsapp/bridge-ready")
+    async def whatsapp_bridge_ready(request: Request):
+        """Bridge meldet sich nach (Neu-)Start — alle konfigurierten Sessions wiederherstellen."""
+        import os as _os
+        secret = _os.environ.get("WHATSAPP_BRIDGE_SECRET", "")
+        if not secret:
+            raise HTTPException(503, "WhatsApp-Bridge nicht konfiguriert (WHATSAPP_BRIDGE_SECRET fehlt)")
+        if request.headers.get("X-Bridge-Secret", "") != secret:
+            raise HTTPException(403, "Ungültiges Bridge-Secret")
+
+        from .whatsapp_agent import bridge_start_session, load_whatsapp_config as _load_wa_cfg
+
+        users = load_users()
+        restarted = []
+        for username in users:
+            cfg = _load_wa_cfg(username)
+            if not cfg or not cfg.get("enabled"):
+                continue
+            agent_id = f"personal_{username}"
+            try:
+                result = await bridge_start_session(agent_id)
+                logger.info("WhatsApp-Session nach Bridge-Neustart: %s → %s", agent_id, result.get("status"))
+                restarted.append(agent_id)
+            except Exception as e:
+                logger.warning("WhatsApp-Session Reconnect fehlgeschlagen für %s: %s", agent_id, e)
+
+        return {"ok": True, "restarted": restarted}
+
     @_internal.post("/whatsapp/incoming")
     async def whatsapp_incoming(request: Request):
         """Eingehende WhatsApp-Nachrichten vom Bridge-Dienst verarbeiten."""
         import os as _os
         secret = _os.environ.get("WHATSAPP_BRIDGE_SECRET", "")
-        if secret:
-            req_secret = request.headers.get("X-Bridge-Secret", "")
-            if req_secret != secret:
-                raise HTTPException(403, "Ungültiges Bridge-Secret")
+        if not secret:
+            # Kein Secret konfiguriert → Endpoint vollständig sperren
+            logger.error(
+                "WHATSAPP_BRIDGE_SECRET nicht gesetzt — /internal/whatsapp/incoming verweigert Anfragen. "
+                "Bitte WHATSAPP_BRIDGE_SECRET in der Umgebung setzen."
+            )
+            raise HTTPException(503, "WhatsApp-Bridge nicht konfiguriert (WHATSAPP_BRIDGE_SECRET fehlt)")
+        req_secret = request.headers.get("X-Bridge-Secret", "")
+        if req_secret != secret:
+            raise HTTPException(403, "Ungültiges Bridge-Secret")
 
         body = await request.json()
-        agent_id = body.get("agent_id", "")
-        from_jid = body.get("from", "")
-        message  = body.get("message", "").strip()
-        if not agent_id or not message:
+        agent_id   = body.get("agent_id", "")
+        from_jid   = body.get("from", "")
+        from_name  = body.get("from_name", "").strip()
+        message    = body.get("message", "").strip()
+        media_type = body.get("media_type", "")
+        media_data = body.get("media_data", "")
+
+        if not agent_id:
             return {"ok": False, "error": "Fehlende Felder"}
 
-        # Rufnummer aus JID extrahieren (123456789@s.whatsapp.net → +123456789)
+        # Audio/PTT transkribieren
+        is_audio = False
+        if media_data and media_type.startswith("audio"):
+            is_audio = True
+            try:
+                from .whatsapp_transcribe import transcribe_audio_b64
+                transcript = transcribe_audio_b64(media_data, media_type)
+                if transcript:
+                    message = transcript
+                    logger.info("WhatsApp Audio transkribiert: %d Zeichen", len(transcript))
+                else:
+                    message = "[Sprachnachricht — Transkription fehlgeschlagen]"
+            except Exception as e:
+                logger.error("Transkriptions-Fehler: %s", e)
+                message = "[Sprachnachricht]"
+
+        if not message:
+            return {"ok": False, "error": "Fehlende Felder"}
+
+        # Rufnummer aus JID extrahieren (123456789@s.whatsapp.net → 123456789)
         sender = from_jid.split("@")[0] if "@" in from_jid else from_jid
+        is_group = from_jid.endswith("@g.us")
+
+        # Filterkonfiguration laden
+        username = agent_id.removeprefix("personal_")
+        from .whatsapp_agent import load_whatsapp_config as _load_wa
+        wa_cfg = _load_wa(username) or {}
+
+        # Agent-Loop-Schutz: Nachrichten von anderen HydraHive-Agenten ignorieren
+        all_users = load_users()
+        for _uname, _udata in all_users.items():
+            if _uname == username:
+                continue
+            _other_cfg = _load_wa(_uname)
+            if not _other_cfg:
+                continue
+            _other_phone = _other_cfg.get("phone", "").lstrip("+")
+            if _other_phone and sender.endswith(_other_phone):
+                return {"ok": True, "filtered": "agent_loop"}
+        private_ok = wa_cfg.get("private_chats_enabled", True)
+        group_ok   = wa_cfg.get("group_chats_enabled", False)
+        keyword    = wa_cfg.get("require_keyword", "").strip()
+        allowed    = [n.strip() for n in wa_cfg.get("allowed_numbers", []) if n.strip()]
+        blocked    = [n.strip() for n in wa_cfg.get("blocked_numbers", []) if n.strip()]
+        owners     = [n.strip().lstrip("+") for n in wa_cfg.get("owner_numbers", []) if n.strip()]
+
+        # Typ-Filter
+        if is_group and not group_ok:
+            return {"ok": True, "filtered": "group_chats_disabled"}
+        if not is_group and not private_ok:
+            return {"ok": True, "filtered": "private_chats_disabled"}
+
+        # Nummer-Filter
+        if blocked and any(sender.endswith(b.lstrip("+")) for b in blocked):
+            return {"ok": True, "filtered": "blocked"}
+        if allowed and not any(sender.endswith(a.lstrip("+")) for a in allowed):
+            return {"ok": True, "filtered": "not_in_allowlist"}
+
+        # Keyword-Filter
+        if keyword and keyword.lower() not in message.lower():
+            return {"ok": True, "filtered": "keyword_missing"}
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
@@ -649,14 +779,36 @@ def register_user_integration_routes(
             agents=_PA(boss=agent_id, workers=[]),
         )
 
+        # Absender-Kontext und Berechtigungen bestimmen
+        sender_label = from_name if from_name else f"+{sender}"
+        chat_type    = "Gruppen-Chat" if is_group else "Einzel-Chat"
+        is_owner     = bool(owners) and any(sender.endswith(o) for o in owners)
+
+        if is_owner:
+            execution_mode = "elevated"
+            enriched_msg = f"[WhatsApp {chat_type} von {sender_label} (+{sender}) — vertrauenswürdiger Kontakt]\n{message}"
+        else:
+            execution_mode = "safe"
+            enriched_msg = (
+                f"[WhatsApp {chat_type} von {sender_label} (+{sender}) — unbekannter Kontakt]\n"
+                f"[ANWEISUNG FÜR DIESEN KONTAKT: "
+                f"1. Nenne NICHT den Namen des Besitzers dieses Assistenten. "
+                f"2. Beschreibe KEINE spezifischen System-Fähigkeiten (kein 'kann Mails lesen', 'kann Server administrieren' usw.). "
+                f"3. Teile keine privaten Daten, Passwörter oder persönliche Informationen. "
+                f"4. Stelle dich nur als allgemeinen KI-Assistenten vor. "
+                f"5. Führe keine System-Befehle oder Datei-Operationen aus. "
+                f"Antworte freundlich und hilfsbereit, aber bleib bei allgemeinen Themen.]\n"
+                f"{message}"
+            )
+
         response_parts: list[str] = []
         try:
             async for chunk in orchestrator.handle_message_stream(
                 project_id   = agent_id,
                 project_cfg  = virtual_cfg,
-                content      = message,
+                content      = enriched_msg,
                 sender       = f"whatsapp:{sender}",
-                execution_mode = "safe",
+                execution_mode = execution_mode,
             ):
                 import json as _json
                 try:
@@ -671,10 +823,27 @@ def register_user_integration_routes(
 
         response_text = "".join(response_parts).strip()
         if response_text:
-            from .whatsapp_agent import bridge_send
-            # Antwort zurück an Absender senden (max 4096 Zeichen pro Nachricht)
-            for i in range(0, len(response_text), 4096):
-                await bridge_send(agent_id, from_jid, response_text[i:i+4096])
+            if is_audio:
+                # Voice-Antwort: TTS → OGG → senden
+                try:
+                    from .whatsapp_tts import text_to_ogg_b64
+                    from .whatsapp_agent import bridge_send_voice
+                    audio_b64 = await text_to_ogg_b64(response_text)
+                    if audio_b64:
+                        await bridge_send_voice(agent_id, from_jid, audio_b64)
+                    else:
+                        # TTS fehlgeschlagen → Fallback auf Text
+                        from .whatsapp_agent import bridge_send
+                        await bridge_send(agent_id, from_jid, response_text)
+                except Exception as e:
+                    logger.error("TTS/Voice-Send Fehler: %s", e)
+                    from .whatsapp_agent import bridge_send
+                    await bridge_send(agent_id, from_jid, response_text)
+            else:
+                # Text-Antwort (max 4096 Zeichen pro Nachricht)
+                from .whatsapp_agent import bridge_send
+                for i in range(0, len(response_text), 4096):
+                    await bridge_send(agent_id, from_jid, response_text[i:i+4096])
 
         return {"ok": True}
 
