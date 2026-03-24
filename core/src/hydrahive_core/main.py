@@ -204,6 +204,14 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
 
+    # AgentLink WebSocket-Listener für persönliche Agenten
+    from .agentlink_listener import start_agentlink_listener as _start_al_listener
+    _personal_agent_ids = [
+        f"personal_{u}" for u in _load_users().keys()
+        if (Path(AGENTS_DIR) / f"personal_{u}").exists()
+    ]
+    agentlink_ws_task = await _start_al_listener(_personal_agent_ids, orchestrator)
+
     # Rate-Limiter Cleanup-Task (verhindert unbounded key growth)
     async def _rate_limit_cleanup_loop():
         while True:
@@ -232,6 +240,8 @@ async def lifespan(app: FastAPI):
     hb_task.cancel()
     cleanup_task.cancel()
     rate_limit_cleanup_task.cancel()
+    if agentlink_ws_task:
+        agentlink_ws_task.cancel()
     logger.info("OctopOS Core faehrt herunter...")
     await runtime.stop()
     projects.stop()

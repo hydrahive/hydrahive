@@ -602,6 +602,18 @@ class WriteHandoffTool(BaseTool):
         data: dict | None = None,
         ttl_seconds: int = 3600,
     ) -> dict:
+        from . import agentlink_client as _alc
+        if _alc.is_available():
+            try:
+                return await _alc.write_handoff_remote(
+                    from_agent=agent_id,
+                    to_agent=to_agent or None,
+                    context=context,
+                    data=data or {},
+                )
+            except Exception as e:
+                logger.warning("AgentLink write_handoff remote fehlgeschlagen, Fallback: %s", e)
+        # Fallback: file-basiert
         from .agentlink import write_handoff as _wh
         project_dir = _handoff_dir(project_id)
         return _wh(
@@ -650,6 +662,16 @@ class ReadHandoffTool(BaseTool):
         self, agent_id: str, project_id: str,
         consume: bool = True,
     ) -> dict:
+        from . import agentlink_client as _alc
+        if _alc.is_available():
+            try:
+                entry = await _alc.read_handoff_remote(agent_id=agent_id, consume=consume)
+                if entry is not None:
+                    return {"handoff": entry, "found": True}
+                # Kein Handoff remote → auch file-basiert prüfen
+            except Exception as e:
+                logger.warning("AgentLink read_handoff remote fehlgeschlagen, Fallback: %s", e)
+        # Fallback: file-basiert
         from .agentlink import read_handoff as _rh
         project_dir = _handoff_dir(project_id)
         entry = _rh(project_dir, to_agent=agent_id, consume=consume)

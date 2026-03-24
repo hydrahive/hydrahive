@@ -54,6 +54,10 @@ echo ""
 echo -e "${BLUE}--- Phase 4: Git-Integration ---${NC}"
 source "${MODULES_DIR}/10_gitea.sh"
 
+echo ""
+echo -e "${BLUE}--- Phase 5: AgentLink Hub ---${NC}"
+source "${MODULES_DIR}/11_agentlink.sh"
+
 # Update-Script nach /opt/hydrahive/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
 chmod +x "${HYDRAHIVE_DIR}/update.sh"
