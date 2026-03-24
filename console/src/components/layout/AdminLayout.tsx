@@ -5,7 +5,6 @@ import {
   FolderKanban,
   Server,
   Wrench,
-  Cpu,
   Users,
   LogOut,
   ShieldCheck,
@@ -13,12 +12,10 @@ import {
   Sun,
   Moon,
   Sparkles,
-  Plug,
-  GitBranch,
   RefreshCw,
   Menu,
   X,
-  Network,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -33,15 +30,12 @@ const navAll = [
 ];
 
 const navAdmin = [
-  { to: "/agents", icon: Bot, label: "Agenten", hint: "Runtime und Profile" },
-  { to: "/system", icon: Server, label: "System", hint: "Host und Dienste" },
-  { to: "/llm", icon: Cpu, label: "LLM-Config", hint: "Modelle und Provider" },
-  { to: "/mcp", icon: Plug, label: "MCP-Server", hint: "Externe Adapter" },
-  { to: "/gitea", icon: GitBranch, label: "Gitea", hint: "Repos und Sync" },
-  { to: "/users", icon: Users, label: "Benutzer", hint: "Accounts und Rollen" },
-  { to: "/audit", icon: ShieldCheck, label: "Audit-Log", hint: "Nachvollziehbarkeit" },
-  { to: "/backup", icon: Archive, label: "Backup", hint: "Snapshots und Restore" },
-  { to: "/vpn", icon: Network, label: "VPN", hint: "Tailscale / Headscale" },
+  { to: "/agents",   icon: Bot,        label: "Agenten",          hint: "Runtime und Profile" },
+  { to: "/system",   icon: Server,     label: "System",           hint: "Host und Dienste" },
+  { to: "/users",    icon: Users,      label: "Benutzer",         hint: "Accounts und Rollen" },
+  { to: "/audit",    icon: ShieldCheck,label: "Audit-Log",        hint: "Nachvollziehbarkeit" },
+  { to: "/backup",   icon: Archive,    label: "Backup",           hint: "Snapshots und Restore" },
+  { to: "/settings", icon: Settings,   label: "Einstellungen",    hint: "LLM, MCP, Gitea, VPN" },
 ];
 
 function useUpdateStatus(isAdmin: boolean) {
