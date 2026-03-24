@@ -130,6 +130,9 @@ export const api = {
   getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
   testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
+  getMail:            () => api.get<MailConfig>("/me/mail"),
+  updateMail:         (d: MailConfigPayload) => api.put<{configured:boolean;mail_address:string;created:boolean}>("/me/mail", d),
+  deleteMail:         () => api.delete("/me/mail"),
   getDiscord:         () => api.get<DiscordConfig>("/me/discord"),
   getDiscordChannels: () => api.get<{channels:{id:string;name:string}[]}>("/me/discord/channels"),
   updateDiscord:      (d: DiscordConfigPayload) => api.put<{updated:boolean;bot_name:string;bot_id:string}>("/me/discord", d),
@@ -236,6 +239,23 @@ export interface DiscordConfigPayload {
   channel_ids:     string[];
   ignore_bots:     boolean;
   require_mention: boolean;
+}
+
+export interface MailConfig {
+  configured:   boolean;
+  mail_address: string;
+  smtp_host:    string;
+}
+
+export interface MailConfigPayload {
+  mail_address:   string;
+  domain:         string;
+  create_account: boolean;
+  smtp_host?:     string;
+  smtp_port?:     number;
+  smtp_user?:     string;
+  smtp_password?: string;
+  imap_host?:     string;
 }
 
 export interface PlatformOverviewEntry {

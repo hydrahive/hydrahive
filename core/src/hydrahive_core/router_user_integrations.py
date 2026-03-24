@@ -18,6 +18,84 @@ class WksConfigRequest(BaseModel):
     ssh_key: str = ""
 
 
+class MailConfigRequest(BaseModel):
+    mail_address: str = ""   # leer = auto-generieren aus username@domain
+    domain: str = ""         # leer = erste Domain aus KAS
+    create_account: bool = False  # True = Account via KAS anlegen
+    # Manuelle SMTP-Konfiguration (wenn create_account=False und kein KAS)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    imap_host: str = ""
+
+
+def _kas_config() -> dict:
+    """Liest /etc/hydrahive/kas.json falls vorhanden."""
+    import json
+    p = Path("/etc/hydrahive/kas.json")
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _mail_config_path(username: str) -> Path:
+    from .main import AGENTS_DIR
+    return Path(AGENTS_DIR) / f"personal_{username}" / "mail.json"
+
+
+def load_mail_config(username: str) -> dict | None:
+    import json
+    p = _mail_config_path(username)
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return None
+
+
+def save_mail_config(username: str, cfg: dict) -> None:
+    import json
+    p = _mail_config_path(username)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(cfg, indent=2))
+
+
+async def kas_create_mailaccount(local_part: str, domain_part: str, password: str, kas_cfg: dict) -> dict:
+    """Legt ein Postfach via All-Inkl KAS SOAP API an."""
+    import httpx
+    login    = kas_cfg.get("login", "")
+    auth_data = kas_cfg.get("password", "")
+    if not login:
+        return {"ok": False, "error": "KAS nicht konfiguriert (/etc/hydrahive/kas.json)"}
+    soap = f"""<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:xmethodsKasApi">
+<SOAP-ENV:Body>
+  <ns1:KasApi>
+    <Params><![CDATA[{{"kas_login":"{login}","kas_auth_data":"{auth_data}","kas_auth_type":"plain","kas_action":"add_mailaccount","KasRequestParams":{{"local_part":"{local_part}","domain_part":"{domain_part}","mail_password":"{password}"}}}}]]></Params>
+  </ns1:KasApi>
+</SOAP-ENV:Body>
+</SOAP-ENV:Envelope>"""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://kasapi.kasserver.com/soap/KasApi.php",
+                content=soap,
+                headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": '"urn:xmethodsKasApi#KasApi"'},
+            )
+        if "kas_error" in r.text.lower():
+            import re
+            err = re.search(r'<string>(kas_\w+)</string>', r.text)
+            return {"ok": False, "error": err.group(1) if err else "KAS Fehler"}
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 class DiscordConfigRequest(BaseModel):
     bot_token: str = ""           # leer = bestehenden Token behalten
     guild_id: str = ""
@@ -497,3 +575,74 @@ def register_user_integration_routes(
             orchestrator=orchestrator,
         )
         return await test_client.test_connection()
+
+    # ── Mail ────────────────────────────────────────────────────────────────
+
+    @auth_router.get("/me/mail")
+    def get_my_mail(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        cfg = load_mail_config(username)
+        if not cfg:
+            return {"configured": False}
+        return {"configured": True, "mail_address": cfg.get("mail_address", ""), "smtp_host": cfg.get("smtp_host", "")}
+
+    @auth_router.put("/me/mail")
+    async def update_my_mail(req: MailConfigRequest, auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        kas_cfg = _kas_config()
+        domain = req.domain.strip() or kas_cfg.get("default_domain", "")
+        if not domain:
+            raise HTTPException(400, "Keine Domain angegeben und keine Default-Domain in KAS-Config")
+
+        local_part = (req.mail_address.split("@")[0] if "@" in req.mail_address else req.mail_address.strip()) or f"personal_{username}"
+        mail_address = f"{local_part}@{domain}"
+
+        if req.create_account:
+            if not kas_cfg:
+                raise HTTPException(400, "KAS nicht konfiguriert — /etc/hydrahive/kas.json fehlt")
+            import secrets, string
+            alphabet = string.ascii_letters + string.digits + "!@#$%"
+            while True:
+                password = "".join(secrets.choice(alphabet) for _ in range(16))
+                if (any(c.isdigit() for c in password) and
+                    any(c in "!@#$%" for c in password) and
+                    any(c.isupper() for c in password)):
+                    break
+            result = await kas_create_mailaccount(local_part, domain, password, kas_cfg)
+            if not result["ok"] and "already_exists" not in result.get("error", ""):
+                raise HTTPException(400, f"KAS Fehler: {result['error']}")
+            smtp_host = kas_cfg.get("smtp_host", f"smtp.{domain}")
+            cfg = {
+                "mail_address": mail_address,
+                "smtp_host": smtp_host,
+                "smtp_port": kas_cfg.get("smtp_port", 587),
+                "smtp_user": mail_address,
+                "smtp_password": password,
+            }
+            save_mail_config(username, cfg)
+            audit_log("mail.created", details={"user": username, "address": mail_address})
+            return {"configured": True, "mail_address": mail_address, "created": True}
+
+        # Manuelle Konfiguration oder nur Adresse speichern
+        existing = load_mail_config(username) or {}
+        existing["mail_address"] = mail_address
+        if req.smtp_host.strip():
+            existing["smtp_host"] = req.smtp_host.strip()
+            existing["smtp_port"] = req.smtp_port
+            existing["smtp_user"] = req.smtp_user.strip() or mail_address
+            if req.smtp_password.strip():
+                existing["smtp_password"] = req.smtp_password.strip()
+            if req.imap_host.strip():
+                existing["imap_host"] = req.imap_host.strip()
+        save_mail_config(username, existing)
+        audit_log("mail.configured", details={"user": username, "address": mail_address, "manual": bool(req.smtp_host.strip())})
+        return {"configured": True, "mail_address": mail_address, "created": False}
+
+    @auth_router.delete("/me/mail")
+    def delete_my_mail(auth: tuple = Depends(require_auth)):
+        username, _ = auth
+        p = _mail_config_path(username)
+        if p.exists():
+            p.unlink()
+        audit_log("mail.removed", details={"user": username})
+        return {"deleted": True}
