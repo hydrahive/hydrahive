@@ -32,6 +32,19 @@ if [ "$EUID" -ne 0 ]; then
   error "Bitte als root ausfuehren: sudo bash install.sh"
 fi
 
+# --- Upgrade-Pfad: /etc/octopos → /etc/hydrahive ---
+if [ -d "/etc/octopos" ] && [ ! -d "/etc/hydrahive" ]; then
+  warn "Alte Installation erkannt: /etc/octopos gefunden — migriere nach /etc/hydrahive ..."
+  mv /etc/octopos /etc/hydrahive
+  ln -s /etc/hydrahive /etc/octopos
+  success "Migration abgeschlossen (/etc/octopos → /etc/hydrahive, Symlink gesetzt)"
+elif [ -d "/etc/octopos" ] && [ -d "/etc/hydrahive" ]; then
+  # Beide existieren — Symlink setzen falls noch nicht vorhanden
+  if [ ! -L "/etc/octopos" ]; then
+    ln -s /etc/hydrahive /etc/octopos 2>/dev/null || true
+  fi
+fi
+
 # --- Phase 1: Fundament ---
 echo -e "${BLUE}--- Phase 1: Fundament ---${NC}"
 source "${MODULES_DIR}/01_os_check.sh"
