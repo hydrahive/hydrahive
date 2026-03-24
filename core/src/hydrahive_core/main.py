@@ -913,7 +913,7 @@ def _create_personal_agent(username: str) -> str:
             "max_tokens": 4096,
         },
         "soul": "./soul.md",
-        "tools": ["file_read", "file_write", "read_memory", "write_memory"],
+        "tools": ["file_read", "file_write", "read_memory", "write_memory", "create_skill", "list_skills", "delete_skill"],
         "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
