@@ -77,10 +77,10 @@ def _check_configs() -> list[dict]:
     """Prüft wichtige Konfigurationsdateien."""
     results = []
     configs = [
-        (Path("/etc/octopos/llm.json"),              "LLM-Konfiguration"),
-        (Path("/etc/octopos/users.json"),            "Benutzer-Datenbank"),
-        (Path("/etc/nginx/sites-enabled/octopos"),   "Nginx-Konfiguration"),
-        (Path("/opt/octopos/venv"),                  "Python-Virtualenv"),
+        (Path("/etc/octopos/llm_config.json"),         "LLM-Konfiguration"),
+        (Path("/etc/octopos/users.json"),             "Benutzer-Datenbank"),
+        (Path("/etc/nginx/sites-enabled/octopos-console"), "Nginx-Konfiguration"),
+        (Path("/opt/octopos/venv"),                   "Python-Virtualenv"),
     ]
     for path, label in configs:
         exists = path.exists()
@@ -144,15 +144,10 @@ def _check_disk() -> list[dict]:
 
 
 async def _check_api() -> list[dict]:
-    """Prüft die eigene API."""
-    import urllib.request
+    """Prüft Deployment-Status (kein Self-Ping um Deadlock zu vermeiden)."""
     results = []
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:8765/health", timeout=3) as r:
-            data = json.loads(r.read())
-            results.append(_check("API: /health", "ok", f"status={data.get('status','?')}"))
-    except Exception as e:
-        results.append(_check("API: /health", "error", str(e)))
+    # Hinweis: kein HTTP-Self-Call — API antwortet ja gerade auf diese Anfrage
+    results.append(_check("API: /health", "ok", "läuft (antwortet auf diese Anfrage)"))
 
     # Update-Status
     status_file = Path("/var/run/octopos-update.json")
@@ -178,7 +173,8 @@ def _check_vpn() -> list[dict]:
         if r.returncode == 0:
             data = json.loads(r.stdout)
             ip = data.get("TailscaleIPs", ["?"])[0] if data.get("TailscaleIPs") else "?"
-            peers = len(data.get("Peer", {}))
+            peer_data = data.get("Peer") or {}
+            peers = len(peer_data)
             results.append(_check("VPN: Tailscale", "ok", f"IP: {ip}, Peers: {peers}"))
         else:
             results.append(_check("VPN: Tailscale", "warn", "Nicht verbunden"))
