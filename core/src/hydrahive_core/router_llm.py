@@ -30,8 +30,10 @@ def _load_llm_config() -> dict:
 def _save_llm_config(config: dict) -> None:
     import json as _json
 
-    Path(LLM_CONFIG_FILE).parent.mkdir(parents=True, exist_ok=True)
-    Path(LLM_CONFIG_FILE).write_text(_json.dumps(config, indent=2), encoding="utf-8")
+    p = Path(LLM_CONFIG_FILE)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_json.dumps(config, indent=2), encoding="utf-8")
+    p.chmod(0o600)
 
 
 def _pkce_pair() -> tuple[str, str]:
@@ -104,6 +106,7 @@ def register_llm_routes(
         if req.api_key:
             lines.append(f"{env_var}={req.api_key}")
         env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
         _save_llm_config(config)
         logger.info("LLM-Provider konfiguriert: %s", provider)
         return {"updated": True, "provider": provider}

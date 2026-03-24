@@ -63,6 +63,7 @@ def save_mail_config(username: str, cfg: dict) -> None:
     p = _mail_config_path(username)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(cfg, indent=2))
+    p.chmod(0o600)
 
 
 async def kas_create_mailaccount(local_part: str, domain_part: str, password: str, kas_cfg: dict) -> dict:
