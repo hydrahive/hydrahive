@@ -78,6 +78,22 @@
     }
     .github-link:hover { border-color: var(--accent); color: var(--accent); }
 
+    /* LANG TOGGLE */
+    .lang-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      letter-spacing: 0.05em;
+      font-family: inherit;
+    }
+    .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
+
     /* HERO */
     .hero {
       text-align: center;
@@ -144,7 +160,7 @@
     }
     .btn-secondary:hover { border-color: var(--accent); }
 
-    /* OCTOPUS SVG */
+    /* HYDRA SVG */
     .hydra-hero {
       margin: 3rem auto 0;
       display: flex;
@@ -386,26 +402,27 @@
 <nav>
   <div class="logo">Hydra<span>Hive</span></div>
   <div class="nav-links">
-    <a href="#features">Features</a>
-    <a href="#how-it-works">How it works</a>
-    <a href="#docs">Docs</a>
+    <a href="#features" data-i18n="nav-features">Features</a>
+    <a href="#how-it-works" data-i18n="nav-how">How it works</a>
+    <a href="#docs" data-i18n="nav-docs">Docs</a>
     <a href="https://github.com/HydraHive/hydrahive" class="github-link" target="_blank">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub
     </a>
     <span class="badge">Production Ready</span>
+    <button class="lang-btn" id="langBtn" onclick="toggleLang()">DE</button>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-tag">Self-Hosted AI Agent Server</div>
-  <h1>One brain.<br><em>Many heads.</em><br>Infinite reach.</h1>
-  <p>Install Linux. Install HydraHive. Done.<br>
+  <div class="hero-tag" data-i18n="hero-tag">Self-Hosted AI Agent Server</div>
+  <h1 data-i18n="hero-h1">One brain.<br><em>Many heads.</em><br>Infinite reach.</h1>
+  <p data-i18n="hero-p">Install Linux. Install HydraHive. Done.<br>
   Manage your entire AI agent swarm from a single web console — no Docker, no cloud dependency.</p>
   <div class="hero-cta">
-    <a href="#quickstart" class="btn-primary">Quick Start</a>
-    <a href="#how-it-works" class="btn-secondary">How it works →</a>
+    <a href="#quickstart" class="btn-primary" data-i18n="btn-quickstart">Quick Start</a>
+    <a href="#how-it-works" class="btn-secondary" data-i18n="btn-how">How it works →</a>
   </div>
   <div class="hydra-hero">
     <svg class="hydra-svg" viewBox="0 0 220 200" xmlns="http://www.w3.org/2000/svg">
@@ -446,67 +463,67 @@
 </section>
 
 <!-- TAGLINE -->
-<div class="tagline-bar">
+<div class="tagline-bar" data-i18n="tagline">
   <strong>"Proxmox for AI Agents"</strong> — The missing platform for self-hosted agent swarms.
 </div>
 
 <!-- FEATURES -->
 <section class="section" id="features">
-  <h2 class="section-title">Everything you need. Nothing you don't.</h2>
-  <p class="section-sub">Built for real infrastructure. No Docker networking nightmares.</p>
+  <h2 class="section-title" data-i18n="feat-title">Everything you need. Nothing you don't.</h2>
+  <p class="section-sub" data-i18n="feat-sub">Built for real infrastructure. No Docker networking nightmares.</p>
   <div class="grid-3">
     <div class="card">
       <div class="card-icon">🧠</div>
-      <h3>Boss + Worker Swarms</h3>
-      <p>One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.</p>
+      <h3 data-i18n="f1-h">Boss + Worker Swarms</h3>
+      <p data-i18n="f1-p">One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔌</div>
-      <h3>One-Command Install</h3>
-      <p>One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.</p>
+      <h3 data-i18n="f2-h">One-Command Install</h3>
+      <p data-i18n="f2-p">One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.</p>
     </div>
     <div class="card">
       <div class="card-icon">💬</div>
-      <h3>Matrix Communication</h3>
-      <p>Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.</p>
+      <h3 data-i18n="f3-h">Matrix Communication</h3>
+      <p data-i18n="f3-p">Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.</p>
     </div>
     <div class="card">
       <div class="card-icon">🤖</div>
-      <h3>Multi-LLM per Agent</h3>
-      <p>Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.</p>
+      <h3 data-i18n="f4-h">Multi-LLM per Agent</h3>
+      <p data-i18n="f4-p">Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.</p>
     </div>
     <div class="card">
       <div class="card-icon">📚</div>
-      <h3>QMD Skills</h3>
-      <p>Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.</p>
+      <h3 data-i18n="f5-h">QMD Skills</h3>
+      <p data-i18n="f5-p">Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.</p>
     </div>
     <div class="card">
       <div class="card-icon">📁</div>
-      <h3>Project Isolation</h3>
-      <p>Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
+      <h3 data-i18n="f6-h">Project Isolation</h3>
+      <p data-i18n="f6-p">Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔗</div>
-      <h3>Webhook System</h3>
-      <p>Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
+      <h3 data-i18n="f7-h">Webhook System</h3>
+      <p data-i18n="f7-p">Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.</p>
     </div>
     <div class="card">
       <div class="card-icon">🛡️</div>
-      <h3>Security & Audit</h3>
-      <p>JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
+      <h3 data-i18n="f8-h">Security &amp; Audit</h3>
+      <p data-i18n="f8-p">JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.</p>
     </div>
     <div class="card">
       <div class="card-icon">🖥️</div>
-      <h3>Full Web Console</h3>
-      <p>Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Live token usage shown per response. Built with React + Tailwind.</p>
+      <h3 data-i18n="f9-h">Full Web Console</h3>
+      <p data-i18n="f9-p">Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Live token usage shown per response. Built with React + Tailwind.</p>
     </div>
   </div>
 </section>
 
 <!-- HOW IT WORKS -->
 <section class="section" id="how-it-works">
-  <h2 class="section-title">How it works</h2>
-  <p class="section-sub">A message travels through 10 layers in under a second.</p>
+  <h2 class="section-title" data-i18n="how-title">How it works</h2>
+  <p class="section-sub" data-i18n="how-sub">A message travels through 10 layers in under a second.</p>
   <div class="flow">
     <div class="flow-step">👤 Web Chat</div>
     <span class="flow-arrow">→</span>
@@ -520,13 +537,13 @@
     <span class="flow-arrow">→</span>
     <div class="flow-step">✅ SSE Stream</div>
   </div>
-  <p style="text-align:center;color:var(--muted);font-size:0.9rem;">The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.</p>
+  <p style="text-align:center;color:var(--muted);font-size:0.9rem;" data-i18n="how-note">The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.</p>
 </section>
 
 <!-- ARCHITECTURE -->
 <section class="section" id="architecture">
-  <h2 class="section-title">Architecture</h2>
-  <p class="section-sub">Clean separation of concerns. Every layer replaceable.</p>
+  <h2 class="section-title" data-i18n="arch-title">Architecture</h2>
+  <p class="section-sub" data-i18n="arch-sub">Clean separation of concerns. Every layer replaceable.</p>
   <div class="arch-box">
     <div><span class="dim">┌─────────────────────────────────────────┐</span></div>
     <div><span class="dim">│</span>  <span class="bright">CLIENT</span>       <span class="dim">React Console · Element · REST API</span>  <span class="dim">│</span></div>
@@ -544,8 +561,8 @@
 
 <!-- STACK -->
 <section class="section">
-  <h2 class="section-title">Stack</h2>
-  <p class="section-sub">Boring technology. Battle-tested components.</p>
+  <h2 class="section-title" data-i18n="stack-title">Stack</h2>
+  <p class="section-sub" data-i18n="stack-sub">Boring technology. Battle-tested components.</p>
   <div class="stack-grid">
     <div class="stack-item">
       <div class="layer">Core</div>
@@ -574,7 +591,7 @@
     <div class="stack-item">
       <div class="layer">Infrastructure</div>
       <div class="tech">Bash + systemd
-        <small>No Docker · idempotent installer</small>
+        <small data-i18n="stack-infra-small">No Docker · idempotent installer</small>
       </div>
     </div>
     <div class="stack-item">
@@ -588,31 +605,31 @@
 
 <!-- PROFILES -->
 <section class="section" id="profiles">
-  <h2 class="section-title">Deployment Profiles</h2>
-  <p class="section-sub">Start small. Scale to full GPU when ready.</p>
+  <h2 class="section-title" data-i18n="prof-title">Deployment Profiles</h2>
+  <p class="section-sub" data-i18n="prof-sub">Start small. Scale to full GPU when ready.</p>
   <div class="grid-2">
     <div class="profile-card">
       <h3>🔵 Lite</h3>
-      <div class="price-tag">Cloud APIs · No GPU required</div>
+      <div class="price-tag" data-i18n="prof-lite-tag">Cloud APIs · No GPU required</div>
       <ul>
-        <li>Any VM or VPS</li>
+        <li data-i18n="prof-lite-1">Any VM or VPS</li>
         <li>Claude Max OAuth + OpenAI</li>
-        <li>Full web console</li>
-        <li>Matrix communication</li>
-        <li>All project features</li>
-        <li>HTTPS out of the box</li>
+        <li data-i18n="prof-lite-3">Full web console</li>
+        <li data-i18n="prof-lite-4">Matrix communication</li>
+        <li data-i18n="prof-lite-5">All project features</li>
+        <li data-i18n="prof-lite-6">HTTPS out of the box</li>
       </ul>
     </div>
     <div class="profile-card featured">
       <h3>🟣 Full</h3>
-      <div class="price-tag">Local LLMs · GPU Passthrough</div>
+      <div class="price-tag" data-i18n="prof-full-tag">Local LLMs · GPU Passthrough</div>
       <ul>
-        <li>PCIe GPU passthrough (e.g. GTX 1080)</li>
-        <li>Ollama — llama3.1:8b default</li>
-        <li>No API costs for local tasks</li>
-        <li>Hybrid: local + cloud per agent</li>
-        <li>Auto-detected at install time</li>
-        <li>Reference: GTX 1080 Ti, 11GB VRAM</li>
+        <li data-i18n="prof-full-1">PCIe GPU passthrough (e.g. GTX 1080)</li>
+        <li data-i18n="prof-full-2">Ollama — llama3.1:8b default</li>
+        <li data-i18n="prof-full-3">No API costs for local tasks</li>
+        <li data-i18n="prof-full-4">Hybrid: local + cloud per agent</li>
+        <li data-i18n="prof-full-5">Auto-detected at install time</li>
+        <li data-i18n="prof-full-6">Reference: GTX 1080 Ti, 11GB VRAM</li>
       </ul>
     </div>
   </div>
@@ -620,24 +637,24 @@
 
 <!-- HANDBOOK HIGHLIGHTS -->
 <section class="section" id="handbook">
-  <h2 class="section-title">Agent System</h2>
-  <p class="section-sub">From the handbook — how agents, skills and projects work together.</p>
+  <h2 class="section-title" data-i18n="hb-title">Agent System</h2>
+  <p class="section-sub" data-i18n="hb-sub">From the handbook — how agents, skills and projects work together.</p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:3rem;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">Agent Types</h3>
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-types-title">Agent Types</h3>
       <div style="display:flex;flex-direction:column;gap:0.8rem;">
         <div>
           <div style="font-weight:600;font-size:0.9rem;">🎯 Boss</div>
-          <div style="color:var(--muted);font-size:0.85rem;">Receives user messages, coordinates worker agents, streams results back</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-boss">Receives user messages, coordinates worker agents, streams results back</div>
         </div>
         <div>
           <div style="font-weight:600;font-size:0.9rem;">🔬 Specialist</div>
-          <div style="color:var(--muted);font-size:0.85rem;">Domain expert delegated tasks from Boss — tax, legal, code, etc.</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-spec">Domain expert delegated tasks from Boss — tax, legal, code, etc.</div>
         </div>
         <div>
           <div style="font-weight:600;font-size:0.9rem;">⚡ Worker</div>
-          <div style="color:var(--muted);font-size:0.85rem;">Short-lived task agent, spawned on-demand, discarded after completion</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-work">Short-lived task agent, spawned on-demand, discarded after completion</div>
         </div>
       </div>
     </div>
@@ -652,17 +669,17 @@
         <span style="color:#818cf8">---</span><br>
         <span style="color:var(--muted)">## Knowledge content here...</span>
       </div>
-      <p style="color:var(--muted);font-size:0.82rem;margin-top:0.8rem;">Hot-reload. No restart needed. Injected into system prompt on keyword match.</p>
+      <p style="color:var(--muted);font-size:0.82rem;margin-top:0.8rem;" data-i18n="hb-skill-note">Hot-reload. No restart needed. Injected into system prompt on keyword match.</p>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)">Available Tools</h3>
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-tools-title">Available Tools</h3>
       <div style="display:flex;flex-direction:column;gap:0.6rem;">
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read</span> <span style="color:var(--muted)">— read project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted)">— write project files</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted)">— search the web</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted)">— call external APIs</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task</span> <span style="color:var(--muted)">— delegate to workers (boss only)</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">spawn_agent</span> <span style="color:var(--muted)">— create short-lived agent</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_read</span> <span style="color:var(--muted);" data-i18n="tool-fr">— read project files</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted);" data-i18n="tool-fw">— write project files</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted);" data-i18n="tool-ws">— search the web</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted);" data-i18n="tool-hr">— call external APIs</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task</span> <span style="color:var(--muted);" data-i18n="tool-dt">— delegate to workers (boss only)</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">spawn_agent</span> <span style="color:var(--muted);" data-i18n="tool-sa">— create short-lived agent</span></div>
       </div>
     </div>
   </div>
@@ -670,89 +687,89 @@
 
 <!-- DATA FLOW -->
 <section class="section" id="dataflow">
-  <h2 class="section-title">Data Flow A → Z</h2>
-  <p class="section-sub">From the technical docs — what happens when a message is sent.</p>
+  <h2 class="section-title" data-i18n="df-title">Data Flow A → Z</h2>
+  <p class="section-sub" data-i18n="df-sub">From the technical docs — what happens when a message is sent.</p>
   <div style="max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:0;">
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">1</div>
-      <div><strong>Browser</strong> — <span style="color:var(--muted);font-size:0.9rem;">POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI</span></div>
+      <div><strong>Browser</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df1">POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">2</div>
-      <div><strong>Auth</strong> — <span style="color:var(--muted);font-size:0.9rem;">JWT validated, project loaded, asyncio.Queue selected</span></div>
+      <div><strong data-i18n="df2-h">Auth</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df2">JWT validated, project loaded, asyncio.Queue selected</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">3</div>
-      <div><strong>Matrix</strong> — <span style="color:var(--muted);font-size:0.9rem;">Message enqueued → Boss-Agent's Matrix room → matrix-nio client</span></div>
+      <div><strong>Matrix</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df3">Message enqueued → Boss-Agent's Matrix room → matrix-nio client</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">4</div>
-      <div><strong>Skills</strong> — <span style="color:var(--muted);font-size:0.9rem;">Skill files scanned, always-loaded + keyword-matched injected into system prompt</span></div>
+      <div><strong>Skills</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df4">Skill files scanned, always-loaded + keyword-matched injected into system prompt</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">5</div>
-      <div><strong>LLM</strong> — <span style="color:var(--muted);font-size:0.9rem;">litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled</span></div>
+      <div><strong>LLM</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df5">litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">6</div>
-      <div><strong>Tools</strong> — <span style="color:var(--muted);font-size:0.9rem;">Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)</span></div>
+      <div><strong>Tools</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df6">Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">7</div>
-      <div><strong>Workers</strong> — <span style="color:var(--muted);font-size:0.9rem;">dispatch_task → parallel worker calls → aggregated results back to Boss</span></div>
+      <div><strong>Workers</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df7">dispatch_task → parallel worker calls → aggregated results back to Boss</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">8</div>
-      <div><strong>Response</strong> — <span style="color:var(--muted);font-size:0.9rem;">Final answer posted to Matrix room, stored in session history</span></div>
+      <div><strong data-i18n="df8-h">Response</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df8">Final answer posted to Matrix room, stored in session history</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">9</div>
-      <div><strong>SSE</strong> — <span style="color:var(--muted);font-size:0.9rem;">Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown</span></div>
+      <div><strong>SSE</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df9">Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;">
       <div style="background:#22c55e;color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">✓</div>
-      <div><strong>Done</strong> — <span style="color:var(--muted);font-size:0.9rem;">data: {"done":true} → stream closed → Audit Log written</span></div>
+      <div><strong data-i18n="df-done-h">Done</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df-done">data: {"done":true} → stream closed → Audit Log written</span></div>
     </div>
   </div>
 </section>
 
 <!-- QUICKSTART -->
 <section class="section" id="quickstart">
-  <h2 class="section-title">Quick Start</h2>
-  <p class="section-sub">Three commands. One browser tab. Running.</p>
+  <h2 class="section-title" data-i18n="qs-title">Quick Start</h2>
+  <p class="section-sub" data-i18n="qs-sub">Three commands. One browser tab. Running.</p>
   <div class="code-block">
     <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/HydraHive/hydrahive.git</span></div>
     <div><span class="prompt">$ </span><span class="cmd">cd hydrahive</span></div>
     <div><span class="prompt">$ </span><span class="cmd">sudo bash installer/install.sh</span></div>
     <div>&nbsp;</div>
-    <div><span class="cmt"># → open https://&lt;your-ip&gt; → Setup Wizard → done</span></div>
+    <div><span class="cmt" data-i18n="qs-comment"># → open https://&lt;your-ip&gt; → Setup Wizard → done</span></div>
   </div>
 </section>
 
 <!-- DOCS -->
 <section class="section" id="docs">
-  <h2 class="section-title">Documentation</h2>
-  <p class="section-sub">Everything you need to install, use, and extend HydraHive.</p>
+  <h2 class="section-title" data-i18n="docs-title">Documentation</h2>
+  <p class="section-sub" data-i18n="docs-sub">Everything you need to install, use, and extend HydraHive.</p>
   <div class="docs-grid">
     <a class="doc-card" href="handbuch.html">
       <div class="doc-icon">📖</div>
-      <h3>Handbook</h3>
-      <p>Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting</p>
+      <h3 data-i18n="doc1-h">Handbook</h3>
+      <p data-i18n="doc1-p">Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting</p>
     </a>
     <a class="doc-card" href="technical.html">
       <div class="doc-icon">⚙️</div>
-      <h3>Technical Docs</h3>
-      <p>Architecture, module overview, data flow A–Z, error handling, known limitations</p>
+      <h3 data-i18n="doc2-h">Technical Docs</h3>
+      <p data-i18n="doc2-p">Architecture, module overview, data flow A–Z, error handling, known limitations</p>
     </a>
     <a class="doc-card" href="api.html">
       <div class="doc-icon">🔌</div>
-      <h3>API Reference</h3>
-      <p>All REST endpoints with request/response examples — agents, projects, webhooks, audit</p>
+      <h3 data-i18n="doc3-h">API Reference</h3>
+      <p data-i18n="doc3-p">All REST endpoints with request/response examples — agents, projects, webhooks, audit</p>
     </a>
     <a class="doc-card" href="development.html">
       <div class="doc-icon">🛠️</div>
-      <h3>Developer Guide</h3>
-      <p>Write tools, skills, endpoints, Console pages — extend HydraHive with new features</p>
+      <h3 data-i18n="doc4-h">Developer Guide</h3>
+      <p data-i18n="doc4-p">Write tools, skills, endpoints, Console pages — extend HydraHive with new features</p>
     </a>
   </div>
 </section>
@@ -762,20 +779,232 @@
   <div class="status-bar">
     <div class="status-dot"></div>
     <div>
-      <strong>Production ready — actively developed</strong><br>
-      <span style="color:var(--muted);font-size:0.85rem;">Core complete · Console complete · Docs complete · API not yet stable</span>
+      <strong data-i18n="status-h">Production ready — actively developed</strong><br>
+      <span style="color:var(--muted);font-size:0.85rem;" data-i18n="status-p">Core complete · Console complete · Docs complete · API not yet stable</span>
     </div>
   </div>
 </section>
 
 <footer>
-  <strong>HydraHive</strong> — Self-Hosted AI Agent Platform &nbsp;·&nbsp;
+  <strong>HydraHive</strong> — <span data-i18n="footer-tagline">Self-Hosted AI Agent Platform</span> &nbsp;·&nbsp;
   <a href="https://github.com/HydraHive/hydrahive" target="_blank">GitHub</a> &nbsp;·&nbsp;
   MIT License &nbsp;·&nbsp;
   <a href="impressum.html">Impressum</a> &nbsp;·&nbsp;
   <a href="datenschutz.html">Datenschutz</a><br>
-  <span style="font-size:0.8rem;margin-top:0.5rem;display:block;">One brain. Many heads. Infinite reach.</span>
+  <span style="font-size:0.8rem;margin-top:0.5rem;display:block;" data-i18n="footer-slogan">One brain. Many heads. Infinite reach.</span>
 </footer>
+
+<script>
+  const translations = {
+    en: {
+      'nav-features':    'Features',
+      'nav-how':         'How it works',
+      'nav-docs':        'Docs',
+      'hero-tag':        'Self-Hosted AI Agent Server',
+      'hero-h1':         'One brain.<br><em>Many heads.</em><br>Infinite reach.',
+      'hero-p':          'Install Linux. Install HydraHive. Done.<br>Manage your entire AI agent swarm from a single web console — no Docker, no cloud dependency.',
+      'btn-quickstart':  'Quick Start',
+      'btn-how':         'How it works →',
+      'tagline':         '<strong>"Proxmox for AI Agents"</strong> — The missing platform for self-hosted agent swarms.',
+      'feat-title':      'Everything you need. Nothing you don\'t.',
+      'feat-sub':        'Built for real infrastructure. No Docker networking nightmares.',
+      'f1-h': 'Boss + Worker Swarms',
+      'f1-p': 'One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.',
+      'f2-h': 'One-Command Install',
+      'f2-p': 'One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.',
+      'f3-h': 'Matrix Communication',
+      'f3-p': 'Agents are real Matrix bots. Use Element to supervise any conversation live. Built-in watchdog restarts crashed bots automatically.',
+      'f4-h': 'Multi-LLM per Agent',
+      'f4-p': 'Each agent runs its own model. Ollama locally, Claude Max (OAuth), OpenAI — mixed per task. Configurable temperature and token limits.',
+      'f5-h': 'QMD Skills',
+      'f5-p': 'Give agents extra knowledge via Markdown files with YAML frontmatter. Scope: always or keyword-triggered on-demand. Hot-reload, no restart.',
+      'f6-h': 'Project Isolation',
+      'f6-p': 'Each project gets a Linux user, isolated filesystem, Samba share, and Matrix room. Agents can only access their own project directory.',
+      'f7-h': 'Webhook System',
+      'f7-p': 'Trigger agents from external systems — Git pushes, CI pipelines, monitoring alerts. HMAC-signed outgoing webhooks included.',
+      'f8-h': 'Security & Audit',
+      'f8-p': 'JWT auth, login rate-limiting, atomic config writes, three-layer tool permission model. Full audit log of all user actions.',
+      'f9-h': 'Full Web Console',
+      'f9-p': 'Manage agents, projects, users, skills, webhooks, logs and LLM config — all without SSH. Live token usage shown per response. Built with React + Tailwind.',
+      'how-title': 'How it works',
+      'how-sub':   'A message travels through 10 layers in under a second.',
+      'how-note':  'The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.',
+      'arch-title': 'Architecture',
+      'arch-sub':   'Clean separation of concerns. Every layer replaceable.',
+      'stack-title': 'Stack',
+      'stack-sub':   'Boring technology. Battle-tested components.',
+      'stack-infra-small': 'No Docker · idempotent installer',
+      'prof-title': 'Deployment Profiles',
+      'prof-sub':   'Start small. Scale to full GPU when ready.',
+      'prof-lite-tag': 'Cloud APIs · No GPU required',
+      'prof-lite-1': 'Any VM or VPS',
+      'prof-lite-3': 'Full web console',
+      'prof-lite-4': 'Matrix communication',
+      'prof-lite-5': 'All project features',
+      'prof-lite-6': 'HTTPS out of the box',
+      'prof-full-tag': 'Local LLMs · GPU Passthrough',
+      'prof-full-1': 'PCIe GPU passthrough (e.g. GTX 1080)',
+      'prof-full-2': 'Ollama — llama3.1:8b default',
+      'prof-full-3': 'No API costs for local tasks',
+      'prof-full-4': 'Hybrid: local + cloud per agent',
+      'prof-full-5': 'Auto-detected at install time',
+      'prof-full-6': 'Reference: GTX 1080 Ti, 11GB VRAM',
+      'hb-title': 'Agent System',
+      'hb-sub':   'From the handbook — how agents, skills and projects work together.',
+      'hb-types-title': 'Agent Types',
+      'hb-boss': 'Receives user messages, coordinates worker agents, streams results back',
+      'hb-spec': 'Domain expert delegated tasks from Boss — tax, legal, code, etc.',
+      'hb-work': 'Short-lived task agent, spawned on-demand, discarded after completion',
+      'hb-skill-note': 'Hot-reload. No restart needed. Injected into system prompt on keyword match.',
+      'hb-tools-title': 'Available Tools',
+      'tool-fr': '— read project files',
+      'tool-fw': '— write project files',
+      'tool-ws': '— search the web',
+      'tool-hr': '— call external APIs',
+      'tool-dt': '— delegate to workers (boss only)',
+      'tool-sa': '— create short-lived agent',
+      'df-title': 'Data Flow A → Z',
+      'df-sub':   'From the technical docs — what happens when a message is sent.',
+      'df1': 'POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI',
+      'df2-h': 'Auth', 'df2': 'JWT validated, project loaded, asyncio.Queue selected',
+      'df3': "Message enqueued → Boss-Agent's Matrix room → matrix-nio client",
+      'df4': 'Skill files scanned, always-loaded + keyword-matched injected into system prompt',
+      'df5': 'litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled',
+      'df6': 'Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)',
+      'df7': 'dispatch_task → parallel worker calls → aggregated results back to Boss',
+      'df8-h': 'Response', 'df8': 'Final answer posted to Matrix room, stored in session history',
+      'df9': 'Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown',
+      'df-done-h': 'Done', 'df-done': 'data: {"done":true} → stream closed → Audit Log written',
+      'qs-title':   'Quick Start',
+      'qs-sub':     'Three commands. One browser tab. Running.',
+      'qs-comment': '# → open https://<your-ip> → Setup Wizard → done',
+      'docs-title': 'Documentation',
+      'docs-sub':   'Everything you need to install, use, and extend HydraHive.',
+      'doc1-h': 'Handbook',        'doc1-p': 'Installation, setup wizard, agents, projects, chat, LLM config, troubleshooting',
+      'doc2-h': 'Technical Docs',  'doc2-p': 'Architecture, module overview, data flow A–Z, error handling, known limitations',
+      'doc3-h': 'API Reference',   'doc3-p': 'All REST endpoints with request/response examples — agents, projects, webhooks, audit',
+      'doc4-h': 'Developer Guide', 'doc4-p': 'Write tools, skills, endpoints, Console pages — extend HydraHive with new features',
+      'status-h': 'Production ready — actively developed',
+      'status-p': 'Core complete · Console complete · Docs complete · API not yet stable',
+      'footer-tagline': 'Self-Hosted AI Agent Platform',
+      'footer-slogan':  'One brain. Many heads. Infinite reach.',
+    },
+    de: {
+      'nav-features':    'Funktionen',
+      'nav-how':         'Wie es funktioniert',
+      'nav-docs':        'Doku',
+      'hero-tag':        'Selbst-gehosteter KI-Agenten-Server',
+      'hero-h1':         'Ein Hirn.<br><em>Viele Köpfe.</em><br>Grenzenlose Reichweite.',
+      'hero-p':          'Linux installieren. HydraHive installieren. Fertig.<br>Verwalte deinen gesamten KI-Agenten-Schwarm über eine einzige Web-Konsole — kein Docker, keine Cloud-Abhängigkeit.',
+      'btn-quickstart':  'Schnellstart',
+      'btn-how':         'Wie es funktioniert →',
+      'tagline':         '<strong>"Proxmox für KI-Agenten"</strong> — Die fehlende Plattform für selbst-gehostete Agenten-Schwärme.',
+      'feat-title':      'Alles was du brauchst. Nichts was du nicht brauchst.',
+      'feat-sub':        'Für echte Infrastruktur gebaut. Kein Docker-Netzwerk-Albtraum.',
+      'f1-h': 'Boss + Worker Schwärme',
+      'f1-p': 'Ein Boss-Agent pro Projekt koordiniert einen Pool von Spezialisten parallel. Ergebnisse aggregiert, Token für Token gestreamt.',
+      'f2-h': 'Ein-Befehl-Installation',
+      'f2-p': 'Ein Bash-Befehl. GPU automatisch erkannt. Matrix, nginx, TLS, systemd — alles konfiguriert. Web-Konsole in Minuten bereit.',
+      'f3-h': 'Matrix-Kommunikation',
+      'f3-p': 'Agenten sind echte Matrix-Bots. Mit Element jedes Gespräch live beobachten. Eingebauter Watchdog startet abgestürzte Bots automatisch neu.',
+      'f4-h': 'Multi-LLM pro Agent',
+      'f4-p': 'Jeder Agent läuft mit eigenem Modell. Ollama lokal, Claude Max (OAuth), OpenAI — gemischt pro Aufgabe. Konfigurierbare Temperatur und Token-Limits.',
+      'f5-h': 'QMD Skills',
+      'f5-p': 'Agenten zusätzliches Wissen geben via Markdown-Dateien mit YAML-Frontmatter. Scope: immer aktiv oder per Keyword on-demand. Hot-Reload, kein Neustart.',
+      'f6-h': 'Projekt-Isolation',
+      'f6-p': 'Jedes Projekt bekommt einen Linux-User, isoliertes Dateisystem, Samba-Share und Matrix-Room. Agenten können nur auf ihr eigenes Projektverzeichnis zugreifen.',
+      'f7-h': 'Webhook-System',
+      'f7-p': 'Agenten von externen Systemen triggern — Git-Pushes, CI-Pipelines, Monitoring-Alerts. HMAC-signierte ausgehende Webhooks inklusive.',
+      'f8-h': 'Sicherheit & Audit',
+      'f8-p': 'JWT-Auth, Login-Rate-Limiting, atomare Config-Writes, dreischichtiges Tool-Permission-Modell. Vollständiges Audit-Log aller Nutzeraktionen.',
+      'f9-h': 'Vollständige Web-Konsole',
+      'f9-p': 'Agenten, Projekte, Nutzer, Skills, Webhooks, Logs und LLM-Config verwalten — alles ohne SSH. Live Token-Verbrauch pro Antwort. Gebaut mit React + Tailwind.',
+      'how-title': 'Wie es funktioniert',
+      'how-sub':   'Eine Nachricht durchläuft 10 Schichten in unter einer Sekunde.',
+      'how-note':  'Der Nutzer sieht einen sauberen Streaming-Chat. Die Agenten erledigen den Rest — mit vollem Matrix-Audit-Trail.',
+      'arch-title': 'Architektur',
+      'arch-sub':   'Saubere Trennung der Verantwortlichkeiten. Jede Schicht austauschbar.',
+      'stack-title': 'Stack',
+      'stack-sub':   'Bewährte Technologie. Kampferprobte Komponenten.',
+      'stack-infra-small': 'Kein Docker · idempotenter Installer',
+      'prof-title': 'Deployment-Profile',
+      'prof-sub':   'Klein anfangen. Bei Bedarf auf volle GPU skalieren.',
+      'prof-lite-tag': 'Cloud APIs · Keine GPU erforderlich',
+      'prof-lite-1': 'Beliebige VM oder VPS',
+      'prof-lite-3': 'Vollständige Web-Konsole',
+      'prof-lite-4': 'Matrix-Kommunikation',
+      'prof-lite-5': 'Alle Projekt-Features',
+      'prof-lite-6': 'HTTPS direkt nach Installation',
+      'prof-full-tag': 'Lokale LLMs · GPU Passthrough',
+      'prof-full-1': 'PCIe GPU Passthrough (z.B. GTX 1080)',
+      'prof-full-2': 'Ollama — llama3.1:8b als Standard',
+      'prof-full-3': 'Keine API-Kosten für lokale Aufgaben',
+      'prof-full-4': 'Hybrid: lokal + Cloud pro Agent',
+      'prof-full-5': 'Automatisch erkannt beim Installieren',
+      'prof-full-6': 'Referenz: GTX 1080 Ti, 11GB VRAM',
+      'hb-title': 'Agenten-System',
+      'hb-sub':   'Aus dem Handbuch — wie Agenten, Skills und Projekte zusammenarbeiten.',
+      'hb-types-title': 'Agenten-Typen',
+      'hb-boss': 'Empfängt Nachrichten, koordiniert Worker-Agenten, streamt Ergebnisse zurück',
+      'hb-spec': 'Domänen-Experte, dem der Boss Aufgaben delegiert — Steuer, Recht, Code, etc.',
+      'hb-work': 'Kurzlebiger Task-Agent, bei Bedarf gestartet, nach Abschluss verworfen',
+      'hb-skill-note': 'Hot-Reload. Kein Neustart nötig. Bei Keyword-Treffer in den System-Prompt injiziert.',
+      'hb-tools-title': 'Verfügbare Tools',
+      'tool-fr': '— Projektdateien lesen',
+      'tool-fw': '— Projektdateien schreiben',
+      'tool-ws': '— Im Web suchen',
+      'tool-hr': '— Externe APIs aufrufen',
+      'tool-dt': '— An Worker delegieren (nur Boss)',
+      'tool-sa': '— Kurzlebigen Agenten erstellen',
+      'df-title': 'Datenfluss A → Z',
+      'df-sub':   'Aus den technischen Docs — was passiert wenn eine Nachricht gesendet wird.',
+      'df1': 'POST /projects/{id}/message/stream → nginx (TLS-Terminierung) → FastAPI',
+      'df2-h': 'Auth', 'df2': 'JWT validiert, Projekt geladen, asyncio.Queue ausgewählt',
+      'df3': 'Nachricht eingereiht → Matrix-Room des Boss-Agenten → matrix-nio Client',
+      'df4': 'Skill-Dateien gescannt, immer-aktive + Keyword-gematchte in den System-Prompt injiziert',
+      'df5': 'litellm routet zum konfigurierten Provider (Ollama / Claude / OpenAI), Streaming aktiv',
+      'df6': 'Tool-Calls abgefangen, über Registry ausgeführt, Ergebnisse ans LLM zurückgegeben (multi-turn)',
+      'df7': 'dispatch_task → parallele Worker-Calls → aggregierte Ergebnisse zurück an Boss',
+      'df8-h': 'Antwort', 'df8': 'Finale Antwort in Matrix-Room gepostet, in Session-History gespeichert',
+      'df9': 'Core dequeuet Tokens → data: {"text":"..."} → Browser rendert Markdown',
+      'df-done-h': 'Fertig', 'df-done': 'data: {"done":true} → Stream geschlossen → Audit-Log geschrieben',
+      'qs-title':   'Schnellstart',
+      'qs-sub':     'Drei Befehle. Ein Browser-Tab. Läuft.',
+      'qs-comment': '# → https://<deine-ip> öffnen → Setup-Wizard → fertig',
+      'docs-title': 'Dokumentation',
+      'docs-sub':   'Alles zum Installieren, Nutzen und Erweitern von HydraHive.',
+      'doc1-h': 'Handbuch',          'doc1-p': 'Installation, Setup-Wizard, Agenten, Projekte, Chat, LLM-Config, Troubleshooting',
+      'doc2-h': 'Technische Docs',   'doc2-p': 'Architektur, Modul-Übersicht, Datenfluss A–Z, Fehlerbehandlung, bekannte Einschränkungen',
+      'doc3-h': 'API-Referenz',      'doc3-p': 'Alle REST-Endpunkte mit Request/Response-Beispielen — Agenten, Projekte, Webhooks, Audit',
+      'doc4-h': 'Entwickler-Guide',  'doc4-p': 'Tools, Skills, Endpunkte und Console-Seiten schreiben — HydraHive mit neuen Features erweitern',
+      'status-h': 'Produktionsreif — aktiv entwickelt',
+      'status-p': 'Core fertig · Console fertig · Doku fertig · API noch nicht stabil',
+      'footer-tagline': 'Selbst-gehostete KI-Agenten-Plattform',
+      'footer-slogan':  'Ein Hirn. Viele Köpfe. Grenzenlose Reichweite.',
+    }
+  };
+
+  let currentLang = localStorage.getItem('hh-lang') || 'en';
+
+  function applyLang(lang) {
+    const t = translations[lang];
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (t[key] !== undefined) el.innerHTML = t[key];
+    });
+    document.getElementById('langBtn').textContent = lang === 'en' ? 'DE' : 'EN';
+    document.documentElement.lang = lang;
+  }
+
+  function toggleLang() {
+    currentLang = currentLang === 'en' ? 'de' : 'en';
+    localStorage.setItem('hh-lang', currentLang);
+    applyLang(currentLang);
+  }
+
+  // Beim Laden gespeicherte Sprache anwenden
+  if (currentLang === 'de') applyLang('de');
+</script>
 
 </body>
 </html>
