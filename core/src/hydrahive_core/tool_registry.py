@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 PROJECTS_ROOT = Path("/projects")
 AGENTS_ROOT   = Path("/agents")
 
+# Wird von main.py im Lifespan gesetzt; ermöglicht interne Core-Calls ohne IP-Bypass
+_internal_secret: str = ""
+
 
 # ============================================================= Path Safety (#54)
 
@@ -1156,11 +1159,13 @@ class AskAgentTool(BaseTool):
 
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
+        headers = {"X-Internal-Secret": _internal_secret} if _internal_secret else {}
         try:
             async with _aio.ClientSession() as session:
                 async with session.post(
                     f"http://127.0.0.1:8765/agents/{target}/message",
                     json={"content": content, "sender": agent_id},
+                    headers=headers,
                     timeout=_aio.ClientTimeout(total=120),
                 ) as resp:
                     if resp.status == 404:

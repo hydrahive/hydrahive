@@ -261,6 +261,7 @@ class SessionManager:
                 json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            path.chmod(0o600)
         except OSError as e:
             logger.warning("Session konnte nicht gespeichert werden: %s", e)
 

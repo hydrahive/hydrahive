@@ -6,6 +6,7 @@ FastAPI-App mit Lifespan-Management:
 - REST-Endpoints fuer Agenten, Projekte, Sessions und Nachrichten
 """
 
+import hmac
 import json
 import logging
 import os
@@ -66,6 +67,10 @@ JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
 APP_VERSION  = "0.1.0"
 
 rate_limiter = RateLimiter.from_env(logger)
+
+# Internes Shared-Secret für Core-interne Calls (z.B. AskAgentTool → /agents/{id}/message)
+# Nur im Prozess-Speicher; nicht persistent, kein IP-Bypass.
+_INTERNAL_SECRET = secrets.token_hex(32)
 
 
 def _check_login_rate(ip: str) -> None:
@@ -150,6 +155,10 @@ async def lifespan(app: FastAPI):
     # JWT-Secret laden oder generieren
     JWT_SECRET = _load_or_create_jwt_secret()
     logger.info("JWT-Secret geladen")
+
+    # Internal-Secret in tool_registry injizieren (AskAgentTool → /agents/{id}/message)
+    from . import tool_registry as _tr
+    _tr._internal_secret = _INTERNAL_SECRET
 
     # Audit-Log-Pfad vorbereiten
     _ensure_audit_log_path()
@@ -364,31 +373,27 @@ auth_router = APIRouter(dependencies=[Depends(require_auth)])
 admin_router = APIRouter(dependencies=[Depends(require_admin)])
 
 
-def _is_local_request(request: Request) -> bool:
-    client = request.client
-    if client is None:
+def _is_internal_request(request: Request) -> bool:
+    """Prüft X-Internal-Secret Header (constant-time). Kein IP-Bypass."""
+    provided = request.headers.get("X-Internal-Secret", "")
+    if not provided:
         return False
-    return client.host in {"127.0.0.1", "::1", "localhost"}
+    return hmac.compare_digest(provided, _INTERNAL_SECRET)
 
 
-def require_auth_or_localhost(
+def require_auth_or_internal(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> tuple[str, str]:
-    """JWT fuer externe Aufrufe, localhost-Bypass fuer interne Core-Calls."""
-    if _is_local_request(request):
+    """JWT fuer externe Aufrufe, Internal-Secret fuer interne Core-Calls."""
+    if _is_internal_request(request):
         return ("internal", "admin")
     return require_auth(creds)
 
 
-def require_admin_or_localhost(
-    request: Request,
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> tuple[str, str]:
-    """Admin fuer externe Aufrufe, localhost-Bypass fuer interne Core-Calls."""
-    if _is_local_request(request):
-        return ("internal", "admin")
-    return require_admin(require_auth(creds))
+# Alias fuer Rueckwaertskompatibilitaet (wird in router_agent_admin/chat uebergeben)
+require_auth_or_localhost   = require_auth_or_internal
+require_admin_or_localhost  = require_auth_or_internal
 
 
 def _check_agent_write(agent_id: str, auth: tuple[str, str]) -> None:
