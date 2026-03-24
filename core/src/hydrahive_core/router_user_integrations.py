@@ -360,7 +360,7 @@ def register_user_integration_routes(
             tmp_path = tf.name
         try:
             _sp.run(
-                ["ssh-keygen", "-t", "ed25519", "-f", tmp_path, "-N", "", "-C", f"octopos-wks@{username}"],
+                ["ssh-keygen", "-t", "ed25519", "-f", tmp_path, "-N", "", "-C", f"hydrahive-wks@{username}"],
                 capture_output=True,
                 check=True,
                 timeout=10,

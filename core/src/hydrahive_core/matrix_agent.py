@@ -8,7 +8,7 @@ Jeder Agent erbt von MatrixAgent. Er:
 - leitet User-Nachrichten an den Orchestrator weiter (#28)
 - kann selbst Nachrichten in Rooms schicken (#29)
 
-Credentials werden in /etc/octopos/agent_tokens/ gespeichert,
+Credentials werden in /etc/hydrahive/agent_tokens/ gespeichert,
 damit der Bot-Account bei Core-Neustart nicht neu registriert werden muss.
 """
 
@@ -33,7 +33,10 @@ from .agent_config import AgentConfig
 logger = logging.getLogger(__name__)
 
 CONDUWUIT_URL   = "http://127.0.0.1:6167"
-TOKEN_DIR       = Path("/etc/octopos/agent_tokens")
+TOKEN_DIR       = next(
+    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/octopos/agent_tokens")] if p.exists()),
+    Path("/etc/hydrahive/agent_tokens"),
+)
 SYNC_TIMEOUT_MS = 30_000    # 30s Long-Poll
 
 
@@ -148,7 +151,7 @@ class MatrixAgent(ABC):
         # Neuen Account registrieren oder einloggen
         resp = await self._client.login(
             password   = self._generate_password(),
-            device_name = f"octopos-{self.config.id}",
+            device_name = f"hydrahive-{self.config.id}",
         )
         if not isinstance(resp, LoginResponse):
             # Login fehlgeschlagen → Registrierung versuchen
@@ -233,7 +236,7 @@ class MatrixAgent(ABC):
         """Deterministisches Passwort aus Agent-ID (kein State nötig)."""
         import hashlib
         # Kein Geheimnis — der Account ist ein interner Bot ohne echte Daten
-        return hashlib.sha256(f"octopos-bot-{self.config.id}".encode()).hexdigest()[:32]
+        return hashlib.sha256(f"hydrahive-bot-{self.config.id}".encode()).hexdigest()[:32]
 
     def _load_token(self) -> dict | None:
         path = TOKEN_DIR / f"{self.config.id}.json"

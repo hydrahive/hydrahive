@@ -132,7 +132,7 @@ fi
 # --- 7. QMD re-indexieren ---
 if command -v qmd &>/dev/null; then
     info "QMD: re-indexiere Memory..."
-    sudo -u hydrahive bash -c "HOME=/home/octopos qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
+    sudo -u hydrahive bash -c "HOME=/home/hydrahive qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
     success "QMD aktualisiert"
 fi
 

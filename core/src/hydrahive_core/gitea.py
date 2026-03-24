@@ -1,15 +1,15 @@
 """
-gitea.py — Gitea-Integration für OctopOS
+gitea.py — Gitea-Integration für HydraHive
 
 Lokales Gitea auf Port 3001 (intern) / 3002 (nginx proxy).
 Jedes Projekt bekommt ein Git-Repo auf dem lokalen Gitea.
 Agents nutzen git_commit/git_push/git_diff/git_status Tools.
 
-Konfiguration in /etc/octopos/gitea_config.json:
+Konfiguration in /etc/hydrahive/gitea_config.json:
 {
   "url": "http://127.0.0.1:3001",
   "token": "<api-token>",
-  "org": "octopos"
+  "org": "hydrahive"
 }
 """
 
@@ -24,12 +24,13 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-GITEA_CONFIG_FILE = Path("/etc/octopos/gitea_config.json")
+_GITEA_CONFIG_PATHS = [Path("/etc/hydrahive/gitea_config.json"), Path("/etc/octopos/gitea_config.json")]
+GITEA_CONFIG_FILE = next((p for p in _GITEA_CONFIG_PATHS if p.exists()), _GITEA_CONFIG_PATHS[0])
 
 _DEFAULT_CONFIG = {
     "url":   "http://127.0.0.1:3001",
-    "token": "",   # wird aus /etc/octopos/gitea_config.json geladen
-    "org":   "octopos",
+    "token": "",   # wird aus /etc/hydrahive/gitea_config.json geladen
+    "org":   "hydrahive",
 }
 
 
@@ -56,7 +57,7 @@ class GiteaClient:
     @classmethod
     def from_config(cls) -> "GiteaClient":
         cfg = _load_config()
-        return cls(cfg["url"], cfg["token"], cfg.get("org", "octopos"))
+        return cls(cfg["url"], cfg["token"], cfg.get("org", "hydrahive"))
 
     def _headers(self) -> dict:
         return {
@@ -123,7 +124,7 @@ class GiteaClient:
     async def create_repo(self, project_id: str, description: str = "") -> dict:
         """
         Legt ein neues Repo für ein Projekt an.
-        Repos liegen unter dem Owner (User oder Org — konfigurierbar, Standard: 'octopos').
+        Repos liegen unter dem Owner (User oder Org — konfigurierbar, Standard: 'hydrahive').
         """
         data = {
             "name":           project_id,
@@ -309,7 +310,7 @@ class GiteaClient:
     # ------------------------------------------------------------------ Org
 
     async def _ensure_org(self) -> None:
-        """Legt die OctopOS-Organisation an falls sie nicht existiert."""
+        """Legt die HydraHive-Organisation an falls sie nicht existiert."""
         try:
             await self._get(f"/orgs/{self.org}")
         except aiohttp.ClientResponseError as e:
@@ -329,17 +330,17 @@ class GiteaClient:
     async def git_workspace(repo_key: str, owner: str | None = None, repo: str | None = None) -> Path:
         """
         Gibt das lokale Git-Workspace-Verzeichnis zurueck.
-        /tmp/octopos-git/{repo_key}/ — wird bei Bedarf geclont.
+        /tmp/hydrahive-git/{repo_key}/ — wird bei Bedarf geclont.
         """
         import asyncio
-        workspace = Path(f"/tmp/octopos-git/{repo_key}")
+        workspace = Path(f"/tmp/hydrahive-git/{repo_key}")
         if not workspace.exists():
             cfg = _load_config()
-            repo_owner = owner or cfg.get("org", "octopos")
+            repo_owner = owner or cfg.get("org", "hydrahive")
             repo_name = repo or repo_key
             clone_url = f"{cfg['url']}/{repo_owner}/{repo_name}.git"
             # URL mit Token für Auth
-            token_url = clone_url.replace("://", f"://octopos:{cfg['token']}@")
+            token_url = clone_url.replace("://", f"://hydrahive:{cfg['token']}@")
             workspace.parent.mkdir(parents=True, exist_ok=True)
             proc = await asyncio.create_subprocess_exec(
                 "git", "clone", token_url, str(workspace),
@@ -356,10 +357,10 @@ class GiteaClient:
         """Führt einen git-Befehl aus und gibt (stdout, stderr, returncode) zurück."""
         import asyncio
         env = {
-            "GIT_AUTHOR_NAME":     "OctopOS Agent",
-            "GIT_AUTHOR_EMAIL":    "agent@octopos.local",
-            "GIT_COMMITTER_NAME":  "OctopOS Agent",
-            "GIT_COMMITTER_EMAIL": "agent@octopos.local",
+            "GIT_AUTHOR_NAME":     "HydraHive Agent",
+            "GIT_AUTHOR_EMAIL":    "agent@hydrahive.local",
+            "GIT_COMMITTER_NAME":  "HydraHive Agent",
+            "GIT_COMMITTER_EMAIL": "agent@hydrahive.local",
             "HOME":                "/tmp",
             "PATH":                "/usr/bin:/bin",
         }

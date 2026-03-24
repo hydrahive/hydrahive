@@ -75,6 +75,13 @@ echo ""
 echo -e "${BLUE}--- Phase 6: VPN ---${NC}"
 source "${MODULES_DIR}/12_vpn.sh"
 
+# --- Modul 13: WhatsApp Bridge (optional) ---
+echo ""
+read -rp "WhatsApp Bridge installieren? (y/N) " INSTALL_WHATSAPP
+if [[ "${INSTALL_WHATSAPP,,}" == "y" ]]; then
+    source "${MODULES_DIR}/13_whatsapp_bridge.sh"
+fi
+
 # Update-Script nach /opt/hydrahive/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
 chmod +x "${HYDRAHIVE_DIR}/update.sh"

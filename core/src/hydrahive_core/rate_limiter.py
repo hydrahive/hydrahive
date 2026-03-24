@@ -70,9 +70,9 @@ class RateLimiter:
 
     @classmethod
     def from_env(cls, logger: logging.Logger | None = None) -> "RateLimiter":
-        backend = os.environ.get("OCTOPOS_RATE_LIMIT_BACKEND", "auto").strip().lower()
-        redis_url = os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_URL", "").strip()
-        redis_timeout_s = float(os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5"))
+        backend = os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", os.environ.get("OCTOPOS_RATE_LIMIT_BACKEND", "auto")).strip().lower()
+        redis_url = os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_URL", "")).strip()
+        redis_timeout_s = float(os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5")))
         return cls(
             backend=backend,
             redis_url=redis_url,
@@ -166,7 +166,7 @@ class RateLimiter:
         return True
 
     def check_login(self, ip: str) -> None:
-        key = f"octopos:rate:login:{ip}"
+        key = f"hydrahive:rate:login:{ip}"
         redis_allowed = self._redis_check(key, self.settings.login_max, self.settings.login_window_s)
         if redis_allowed is not None:
             if not redis_allowed:
@@ -183,7 +183,7 @@ class RateLimiter:
 
     def check_message(self, user_id: str, project_id: str) -> None:
         key = (user_id, project_id)
-        redis_key = f"octopos:rate:message:{user_id}:{project_id}"
+        redis_key = f"hydrahive:rate:message:{user_id}:{project_id}"
         redis_allowed = self._redis_check(redis_key, self.settings.message_max, self.settings.message_window_s)
         if redis_allowed is not None:
             if not redis_allowed:

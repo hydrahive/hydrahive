@@ -263,7 +263,7 @@ def register_project_integration_routes(
         audit_log("gitea.webhook.push", target=project_id, project_id=project_id,
                   details={"ref": ref, "pusher": pusher, "commits": commits})
 
-        ws = Path(f"/tmp/octopos-git/{project_id}")
+        ws = Path(f"/tmp/hydrahive-git/{project_id}")
         if ws.exists():
             _shutil.rmtree(ws)
             logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)

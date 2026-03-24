@@ -19,7 +19,7 @@ class NetworkProfileRequest(BaseModel):
 class GiteaConfigRequest(BaseModel):
     url: str = "http://127.0.0.1:3001"
     token: str = ""
-    org: str = "octopos"
+    org: str = "hydrahive"
     webhook_secret: str = ""
 
 
@@ -44,7 +44,15 @@ def register_system_routes(
     app_version: str,
     logger: logging.Logger,
 ) -> None:
-    def _load_update_status(status_file: str = "/var/run/octopos-update.json") -> dict:
+    def _load_update_status(status_file: str = "") -> dict:
+        # Beide Pfade prüfen — hydrahive zuerst, octopos als Fallback
+        if not status_file:
+            for sf in ["/var/run/hydrahive-update.json", "/var/run/octopos-update.json"]:
+                if Path(sf).exists():
+                    status_file = sf
+                    break
+            else:
+                status_file = "/var/run/hydrahive-update.json"
         p = Path(status_file)
         if p.exists():
             try:
@@ -166,7 +174,9 @@ def register_system_routes(
 
     @admin_router.get("/admin/update/status")
     def get_update_status():
-        log_file = "/var/log/octopos-update.log"
+        log_file = "/var/log/hydrahive-update.log"
+        if not Path(log_file).exists():
+            log_file = "/var/log/octopos-update.log"
         status = _load_update_status()
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()
@@ -200,12 +210,12 @@ def register_system_routes(
     def get_gitea_config():
         p = Path(gitea_config_file)
         if not p.exists():
-            return {"url": "http://127.0.0.1:3001", "org": "octopos", "webhook_secret": "", "has_token": False, "token_masked": ""}
+            return {"url": "http://127.0.0.1:3001", "org": "hydrahive", "webhook_secret": "", "has_token": False, "token_masked": ""}
         cfg = json.loads(p.read_text(encoding="utf-8"))
         token = cfg.get("token", "")
         return {
             "url": cfg.get("url", "http://127.0.0.1:3001"),
-            "org": cfg.get("org", "octopos"),
+            "org": cfg.get("org", "hydrahive"),
             "webhook_secret": cfg.get("webhook_secret", ""),
             "has_token": bool(token),
             "token_masked": token[:8] + "..." + token[-4:] if token else "",

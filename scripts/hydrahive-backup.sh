@@ -8,7 +8,7 @@ set -e
 
 # Konfiguration: scripts/hydrahive.conf anlegen um Defaults zu überschreiben
 CONF="$(dirname "$0")/hydrahive.conf"
-VM="octopos@192.168.1.100"
+VM="hydrahive@192.168.1.100"
 SSH_KEY="$HOME/.ssh/id_rsa"
 [ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"

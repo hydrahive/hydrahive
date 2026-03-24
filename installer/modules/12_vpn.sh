@@ -199,5 +199,17 @@ VPNCFG
 chmod 600 "${VPN_CONFIG}"
 chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${VPN_CONFIG}"
 
+# --- Sudoers: hydrahive-User darf tailscale ohne Passwort steuern ---
+SUDOERS_FILE="/etc/sudoers.d/hydrahive-tailscale"
+cat > "$SUDOERS_FILE" << 'SUDOERS'
+# HydraHive: Core darf Tailscale VPN steuern
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale set *
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale status *
+SUDOERS
+chmod 440 "$SUDOERS_FILE"
+visudo -c -f "$SUDOERS_FILE" && success "Tailscale-Sudoers geschrieben" || { rm "$SUDOERS_FILE"; warn "Sudoers-Syntax ungültig — übersprungen"; }
+
 success "VPN-Setup abgeschlossen (Modus: ${VPN_BACKEND})"
 info "Auth-Key im Admin-Panel unter Admin → VPN hinterlegen um den VPN zu aktivieren"

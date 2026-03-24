@@ -701,7 +701,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bshred\b",                  "shred verboten"),
     (r"\bwipefs\b",                 "wipefs verboten"),
     # Service-Sabotage (OctopOS selbst killen)
-    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+octopos",  "systemctl stop/disable octopos verboten"),
+    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+(octopos|hydrahive)",  "systemctl stop/disable octopos/hydrahive verboten"),
     (r"\bkillall\s+uvicorn\b",      "killall uvicorn verboten"),
     (r"\bkill\b.*\buvicorn\b",      "kill uvicorn verboten"),
     # Fork-Bombe / Wildcard-Gefahr
@@ -709,7 +709,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
     (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
     # Schreiben in geschützte Systempfade via Redirects
-    (r">\s*/opt/octopos/(?!.*\bjournald?\b)",  "Redirect nach /opt/octopos/ verboten"),
+    (r">\s*/opt/(octopos|hydrahive)/(?!.*\bjournald?\b)",  "Redirect nach /opt/hydrahive/ (bzw. /opt/octopos/) verboten"),
     (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
     (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
     (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
@@ -725,7 +725,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     # git clone/reset --hard auf /opt/
     (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
     (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
-    (r"cd\s+/opt/octopos\b.*&&.*\bgit\b", "git in /opt/octopos/ verboten"),
+    (r"cd\s+/opt/(octopos|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ (bzw. /opt/octopos/) verboten"),
     # Subshell-/Command-Substitution-Gefahr
     (r"\$\(",                     "Command Substitution $(...) verboten"),
     (r"`",                        "Backticks verboten"),
@@ -776,7 +776,7 @@ class ShellExecTool(BaseTool):
     Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
     Nur fuer Superagenten — kein Sandbox, voller Systemzugriff.
     Destruktive Kommandos (rm -rf, dd, mkfs, ...) und Zugriffe auf
-    /opt/octopos/ werden blockiert.
+    /opt/hydrahive/ (bzw. /opt/octopos/) werden blockiert.
     """
 
     @property
@@ -789,8 +789,8 @@ class ShellExecTool(BaseTool):
             "Führt einen Bash-Befehl aus und gibt stdout, stderr und Exit-Code zurück. "
             "Verwende dies für Systemverwaltung, git, pip, systemctl, Dateioperationen, etc. "
             "Timeout standard 30 Sekunden, maximal 120 Sekunden. "
-            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/octopos/, "
-            "git clone/reset in /opt/octopos/, systemctl stop/disable octopos."
+            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/hydrahive/ (bzw. /opt/octopos/), "
+            "git clone/reset in /opt/hydrahive/, systemctl stop/disable octopos/hydrahive."
         )
 
     @property
@@ -907,7 +907,12 @@ class ReadSystemFileTool(BaseTool):
         limit = min(limit, 1000)
         p = Path(path)
         if not p.is_absolute():
-            p = Path("/opt/octopos") / path
+            for base in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+                if base.exists():
+                    p = base / path
+                    break
+            else:
+                p = Path("/opt/hydrahive") / path
         logger.info("read_system_file [%s]: %s (offset=%d limit=%d)", agent_id, p, offset, limit)
         if not p.exists():
             return {"error": f"Datei nicht gefunden: {p}"}
@@ -975,7 +980,12 @@ class WriteSystemFileTool(BaseTool):
     ) -> dict:
         p = Path(path)
         if not p.is_absolute():
-            p = Path("/opt/octopos") / path
+            for base in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+                if base.exists():
+                    p = base / path
+                    break
+            else:
+                p = Path("/opt/hydrahive") / path
         logger.info("write_system_file [%s]: %s (%s, %d bytes)", agent_id, p, mode, len(content))
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -1363,7 +1373,7 @@ class AskAgentTool(BaseTool):
             "properties": {
                 "target": {
                     "type":        "string",
-                    "description": "ID des Ziel-Agenten (z.B. 'octopos-dev', 'claude_boss')",
+                    "description": "ID des Ziel-Agenten (z.B. 'hydrahive-dev', 'claude_boss')",
                 },
                 "question": {
                     "type":        "string",
@@ -2356,7 +2366,7 @@ class GitPushTool(BaseTool):
 
         # Remote-URL mit Token setzen
         remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
-        token_url  = remote_url.replace("://", f"://octopos:{cfg['token']}@")
+        token_url  = remote_url.replace("://", f"://hydrahive:{cfg['token']}@")
         await GiteaClient._git(["remote", "set-url", "origin", token_url], ws)
 
         # Branch ermitteln
@@ -2471,7 +2481,12 @@ def _get_wks_config(project_id: str) -> dict | None:
     """WKS-Config des Users laden, der zum project_id gehört.
     Persönliche Agenten heißen personal_<username> → username extrahieren."""
     import json as _j
-    USERS_FILE = Path("/etc/octopos/users.json")
+    for uf in [Path("/etc/hydrahive/users.json"), Path("/etc/octopos/users.json")]:
+        if uf.exists():
+            USERS_FILE = uf
+            break
+    else:
+        USERS_FILE = Path("/etc/hydrahive/users.json")
     if not project_id.startswith("personal_"):
         return None
     username = project_id[len("personal_"):]
