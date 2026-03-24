@@ -1,5 +1,45 @@
 # HydraHive Changelog
 
+## 2026-03-24
+
+### Added
+
+- **VPN-Integration (Tailscale / Headscale)**
+  - Neuer Tab **VPN** in den konsolidierten Einstellungen
+  - Tailscale als VPN-Overlay für NAT-Traversal ohne Portweiterleitung
+  - Optionaler selbst-gehosteter Headscale-Coordinator
+  - API-Endpunkte: `GET/POST /admin/vpn/status`, `/admin/vpn/connect`, `/admin/vpn/down`
+  - Installer-Modul: `installer/modules/12_vpn.sh`
+
+- **Self-Learning Skills**
+  - Agenten-Tools: `create_skill`, `list_skills`, `delete_skill`
+  - Agenten können eigenständig Skills anlegen (YAML-Frontmatter `author: agent` wird gesetzt)
+  - Löschsperre: Agenten können nur eigene Skills löschen; System-Skills sind schreibgeschützt
+  - Admin kann alle Skills über die Konsole verwalten
+  - Bot-Icon in der Konsole kennzeichnet Agent-erstellte Skills
+
+- **Konsolidierte Settings-Seite**
+  - Alle Admin-Einstellungen in einer Seite (`/settings`) mit Tabs: LLM, MCP, Gitea, VPN
+  - Alte URLs `/llm`, `/mcp`, `/gitea` leiten automatisch auf `/settings` um
+
+- **Mehrsprachigkeit (i18n DE/EN)**
+  - Vollständige DE/EN Unterstützung via react-i18next (~730 übersetzte Strings)
+  - Sprachumschalter in der Sidebar (DE/EN Button)
+  - Spracheinstellung wird im Browser gespeichert (localStorage)
+
+- **WhatsApp-Bridge-Erweiterungen**
+  - Transkription von Sprachnachrichten via Whisper (`transcribe_voice`)
+  - Text-to-Speech für Agenten-Antworten (`tts_enabled`)
+  - Service: `octopos-whatsapp-bridge.service`
+
+- **System-Topologie Memory**
+  - Core generiert beim Start automatisch `system_topology.md` in jedem Agenten-Memory
+  - Enthält: Services, Ports, WKS-IPs, Plattform-Verbindungen, aktive MCP-Server
+  - Wird bei jedem Core-Neustart aktualisiert
+
+- **Commit-Stand in Deploy-Skript**
+  - `scripts/hydrahive-update.sh` protokolliert jetzt den installierten Commit-Hash
+
 ## 2026-03-23
 
 ### Fixed

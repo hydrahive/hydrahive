@@ -34,14 +34,16 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 11. [WKS-Zugang (Workstation)](#11-wks-zugang-workstation)
 12. [Git-Tools](#12-git-tools)
 13. [MCP-Server](#13-mcp-server)
-14. [Webhooks](#14-webhooks)
-15. [Benutzer und Rollen](#15-benutzer-und-rollen)
-16. [Backup & Restore](#16-backup--restore)
-17. [Audit-Log](#17-audit-log)
-18. [Matrix-Integration](#18-matrix-integration)
-19. [GPU-Monitoring](#19-gpu-monitoring)
-20. [System-Update](#20-system-update)
-21. [Troubleshooting](#21-troubleshooting)
+14. [VPN-Zugang (Tailscale / Headscale)](#14-vpn-zugang-tailscale--headscale)
+15. [Webhooks](#15-webhooks)
+16. [Benutzer und Rollen](#16-benutzer-und-rollen)
+17. [Backup & Restore](#17-backup--restore)
+18. [Audit-Log](#18-audit-log)
+19. [Matrix-Integration](#19-matrix-integration)
+20. [GPU-Monitoring](#20-gpu-monitoring)
+21. [System-Update](#21-system-update)
+22. [WhatsApp-Integration](#22-whatsapp-integration)
+23. [Troubleshooting](#23-troubleshooting)
 
 ---
 
@@ -113,12 +115,28 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
 | **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
-| **LLM-Config** | Sprachmodell konfigurieren (Ollama, Claude, OpenAI) | admin |
-| **MCP-Server** | Externe Tool-Server konfigurieren | admin |
+| **Einstellungen** | LLM, MCP-Server, Gitea und VPN konfigurieren (Tab-basiert) | admin |
 | **Benutzer** | Benutzer anlegen und verwalten | admin |
 | **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
 | **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
+
+### Konsolidierte Einstellungen
+
+Alle Admin-Konfigurationen sind in der Seite **Einstellungen** zusammengefasst. Die Seite enthält vier Tabs:
+
+| Tab | Inhalt |
+|---|---|
+| **LLM** | Sprachmodell-Konfiguration (Ollama, Claude Max OAuth, OpenAI, Fallback-Modelle) |
+| **MCP** | Externe MCP-Server verwalten |
+| **Gitea** | Gitea-URL, Token, Organisation |
+| **VPN** | Tailscale/Headscale-Verbindung konfigurieren |
+
+Die alten URLs `/llm`, `/mcp` und `/gitea` leiten automatisch auf `/settings` um.
+
+### Mehrsprachigkeit (DE/EN)
+
+Die Konsole unterstützt Deutsch und Englisch. Der Sprachumschalter befindet sich in der Sidebar (Schaltfläche **DE** / **EN**). Die gewählte Sprache wird im Browser gespeichert und beim nächsten Öffnen automatisch wiederhergestellt. Insgesamt sind ~730 Strings übersetzt.
 
 ---
 
@@ -448,6 +466,31 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.
 
 > **Hot-Reload:** Skills werden bei jedem Request neu eingelesen. Kein Core-Neustart notwendig.
 
+### Self-Learning Skills (Agent-gesteuert)
+
+Agenten können eigenständig neue Skills anlegen, auflisten und löschen — ohne manuellen Eingriff über die Konsole.
+
+**Agent-Tools:**
+
+| Tool | Beschreibung |
+|---|---|
+| `create_skill` | Neuen Skill anlegen (`filename`, `content`); Frontmatter wird automatisch gesetzt; `author: agent` wird eingetragen |
+| `list_skills` | Alle vorhandenen Skills des Agenten auflisten |
+| `delete_skill` | Skill löschen — nur wenn `author: agent` im Frontmatter steht |
+
+**Regeln:**
+
+- Agenten können nur Skills löschen die sie selbst angelegt haben (`author: agent`). System-Skills (`author: human` oder ohne `author`-Feld) sind schreibgeschützt.
+- Admin kann alle Skills — einschließlich agent-erstellter — über die Konsole verwalten.
+- In der Konsole zeigt ein Bot-Icon neben dem Skill-Namen an, dass der Skill von einem Agenten erstellt wurde.
+
+**Beispiel:** Ein Agent erhält neue Informationen und legt eigenständig einen Skill an:
+
+```
+# Agent im Chat:
+→ create_skill(filename="neue_preisliste", content="---\nskill: Preisliste 2026\nscope: on-demand\ntriggers: [preis, angebot]\nauthor: agent\n---\n\nStandardpreis: 99 € / Monat\n...")
+```
+
 ---
 
 ## 9. Persönlicher Agent (Mein Agent)
@@ -526,6 +569,24 @@ Wenn der Agent `qmd` als MCP-Server konfiguriert hat, kann er gezielt in den Mem
 ```
 
 Das spart erheblich Tokens gegenüber der vollständigen Memory-Injektion.
+
+### System-Topologie (automatisch generiert)
+
+Beim Start des Core generiert HydraHive automatisch eine Datei `system_topology.md` im Memory-Verzeichnis jedes Agenten. Diese Datei enthält:
+
+- Alle laufenden Services mit ihren Ports
+- Konfigurierte WKS-IPs der Nutzer
+- Aktive Plattform-Verbindungen (Matrix, Gitea, Discord, WhatsApp, VPN)
+- Aktive MCP-Server
+
+Die Datei wird bei jedem Core-Neustart aktualisiert. Agenten kennen damit von Beginn an die Systemstruktur, ohne sie manuell abfragen zu müssen.
+
+```
+/agents/personal_admin/memory/
+├── user.md
+├── projects.md
+└── system_topology.md    ← automatisch generiert beim Start
+```
 
 ---
 
@@ -669,7 +730,78 @@ Agenten mit `qmd` in `mcp_servers` können gezielt in ihren Memory-Dateien suche
 
 ---
 
-## 14. Webhooks
+## 14. VPN-Zugang (Tailscale / Headscale)
+
+HydraHive unterstützt Tailscale als VPN-Overlay für sichere Verbindungen ohne Portweiterleitung im Router. Damit können Workstations und externe Nutzer den HydraHive-Server über ein verschlüsseltes Overlay-Netz erreichen — unabhängig von NAT oder Firewall-Einstellungen.
+
+### Funktionsweise
+
+Tailscale baut ein Mesh-VPN auf Basis von WireGuard auf. Jedes Gerät im Tailnet erhält eine stabile IP (100.x.x.x). Optional kann ein selbst-gehostetes Headscale als Coordinator statt der Tailscale-Cloud verwendet werden.
+
+### Einrichten
+
+1. **Einstellungen** → Tab **VPN** öffnen
+2. Tailscale-Auth-Key eintragen (aus dem Tailscale-Dashboard oder von Headscale generiert)
+3. Optional: **Headscale-URL** eintragen für selbst-gehosteten Coordinator
+4. **Verbinden** klicken
+
+Der Installer richtet Tailscale automatisch ein wenn das Modul `12_vpn.sh` aktiv ist:
+
+```bash
+sudo bash installer/install.sh   # VPN-Modul wird automatisch eingebunden
+```
+
+### API-Endpunkte
+
+| Endpunkt | Methode | Beschreibung |
+|---|---|---|
+| `/admin/vpn/status` | GET | Aktuellen Verbindungsstatus abfragen |
+| `/admin/vpn/connect` | POST | VPN-Verbindung aufbauen |
+| `/admin/vpn/down` | POST | VPN-Verbindung trennen |
+
+```bash
+# Status abfragen
+curl https://<ip>/api/admin/vpn/status \
+  -H "Authorization: Bearer <token>"
+
+# Verbinden
+curl -X POST https://<ip>/api/admin/vpn/connect \
+  -H "Authorization: Bearer <token>"
+```
+
+### Headscale (selbst-gehostet)
+
+Wer keine Tailscale-Cloud nutzen möchte, kann Headscale als eigenen Coordinator betreiben:
+
+```bash
+# Headscale auf separatem Server installieren
+curl -fsSL https://github.com/juanfont/headscale/releases/latest/download/headscale_linux_amd64 \
+  -o /usr/local/bin/headscale
+chmod +x /usr/local/bin/headscale
+
+# Auth-Key generieren
+headscale preauthkeys create --user hydrahive --expiration 24h
+```
+
+Die Headscale-URL (z.B. `https://headscale.mein-server.de`) und den generierten Auth-Key dann in **Einstellungen → VPN** eintragen.
+
+### Typischer Anwendungsfall
+
+```
+Workstation (Till, WKS 192.168.1.50)
+    │  Tailscale (100.64.0.5)
+    ▼
+HydraHive-Server (100.64.0.1)
+    │  /api/
+    ▼
+Agent-Chat, WKS-Tools, Admin-Konsole
+```
+
+> **Hinweis:** VPN ist optional. Ohne VPN ist HydraHive nur im lokalen Netz erreichbar, sofern kein öffentliches Portforwarding eingerichtet ist.
+
+---
+
+## 15. Webhooks
 
 Webhooks ermöglichen externe Systeme HydraHive zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.
 
@@ -701,7 +833,7 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]
 
 ---
 
-## 15. Benutzer und Rollen
+## 16. Benutzer und Rollen
 
 Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. HydraHive kennt zwei Rollen:
 
@@ -718,7 +850,7 @@ Beim Anlegen eines Users wird automatisch ein persönlicher Agent `personal_<use
 
 ---
 
-## 16. Backup & Restore
+## 17. Backup & Restore
 
 Unter **Backup** (Admin only) können vollständige System-Backups erstellt und verwaltet werden.
 
@@ -772,7 +904,7 @@ curl https://<ip>/api/admin/backups \
 
 ---
 
-## 17. Audit-Log
+## 18. Audit-Log
 
 Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
 
@@ -791,7 +923,7 @@ Gespeichert in `/var/log/hydrahive/audit.jsonl` — append-only, ein JSON-Objekt
 
 ---
 
-## 18. Matrix-Integration
+## 19. Matrix-Integration
 
 HydraHive kann Nachrichten über Matrix (Element) empfangen und beantworten.
 
@@ -809,7 +941,7 @@ Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch.
 
 ---
 
-## 19. GPU-Monitoring
+## 20. GPU-Monitoring
 
 Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die **System**-Seite eine GPU-Auslastungsanzeige.
 
@@ -831,7 +963,7 @@ NVIDIA-Treiber und `nvidia-smi` müssen installiert sein. Ohne GPU oder ohne Tre
 
 ---
 
-## 20. System-Update
+## 21. System-Update
 
 HydraHive kann sich selbst aktualisieren — entweder manuell über die Console oder automatisch per Webhook.
 
@@ -859,7 +991,57 @@ sudo bash /opt/hydrahive/update.sh
 
 ---
 
-## 21. Troubleshooting
+## 22. WhatsApp-Integration
+
+HydraHive unterstützt WhatsApp als Kommunikationskanal. Eine Node.js-basierte Bridge (Baileys) verbindet WhatsApp mit dem Agenten-System.
+
+### Funktionsumfang
+
+| Funktion | Beschreibung |
+|---|---|
+| **Nachrichten empfangen** | Eingehende WhatsApp-Nachrichten werden an den konfigurierten Agenten weitergeleitet |
+| **Nachrichten senden** | Agenten können WhatsApp-Nachrichten an Kontakte oder Gruppen senden |
+| **Sprachnachrichten transkribieren** | Eingehende Voice Notes werden automatisch per Whisper transkribiert |
+| **Text-to-Speech** | Agenten-Antworten können als Sprachnachricht zurückgesendet werden |
+
+### Service
+
+Die WhatsApp-Bridge läuft als systemd-Service:
+
+```bash
+sudo systemctl status octopos-whatsapp-bridge
+sudo journalctl -u octopos-whatsapp-bridge -f
+```
+
+### Einrichten
+
+1. Service starten: `sudo systemctl start octopos-whatsapp-bridge`
+2. QR-Code im Log anzeigen lassen: `sudo journalctl -u octopos-whatsapp-bridge -n 50`
+3. WhatsApp auf dem Mobilgerät öffnen → **Verknüpfte Geräte** → QR-Code scannen
+4. Nach erfolgreicher Verknüpfung läuft die Bridge dauerhaft im Hintergrund
+
+### Konfiguration
+
+Die Bridge-Konfiguration liegt in `/etc/hydrahive/whatsapp_config.json`:
+
+```json
+{
+  "agent_id": "personal_admin",
+  "tts_enabled": true,
+  "transcribe_voice": true,
+  "allowed_contacts": []
+}
+```
+
+- `allowed_contacts`: Wenn leer, werden alle eingehenden Nachrichten akzeptiert. Wenn befüllt, nur Nachrichten dieser Nummern (Format: `491234567890`).
+- `tts_enabled`: Ob Antworten als Sprachnachricht zurückgesendet werden.
+- `transcribe_voice`: Ob eingehende Voice Notes transkribiert werden (erfordert Whisper).
+
+> **Hinweis:** Die WhatsApp-Verknüpfung muss nach einem Geräte-Reset oder nach längerer Inaktivität erneuert werden. Der QR-Code wird dann erneut im Service-Log angezeigt.
+
+---
+
+## 23. Troubleshooting
 
 ### Konsole nicht erreichbar
 
