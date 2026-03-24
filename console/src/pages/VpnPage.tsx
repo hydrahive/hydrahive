@@ -64,11 +64,10 @@ export function VpnPage() {
   function refresh() { setRefreshing(true); load(); }
 
   async function handleConnect() {
-    if (!authKey.trim()) return;
     setConnecting(true); setError("");
     try {
       await api.vpnConnect({
-        auth_key: authKey.trim(),
+        auth_key: authKey.trim() || undefined,
         login_server: loginServer.trim() || undefined,
         hostname: hostname.trim() || undefined,
       });
@@ -188,11 +187,16 @@ export function VpnPage() {
             </p>
           )}
 
+          {status?.configured && !status?.connected && (
+            <p className="text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              Tailscale ist gestoppt aber bereits konfiguriert — einfach "Verbinden" klicken ohne neuen Key.
+            </p>
+          )}
           <input
             type="password"
             value={authKey}
             onChange={e => setAuthKey(e.target.value)}
-            placeholder="tskey-auth-..."
+            placeholder={status?.configured ? "Leer lassen für Reconnect, oder neuen Key eingeben" : "tskey-auth-..."}
             className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
           />
 
@@ -215,7 +219,7 @@ export function VpnPage() {
           />
 
           <div className="flex gap-2">
-            <button onClick={handleConnect} disabled={!authKey.trim() || connecting}
+            <button onClick={handleConnect} disabled={connecting}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
               <Power size={14} />
               {connecting ? "Verbinde..." : "Verbinden"}

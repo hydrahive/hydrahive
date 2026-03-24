@@ -66,7 +66,7 @@ def _get_tailscale_ip() -> str | None:
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 class VpnConnectRequest(BaseModel):
-    auth_key:     str
+    auth_key:     str | None = None  # Optional: leer = Reconnect mit bestehenden Credentials
     login_server: str | None = None
     hostname:     str | None = None
 
@@ -131,17 +131,20 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
         if mode == "none":
             raise HTTPException(400, "VPN nicht installiert — Installer erneut ausführen")
 
-        # Auth-Key speichern
-        cfg["auth_key"]     = body.auth_key
-        cfg["configured"]   = True
+        # Config aktualisieren
+        if body.auth_key:
+            cfg["auth_key"]   = body.auth_key
+            cfg["configured"] = True
         if body.login_server:
             cfg["login_server"] = body.login_server
         if body.hostname:
             cfg["hostname"] = body.hostname
         _save_vpn_config(cfg)
 
-        # tailscale up bauen
-        cmd = ["tailscale", "up", f"--authkey={body.auth_key}", "--accept-routes"]
+        # tailscale up bauen — ohne Key = Reconnect mit bestehenden Credentials
+        cmd = ["tailscale", "up", "--accept-routes"]
+        if body.auth_key:
+            cmd.append(f"--authkey={body.auth_key}")
         login_server = cfg.get("login_server", "")
         if login_server and "tailscale.com" not in login_server:
             cmd.append(f"--login-server={login_server}")

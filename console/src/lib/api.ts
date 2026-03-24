@@ -126,7 +126,7 @@ export const api = {
     api.post<{updated:boolean;[key:string]:unknown}>(`/llm/oauth/${provider}/exchange`, body),
   // VPN (Tailscale / Headscale)
   vpnStatus:            () => api.get<VpnStatus>("/admin/vpn/status"),
-  vpnConnect:           (d: {auth_key: string; login_server?: string; hostname?: string}) =>
+  vpnConnect:           (d: {auth_key?: string; login_server?: string; hostname?: string}) =>
     api.post<{connected: boolean; tailscale_ip: string | null; mode: string}>("/admin/vpn/connect", d),
   vpnDown:              () => api.post<{disconnected: boolean}>("/admin/vpn/down", {}),
   vpnPeers:             () => api.get<{peers: VpnPeer[]; count: number}>("/admin/vpn/peers"),
