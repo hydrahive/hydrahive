@@ -1604,7 +1604,7 @@ function MailTab() {
   const [cfg,          setCfg]         = useState<MailConfig | null>(null);
   const [mailAddress,  setMailAddress] = useState("");
   const [domain,       setDomain]      = useState("");
-  const [createAcc,    setCreateAcc]   = useState(true);
+  const [createAcc,    setCreateAcc]   = useState(false);
   // manuelle SMTP-Felder
   const [smtpHost,     setSmtpHost]    = useState("");
   const [smtpPort,     setSmtpPort]    = useState("587");
