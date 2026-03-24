@@ -69,8 +69,8 @@ APP_VERSION  = "0.1.0"
 rate_limiter = RateLimiter.from_env(logger)
 
 # Internes Shared-Secret für Core-interne Calls (z.B. AskAgentTool → /agents/{id}/message)
-# Nur im Prozess-Speicher; nicht persistent, kein IP-Bypass.
-_INTERNAL_SECRET = secrets.token_hex(32)
+# Wird im Lifespan aus Datei geladen oder einmalig generiert (persistiert → überlebt Restarts).
+_INTERNAL_SECRET = ""   # gesetzt im Lifespan via _load_or_create_internal_secret()
 
 
 def _check_login_rate(ip: str) -> None:
@@ -144,7 +144,7 @@ hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifesp
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global provisioner, JWT_SECRET, hb_scheduler
+    global provisioner, JWT_SECRET, hb_scheduler, _INTERNAL_SECRET
     logger.info("OctopOS Core startet...")
     discovery.start()
     projects.start()
@@ -156,9 +156,11 @@ async def lifespan(app: FastAPI):
     JWT_SECRET = _load_or_create_jwt_secret()
     logger.info("JWT-Secret geladen")
 
-    # Internal-Secret in tool_registry injizieren (AskAgentTool → /agents/{id}/message)
+    # Internal-Secret laden oder generieren (persistiert → überlebt Restarts)
+    _INTERNAL_SECRET = _load_or_create_internal_secret()
     from . import tool_registry as _tr
     _tr._internal_secret = _INTERNAL_SECRET
+    logger.info("Internal-Secret geladen")
 
     # Audit-Log-Pfad vorbereiten
     _ensure_audit_log_path()
@@ -313,6 +315,21 @@ def _load_or_create_jwt_secret(secret_file: str = "/etc/octopos/jwt_secret") -> 
     return secret
 
 
+def _load_or_create_internal_secret(secret_file: str = "/etc/hydrahive/internal_secret") -> str:
+    """Internal-Secret aus Datei laden oder einmalig generieren und persistieren."""
+    path = Path(secret_file)
+    if path.exists():
+        val = path.read_text().strip()
+        if val:
+            return val
+    val = secrets.token_hex(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(val, encoding="utf-8")
+    path.chmod(0o600)
+    logger.info("Neues Internal-Secret generiert: %s", secret_file)
+    return val
+
+
 def _read_admin_password() -> str:
     """Admin-Passwort aus /etc/octopos/admin_credentials lesen."""
     try:
@@ -374,11 +391,23 @@ admin_router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _is_internal_request(request: Request) -> bool:
-    """Prüft X-Internal-Secret Header (constant-time). Kein IP-Bypass."""
-    provided = request.headers.get("X-Internal-Secret", "")
-    if not provided:
+    """
+    Prüft X-Internal-Timestamp + X-Internal-Signature (Replay-Schutz, ±30s).
+    Signatur: hmac_sha256(secret, timestamp_str). Kein IP-Bypass.
+    """
+    import time as _t
+    ts_str = request.headers.get("X-Internal-Timestamp", "")
+    sig    = request.headers.get("X-Internal-Signature", "")
+    if not ts_str or not sig or not _INTERNAL_SECRET:
         return False
-    return hmac.compare_digest(provided, _INTERNAL_SECRET)
+    try:
+        ts = float(ts_str)
+    except ValueError:
+        return False
+    if abs(_t.time() - ts) > 30:
+        return False
+    expected = hmac.new(_INTERNAL_SECRET.encode(), ts_str.encode(), "sha256").hexdigest()
+    return hmac.compare_digest(sig, expected)
 
 
 def require_auth_or_internal(
