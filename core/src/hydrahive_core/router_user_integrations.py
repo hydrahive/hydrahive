@@ -918,3 +918,88 @@ def register_user_integration_routes(
             p.unlink()
         audit_log("mail.removed", details={"user": username})
         return {"deleted": True}
+
+    # ── Telegram ──────────────────────────────────────────────────────────────
+
+    @auth_router.get("/me/telegram")
+    async def get_my_telegram(auth: tuple = Depends(require_auth)):
+        from .telegram_agent import load_telegram_config, get_bot_status
+        username, _ = auth
+        cfg = load_telegram_config(username) or {}
+        agent_id = f"personal_{username}"
+        status = get_bot_status(agent_id) if cfg.get("enabled") else "stopped"
+        return {
+            "configured":      bool(cfg.get("bot_token")),
+            "enabled":         cfg.get("enabled", False),
+            "status":          status,
+            "bot_username":    cfg.get("bot_username", ""),
+            "allow_private":   cfg.get("allow_private", True),
+            "allow_groups":    cfg.get("allow_groups", False),
+            "require_keyword": cfg.get("require_keyword", ""),
+            "allowed_user_ids": cfg.get("allowed_user_ids", []),
+            "blocked_user_ids": cfg.get("blocked_user_ids", []),
+            "admin_user_ids":  cfg.get("admin_user_ids", []),
+        }
+
+    @auth_router.post("/me/telegram/connect")
+    async def connect_my_telegram(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+        from .telegram_agent import (
+            load_telegram_config, save_telegram_config,
+            start_telegram_bot, stop_telegram_bot,
+        )
+        username, _ = auth
+        token = body.get("bot_token", "").strip()
+        if not token:
+            raise HTTPException(400, "bot_token fehlt")
+
+        agent_id = f"personal_{username}"
+        await stop_telegram_bot(agent_id)
+
+        cfg = load_telegram_config(username) or {}
+        cfg.update({
+            "enabled": True,
+            "bot_token": token,
+            "allow_private":   body.get("allow_private", cfg.get("allow_private", True)),
+            "allow_groups":    body.get("allow_groups", cfg.get("allow_groups", False)),
+            "require_keyword": body.get("require_keyword", cfg.get("require_keyword", "")),
+            "allowed_user_ids": body.get("allowed_user_ids", cfg.get("allowed_user_ids", [])),
+            "blocked_user_ids": body.get("blocked_user_ids", cfg.get("blocked_user_ids", [])),
+            "admin_user_ids":  body.get("admin_user_ids", cfg.get("admin_user_ids", [])),
+        })
+        save_telegram_config(username, cfg)
+
+        result = await start_telegram_bot(agent_id, username, token, cfg, orchestrator)
+        if result.get("bot_username"):
+            cfg["bot_username"] = result["bot_username"]
+            save_telegram_config(username, cfg)
+
+        audit_log("telegram.connect", details={"user": username, "status": result.get("status")})
+        return {
+            "configured": True,
+            "status": result.get("status", "running"),
+            "bot_username": cfg.get("bot_username", ""),
+        }
+
+    @auth_router.put("/me/telegram/config")
+    async def update_my_telegram_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+        from .telegram_agent import load_telegram_config, save_telegram_config
+        username, _ = auth
+        cfg = load_telegram_config(username)
+        if not cfg:
+            raise HTTPException(404, "Telegram nicht konfiguriert")
+        for field in ("allow_private", "allow_groups", "require_keyword",
+                      "allowed_user_ids", "blocked_user_ids", "admin_user_ids"):
+            if field in body:
+                cfg[field] = body[field]
+        save_telegram_config(username, cfg)
+        return {"updated": True}
+
+    @auth_router.delete("/me/telegram")
+    async def delete_my_telegram(auth: tuple = Depends(require_auth)):
+        from .telegram_agent import delete_telegram_config, stop_telegram_bot
+        username, _ = auth
+        agent_id = f"personal_{username}"
+        await stop_telegram_bot(agent_id)
+        delete_telegram_config(username)
+        audit_log("telegram.disconnect", details={"user": username})
+        return {"disconnected": True}

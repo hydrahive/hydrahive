@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
-import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, PlatformOverviewEntry } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 
@@ -102,7 +102,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"mail">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -294,15 +294,17 @@ export function MyAgentPage() {
         </div>
         <div className="flex gap-0 px-4">
           {[
-            { id: "chat",     label: "Chat",           icon: Bot },
-            { id: "settings", label: "Einstellungen",  icon: Settings },
-            { id: "skills",   label: "Skills",         icon: BookOpen },
-            { id: "mcp",      label: "MCP",            icon: Plug },
-            { id: "platforms", label: "Integrationen", icon: Wifi },
-            { id: "wks",      label: "WKS",            icon: Monitor },
-            { id: "discord",   label: "Discord",          icon: MessageSquare },
-            { id: "whatsapp",  label: "WhatsApp",         icon: Phone },
-            { id: "mail",      label: "Mail",             icon: Mail },
+            { id: "chat",      label: "Chat",           icon: Bot },
+            { id: "settings",  label: "Einstellungen",  icon: Settings },
+            { id: "heartbeat", label: "Heartbeat",       icon: Timer },
+            { id: "skills",    label: "Skills",          icon: BookOpen },
+            { id: "mcp",       label: "MCP",             icon: Plug },
+            { id: "platforms", label: "Integrationen",   icon: Wifi },
+            { id: "wks",       label: "WKS",             icon: Monitor },
+            { id: "discord",   label: "Discord",         icon: MessageSquare },
+            { id: "whatsapp",  label: "WhatsApp",        icon: Phone },
+            { id: "telegram",  label: "Telegram",        icon: Send },
+            { id: "mail",      label: "Mail",            icon: Mail },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -705,6 +707,21 @@ export function MyAgentPage() {
       {/* ── WhatsApp Tab ──────────────────────────────────────────────────── */}
       {tab === "whatsapp" && (
         <WhatsAppTab />
+      )}
+
+      {/* ── Telegram Tab ──────────────────────────────────────────────────── */}
+      {tab === "telegram" && (
+        <TelegramTab />
+      )}
+
+      {/* ── Heartbeat Tab ─────────────────────────────────────────────────── */}
+      {tab === "heartbeat" && agentInfo && (
+        <HeartbeatTab agentInfo={agentInfo} onSaved={loadAgent} />
+      )}
+      {tab === "heartbeat" && !agentInfo && (
+        <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
+          <p className="text-sm">Agenten-Konfiguration nicht geladen.</p>
+        </div>
       )}
 
       {/* ── Mail Tab ──────────────────────────────────────────────────────── */}
@@ -1610,17 +1627,48 @@ function WhatsAppTab() {
   const [status,  setStatus]  = useState<WhatsAppStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg,     setMsg]     = useState("");
+  const [cfg, setCfg] = useState<WhatsAppConfig>({
+    private_chats_enabled: true,
+    group_chats_enabled:   false,
+    require_keyword:       "",
+    allowed_numbers:       [],
+    blocked_numbers:       [],
+    owner_numbers:         [],
+  });
+  const [cfgSaving, setCfgSaving] = useState(false);
+  const [numInput,   setNumInput]   = useState("");
+  const [blockInput, setBlockInput] = useState("");
+  const [ownerInput, setOwnerInput] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchStatus() {
     try {
       const s = await api.getWhatsApp();
       setStatus(s);
-      // Polling stoppen wenn verbunden oder Fehler
+      if (s.private_chats_enabled !== undefined) {
+        setCfg({
+          private_chats_enabled: s.private_chats_enabled ?? true,
+          group_chats_enabled:   s.group_chats_enabled   ?? false,
+          require_keyword:       s.require_keyword       ?? "",
+          allowed_numbers:       s.allowed_numbers       ?? [],
+          blocked_numbers:       s.blocked_numbers       ?? [],
+          owner_numbers:         s.owner_numbers         ?? [],
+        });
+      }
       if (s.status === "connected" || s.status === "bridge_unavailable" || s.status === "disconnected") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       }
     } catch {}
+  }
+
+  async function saveCfg() {
+    setCfgSaving(true); setMsg("");
+    try {
+      await api.updateWhatsAppConfig(cfg);
+      setMsg("Gespeichert ✓");
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setCfgSaving(false); }
   }
 
   useEffect(() => {
@@ -1728,20 +1776,304 @@ function WhatsAppTab() {
         )}
       </div>
 
-      <section className="space-y-2 border-t pt-4">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hinweise</h3>
-        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-          <li>Die Verbindung läuft über Baileys (WhatsApp Web-Protokoll) auf dem Server.</li>
-          <li>Nach dem Scannen bleibt die Session aktiv bis du sie manuell trennst.</li>
-          <li>Eingehende WhatsApp-Nachrichten werden direkt an deinen Agenten weitergeleitet.</li>
-          <li>Erfordert den WhatsApp Bridge Service auf dem Server (<code className="font-mono bg-muted px-1 rounded">octopos-whatsapp-bridge</code>).</li>
-        </ul>
-      </section>
+      {/* Konfiguration */}
+      {(status?.configured || (status && status.status !== "disconnected")) && (
+        <section className="space-y-4 border-t pt-5">
+          <h3 className="text-sm font-semibold">Verhalten konfigurieren</h3>
+
+          {/* Chat-Typen */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reagiert auf</p>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={cfg.private_chats_enabled}
+                onChange={e => setCfg(c => ({ ...c, private_chats_enabled: e.target.checked }))} className="h-4 w-4 rounded" />
+              <span className="text-sm">Einzel-Chats (private Nachrichten)</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={cfg.group_chats_enabled}
+                onChange={e => setCfg(c => ({ ...c, group_chats_enabled: e.target.checked }))} className="h-4 w-4 rounded" />
+              <span className="text-sm">Gruppen-Chats</span>
+            </label>
+          </div>
+
+          {/* Keyword */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Pflicht-Keyword (optional)
+            </label>
+            <input value={cfg.require_keyword}
+              onChange={e => setCfg(c => ({ ...c, require_keyword: e.target.value }))}
+              placeholder="z.B. !agent  oder  @lilith"
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            <p className="text-xs text-muted-foreground">Agent antwortet nur wenn diese Zeichenkette in der Nachricht vorkommt.</p>
+          </div>
+
+          {/* Whitelist */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Nummern (leer = alle)</p>
+            <div className="flex flex-wrap gap-1">
+              {cfg.allowed_numbers.map(n => (
+                <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-secondary rounded">
+                  {n}
+                  <button type="button" onClick={() => setCfg(c => ({ ...c, allowed_numbers: c.allowed_numbers.filter(x => x !== n) }))}>
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={numInput} onChange={e => setNumInput(e.target.value)}
+                placeholder="+491234567890" onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (numInput.trim()) { setCfg(c => ({ ...c, allowed_numbers: [...c.allowed_numbers, numInput.trim()] })); setNumInput(""); }}}}
+                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+              <button type="button" onClick={() => { if (numInput.trim()) { setCfg(c => ({ ...c, allowed_numbers: [...c.allowed_numbers, numInput.trim()] })); setNumInput(""); }}}
+                className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"><Plus className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          {/* Blacklist */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gesperrte Nummern</p>
+            <div className="flex flex-wrap gap-1">
+              {cfg.blocked_numbers.map(n => (
+                <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-destructive/10 text-destructive rounded">
+                  {n}
+                  <button type="button" onClick={() => setCfg(c => ({ ...c, blocked_numbers: c.blocked_numbers.filter(x => x !== n) }))}>
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={blockInput} onChange={e => setBlockInput(e.target.value)}
+                placeholder="+491234567890" onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (blockInput.trim()) { setCfg(c => ({ ...c, blocked_numbers: [...c.blocked_numbers, blockInput.trim()] })); setBlockInput(""); }}}}
+                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+              <button type="button" onClick={() => { if (blockInput.trim()) { setCfg(c => ({ ...c, blocked_numbers: [...c.blocked_numbers, blockInput.trim()] })); setBlockInput(""); }}}
+                className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"><Plus className="h-4 w-4" /></button>
+            </div>
+
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Admin-Nummern (erhalten volle Rechte)</p>
+            <p className="text-xs text-muted-foreground">Diese Nummern dürfen alle Befehle ausführen und erhalten Zugriff auf private Daten.</p>
+            <div className="flex flex-wrap gap-1">
+              {cfg.owner_numbers.map(n => (
+                <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 rounded">
+                  <Shield className="h-2.5 w-2.5" />{n}
+                  <button type="button" onClick={() => setCfg(c => ({ ...c, owner_numbers: c.owner_numbers.filter(x => x !== n) }))}>
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={ownerInput} onChange={e => setOwnerInput(e.target.value)}
+                placeholder="+491234567890" onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (ownerInput.trim()) { setCfg(c => ({ ...c, owner_numbers: [...c.owner_numbers, ownerInput.trim()] })); setOwnerInput(""); }}}}
+                className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+              <button type="button" onClick={() => { if (ownerInput.trim()) { setCfg(c => ({ ...c, owner_numbers: [...c.owner_numbers, ownerInput.trim()] })); setOwnerInput(""); }}}
+                className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"><Plus className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={saveCfg} disabled={cfgSaving}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <Save className="h-3.5 w-3.5" />{cfgSaving ? "Speichern…" : "Einstellungen speichern"}
+            </button>
+            {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
 // ── Mail Tab ───────────────────────────────────────────────────────────────────
+
+// ── Heartbeat Tab ────────────────────────────────────────────────────────────
+
+interface HbTask {
+  id: string;
+  message: string;
+  interval: number | null;
+  schedule: string | null;
+  active_hours: string | null;
+}
+
+const TASK_PRESETS = [
+  { label: "Mails prüfen",     id: "check_mail",    message: "Bitte prüfe deine Mails und antworte auf wichtige Nachrichten." },
+  { label: "Issues lesen",     id: "check_issues",  message: "Bitte prüfe offene Gitea-Issues in deinen Projekten und gib eine kurze Zusammenfassung." },
+  { label: "Tages-Briefing",   id: "daily_briefing",message: "Gib mir ein kurzes Briefing über den aktuellen Stand der laufenden Aufgaben." },
+  { label: "Erinnerung",       id: "reminder",      message: "Prüfe ausstehende Aufgaben und erinnere mich an fällige Punkte." },
+];
+
+function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: () => void }) {
+  const cfg = agentInfo.config as AgentCfg & {
+    heartbeat?: { enabled?: boolean; interval?: string; timeout?: string; on_failure?: string };
+    heartbeat_tasks?: HbTask[];
+  };
+
+  const [enabled,    setEnabled]    = useState(cfg.heartbeat?.enabled ?? true);
+  const [interval,   setInterval]   = useState(cfg.heartbeat?.interval ?? "60s");
+  const [timeout,    setTimeout_]   = useState(cfg.heartbeat?.timeout ?? "180s");
+  const [onFailure,  setOnFailure]  = useState(cfg.heartbeat?.on_failure ?? "ignore");
+  const [tasks,      setTasks]      = useState<HbTask[]>(cfg.heartbeat_tasks ?? []);
+  const [saving,     setSaving]     = useState(false);
+  const [msg,        setMsg]        = useState("");
+  const [editIdx,    setEditIdx]    = useState<number | null>(null);
+  const [newTask,    setNewTask]    = useState<HbTask>({ id: "", message: "", interval: 1800, schedule: null, active_hours: null });
+
+  async function save() {
+    setSaving(true); setMsg("");
+    try {
+      await api.patchMyAgentHeartbeat({
+        heartbeat: { enabled, interval, timeout, on_failure: onFailure },
+        heartbeat_tasks: tasks,
+      });
+      setMsg("Gespeichert ✓");
+      onSaved();
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSaving(false); }
+  }
+
+  function addTask() {
+    if (!newTask.id || !newTask.message) return;
+    setTasks(t => [...t, { ...newTask }]);
+    setNewTask({ id: "", message: "", interval: 1800, schedule: null, active_hours: null });
+  }
+
+  function removeTask(idx: number) {
+    setTasks(t => t.filter((_, i) => i !== idx));
+  }
+
+  function applyPreset(id: string, message: string) {
+    setNewTask(t => ({ ...t, id: t.id || id, message }));
+  }
+
+  const inputCls = "w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary";
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-8 max-w-2xl">
+
+      {/* Basis-Config */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold flex items-center gap-2"><Timer className="h-4 w-4" />Heartbeat-Einstellungen</h2>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="h-4 w-4 rounded" />
+          <span className="text-sm font-medium">Heartbeat aktiv</span>
+          <span className="text-xs text-muted-foreground">— Agent wird regelmäßig auf Lebenszeichen geprüft</span>
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Intervall</label>
+            <input value={interval} onChange={e => setInterval(e.target.value)} placeholder="60s" className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Timeout</label>
+            <input value={timeout} onChange={e => setTimeout_(e.target.value)} placeholder="180s" className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Bei Timeout</label>
+            <select value={onFailure} onChange={e => setOnFailure(e.target.value)} className={inputCls}>
+              <option value="ignore">ignore</option>
+              <option value="restart">restart</option>
+              <option value="stop">stop</option>
+              <option value="alert">alert</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* Aufgaben */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold flex items-center gap-2"><Bot className="h-4 w-4" />Regelmäßige Aufgaben</h2>
+        <p className="text-xs text-muted-foreground">Diese Nachrichten werden automatisch in festgelegten Abständen an deinen Agenten geschickt.</p>
+
+        {/* Bestehende Tasks */}
+        {tasks.length > 0 && (
+          <div className="space-y-2">
+            {tasks.map((t, i) => (
+              <div key={i} className="flex items-start gap-3 rounded-xl border bg-secondary/30 p-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <span className="font-mono font-medium text-foreground">{t.id}</span>
+                    {t.interval && <span>alle {t.interval >= 3600 ? `${t.interval/3600}h` : `${t.interval/60}min`}</span>}
+                    {t.schedule && <span>Cron: {t.schedule}</span>}
+                    {t.active_hours && <span>{t.active_hours}</span>}
+                  </div>
+                  <p className="text-sm truncate">{t.message}</p>
+                </div>
+                <button onClick={() => removeTask(i)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {tasks.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">Noch keine Aufgaben definiert.</p>
+        )}
+
+        {/* Neue Aufgabe */}
+        <div className="rounded-xl border p-4 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Neue Aufgabe</p>
+
+          {/* Presets */}
+          <div className="flex flex-wrap gap-2">
+            {TASK_PRESETS.map(p => (
+              <button key={p.label} type="button" onClick={() => applyPreset(p.id, p.message)}
+                className="rounded-full border px-3 py-1 text-xs hover:bg-accent transition-colors">
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">ID</label>
+              <input value={newTask.id} onChange={e => setNewTask(t => ({ ...t, id: e.target.value }))}
+                placeholder="z.B. check_mail" className={inputCls} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Intervall (Sekunden)</label>
+              <input type="number" value={newTask.interval ?? ""} onChange={e => setNewTask(t => ({ ...t, interval: parseInt(e.target.value) || null, schedule: null }))}
+                placeholder="1800" className={inputCls} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Nachricht / Aufgabe</label>
+            <textarea value={newTask.message} onChange={e => setNewTask(t => ({ ...t, message: e.target.value }))}
+              rows={3} placeholder="Was soll der Agent tun?"
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Aktive Stunden (optional)</label>
+              <input value={newTask.active_hours ?? ""} onChange={e => setNewTask(t => ({ ...t, active_hours: e.target.value || null }))}
+                placeholder="07:00-22:00" className={inputCls} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Cron (alternativ zu Intervall)</label>
+              <input value={newTask.schedule ?? ""} onChange={e => setNewTask(t => ({ ...t, schedule: e.target.value || null, interval: e.target.value ? null : t.interval }))}
+                placeholder="0 8 * * *" className={inputCls} />
+            </div>
+          </div>
+          <button type="button" onClick={addTask} disabled={!newTask.id || !newTask.message}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md border hover:bg-accent transition-colors disabled:opacity-40">
+            <Plus className="h-3.5 w-3.5" />Aufgabe hinzufügen
+          </button>
+        </div>
+      </section>
+
+      {/* Speichern */}
+      <div className="flex items-center gap-3">
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+          <Save className="h-3.5 w-3.5" />{saving ? "Speichern…" : "Speichern"}
+        </button>
+        {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
 
 function MailTab() {
   const [cfg,          setCfg]         = useState<MailConfig | null>(null);
@@ -1918,6 +2250,275 @@ function MailTab() {
           <li>Ohne KAS kannst du beliebige SMTP-Zugangsdaten manuell eingeben.</li>
           <li>Der Agent kann danach E-Mails versenden (Tool: <code className="font-mono bg-muted px-1 rounded">send_mail</code>) und empfangen (<code className="font-mono bg-muted px-1 rounded">receive_mail</code>).</li>
         </ul>
+      </section>
+    </div>
+  );
+}
+
+// ── TelegramTab ───────────────────────────────────────────────────────────────
+
+import type { TelegramStatus, TelegramConfig } from "../lib/api";
+
+function TelegramTab() {
+  const [status,   setStatus]   = useState<TelegramStatus | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [token,    setToken]    = useState("");
+  const [cfg, setCfg] = useState<TelegramConfig>({
+    allow_private:    true,
+    allow_groups:     false,
+    require_keyword:  "",
+    allowed_user_ids: [],
+    blocked_user_ids: [],
+    admin_user_ids:   [],
+  });
+  const [cfgSaving,  setCfgSaving]  = useState(false);
+  const [uidInput,   setUidInput]   = useState("");
+  const [blockInput, setBlockInput] = useState("");
+  const [adminInput, setAdminInput] = useState("");
+
+  async function fetchStatus() {
+    try {
+      const s = await api.getTelegram();
+      setStatus(s);
+      if (s.allow_private !== undefined) {
+        setCfg({
+          allow_private:    s.allow_private    ?? true,
+          allow_groups:     s.allow_groups     ?? false,
+          require_keyword:  s.require_keyword  ?? "",
+          allowed_user_ids: s.allowed_user_ids ?? [],
+          blocked_user_ids: s.blocked_user_ids ?? [],
+          admin_user_ids:   s.admin_user_ids   ?? [],
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  async function handleConnect() {
+    if (!token.trim()) return;
+    setLoading(true);
+    try {
+      const s = await api.connectTelegram({ bot_token: token, ...cfg });
+      setStatus(s);
+      setToken("");
+    } catch (e: any) {
+      alert(e?.message ?? "Verbindung fehlgeschlagen");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("Telegram-Bot trennen?")) return;
+    setLoading(true);
+    try {
+      await api.disconnectTelegram();
+      setStatus({ configured: false, enabled: false, status: "stopped", bot_username: "" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveCfg() {
+    setCfgSaving(true);
+    try {
+      await api.updateTelegramConfig(cfg);
+      await fetchStatus();
+    } finally {
+      setCfgSaving(false);
+    }
+  }
+
+  function addId(list: string[], val: string, setter: (v: string[]) => void, inputSetter: (v: string) => void) {
+    const v = val.trim();
+    if (v && !list.includes(v)) setter([...list, v]);
+    inputSetter("");
+  }
+
+  const isRunning = status?.status === "running";
+  const statusColor = isRunning
+    ? "bg-green-500/20 text-green-600 dark:text-green-400"
+    : status?.status === "error"
+    ? "bg-destructive/20 text-destructive"
+    : "bg-muted text-muted-foreground";
+  const statusLabel = isRunning ? "Verbunden" : status?.status === "error" ? "Fehler" : "Getrennt";
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 max-w-2xl">
+      {/* Status */}
+      <section className="rounded-2xl border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Send className="h-5 w-5 text-blue-500" />
+            <div>
+              <h3 className="font-semibold text-sm">Telegram Bot</h3>
+              {status?.bot_username && (
+                <p className="text-xs text-muted-foreground">{status.bot_username}</p>
+              )}
+            </div>
+          </div>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor}`}>
+            {statusLabel}
+          </span>
+        </div>
+
+        {/* Token-Input wenn nicht verbunden */}
+        {!isRunning && (
+          <div className="space-y-2">
+            <label className="text-xs text-muted-foreground">Bot-Token (@BotFather)</label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={token}
+                onChange={e => setToken(e.target.value)}
+                placeholder="1234567890:ABCdef..."
+                className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm font-mono"
+              />
+              <button
+                onClick={handleConnect}
+                disabled={loading || !token.trim()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+              >
+                {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Verbinden
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Bot erstellen: Telegram öffnen → <strong>@BotFather</strong> → /newbot → Token kopieren
+            </p>
+          </div>
+        )}
+
+        {isRunning && (
+          <button
+            onClick={handleDisconnect}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-medium hover:bg-destructive/10"
+          >
+            <X className="h-3.5 w-3.5" /> Bot trennen
+          </button>
+        )}
+      </section>
+
+      {/* Konfiguration */}
+      {status?.configured && (
+        <section className="rounded-2xl border bg-card p-5 space-y-5">
+          <h3 className="font-semibold text-sm">Konfiguration</h3>
+
+          {/* Chat-Typen */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Chats</p>
+            {[
+              { key: "allow_private", label: "Privatnachrichten" },
+              { key: "allow_groups",  label: "Gruppen & Channels" },
+            ].map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cfg[key as keyof TelegramConfig] as boolean}
+                  onChange={e => setCfg(c => ({ ...c, [key]: e.target.checked }))}
+                  className="rounded"
+                />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Keyword */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Keyword-Filter</label>
+            <input
+              value={cfg.require_keyword}
+              onChange={e => setCfg(c => ({ ...c, require_keyword: e.target.value }))}
+              placeholder="z.B. !bot (leer = alle Nachrichten)"
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
+          {/* Admin-IDs */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <Shield className="h-3 w-3" /> Admin User-IDs (elevated)
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {cfg.admin_user_ids.map(id => (
+                <span key={id} className="flex items-center gap-1 text-xs bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-full px-2 py-0.5">
+                  {id}
+                  <button onClick={() => setCfg(c => ({ ...c, admin_user_ids: c.admin_user_ids.filter(x => x !== id) }))}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={adminInput} onChange={e => setAdminInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addId(cfg.admin_user_ids, adminInput, ids => setCfg(c => ({ ...c, admin_user_ids: ids })), setAdminInput)}
+                placeholder="Telegram User-ID (z.B. 123456789)"
+                className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm" />
+              <button onClick={() => addId(cfg.admin_user_ids, adminInput, ids => setCfg(c => ({ ...c, admin_user_ids: ids })), setAdminInput)}
+                className="px-3 py-1.5 rounded-lg border text-sm">+ Add</button>
+            </div>
+            <p className="text-xs text-muted-foreground">Deine User-ID findest du über @userinfobot auf Telegram.</p>
+          </div>
+
+          {/* Whitelist */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte User-IDs (Whitelist)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {cfg.allowed_user_ids.map(id => (
+                <span key={id} className="flex items-center gap-1 text-xs bg-muted rounded-full px-2 py-0.5">
+                  {id}
+                  <button onClick={() => setCfg(c => ({ ...c, allowed_user_ids: c.allowed_user_ids.filter(x => x !== id) }))}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={uidInput} onChange={e => setUidInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addId(cfg.allowed_user_ids, uidInput, ids => setCfg(c => ({ ...c, allowed_user_ids: ids })), setUidInput)}
+                placeholder="User-ID (leer = alle erlaubt)"
+                className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm" />
+              <button onClick={() => addId(cfg.allowed_user_ids, uidInput, ids => setCfg(c => ({ ...c, allowed_user_ids: ids })), setUidInput)}
+                className="px-3 py-1.5 rounded-lg border text-sm">+ Add</button>
+            </div>
+          </div>
+
+          {/* Blacklist */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Blockierte User-IDs</p>
+            <div className="flex flex-wrap gap-1.5">
+              {cfg.blocked_user_ids.map(id => (
+                <span key={id} className="flex items-center gap-1 text-xs bg-destructive/10 text-destructive rounded-full px-2 py-0.5">
+                  {id}
+                  <button onClick={() => setCfg(c => ({ ...c, blocked_user_ids: c.blocked_user_ids.filter(x => x !== id) }))}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={blockInput} onChange={e => setBlockInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addId(cfg.blocked_user_ids, blockInput, ids => setCfg(c => ({ ...c, blocked_user_ids: ids })), setBlockInput)}
+                placeholder="User-ID blockieren"
+                className="flex-1 rounded-lg border bg-background px-3 py-1.5 text-sm" />
+              <button onClick={() => addId(cfg.blocked_user_ids, blockInput, ids => setCfg(c => ({ ...c, blocked_user_ids: ids })), setBlockInput)}
+                className="px-3 py-1.5 rounded-lg border text-sm">+ Add</button>
+            </div>
+          </div>
+
+          <button onClick={saveCfg} disabled={cfgSaving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
+            <Save className="h-3.5 w-3.5" />
+            {cfgSaving ? "Speichern..." : "Speichern"}
+          </button>
+        </section>
+      )}
+
+      {/* Hinweis */}
+      <section className="rounded-2xl border bg-muted/30 p-4 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">Einrichtung</p>
+        <ol className="list-decimal list-inside space-y-1">
+          <li>Öffne Telegram und schreibe <strong>@BotFather</strong></li>
+          <li>Schicke <code className="bg-muted px-1 rounded">/newbot</code> und folge den Anweisungen</li>
+          <li>Kopiere den Token und füge ihn oben ein</li>
+          <li>Deine User-ID findest du via <strong>@userinfobot</strong> → als Admin eintragen für vollen Zugriff</li>
+        </ol>
       </section>
     </div>
   );

@@ -202,6 +202,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("WhatsApp-Setup fehlgeschlagen: %s", e)
 
+    # Telegram-Bots für User mit konfiguriertem Bot-Token starten (#84)
+    try:
+        from .telegram_agent import setup_telegram_sessions as _setup_tg
+        await _setup_tg(load_users=_load_users, orchestrator=orchestrator, logger_=logger)
+    except Exception as e:
+        logger.warning("Telegram-Setup fehlgeschlagen: %s", e)
+
     # Heartbeat-Scheduler starten (#77)
     from .heartbeat import AgentHeartbeatScheduler as _HBS
     hb_scheduler = _HBS(discovery, projects, orchestrator, AGENTS_DIR)
