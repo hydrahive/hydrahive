@@ -45,6 +45,11 @@ class HeartbeatTask(BaseModel):
     interval:     int | None = None    # Sekunden-Intervall, z.B. 1800
     project:      str | None = None    # explizites Projekt (sonst: erstes Boss-Projekt)
     active_hours: str | None = None    # z.B. "07:00-22:00"
+    # AgentLink-Eskalation: wenn gesetzt wird bei Fund ein Handoff geschrieben
+    escalate_to:     str | None = None  # Ziel-Agent-ID bei Fund (z.B. "personal_castiel")
+    escalate_type:   str        = "bug_fix"  # AgentLink task.type
+    escalate_priority: int      = 3          # AgentLink task.priority 1-5
+    escalate_skills: list[str]  = Field(default_factory=list)  # required_skills
 
 
 class ExecutionModeProfile(BaseModel):

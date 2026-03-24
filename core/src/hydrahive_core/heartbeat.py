@@ -146,10 +146,48 @@ class AgentHeartbeatScheduler:
 
         logger.info("Heartbeat-Task '%s/%s' → Projekt '%s': %s", agent_id, task.id, project_id, task.message[:60])
         try:
-            await self._orchestrator.handle_message(project_id, project_cfg, task.message, sender="heartbeat")
+            # Heartbeat ausführen und Ergebnis prüfen
+            reply_tuple = await self._orchestrator.handle_message(project_id, project_cfg, task.message, sender="heartbeat")
+            result = reply_tuple[0] if isinstance(reply_tuple, tuple) else str(reply_tuple)
             _save_state(agent_dir, task.id, now)
+
+            # AgentLink-Eskalation wenn konfiguriert und Ergebnis nicht leer
+            if task.escalate_to and result:
+                await self._maybe_escalate(agent_id, task, result)
+
         except Exception as e:
             logger.warning("Heartbeat-Task '%s/%s' Ausführung fehlgeschlagen: %s", agent_id, task.id, e)
+
+    async def _maybe_escalate(self, agent_id: str, task, finding: str) -> None:
+        """Schreibt einen AgentLink-Handoff wenn der Heartbeat etwas gefunden hat."""
+        from .agentlink_client import is_available, write_handoff_remote
+
+        if not is_available():
+            logger.debug("AgentLink nicht verfügbar — Eskalation übersprungen")
+            return
+
+        # Nur eskalieren wenn Ergebnis auf einen Fund hindeutet (nicht leer/ok)
+        lower = finding.lower()
+        boring = ("kein", "keine", "alles ok", "nothing", "no issues", "ok", "✓", "0 fehler")
+        if any(b in lower for b in boring) and len(finding) < 200:
+            logger.debug("Heartbeat '%s/%s': kein Fund → keine Eskalation", agent_id, task.id)
+            return
+
+        logger.info(
+            "Heartbeat '%s/%s' eskaliert an '%s' via AgentLink",
+            agent_id, task.id, task.escalate_to,
+        )
+        try:
+            await write_handoff_remote(
+                from_agent=agent_id,
+                to_agent=task.escalate_to,
+                context=f"[Heartbeat Fund: {task.id}]\n\n{finding[:1000]}",
+                data={"heartbeat_task": task.id, "agent": agent_id},
+                task_type=task.escalate_type,
+                priority=task.escalate_priority,
+            )
+        except Exception as e:
+            logger.warning("AgentLink-Eskalation fehlgeschlagen für '%s/%s': %s", agent_id, task.id, e)
 
     def _find_project(self, agent_id: str) -> str | None:
         """Erstes Projekt in dem der Agent als Boss konfiguriert ist."""
