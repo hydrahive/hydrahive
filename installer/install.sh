@@ -78,7 +78,7 @@ for _f in jwt_secret llm_env llm_config.json gitea_config.json; do
     _path="/etc/hydrahive/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"
-        chown hydrahive:octopos "${_path}"
+        chown hydrahive:hydrahive "${_path}"
         chmod 600 "${_path}"
     fi
 done

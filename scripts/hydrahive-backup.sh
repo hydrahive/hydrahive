@@ -22,10 +22,10 @@ echo "==> HydraHive Backup — $TIMESTAMP"
 echo "    Ziel: $DEST"
 echo ""
 
-echo "==> [1/3] /etc/octopos/ (Secrets, Users, Config)"
+echo "==> [1/3] /etc/hydrahive/ (Secrets, Users, Config)"
 rsync -av -e "ssh -i $SSH_KEY" \
-  "$VM:/etc/octopos/" \
-  "$DEST/etc-octopos/"
+  "$VM:/etc/hydrahive/" \
+  "$DEST/etc-hydrahive/"
 
 echo ""
 echo "==> [2/3] /agents/ (Agent-Konfigurationen)"

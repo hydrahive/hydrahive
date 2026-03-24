@@ -8,7 +8,7 @@ AGENTLINK_PORT="${AGENTLINK_PORT:-8010}"
 AGENTLINK_CONFIG="/etc/hydrahive/agentlink.json"
 AGENTLINK_DATA="/var/lib/hydrahive/agentlink"
 AGENTLINK_DB_PASS="${AGENTLINK_DB_PASS:-$(openssl rand -hex 16)}"
-AGENTLINK_REPO="https://github.com/tilleulenspiegel/agentlink.git"
+AGENTLINK_REPO="https://github.com/hydrahive/agentlink.git"
 HYDRAHIVE_USER="hydrahive"
 
 info "Installiere AgentLink (nativ)..."
