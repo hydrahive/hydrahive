@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap } from "lucide-react";
 import { api, GpuInfo, GpuEntry } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface RuntimeAgent {
   status:             string;
@@ -94,6 +95,7 @@ function GpuCard({ gpu }: { gpu: GpuEntry }) {
 }
 
 export function SystemPage() {
+  const { t } = useTranslation();
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
   const [healthy,   setHealthy]   = useState<boolean | null>(null);
   const [gpu,       setGpu]       = useState<GpuInfo | null>(null);
@@ -120,42 +122,40 @@ export function SystemPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">System</h1>
-          <p className="text-sm text-muted-foreground">Services und Laufzeit-Status · aktualisiert alle 15s</p>
+          <h1 className="text-xl font-semibold">{t("system.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("system.subtitle")}</p>
         </div>
         <button onClick={refresh} disabled={refreshing}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          Aktualisieren
+          {t("system.refresh")}
         </button>
       </div>
 
-      {/* Kurzübersicht */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-card border rounded-lg p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wide font-medium">
-            <Activity className="h-3.5 w-3.5" />Core API
+            <Activity className="h-3.5 w-3.5" />{t("system.coreApi")}
           </div>
           <p className={`text-lg font-semibold ${healthy === false ? "text-destructive" : "text-green-500"}`}>
-            {loading ? "..." : healthy ? "Online" : "Offline"}
+            {loading ? "..." : healthy ? t("system.online") : t("system.offline")}
           </p>
         </div>
         <div className="bg-card border rounded-lg p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wide font-medium">
-            <Cpu className="h-3.5 w-3.5" />Agenten laufend
+            <Cpu className="h-3.5 w-3.5" />{t("system.agentsRunning")}
           </div>
           <p className="text-lg font-semibold">
             <span className="text-green-500">{runningCount}</span>
             <span className="text-muted-foreground text-sm"> / {agentList.length}</span>
-            {errorCount > 0 && <span className="text-destructive text-sm ml-2">{errorCount} Fehler</span>}
+            {errorCount > 0 && <span className="text-destructive text-sm ml-2">{errorCount} {t("system.errors")}</span>}
           </p>
         </div>
         <div className="bg-card border rounded-lg p-4 space-y-1">
           <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wide font-medium">
-            <HardDrive className="h-3.5 w-3.5" />Aktive Sessions
+            <HardDrive className="h-3.5 w-3.5" />{t("system.activeSessions")}
           </div>
           <p className="text-lg font-semibold">
             {status?.sessions?.active_projects?.length ?? "..."}
@@ -164,42 +164,39 @@ export function SystemPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-        {/* Services */}
         <div className="bg-card border rounded-lg p-4 space-y-1">
-          <h2 className="text-sm font-medium mb-3">Systemd-Services</h2>
+          <h2 className="text-sm font-medium mb-3">{t("system.services")}</h2>
           <ServiceRow name="hydrahive-core"      status={healthy ? "ok" : "error"} />
           <ServiceRow name="hydrahive-conduwuit" status="ok" />
           <ServiceRow name="hydrahive-console"   status="ok" />
           <ServiceRow name="ollama"            status="ok" />
         </div>
 
-        {/* Verzeichnisse */}
         <div className="bg-card border rounded-lg p-4 space-y-1">
-          <h2 className="text-sm font-medium mb-3">Verzeichnisse</h2>
+          <h2 className="text-sm font-medium mb-3">{t("system.directories")}</h2>
           <div className="space-y-2">
             <div className="flex justify-between text-sm py-2 border-b">
-              <span className="text-muted-foreground">Agenten</span>
+              <span className="text-muted-foreground">{t("system.agentsDir")}</span>
               <code className="text-xs">{status?.discovery?.agents_dir ?? "/agents"}</code>
             </div>
             <div className="flex justify-between text-sm py-2 border-b">
-              <span className="text-muted-foreground">Projekte</span>
+              <span className="text-muted-foreground">{t("system.projectsDir")}</span>
               <code className="text-xs">{status?.projects?.projects_dir ?? "/projects"}</code>
             </div>
             <div className="flex justify-between text-sm py-2">
-              <span className="text-muted-foreground">Aktive Projekte</span>
+              <span className="text-muted-foreground">{t("system.activeProjects")}</span>
               <span className="text-xs">{status?.sessions?.active_projects?.join(", ") || "—"}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* GPU Monitoring */}
       {gpu && gpu.available && gpu.gpus && gpu.gpus.length > 0 && (
         <div className="bg-card border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-4">
             <Zap className="h-4 w-4 text-yellow-500" />
-            <h2 className="text-sm font-medium">GPU</h2>
-            <span className="text-xs text-muted-foreground ml-auto">aktualisiert alle 15s</span>
+            <h2 className="text-sm font-medium">{t("system.gpu")}</h2>
+            <span className="text-xs text-muted-foreground ml-auto">{t("system.gpuRefresh")}</span>
           </div>
           <div className={`grid gap-6 ${gpu.gpus.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
             {gpu.gpus.map((g, i) => <GpuCard key={i} gpu={g} />)}
@@ -207,10 +204,9 @@ export function SystemPage() {
         </div>
       )}
 
-      {/* Agent Runtime Detail */}
       {agentList.length > 0 && (
         <div className="bg-card border rounded-lg p-4">
-          <h2 className="text-sm font-medium mb-4">Agent-Laufzeit</h2>
+          <h2 className="text-sm font-medium mb-4">{t("system.agentRuntime")}</h2>
           <div className="space-y-0">
             {agentList.map(([id, agent]) => {
               const hbWarn = agent.last_heartbeat_age > agent.heartbeat_timeout * 0.8;

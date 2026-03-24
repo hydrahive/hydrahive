@@ -21,22 +21,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
-
-const navAll = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", hint: "Lagebild" },
-  { to: "/my-agent", icon: Sparkles, label: "Mein Agent", hint: "Persoenlicher Kanal" },
-  { to: "/projects", icon: FolderKanban, label: "Projekte", hint: "Queues und Chats" },
-  { to: "/tools", icon: Wrench, label: "Tools", hint: "Aktionen und Skills" },
-];
-
-const navAdmin = [
-  { to: "/agents",   icon: Bot,        label: "Agenten",          hint: "Runtime und Profile" },
-  { to: "/system",   icon: Server,     label: "System",           hint: "Host und Dienste" },
-  { to: "/users",    icon: Users,      label: "Benutzer",         hint: "Accounts und Rollen" },
-  { to: "/audit",    icon: ShieldCheck,label: "Audit-Log",        hint: "Nachvollziehbarkeit" },
-  { to: "/backup",   icon: Archive,    label: "Backup",           hint: "Snapshots und Restore" },
-  { to: "/settings", icon: Settings,   label: "Einstellungen",    hint: "LLM, MCP, Gitea, VPN" },
-];
+import { useTranslation } from "react-i18next";
+import i18n from "@/lib/i18n";
 
 function useUpdateStatus(isAdmin: boolean) {
   const [updating, setUpdating] = useState(false);
@@ -110,9 +96,27 @@ function useDarkMode() {
 }
 
 export function AdminLayout() {
+  const { t } = useTranslation();
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const navAll = [
+    { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
+    { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
+    { to: "/projects", icon: FolderKanban, label: t("nav.projects"), hint: t("navHint.projects") },
+    { to: "/tools", icon: Wrench, label: t("nav.tools"), hint: t("navHint.tools") },
+  ];
+
+  const navAdmin = [
+    { to: "/agents",   icon: Bot,        label: t("nav.agents"),   hint: t("navHint.agents") },
+    { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
+    { to: "/users",    icon: Users,      label: t("nav.users"),    hint: t("navHint.users") },
+    { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
+    { to: "/backup",   icon: Archive,    label: t("nav.backup"),   hint: t("navHint.backup") },
+    { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
+  ];
+
   const nav = isAdmin ? [...navAll, ...navAdmin] : navAll;
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -136,7 +140,7 @@ export function AdminLayout() {
               O
             </div>
             <div>
-              <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">Control Fabric</p>
+              <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">{t("layout.controlFabric")}</p>
               <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">HydraHive</h1>
             </div>
           </div>
@@ -150,10 +154,10 @@ export function AdminLayout() {
         </div>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[hsl(var(--sidebar-foreground))]">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">{user?.username ?? "unbekannt"}</span>
+            <span className="font-medium">{user?.username ?? t("layout.unknown")}</span>
             {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
           </div>
-          <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">Hybrid-Konsole fuer Agenten, Runtime und Systeme.</p>
+          <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.hybridConsole")}</p>
         </div>
       </div>
 
@@ -177,11 +181,11 @@ export function AdminLayout() {
         {isAdmin && (
           <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-[hsl(var(--sidebar-foreground))]">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">Deployment</span>
-              <span className={cn("status-pill", updating ? "bg-white/10 text-[hsl(var(--sidebar-foreground))]" : "status-pill-ok")}>{updating ? "laeuft" : "bereit"}</span>
+              <span className="font-medium">{t("layout.deployment")}</span>
+              <span className={cn("status-pill", updating ? "bg-white/10 text-[hsl(var(--sidebar-foreground))]" : "status-pill-ok")}>{updating ? t("layout.running") : t("layout.ready")}</span>
             </div>
             <p className="mt-2 text-[hsl(var(--sidebar-muted))]">
-              {lastCommit ? `Letzter Stand ${lastCommit}` : "Kein Commit-Stand vorhanden"}
+              {lastCommit ? t("layout.lastCommit", { commit: lastCommit }) : t("layout.noCommit")}
             </p>
             {updateError && <p className="mt-2 text-[#ffd0d0]">{updateError}</p>}
             <button
@@ -190,18 +194,24 @@ export function AdminLayout() {
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", updating && "animate-spin")} />
-              {updating ? "Update laeuft" : "Update ausloesen"}
+              {updating ? t("layout.updateRunning") : t("layout.triggerUpdate")}
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={toggleDark}
             className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
           >
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            {dark ? "Hell" : "Dunkel"}
+            {dark ? t("layout.light") : t("layout.dark")}
+          </button>
+          <button
+            onClick={() => i18n.changeLanguage(i18n.language === "de" ? "en" : "de")}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
+          >
+            {i18n.language === "de" ? "EN" : "DE"}
           </button>
           <button
             onClick={() => {
@@ -211,7 +221,7 @@ export function AdminLayout() {
             className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:border-red-300/20 hover:bg-red-500/10 hover:text-red-100"
           >
             <LogOut className="h-4 w-4" />
-            Ende
+            {t("layout.logout")}
           </button>
         </div>
       </div>
@@ -244,14 +254,14 @@ export function AdminLayout() {
                 <Menu className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">Operations Console</p>
+                <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">{t("layout.operationsConsole")}</p>
                 <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "HydraHive"}</h2>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="status-pill">{activeItem?.hint ?? "Systemansicht"}</span>
+              <span className="status-pill">{activeItem?.hint ?? t("layout.systemView")}</span>
               <span className={cn("status-pill", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
-                {updating ? "Update aktiv" : "System bereit"}
+                {updating ? t("layout.updateActive") : t("layout.systemReady")}
               </span>
             </div>
           </div>

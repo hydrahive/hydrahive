@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [gpu, setGpu] = useState<GpuInfo | null>(null);
@@ -67,11 +69,10 @@ export function DashboardPage() {
   const problemAgents = useMemo(() => {
     return Object.entries(agentMap)
       .map(([id, entry]) => {
-        // Template-Agenten werden nicht gestartet — kein Problem
         if (id.endsWith("_template") || id.endsWith("-template")) return null;
         const runtimeState = entry?.runtime;
         if (!runtimeState) {
-          return { id, severity: "warn", summary: "Keine Runtime aktiv", detail: "Agent ist konfiguriert, aber aktuell nicht gestartet." };
+          return { id, severity: "warn", summary: t("agents.noRuntime"), detail: "Agent ist konfiguriert, aber aktuell nicht gestartet." };
         }
         if (runtimeState.status !== "running") {
           return { id, severity: "critical", summary: `Runtime ${runtimeState.status}`, detail: "Agent meldet keinen laufenden Zustand." };
@@ -88,7 +89,7 @@ export function DashboardPage() {
       })
       .filter((entry): entry is { id: string; severity: "warn" | "critical"; summary: string; detail: string } => entry !== null)
       .sort((a, b) => (a.severity === b.severity ? a.id.localeCompare(b.id) : a.severity === "critical" ? -1 : 1));
-  }, [agentMap]);
+  }, [agentMap, t]);
   const projectSignals = useMemo(() => {
     return activeProjects.map((id) => {
       const entry = projectMap[id];
@@ -115,30 +116,30 @@ export function DashboardPage() {
   const cards = [
     {
       icon: Activity,
-      label: "Core",
-      value: healthy === null ? "..." : healthy ? "Online" : "Offline",
-      meta: healthy === false ? "API antwortet nicht stabil" : "Healthcheck und API erreichbar",
+      label: t("dashboard.coreLabel", { defaultValue: "Core" }),
+      value: healthy === null ? "..." : healthy ? t("dashboard.coreOnline") : t("dashboard.coreOffline"),
+      meta: healthy === false ? t("dashboard.coreApiUnstable") : t("dashboard.coreApiOk"),
       state: healthy === false ? "problem" : "ok",
     },
     {
       icon: Bot,
-      label: "Agenten",
+      label: t("dashboard.agentsLabel"),
       value: agents ?? "...",
-      meta: "Erkannte Agenten im aktuellen Stand",
+      meta: t("dashboard.agentsNote"),
       state: "ok",
     },
     {
       icon: FolderKanban,
-      label: "Projekte",
+      label: t("dashboard.projectsLabel"),
       value: projects ?? "...",
-      meta: "Aktive Projektdefinitionen",
+      meta: t("dashboard.projectsNote"),
       state: "ok",
     },
     {
       icon: Cpu,
-      label: "Runtime",
+      label: t("dashboard.runtimeLabel"),
       value: running,
-      meta: "Gerade laufende Agentenprozesse",
+      meta: t("dashboard.runtimeNote"),
       state: "ok",
     },
   ];
@@ -146,44 +147,48 @@ export function DashboardPage() {
   const healthTone = healthy === false ? "bg-destructive/12 text-destructive" : "status-pill-ok";
   const systemFacts = useMemo(
     () => [
-      { label: "Discovery", value: agents ?? "...", note: "Agentprofile geladen" },
-      { label: "Projects", value: projects ?? "...", note: "Projektflaechen aktiv" },
-      { label: "Runtime", value: running, note: "Workloads in Ausfuehrung" },
-      { label: "Heartbeats", value: runningHeartbeats, note: "Geplante Systemaufgaben" },
-      { label: "Sessions", value: activeProjects.length, note: "Aktive Projekt- oder Agent-Sessions" },
+      { label: "Discovery", value: agents ?? "...", note: t("dashboard.discoveryNote") },
+      { label: "Projects", value: projects ?? "...", note: t("dashboard.projectsActive") },
+      { label: "Runtime", value: running, note: t("dashboard.runtimeRunning") },
+      { label: "Heartbeats", value: runningHeartbeats, note: t("dashboard.heartbeatNote") },
+      { label: "Sessions", value: activeProjects.length, note: t("dashboard.sessionsNote") },
     ],
-    [activeProjects.length, agents, projects, running, runningHeartbeats],
+    [activeProjects.length, agents, projects, running, runningHeartbeats, t],
   );
   const attentionItems = useMemo(() => {
     const items: { tone: "critical" | "warn" | "info"; title: string; detail: string }[] = [];
     if (healthy === false) {
-      items.push({ tone: "critical", title: "Core gestört", detail: "Healthcheck oder API-Antwort ist aktuell nicht stabil." });
+      items.push({ tone: "critical", title: t("dashboard.coreDisturbed2"), detail: t("dashboard.coreDisturbed2Detail") });
     }
     if (updateState === "error") {
-      items.push({ tone: "critical", title: "Update-Fehler", detail: update?.error || "Der letzte Update-Lauf hat einen Fehler gemeldet." });
+      items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || "Der letzte Update-Lauf hat einen Fehler gemeldet." });
     } else if (updateState === "running") {
-      items.push({ tone: "info", title: "Update läuft", detail: "Ein Rollout oder Self-Update ist gerade aktiv." });
+      items.push({ tone: "info", title: t("dashboard.updateRunning2"), detail: t("dashboard.updateRunning2Detail") });
     }
     if (problemAgents.length > 0) {
       const critical = problemAgents.filter((entry) => entry.severity === "critical").length;
       items.push({
         tone: critical > 0 ? "critical" : "warn",
-        title: `${problemAgents.length} Agentensignal${problemAgents.length !== 1 ? "e" : ""}`,
-        detail: critical > 0 ? `${critical} kritisch, Rest mit Warnstatus.` : "Auffällige Heartbeats oder Restarts erkannt.",
+        title: problemAgents.length !== 1
+          ? t("dashboard.agentSignalCountPlural", { count: problemAgents.length })
+          : t("dashboard.agentSignalCount", { count: problemAgents.length }),
+        detail: critical > 0
+          ? t("dashboard.criticalAgents", { critical })
+          : t("dashboard.heartbeatWarn"),
       });
     }
     if (hottestGpu && (hottestGpu.temp_c ?? 0) >= 80) {
       items.push({
         tone: "warn",
-        title: `GPU heiß (${hottestGpu.temp_c ?? "-"}°C)`,
+        title: t("dashboard.gpuHot", { temp: hottestGpu.temp_c ?? "-" }),
         detail: `${hottestGpu.name} liegt über dem normalen Temperaturfenster.`,
       });
     }
     if (items.length === 0) {
-      items.push({ tone: "info", title: "Keine akuten Auffälligkeiten", detail: "Core, Runtime und Update-Lage wirken im Moment stabil." });
+      items.push({ tone: "info", title: t("dashboard.noIssues"), detail: t("dashboard.noIssuesDetail") });
     }
     return items.slice(0, 4);
-  }, [healthy, hottestGpu, problemAgents, update?.error, updateState]);
+  }, [healthy, hottestGpu, problemAgents, update?.error, updateState, t]);
   const attentionTone = attentionItems.some((item) => item.tone === "critical")
     ? "bg-destructive/12 text-destructive"
     : attentionItems.some((item) => item.tone === "warn")
@@ -198,19 +203,18 @@ export function DashboardPage() {
             <div className="flex flex-wrap items-center gap-3">
               <span className={healthTone + " status-pill"}>
                 <span className={"dot " + (healthy === false ? "bg-destructive" : "bg-primary")} />
-                {healthy === false ? "Core gestoert" : "Core erreichbar"}
+                {healthy === false ? t("dashboard.coreDisturbed") : t("dashboard.coreReachable")}
               </span>
               <span className="status-pill">
                 <Radar className="h-3.5 w-3.5" />
-                Dashboard jetzt als Operations-Flaeche
+                {t("dashboard.dashboardLabel")}
               </span>
             </div>
 
             <div>
-              <h1 className="shell-title">Operations-Dashboard fuer den laufenden HydraHive-Stack</h1>
+              <h1 className="shell-title">{t("dashboard.title")}</h1>
               <p className="shell-copy mt-3 max-w-2xl">
-                Diese Flaeche zeigt jetzt nicht nur Basiszahlen, sondern die fuer den Betrieb wichtigsten Signale:
-                Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivitaet.
+                {t("dashboard.subtitle")}
               </p>
             </div>
           </div>
@@ -219,19 +223,19 @@ export function DashboardPage() {
             <div className="app-panel app-panel-muted p-5">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Workflow className="h-4 w-4 text-primary" />
-                Heute im Fokus
+                {t("dashboard.focusToday")}
               </div>
               <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-start justify-between gap-3">
-                  <span>Runtime- und Update-Lage schneller erfassen</span>
+                  <span>{t("dashboard.focus1")}</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span>GPU- und Heartbeat-Signale ohne Seitenwechsel sehen</span>
+                  <span>{t("dashboard.focus2")}</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
                 <div className="flex items-start justify-between gap-3">
-                  <span>letzte Admin-/Systemereignisse direkt im Dashboard</span>
+                  <span>{t("dashboard.focus3")}</span>
                   <ArrowRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                 </div>
               </div>
@@ -242,12 +246,12 @@ export function DashboardPage() {
                 </span>
                 <span className="status-pill">
                   <TimerReset className="h-3.5 w-3.5" />
-                  {lastUpdated ? `Update ${lastUpdated.toLocaleTimeString("de-DE")}` : "Erster Sync läuft"}
+                  {lastUpdated ? t("dashboard.updateSync", { time: lastUpdated.toLocaleTimeString("de-DE") }) : t("dashboard.firstSync")}
                 </span>
                 {isRefreshing && (
                   <span className="status-pill">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    Live Refresh
+                    {t("dashboard.liveRefresh")}
                   </span>
                 )}
               </div>
@@ -260,12 +264,16 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="metric-kicker">Attention</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">Was gerade Aufmerksamkeit braucht</h2>
+              <p className="metric-kicker">{t("dashboard.attention")}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{t("dashboard.attentionTitle")}</h2>
             </div>
             <span className={`status-pill ${attentionTone}`}>
               <Siren className="h-3.5 w-3.5" />
-              {attentionItems.some((item) => item.tone === "critical") ? "kritisch" : attentionItems.some((item) => item.tone === "warn") ? "warn" : "stabil"}
+              {attentionItems.some((item) => item.tone === "critical")
+                ? t("dashboard.critical")
+                : attentionItems.some((item) => item.tone === "warn")
+                  ? t("dashboard.warn")
+                  : t("dashboard.stable")}
             </span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -288,24 +296,24 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="metric-kicker">Live</p>
-              <h2 className="mt-2 text-lg font-semibold tracking-tight">Realtime-Lage</h2>
+              <p className="metric-kicker">{t("dashboard.liveLabel")}</p>
+              <h2 className="mt-2 text-lg font-semibold tracking-tight">{t("dashboard.realtimeState")}</h2>
             </div>
             <span className="status-pill status-pill-ok">15s</span>
           </div>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
-                <span>Polling</span>
-                <span className="status-pill">{isRefreshing ? "läuft" : "bereit"}</span>
+                <span>{t("dashboard.polling")}</span>
+                <span className="status-pill">{isRefreshing ? t("layout.running") : t("layout.ready")}</span>
               </div>
             </div>
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Letzter Sync</div>
-              <div className="mt-2 font-medium text-foreground">{lastUpdated ? lastUpdated.toLocaleTimeString("de-DE") : "noch kein Sync"}</div>
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.lastSync")}</div>
+              <div className="mt-2 font-medium text-foreground">{lastUpdated ? lastUpdated.toLocaleTimeString("de-DE") : t("dashboard.noSync")}</div>
             </div>
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Aktive Beobachter</div>
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.activeObservers")}</div>
               <div className="mt-2 text-foreground">{runningHeartbeats} Heartbeats · {activeProjects.length} Sessions · {problemAgents.length} Signale</div>
             </div>
           </div>
@@ -333,10 +341,10 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="metric-kicker">Lagebild</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">Kompakte Betriebsansicht</h2>
+              <p className="metric-kicker">{t("dashboard.overviewKicker")}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{t("dashboard.overviewTitle")}</h2>
             </div>
-            <span className="status-pill status-pill-ok">Uebersicht</span>
+            <span className="status-pill status-pill-ok">{t("dashboard.overview")}</span>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {systemFacts.map((item) => (
@@ -352,7 +360,7 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center gap-2">
             <RefreshCw className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Update-Status</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.updateStatus")}</h2>
           </div>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
@@ -362,8 +370,8 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Commit</div>
-              <div className="mt-2 font-mono text-foreground">{update?.commit ?? "unbekannt"}</div>
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.commit")}</div>
+              <div className="mt-2 font-mono text-foreground">{update?.commit ?? t("dashboard.commitUnknown")}</div>
             </div>
             {update?.error && <div className="rounded-2xl bg-destructive/10 px-4 py-3 text-destructive">{update.error}</div>}
           </div>
@@ -374,11 +382,11 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">GPU / Systemsignal</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.gpuSignal")}</h2>
           </div>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             {!gpu?.available || gpuList.length === 0 ? (
-              <div className="rounded-2xl bg-secondary/55 px-4 py-3">Keine GPU-Daten verfuegbar.</div>
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">{t("dashboard.noGpu")}</div>
             ) : (
               gpuList.slice(0, 2).map((entry) => (
                 <div key={entry.name} className="rounded-2xl bg-secondary/55 px-4 py-3">
@@ -395,24 +403,24 @@ export function DashboardPage() {
                 </div>
               ))
             )}
-            {hottestGpu && <div className="text-xs text-muted-foreground">Heisseste GPU: {hottestGpu.name} bei {hottestGpu.temp_c ?? "-"}°C</div>}
+            {hottestGpu && <div className="text-xs text-muted-foreground">{t("dashboard.hottestGpu", { name: hottestGpu.name, temp: hottestGpu.temp_c ?? "-" })}</div>}
           </div>
         </div>
 
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Clock3 className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Heartbeat-Tasks</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.heartbeatTasks")}</h2>
           </div>
           <div className="mt-4 space-y-3">
             {heartbeatTasks.length === 0 ? (
-              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">Keine Heartbeat-Tasks aktiv.</div>
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">{t("dashboard.noHeartbeat")}</div>
             ) : (
               heartbeatTasks.slice(0, 4).map((task) => (
                 <div key={task.task_id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-foreground">{task.agent_id}</span>
-                    <span className="status-pill">{task.interval ? `${task.interval}s` : task.schedule ?? "manuell"}</span>
+                    <span className="status-pill">{task.interval ? `${task.interval}s` : task.schedule ?? t("dashboard.manual")}</span>
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">{task.message}</div>
                 </div>
@@ -424,11 +432,11 @@ export function DashboardPage() {
         <div className="section-card md:col-span-2 xl:col-span-1">
           <div className="flex items-center gap-2">
             <Layers3 className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Letzte Audit-Events</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.lastAudit")}</h2>
           </div>
           <div className="mt-4 space-y-3">
             {audit.length === 0 ? (
-              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">Keine Audit-Events geladen.</div>
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">{t("dashboard.noAudit")}</div>
             ) : (
               audit.map((entry) => (
                 <div key={entry.id} className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
@@ -448,12 +456,12 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Priorisierte Agenten-Signale</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.agentSignals")}</h2>
           </div>
           <div className="mt-4 space-y-3">
             {problemAgents.length === 0 ? (
               <div className="rounded-2xl bg-secondary/55 px-4 py-3 text-sm text-muted-foreground">
-                Aktuell keine auffaelligen Agenten. Runtime und Heartbeats wirken stabil.
+                {t("dashboard.noAgentSignals")}
               </div>
             ) : (
               problemAgents.slice(0, 5).map((agent) => (
@@ -476,18 +484,18 @@ export function DashboardPage() {
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Workflow className="h-4 w-4 text-primary" />
-            <h2 className="text-lg font-semibold tracking-tight">Aktive Projekte</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.activeProjects")}</h2>
           </div>
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             {projectSignals.length === 0 ? (
-              <div className="rounded-2xl bg-secondary/55 px-4 py-3">Keine aktiven Sessions gemeldet.</div>
+              <div className="rounded-2xl bg-secondary/55 px-4 py-3">{t("dashboard.noActiveSessions")}</div>
             ) : (
               projectSignals.slice(0, 5).map((project) => (
                 <div key={project.id} className="rounded-2xl bg-secondary/55 px-4 py-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <span className="font-medium text-foreground">{project.title}</span>
                     <span className={project.tone === "warn" ? "status-pill bg-accent/15 text-accent" : "status-pill status-pill-ok"}>
-                      aktiv
+                      {t("dashboard.active")}
                     </span>
                   </div>
                   <div className="mt-2 text-xs text-muted-foreground">{project.summary}</div>

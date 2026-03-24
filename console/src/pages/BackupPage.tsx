@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Archive, Download, Trash2, RefreshCw, RotateCcw, Plus, AlertTriangle } from "lucide-react";
 import { api, BackupEntry } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -13,6 +14,7 @@ function fmtDate(iso: string): string {
 }
 
 export function BackupPage() {
+  const { t } = useTranslation();
   const [backups,    setBackups]    = useState<BackupEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState("");
@@ -61,8 +63,7 @@ export function BackupPage() {
     try {
       await api.restoreBackup(name);
       setError("");
-      // Service startet neu — kurze Info
-      alert(`Restore von "${name}" gestartet. HydraHive startet neu — bitte in 10 Sekunden neu laden.`);
+      alert(t("backup.restoreStarted", { name }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Restore fehlgeschlagen");
     } finally { setRestoring(null); }
@@ -70,24 +71,23 @@ export function BackupPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Backup & Restore</h1>
+          <h1 className="text-xl font-semibold">{t("backup.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Sichert /etc/hydrahive, /agents und /projects
+            {t("backup.subtitle")}
           </p>
         </div>
         <div className="flex gap-2">
           <button onClick={refresh} disabled={refreshing}
             className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Aktualisieren
+            {t("backup.refresh")}
           </button>
           <button onClick={handleCreate} disabled={creating}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50">
             <Plus className={`h-3.5 w-3.5 ${creating ? "animate-spin" : ""}`} />
-            {creating ? "Erstelle..." : "Backup erstellen"}
+            {creating ? t("backup.creating") : t("backup.createBtn")}
           </button>
         </div>
       </div>
@@ -98,7 +98,6 @@ export function BackupPage() {
         </div>
       )}
 
-      {/* Tabelle */}
       {loading ? (
         <div className="space-y-2">
           {[1,2,3].map(i => <div key={i} className="h-12 bg-muted/20 rounded-lg animate-pulse" />)}
@@ -106,10 +105,10 @@ export function BackupPage() {
       ) : backups.length === 0 ? (
         <div className="bg-card border rounded-lg p-12 text-center space-y-3">
           <Archive className="h-10 w-10 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Noch keine Backups vorhanden.</p>
+          <p className="text-sm text-muted-foreground">{t("backup.noBackups")}</p>
           <button onClick={handleCreate} disabled={creating}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4" />Erstes Backup erstellen
+            <Plus className="h-4 w-4" />{t("backup.firstBackup")}
           </button>
         </div>
       ) : (
@@ -117,10 +116,10 @@ export function BackupPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/20 text-xs text-muted-foreground uppercase tracking-wide">
-                <th className="px-4 py-2.5 text-left">Backup</th>
-                <th className="px-4 py-2.5 text-left">Erstellt</th>
-                <th className="px-4 py-2.5 text-right">Größe</th>
-                <th className="px-4 py-2.5 text-right">Aktionen</th>
+                <th className="px-4 py-2.5 text-left">{t("backup.colBackup")}</th>
+                <th className="px-4 py-2.5 text-left">{t("backup.colCreated")}</th>
+                <th className="px-4 py-2.5 text-right">{t("backup.colSize")}</th>
+                <th className="px-4 py-2.5 text-right">{t("backup.colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -131,50 +130,47 @@ export function BackupPage() {
                   <td className="px-4 py-3 text-xs text-right">{fmtSize(b.size)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {/* Download */}
                       <a href={api.downloadBackupUrl(b.name)}
                         className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-                        title="Herunterladen" download>
+                        title={t("backup.download")} download>
                         <Download className="h-3.5 w-3.5" />
                       </a>
 
-                      {/* Restore */}
                       {confirmRes === b.name ? (
                         <span className="flex items-center gap-1 text-xs">
-                          <span className="text-orange-500">Wirklich?</span>
+                          <span className="text-orange-500">{t("backup.really")}</span>
                           <button onClick={() => handleRestore(b.name)} disabled={restoring === b.name}
                             className="px-2 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50">
-                            Ja
+                            {t("backup.yes")}
                           </button>
                           <button onClick={() => setConfirmRes(null)}
                             className="px-2 py-0.5 text-xs border rounded hover:bg-accent">
-                            Nein
+                            {t("backup.no")}
                           </button>
                         </span>
                       ) : (
                         <button onClick={() => setConfirmRes(b.name)} disabled={!!restoring}
-                          title="Wiederherstellen"
+                          title={t("backup.restore")}
                           className="p-1.5 rounded hover:bg-orange-500/10 hover:text-orange-500 transition-colors text-muted-foreground disabled:opacity-50">
                           <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                       )}
 
-                      {/* Delete */}
                       {confirmDel === b.name ? (
                         <span className="flex items-center gap-1 text-xs">
-                          <span className="text-destructive">Löschen?</span>
+                          <span className="text-destructive">{t("backup.deleting")}</span>
                           <button onClick={() => handleDelete(b.name)} disabled={deleting === b.name}
                             className="px-2 py-0.5 text-xs bg-destructive text-destructive-foreground rounded hover:bg-destructive/90 disabled:opacity-50">
-                            Ja
+                            {t("backup.yes")}
                           </button>
                           <button onClick={() => setConfirmDel(null)}
                             className="px-2 py-0.5 text-xs border rounded hover:bg-accent">
-                            Nein
+                            {t("backup.no")}
                           </button>
                         </span>
                       ) : (
                         <button onClick={() => setConfirmDel(b.name)} disabled={!!deleting}
-                          title="Löschen"
+                          title={t("backup.delete")}
                           className="p-1.5 rounded hover:bg-destructive/10 hover:text-destructive transition-colors text-muted-foreground disabled:opacity-50">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -188,11 +184,10 @@ export function BackupPage() {
         </div>
       )}
 
-      {/* Hinweis Restore */}
       {backups.length > 0 && (
         <div className="flex items-start gap-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-orange-400" />
-          <span>Restore überschreibt Konfiguration und startet HydraHive neu. Laufende Chats werden unterbrochen.</span>
+          <span>{t("backup.restoreWarning")}</span>
         </div>
       )}
     </div>

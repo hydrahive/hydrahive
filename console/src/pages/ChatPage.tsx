@@ -4,6 +4,7 @@ import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles, Smile }
 import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
+import { useTranslation } from "react-i18next";
 
 interface Message {
   id: string;
@@ -13,22 +14,23 @@ interface Message {
   tokenUsage?: { input: number; output: number };
 }
 
-const SLASH_COMMANDS = [
-  { cmd: "/help", desc: "Verfuegbare Commands anzeigen" },
-  { cmd: "/clear", desc: "Chat-Verlauf leeren" },
-  { cmd: "/status", desc: "Projekt- und Agent-Status anzeigen" },
-  { cmd: "/retry", desc: "Letzte Nachricht nochmal senden" },
-  { cmd: "/model", desc: "Aktuelles LLM-Modell anzeigen" },
-];
-
 let msgCounter = 0;
 function mkMsg(role: Message["role"], content: string, workers?: string[]): Message {
   return { id: `msg-${++msgCounter}`, role, content, workers };
 }
 
 export function ChatPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  const SLASH_COMMANDS = [
+    { cmd: "/help",   desc: t("slashCommands.help") },
+    { cmd: "/clear",  desc: t("slashCommands.clear") },
+    { cmd: "/status", desc: t("slashCommands.status") },
+    { cmd: "/retry",  desc: t("slashCommands.retry") },
+    { cmd: "/model",  desc: t("slashCommands.model") },
+  ];
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -108,19 +110,19 @@ export function ChatPage() {
     const base = parts[0].toLowerCase();
 
     if (base === "/help") {
-      sysMsg("**Verfuegbare Commands:**\n\n" + SLASH_COMMANDS.map((c) => `\`${c.cmd}\` — ${c.desc}`).join("\n"));
+      sysMsg("**" + t("slashCommands.help") + ":**\n\n" + SLASH_COMMANDS.map((c) => `\`${c.cmd}\` — ${c.desc}`).join("\n"));
       return true;
     }
     if (base === "/clear") {
       setMessages([]);
-      sysMsg("Chat-Verlauf geleert.");
+      sysMsg(t("slashCommands.clear") + ".");
       return true;
     }
     if (base === "/status") {
       const cfg = projectData.config as { agents?: { boss?: string; workers?: string[] } } | undefined;
       const boss = cfg?.agents?.boss ?? "—";
       const workers = cfg?.agents?.workers?.join(", ") || "—";
-      const model = bossModel.model ?? "nicht konfiguriert";
+      const model = bossModel.model ?? t("chat.notConfigured");
       sysMsg(`**Projekt:** ${projectName} (\`${id}\`)\n**Boss-Agent:** ${boss}\n**Worker-Agenten:** ${workers}\n**LLM-Modell:** ${model}`);
       return true;
     }
@@ -135,12 +137,12 @@ export function ChatPage() {
       return true;
     }
     if (base === "/model") {
-      const model = bossModel.model ?? "nicht konfiguriert";
+      const model = bossModel.model ?? t("chat.notConfigured");
       const temp = bossModel.temperature ?? "—";
       sysMsg(`**Aktuelles Modell:** \`${model}\`\n**Temperatur:** ${temp}`);
       return true;
     }
-    sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\` fuer eine Uebersicht.`);
+    sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\`.`);
     return true;
   }
 
@@ -243,12 +245,12 @@ export function ChatPage() {
   }
 
   const statusPills = useMemo(() => {
-    const model = bossModel.model ?? "kein Modell";
+    const model = bossModel.model ?? t("chat.noModel");
     return [
       { label: model, tone: "ok" },
-      { label: showSwarm ? "Swarm sichtbar" : "Swarm kompakt", tone: "default" },
+      { label: showSwarm ? t("chat.swarmVisiblePill") : t("chat.swarmCompactPill"), tone: "default" },
     ];
-  }, [bossModel.model, showSwarm]);
+  }, [bossModel.model, showSwarm, t]);
 
   return (
     <div className="space-y-6">
@@ -258,15 +260,14 @@ export function ChatPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={() => navigate("/projects")} className="inline-flex items-center gap-2 rounded-2xl border bg-background/60 px-4 py-2 text-sm transition hover:bg-background">
                 <ArrowLeft className="h-4 w-4" />
-                Zurueck zu Projekten
+                {t("chat.backToProjects")}
               </button>
-              <span className="status-pill status-pill-ok"><Radar className="h-3.5 w-3.5" />Projekt-Chat aktiv</span>
+              <span className="status-pill status-pill-ok"><Radar className="h-3.5 w-3.5" />{t("chat.projectChatActive")}</span>
             </div>
             <div>
               <h1 className="shell-title">{projectName}</h1>
               <p className="shell-copy mt-3 max-w-2xl">
-                Direkter Kanal zum Boss-Agenten des Projekts. Streaming, Slash-Commands und Tool-Hinweise bleiben erhalten,
-                aber der Chat ist jetzt visuell staerker als Arbeitsflaeche statt als nackter Verlauf aufgebaut.
+                {t("chat.chatSubtitle")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -278,14 +279,14 @@ export function ChatPage() {
           </div>
           <div className="lg:col-span-4">
             <div className="app-panel app-panel-muted p-5">
-              <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" />Chat-Steuerung</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" />{t("chat.chatControl")}</div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => setShowSwarm((s) => !s)} className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm transition ${showSwarm ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}>
                   <Network className="h-4 w-4" />
-                  {showSwarm ? "Swarm ausblenden" : "Swarm einblenden"}
+                  {showSwarm ? t("chat.hideSwarm") : t("chat.showSwarm")}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">Slash-Commands bleiben unten ueber ` / ` verfuegbar. Tool-Aufrufe werden waehrend des Streams weiterhin live angezeigt.</p>
+              <p className="mt-3 text-sm text-muted-foreground">{t("chat.slashHint")}</p>
             </div>
           </div>
         </div>
@@ -297,10 +298,14 @@ export function ChatPage() {
             <div className="border-b bg-muted/20 px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="metric-kicker">Conversation</p>
-                  <h2 className="mt-2 text-lg font-semibold tracking-tight">Projektkanal</h2>
+                  <p className="metric-kicker">{t("chat.conversation")}</p>
+                  <h2 className="mt-2 text-lg font-semibold tracking-tight">{t("chat.projectChannel")}</h2>
                 </div>
-                <span className="status-pill">{messages.length} Nachricht{messages.length !== 1 ? "en" : ""}</span>
+                <span className="status-pill">
+                  {messages.length !== 1
+                    ? t("chat.messageCountPlural", { count: messages.length })
+                    : t("chat.messageCount", { count: messages.length })}
+                </span>
               </div>
             </div>
 
@@ -308,8 +313,8 @@ export function ChatPage() {
               {messages.length === 0 && (
                 <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
                   <Bot className="h-10 w-10" />
-                  <p className="text-sm">Schreib eine Nachricht, um den Boss-Agenten zu erreichen.</p>
-                  <p className="text-xs opacity-60">Tippe <code className="rounded bg-muted px-1">/help</code> fuer verfuegbare Commands.</p>
+                  <p className="text-sm">{t("chat.emptyChat")}</p>
+                  <p className="text-xs opacity-60">{t("chat.slashTip")} <code className="rounded bg-muted px-1">/help</code> {t("chat.slashTip2")}</p>
                 </div>
               )}
               {messages.map((msg) => {
@@ -409,11 +414,11 @@ export function ChatPage() {
               <div className="relative rounded-3xl border bg-muted/20 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span className="status-pill">Enter senden</span>
-                    <span className="status-pill">Shift+Enter Umbruch</span>
-                    <span className="status-pill">/ Commands</span>
+                    <span className="status-pill">{t("chat.enterSend")}</span>
+                    <span className="status-pill">{t("chat.shiftEnterBreak")}</span>
+                    <span className="status-pill">{t("chat.slashCommands")}</span>
                   </div>
-                  {sending && <span className="status-pill status-pill-ok">Streaming aktiv</span>}
+                  {sending && <span className="status-pill status-pill-ok">{t("chat.streamingActive")}</span>}
                 </div>
                 {showEmoji && (
                   <>
@@ -438,7 +443,7 @@ export function ChatPage() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={onKeyDown}
                     onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                    placeholder="Nachricht... (Enter zum Senden, Shift+Enter fuer Zeilenumbruch, / fuer Commands)"
+                    placeholder={t("chat.messagePlaceholder")}
                     rows={1}
                     disabled={sending}
                     className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
@@ -458,52 +463,56 @@ export function ChatPage() {
           <aside className="border-t bg-muted/10 p-4 sm:p-5 lg:self-start lg:border-t-0 lg:border-l">
             <div className="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
               <div className="app-panel app-panel-muted p-4">
-                <p className="metric-kicker">Live</p>
+                <p className="metric-kicker">{t("chat.livePanel")}</p>
                 <div className="mt-3 space-y-3">
                   <div className="flex items-start gap-3">
                     <span className="rounded-2xl bg-primary/12 p-2 text-primary"><Sparkles className="h-4 w-4" /></span>
                     <div>
-                      <p className="text-sm font-medium">Streaming</p>
-                      <p className="text-xs text-muted-foreground">{sending ? "Antwort wird gerade aufgebaut" : "Kein aktiver Stream"}</p>
+                      <p className="text-sm font-medium">{t("chat.streaming")}</p>
+                      <p className="text-xs text-muted-foreground">{sending ? t("chat.streamingBuilding") : t("chat.streamingIdle")}</p>
                     </div>
                   </div>
                   <div className="rounded-2xl border bg-background/75 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Aktives Tool</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("chat.activeTool")}</p>
                     {activeTool ? (
                       <div className="mt-2 space-y-1">
                         <p className="text-sm font-medium text-primary">{activeTool.name}</p>
-                        <p className="break-all text-xs text-muted-foreground">{activeTool.detail || "ohne Zusatzdetail"}</p>
+                        <p className="break-all text-xs text-muted-foreground">{activeTool.detail || t("chat.noToolDetail")}</p>
                       </div>
                     ) : (
-                      <p className="mt-2 text-xs text-muted-foreground">Kein Tool aktiv.</p>
+                      <p className="mt-2 text-xs text-muted-foreground">{t("chat.noTool")}</p>
                     )}
                   </div>
                 </div>
               </div>
 
               <div className="app-panel p-4">
-                <p className="metric-kicker">Projekt</p>
+                <p className="metric-kicker">{t("chat.projectPanel")}</p>
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Projekt</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("chat.projectPanel")}</p>
                     <p className="mt-1 font-medium">{projectName}</p>
                     <p className="font-mono text-xs text-muted-foreground">{id}</p>
                   </div>
                   <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Boss-Modell</p>
-                    <p className="mt-1 break-all font-medium">{bossModel.model ?? "nicht konfiguriert"}</p>
-                    <p className="text-xs text-muted-foreground">Temperatur {bossModel.temperature ?? "—"}</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("chat.bossModel")}</p>
+                    <p className="mt-1 break-all font-medium">{bossModel.model ?? t("chat.notConfigured")}</p>
+                    <p className="text-xs text-muted-foreground">{t("chat.temperature")} {bossModel.temperature ?? "—"}</p>
                   </div>
                   <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Verlauf</p>
-                    <p className="mt-1 font-medium">{messages.length} Nachrichten</p>
-                    <p className="text-xs text-muted-foreground">{showSwarm ? "Swarm-Hinweise sichtbar" : "Swarm-Hinweise kompakt"}</p>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("chat.history")}</p>
+                    <p className="mt-1 font-medium">
+                      {messages.length !== 1
+                        ? t("chat.messageCountPlural", { count: messages.length })
+                        : t("chat.messageCount", { count: messages.length })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{showSwarm ? t("chat.swarmVisible") : t("chat.swarmCompact")}</p>
                   </div>
                 </div>
               </div>
 
               <div className="app-panel p-4">
-                <p className="metric-kicker">Shortcuts</p>
+                <p className="metric-kicker">{t("chat.shortcuts")}</p>
                 <div className="mt-3 space-y-2">
                   {SLASH_COMMANDS.map((command) => (
                     <div key={command.cmd} className="rounded-2xl border bg-background/70 px-3 py-2">

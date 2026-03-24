@@ -5,6 +5,7 @@ import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
 import { VpnPage } from "@/pages/VpnPage";
+import { useTranslation } from "react-i18next";
 
 const TABS = [
   { id: "llm",   label: "LLM-Config",  icon: Cpu,       component: LlmConfigPage },
@@ -16,18 +17,17 @@ const TABS = [
 type TabId = typeof TABS[number]["id"];
 
 export function SettingsPage() {
+  const { t } = useTranslation();
   const [active, setActive] = useState<TabId>("llm");
   const ActiveComponent = TABS.find(t => t.id === active)!.component;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="px-6 pt-6 pb-0 border-b border-zinc-800">
         <div className="flex items-center gap-2 mb-4">
           <Settings size={20} className="text-zinc-400" />
-          <h1 className="text-lg font-semibold text-zinc-100">Systemeinstellungen</h1>
+          <h1 className="text-lg font-semibold text-zinc-100">{t("settings.title")}</h1>
         </div>
-        {/* Tab-Leiste */}
         <div className="flex gap-1">
           {TABS.map(tab => (
             <button
@@ -47,7 +47,6 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* Tab-Inhalt */}
       <div className="flex-1 overflow-auto">
         <ActiveComponent />
       </div>

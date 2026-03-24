@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Wrench, RefreshCw, ShieldCheck, Code2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface ToolSchema {
   name:                 string;
@@ -14,6 +15,7 @@ interface ToolSchema {
 }
 
 export function ToolsPage() {
+  const { t } = useTranslation();
   const [tools,     setTools]     = useState<Record<string, ToolSchema>>({});
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
@@ -40,15 +42,17 @@ export function ToolsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Tools</h1>
+          <h1 className="text-xl font-semibold">{t("tools.title")}</h1>
           <p className="text-sm text-muted-foreground">
-            {toolList.length} Tool{toolList.length !== 1 ? "s" : ""} im Core-Registry
+            {toolList.length !== 1
+              ? t("tools.subtitlePlural", { count: toolList.length })
+              : t("tools.subtitle", { count: toolList.length })}
           </p>
         </div>
         <button onClick={refresh} disabled={refreshing}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          Aktualisieren
+          {t("tools.refresh")}
         </button>
       </div>
 
@@ -63,7 +67,7 @@ export function ToolsPage() {
       {!loading && toolList.length === 0 && (
         <div className="bg-card border rounded-lg p-12 text-center">
           <Wrench className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">Keine Tools registriert</p>
+          <p className="text-sm text-muted-foreground">{t("tools.noTools")}</p>
         </div>
       )}
 
@@ -76,7 +80,6 @@ export function ToolsPage() {
 
             return (
               <div key={id} className="bg-card border rounded-lg overflow-hidden">
-                {/* Header */}
                 <button
                   onClick={() => toggle(id)}
                   className="w-full flex items-start gap-3 p-4 text-left hover:bg-accent/50 transition-colors"
@@ -102,7 +105,6 @@ export function ToolsPage() {
                   </div>
                 </button>
 
-                {/* Detail */}
                 {isOpen && (
                   <div className="px-4 pb-4 space-y-4 border-t">
                     <p className="text-sm text-muted-foreground pt-3">{tool.description}</p>
@@ -110,7 +112,7 @@ export function ToolsPage() {
                     {tool.permissions_required.length > 0 && (
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                          <ShieldCheck className="h-3.5 w-3.5" />Benötigte Berechtigungen
+                          <ShieldCheck className="h-3.5 w-3.5" />{t("tools.requiredPermissions")}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {tool.permissions_required.map(p => (
@@ -125,7 +127,7 @@ export function ToolsPage() {
                     {params.length > 0 && (
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                          <Code2 className="h-3.5 w-3.5" />Parameter
+                          <Code2 className="h-3.5 w-3.5" />{t("tools.parameters")}
                         </p>
                         <div className="space-y-1.5">
                           {params.map(([pname, pdef]) => (
@@ -155,7 +157,7 @@ export function ToolsPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Tools sind read-only — sie werden im Core definiert. Agenten deklarieren in ihrer agent.yaml welche Tools sie nutzen dürfen.
+        {t("tools.footer")}
       </p>
     </div>
   );

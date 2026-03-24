@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const EMPTY_SKILL = {
   filename: "",
@@ -15,6 +16,7 @@ const EMPTY_SKILL = {
 interface Props { agentId: string; }
 
 export function SkillsPanel({ agentId }: Props) {
+  const { t } = useTranslation();
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -76,13 +78,13 @@ export function SkillsPanel({ agentId }: Props) {
   }
 
   function addTrigger() {
-    const t = triggerInput.trim().toLowerCase();
-    if (t && !form.triggers.includes(t)) setForm((f) => ({ ...f, triggers: [...f.triggers, t] }));
+    const trig = triggerInput.trim().toLowerCase();
+    if (trig && !form.triggers.includes(trig)) setForm((f) => ({ ...f, triggers: [...f.triggers, trig] }));
     setTriggerInput("");
   }
 
-  function removeTrigger(t: string) {
-    setForm((f) => ({ ...f, triggers: f.triggers.filter((x) => x !== t) }));
+  function removeTrigger(trig: string) {
+    setForm((f) => ({ ...f, triggers: f.triggers.filter((x) => x !== trig) }));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -106,7 +108,7 @@ export function SkillsPanel({ agentId }: Props) {
   }
 
   async function handleDelete(filename: string) {
-    if (!confirm(`Skill "${filename}" loeschen?`)) return;
+    if (!confirm(t("skills.deleteConfirm", { file: filename }))) return;
     setDeleting(filename);
     try {
       await api.deleteSkill(agentId, filename);
@@ -124,14 +126,14 @@ export function SkillsPanel({ agentId }: Props) {
         <div>
           <div className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-primary" />
-            <h3 className="text-base font-semibold tracking-tight">Skills</h3>
+            <h3 className="text-base font-semibold tracking-tight">{t("skills.title")}</h3>
             <span className="status-pill">{skills.length}</span>
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">Skill-Dateien fuer den Agenten. Trigger, Scope und Prioritaet bleiben unveraendert, die Bearbeitung ist nur klarer strukturiert.</p>
+          <p className="mt-2 text-sm text-muted-foreground">{t("skills.subtitle")}</p>
         </div>
         <button onClick={openNew} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
           <Plus className="h-4 w-4" />
-          Neuer Skill
+          {t("skills.newSkill")}
         </button>
       </div>
 
@@ -141,67 +143,69 @@ export function SkillsPanel({ agentId }: Props) {
         <div className="app-panel mt-5 p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="metric-kicker">Skill</p>
-              <h4 className="mt-2 text-lg font-semibold tracking-tight">{editFile ? `Skill bearbeiten: ${editFile}` : "Neuen Skill anlegen"}</h4>
+              <p className="metric-kicker">{t("skills.title")}</p>
+              <h4 className="mt-2 text-lg font-semibold tracking-tight">
+                {editFile ? t("skills.editSkill", { file: editFile }) : t("skills.newSkillTitle")}
+              </h4>
             </div>
             <button onClick={closeForm} className="rounded-xl p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"><X className="h-4 w-4" /></button>
           </div>
           <form onSubmit={handleSave} className="mt-5 space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Dateiname *</label>
-                <input value={form.filename} disabled={!!editFile} onChange={(e) => set("filename", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder="z.B. steuern" required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50" />
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.filename")}</label>
+                <input value={form.filename} disabled={!!editFile} onChange={(e) => set("filename", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder={t("skills.filenamePlaceholder")} required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Skill-Name *</label>
-                <input value={form.skill} onChange={(e) => set("skill", e.target.value)} placeholder="z.B. Steuerberatung" required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.skillName")}</label>
+                <input value={form.skill} onChange={(e) => set("skill", e.target.value)} placeholder={t("skills.skillNamePlaceholder")} required className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Version</label>
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.version")}</label>
                 <input value={form.version} onChange={(e) => set("version", e.target.value)} placeholder="1.0" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Scope</label>
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.scope")}</label>
                 <select value={form.scope} onChange={(e) => set("scope", e.target.value)} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                   <option value="on-demand">on-demand</option>
                   <option value="always">always</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Priority (1-100)</label>
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.priority")}</label>
                 <input type="number" value={form.priority} min={1} max={100} onChange={(e) => set("priority", parseInt(e.target.value))} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
             </div>
 
             {form.scope === "on-demand" && (
               <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Trigger-Keywords</label>
+                <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.triggerKeywords")}</label>
                 <div className="flex flex-wrap gap-2">
-                  {form.triggers.map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
-                      {t}
-                      <button type="button" onClick={() => removeTrigger(t)}><X className="h-3 w-3" /></button>
+                  {form.triggers.map((trig) => (
+                    <span key={trig} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                      {trig}
+                      <button type="button" onClick={() => removeTrigger(trig)}><X className="h-3 w-3" /></button>
                     </span>
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input value={triggerInput} onChange={(e) => setTriggerInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTrigger(); } }} placeholder="Keyword eingeben, Enter zum Hinzufuegen" className="flex-1 rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input value={triggerInput} onChange={(e) => setTriggerInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTrigger(); } }} placeholder={t("skills.triggerPlaceholder")} className="flex-1 rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                   <button type="button" onClick={addTrigger} className="rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">+</button>
                 </div>
               </div>
             )}
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Inhalt (Markdown)</label>
-              <textarea value={form.content} onChange={(e) => set("content", e.target.value)} rows={6} placeholder="Beschreibe hier, was der Agent in diesem Skill-Kontext wissen soll..." className="w-full resize-none rounded-2xl border bg-background px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("skills.content")}</label>
+              <textarea value={form.content} onChange={(e) => set("content", e.target.value)} rows={6} placeholder={t("skills.contentPlaceholder")} className="w-full resize-none rounded-2xl border bg-background px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
 
             {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
+              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">{t("skills.cancel")}</button>
               <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                 <Save className="h-4 w-4" />
-                {saving ? "Speichern..." : editFile ? "Aktualisieren" : "Skill anlegen"}
+                {saving ? t("skills.saving") : editFile ? t("skills.update") : t("skills.create")}
               </button>
             </div>
           </form>
@@ -214,7 +218,7 @@ export function SkillsPanel({ agentId }: Props) {
         ) : skills.length === 0 && !showForm ? (
           <div className="section-card py-10 text-center text-sm text-muted-foreground">
             <Radar className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3">Keine Skills. Leg den ersten an.</p>
+            <p className="mt-3">{t("skills.noSkills")}</p>
           </div>
         ) : (
           skills.map((s) => (
@@ -227,7 +231,7 @@ export function SkillsPanel({ agentId }: Props) {
                     <span className={`rounded-full px-2 py-1 text-xs ${s.scope === "always" ? "bg-primary/10 text-primary" : "bg-secondary text-secondary-foreground"}`}>{s.scope}</span>
                     <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{s.filename}.md</span>
                     {s.author === "agent" && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-accent/30 px-2 py-1 text-xs text-accent-foreground" title="Vom Agenten erstellt">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-accent/30 px-2 py-1 text-xs text-accent-foreground" title={t("skills.createdByAgent")}>
                         <Bot className="h-3 w-3" />
                         Agent
                       </span>

@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface AgentEntry {
   config: { type: string; identity: string; model: string };
 }
 
 export function ProjectCreatePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [id,          setId]          = useState("");
@@ -38,7 +40,7 @@ export function ProjectCreatePage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!id || !name || !boss) { setError("ID, Name und Boss sind Pflichtfelder"); return; }
+    if (!id || !name || !boss) { setError(t("projectCreate.requiredFields")); return; }
     setSubmitting(true);
     try {
       await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm });
@@ -52,7 +54,6 @@ export function ProjectCreatePage() {
 
   return (
     <div className="p-6 max-w-2xl space-y-6 overflow-y-auto flex-1">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/projects")}
@@ -61,8 +62,8 @@ export function ProjectCreatePage() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
-          <h1 className="text-xl font-semibold">Neues Projekt</h1>
-          <p className="text-sm text-muted-foreground">Legt Verzeichnis, Linux-User, Samba-Share und Matrix-Room an</p>
+          <h1 className="text-xl font-semibold">{t("projectCreate.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("projectCreate.subtitle")}</p>
         </div>
       </div>
 
@@ -73,50 +74,47 @@ export function ProjectCreatePage() {
       )}
 
       <form onSubmit={submit} className="space-y-5">
-        {/* ID + Name */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Projekt-ID *</label>
+            <label className="text-sm font-medium">{t("projectCreate.projectId")}</label>
             <input
               value={id}
               onChange={e => setId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-              placeholder="mein-projekt"
+              placeholder={t("projectCreate.projectIdPlaceholder")}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
             />
-            <p className="text-xs text-muted-foreground">a-z, 0-9, _ und -</p>
+            <p className="text-xs text-muted-foreground">{t("projectCreate.projectIdHint")}</p>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Name *</label>
+            <label className="text-sm font-medium">{t("projectCreate.name")}</label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Mein Projekt"
+              placeholder={t("projectCreate.namePlaceholder")}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>
 
-        {/* Beschreibung */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Beschreibung</label>
+          <label className="text-sm font-medium">{t("projectCreate.description")}</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
-            placeholder="Wofür ist dieses Projekt?"
+            placeholder={t("projectCreate.descriptionPlaceholder")}
             className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
         </div>
 
-        {/* Boss */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Boss-Agent *</label>
+          <label className="text-sm font-medium">{t("projectCreate.bossAgent")}</label>
           <select
             value={boss}
             onChange={e => setBoss(e.target.value)}
             className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <option value="">— Agent wählen —</option>
+            <option value="">{t("projectCreate.selectAgent")}</option>
             {agentIds.map(aid => (
               <option key={aid} value={aid}>
                 {agents[aid].config.identity} ({aid})
@@ -125,16 +123,15 @@ export function ProjectCreatePage() {
           </select>
         </div>
 
-        {/* Workers */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Worker-Agenten</label>
+          <label className="text-sm font-medium">{t("projectCreate.workerAgents")}</label>
           <div className="flex gap-2">
             <select
               value={workerInput}
               onChange={e => setWorkerInput(e.target.value)}
               className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <option value="">— Worker hinzufügen —</option>
+              <option value="">{t("projectCreate.addWorker")}</option>
               {agentIds.filter(a => !workers.includes(a)).map(aid => (
                 <option key={aid} value={aid}>
                   {agents[aid].config.identity} ({aid})
@@ -164,34 +161,32 @@ export function ProjectCreatePage() {
           )}
         </div>
 
-        {/* Optionen */}
         <div className="space-y-2">
-          <label className="text-sm font-medium">Optionen</label>
+          <label className="text-sm font-medium">{t("projectCreate.options")}</label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={samba} onChange={e => setSamba(e.target.checked)} className="rounded" />
-            Samba-Share anlegen
+            {t("projectCreate.sambaShare")}
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={showSwarm} onChange={e => setShowSwarm(e.target.checked)} className="rounded" />
-            Swarm-Aktivität im Chat anzeigen
+            {t("projectCreate.showSwarm")}
           </label>
         </div>
 
-        {/* Aktionen */}
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
             disabled={submitting}
             className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {submitting ? "Wird angelegt…" : "Projekt anlegen"}
+            {submitting ? t("projectCreate.creating") : t("projectCreate.createBtn")}
           </button>
           <button
             type="button"
             onClick={() => navigate("/projects")}
             className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors"
           >
-            Abbrechen
+            {t("projectCreate.cancel")}
           </button>
         </div>
       </form>

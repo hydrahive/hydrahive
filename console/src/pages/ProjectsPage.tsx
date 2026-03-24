@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
 import { useAuth } from "@/hooks/useAuth";
+import { useTranslation } from "react-i18next";
 
 interface ProjectEntry {
   name: string;
@@ -47,6 +48,7 @@ interface CreateForm {
 const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true };
 
 export function ProjectsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [projects, setProjects] = useState<Record<string, ProjectEntry>>({});
@@ -132,12 +134,12 @@ export function ProjectsPage() {
     const workers = projectList.reduce((acc, [, proj]) => acc + proj.workers.length, 0);
     const matrix = projectList.filter(([, proj]) => !!proj.matrix_room).length;
     return [
-      { label: "Projekte", value: projectList.length, note: "Konfigurierte Arbeitsraeume" },
-      { label: "Swarm", value: swarm, note: "Mit sichtbarer Worker-Ebene" },
-      { label: "Worker", value: workers, note: "Gebundene Team-Agenten" },
-      { label: "Matrix", value: matrix, note: "Mit verbundenem Raum" },
+      { label: t("projects.projectsLabel"), value: projectList.length, note: t("projects.configuredWorkspaces") },
+      { label: t("projects.swarm"), value: swarm, note: t("projects.swarmVisible") },
+      { label: t("projects.worker"), value: workers, note: t("projects.boundAgents") },
+      { label: t("projects.matrix"), value: matrix, note: t("projects.connectedRoom") },
     ];
-  }, [projectList]);
+  }, [projectList, t]);
 
   return (
     <div className="space-y-6">
@@ -147,19 +149,20 @@ export function ProjectsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <span className="status-pill status-pill-ok">
                 <Radar className="h-3.5 w-3.5" />
-                {projectList.length} Projekt{projectList.length !== 1 ? "e" : ""} aktiv
+                {projectList.length !== 1
+                  ? t("projects.activeCountPlural", { count: projectList.length })
+                  : t("projects.activeCount", { count: projectList.length })}
               </span>
               <span className="status-pill">
                 <Workflow className="h-3.5 w-3.5" />
-                Arbeitsraeume mit Chat, AgentLink und Webhooks
+                {t("projects.workspacesLabel")}
               </span>
             </div>
 
             <div>
-              <h1 className="shell-title">Projekte als steuerbare Arbeitsraeume</h1>
+              <h1 className="shell-title">{t("projects.title")}</h1>
               <p className="shell-copy mt-3 max-w-2xl">
-                Projekte verbinden Boss-Agenten, Worker, Filesystem, Matrix, Integrationen und den operativen Chat.
-                Diese Seite zeigt jetzt staerker den echten Arbeitsraum pro Projekt statt nur seine Konfiguration.
+                {t("projects.subtitle")}
               </p>
             </div>
           </div>
@@ -168,7 +171,7 @@ export function ProjectsPage() {
             <div className="app-panel app-panel-muted p-5">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <FolderKanban className="h-4 w-4 text-primary" />
-                Projektaktionen
+                {t("projects.projectActions")}
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button
@@ -177,7 +180,7 @@ export function ProjectsPage() {
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border bg-background/70 px-4 py-2 text-sm transition hover:bg-background disabled:opacity-50"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-                  Aktualisieren
+                  {t("projects.refresh")}
                 </button>
                 {isAdmin && (
                   <button
@@ -185,7 +188,7 @@ export function ProjectsPage() {
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Neues Projekt
+                    {t("projects.newProject")}
                   </button>
                 )}
               </div>
@@ -210,8 +213,8 @@ export function ProjectsPage() {
         <section className="section-card space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="metric-kicker">Anlage</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">Neues Projekt anlegen</h2>
+              <p className="metric-kicker">{t("projects.create")}</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{t("projects.createTitle")}</h2>
             </div>
             <button
               onClick={() => {
@@ -221,40 +224,40 @@ export function ProjectsPage() {
               }}
               className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent"
             >
-              Abbrechen
+              {t("projects.cancel")}
             </button>
           </div>
           <form onSubmit={handleCreate} className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Projekt-ID *</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.projectId")}</label>
               <input
                 value={form.id}
                 onChange={(e) => setForm({ ...form, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") })}
-                placeholder="z.B. buchhaltung"
+                placeholder={t("projects.projectIdPlaceholder")}
                 required
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <p className="text-xs text-muted-foreground">Nur a-z, 0-9, _ und -</p>
+              <p className="text-xs text-muted-foreground">{t("projects.projectIdHint")}</p>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Name *</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.name")}</label>
               <input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Anzeigename"
+                placeholder={t("projects.namePlaceholder")}
                 required
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Boss-Agent *</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.bossAgent")}</label>
               <select
                 value={form.boss}
                 onChange={(e) => setForm({ ...form, boss: e.target.value })}
                 required
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Agent waehlen...</option>
+                <option value="">{t("projects.selectAgent")}</option>
                 {agents.map((a) => (
                   <option key={a} value={a}>
                     {a}
@@ -263,20 +266,20 @@ export function ProjectsPage() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Worker-Agenten</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.workerAgents")}</label>
               <input
                 value={form.workers}
                 onChange={(e) => setForm({ ...form, workers: e.target.value })}
-                placeholder="agent1, agent2"
+                placeholder={t("projects.workerPlaceholder")}
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Beschreibung</label>
+              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.description")}</label>
               <input
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Optionale Beschreibung"
+                placeholder={t("projects.descriptionPlaceholder")}
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -288,15 +291,15 @@ export function ProjectsPage() {
                 onChange={(e) => setForm({ ...form, samba: e.target.checked })}
                 className="h-4 w-4 rounded border"
               />
-              <label htmlFor="samba">Samba-Freigabe einrichten</label>
+              <label htmlFor="samba">{t("projects.sambaShare")}</label>
             </div>
             {createErr && <p className="md:col-span-2 text-sm text-destructive">{createErr}</p>}
             <div className="md:col-span-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY); }} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">
-                Abbrechen
+                {t("projects.cancel")}
               </button>
               <button type="submit" disabled={creating} className="rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-                {creating ? "Wird angelegt..." : "Projekt anlegen"}
+                {creating ? t("projects.creating") : t("projects.createBtn")}
               </button>
             </div>
           </form>
@@ -314,11 +317,11 @@ export function ProjectsPage() {
       {!loading && projectList.length === 0 && !showForm && (
         <div className="section-card py-14 text-center">
           <FolderKanban className="mx-auto h-10 w-10 text-muted-foreground" />
-          <p className="mt-4 text-sm text-muted-foreground">Noch keine Projekte. Lege ein erstes Projekt an.</p>
+          <p className="mt-4 text-sm text-muted-foreground">{t("projects.noProjects")}</p>
           {isAdmin && (
             <button onClick={() => setShowForm(true)} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90">
               <Plus className="h-4 w-4" />
-              Erstes Projekt anlegen
+              {t("projects.firstProject")}
             </button>
           )}
         </div>
@@ -338,18 +341,18 @@ export function ProjectsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-lg font-semibold tracking-tight">{proj.name}</span>
                         <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{id}</span>
-                        {proj.show_swarm && <span className="status-pill status-pill-ok">Swarm sichtbar</span>}
-                        {proj.matrix_room && <span className="status-pill">Matrix aktiv</span>}
+                        {proj.show_swarm && <span className="status-pill status-pill-ok">{t("projects.swarmVisible2")}</span>}
+                        {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
                       </div>
                       {proj.description && <p className="max-w-2xl text-sm text-muted-foreground">{proj.description}</p>}
                       <div className="flex flex-wrap gap-2">
                         <span className="status-pill">
                           <Users className="h-3.5 w-3.5" />
-                          Boss {proj.boss}
+                          {t("projects.boss", { name: proj.boss })}
                         </span>
                         <span className="status-pill">
                           <Boxes className="h-3.5 w-3.5" />
-                          {proj.workers.length} Worker
+                          {t("projects.workerCount", { count: proj.workers.length })}
                         </span>
                         <span className="status-pill">
                           <HardDrive className="h-3.5 w-3.5" />
@@ -357,7 +360,7 @@ export function ProjectsPage() {
                         </span>
                         <span className="status-pill">
                           <GitBranch className="h-3.5 w-3.5" />
-                          Filespace bereit
+                          {t("projects.filespaceReady")}
                         </span>
                       </div>
                     </div>
@@ -373,8 +376,8 @@ export function ProjectsPage() {
                           <MessageSquare className="h-4 w-4" />
                         </span>
                         <span>
-                          <span className="block font-medium">Chat</span>
-                          <span className="text-xs text-muted-foreground">Direkt in den Arbeitsraum</span>
+                          <span className="block font-medium">{t("projects.chat")}</span>
+                          <span className="text-xs text-muted-foreground">{t("projects.chatSubtitle")}</span>
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -388,8 +391,8 @@ export function ProjectsPage() {
                           <GitMerge className="h-4 w-4" />
                         </span>
                         <span>
-                          <span className="block font-medium">AgentLink</span>
-                          <span className="text-xs text-muted-foreground">Handoffs und Folgearbeit</span>
+                          <span className="block font-medium">{t("projects.agentLink")}</span>
+                          <span className="text-xs text-muted-foreground">{t("projects.agentLinkSubtitle")}</span>
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -403,8 +406,8 @@ export function ProjectsPage() {
                           <Webhook className="h-4 w-4" />
                         </span>
                         <span>
-                          <span className="block font-medium">Webhooks</span>
-                          <span className="text-xs text-muted-foreground">Push-, Wake- und Trigger-Events</span>
+                          <span className="block font-medium">{t("projects.webhooks")}</span>
+                          <span className="text-xs text-muted-foreground">{t("projects.webhooksSubtitle")}</span>
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -415,8 +418,8 @@ export function ProjectsPage() {
                           <Server className="h-4 w-4" />
                         </span>
                         <div>
-                          <p className="text-sm font-medium">Runtime-Kontext</p>
-                          <p className="text-xs text-muted-foreground">Infrastruktur, Matrix und Benutzer kompakt</p>
+                          <p className="text-sm font-medium">{t("projects.runtimeContext")}</p>
+                          <p className="text-xs text-muted-foreground">{t("projects.runtimeContextSubtitle")}</p>
                         </div>
                       </div>
                     </div>
@@ -425,41 +428,41 @@ export function ProjectsPage() {
 
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_0.9fr]">
                   <div className="rounded-3xl border bg-background/55 p-4">
-                    <p className="metric-kicker">Arbeitsraum</p>
+                    <p className="metric-kicker">{t("projects.workspace")}</p>
                     <div className="mt-3 space-y-3 text-sm">
                       <div className="flex items-start gap-3">
                         <HardDrive className="mt-0.5 h-4 w-4 text-primary" />
                         <div>
-                          <p className="font-medium">Filesystem</p>
+                          <p className="font-medium">{t("projects.filesystem")}</p>
                           <p className="break-all text-muted-foreground">{proj.filesystem}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
                         <Server className="mt-0.5 h-4 w-4 text-primary" />
                         <div>
-                          <p className="font-medium">System-User</p>
+                          <p className="font-medium">{t("projects.systemUser")}</p>
                           <p className="text-muted-foreground">{proj.system_user}</p>
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
                         <Hash className="mt-0.5 h-4 w-4 text-primary" />
                         <div>
-                          <p className="font-medium">Matrix-Raum</p>
-                          <p className="break-all text-muted-foreground">{proj.matrix_room || "Noch kein Raum verbunden"}</p>
+                          <p className="font-medium">{t("projects.matrixRoom")}</p>
+                          <p className="break-all text-muted-foreground">{proj.matrix_room || t("projects.noMatrixRoom")}</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="rounded-3xl border bg-background/55 p-4 md:col-span-2 xl:col-span-1">
-                    <p className="metric-kicker">Team</p>
+                    <p className="metric-kicker">{t("projects.team")}</p>
                     <div className="mt-3 space-y-3 text-sm">
                       <div className="rounded-2xl bg-secondary/60 px-3 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Boss</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("projects.bossLabel")}</p>
                         <p className="mt-1 font-medium">{proj.boss}</p>
                       </div>
                       <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Worker</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("projects.workerLabel")}</p>
                         {proj.workers.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {proj.workers.map((worker) => (
@@ -469,7 +472,7 @@ export function ProjectsPage() {
                             ))}
                           </div>
                         ) : (
-                          <p className="mt-1 text-muted-foreground">Keine Worker hinterlegt</p>
+                          <p className="mt-1 text-muted-foreground">{t("projects.noWorkers")}</p>
                         )}
                       </div>
                     </div>
@@ -478,25 +481,25 @@ export function ProjectsPage() {
                   <div className="rounded-3xl border border-destructive/15 bg-destructive/5 p-4">
                     <div className="flex items-center gap-2 text-sm font-medium text-destructive">
                       <ShieldAlert className="h-4 w-4" />
-                      Danger Zone
+                      {t("projects.dangerZone")}
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">
-                      Projektloeschung entfernt Arbeitsraum, Sessions und Integrationen. Diese Aktion bleibt bewusst getrennt.
+                      {t("projects.dangerZoneDesc")}
                     </p>
                     <div className="mt-4">
                       {isAdmin && (confirmDel === id ? (
                         <div className="space-y-2">
                           <button onClick={() => handleDelete(id)} disabled={deleting === id} className="w-full rounded-2xl bg-destructive px-3 py-2 text-sm text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
-                            Ja, Projekt endgueltig loeschen
+                            {t("projects.deleteConfirm")}
                           </button>
                           <button onClick={() => setConfirmDel(null)} className="w-full rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
-                            Abbrechen
+                            {t("projects.cancel")}
                           </button>
                         </div>
                       ) : (
                         <button onClick={() => setConfirmDel(id)} disabled={!!deleting} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50">
                           <Trash2 className="h-4 w-4" />
-                          Projekt loeschen
+                          {t("projects.deleteBtn")}
                         </button>
                       ))}
                     </div>

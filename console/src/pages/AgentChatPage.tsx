@@ -4,6 +4,7 @@ import { ArrowLeft, Send, Bot, User, Terminal, Smile } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
+import { useTranslation } from "react-i18next";
 
 interface Message {
   id:         string;
@@ -12,23 +13,24 @@ interface Message {
   tokenUsage?: { input: number; output: number };
 }
 
-const SLASH_COMMANDS = [
-  { cmd: "/help",     desc: "Verfügbare Commands anzeigen" },
-  { cmd: "/clear",    desc: "Chat-Verlauf leeren" },
-  { cmd: "/compact",  desc: "Konversation via LLM zusammenfassen (spart Tokens)" },
-  { cmd: "/model",    desc: "Aktuelles LLM-Modell anzeigen" },
-  { cmd: "/retry",    desc: "Letzte Nachricht nochmal senden" },
-  { cmd: "/remember", desc: "Session im Agenten-Gedächtnis speichern (/remember [name])" },
-];
-
 let _msgCounter = 0;
 function mkMsg(role: Message["role"], content: string): Message {
   return { id: `msg-${++_msgCounter}`, role, content };
 }
 
 export function AgentChatPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  const SLASH_COMMANDS = [
+    { cmd: "/help",     desc: t("slashCommands.help") },
+    { cmd: "/clear",    desc: t("slashCommands.clear") },
+    { cmd: "/compact",  desc: t("slashCommands.compact") },
+    { cmd: "/model",    desc: t("slashCommands.model") },
+    { cmd: "/retry",    desc: t("slashCommands.retry") },
+    { cmd: "/remember", desc: t("slashCommands.remember") },
+  ];
 
   const [messages,    setMessages]    = useState<Message[]>([]);
   const [input,       setInput]       = useState("");
@@ -85,18 +87,18 @@ export function AgentChatPage() {
     const base = cmd.trim().split(/\s+/)[0].toLowerCase();
 
     if (base === "/help") {
-      sysMsg("**Verfügbare Commands:**\n\n" +
+      sysMsg("**" + t("slashCommands.help") + ":**\n\n" +
         SLASH_COMMANDS.map(c => `\`${c.cmd}\` — ${c.desc}`).join("\n"));
       return true;
     }
     if (base === "/clear") {
       setMessages([]);
       api.delete(`/agents/${id}/session`).catch(() => {});
-      sysMsg("Chat-Verlauf geleert.");
+      sysMsg(t("slashCommands.clear") + ".");
       return true;
     }
     if (base === "/model") {
-      const model = agentModel.model ?? "nicht konfiguriert";
+      const model = agentModel.model ?? t("agentChat.notConfigured" as any) ?? "nicht konfiguriert";
       const temp  = agentModel.temperature ?? "—";
       sysMsg(`**Aktuelles Modell:** \`${model}\`\n**Temperatur:** ${temp}`);
       return true;
@@ -142,7 +144,7 @@ export function AgentChatPage() {
         .catch((e: Error) => sysMsg(`Fehler: ${e.message}`));
       return true;
     }
-    sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\` für eine Übersicht.`);
+    sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\`.`);
     return true;
   }
 
@@ -235,7 +237,6 @@ export function AgentChatPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
         <button onClick={() => navigate("/agents")}
           className="p-1.5 rounded-md hover:bg-accent transition-colors">
@@ -250,13 +251,12 @@ export function AgentChatPage() {
         </div>
       </div>
 
-      {/* Nachrichten */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-3 text-muted-foreground">
             <Bot className="h-10 w-10" />
-            <p className="text-sm">Direkter Chat mit <strong>{agentName}</strong>.</p>
-            <p className="text-xs opacity-60">Tippe <code className="bg-muted px-1 rounded">/help</code> für verfügbare Commands.</p>
+            <p className="text-sm">{t("agentChat.emptyChat", { name: agentName })}</p>
+            <p className="text-xs opacity-60">{t("agentChat.slashTip")} <code className="bg-muted px-1 rounded">/help</code> {t("agentChat.slashTip2")}</p>
           </div>
         )}
         {messages.map((msg) => {
@@ -329,7 +329,6 @@ export function AgentChatPage() {
         </div>
       )}
 
-      {/* Eingabe */}
       <div className="px-4 py-3 border-t flex-shrink-0 relative">
         {showSuggest && suggestions.length > 0 && (
           <div className="absolute bottom-full left-4 right-4 mb-1 bg-card border rounded-md shadow-lg overflow-hidden z-10">
@@ -366,7 +365,7 @@ export function AgentChatPage() {
             onChange={e => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-            placeholder="Nachricht… (Enter zum Senden, Shift+Enter für Zeilenumbruch, / für Commands)"
+            placeholder={t("agentChat.messagePlaceholder")}
             rows={1} disabled={sending}
             className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50"
             style={{ maxHeight: "120px", overflowY: "auto" }} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, ShieldCheck, Filter } from "lucide-react";
 import { api, AuditEntry } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const ACTION_GROUPS: Record<string, string[]> = {
   "Benutzer":    ["user.login", "user.create", "user.delete", "user.password_change"],
@@ -32,6 +33,7 @@ function fmtTime(iso: string): string {
 }
 
 export function AuditPage() {
+  const { t } = useTranslation();
   const [logs,      setLogs]      = useState<AuditEntry[]>([]);
   const [count,     setCount]     = useState(0);
   const [loading,   setLoading]   = useState(true);
@@ -67,35 +69,32 @@ export function AuditPage() {
     load({ user: "", action: "", project: "" });
   }
 
-  const allActions = Object.values(ACTION_GROUPS).flat();
   const hasFilter = filterUser || filterAction || filterProject;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />Audit-Log
+            <ShieldCheck className="h-5 w-5 text-primary" />{t("audit.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">{count} Einträge gesamt</p>
+          <p className="text-sm text-muted-foreground">{t("audit.total", { count })}</p>
         </div>
         <button onClick={refresh} disabled={refreshing}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          Aktualisieren
+          {t("audit.refresh")}
         </button>
       </div>
 
-      {/* Filter-Leiste */}
       <div className="flex items-center gap-3 px-6 py-3 border-b bg-muted/20 flex-shrink-0">
         <Filter className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
         <input value={filterUser} onChange={e => setFilterUser(e.target.value)}
-          placeholder="Benutzer"
+          placeholder={t("audit.filterUser")}
           className="w-32 px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
         <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
           className="px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary">
-          <option value="">Alle Aktionen</option>
+          <option value="">{t("audit.allActions")}</option>
           {Object.entries(ACTION_GROUPS).map(([group, actions]) => (
             <optgroup key={group} label={group}>
               {actions.map(a => <option key={a} value={a}>{a}</option>)}
@@ -103,7 +102,7 @@ export function AuditPage() {
           ))}
         </select>
         <input value={filterProject} onChange={e => setFilterProject(e.target.value)}
-          placeholder="Projekt-ID"
+          placeholder={t("audit.filterProject")}
           className="w-36 px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
         <select value={limit} onChange={e => setLimit(Number(e.target.value))}
           className="px-2.5 py-1.5 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary">
@@ -114,17 +113,16 @@ export function AuditPage() {
         </select>
         <button onClick={applyFilters}
           className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors">
-          Filtern
+          {t("audit.filter")}
         </button>
         {hasFilter && (
           <button onClick={clearFilters}
             className="px-3 py-1.5 text-sm border rounded hover:bg-accent transition-colors">
-            Zurücksetzen
+            {t("audit.reset")}
           </button>
         )}
       </div>
 
-      {/* Tabelle */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-6 space-y-2">
@@ -133,18 +131,18 @@ export function AuditPage() {
         ) : logs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-2 text-muted-foreground py-16">
             <ShieldCheck className="h-10 w-10" />
-            <p className="text-sm">{hasFilter ? "Keine Einträge für diese Filter." : "Noch keine Audit-Einträge."}</p>
+            <p className="text-sm">{hasFilter ? t("audit.noEntries") : t("audit.noEntriesYet")}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-background border-b">
               <tr className="text-xs text-muted-foreground uppercase tracking-wide">
-                <th className="text-left px-4 py-2.5 font-medium">Zeitpunkt</th>
-                <th className="text-left px-4 py-2.5 font-medium">Benutzer</th>
-                <th className="text-left px-4 py-2.5 font-medium">Aktion</th>
-                <th className="text-left px-4 py-2.5 font-medium">Ziel</th>
-                <th className="text-left px-4 py-2.5 font-medium">Projekt</th>
-                <th className="text-left px-4 py-2.5 font-medium">IP</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colTime")}</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colUser")}</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colAction")}</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colTarget")}</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colProject")}</th>
+                <th className="text-left px-4 py-2.5 font-medium">{t("audit.colIp")}</th>
               </tr>
             </thead>
             <tbody>

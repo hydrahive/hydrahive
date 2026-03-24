@@ -4,6 +4,7 @@ import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
+import { useTranslation } from "react-i18next";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
@@ -87,13 +88,7 @@ const KNOWN_MODELS = [
   "ollama/mistral:latest","ollama/llama3.1:8b","ollama/llama3.2:3b",
 ];
 
-const SLASH_COMMANDS = [
-  { cmd: "/help",     desc: "Verfügbare Commands" },
-  { cmd: "/clear",    desc: "Chat-Verlauf leeren" },
-  { cmd: "/model",    desc: "Modell anzeigen" },
-  { cmd: "/retry",    desc: "Letzte Nachricht wiederholen" },
-  { cmd: "/remember", desc: "Session speichern" },
-];
+// SLASH_COMMANDS moved inside MyAgentPage component to use live t() calls
 
 let _cnt = 0;
 const mkMsg = (role: Message["role"], content: string): Message =>
@@ -102,6 +97,16 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function MyAgentPage() {
+  const { t } = useTranslation();
+
+  const SLASH_COMMANDS = [
+    { cmd: "/help",     desc: t("slashCommands.help") },
+    { cmd: "/clear",    desc: t("slashCommands.clear") },
+    { cmd: "/model",    desc: t("slashCommands.model") },
+    { cmd: "/retry",    desc: t("slashCommands.retry") },
+    { cmd: "/remember", desc: t("slashCommands.remember") },
+  ];
+
   const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
@@ -294,17 +299,17 @@ export function MyAgentPage() {
         </div>
         <div className="flex gap-0 px-4">
           {[
-            { id: "chat",      label: "Chat",           icon: Bot },
-            { id: "settings",  label: "Einstellungen",  icon: Settings },
-            { id: "heartbeat", label: "Heartbeat",       icon: Timer },
-            { id: "skills",    label: "Skills",          icon: BookOpen },
-            { id: "mcp",       label: "MCP",             icon: Plug },
-            { id: "platforms", label: "Integrationen",   icon: Wifi },
-            { id: "wks",       label: "WKS",             icon: Monitor },
-            { id: "discord",   label: "Discord",         icon: MessageSquare },
-            { id: "whatsapp",  label: "WhatsApp",        icon: Phone },
-            { id: "telegram",  label: "Telegram",        icon: Send },
-            { id: "mail",      label: "Mail",            icon: Mail },
+            { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
+            { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
+            { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
+            { id: "skills",    label: t("myAgent.skillsTab"),     icon: BookOpen },
+            { id: "mcp",       label: t("myAgent.mcpTab"),        icon: Plug },
+            { id: "platforms", label: t("myAgent.platformsTab"),  icon: Wifi },
+            { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
+            { id: "discord",   label: t("myAgent.discordTab"),    icon: MessageSquare },
+            { id: "whatsapp",  label: t("myAgent.whatsappTab"),   icon: Phone },
+            { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
+            { id: "mail",      label: t("myAgent.mailTab"),       icon: Mail },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -326,7 +331,7 @@ export function MyAgentPage() {
               {loadError && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                   {loadError.includes("Token")
-                    ? "Deine Sitzung ist abgelaufen oder ungültig. Bitte neu anmelden."
+                    ? t("myAgent.sessionExpired")
                     : loadError}
                 </div>
               )}
@@ -335,27 +340,27 @@ export function MyAgentPage() {
                   <div className="space-y-2">
                     <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                       <Bot className="h-3.5 w-3.5" />
-                      Mein Agent Chat
+                      {t("myAgent.myChatLabel")}
                     </div>
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">{identity}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Direkter Arbeitskanal mit Streaming, Tool-Hinweisen und gespeicherter Session-History.
+                        {t("myAgent.chatSubtitle")}
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 font-medium text-foreground">
-                      {agentInfo?.config?.llm?.model ?? "Kein Modell"}
+                      {agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}
                     </span>
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      Modus: {exec.defaultMode}
+                      {t("myAgent.mode")}: {exec.defaultMode}
                     </span>
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      {sending ? "Streaming aktiv" : "Bereit"}
+                      {sending ? t("myAgent.streamingActive") : t("myAgent.ready")}
                     </span>
                     <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      {messages.filter((m) => m.role !== "system").length} Nachrichten
+                      {messages.filter((m) => m.role !== "system").length} {t("myAgent.messages")}
                     </span>
                   </div>
                 </div>
@@ -365,8 +370,8 @@ export function MyAgentPage() {
                 <div className="border-b border-border/60 px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold">Verlauf</h3>
-                      <p className="text-xs text-muted-foreground">Streaming, Systemhinweise und Agentenantworten bleiben im Kontext sichtbar.</p>
+                      <h3 className="text-sm font-semibold">{t("myAgent.historyTitle")}</h3>
+                      <p className="text-xs text-muted-foreground">{t("myAgent.historySubtitle")}</p>
                     </div>
                     {activeTool && (
                       <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
@@ -381,8 +386,8 @@ export function MyAgentPage() {
                   {messages.length === 0 && (
                     <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-muted/20 px-6 text-center text-muted-foreground">
                       <Bot className="h-10 w-10 opacity-70" />
-                      <p className="mt-4 text-sm font-medium text-foreground">Hallo. Ich bin <strong>{identity}</strong>.</p>
-                      <p className="mt-2 max-w-md text-xs">Tippe <code className="rounded bg-background px-1.5 py-0.5">/help</code> fuer Commands oder starte direkt mit einer Arbeitsanweisung.</p>
+                      <p className="mt-4 text-sm font-medium text-foreground">{t("myAgent.greetingTitle", { name: identity })}</p>
+                      <p className="mt-2 max-w-md text-xs">{t("myAgent.greetingSubtitle")} <code className="rounded bg-background px-1.5 py-0.5">/help</code> {t("myAgent.greetingSubtitle2")}</p>
                     </div>
                   )}
 
@@ -529,7 +534,7 @@ export function MyAgentPage() {
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                          placeholder="Nachricht … Enter sendet, Shift+Enter macht einen Umbruch" rows={1} disabled={sending}
+                          placeholder={t("myAgent.messagePlaceholder")} rows={1} disabled={sending}
                           className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
@@ -550,52 +555,52 @@ export function MyAgentPage() {
             <aside className="xl:sticky xl:top-24 xl:self-start">
               <div className="space-y-4 rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
                 <div className="space-y-1">
-                  <h3 className="text-sm font-semibold">Kontext</h3>
-                  <p className="text-xs text-muted-foreground">Direkte Sicht auf Modell, Werkzeuge und Session-Hinweise.</p>
+                  <h3 className="text-sm font-semibold">{t("myAgent.contextTitle")}</h3>
+                  <p className="text-xs text-muted-foreground">{t("myAgent.contextSubtitle")}</p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Modell
+                      {t("myAgent.modelLabel")}
                     </div>
-                    <div className="mt-3 text-sm font-medium">{agentInfo?.config?.llm?.model ?? "Nicht gesetzt"}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">Fallbacks: {agentInfo?.config?.llm?.fallback_models?.length ?? 0}</div>
+                    <div className="mt-3 text-sm font-medium">{agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{t("myAgent.fallbacks", { count: agentInfo?.config?.llm?.fallback_models?.length ?? 0 })}</div>
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <Settings className="h-3.5 w-3.5" />
-                      Status
+                      {t("myAgent.statusLabel")}
                     </div>
                     <div className="mt-3 flex items-center gap-2 text-sm">
                       {sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
-                      <span>{sending ? "Antwort wird gestreamt" : "Agent ist bereit"}</span>
+                      <span>{sending ? t("myAgent.streamingNow") : t("myAgent.agentReady")}</span>
                     </div>
-                    {activeTool && <div className="mt-2 text-xs text-muted-foreground">Aktives Tool: <code className="font-mono text-foreground">{activeTool.name}</code></div>}
+                    {activeTool && <div className="mt-2 text-xs text-muted-foreground">{t("myAgent.activeTool")}: <code className="font-mono text-foreground">{activeTool.name}</code></div>}
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <Shield className="h-3.5 w-3.5" />
-                      Execution Modes
+                      {t("myAgent.executionModes")}
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium">Default: {exec.defaultMode}</span>
+                      <span className="text-sm font-medium">{t("myAgent.defaultMode", { mode: exec.defaultMode })}</span>
                     </div>
                     <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                       <div className="flex items-center justify-between gap-3">
                         <span>safe</span>
-                        <span className="font-medium text-foreground">{exec.counts.safe} Permissions</span>
+                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.safe })}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span>elevated</span>
-                        <span className="font-medium text-foreground">{exec.counts.elevated} Permissions</span>
+                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.elevated })}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <span>root</span>
-                        <span className="font-medium text-foreground">{exec.counts.root} Permissions</span>
+                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.root })}</span>
                       </div>
                     </div>
                   </div>
@@ -603,7 +608,7 @@ export function MyAgentPage() {
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <MessageSquare className="h-3.5 w-3.5" />
-                      Commands
+                      {t("myAgent.commandsLabel")}
                     </div>
                     <div className="mt-3 space-y-2">
                       {SLASH_COMMANDS.map((cmd) => (
@@ -618,20 +623,20 @@ export function MyAgentPage() {
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       <Terminal className="h-3.5 w-3.5" />
-                      Session
+                      {t("myAgent.sessionLabel")}
                     </div>
                     <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                       <div className="flex items-center justify-between gap-3">
-                        <span>Verlauf</span>
+                        <span>{t("myAgent.historyCount")}</span>
                         <span className="font-medium text-foreground">{messages.length}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span>Aktive Tools</span>
+                        <span>{t("myAgent.activeTools")}</span>
                         <span className="font-medium text-foreground">{activeTool ? 1 : 0}</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
-                        <span>Fehlerstatus</span>
-                        <span className={`font-medium ${chatError ? "text-destructive" : "text-foreground"}`}>{chatError ? "Fehler" : "Sauber"}</span>
+                        <span>{t("myAgent.errorStatus")}</span>
+                        <span className={`font-medium ${chatError ? "text-destructive" : "text-foreground"}`}>{chatError ? t("myAgent.errorState") : t("myAgent.cleanState")}</span>
                       </div>
                     </div>
                   </div>
@@ -653,10 +658,8 @@ export function MyAgentPage() {
       {tab === "settings" && !agentInfo && (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
           <div className="max-w-md space-y-3">
-            <p className="text-sm font-medium text-foreground">Agenten-Konfiguration nicht geladen</p>
-            <p className="text-xs">
-              Wenn dein Token abgelaufen ist, melde dich neu an. Falls das Problem bleibt, ist die Agenten-Konfiguration auf dem Server nicht verfügbar.
-            </p>
+            <p className="text-sm font-medium text-foreground">{t("myAgent.configNotLoaded")}</p>
+            <p className="text-xs">{t("myAgent.configNotLoadedDetail")}</p>
           </div>
         </div>
       )}
@@ -670,8 +673,8 @@ export function MyAgentPage() {
       {tab === "skills" && !agentInfo && (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
           <div className="max-w-md space-y-3">
-            <p className="text-sm font-medium text-foreground">Skills nicht geladen</p>
-            <p className="text-xs">Die Agentendaten fehlen oder die Sitzung ist nicht mehr gültig.</p>
+            <p className="text-sm font-medium text-foreground">{t("myAgent.skillsNotLoaded")}</p>
+            <p className="text-xs">{t("myAgent.skillsNotLoadedDetail")}</p>
           </div>
         </div>
       )}
@@ -683,8 +686,8 @@ export function MyAgentPage() {
       {tab === "mcp" && !agentInfo && (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
           <div className="max-w-md space-y-3">
-            <p className="text-sm font-medium text-foreground">MCP-Konfiguration nicht geladen</p>
-            <p className="text-xs">Ohne gültige Sitzung kann die persönliche MCP-Liste nicht angezeigt werden.</p>
+            <p className="text-sm font-medium text-foreground">{t("myAgent.mcpNotLoaded")}</p>
+            <p className="text-xs">{t("myAgent.mcpNotLoadedDetail")}</p>
           </div>
         </div>
       )}
@@ -720,7 +723,7 @@ export function MyAgentPage() {
       )}
       {tab === "heartbeat" && !agentInfo && (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
-          <p className="text-sm">Agenten-Konfiguration nicht geladen.</p>
+          <p className="text-sm">{t("myAgent.hbNotLoaded")}</p>
         </div>
       )}
 
@@ -741,6 +744,7 @@ function McpTab({
   mcpServers: McpServer[];
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const cfg = agentInfo.config;
   const [selected, setSelected] = useState<string[]>(cfg.mcp_servers ?? []);
   const [saving,   setSaving]   = useState(false);
@@ -766,7 +770,7 @@ function McpTab({
         allowed_agents:  cfg.allowed_agents ?? [],
         mcp_servers:     selected,
       });
-      setMsg("Gespeichert ✓");
+      setMsg(t("myAgent.mcpSaved"));
       onSaved();
       setTimeout(() => setMsg(""), 3000);
     } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
@@ -777,8 +781,8 @@ function McpTab({
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground space-y-3">
         <Plug className="h-10 w-10 opacity-30" />
-        <p className="text-sm">Keine MCP-Server verfügbar.</p>
-        <p className="text-xs">Ein Admin kann Server unter <strong>MCP-Server</strong> konfigurieren.</p>
+        <p className="text-sm">{t("myAgent.mcpNoServers")}</p>
+        <p className="text-xs">{t("myAgent.mcpNoServersHint")}</p>
       </div>
     );
   }
@@ -786,8 +790,8 @@ function McpTab({
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-2xl">
       <div className="space-y-1">
-        <h2 className="text-sm font-semibold">MCP-Server</h2>
-        <p className="text-xs text-muted-foreground">Waehle welche MCP-Server dein Agent nutzen soll. Lokales Memory bleibt privat; A-MEM ist die zentrale Shared-Memory-Schicht.</p>
+        <h2 className="text-sm font-semibold">{t("myAgent.mcpTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("myAgent.mcpSubtitle")}</p>
       </div>
 
       {amemServer && (
@@ -796,16 +800,16 @@ function McpTab({
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Sparkles className="h-4 w-4 text-primary" />
-                A-MEM Shared Memory
+                {t("myAgent.mcpAmemTitle")}
               </div>
               <p className="text-xs text-muted-foreground">
-                Zentraler Langzeitspeicher fuer agentenuebergreifende Learnings, Fehler, Loesungen und Projektwissen.
+                {t("myAgent.mcpAmemDesc")}
               </p>
               <p className="text-xs font-mono text-muted-foreground">{amemServer.url}</p>
             </div>
             <div className="text-right text-xs">
               <div className={`inline-flex rounded-full px-2.5 py-1 ${amemEnabled ? "bg-emerald-500/15 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
-                {amemEnabled ? "diesem Agenten zugewiesen" : "nicht zugewiesen"}
+                {amemEnabled ? t("myAgent.mcpAmemAssigned") : t("myAgent.mcpAmemNotAssigned")}
               </div>
               {typeof amemServer.meta?.search_ui_url === "string" && (
                 <div className="mt-2">
@@ -815,7 +819,7 @@ function McpTab({
                     rel="noreferrer"
                     className="text-primary hover:underline"
                   >
-                    Search UI oeffnen
+                    {t("myAgent.mcpSearchUi")}
                   </a>
                 </div>
               )}
@@ -848,7 +852,7 @@ function McpTab({
         <button onClick={save} disabled={saving}
           className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
           <Save className="h-3.5 w-3.5" />
-          {saving ? "Speichern…" : "Speichern"}
+          {saving ? t("myAgent.mcpSaving") : t("myAgent.mcpSave")}
         </button>
         {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
       </div>
@@ -859,6 +863,7 @@ function McpTab({
 // ── Platform Overview Tab ────────────────────────────────────────────────────
 
 function PlatformsTab() {
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [platforms, setPlatforms] = useState<PlatformOverviewEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -891,16 +896,16 @@ function PlatformsTab() {
       <div className="space-y-1">
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <Wifi className="h-4 w-4" />
-          Integrationen
+          {t("myAgent.platformsTitle")}
         </h2>
         <p className="text-xs text-muted-foreground">
-          Einheitlicher Status deiner Plattform-Anbindungen. Matrix, Discord und WKS sind aktiv integriert; weitere Kanäle sind als Ziel sichtbar.
+          {t("myAgent.platformsSubtitle")}
         </p>
       </div>
 
       {loading && (
         <div className="rounded-2xl border border-border/60 bg-card/70 p-6 text-sm text-muted-foreground">
-          Lade Integrationsstatus…
+          {t("myAgent.platformsLoading")}
         </div>
       )}
 
@@ -920,7 +925,7 @@ function PlatformsTab() {
 
           {planned.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Geplant</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("myAgent.platformsPlanned")}</h3>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {planned.map(entry => (
                   <PlatformCard key={entry.platform} entry={entry} />
@@ -930,11 +935,11 @@ function PlatformsTab() {
           )}
 
           <div className="rounded-2xl border border-border/60 bg-card/80 p-5 space-y-3">
-            <h3 className="text-sm font-semibold">Kurzüberblick</h3>
+            <h3 className="text-sm font-semibold">{t("myAgent.platformsOverview")}</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>Benutzer: <span className="font-mono text-foreground">{username || "?"}</span></li>
-              <li>Aktive Integrationen: <span className="text-foreground font-medium">{supported.filter(p => p.connected).length}</span></li>
-              <li>Geplante Kanäle: <span className="text-foreground font-medium">{planned.length}</span></li>
+              <li>{t("myAgent.platformsUser")}: <span className="font-mono text-foreground">{username || "?"}</span></li>
+              <li>{t("myAgent.platformsActive")}: <span className="text-foreground font-medium">{supported.filter(p => p.connected).length}</span></li>
+              <li>{t("myAgent.platformsPlannedCount")}: <span className="text-foreground font-medium">{planned.length}</span></li>
             </ul>
           </div>
         </>
@@ -944,9 +949,10 @@ function PlatformsTab() {
 }
 
 function PlatformCard({ entry }: { entry: PlatformOverviewEntry }) {
+  const { t } = useTranslation();
   const statusLabel = entry.supported
-    ? (entry.connected ? "Verbunden" : (entry.configured ? "Konfiguriert" : "Nicht konfiguriert"))
-    : "Geplant";
+    ? (entry.connected ? t("myAgent.platformStatusConnected") : (entry.configured ? t("myAgent.platformStatusConfigured") : t("myAgent.platformStatusNotConfigured")))
+    : t("myAgent.platformStatusPlanned");
   const statusClass = entry.supported
     ? (entry.connected ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-700")
     : "bg-muted text-muted-foreground";
@@ -962,16 +968,16 @@ function PlatformCard({ entry }: { entry: PlatformOverviewEntry }) {
       </div>
       <div className="space-y-2 text-xs">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Unterstützt</span>
-          <span className={entry.supported ? "text-emerald-700" : "text-muted-foreground"}>{entry.supported ? "Ja" : "Nein"}</span>
+          <span className="text-muted-foreground">{t("myAgent.platformSupported")}</span>
+          <span className={entry.supported ? "text-emerald-700" : "text-muted-foreground"}>{entry.supported ? t("myAgent.platformYes") : t("myAgent.platformNo")}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Konfiguriert</span>
-          <span className={entry.configured ? "text-foreground" : "text-muted-foreground"}>{entry.configured ? "Ja" : "Nein"}</span>
+          <span className="text-muted-foreground">{t("myAgent.platformConfigured")}</span>
+          <span className={entry.configured ? "text-foreground" : "text-muted-foreground"}>{entry.configured ? t("myAgent.platformYes") : t("myAgent.platformNo")}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted-foreground">Verbunden</span>
-          <span className={entry.connected ? "text-foreground" : "text-muted-foreground"}>{entry.connected ? "Ja" : "Nein"}</span>
+          <span className="text-muted-foreground">{t("myAgent.platformConnected")}</span>
+          <span className={entry.connected ? "text-foreground" : "text-muted-foreground"}>{entry.connected ? t("myAgent.platformYes") : t("myAgent.platformNo")}</span>
         </div>
       </div>
       {Object.keys(entry.details || {}).length > 0 && (
@@ -997,6 +1003,7 @@ function SettingsPanel({
   agents: string[];
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const cfg = agentInfo.config;
 
   const [identity,       setIdentity]       = useState(cfg.identity ?? "");
@@ -1054,7 +1061,7 @@ function SettingsPanel({
         fallback_models: fallbacks, tools, allowed_agents: allowedAgents,
         ollama_base_url,
       });
-      setSaveMsg("Gespeichert ✓");
+      setSaveMsg(t("myAgent.settingsSaved"));
       onSaved();
       setTimeout(() => setSaveMsg(""), 3000);
     } catch(e) { setSaveMsg(e instanceof Error ? e.message : "Fehler"); }
@@ -1068,27 +1075,27 @@ function SettingsPanel({
         {/* Persönlichkeit */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Bot className="h-4 w-4" />Persönlichkeit
+            <Bot className="h-4 w-4" />{t("myAgent.settingsSectionPersonality")}
           </h2>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Name / Identität</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.settingsNameLabel")}</label>
             <input value={identity} onChange={e => setIdentity(e.target.value)}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Soul — Charakter & Verhalten (Markdown)</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.settingsSoulLabel")}</label>
             <textarea value={soul} onChange={e => setSoul(e.target.value)} rows={6}
-              placeholder="Beschreibe wie dein Agent sein soll, was er bevorzugt, seine Stärken..."
+              placeholder={t("myAgent.settingsSoulPlaceholder")}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono" />
           </div>
         </section>
 
         {/* Modell */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Modell</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionModel")}</h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 space-y-1">
-              <label className="text-xs text-muted-foreground">Primäres Modell</label>
+              <label className="text-xs text-muted-foreground">{t("myAgent.settingsPrimaryModel")}</label>
               <select value={model} onChange={e => setModel(e.target.value)}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
                 {model && !availableModels.find(m => m.id === model) && (
@@ -1101,20 +1108,20 @@ function SettingsPanel({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Temperatur ({temperature})</label>
+              <label className="text-xs text-muted-foreground">{t("myAgent.settingsTemperature", { value: temperature })}</label>
               <input type="range" min={0} max={1} step={0.05} value={temperature}
                 onChange={e => setTemperature(parseFloat(e.target.value))}
                 className="w-full" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Max Tokens</label>
+              <label className="text-xs text-muted-foreground">{t("myAgent.settingsMaxTokens")}</label>
               <input type="number" value={maxTokens} min={256} max={32000} step={256}
                 onChange={e => setMaxTokens(parseInt(e.target.value))}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Fallback-Modelle</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.settingsFallbackModels")}</label>
             <div className="flex flex-wrap gap-1 mb-2">
               {fallbacks.map(m => (
                 <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-secondary rounded">
@@ -1128,7 +1135,7 @@ function SettingsPanel({
             <div className="flex gap-2">
               <select value={fbInput} onChange={e => setFbInput(e.target.value)}
                 className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                <option value="">— Modell wählen —</option>
+                <option value="">{t("myAgent.settingsSelectModel")}</option>
                 {(availableModels.length === 0 ? KNOWN_MODELS.map(m=>({id:m,label:m})) : availableModels)
                   .filter(m => !fallbacks.includes(m.id))
                   .map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -1143,7 +1150,7 @@ function SettingsPanel({
 
         {/* Tools */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Tools</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
           <div className="grid grid-cols-2 gap-2">
             {ALL_TOOLS.map(t => (
               <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -1159,8 +1166,8 @@ function SettingsPanel({
         {/* Delegation */}
         {agents.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">Agenten-Delegation</h2>
-            <p className="text-xs text-muted-foreground">Welche Agenten darf dein Agent via ask_agent/delegate_agent beauftragen?</p>
+            <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionDelegation")}</h2>
+            <p className="text-xs text-muted-foreground">{t("myAgent.settingsDelegationHint")}</p>
             <div className="grid grid-cols-2 gap-2">
               {agents.map(id => (
                 <label key={id} className="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -1178,7 +1185,7 @@ function SettingsPanel({
           <button type="submit" disabled={saving}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Speichern…" : "Speichern"}
+            {saving ? t("myAgent.settingsSaving") : t("myAgent.settingsSave")}
           </button>
           {saveMsg && (
             <span className={`text-xs ${saveMsg.includes("✓") ? "text-green-600" : "text-destructive"}`}>
@@ -1187,7 +1194,7 @@ function SettingsPanel({
           )}
           <button type="button" onClick={onSaved}
             className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <RefreshCw className="h-3 w-3" />Neu laden
+            <RefreshCw className="h-3 w-3" />{t("myAgent.settingsReload")}
           </button>
         </div>
       </form>
@@ -1198,6 +1205,7 @@ function SettingsPanel({
 // ── WKS Tab ───────────────────────────────────────────────────────────────────
 
 function WksTab() {
+  const { t } = useTranslation();
   const [wks,         setWks]         = useState<WksConfig | null>(null);
   const [ip,          setIp]          = useState("");
   const [sshUser,     setSshUser]     = useState("");
@@ -1230,7 +1238,7 @@ function WksTab() {
     setSaving(true); setMsg("");
     try {
       await api.updateWks({ ip, ssh_user: sshUser, ollama_port: ollamaPort, ssh_key: sshKey });
-      setMsg("Gespeichert ✓");
+      setMsg(t("myAgent.wksSave") + " ✓");
       setSshKey("");
       const updated = await api.getWks();
       setWks(updated);
@@ -1246,7 +1254,7 @@ function WksTab() {
       setPubKey(r.public_key);
       const updated = await api.getWks();
       setWks(updated);
-      setMsg("SSH-Key generiert ✓");
+      setMsg(t("myAgent.wksSshKeyGenerated"));
       setTimeout(() => setMsg(""), 3000);
     } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setGenerating(false); }
@@ -1283,59 +1291,59 @@ function WksTab() {
       <form onSubmit={save} className="p-6 space-y-8 max-w-2xl">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold flex items-center gap-2">
-            <Monitor className="h-4 w-4" />Workstation-Zugang (WKS)
+            <Monitor className="h-4 w-4" />{t("myAgent.wksTitle")}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Verbinde deinen Agenten mit deiner eigenen Workstation via SSH. Der Agent kann dann Befehle ausführen und Dateien lesen/schreiben.
+            {t("myAgent.wksSubtitle")}
           </p>
           {wks?.configured && (
             <p className="text-xs text-green-600 font-medium">
-              ✓ WKS konfiguriert: {wks.ssh_user}@{wks.ip}:{wks.ollama_port}
-              {wks.has_ssh_key && " · SSH-Key vorhanden"}
+              {t("myAgent.wksConfigured", { user: wks.ssh_user, ip: wks.ip, port: wks.ollama_port })}
+              {wks.has_ssh_key && t("myAgent.wksHasSshKey")}
             </p>
           )}
         </div>
 
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Verbindung</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("myAgent.wksSectionConnection")}</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">IP-Adresse</label>
+              <label className="text-xs text-muted-foreground">{t("myAgent.wksIpLabel")}</label>
               <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.100"
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">SSH-Benutzer</label>
+              <label className="text-xs text-muted-foreground">{t("myAgent.wksSshUserLabel")}</label>
               <input value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="till"
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
           </div>
           {/* SSH Key */}
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">SSH-Key</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.wksSshKeyLabel")}</label>
             {pubKey ? (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-green-600 font-medium">✓ SSH-Key vorhanden</span>
+                  <span className="text-xs text-green-600 font-medium">{t("myAgent.wksSshKeyPresent")}</span>
                   <button type="button" onClick={() => navigator.clipboard.writeText(pubKey)}
                     className="text-xs text-muted-foreground hover:text-foreground border rounded px-2 py-0.5">
-                    Public Key kopieren
+                    {t("myAgent.wksCopyPublicKey")}
                   </button>
                 </div>
                 <p className="text-xs font-mono bg-muted/50 rounded px-2 py-1.5 break-all text-muted-foreground">
                   {pubKey}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Diesen Public Key in <code>~/.ssh/authorized_keys</code> auf der Workstation eintragen.
+                  {t("myAgent.wksSshKeyHint")}
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
                 <button type="button" onClick={generateKey} disabled={generating}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
-                  {generating ? "Generiere…" : "Neuen SSH-Key generieren"}
+                  {generating ? t("myAgent.wksGenerating") : t("myAgent.wksGenerateKey")}
                 </button>
-                <p className="text-xs text-muted-foreground">Oder eigenen privaten Key einfügen:</p>
+                <p className="text-xs text-muted-foreground">{t("myAgent.wksOrPasteKey")}</p>
                 <textarea value={sshKey} onChange={e => setSshKey(e.target.value)} rows={4}
                   placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
                   className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none font-mono text-xs" />
@@ -1346,7 +1354,7 @@ function WksTab() {
               <div className="flex items-center gap-3 pt-1">
                 <button type="button" onClick={testSsh} disabled={sshTesting}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
-                  {sshTesting ? "Teste…" : "SSH testen"}
+                  {sshTesting ? t("myAgent.wksSshTesting") : t("myAgent.wksSshTest")}
                 </button>
                 {sshTestMsg && (
                   <span className={`text-xs ${sshTestMsg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>
@@ -1359,9 +1367,9 @@ function WksTab() {
         </section>
 
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ollama auf WKS</h3>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("myAgent.wksSectionOllama")}</h3>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Ollama-Port</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.wksOllamaPort")}</label>
             <input type="number" value={ollamaPort} onChange={e => setOllamaPort(parseInt(e.target.value))}
               className="w-40 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
@@ -1369,7 +1377,7 @@ function WksTab() {
             <button type="button" onClick={testConnection} disabled={testing || !ip}
               className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
               <RefreshCw className={`h-3.5 w-3.5 ${testing ? "animate-spin" : ""}`} />
-              {testing ? "Prüfe…" : "Verbindung testen"}
+              {testing ? t("myAgent.wksTesting") : t("myAgent.wksTestConnection")}
             </button>
             {testMsg && (
               <span className={`text-xs ${testMsg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>{testMsg}</span>
@@ -1377,7 +1385,7 @@ function WksTab() {
           </div>
           {wksModels.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Verfügbare Modelle auf WKS:</p>
+              <p className="text-xs text-muted-foreground">{t("myAgent.wksAvailableModels")}</p>
               <div className="flex flex-wrap gap-1">
                 {wksModels.map(m => (
                   <span key={m.id} className="text-xs bg-secondary px-2 py-0.5 rounded font-mono">{m.label}</span>
@@ -1391,7 +1399,7 @@ function WksTab() {
           <button type="submit" disabled={saving || !ip}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Speichern…" : "Speichern"}
+            {saving ? t("myAgent.wksSaving") : t("myAgent.wksSave")}
           </button>
           {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
         </div>
@@ -1404,6 +1412,7 @@ function WksTab() {
 // ── Discord Tab ───────────────────────────────────────────────────────────────
 
 function DiscordTab() {
+  const { t } = useTranslation();
   const [cfg,          setCfg]          = useState<DiscordConfig | null>(null);
   const [botToken,     setBotToken]     = useState("");
   const [changeToken,  setChangeToken]  = useState(false);
@@ -1468,7 +1477,7 @@ function DiscordTab() {
   }
 
   async function handleDelete() {
-    if (!confirm("Discord-Bot entfernen?")) return;
+    if (!confirm(t("myAgent.discordDeleteConfirm"))) return;
     await api.deleteDiscord();
     setCfg({ configured: false });
     setGuildId(""); setSelectedIds(new Set()); setChannels([]);
@@ -1488,29 +1497,29 @@ function DiscordTab() {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
       <div>
-        <h2 className="text-sm font-semibold mb-1">Discord Bot</h2>
+        <h2 className="text-sm font-semibold mb-1">{t("myAgent.discordTitle")}</h2>
         <p className="text-xs text-muted-foreground">
-          Verbinde deinen persönlichen Agenten mit einem Discord-Bot.
+          {t("myAgent.discordSubtitle")}
         </p>
       </div>
 
       {cfg?.configured && (
         <div className={`flex items-center gap-2 p-3 rounded-md text-xs border ${cfg.connected ? "bg-green-50 border-green-200 text-green-700" : "bg-yellow-50 border-yellow-200 text-yellow-700"}`}>
           {cfg.connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-          {cfg.connected ? "Bot ist online" : "Bot konfiguriert, aber nicht verbunden"}
-          {cfg.guild_id && <span className="ml-auto text-muted-foreground">Guild: {cfg.guild_id}</span>}
+          {cfg.connected ? t("myAgent.discordOnline") : t("myAgent.discordOffline")}
+          {cfg.guild_id && <span className="ml-auto text-muted-foreground">{t("myAgent.discordGuild", { id: cfg.guild_id })}</span>}
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-4">
         {/* Token */}
         <div>
-          <label className="text-xs font-medium block mb-1">Bot-Token</label>
+          <label className="text-xs font-medium block mb-1">{t("myAgent.discordBotToken")}</label>
           {cfg?.configured && !changeToken ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground font-mono">••••••••••••••••••••</span>
               <button type="button" onClick={() => setChangeToken(true)}
-                className="text-xs text-primary underline">ändern</button>
+                className="text-xs text-primary underline">{t("myAgent.discordChangeToken")}</button>
             </div>
           ) : (
             <>
@@ -1519,7 +1528,7 @@ function DiscordTab() {
                 className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
               {cfg?.configured && (
                 <button type="button" onClick={() => { setChangeToken(false); setBotToken(""); }}
-                  className="text-xs text-muted-foreground underline mt-1">abbrechen</button>
+                  className="text-xs text-muted-foreground underline mt-1">{t("myAgent.discordCancelToken")}</button>
               )}
             </>
           )}
@@ -1527,7 +1536,7 @@ function DiscordTab() {
 
         {/* Guild ID */}
         <div>
-          <label className="text-xs font-medium block mb-1">Server (Guild) ID</label>
+          <label className="text-xs font-medium block mb-1">{t("myAgent.discordGuildId")}</label>
           <input type="text" value={guildId} onChange={e => setGuildId(e.target.value)}
             placeholder="z.B. 1234567890123456789"
             className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
@@ -1536,11 +1545,11 @@ function DiscordTab() {
         {/* Channels */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium">Channels</label>
+            <label className="text-xs font-medium">{t("myAgent.discordChannels")}</label>
             <button type="button" onClick={loadChannels} disabled={loadingCh || !cfg?.configured}
               className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-40">
               {loadingCh ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              Channels laden
+              {t("myAgent.discordLoadChannels")}
             </button>
           </div>
           {channels.length > 0 ? (
@@ -1557,8 +1566,8 @@ function DiscordTab() {
           ) : (
             <p className="text-xs text-muted-foreground">
               {selectedIds.size > 0
-                ? `${selectedIds.size} Channel(s) gespeichert — "Channels laden" um sie anzuzeigen`
-                : "Keine Auswahl = Bot reagiert in allen Channels"}
+                ? t("myAgent.discordSelectedChannels", { count: selectedIds.size })
+                : t("myAgent.discordNoChannels")}
             </p>
           )}
         </div>
@@ -1567,33 +1576,33 @@ function DiscordTab() {
         <label className="flex items-center gap-2 text-xs cursor-pointer">
           <input type="checkbox" checked={ignoreBots} onChange={e => setIgnoreBots(e.target.checked)}
             className="accent-primary" />
-          <span>Nachrichten von anderen Bots ignorieren</span>
+          <span>{t("myAgent.discordIgnoreBots")}</span>
         </label>
 
         {/* Nur bei @Mention */}
         <label className="flex items-center gap-2 text-xs cursor-pointer">
           <input type="checkbox" checked={requireMention} onChange={e => setRequireMention(e.target.checked)}
             className="accent-primary" />
-          <span>Nur bei @Mention antworten (für geteilte Channels)</span>
+          <span>{t("myAgent.discordRequireMention")}</span>
         </label>
 
         <div className="flex flex-wrap items-center gap-2">
           <button type="submit" disabled={saving || (!cfg?.configured && !botToken.trim())}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Speichern…" : "Speichern & Verbinden"}
+            {saving ? t("myAgent.discordSaving") : t("myAgent.discordSave")}
           </button>
           {cfg?.configured && (
             <>
               <button type="button" onClick={handleTest} disabled={testing}
                 className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 transition-colors">
                 {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
-                Testen
+                {t("myAgent.discordTest")}
               </button>
               <button type="button" onClick={handleDelete}
                 className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
                 <X className="h-3.5 w-3.5" />
-                Entfernen
+                {t("myAgent.discordRemove")}
               </button>
             </>
           )}
@@ -1607,14 +1616,14 @@ function DiscordTab() {
       </form>
 
       <section className="space-y-2 border-t pt-4">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">So richtest du einen Discord Bot ein</h3>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.discordSetupTitle")}</h3>
         <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-          <li>Discord Developer Portal öffnen: discord.com/developers/applications</li>
-          <li>„New Application" → Name wählen → Erstellen</li>
-          <li>Links „Bot" → Token kopieren</li>
-          <li>„Message Content Intent" aktivieren</li>
-          <li>OAuth2 → URL Generator: Scopes „bot" + Perms „Read/Send Messages" → Bot einladen</li>
-          <li>Token und Guild-ID eintragen, dann Channels laden</li>
+          <li>{t("myAgent.discordSetup1")}</li>
+          <li>{t("myAgent.discordSetup2")}</li>
+          <li>{t("myAgent.discordSetup3")}</li>
+          <li>{t("myAgent.discordSetup4")}</li>
+          <li>{t("myAgent.discordSetup5")}</li>
+          <li>{t("myAgent.discordSetup6")}</li>
         </ol>
       </section>
     </div>
@@ -1624,6 +1633,7 @@ function DiscordTab() {
 // ── WhatsApp Tab ──────────────────────────────────────────────────────────────
 
 function WhatsAppTab() {
+  const { t } = useTranslation();
   const [status,  setStatus]  = useState<WhatsAppStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg,     setMsg]     = useState("");
@@ -1691,11 +1701,11 @@ function WhatsAppTab() {
   }
 
   async function handleDisconnect() {
-    if (!confirm("WhatsApp-Verbindung trennen?")) return;
+    if (!confirm(t("myAgent.whatsappDisconnect") + "?")) return;
     try {
       await api.disconnectWhatsApp();
       setStatus({ configured: false, status: "disconnected", qr: null, phone: null });
-      setMsg("Verbindung getrennt");
+      setMsg(t("myAgent.whatsappDisconnected2"));
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     } catch (err: unknown) {
       setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
@@ -1710,9 +1720,9 @@ function WhatsAppTab() {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
       <div>
-        <h2 className="text-sm font-semibold mb-1">WhatsApp</h2>
+        <h2 className="text-sm font-semibold mb-1">{t("myAgent.whatsappTitle")}</h2>
         <p className="text-xs text-muted-foreground">
-          Verbinde deinen persönlichen Agenten mit WhatsApp über einen QR-Code-Login.
+          {t("myAgent.whatsappSubtitle")}
         </p>
       </div>
 
@@ -1729,11 +1739,11 @@ function WhatsAppTab() {
            bridgeDown  ? <AlertCircle className="h-3.5 w-3.5" /> :
                          <WifiOff className="h-3.5 w-3.5" />}
           <span>
-            {connected    ? `Verbunden${status.phone ? ` · +${status.phone}` : ""}` :
-             waitingQr    ? "QR-Code scannen …" :
-             reconnecting ? "Verbindung wird hergestellt …" :
-             bridgeDown   ? "WhatsApp Bridge nicht erreichbar" :
-                            "Nicht verbunden"}
+            {connected    ? t("myAgent.whatsappConnected", { phone: status.phone ? ` · +${status.phone}` : "" }) :
+             waitingQr    ? t("myAgent.whatsappWaitingQr") :
+             reconnecting ? t("myAgent.whatsappReconnecting") :
+             bridgeDown   ? t("myAgent.whatsappBridgeDown") :
+                            t("myAgent.whatsappDisconnected")}
           </span>
           {(waitingQr || reconnecting) && (
             <span className="ml-auto text-xs opacity-60 animate-pulse">●</span>
@@ -1745,10 +1755,10 @@ function WhatsAppTab() {
       {waitingQr && status?.qr && (
         <div className="flex flex-col items-center gap-3 p-4 border rounded-md bg-white">
           <p className="text-xs text-muted-foreground">
-            WhatsApp öffnen → Verknüpfte Geräte → Gerät hinzufügen → QR-Code scannen
+            {t("myAgent.whatsappQrHint")}
           </p>
           <img src={status.qr} alt="WhatsApp QR-Code" className="w-56 h-56 rounded" />
-          <p className="text-xs text-muted-foreground animate-pulse">Warte auf Scan …</p>
+          <p className="text-xs text-muted-foreground animate-pulse">{t("myAgent.whatsappWaitScan")}</p>
         </div>
       )}
 
@@ -1758,14 +1768,14 @@ function WhatsAppTab() {
           <button onClick={handleConnect} disabled={loading}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Phone className="h-3.5 w-3.5" />
-            {loading ? "Verbinden …" : "Verbinden"}
+            {loading ? t("myAgent.whatsappConnecting") : t("myAgent.whatsappConnect")}
           </button>
         )}
         {(connected || waitingQr || reconnecting) && (
           <button onClick={handleDisconnect}
             className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
             <X className="h-3.5 w-3.5" />
-            Trennen
+            {t("myAgent.whatsappDisconnect")}
           </button>
         )}
         {msg && (
@@ -1779,38 +1789,38 @@ function WhatsAppTab() {
       {/* Konfiguration */}
       {(status?.configured || (status && status.status !== "disconnected")) && (
         <section className="space-y-4 border-t pt-5">
-          <h3 className="text-sm font-semibold">Verhalten konfigurieren</h3>
+          <h3 className="text-sm font-semibold">{t("myAgent.whatsappConfigTitle")}</h3>
 
           {/* Chat-Typen */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reagiert auf</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.whatsappRespondTo")}</p>
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={cfg.private_chats_enabled}
                 onChange={e => setCfg(c => ({ ...c, private_chats_enabled: e.target.checked }))} className="h-4 w-4 rounded" />
-              <span className="text-sm">Einzel-Chats (private Nachrichten)</span>
+              <span className="text-sm">{t("myAgent.whatsappPrivateChats")}</span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={cfg.group_chats_enabled}
                 onChange={e => setCfg(c => ({ ...c, group_chats_enabled: e.target.checked }))} className="h-4 w-4 rounded" />
-              <span className="text-sm">Gruppen-Chats</span>
+              <span className="text-sm">{t("myAgent.whatsappGroupChats")}</span>
             </label>
           </div>
 
           {/* Keyword */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Pflicht-Keyword (optional)
+              {t("myAgent.whatsappKeyword")}
             </label>
             <input value={cfg.require_keyword}
               onChange={e => setCfg(c => ({ ...c, require_keyword: e.target.value }))}
               placeholder="z.B. !agent  oder  @lilith"
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-            <p className="text-xs text-muted-foreground">Agent antwortet nur wenn diese Zeichenkette in der Nachricht vorkommt.</p>
+            <p className="text-xs text-muted-foreground">{t("myAgent.whatsappKeywordHint")}</p>
           </div>
 
           {/* Whitelist */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Nummern (leer = alle)</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.whatsappAllowed")}</p>
             <div className="flex flex-wrap gap-1">
               {cfg.allowed_numbers.map(n => (
                 <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-secondary rounded">
@@ -1832,7 +1842,7 @@ function WhatsAppTab() {
 
           {/* Blacklist */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gesperrte Nummern</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.whatsappBlocked")}</p>
             <div className="flex flex-wrap gap-1">
               {cfg.blocked_numbers.map(n => (
                 <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-destructive/10 text-destructive rounded">
@@ -1851,8 +1861,8 @@ function WhatsAppTab() {
                 className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"><Plus className="h-4 w-4" /></button>
             </div>
 
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">Admin-Nummern (erhalten volle Rechte)</p>
-            <p className="text-xs text-muted-foreground">Diese Nummern dürfen alle Befehle ausführen und erhalten Zugriff auf private Daten.</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">{t("myAgent.whatsappAdmins")}</p>
+            <p className="text-xs text-muted-foreground">{t("myAgent.whatsappAdminsHint")}</p>
             <div className="flex flex-wrap gap-1">
               {cfg.owner_numbers.map(n => (
                 <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 rounded">
@@ -1875,7 +1885,7 @@ function WhatsAppTab() {
           <div className="flex items-center gap-3 pt-2">
             <button onClick={saveCfg} disabled={cfgSaving}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
-              <Save className="h-3.5 w-3.5" />{cfgSaving ? "Speichern…" : "Einstellungen speichern"}
+              <Save className="h-3.5 w-3.5" />{cfgSaving ? t("myAgent.whatsappSaving") : t("myAgent.whatsappSave")}
             </button>
             {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
           </div>
@@ -1905,6 +1915,7 @@ const TASK_PRESETS = [
 ];
 
 function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: () => void }) {
+  const { t } = useTranslation();
   const cfg = agentInfo.config as AgentCfg & {
     heartbeat?: { enabled?: boolean; interval?: string; timeout?: string; on_failure?: string };
     heartbeat_tasks?: HbTask[];
@@ -1927,7 +1938,7 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
         heartbeat: { enabled, interval, timeout, on_failure: onFailure },
         heartbeat_tasks: tasks,
       });
-      setMsg("Gespeichert ✓");
+      setMsg(t("myAgent.hbSaved"));
       onSaved();
       setTimeout(() => setMsg(""), 3000);
     } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
@@ -1955,23 +1966,23 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 
       {/* Basis-Config */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold flex items-center gap-2"><Timer className="h-4 w-4" />Heartbeat-Einstellungen</h2>
+        <h2 className="text-sm font-semibold flex items-center gap-2"><Timer className="h-4 w-4" />{t("myAgent.hbTitle")}</h2>
         <label className="flex items-center gap-3 cursor-pointer">
           <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="h-4 w-4 rounded" />
-          <span className="text-sm font-medium">Heartbeat aktiv</span>
-          <span className="text-xs text-muted-foreground">— Agent wird regelmäßig auf Lebenszeichen geprüft</span>
+          <span className="text-sm font-medium">{t("myAgent.hbActive")}</span>
+          <span className="text-xs text-muted-foreground">{t("myAgent.hbActiveHint")}</span>
         </label>
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Intervall</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.hbInterval")}</label>
             <input value={interval} onChange={e => setInterval(e.target.value)} placeholder="60s" className={inputCls} />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Timeout</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.hbTimeout")}</label>
             <input value={timeout} onChange={e => setTimeout_(e.target.value)} placeholder="180s" className={inputCls} />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Bei Timeout</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.hbOnTimeout")}</label>
             <select value={onFailure} onChange={e => setOnFailure(e.target.value)} className={inputCls}>
               <option value="ignore">ignore</option>
               <option value="restart">restart</option>
@@ -1984,8 +1995,8 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 
       {/* Aufgaben */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold flex items-center gap-2"><Bot className="h-4 w-4" />Regelmäßige Aufgaben</h2>
-        <p className="text-xs text-muted-foreground">Diese Nachrichten werden automatisch in festgelegten Abständen an deinen Agenten geschickt.</p>
+        <h2 className="text-sm font-semibold flex items-center gap-2"><Bot className="h-4 w-4" />{t("myAgent.hbTasksTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("myAgent.hbTasksSubtitle")}</p>
 
         {/* Bestehende Tasks */}
         {tasks.length > 0 && (
@@ -2009,12 +2020,12 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
           </div>
         )}
         {tasks.length === 0 && (
-          <p className="text-xs text-muted-foreground italic">Noch keine Aufgaben definiert.</p>
+          <p className="text-xs text-muted-foreground italic">{t("myAgent.hbNoTasks")}</p>
         )}
 
         {/* Neue Aufgabe */}
         <div className="rounded-xl border p-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Neue Aufgabe</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.hbNewTask")}</p>
 
           {/* Presets */}
           <div className="flex flex-wrap gap-2">
@@ -2028,37 +2039,37 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">ID</label>
-              <input value={newTask.id} onChange={e => setNewTask(t => ({ ...t, id: e.target.value }))}
+              <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskId")}</label>
+              <input value={newTask.id} onChange={e => setNewTask(task => ({ ...task, id: e.target.value }))}
                 placeholder="z.B. check_mail" className={inputCls} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Intervall (Sekunden)</label>
-              <input type="number" value={newTask.interval ?? ""} onChange={e => setNewTask(t => ({ ...t, interval: parseInt(e.target.value) || null, schedule: null }))}
+              <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskInterval")}</label>
+              <input type="number" value={newTask.interval ?? ""} onChange={e => setNewTask(task => ({ ...task, interval: parseInt(e.target.value) || null, schedule: null }))}
                 placeholder="1800" className={inputCls} />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Nachricht / Aufgabe</label>
-            <textarea value={newTask.message} onChange={e => setNewTask(t => ({ ...t, message: e.target.value }))}
-              rows={3} placeholder="Was soll der Agent tun?"
+            <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskMessage")}</label>
+            <textarea value={newTask.message} onChange={e => setNewTask(task => ({ ...task, message: e.target.value }))}
+              rows={3} placeholder={t("myAgent.hbTaskMessagePlaceholder")}
               className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Aktive Stunden (optional)</label>
-              <input value={newTask.active_hours ?? ""} onChange={e => setNewTask(t => ({ ...t, active_hours: e.target.value || null }))}
+              <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskActiveHours")}</label>
+              <input value={newTask.active_hours ?? ""} onChange={e => setNewTask(task => ({ ...task, active_hours: e.target.value || null }))}
                 placeholder="07:00-22:00" className={inputCls} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Cron (alternativ zu Intervall)</label>
-              <input value={newTask.schedule ?? ""} onChange={e => setNewTask(t => ({ ...t, schedule: e.target.value || null, interval: e.target.value ? null : t.interval }))}
+              <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskCron")}</label>
+              <input value={newTask.schedule ?? ""} onChange={e => setNewTask(task => ({ ...task, schedule: e.target.value || null, interval: e.target.value ? null : task.interval }))}
                 placeholder="0 8 * * *" className={inputCls} />
             </div>
           </div>
           <button type="button" onClick={addTask} disabled={!newTask.id || !newTask.message}
             className="flex items-center gap-2 px-4 py-2 text-sm rounded-md border hover:bg-accent transition-colors disabled:opacity-40">
-            <Plus className="h-3.5 w-3.5" />Aufgabe hinzufügen
+            <Plus className="h-3.5 w-3.5" />{t("myAgent.hbAddTask")}
           </button>
         </div>
       </section>
@@ -2067,7 +2078,7 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={saving}
           className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
-          <Save className="h-3.5 w-3.5" />{saving ? "Speichern…" : "Speichern"}
+          <Save className="h-3.5 w-3.5" />{saving ? t("myAgent.hbSaving") : t("myAgent.hbSave")}
         </button>
         {msg && <span className={`text-xs ${msg.includes("✓") ? "text-green-600" : "text-destructive"}`}>{msg}</span>}
       </div>
@@ -2076,6 +2087,7 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 }
 
 function MailTab() {
+  const { t } = useTranslation();
   const [cfg,          setCfg]         = useState<MailConfig | null>(null);
   const [mailAddress,  setMailAddress] = useState("");
   const [domain,       setDomain]      = useState("");
@@ -2124,12 +2136,12 @@ function MailTab() {
   }
 
   async function handleDelete() {
-    if (!confirm("Mail-Konfiguration entfernen?")) return;
+    if (!confirm(t("myAgent.mailDeleteConfirm"))) return;
     try {
       await api.deleteMail();
       setCfg({ configured: false, mail_address: "", smtp_host: "" });
       setMailAddress(""); setDomain(""); setSmtpHost(""); setSmtpPassword("");
-      setMsg("Mail-Konfiguration entfernt");
+      setMsg(t("myAgent.mailRemoved"));
     } catch (err: unknown) {
       setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
     }
@@ -2138,16 +2150,16 @@ function MailTab() {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
       <div>
-        <h2 className="text-sm font-semibold mb-1">Mail-Konto</h2>
+        <h2 className="text-sm font-semibold mb-1">{t("myAgent.mailTitle")}</h2>
         <p className="text-xs text-muted-foreground">
-          Verknüpfe deinen persönlichen Agenten mit einem E-Mail-Postfach.
+          {t("myAgent.mailSubtitle")}
         </p>
       </div>
 
       {cfg?.configured && (
         <div className="flex items-center gap-2 p-3 rounded-md text-xs border bg-green-50 border-green-200 text-green-700">
           <CheckCircle className="h-3.5 w-3.5" />
-          <span>Konfiguriert: <strong>{cfg.mail_address}</strong></span>
+          <span>{t("myAgent.mailConfigured", { address: cfg.mail_address })}</span>
           {cfg.smtp_host && <span className="ml-auto text-muted-foreground font-mono">{cfg.smtp_host}</span>}
         </div>
       )}
@@ -2156,20 +2168,20 @@ function MailTab() {
         <label className="flex items-center gap-2 text-xs cursor-pointer">
           <input type="checkbox" checked={createAcc} onChange={e => setCreateAcc(e.target.checked)}
             className="accent-primary" />
-          <span>Postfach automatisch bei All-Inkl anlegen (KAS API)</span>
+          <span>{t("myAgent.mailCreateAccount")}</span>
         </label>
 
         {createAcc ? (
           <>
             <div>
-              <label className="text-xs font-medium block mb-1">Mail-Adresse (Localpart)</label>
+              <label className="text-xs font-medium block mb-1">{t("myAgent.mailLocalpart")}</label>
               <input type="text" value={mailAddress} onChange={e => setMailAddress(e.target.value)}
                 placeholder="z.B. meinagent"
                 className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
-              <p className="text-xs text-muted-foreground mt-1">Nur den Teil vor dem @-Zeichen eingeben.</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("myAgent.mailLocalpartHint")}</p>
             </div>
             <div>
-              <label className="text-xs font-medium block mb-1">Domain</label>
+              <label className="text-xs font-medium block mb-1">{t("myAgent.mailDomain")}</label>
               <input type="text" value={domain} onChange={e => setDomain(e.target.value)}
                 placeholder="z.B. hydrahive.org (leer = Server-Standard)"
                 className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
@@ -2178,41 +2190,41 @@ function MailTab() {
         ) : (
           <>
             <div>
-              <label className="text-xs font-medium block mb-1">Vollständige Mail-Adresse</label>
+              <label className="text-xs font-medium block mb-1">{t("myAgent.mailFullAddress")}</label>
               <input type="email" value={mailAddress} onChange={e => setMailAddress(e.target.value)}
                 placeholder="agent@example.com"
                 className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
             </div>
             <div className="space-y-3 p-3 border rounded-md bg-muted/30">
-              <p className="text-xs font-medium">SMTP-Konfiguration</p>
+              <p className="text-xs font-medium">{t("myAgent.mailSmtpConfig")}</p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <label className="text-xs text-muted-foreground block mb-1">SMTP-Host</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("myAgent.mailSmtpHost")}</label>
                   <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)}
                     placeholder="smtp.example.com"
                     className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Port</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("myAgent.mailSmtpPort")}</label>
                   <input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)}
                     placeholder="587"
                     className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Benutzername (leer = Mail-Adresse)</label>
+                <label className="text-xs text-muted-foreground block mb-1">{t("myAgent.mailSmtpUser")}</label>
                 <input type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)}
                   placeholder="agent@example.com"
                   className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Passwort</label>
+                <label className="text-xs text-muted-foreground block mb-1">{t("myAgent.mailSmtpPassword")}</label>
                 <input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)}
                   placeholder="SMTP-Passwort"
                   className="w-full text-xs border rounded-md px-3 py-2 bg-background" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">IMAP-Host (leer = smtp. → imap.)</label>
+                <label className="text-xs text-muted-foreground block mb-1">{t("myAgent.mailImapHost")}</label>
                 <input type="text" value={imapHost} onChange={e => setImapHost(e.target.value)}
                   placeholder="imap.example.com"
                   className="w-full text-xs border rounded-md px-3 py-2 bg-background font-mono" />
@@ -2225,13 +2237,13 @@ function MailTab() {
           <button type="submit" disabled={saving || !mailAddress.trim()}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5" />
-            {saving ? "Speichern…" : "Speichern"}
+            {saving ? t("myAgent.mailSaving") : t("myAgent.mailSave")}
           </button>
           {cfg?.configured && (
             <button type="button" onClick={handleDelete}
               className="flex items-center gap-2 px-3 py-2 text-sm border border-destructive text-destructive rounded-md hover:bg-destructive/10 transition-colors">
               <X className="h-3.5 w-3.5" />
-              Entfernen
+              {t("myAgent.mailRemove")}
             </button>
           )}
           {msg && (
@@ -2244,11 +2256,11 @@ function MailTab() {
       </form>
 
       <section className="space-y-2 border-t pt-4">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hinweise</h3>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.mailNotesTitle")}</h3>
         <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-          <li>Mit KAS API wird das Postfach automatisch bei All-Inkl angelegt.</li>
-          <li>Ohne KAS kannst du beliebige SMTP-Zugangsdaten manuell eingeben.</li>
-          <li>Der Agent kann danach E-Mails versenden (Tool: <code className="font-mono bg-muted px-1 rounded">send_mail</code>) und empfangen (<code className="font-mono bg-muted px-1 rounded">receive_mail</code>).</li>
+          <li>{t("myAgent.mailNote1")}</li>
+          <li>{t("myAgent.mailNote2")}</li>
+          <li>{t("myAgent.mailNote3")}</li>
         </ul>
       </section>
     </div>
@@ -2260,6 +2272,7 @@ function MailTab() {
 import type { TelegramStatus, TelegramConfig } from "../lib/api";
 
 function TelegramTab() {
+  const { t } = useTranslation();
   const [status,   setStatus]   = useState<TelegramStatus | null>(null);
   const [loading,  setLoading]  = useState(false);
   const [token,    setToken]    = useState("");
@@ -2310,7 +2323,7 @@ function TelegramTab() {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Telegram-Bot trennen?")) return;
+    if (!confirm(t("myAgent.telegramDisconnectConfirm"))) return;
     setLoading(true);
     try {
       await api.disconnectTelegram();
@@ -2342,7 +2355,7 @@ function TelegramTab() {
     : status?.status === "error"
     ? "bg-destructive/20 text-destructive"
     : "bg-muted text-muted-foreground";
-  const statusLabel = isRunning ? "Verbunden" : status?.status === "error" ? "Fehler" : "Getrennt";
+  const statusLabel = isRunning ? t("myAgent.telegramConnected") : status?.status === "error" ? t("myAgent.telegramError") : t("myAgent.telegramDisconnected");
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 max-w-2xl">
@@ -2352,7 +2365,7 @@ function TelegramTab() {
           <div className="flex items-center gap-3">
             <Send className="h-5 w-5 text-blue-500" />
             <div>
-              <h3 className="font-semibold text-sm">Telegram Bot</h3>
+              <h3 className="font-semibold text-sm">{t("myAgent.telegramTitle")}</h3>
               {status?.bot_username && (
                 <p className="text-xs text-muted-foreground">{status.bot_username}</p>
               )}
@@ -2366,7 +2379,7 @@ function TelegramTab() {
         {/* Token-Input wenn nicht verbunden */}
         {!isRunning && (
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Bot-Token (@BotFather)</label>
+            <label className="text-xs text-muted-foreground">{t("myAgent.telegramTokenLabel")}</label>
             <div className="flex gap-2">
               <input
                 type="password"
@@ -2381,11 +2394,11 @@ function TelegramTab() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
               >
                 {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                Verbinden
+                {loading ? t("myAgent.telegramConnecting") : t("myAgent.telegramConnect")}
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Bot erstellen: Telegram öffnen → <strong>@BotFather</strong> → /newbot → Token kopieren
+              {t("myAgent.telegramCreateHint")}
             </p>
           </div>
         )}
@@ -2396,7 +2409,7 @@ function TelegramTab() {
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-medium hover:bg-destructive/10"
           >
-            <X className="h-3.5 w-3.5" /> Bot trennen
+            <X className="h-3.5 w-3.5" /> {t("myAgent.telegramDisconnectBtn")}
           </button>
         )}
       </section>
@@ -2404,14 +2417,14 @@ function TelegramTab() {
       {/* Konfiguration */}
       {status?.configured && (
         <section className="rounded-2xl border bg-card p-5 space-y-5">
-          <h3 className="font-semibold text-sm">Konfiguration</h3>
+          <h3 className="font-semibold text-sm">{t("myAgent.telegramConfigTitle")}</h3>
 
           {/* Chat-Typen */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Chats</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.telegramAllowedChats")}</p>
             {[
-              { key: "allow_private", label: "Privatnachrichten" },
-              { key: "allow_groups",  label: "Gruppen & Channels" },
+              { key: "allow_private", label: t("myAgent.telegramPrivate") },
+              { key: "allow_groups",  label: t("myAgent.telegramGroups") },
             ].map(({ key, label }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -2427,7 +2440,7 @@ function TelegramTab() {
 
           {/* Keyword */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Keyword-Filter</label>
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.telegramKeyword")}</label>
             <input
               value={cfg.require_keyword}
               onChange={e => setCfg(c => ({ ...c, require_keyword: e.target.value }))}
@@ -2439,7 +2452,7 @@ function TelegramTab() {
           {/* Admin-IDs */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-              <Shield className="h-3 w-3" /> Admin User-IDs (elevated)
+              <Shield className="h-3 w-3" /> {t("myAgent.telegramAdmins")}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {cfg.admin_user_ids.map(id => (
@@ -2457,12 +2470,12 @@ function TelegramTab() {
               <button onClick={() => addId(cfg.admin_user_ids, adminInput, ids => setCfg(c => ({ ...c, admin_user_ids: ids })), setAdminInput)}
                 className="px-3 py-1.5 rounded-lg border text-sm">+ Add</button>
             </div>
-            <p className="text-xs text-muted-foreground">Deine User-ID findest du über @userinfobot auf Telegram.</p>
+            <p className="text-xs text-muted-foreground">{t("myAgent.telegramAdminHint")}</p>
           </div>
 
           {/* Whitelist */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte User-IDs (Whitelist)</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.telegramWhitelist")}</p>
             <div className="flex flex-wrap gap-1.5">
               {cfg.allowed_user_ids.map(id => (
                 <span key={id} className="flex items-center gap-1 text-xs bg-muted rounded-full px-2 py-0.5">
@@ -2483,7 +2496,7 @@ function TelegramTab() {
 
           {/* Blacklist */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Blockierte User-IDs</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("myAgent.telegramBlacklist")}</p>
             <div className="flex flex-wrap gap-1.5">
               {cfg.blocked_user_ids.map(id => (
                 <span key={id} className="flex items-center gap-1 text-xs bg-destructive/10 text-destructive rounded-full px-2 py-0.5">
@@ -2505,19 +2518,19 @@ function TelegramTab() {
           <button onClick={saveCfg} disabled={cfgSaving}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
             <Save className="h-3.5 w-3.5" />
-            {cfgSaving ? "Speichern..." : "Speichern"}
+            {cfgSaving ? t("myAgent.telegramSaving") : t("myAgent.telegramSave")}
           </button>
         </section>
       )}
 
       {/* Hinweis */}
       <section className="rounded-2xl border bg-muted/30 p-4 text-xs text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">Einrichtung</p>
+        <p className="font-medium text-foreground">{t("myAgent.telegramSetupTitle")}</p>
         <ol className="list-decimal list-inside space-y-1">
-          <li>Öffne Telegram und schreibe <strong>@BotFather</strong></li>
-          <li>Schicke <code className="bg-muted px-1 rounded">/newbot</code> und folge den Anweisungen</li>
-          <li>Kopiere den Token und füge ihn oben ein</li>
-          <li>Deine User-ID findest du via <strong>@userinfobot</strong> → als Admin eintragen für vollen Zugriff</li>
+          <li>{t("myAgent.telegramSetup1")}</li>
+          <li>{t("myAgent.telegramSetup2")}</li>
+          <li>{t("myAgent.telegramSetup3")}</li>
+          <li>{t("myAgent.telegramSetup4")}</li>
         </ol>
       </section>
     </div>
