@@ -1105,6 +1105,232 @@ class WriteMemoryTool(BaseTool):
         return {"saved": True, "filename": safe, "bytes": len(content.encode())}
 
 
+# ============================================================= Self-Learning Skills (#7)
+
+def _safe_skill_filename(filename: str) -> str:
+    """Normalisiert Skill-Dateinamen: a-z, A-Z, 0-9, _ und - erlaubt, erzwingt .md Extension."""
+    base = filename.removesuffix(".md").strip()
+    if not _re_shell.match(r"^[a-zA-Z0-9_-]+$", base):
+        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, A-Z, 0-9, _ und - erlaubt.")
+    return base + ".md"
+
+
+_SKILL_FRONTMATTER_TEMPLATE = """\
+---
+skill: {skill_id}
+version: "1.0"
+scope: {scope}
+author: agent
+triggers:
+{triggers_yaml}priority: {priority}
+---
+
+{content}"""
+
+
+class CreateSkillTool(BaseTool):
+    """Erstellt oder aktualisiert einen eigenen Skill im persönlichen Skill-Verzeichnis."""
+
+    @property
+    def id(self) -> str:   return "create_skill"
+    @property
+    def name(self) -> str: return "Skill erstellen"
+    @property
+    def description(self) -> str:
+        return (
+            "Erstellt einen neuen Skill (wiederverwendbares Wissen/Prozedur) im eigenen Skill-Verzeichnis. "
+            "Skill wird beim nächsten passenden Trigger automatisch in den System-Prompt geladen. "
+            "scope='on-demand': nur wenn ein Trigger-Keyword in der Nachricht vorkommt. "
+            "scope='always': immer geladen (sparsam einsetzen). "
+            "Nur für Wissen geeignet das regelmäßig gebraucht wird — kein Einmalwissen."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["memory.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type":        "string",
+                    "description": "Dateiname ohne Pfad (z.B. 'deploy-prozess' → deploy-prozess.md)",
+                },
+                "skill_id": {
+                    "type":        "string",
+                    "description": "Eindeutiger Skill-Name (z.B. 'deploy-prozess')",
+                },
+                "triggers": {
+                    "type":        "array",
+                    "items":       {"type": "string"},
+                    "description": "Keywords die diesen Skill aktivieren (z.B. ['deploy', 'rollout', 'update'])",
+                },
+                "content": {
+                    "type":        "string",
+                    "description": "Inhalt des Skills — Anleitung, Wissen oder Prozedur in Markdown",
+                },
+                "scope": {
+                    "type":        "string",
+                    "enum":        ["on-demand", "always"],
+                    "description": "on-demand (Standard, empfohlen) oder always",
+                },
+                "priority": {
+                    "type":        "integer",
+                    "description": "Ladereihenfolge, niedrigere Zahl = früher (Standard: 50)",
+                },
+            },
+            "required": ["filename", "skill_id", "triggers", "content"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        filename: str, skill_id: str, triggers: list, content: str,
+        scope: str = "on-demand", priority: int = 50,
+    ) -> dict:
+        try:
+            safe = _safe_skill_filename(filename)
+        except ValueError as e:
+            return {"error": str(e)}
+
+        skills_dir = AGENTS_ROOT / agent_id / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+
+        triggers_yaml = "".join(f"  - {t}\n" for t in triggers)
+        text = _SKILL_FRONTMATTER_TEMPLATE.format(
+            skill_id=skill_id,
+            scope=scope,
+            triggers_yaml=triggers_yaml,
+            priority=priority,
+            content=content.strip(),
+        )
+
+        p = skills_dir / safe
+        p.write_text(text, encoding="utf-8")
+        try:
+            p.chmod(0o600)
+        except Exception:
+            pass
+
+        logger.info("create_skill [%s]: %s (triggers=%s)", agent_id, safe, triggers)
+        return {"created": True, "filename": safe, "skill_id": skill_id, "triggers": triggers}
+
+
+class ListSkillsTool(BaseTool):
+    """Listet alle eigenen Skills mit Metadaten auf."""
+
+    @property
+    def id(self) -> str:   return "list_skills"
+    @property
+    def name(self) -> str: return "Skills auflisten"
+    @property
+    def description(self) -> str:
+        return (
+            "Listet alle vorhandenen Skills des Agenten auf (Dateiname, Skill-ID, Scope, Triggers, Author). "
+            "Hilft zu entscheiden ob ein neuer Skill nötig ist oder ein bestehender aktualisiert werden soll."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["memory.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str) -> dict:
+        import yaml as _yaml
+        import re as _re
+        skills_dir = AGENTS_ROOT / agent_id / "skills"
+        if not skills_dir.exists():
+            return {"skills": [], "count": 0}
+
+        FRONTMATTER_RE = _re.compile(r"^---\s*\n(.*?)\n---\s*\n", _re.DOTALL)
+        skills = []
+        for p in sorted(skills_dir.glob("*.md")):
+            entry: dict = {"filename": p.name, "skill_id": "", "scope": "", "triggers": [], "author": "system"}
+            try:
+                text = p.read_text(encoding="utf-8")
+                m = FRONTMATTER_RE.match(text)
+                if m:
+                    fm = _yaml.safe_load(m.group(1)) or {}
+                    entry["skill_id"] = fm.get("skill", "")
+                    entry["scope"]    = fm.get("scope", "")
+                    entry["triggers"] = fm.get("triggers", [])
+                    entry["author"]   = fm.get("author", "system")
+            except Exception:
+                pass
+            skills.append(entry)
+
+        return {"skills": skills, "count": len(skills)}
+
+
+class DeleteSkillTool(BaseTool):
+    """Löscht einen selbst angelegten Skill. Nur Skills mit author=agent können gelöscht werden."""
+
+    @property
+    def id(self) -> str:   return "delete_skill"
+    @property
+    def name(self) -> str: return "Skill löschen"
+    @property
+    def description(self) -> str:
+        return (
+            "Löscht einen eigenen Skill aus dem Skill-Verzeichnis. "
+            "Nur Skills die mit create_skill angelegt wurden (author=agent) können gelöscht werden. "
+            "System-Skills (author=system oder kein author) sind geschützt."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["memory.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type":        "string",
+                    "description": "Dateiname des zu löschenden Skills (z.B. 'deploy-prozess.md')",
+                },
+            },
+            "required": ["filename"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, filename: str) -> dict:
+        import yaml as _yaml
+        import re as _re
+
+        try:
+            safe = _safe_skill_filename(filename)
+        except ValueError as e:
+            return {"error": str(e)}
+
+        p = AGENTS_ROOT / agent_id / "skills" / safe
+        if not p.exists():
+            return {"error": f"Skill '{safe}' nicht gefunden."}
+
+        # Author-Prüfung: nur agent-erstellte Skills dürfen gelöscht werden
+        FRONTMATTER_RE = _re.compile(r"^---\s*\n(.*?)\n---\s*\n", _re.DOTALL)
+        try:
+            text = p.read_text(encoding="utf-8")
+            m = FRONTMATTER_RE.match(text)
+            author = "system"
+            if m:
+                fm = _yaml.safe_load(m.group(1)) or {}
+                author = fm.get("author", "system")
+        except Exception:
+            author = "system"
+
+        if author != "agent":
+            return {"error": f"Skill '{safe}' ist ein System-Skill (author={author}) und kann nicht gelöscht werden."}
+
+        p.unlink()
+        logger.info("delete_skill [%s]: %s gelöscht", agent_id, safe)
+        return {"deleted": True, "filename": safe}
+
+
 # ============================================================= Agenten-Delegation (#107)
 
 class AskAgentTool(BaseTool):
@@ -2700,6 +2926,9 @@ registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
+registry.register(CreateSkillTool())
+registry.register(ListSkillsTool())
+registry.register(DeleteSkillTool())
 registry.register(AskAgentTool())
 registry.register(DelegateAgentTool())
 registry.register(GitStatusTool())
