@@ -18,7 +18,10 @@ export function SetupPage() {
     setLoading(true); setError("");
     try {
       await api.post("/setup", { username, password });
-      navigate("/login");
+      // Auto-Login und direkt zum Wizard
+      const tokenRes = await api.post<{access_token: string}>("/token", { username, password });
+      localStorage.setItem("hydrahive_token", tokenRes.access_token);
+      navigate("/wizard");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Setup");
     } finally {

@@ -22,6 +22,14 @@ class SetupRequest(BaseModel):
     password: str
 
 
+class KasConfigRequest(BaseModel):
+    login:          str
+    password:       str
+    default_domain: str = ""
+    smtp_host:      str = ""
+    smtp_port:      int = 587
+
+
 class AgentLlmPatchRequest(BaseModel):
     fallback_models: list[str]
 
@@ -192,8 +200,50 @@ def register_core_misc_routes(
 ) -> type[IncomingMessage]:
     @public_router.get("/setup/status")
     def setup_status():
+        import json
+        from pathlib import Path as _Path
         users = load_users()
-        return {"needs_setup": len(users) == 0}
+        kas_ok  = _Path("/etc/hydrahive/kas.json").exists()
+        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/octopos/llm_config.json").exists()
+        wizard_done = _Path("/etc/hydrahive/setup_wizard_done").exists()
+        return {
+            "needs_setup":   len(users) == 0,
+            "wizard_done":   wizard_done or (kas_ok and llm_ok),
+            "kas_configured": kas_ok,
+            "llm_configured": llm_ok,
+        }
+
+    _KAS_PATH = "/etc/hydrahive/kas.json"
+
+    @admin_router.get("/admin/kas")
+    def get_kas():
+        import json
+        from pathlib import Path as _Path
+        p = _Path(_KAS_PATH)
+        if not p.exists():
+            return {"configured": False}
+        try:
+            data = json.loads(p.read_text())
+            return {"configured": True, **data}
+        except Exception:
+            return {"configured": False}
+
+    @admin_router.put("/admin/kas")
+    def put_kas(req: KasConfigRequest):
+        import json
+        from pathlib import Path as _Path
+        p = _Path(_KAS_PATH)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = req.model_dump()
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        p.chmod(0o600)
+        return {"saved": True}
+
+    @admin_router.post("/admin/wizard/complete")
+    def wizard_complete():
+        from pathlib import Path as _Path
+        _Path("/etc/hydrahive/setup_wizard_done").touch()
+        return {"done": True}
 
     @public_router.post("/setup", status_code=201)
     async def run_setup(req: SetupRequest):

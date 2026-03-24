@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cpu, Plug, GitBranch, Network, Settings } from "lucide-react";
+import { Cpu, Plug, GitBranch, Network, Settings, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
 import { VpnPage } from "@/pages/VpnPage";
+import { KasConfigPage } from "@/pages/KasConfigPage";
 import { useTranslation } from "react-i18next";
 
 const TABS = [
@@ -12,6 +13,7 @@ const TABS = [
   { id: "mcp",   label: "MCP-Server",  icon: Plug,      component: McpConfigPage },
   { id: "gitea", label: "Gitea",       icon: GitBranch, component: GiteaConfigPage },
   { id: "vpn",   label: "VPN",         icon: Network,   component: VpnPage },
+  { id: "kas",   label: "Mail / KAS",  icon: Mail,      component: KasConfigPage },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];

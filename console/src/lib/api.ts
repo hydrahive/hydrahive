@@ -131,6 +131,10 @@ export const api = {
   vpnDown:              () => api.post<{disconnected: boolean}>("/admin/vpn/down", {}),
   vpnPeers:             () => api.get<{peers: VpnPeer[]; count: number}>("/admin/vpn/peers"),
   vpnHeadscaleAuthkey:  () => api.post<{auth_key: string; expiration: string; reusable: boolean}>("/admin/vpn/headscale/authkey", {}),
+  // KAS / All-Inkl
+  getKas:  () => api.get<KasConfig>("/admin/kas"),
+  putKas:  (d: KasConfigPayload) => api.put<{saved: boolean}>("/admin/kas", d),
+  wizardComplete: () => api.post<{done: boolean}>("/admin/wizard/complete", {}),
   // Session History
   listSessions:  (projectId: string, limit = 20) =>
     api.get<{sessions: SessionPreview[]}>(`/projects/${projectId}/sessions?limit=${limit}`),
@@ -358,6 +362,23 @@ export interface DoctorReport {
   status:  "ok" | "warn" | "error";
   summary: { total: number; ok: number; warn: number; error: number };
   checks:  DoctorCheck[];
+}
+
+export interface KasConfig {
+  configured:     boolean;
+  login?:         string;
+  password?:      string;
+  default_domain?: string;
+  smtp_host?:     string;
+  smtp_port?:     number;
+}
+
+export interface KasConfigPayload {
+  login:          string;
+  password:       string;
+  default_domain: string;
+  smtp_host:      string;
+  smtp_port:      number;
 }
 
 export interface SessionPreview {

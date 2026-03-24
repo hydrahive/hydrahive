@@ -18,6 +18,7 @@ const AuditPage         = lazy(() => import("@/pages/AuditPage").then((m) => ({ 
 const BackupPage        = lazy(() => import("@/pages/BackupPage").then((m) => ({ default: m.BackupPage })));
 const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -47,8 +48,9 @@ export default function App() {
     <SetupGuard>
       <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>
-          <Route path="/setup" element={<SetupPage />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/setup"  element={<SetupPage />} />
+          <Route path="/wizard" element={<WizardPage />} />
+          <Route path="/login"  element={<LoginPage />} />
           <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
