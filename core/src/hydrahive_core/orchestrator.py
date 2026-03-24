@@ -409,14 +409,20 @@ class Orchestrator:
         self,
         project_id: str,
         boss_cfg: AgentConfig,
-        token_threshold: int = 4000,
         keep_last: int = 8,
     ) -> None:
         """
         Context-Kompaktierung (#74): wenn Session zu gross wird, aelteren Kontext
         per LLM zusammenfassen und durch eine Summary-Message ersetzen.
-        token_threshold: geschaetzte Tokens ab denen kompaktiert wird.
+        Threshold ist model-aware: Claude/GPT-4/Gemini/Mistral-Large = 40000 Tokens,
+        lokale/kleine Modelle = 3000 Tokens.
         """
+        model = boss_cfg.llm.model.lower()
+        if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
+            token_threshold = 40_000
+        else:
+            token_threshold = 3_000  # lokale Modelle haben kleine Kontextfenster
+
         if self._sessions.estimated_tokens(project_id) < token_threshold:
             return
 
@@ -1019,6 +1025,10 @@ class Orchestrator:
         user_msg_saved = False
         self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
         user_msg_saved = True
+
+        # Context-Kompaktierung vor dem LLM-Aufruf
+        await self._compact_if_needed(project_id, boss_cfg)
+
         system_prompt = self._build_system_prompt(boss_cfg, content)
         history       = self._sessions.get_context(project_id, max_messages=12)
         messages      = [{"role": "system", "content": system_prompt}] + history

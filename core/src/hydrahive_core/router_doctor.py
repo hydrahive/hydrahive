@@ -1,0 +1,189 @@
+"""
+router_doctor.py — HydraHive Doctor: Systemdiagnose (#new)
+
+GET /admin/doctor  → führt alle Checks durch und gibt strukturierten Report zurück
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import subprocess
+from pathlib import Path
+
+from fastapi import APIRouter, Depends
+
+logger = logging.getLogger(__name__)
+
+
+def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
+
+    @admin_router.get("/admin/doctor")
+    async def run_doctor(_a=Depends(require_admin)):
+        checks = []
+        checks += await _check_services()
+        checks += _check_configs()
+        checks += _check_ports()
+        checks += _check_disk()
+        checks += await _check_api()
+        checks += _check_vpn()
+
+        total = len(checks)
+        errors = sum(1 for c in checks if c["status"] == "error")
+        warnings = sum(1 for c in checks if c["status"] == "warn")
+
+        return {
+            "status": "error" if errors else ("warn" if warnings else "ok"),
+            "summary": {"total": total, "ok": total - errors - warnings, "warn": warnings, "error": errors},
+            "checks": checks,
+        }
+
+
+def _check(name: str, status: str, detail: str, hint: str = "") -> dict:
+    return {"name": name, "status": status, "detail": detail, "hint": hint}
+
+
+async def _check_services() -> list[dict]:
+    """Prüft systemd-Services."""
+    results = []
+    services = [
+        ("octopos-core",              "HydraHive Core"),
+        ("nginx",                     "Nginx Reverse Proxy"),
+        ("gitea",                     "Gitea"),
+        ("octopos-conduwuit",         "Matrix (conduwuit)"),
+        ("octopos-whatsapp-bridge",   "WhatsApp Bridge"),
+        ("octopos-amem",              "A-MEM MCP"),
+        ("tailscaled",                "Tailscale VPN"),
+    ]
+    for unit, label in services:
+        try:
+            r = subprocess.run(
+                ["systemctl", "is-active", unit],
+                capture_output=True, text=True, timeout=5
+            )
+            active = r.stdout.strip() == "active"
+            results.append(_check(
+                f"Service: {label}",
+                "ok" if active else "warn",
+                "aktiv" if active else r.stdout.strip(),
+                "" if active else f"sudo systemctl start {unit}",
+            ))
+        except Exception as e:
+            results.append(_check(f"Service: {label}", "error", str(e)))
+    return results
+
+
+def _check_configs() -> list[dict]:
+    """Prüft wichtige Konfigurationsdateien."""
+    results = []
+    configs = [
+        (Path("/etc/octopos/llm.json"),              "LLM-Konfiguration"),
+        (Path("/etc/octopos/users.json"),            "Benutzer-Datenbank"),
+        (Path("/etc/nginx/sites-enabled/octopos"),   "Nginx-Konfiguration"),
+        (Path("/opt/octopos/venv"),                  "Python-Virtualenv"),
+    ]
+    for path, label in configs:
+        exists = path.exists()
+        results.append(_check(
+            f"Config: {label}",
+            "ok" if exists else "error",
+            str(path) if exists else f"Nicht gefunden: {path}",
+            "" if exists else "Installer erneut ausführen",
+        ))
+
+    # VPN-Konfig optional
+    vpn = Path("/etc/hydrahive/vpn.json")
+    if vpn.exists():
+        try:
+            data = json.loads(vpn.read_text())
+            results.append(_check("Config: VPN", "ok", f"Modus: {data.get('mode','unbekannt')}"))
+        except Exception:
+            results.append(_check("Config: VPN", "warn", "vpn.json nicht parsebar"))
+
+    return results
+
+
+def _check_ports() -> list[dict]:
+    """Prüft ob wichtige Ports erreichbar sind."""
+    import socket
+    results = []
+    ports = [
+        (8765, "Core API"),
+        (80,   "HTTP/nginx"),
+        (3002, "Gitea"),
+        (8008, "Matrix"),
+    ]
+    for port, label in ports:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=2):
+                results.append(_check(f"Port {port}: {label}", "ok", "erreichbar"))
+        except Exception:
+            results.append(_check(f"Port {port}: {label}", "error", "nicht erreichbar",
+                                  f"Prüfe: sudo ss -tlnp | grep {port}"))
+    return results
+
+
+def _check_disk() -> list[dict]:
+    """Prüft Festplattenplatz."""
+    results = []
+    try:
+        import shutil
+        total, used, free = shutil.disk_usage("/opt/octopos")
+        free_gb = free / (1024 ** 3)
+        used_pct = int(used / total * 100)
+        status = "ok" if free_gb > 2 else ("warn" if free_gb > 0.5 else "error")
+        results.append(_check(
+            "Festplatte: /opt/octopos",
+            status,
+            f"{free_gb:.1f} GB frei ({used_pct}% belegt)",
+            "" if status == "ok" else "Speicherplatz freigeben",
+        ))
+    except Exception as e:
+        results.append(_check("Festplatte", "warn", str(e)))
+    return results
+
+
+async def _check_api() -> list[dict]:
+    """Prüft die eigene API."""
+    import urllib.request
+    results = []
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8765/health", timeout=3) as r:
+            data = json.loads(r.read())
+            results.append(_check("API: /health", "ok", f"status={data.get('status','?')}"))
+    except Exception as e:
+        results.append(_check("API: /health", "error", str(e)))
+
+    # Update-Status
+    status_file = Path("/var/run/octopos-update.json")
+    if status_file.exists():
+        try:
+            data = json.loads(status_file.read_text())
+            commit = data.get("commit", "?")
+            results.append(_check("Deployment: Commit-Stand", "ok", f"Letzter Commit: {commit}"))
+        except Exception:
+            results.append(_check("Deployment: Commit-Stand", "warn", "Status nicht lesbar"))
+    else:
+        results.append(_check("Deployment: Commit-Stand", "warn", "Noch nie deployed"))
+
+    return results
+
+
+def _check_vpn() -> list[dict]:
+    """Prüft Tailscale-Status falls installiert."""
+    results = []
+    try:
+        r = subprocess.run(["tailscale", "status", "--json"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            data = json.loads(r.stdout)
+            ip = data.get("TailscaleIPs", ["?"])[0] if data.get("TailscaleIPs") else "?"
+            peers = len(data.get("Peer", {}))
+            results.append(_check("VPN: Tailscale", "ok", f"IP: {ip}, Peers: {peers}"))
+        else:
+            results.append(_check("VPN: Tailscale", "warn", "Nicht verbunden"))
+    except FileNotFoundError:
+        pass  # tailscale nicht installiert → kein Check
+    except Exception as e:
+        results.append(_check("VPN: Tailscale", "warn", str(e)))
+    return results

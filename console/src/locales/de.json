@@ -283,6 +283,17 @@
     "gpuRefresh": "aktualisiert alle 15s",
     "agentRuntime": "Agent-Laufzeit"
   },
+  "doctor": {
+    "title": "Systemdiagnose",
+    "runBtn": "Diagnose ausführen",
+    "running": "Diagnose läuft...",
+    "total": "Checks gesamt",
+    "ok": "OK",
+    "warnings": "Warnungen",
+    "errors": "Fehler",
+    "allOk": "Alles in Ordnung",
+    "issuesFound": "Probleme gefunden"
+  },
   "tools": {
     "title": "Tools",
     "subtitle": "{{count}} Tool im Core-Registry",

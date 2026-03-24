@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap } from "lucide-react";
-import { api, GpuInfo, GpuEntry } from "@/lib/api";
+import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle } from "lucide-react";
+import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/hooks/useAuth";
 
 interface RuntimeAgent {
   status:             string;
@@ -90,6 +91,93 @@ function GpuCard({ gpu }: { gpu: GpuEntry }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DoctorStatusIcon({ status }: { status: DoctorCheck["status"] }) {
+  if (status === "ok")   return <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />;
+  if (status === "warn") return <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />;
+  return <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />;
+}
+
+function DoctorPanel() {
+  const { t } = useTranslation();
+  const { isAdmin } = useAuth();
+  const [report,  setReport]  = useState<DoctorReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  if (!isAdmin) return null;
+
+  async function runDoctor() {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.doctor();
+      setReport(r);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const summaryColor =
+    report?.status === "error" ? "text-destructive" :
+    report?.status === "warn"  ? "text-yellow-500" :
+    report?.status === "ok"    ? "text-green-500" : "";
+
+  return (
+    <div className="bg-card border rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Stethoscope className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">{t("doctor.title")}</h2>
+          {report && (
+            <span className={`text-xs font-semibold ${summaryColor}`}>
+              — {report.status === "ok" ? t("doctor.allOk") : t("doctor.issuesFound")}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={runDoctor}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+        >
+          <Stethoscope className={`h-3.5 w-3.5 ${loading ? "animate-pulse" : ""}`} />
+          {loading ? t("doctor.running") : t("doctor.runBtn")}
+        </button>
+      </div>
+
+      {error && (
+        <p className="text-sm text-destructive">{error}</p>
+      )}
+
+      {report && (
+        <>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground border-b pb-3">
+            <span>{t("doctor.total")}: <strong>{report.summary.total}</strong></span>
+            <span className="text-green-500">{t("doctor.ok")}: <strong>{report.summary.ok}</strong></span>
+            <span className="text-yellow-500">{t("doctor.warnings")}: <strong>{report.summary.warn}</strong></span>
+            <span className="text-destructive">{t("doctor.errors")}: <strong>{report.summary.error}</strong></span>
+          </div>
+          <div className="space-y-0">
+            {report.checks.map((check, i) => (
+              <div key={i} className="flex items-start gap-3 py-2.5 border-b last:border-0">
+                <DoctorStatusIcon status={check.status} />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{check.name}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
+                  {check.hint && (
+                    <p className="text-xs text-muted-foreground/60 mt-0.5 font-mono">{check.hint}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -232,6 +320,8 @@ export function SystemPage() {
           </div>
         </div>
       )}
+
+      <DoctorPanel />
     </div>
   );
 }
