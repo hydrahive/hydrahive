@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Menu,
   X,
+  Network,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ const navAdmin = [
   { to: "/users", icon: Users, label: "Benutzer", hint: "Accounts und Rollen" },
   { to: "/audit", icon: ShieldCheck, label: "Audit-Log", hint: "Nachvollziehbarkeit" },
   { to: "/backup", icon: Archive, label: "Backup", hint: "Snapshots und Restore" },
+  { to: "/vpn", icon: Network, label: "VPN", hint: "Tailscale / Headscale" },
 ];
 
 function useUpdateStatus(isAdmin: boolean) {

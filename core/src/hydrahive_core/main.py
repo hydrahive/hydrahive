@@ -34,6 +34,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_backup_restore import register_backup_restore_routes
+from .router_vpn import register_vpn_routes
 from .router_core_misc import register_core_misc_routes
 from .router_llm import register_llm_routes
 from .router_mcp import register_mcp_routes
@@ -1182,6 +1183,8 @@ register_backup_restore_routes(
     audit_log=audit_log,
     logger=logger,
 )
+
+register_vpn_routes(admin_router, require_admin=require_admin)
 
 
 # ================================================================== Status
