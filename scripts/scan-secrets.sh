@@ -100,6 +100,29 @@ else
   echo "$RG_OUT"
 fi
 
+# ── 6. VM Dateirechte (nur wenn SSH erreichbar) ───────────────────────────────
+VM_HOST="${HYDRAHIVE_VM:-192.168.178.181}"
+VM_USER="${HYDRAHIVE_VM_USER:-octopos}"
+VM_KEY="${HYDRAHIVE_VM_KEY:-$HOME/.ssh/claude_key_nopass}"
+info "6/6 VM Dateirechte — $VM_HOST (übersprungen wenn nicht erreichbar)"
+if ssh -i "$VM_KEY" -o ConnectTimeout=5 -o BatchMode=yes "$VM_USER@$VM_HOST" true 2>/dev/null; then
+  OPEN=$(ssh -i "$VM_KEY" "$VM_USER@$VM_HOST" \
+    "find /etc/hydrahive /agents /projects -type f \
+      \( -name '*.json' -o -name '*.md' -o -name '*token*' -o -name '*secret*' -o -name '*credentials*' \) \
+      -perm /044 -not -path '*agent.yaml' -not -path '*/soul.md' \
+      -not -path '*/skills/*' -not -path '*/agentlink/*' \
+      -not -path '*/memory/*' 2>/dev/null" || true)
+  if [ -z "$OPEN" ]; then
+    green "VM Dateirechte: alle sensitiven Dateien korrekt abgesichert"
+    PASS=$((PASS+1))
+  else
+    red "VM Dateirechte: zu offen (sollten 600/640 sein):"
+    echo "$OPEN"
+  fi
+else
+  info "VM nicht erreichbar — Rechte-Check übersprungen"
+fi
+
 # ── Zusammenfassung ───────────────────────────────────────────────────────────
 echo ""
 echo "════════════════════════════════════"
