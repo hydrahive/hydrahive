@@ -227,6 +227,43 @@ class SessionManager:
         total_chars = sum(len(m.content) for m in session.messages)
         return total_chars // 4
 
+    def list_sessions(self, project_id: str, limit: int = 20) -> list[dict]:
+        """Alle gespeicherten Sessions eines Projekts (neueste zuerst) mit Preview."""
+        sessions_dir = self._projects_dir / project_id / self.SESSIONS_SUBDIR
+        if not sessions_dir.exists():
+            return []
+        files = sorted(sessions_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        result = []
+        for f in files[:limit]:
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                msgs = data.get("messages", [])
+                first_user = next((m for m in msgs if m["role"] == "user"), None)
+                result.append({
+                    "id": data["id"],
+                    "started_at": data["started_at"],
+                    "ended_at": data.get("ended_at"),
+                    "message_count": len(msgs),
+                    "preview": first_user["content"][:120] if first_user else "",
+                })
+            except Exception:
+                continue
+        return result
+
+    def get_session_by_id(self, project_id: str, session_id: str) -> "Session | None":
+        """Eine bestimmte Session laden (aktive oder historische)."""
+        active = self._active.get(project_id)
+        if active and active.id == session_id:
+            return active
+        path = self._session_dir(project_id) / f"{session_id}.json"
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return Session.from_dict(data)
+        except Exception:
+            return None
+
     def compact(self, project_id: str, summary: str, keep_last: int = 10) -> None:
         """
         Context-Kompaktierung (#74): ersetzt alte Nachrichten durch eine Summary-Message.

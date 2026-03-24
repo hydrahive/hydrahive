@@ -226,6 +226,21 @@ def register_project_routes(
             "count": len(context),
         }
 
+    @auth_router.get("/projects/{project_id}/sessions")
+    def list_sessions(project_id: str, limit: int = 20):
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        return {"sessions": sessions.list_sessions(project_id, limit)}
+
+    @auth_router.get("/projects/{project_id}/sessions/{session_id}")
+    def get_session(project_id: str, session_id: str):
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        session = sessions.get_session_by_id(project_id, session_id)
+        if not session:
+            raise HTTPException(404, "Session nicht gefunden")
+        return session.to_dict()
+
     @auth_router.post("/projects/{project_id}/message/stream")
     async def send_message_stream(
         project_id: str,

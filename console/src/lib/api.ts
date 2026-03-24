@@ -131,6 +131,11 @@ export const api = {
   vpnDown:              () => api.post<{disconnected: boolean}>("/admin/vpn/down", {}),
   vpnPeers:             () => api.get<{peers: VpnPeer[]; count: number}>("/admin/vpn/peers"),
   vpnHeadscaleAuthkey:  () => api.post<{auth_key: string; expiration: string; reusable: boolean}>("/admin/vpn/headscale/authkey", {}),
+  // Session History
+  listSessions:  (projectId: string, limit = 20) =>
+    api.get<{sessions: SessionPreview[]}>(`/projects/${projectId}/sessions?limit=${limit}`),
+  getSessionById: (projectId: string, sessionId: string) =>
+    api.get<SessionFull>(`/projects/${projectId}/sessions/${sessionId}`),
   // Doctor
   doctor: () => api.get<DoctorReport>("/admin/doctor"),
   // System-Update
@@ -353,6 +358,29 @@ export interface DoctorReport {
   status:  "ok" | "warn" | "error";
   summary: { total: number; ok: number; warn: number; error: number };
   checks:  DoctorCheck[];
+}
+
+export interface SessionPreview {
+  id:            string;
+  started_at:    string;
+  ended_at:      string | null;
+  message_count: number;
+  preview:       string;
+}
+
+export interface SessionMessage {
+  role:      "user" | "assistant" | "system" | "tool";
+  content:   string;
+  timestamp: string;
+  agent_id:  string | null;
+}
+
+export interface SessionFull {
+  id:         string;
+  project_id: string;
+  started_at: string;
+  ended_at:   string | null;
+  messages:   SessionMessage[];
 }
 
 export interface UpdateStatus {

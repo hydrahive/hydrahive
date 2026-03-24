@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles, Smile } from "lucide-react";
-import { api } from "@/lib/api";
+import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight } from "lucide-react";
+import { api, SessionPreview, SessionFull } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useTranslation } from "react-i18next";
@@ -46,6 +46,10 @@ export function ChatPage() {
   const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [doneMsgId, setDoneMsgId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [viewSession, setViewSession] = useState<SessionFull | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,6 +95,22 @@ export function ChatPage() {
       })
       .catch(() => {});
   }, [id]);
+
+  function openHistory() {
+    setShowHistory(true);
+    setViewSession(null);
+    if (!id) return;
+    setHistoryLoading(true);
+    api.listSessions(id).then((d) => setHistoryList(d.sessions)).catch(() => {}).finally(() => setHistoryLoading(false));
+  }
+
+  async function openSession(sessionId: string) {
+    if (!id) return;
+    try {
+      const s = await api.getSessionById(id, sessionId);
+      setViewSession(s);
+    } catch {}
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -294,20 +314,96 @@ export function ChatPage() {
 
       <section className="section-card min-h-[65vh] overflow-hidden lg:overflow-visible p-0">
         <div className="grid min-h-[65vh] gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
-          <div className="flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
+          <div className="relative flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
             <div className="border-b bg-muted/20 px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="metric-kicker">{t("chat.conversation")}</p>
                   <h2 className="mt-2 text-lg font-semibold tracking-tight">{t("chat.projectChannel")}</h2>
                 </div>
-                <span className="status-pill">
-                  {messages.length !== 1
-                    ? t("chat.messageCountPlural", { count: messages.length })
-                    : t("chat.messageCount", { count: messages.length })}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button onClick={openHistory} className="inline-flex items-center gap-1.5 rounded-2xl border px-3 py-1.5 text-xs hover:bg-accent transition-colors">
+                    <History className="h-3.5 w-3.5" /> {t("chat.history")}
+                  </button>
+                  <span className="status-pill">
+                    {messages.length !== 1
+                      ? t("chat.messageCountPlural", { count: messages.length })
+                      : t("chat.messageCount", { count: messages.length })}
+                  </span>
+                </div>
               </div>
             </div>
+
+            {/* History Drawer */}
+            {showHistory && (
+              <div className="absolute inset-0 z-20 flex">
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => { setShowHistory(false); setViewSession(null); }} />
+                <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l bg-background shadow-xl">
+                  <div className="flex items-center justify-between border-b px-5 py-4">
+                    {viewSession ? (
+                      <button onClick={() => setViewSession(null)} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                        <ArrowLeft className="h-4 w-4" /> {t("chat.history")}
+                      </button>
+                    ) : (
+                      <h3 className="font-semibold">{t("chat.history")}</h3>
+                    )}
+                    <button onClick={() => { setShowHistory(false); setViewSession(null); }} className="rounded-lg p-1.5 hover:bg-muted">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {!viewSession ? (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                      {historyLoading && <p className="text-sm text-muted-foreground">{t("chat.historyLoading")}</p>}
+                      {!historyLoading && historyList.length === 0 && (
+                        <p className="text-sm text-muted-foreground">{t("chat.historyEmpty")}</p>
+                      )}
+                      {historyList.map((s) => (
+                        <button key={s.id} onClick={() => openSession(s.id)}
+                          className="w-full rounded-xl border bg-muted/30 px-4 py-3 text-left hover:bg-muted/60 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(s.started_at).toLocaleString()}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="status-pill text-xs">{s.message_count} Msg</span>
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            </div>
+                          </div>
+                          {s.preview && <p className="mt-1.5 text-sm line-clamp-2 text-foreground/80">{s.preview}</p>}
+                          {!s.ended_at && <span className="mt-1 inline-block text-xs text-green-500">● aktiv</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      <div className="rounded-xl border bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                        {t("chat.historyReadOnly")}
+                      </div>
+                      {viewSession.messages.filter(m => m.role === "user" || m.role === "assistant").map((m, i) => (
+                        <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                          {m.role === "assistant" && (
+                            <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                              <Bot className="h-3.5 w-3.5 text-primary" />
+                            </div>
+                          )}
+                          <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-primary text-primary-foreground" : "border bg-card prose prose-sm max-w-none dark:prose-invert"}`}>
+                            {m.role === "user"
+                              ? <span className="whitespace-pre-wrap">{m.content}</span>
+                              : <ReactMarkdown>{m.content}</ReactMarkdown>}
+                          </div>
+                          {m.role === "user" && (
+                            <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">
+                              <User className="h-3.5 w-3.5" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
               {messages.length === 0 && (
