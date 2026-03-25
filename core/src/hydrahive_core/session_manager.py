@@ -78,18 +78,30 @@ class Session:
     def end(self) -> None:
         self.ended_at = datetime.now(timezone.utc).isoformat()
 
-    def llm_context(self, max_messages: int = 50, prune_tool_results: int = 5) -> list[dict]:
+    def llm_context(
+        self,
+        max_messages: int = 50,
+        prune_tool_results: int = 3,
+        max_tool_result_chars: int = 1500,
+    ) -> list[dict]:
         """
         Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning)
-        Tool-Results die aelter als prune_tool_results Positionen sind werden
-        auf einen Platzhalter gekuerzt — spart Tokens ohne Kontext zu verlieren.
+        - Tool-Results älter als prune_tool_results → Platzhalter
+        - Alle Tool-Results werden auf max_tool_result_chars gekürzt (verhindert
+          dass große file_read / shell_exec Outputs den Context fluten)
         """
         window = self.messages[-max_messages:]
         cutoff = max(0, len(window) - prune_tool_results)
         result = []
         for i, m in enumerate(window):
-            if i < cutoff and m.role == MessageRole.TOOL and len(m.content) > 200:
-                result.append({"role": m.role.value, "content": "[Tool-Result gekürzt — zu weit zurück im Kontext]"})
+            if m.role == MessageRole.TOOL:
+                if i < cutoff and len(m.content) > 200:
+                    result.append({"role": m.role.value, "content": "[Tool-Result gekürzt — zu weit zurück im Kontext]"})
+                elif len(m.content) > max_tool_result_chars:
+                    truncated = m.content[:max_tool_result_chars] + f"\n…[gekürzt, {len(m.content)} Zeichen total]"
+                    result.append({"role": m.role.value, "content": truncated})
+                else:
+                    result.append(m.as_llm_message())
             else:
                 result.append(m.as_llm_message())
         return result
