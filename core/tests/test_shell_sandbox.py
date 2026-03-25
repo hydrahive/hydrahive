@@ -178,7 +178,7 @@ def test_cwd_projects_erlaubt():
     assert _validate_shell_cwd("/projects/mein_projekt") is None
 
 def test_cwd_home_erlaubt():
-    assert _validate_shell_cwd("/home/octopos") is None
+    assert _validate_shell_cwd("/home/hydrahive") is None
 
 def test_cwd_etc_geblockt():
     assert _validate_shell_cwd("/etc") is not None

@@ -45,9 +45,9 @@ def register_system_routes(
     logger: logging.Logger,
 ) -> None:
     def _load_update_status(status_file: str = "") -> dict:
-        # Beide Pfade prüfen — hydrahive zuerst, octopos als Fallback
+        # Beide Pfade prüfen — hydrahive zuerst, hydrahive als Fallback
         if not status_file:
-            for sf in ["/var/run/hydrahive-update.json", "/var/run/octopos-update.json"]:
+            for sf in ["/var/run/hydrahive-update.json", "/var/run/hydrahive-update.json"]:
                 if Path(sf).exists():
                     status_file = sf
                     break
@@ -176,7 +176,7 @@ def register_system_routes(
     def get_update_status():
         log_file = "/var/log/hydrahive-update.log"
         if not Path(log_file).exists():
-            log_file = "/var/log/octopos-update.log"
+            log_file = "/var/log/hydrahive-update.log"
         status = _load_update_status()
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()

@@ -77,9 +77,9 @@ class RateLimiter:
 
     @classmethod
     def from_env(cls, logger: logging.Logger | None = None) -> "RateLimiter":
-        backend = os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", os.environ.get("OCTOPOS_RATE_LIMIT_BACKEND", "auto")).strip().lower()
-        redis_url = os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_URL", "")).strip()
-        redis_timeout_s = float(os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", os.environ.get("OCTOPOS_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5")))
+        backend = os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", "auto")).strip().lower()
+        redis_url = os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", "")).strip()
+        redis_timeout_s = float(os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5")))
         return cls(
             backend=backend,
             redis_url=redis_url,

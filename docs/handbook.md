@@ -1009,14 +1009,14 @@ HydraHive unterstützt WhatsApp als Kommunikationskanal. Eine Node.js-basierte B
 Die WhatsApp-Bridge läuft als systemd-Service:
 
 ```bash
-sudo systemctl status octopos-whatsapp-bridge
-sudo journalctl -u octopos-whatsapp-bridge -f
+sudo systemctl status hydrahive-whatsapp-bridge
+sudo journalctl -u hydrahive-whatsapp-bridge -f
 ```
 
 ### Einrichten
 
-1. Service starten: `sudo systemctl start octopos-whatsapp-bridge`
-2. QR-Code im Log anzeigen lassen: `sudo journalctl -u octopos-whatsapp-bridge -n 50`
+1. Service starten: `sudo systemctl start hydrahive-whatsapp-bridge`
+2. QR-Code im Log anzeigen lassen: `sudo journalctl -u hydrahive-whatsapp-bridge -n 50`
 3. WhatsApp auf dem Mobilgerät öffnen → **Verknüpfte Geräte** → QR-Code scannen
 4. Nach erfolgreicher Verknüpfung läuft die Bridge dauerhaft im Hintergrund
 

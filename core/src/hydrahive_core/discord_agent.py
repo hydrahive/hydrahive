@@ -5,7 +5,7 @@ Jeder persönliche Agent kann einen eigenen Discord Bot haben.
 Der Bot lauscht auf Nachrichten in konfigurierten Channels und
 leitet sie an den Orchestrator weiter.
 
-Credentials: /etc/octopos/agent_tokens/<agent_id>_discord.json
+Credentials: /etc/hydrahive/agent_tokens/<agent_id>_discord.json
 Format: {"bot_token": "...", "guild_id": "...", "channel_ids": ["..."]}
 """
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR = Path("/etc/octopos/agent_tokens")
+TOKEN_DIR = Path("/etc/hydrahive/agent_tokens")
 
 
 def load_discord_config(agent_id: str) -> dict | None:
@@ -419,7 +419,7 @@ class DiscordAgentClient(ABC):
 
 class AgentDiscordClient(DiscordAgentClient):
     """
-    Konkrete Discord-Client-Implementierung für OctopOS-Agenten.
+    Konkrete Discord-Client-Implementierung für HydraHive-Agenten.
     Leitet eingehende Nachrichten an den Orchestrator weiter.
     """
 

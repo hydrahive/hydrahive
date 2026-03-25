@@ -88,7 +88,7 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float
 
 def _load_claude_oauth_token() -> str:
     """Laedt Claude OAuth Token falls vorhanden."""
-    token_file = Path("/etc/octopos/claude_oauth_token")
+    token_file = Path("/etc/hydrahive/claude_oauth_token")
     try:
         token = token_file.read_text(encoding="utf-8").strip()
         return token if token.startswith("sk-ant-oat01-") else ""
@@ -99,7 +99,7 @@ def _load_claude_oauth_token() -> str:
 def _load_openai_codex_token() -> dict | None:
     """Laedt OpenAI Codex OAuth Token (ChatGPT Plus/Pro)."""
     import json as _json
-    token_file = Path("/etc/octopos/openai_codex_token.json")
+    token_file = Path("/etc/hydrahive/openai_codex_token.json")
     try:
         data = _json.loads(token_file.read_text(encoding="utf-8"))
         if data.get("access_token") and data.get("account_id"):

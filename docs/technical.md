@@ -611,7 +611,7 @@ Alle sicherheitsrelevanten Aktionen werden in `/var/log/hydrahive/audit.jsonl` p
 Der Installer ist modular aufgebaut. Jedes Modul ist ein eigenständiges bash-Skript das von `install.sh` via `source` eingebunden wird. Alle Module teilen:
 
 - `info()`, `success()`, `warn()`, `error()` Funktionen (exportiert)
-- `$OCTOPOS_DIR`, `$OCTOPOS_USER` Variablen
+- `$HYDRAHIVE_DIR`, `$HYDRAHIVE_USER` Variablen
 - `$PROFILE` Variable (`minimal` | `standard` | `full`)
 
 **Idempotenz-Prinzip:** Jedes Modul prüft vor Installation ob die Komponente bereits vorhanden ist und überspringt sie wenn ja.

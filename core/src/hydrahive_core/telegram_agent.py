@@ -4,7 +4,7 @@ telegram_agent.py — Telegram Bot Integration für Personal Agents
 Jeder Personal-Agent bekommt seinen eigenen Bot (Token von @BotFather).
 Der Bot läuft als asyncio-Task mit Long-Polling — kein separater Bridge-Prozess nötig.
 
-Config: /etc/octopos/agent_tokens/personal_{username}_telegram.json (600)
+Config: /etc/hydrahive/agent_tokens/personal_{username}_telegram.json (600)
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR = Path("/etc/octopos/agent_tokens")
+TOKEN_DIR = Path("/etc/hydrahive/agent_tokens")
 
 # Laufende Bot-Instanzen: agent_id → asyncio.Task
 _bot_tasks: dict[str, asyncio.Task] = {}

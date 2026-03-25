@@ -30,7 +30,7 @@
 - **WhatsApp-Bridge-Erweiterungen**
   - Transkription von Sprachnachrichten via Whisper (`transcribe_voice`)
   - Text-to-Speech für Agenten-Antworten (`tts_enabled`)
-  - Service: `octopos-whatsapp-bridge.service`
+  - Service: `hydrahive-whatsapp-bridge.service`
 
 - **System-Topologie Memory**
   - Core generiert beim Start automatisch `system_topology.md` in jedem Agenten-Memory

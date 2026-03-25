@@ -102,7 +102,7 @@ fi
 
 # ── 6. VM Dateirechte (nur wenn SSH erreichbar) ───────────────────────────────
 VM_HOST="${HYDRAHIVE_VM:-YOUR-VM-IP}"
-VM_USER="${HYDRAHIVE_VM_USER:-octopos}"
+VM_USER="${HYDRAHIVE_VM_USER:-hydrahive}"
 VM_KEY="${HYDRAHIVE_VM_KEY:-$HOME/.ssh/your-ssh-key}"
 info "6/6 VM Dateirechte — $VM_HOST (übersprungen wenn nicht erreichbar)"
 if ssh -i "$VM_KEY" -o ConnectTimeout=5 -o BatchMode=yes "$VM_USER@$VM_HOST" true 2>/dev/null; then

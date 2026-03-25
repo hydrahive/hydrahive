@@ -75,7 +75,7 @@ def assert_path_within_project(path: str | Path, project_id: str) -> Path:
 
 class BaseTool(ABC):
     """
-    Einheitliches Interface fuer alle OctopOS-Tools (TL2).
+    Einheitliches Interface fuer alle HydraHive-Tools (TL2).
     parameters = Function-Calling-Schema direkt fuer litellm (TL3).
 
     execute() bekommt agent_id und project_id — Filesystem-Tools muessen
@@ -703,8 +703,8 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bparted\b",                 "parted verboten"),
     (r"\bshred\b",                  "shred verboten"),
     (r"\bwipefs\b",                 "wipefs verboten"),
-    # Service-Sabotage (OctopOS selbst killen)
-    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+(octopos|hydrahive)",  "systemctl stop/disable octopos/hydrahive verboten"),
+    # Service-Sabotage (HydraHive selbst killen)
+    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+(hydrahive|hydrahive)",  "systemctl stop/disable hydrahive/hydrahive verboten"),
     (r"\bkillall\s+uvicorn\b",      "killall uvicorn verboten"),
     (r"\bkill\b.*\buvicorn\b",      "kill uvicorn verboten"),
     # Fork-Bombe / Wildcard-Gefahr
@@ -712,7 +712,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
     (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
     # Schreiben in geschützte Systempfade via Redirects / tee / install / cp
-    (r">\s*/opt/(octopos|hydrahive)/", "Redirect nach /opt/hydrahive/ verboten"),
+    (r">\s*/opt/(hydrahive|hydrahive)/", "Redirect nach /opt/hydrahive/ verboten"),
     (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
     (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
     (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
@@ -722,9 +722,9 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r">\s*/sys/",                  "Redirect nach /sys/ verboten"),
     (r">\s*/proc/",                 "Redirect nach /proc/ verboten"),
     (r"\btee\s+(/etc/|/opt/|/usr/|/bin/|/boot/|/lib|/sys/|/proc/)", "tee auf Systempfad verboten"),
-    (r"\bcp\b.+\s(/etc/|/opt/(octopos|hydrahive)/|/usr/|/bin/|/boot/)", "cp nach Systempfad verboten"),
+    (r"\bcp\b.+\s(/etc/|/opt/(hydrahive|hydrahive)/|/usr/|/bin/|/boot/)", "cp nach Systempfad verboten"),
     (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/etc/", "Download nach /etc/ verboten"),
-    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/opt/(octopos|hydrahive)/", "Download nach /opt/hydrahive/ verboten"),
+    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/opt/(hydrahive|hydrahive)/", "Download nach /opt/hydrahive/ verboten"),
     # chmod/chown auf Systempfade
     (r"\b(chmod|chown)\b.*/opt/",   "chmod/chown auf /opt/ verboten"),
     (r"\b(chmod|chown)\b.*/etc/",   "chmod/chown auf /etc/ verboten"),
@@ -732,7 +732,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     # git clone/reset --hard auf /opt/
     (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
     (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
-    (r"cd\s+/opt/(octopos|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
+    (r"cd\s+/opt/(hydrahive|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
     # Inline-Code-Ausführung in Interpreter (python -c, perl -e, etc.)
     (r"\bpython[23]?\s+-[a-zA-Z]*c\b", "python -c (Inline-Code) verboten"),
     (r"\bperl\s+-[a-zA-Z]*e\b",     "perl -e (Inline-Code) verboten"),
@@ -745,7 +745,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\$\(",                       "Command Substitution $(...) verboten"),
     (r"`",                          "Backticks verboten"),
     # CWD-Manipulation zu Systempfaden
-    (r"\bcd\s+(/etc|/opt/(octopos|hydrahive)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
+    (r"\bcd\s+(/etc|/opt/(hydrahive|hydrahive)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
 ]
 
 # Shell-Wrapper-Programme: erste Token prüfen, ob -c folgt
@@ -828,7 +828,7 @@ class ShellExecTool(BaseTool):
     Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
     Nur fuer Superagenten — kein Sandbox, voller Systemzugriff.
     Destruktive Kommandos (rm -rf, dd, mkfs, ...) und Zugriffe auf
-    /opt/hydrahive/ (bzw. /opt/octopos/) werden blockiert.
+    /opt/hydrahive/ (bzw. /opt/hydrahive/) werden blockiert.
     """
 
     @property
@@ -841,8 +841,8 @@ class ShellExecTool(BaseTool):
             "Führt einen Bash-Befehl aus und gibt stdout, stderr und Exit-Code zurück. "
             "Verwende dies für Systemverwaltung, git, pip, systemctl, Dateioperationen, etc. "
             "Timeout standard 30 Sekunden, maximal 120 Sekunden. "
-            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/hydrahive/ (bzw. /opt/octopos/), "
-            "git clone/reset in /opt/hydrahive/, systemctl stop/disable octopos/hydrahive."
+            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/hydrahive/ (bzw. /opt/hydrahive/), "
+            "git clone/reset in /opt/hydrahive/, systemctl stop/disable hydrahive/hydrahive."
         )
 
     @property
@@ -964,7 +964,7 @@ class ReadSystemFileTool(BaseTool):
         limit = min(limit, 1000)
         p = Path(path)
         if not p.is_absolute():
-            for base in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+            for base in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
                 if base.exists():
                     p = base / path
                     break
@@ -1037,7 +1037,7 @@ class WriteSystemFileTool(BaseTool):
     ) -> dict:
         p = Path(path)
         if not p.is_absolute():
-            for base in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+            for base in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
                 if base.exists():
                     p = base / path
                     break
@@ -2545,7 +2545,7 @@ def _get_wks_config(project_id: str) -> dict | None:
     """WKS-Config des Users laden, der zum project_id gehört.
     Persönliche Agenten heißen personal_<username> → username extrahieren."""
     import json as _j
-    for uf in [Path("/etc/hydrahive/users.json"), Path("/etc/octopos/users.json")]:
+    for uf in [Path("/etc/hydrahive/users.json"), Path("/etc/hydrahive/users.json")]:
         if uf.exists():
             USERS_FILE = uf
             break

@@ -42,7 +42,7 @@ def _token_dir_exists(p: Path) -> bool:
         return False
 
 TOKEN_DIR       = next(
-    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/octopos/agent_tokens")] if _token_dir_exists(p)),
+    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/hydrahive/agent_tokens")] if _token_dir_exists(p)),
     Path("/etc/hydrahive/agent_tokens"),
 )
 SYNC_TIMEOUT_MS = 30_000    # 30s Long-Poll

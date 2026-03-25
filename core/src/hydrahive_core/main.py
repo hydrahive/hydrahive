@@ -1,5 +1,5 @@
 """
-main.py — OctopOS Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11, #12, #35)
+main.py — HydraHive Core Runtime Einstiegspunkt (#4, #6, #7, #8, #9, #10, #11, #12, #35)
 
 FastAPI-App mit Lifespan-Management:
 - AgentDiscovery + AgentRuntime + ProjectLoader + SessionManager + Orchestrator
@@ -78,8 +78,8 @@ if _SENTRY_DSN:
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
-CRED_FILE        = "/etc/octopos/admin_credentials"
-MCP_SERVERS_FILE = "/etc/octopos/mcp_servers.json"
+CRED_FILE        = "/etc/hydrahive/admin_credentials"
+MCP_SERVERS_FILE = "/etc/hydrahive/mcp_servers.json"
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
@@ -164,7 +164,7 @@ hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifesp
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global provisioner, JWT_SECRET, hb_scheduler, _INTERNAL_SECRET
-    logger.info("OctopOS Core startet...")
+    logger.info("HydraHive Core startet...")
     discovery.start()
     projects.start()
     sessions.start()
@@ -199,7 +199,7 @@ async def lifespan(app: FastAPI):
         logger.info("Matrix Admin-Token geladen (server: %s)", server_name)
     except Exception as e:
         logger.warning("Matrix Admin-Token konnte nicht geladen werden: %s", e)
-        provisioner = Provisioner("", "octopos")
+        provisioner = Provisioner("", "hydrahive")
 
     # Matrix-Clients für Boss-Agenten mit konfigurierten Rooms starten
     server_name = _read_server_name()
@@ -289,25 +289,25 @@ async def lifespan(app: FastAPI):
     except Exception as _ge:
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
-    logger.info("OctopOS Core bereit")
+    logger.info("HydraHive Core bereit")
     yield
     hb_task.cancel()
     cleanup_task.cancel()
     rate_limit_cleanup_task.cancel()
     if agentlink_ws_task:
         agentlink_ws_task.cancel()
-    logger.info("OctopOS Core faehrt herunter...")
+    logger.info("HydraHive Core faehrt herunter...")
     await runtime.stop()
     projects.stop()
     discovery.stop()
-    logger.info("OctopOS Core gestoppt")
+    logger.info("HydraHive Core gestoppt")
 
 
 def _read_server_name(
     toml_path: str = "/etc/conduwuit/conduwuit.toml",
-    config_path: str = "/etc/octopos/matrix_server_name",
+    config_path: str = "/etc/hydrahive/matrix_server_name",
 ) -> str:
-    env_server_name = os.environ.get("OCTOPOS_MATRIX_SERVER_NAME", "").strip()
+    env_server_name = os.environ.get("HYDRAHIVE_MATRIX_SERVER_NAME", "").strip()
     if env_server_name:
         return env_server_name
 
@@ -329,16 +329,16 @@ def _read_server_name(
     except OSError as e:
         logger.warning("conduwuit server_name konnte nicht gelesen werden: %s", e)
 
-    fallback = "octopos"
+    fallback = "hydrahive"
     logger.warning(
         "Matrix server_name nicht konfiguriert, verwende Fallback '%s'. "
-        "Setze OCTOPOS_MATRIX_SERVER_NAME oder /etc/octopos/matrix_server_name fuer nicht-default Installationen.",
+        "Setze HYDRAHIVE_MATRIX_SERVER_NAME oder /etc/hydrahive/matrix_server_name fuer nicht-default Installationen.",
         fallback,
     )
     return fallback
 
 
-def _load_or_create_jwt_secret(secret_file: str = "/etc/octopos/jwt_secret") -> str:
+def _load_or_create_jwt_secret(secret_file: str = "/etc/hydrahive/jwt_secret") -> str:
     """JWT-Secret aus Datei laden oder einmalig generieren und speichern."""
     path = Path(secret_file)
     if path.exists():
@@ -367,7 +367,7 @@ def _load_or_create_internal_secret(secret_file: str = "/etc/hydrahive/internal_
 
 
 def _read_admin_password() -> str:
-    """Admin-Passwort aus /etc/octopos/admin_credentials lesen."""
+    """Admin-Passwort aus /etc/hydrahive/admin_credentials lesen."""
     try:
         for line in Path(CRED_FILE).read_text().splitlines():
             if "=" in line:
@@ -507,7 +507,7 @@ async def _setup_matrix_clients(server_name: str) -> None:
 
 
 app = FastAPI(
-    title="OctopOS Core",
+    title="HydraHive Core",
     version=APP_VERSION,
     lifespan=lifespan,
 )
@@ -540,7 +540,7 @@ IncomingMessage = register_core_misc_routes(
 
 # ================================================================== Audit-Log
 
-AUDIT_LOG_FILE = Path("/var/log/octopos/audit.jsonl")
+AUDIT_LOG_FILE = Path("/var/log/hydrahive/audit.jsonl")
 
 
 def _ensure_audit_log_path() -> None:
@@ -645,7 +645,7 @@ register_agent_chat_routes(
 
 # ================================================================== User-Verwaltung
 
-USERS_FILE = Path("/etc/octopos/users.json")
+USERS_FILE = Path("/etc/hydrahive/users.json")
 
 
 def _load_users() -> dict:
@@ -753,8 +753,8 @@ def _write_system_topology(dest: Path) -> None:
 
 ### systemd-Services auf dem Server
 ```
-octopos-core   — HydraHive Core (systemctl is-active octopos-core)
-octopos-amem   — A-MEM MCP Server
+hydrahive-core   — HydraHive Core (systemctl is-active hydrahive-core)
+hydrahive-amem   — A-MEM MCP Server
 redis          — Redis
 gitea          — Gitea Git-Server
 ```
@@ -785,9 +785,9 @@ Die WKS sind keine Server — dort laufen keine HydraHive-Services.
 ```
 /agents/{{id}}/          — Agent-Daten (soul.md, agent.yaml, memory/, skills/)
 /agents/{{id}}/memory/   — Auto-injizierte Memory-Dateien (diese Datei!)
-/etc/octopos/            — Konfiguration (JWT, LLM, WKS, etc.)
+/etc/hydrahive/            — Konfiguration (JWT, LLM, WKS, etc.)
 /etc/hydrahive/          — Secrets
-/opt/octopos/            — HydraHive-Code + venv
+/opt/hydrahive/            — HydraHive-Code + venv
 /opt/amem/               — A-MEM Code
 /opt/agentlink/          — AgentLink Code
 ```
@@ -812,7 +812,7 @@ triggers:
   - healthcheck
   - services prüfen
   - services laufen
-  - octopos läuft
+  - hydrahive läuft
   - hydrahive läuft
   - server status
   - diagnose
@@ -831,7 +831,7 @@ priority: 10
 
 ### 1. Services prüfen
 ```
-systemctl is-active octopos-core octopos-amem redis gitea
+systemctl is-active hydrahive-core hydrahive-amem redis gitea
 ```
 
 ### 2. HydraHive Core Health
@@ -848,7 +848,7 @@ curl -s http://127.0.0.1:8000/health
 
 ### 4. A-MEM — KEIN REST-Health-Endpoint
 A-MEM ist ein MCP/SSE-Server. `GET /` → 404 ist NORMAL.
-A-MEM läuft wenn: `systemctl is-active octopos-amem` → `active`.
+A-MEM läuft wenn: `systemctl is-active hydrahive-amem` → `active`.
 Nie per curl testen.
 
 ### 5. Redis
@@ -890,7 +890,7 @@ def _create_personal_agent(username: str) -> str:
 
     model = "claude-haiku-4-5-20251001"
     try:
-        llm_raw = json.loads(Path("/etc/octopos/llm_config.json").read_text())
+        llm_raw = json.loads(Path("/etc/hydrahive/llm_config.json").read_text())
         providers = llm_raw.get("providers", {})
         if providers.get("claude_max", {}).get("enabled"):
             model = "claude-haiku-4-5-20251001"
@@ -997,7 +997,7 @@ register_user_routes(
 )
 
 
-WKS_KEYS_DIR = Path("/etc/octopos/wks_keys")
+WKS_KEYS_DIR = Path("/etc/hydrahive/wks_keys")
 
 
 internal_router = APIRouter(prefix="/internal", tags=["internal"])
@@ -1019,7 +1019,7 @@ register_user_integration_routes(
 async def _run_self_update(pusher: str, commits: int) -> None:
     """Übergibt den Self-Update-Job an eine dedizierte systemd-Service-Unit."""
     import asyncio as _asyncio
-    STATUS_FILE   = "/var/run/octopos-update.json"
+    STATUS_FILE   = "/var/run/hydrahive-update.json"
 
     logger.info("Self-Update gestartet (pusher=%s commits=%d)", pusher, commits)
 
@@ -1038,7 +1038,7 @@ async def _run_self_update(pusher: str, commits: int) -> None:
 
     try:
         check = await _asyncio.create_subprocess_exec(
-            "sudo", "systemctl", "is-active", "--quiet", "octopos-selfupdate.service",
+            "sudo", "systemctl", "is-active", "--quiet", "hydrahive-selfupdate.service",
             stdout=_asyncio.subprocess.DEVNULL,
             stderr=_asyncio.subprocess.DEVNULL,
         )
@@ -1048,7 +1048,7 @@ async def _run_self_update(pusher: str, commits: int) -> None:
             return
 
         proc = await _asyncio.create_subprocess_exec(
-            "sudo", "systemctl", "start", "--no-block", "octopos-selfupdate.service",
+            "sudo", "systemctl", "start", "--no-block", "hydrahive-selfupdate.service",
             stdout=_asyncio.subprocess.PIPE,
             stderr=_asyncio.subprocess.STDOUT,
         )
@@ -1173,9 +1173,9 @@ register_mcp_routes(
 
 # ================================================================== Backup & Restore
 
-BACKUP_DIR = Path("/opt/octopos/backups")
+BACKUP_DIR = Path("/opt/hydrahive/backups")
 _BACKUP_SOURCES = [
-    ("/etc/octopos",  "etc-octopos"),
+    ("/etc/hydrahive",  "etc-hydrahive"),
     ("/agents",       "agents"),
     ("/projects",     "projects"),
 ]
@@ -1195,8 +1195,8 @@ register_doctor_routes(admin_router, require_admin=require_admin)
 
 # ================================================================== Status
 
-NETWORK_PROFILE_FILE = Path("/etc/octopos/network_profile")
-NETWORK_PROFILE_SCRIPT = "/opt/octopos/apply-network-profile.sh"
+NETWORK_PROFILE_FILE = Path("/etc/hydrahive/network_profile")
+NETWORK_PROFILE_SCRIPT = "/opt/hydrahive/apply-network-profile.sh"
 NETWORK_PROFILES: dict[str, dict[str, list[int] | bool]] = {
     "full": {
         "tcp_ports": [],
@@ -1369,19 +1369,19 @@ def _network_profile_status() -> dict:
     }
 
 
-GITEA_CONFIG_FILE = "/etc/octopos/gitea_config.json"
+GITEA_CONFIG_FILE = "/etc/hydrahive/gitea_config.json"
 
 
 def get_gitea_config():
     """Helper fuer Tests und lokale Call-Sites: maskierte Gitea-Konfiguration lesen."""
     p = Path(GITEA_CONFIG_FILE)
     if not p.exists():
-        return {"url": "http://127.0.0.1:3001", "org": "octopos", "webhook_secret": "", "has_token": False, "token_masked": ""}
+        return {"url": "http://127.0.0.1:3001", "org": "hydrahive", "webhook_secret": "", "has_token": False, "token_masked": ""}
     cfg = json.loads(p.read_text(encoding="utf-8"))
     token = cfg.get("token", "")
     return {
         "url": cfg.get("url", "http://127.0.0.1:3001"),
-        "org": cfg.get("org", "octopos"),
+        "org": cfg.get("org", "hydrahive"),
         "webhook_secret": cfg.get("webhook_secret", ""),
         "has_token": bool(token),
         "token_masked": token[:8] + "..." + token[-4:] if token else "",

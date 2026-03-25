@@ -332,7 +332,7 @@ class DocsConsistencyTests(unittest.TestCase):
     def _find(self, name: str) -> Path | None:
         for p in [
             Path(__file__).parent.parent.parent / "docs" / name,
-            Path("/home/till/octopos/docs") / name,
+            Path("/home/till/hydrahive/docs") / name,
         ]:
             if p.exists():
                 return p
@@ -414,7 +414,7 @@ class AgentMemoryE2ETests(unittest.TestCase):
                 resp = client.post(
                     "/agents/nonexistent_xyz/memory",
                     headers=headers,
-                    json={"filename": "test_fact", "content": "# Test\nOctopOS ist toll."},
+                    json={"filename": "test_fact", "content": "# Test\nHydraHive ist toll."},
                 )
                 # 404 beweist: Endpoint existiert, Auth funktioniert, Agent-Lookup läuft
                 self.assertEqual(resp.status_code, 404, resp.text)

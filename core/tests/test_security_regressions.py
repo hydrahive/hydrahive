@@ -357,7 +357,7 @@ class SecurityRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "gitea_config.json"
             config_path.write_text(
-                '{"url":"http://127.0.0.1:3001","org":"octopos","token":"1234567890abcdef","webhook_secret":"secret"}',
+                '{"url":"http://127.0.0.1:3001","org":"hydrahive","token":"1234567890abcdef","webhook_secret":"secret"}',
                 encoding="utf-8",
             )
             main.GITEA_CONFIG_FILE = str(config_path)
@@ -513,7 +513,7 @@ class SecurityRegressionTests(unittest.TestCase):
                     "from-config",
                 )
 
-                with mock.patch.dict("os.environ", {"OCTOPOS_MATRIX_SERVER_NAME": "from-env"}, clear=False):
+                with mock.patch.dict("os.environ", {"HYDRAHIVE_MATRIX_SERVER_NAME": "from-env"}, clear=False):
                     self.assertEqual(
                         main._read_server_name(str(toml_path), str(config_path)),
                         "from-env",
@@ -525,7 +525,7 @@ class SecurityRegressionTests(unittest.TestCase):
             with mock.patch.dict("os.environ", {}, clear=False):
                 self.assertEqual(
                     main._read_server_name(str(toml_path), str(config_path)),
-                    "octopos",
+                    "hydrahive",
                 )
 
     def test_personal_agent_update_persists_empty_lists(self):
@@ -594,7 +594,7 @@ class SecurityRegressionTests(unittest.TestCase):
         with self.assertRaises(main.HTTPException) as ctx:
             limiter.check_login("203.0.113.10")
         self.assertEqual(ctx.exception.status_code, 429)
-        self.assertEqual(script.calls[0][0][0], "octopos:rate:login:203.0.113.10")
+        self.assertEqual(script.calls[0][0][0], "hydrahive:rate:login:203.0.113.10")
 
     def test_rate_limiter_redis_failure_falls_back_to_local_state(self):
         script = mock.Mock(side_effect=RuntimeError("redis down"))
@@ -847,10 +847,10 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_gitea_create_issue_tool_uses_repo_reference(self):
         tool = GiteaCreateIssueTool()
-        fake_client = mock.Mock(org="octopos")
+        fake_client = mock.Mock(org="hydrahive")
         fake_client.create_issue_for_repo = mock.AsyncMock(return_value={
             "number": 131,
-            "html_url": "http://example.local/octopos/octopos/issues/131",
+            "html_url": "http://example.local/hydrahive/hydrahive/issues/131",
             "title": "Test issue",
         })
 
@@ -859,7 +859,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 tool.execute(
                     "personal_till",
                     "personal_till",
-                    repo="octopos/octopos",
+                    repo="hydrahive/hydrahive",
                     title="Test issue",
                     body="Body",
                     labels=["review"],
@@ -869,8 +869,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(result["created"])
         self.assertEqual(result["issue_number"], 131)
         fake_client.create_issue_for_repo.assert_awaited_once_with(
-            "octopos",
-            "octopos",
+            "hydrahive",
+            "hydrahive",
             "Test issue",
             body="Body",
             labels=["review"],
@@ -882,7 +882,7 @@ class SecurityRegressionTests(unittest.TestCase):
             tool.execute(
                 "personal_till",
                 "personal_till",
-                repo="octopos/octopos",
+                repo="hydrahive/hydrahive",
                 title="T" * 300,
                 body="Body",
             )
@@ -914,10 +914,10 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_gitea_comment_issue_tool_uses_repo_reference(self):
         tool = GiteaCommentIssueTool()
-        fake_client = mock.Mock(org="octopos")
+        fake_client = mock.Mock(org="hydrahive")
         fake_client.comment_issue_for_repo = mock.AsyncMock(return_value={
             "id": 99,
-            "html_url": "http://example.local/octopos/octopos/issues/1#issuecomment-99",
+            "html_url": "http://example.local/hydrahive/hydrahive/issues/1#issuecomment-99",
         })
 
         with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
@@ -925,7 +925,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 tool.execute(
                     "personal_till",
                     "personal_till",
-                    repo="octopos/octopos",
+                    repo="hydrahive/hydrahive",
                     issue_number=138,
                     body="Kommentar",
                 )
@@ -933,18 +933,18 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertTrue(result["commented"])
         fake_client.comment_issue_for_repo.assert_awaited_once_with(
-            "octopos",
-            "octopos",
+            "hydrahive",
+            "hydrahive",
             138,
             "Kommentar",
         )
 
     def test_gitea_update_issue_tool_can_close_issue(self):
         tool = GiteaUpdateIssueTool()
-        fake_client = mock.Mock(org="octopos")
+        fake_client = mock.Mock(org="hydrahive")
         fake_client.update_issue_for_repo = mock.AsyncMock(return_value={
             "number": 139,
-            "html_url": "http://example.local/octopos/octopos/issues/139",
+            "html_url": "http://example.local/hydrahive/hydrahive/issues/139",
             "state": "closed",
             "title": "Temp placeholder - ignore",
         })
@@ -954,7 +954,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 tool.execute(
                     "personal_till",
                     "personal_till",
-                    repo="octopos/octopos",
+                    repo="hydrahive/hydrahive",
                     issue_number=139,
                     state="closed",
                 )
@@ -963,8 +963,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(result["updated"])
         self.assertEqual(result["state"], "closed")
         fake_client.update_issue_for_repo.assert_awaited_once_with(
-            "octopos",
-            "octopos",
+            "hydrahive",
+            "hydrahive",
             139,
             title=None,
             body=None,
@@ -974,11 +974,11 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_resolve_repo_ref_accepts_url_and_short_forms(self):
         self.assertEqual(
-            resolve_repo_ref("http://192.168.1.100:3002/octopos/octopos"),
-            ("octopos", "octopos"),
+            resolve_repo_ref("http://192.168.1.100:3002/hydrahive/hydrahive"),
+            ("hydrahive", "hydrahive"),
         )
-        self.assertEqual(resolve_repo_ref("octopos/octopos"), ("octopos", "octopos"))
-        self.assertEqual(resolve_repo_ref("octopos", default_owner="octopos"), ("octopos", "octopos"))
+        self.assertEqual(resolve_repo_ref("hydrahive/hydrahive"), ("hydrahive", "hydrahive"))
+        self.assertEqual(resolve_repo_ref("hydrahive", default_owner="hydrahive"), ("hydrahive", "hydrahive"))
 
     def test_repo_review_guidance_is_added_for_repo_queries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -997,16 +997,16 @@ class SecurityRegressionTests(unittest.TestCase):
             )
             cfg.agent_dir = agent_dir
             orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
-            prompt = orchestrator._build_system_prompt(cfg, "Schau dir das octopos repo an und reviewe die Aenderungen")
+            prompt = orchestrator._build_system_prompt(cfg, "Schau dir das hydrahive repo an und reviewe die Aenderungen")
 
         self.assertIn("Repo-Review-Arbeitsrahmen", prompt)
         self.assertIn("gitea_repo_tree", prompt)
         self.assertIn("gitea_repo_file", prompt)
 
     def test_resolve_git_target_uses_project_heuristics(self):
-        client = mock.Mock(org="octopos")
+        client = mock.Mock(org="hydrahive")
         async def fake_get_repo(owner, repo):
-            if (owner, repo) == ("octopos", "octopos"):
+            if (owner, repo) == ("hydrahive", "hydrahive"):
                 return {"full_name": f"{owner}/{repo}"}
             raise aiohttp.ClientResponseError(
                 mock.Mock(real_url="http://test"),
@@ -1016,16 +1016,16 @@ class SecurityRegressionTests(unittest.TestCase):
             )
 
         client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
-        target = asyncio.run(resolve_git_target(client, project_id="octopos_dev"))
-        self.assertEqual(target["owner"], "octopos")
-        self.assertEqual(target["repo"], "octopos")
-        self.assertEqual(target["workspace_key"], "octopos__octopos")
+        target = asyncio.run(resolve_git_target(client, project_id="hydrahive_dev"))
+        self.assertEqual(target["owner"], "hydrahive")
+        self.assertEqual(target["repo"], "hydrahive")
+        self.assertEqual(target["workspace_key"], "hydrahive__hydrahive")
 
     def test_resolve_git_target_fails_on_ambiguous_matches(self):
-        client = mock.Mock(org="octopos")
+        client = mock.Mock(org="hydrahive")
 
         async def fake_get_repo(owner, repo):
-            if repo in {"octopos", "octopos-dev"}:
+            if repo in {"hydrahive", "hydrahive-dev"}:
                 return {"full_name": f"{owner}/{repo}"}
             raise aiohttp.ClientResponseError(
                 mock.Mock(real_url="http://test"),
@@ -1037,52 +1037,52 @@ class SecurityRegressionTests(unittest.TestCase):
         client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
 
         with self.assertRaises(ValueError) as ctx:
-            asyncio.run(resolve_git_target(client, project_id="octopos_dev"))
+            asyncio.run(resolve_git_target(client, project_id="hydrahive_dev"))
 
         self.assertIn("mehrdeutig", str(ctx.exception))
-        self.assertIn("octopos/octopos", str(ctx.exception))
-        self.assertIn("octopos/octopos-dev", str(ctx.exception))
+        self.assertIn("hydrahive/hydrahive", str(ctx.exception))
+        self.assertIn("hydrahive/hydrahive-dev", str(ctx.exception))
 
     def test_git_status_accepts_explicit_repo_reference(self):
         tool = GitStatusTool()
         with mock.patch("hydrahive_core.gitea.get_gitea_client") as get_client, \
              mock.patch("hydrahive_core.gitea.resolve_git_target", new=mock.AsyncMock(return_value={
-                 "owner": "octopos",
-                 "repo": "octopos",
-                 "full_name": "octopos/octopos",
-                 "workspace_key": "octopos__octopos",
+                 "owner": "hydrahive",
+                 "repo": "hydrahive",
+                 "full_name": "hydrahive/hydrahive",
+                 "workspace_key": "hydrahive__hydrahive",
                  "source": "repo",
              })), \
-             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/hydrahive-git/hydrahive__hydrahive"))), \
              mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("## main\n", "", 0),
                  ("main\n", "", 0),
              ])):
-            get_client.return_value = mock.Mock(org="octopos")
+            get_client.return_value = mock.Mock(org="hydrahive")
             result = asyncio.run(
-                tool.execute("personal_admin", "personal_admin", repo="octopos/octopos")
+                tool.execute("personal_admin", "personal_admin", repo="hydrahive/hydrahive")
             )
 
-        self.assertEqual(result["full_name"], "octopos/octopos")
+        self.assertEqual(result["full_name"], "hydrahive/hydrahive")
         self.assertEqual(result["branch"], "main")
 
     def test_gitea_repo_diff_defaults_to_latest_two_commits(self):
         from hydrahive_core.tool_registry import GiteaRepoDiffTool
 
         tool = GiteaRepoDiffTool()
-        fake_client = mock.Mock(org="octopos")
+        fake_client = mock.Mock(org="hydrahive")
         fake_client.list_commits = mock.AsyncMock(return_value=[
             {"sha": "headsha123456"},
             {"sha": "basesha654321"},
         ])
         with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client), \
-             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/octopos-git/octopos__octopos"))), \
+             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/hydrahive-git/hydrahive__hydrahive"))), \
              mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("", "", 0),
                  (" file1 | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)", "", 0),
                  ("diff --git a/file1 b/file1\n--- a/file1\n+++ b/file1\n@@ -1 +1 @@\n-old\n+new\n", "", 0),
              ])):
-            result = asyncio.run(tool.execute("personal_admin", "personal_admin", repo="octopos/octopos"))
+            result = asyncio.run(tool.execute("personal_admin", "personal_admin", repo="hydrahive/hydrahive"))
 
         self.assertEqual(result["base"], "basesha654321")
         self.assertEqual(result["head"], "headsha123456")
@@ -1108,13 +1108,13 @@ class SecurityRegressionTests(unittest.TestCase):
                 boss_cfg=boss_cfg,
                 project_id="personal_test",
                 tool_name="git_status",
-                tool_input={"project_id": "octopos_dev"},
+                tool_input={"project_id": "hydrahive_dev"},
             )
         )
 
         tool.execute.assert_awaited_once_with(
             agent_id="personal_test",
-            project_id="octopos_dev",
+            project_id="hydrahive_dev",
         )
 
     def test_tool_loop_uses_agent_max_tool_rounds_and_breaks_on_repeat(self):

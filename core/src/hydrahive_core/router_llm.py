@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-LLM_CONFIG_FILE = "/etc/octopos/llm_config.json"
+LLM_CONFIG_FILE = "/etc/hydrahive/llm_config.json"
 
 
 class LlmProviderConfig(BaseModel):
@@ -106,7 +106,7 @@ def register_llm_routes(
         if not token.startswith("sk-ant-oat01-"):
             raise HTTPException(400, "Ungültiger Claude OAuth Token — erwartet sk-ant-oat01-...")
 
-        token_file = Path("/etc/octopos/claude_oauth_token")
+        token_file = Path("/etc/hydrahive/claude_oauth_token")
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(token, encoding="utf-8")
         token_file.chmod(0o600)
@@ -129,7 +129,7 @@ def register_llm_routes(
             "openai": "OPENAI_API_KEY",
         }
         env_var = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
-        env_file = Path("/etc/octopos/llm_env")
+        env_file = Path("/etc/hydrahive/llm_env")
         lines = []
         if env_file.exists():
             lines = [line for line in env_file.read_text().splitlines() if not line.startswith(f"{env_var}=")]
@@ -158,7 +158,7 @@ def register_llm_routes(
             for model in ["gpt-4o-mini", "gpt-4o"]:
                 models.append({"id": model, "label": model, "provider": "openai"})
 
-        codex_file = Path("/etc/octopos/openai_codex_token.json")
+        codex_file = Path("/etc/hydrahive/openai_codex_token.json")
         if codex_file.exists():
             try:
                 import json as _json
@@ -233,7 +233,7 @@ def register_llm_routes(
             "refresh_token": body.get("refresh_token", ""),
             "account_id": account_id,
         }
-        token_file = Path("/etc/octopos/openai_codex_token.json")
+        token_file = Path("/etc/hydrahive/openai_codex_token.json")
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(_json.dumps(data, indent=2), encoding="utf-8")
         token_file.chmod(0o600)
@@ -245,7 +245,7 @@ def register_llm_routes(
     def get_openai_codex_status():
         import json as _json
 
-        token_file = Path("/etc/octopos/openai_codex_token.json")
+        token_file = Path("/etc/hydrahive/openai_codex_token.json")
         if not token_file.exists() or token_file.stat().st_size == 0:
             return {"configured": False, "account_id": None}
         try:
@@ -334,7 +334,7 @@ def register_llm_routes(
         if not access_token or not access_token.startswith("sk-ant-oat01-"):
             raise HTTPException(400, f"Kein gültiger Anthropic Token in Response: {str(token_data)[:200]}")
 
-        token_file = Path("/etc/octopos/claude_oauth_token")
+        token_file = Path("/etc/hydrahive/claude_oauth_token")
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(access_token, encoding="utf-8")
         token_file.chmod(0o600)
@@ -426,7 +426,7 @@ def register_llm_routes(
         if not account_id:
             raise HTTPException(400, "account_id konnte nicht aus Token extrahiert werden")
 
-        token_file = Path("/etc/octopos/openai_codex_token.json")
+        token_file = Path("/etc/hydrahive/openai_codex_token.json")
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(
             _json.dumps(
@@ -449,7 +449,7 @@ def register_llm_routes(
     def get_claude_token_status():
         import time as _time
 
-        token_file = Path("/etc/octopos/claude_oauth_token")
+        token_file = Path("/etc/hydrahive/claude_oauth_token")
         if not token_file.exists() or token_file.stat().st_size == 0:
             return {"configured": False, "token_age_days": None, "warning": None}
 

@@ -7,13 +7,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 
-_BACKUP_NAME_RE = r"^octopos-backup-[\w\-]+\.tar\.gz$"
+_BACKUP_NAME_RE = r"^hydrahive-backup-[\w\-]+\.tar\.gz$"
 
 
 def _list_backups(backup_dir: Path) -> list[dict]:
     backup_dir.mkdir(parents=True, exist_ok=True)
     result = []
-    for path in sorted(backup_dir.glob("octopos-backup-*.tar.gz"), reverse=True):
+    for path in sorted(backup_dir.glob("hydrahive-backup-*.tar.gz"), reverse=True):
         stat = path.stat()
         result.append(
             {
@@ -43,7 +43,7 @@ def register_backup_restore_routes(
         import tarfile as _tar
 
         backup_dir.mkdir(parents=True, exist_ok=True)
-        name = f"octopos-backup-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tar.gz"
+        name = f"hydrahive-backup-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tar.gz"
         dest = backup_dir / name
         with _tar.open(dest, "w:gz") as tf:
             for src, arcname in backup_sources:
@@ -111,10 +111,10 @@ def register_backup_restore_routes(
             with _tar.open(path, "r:gz") as tf:
                 tf.extractall(tmp_path)
 
-            src_etc = tmp_path / "etc-octopos"
+            src_etc = tmp_path / "etc-hydrahive"
             if src_etc.exists():
                 for file_path in src_etc.iterdir():
-                    _sh.copy2(file_path, Path("/etc/octopos") / file_path.name)
+                    _sh.copy2(file_path, Path("/etc/hydrahive") / file_path.name)
 
             src_agents = tmp_path / "agents"
             if src_agents.exists():

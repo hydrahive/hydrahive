@@ -7,7 +7,7 @@ Bei Projekt-Anlage drei Schritte in Reihe:
 3. Matrix-Room erstellen: #<id>:server, Boss + Worker einladen (A1, PR3)
 
 Idempotent: Bereits existierende Ressourcen werden übersprungen.
-Core läuft als 'octopos'-User — Root-Operationen via sudo (NOPASSWD konfiguriert).
+Core läuft als 'hydrahive'-User — Root-Operationen via sudo (NOPASSWD konfiguriert).
 """
 
 import asyncio
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 CONDUWUIT_URL  = "http://127.0.0.1:6167"
 SAMBA_CONF     = "/etc/samba/smb.conf"
-SAMBA_INCLUDES = "/etc/samba/octopos-shares.conf"
+SAMBA_INCLUDES = "/etc/samba/hydrahive-shares.conf"
 PROJECTS_DIR   = "/projects"
 
 
@@ -127,7 +127,7 @@ class Provisioner:
                "--system",
                "--no-create-home",
                "--shell", "/usr/sbin/nologin",
-               "--comment", f"OctopOS Projekt-User",
+               "--comment", f"HydraHive Projekt-User",
                username]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
@@ -160,7 +160,7 @@ class Provisioner:
 
     def _setup_samba(self, project_id: str, username: str, files_dir: str) -> str | None:
         """
-        Schreibt einen Include-Block nach /etc/samba/octopos-shares.conf.
+        Schreibt einen Include-Block nach /etc/samba/hydrahive-shares.conf.
         Hängt den Include in smb.conf ein falls noch nicht vorhanden.
         Idempotent: bestehender Share-Block wird überschrieben.
         """
@@ -197,12 +197,12 @@ class Provisioner:
         existing = includes_path.read_text(encoding="utf-8") if includes_path.exists() else ""
 
         # Block für dieses Projekt herausschneiden und neu schreiben
-        marker_start = f"# BEGIN octopos:{project_id}"
-        marker_end   = f"# END octopos:{project_id}"
+        marker_start = f"# BEGIN hydrahive:{project_id}"
+        marker_end   = f"# END hydrahive:{project_id}"
         new_block = (
             f"{marker_start}\n"
             f"[{project_id}]\n"
-            f"   comment = OctopOS Projekt {project_id}\n"
+            f"   comment = HydraHive Projekt {project_id}\n"
             f"   path = {files_dir}\n"
             f"   valid users = {username}\n"
             f"   read only = no\n"
@@ -220,7 +220,7 @@ class Provisioner:
         else:
             updated = existing + "\n" + new_block
 
-        tmp = Path(f"/tmp/octopos-samba-{project_id}.conf")
+        tmp = Path(f"/tmp/hydrahive-samba-{project_id}.conf")
         tmp.write_text(updated, encoding="utf-8")
         subprocess.run(
             ["sudo", "cp", str(tmp), SAMBA_INCLUDES],
@@ -234,11 +234,11 @@ class Provisioner:
             return None
         import re
         existing = includes_path.read_text(encoding="utf-8")
-        marker_start = f"# BEGIN octopos:{project_id}"
-        marker_end   = f"# END octopos:{project_id}"
+        marker_start = f"# BEGIN hydrahive:{project_id}"
+        marker_end   = f"# END hydrahive:{project_id}"
         pattern = rf"{re.escape(marker_start)}.*?{re.escape(marker_end)}\n"
         updated = re.sub(pattern, "", existing, flags=re.DOTALL)
-        tmp = Path(f"/tmp/octopos-samba-rm-{project_id}.conf")
+        tmp = Path(f"/tmp/hydrahive-samba-rm-{project_id}.conf")
         tmp.write_text(updated, encoding="utf-8")
         subprocess.run(["sudo", "cp", str(tmp), SAMBA_INCLUDES], capture_output=True)
         subprocess.run(["sudo", "smbcontrol", "smbd", "reload-config"], capture_output=True)
@@ -254,7 +254,7 @@ class Provisioner:
             return
         # Ans Ende der [global]-Sektion anhängen
         updated = content.rstrip() + f"\n\n{include_line}\n"
-        tmp = Path("/tmp/octopos-smb.conf")
+        tmp = Path("/tmp/hydrahive-smb.conf")
         tmp.write_text(updated, encoding="utf-8")
         subprocess.run(["sudo", "cp", str(tmp), SAMBA_CONF], capture_output=True)
 
@@ -285,7 +285,7 @@ class Provisioner:
             payload = {
                 "name":             room_name,
                 "room_alias_name":  room_alias,
-                "topic":            f"OctopOS Projekt: {room_name}",
+                "topic":            f"HydraHive Projekt: {room_name}",
                 "preset":           "private_chat",
                 "invite":           invite_mxids,
                 "power_level_content_override": {
@@ -337,8 +337,8 @@ class Provisioner:
             return None
 
 
-def load_admin_token(cred_file: str = "/etc/octopos/admin_credentials") -> str:
-    """Admin-Token aus /etc/octopos/admin_credentials lesen."""
+def load_admin_token(cred_file: str = "/etc/hydrahive/admin_credentials") -> str:
+    """Admin-Token aus /etc/hydrahive/admin_credentials lesen."""
     try:
         for line in Path(cred_file).read_text().splitlines():
             if line.startswith("matrix_admin_password="):

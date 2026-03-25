@@ -24,7 +24,7 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-_GITEA_CONFIG_PATHS = [Path("/etc/hydrahive/gitea_config.json"), Path("/etc/octopos/gitea_config.json")]
+_GITEA_CONFIG_PATHS = [Path("/etc/hydrahive/gitea_config.json"), Path("/etc/hydrahive/gitea_config.json")]
 GITEA_CONFIG_FILE = next((p for p in _GITEA_CONFIG_PATHS if p.exists()), _GITEA_CONFIG_PATHS[0])
 
 _DEFAULT_CONFIG = {

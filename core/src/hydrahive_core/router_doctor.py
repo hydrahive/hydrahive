@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _find_install_dir() -> Path:
-    for candidate in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+    for candidate in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
         if candidate.exists():
             return candidate
     return Path("/opt/hydrahive")
@@ -99,12 +99,12 @@ async def _check_services() -> list[dict]:
     """Prüft systemd-Services."""
     results = []
     services = [
-        (["hydrahive-core", "octopos-core"],                          "HydraHive Core"),
+        (["hydrahive-core", "hydrahive-core"],                          "HydraHive Core"),
         (["nginx"],                                                    "Nginx Reverse Proxy"),
         (["gitea"],                                                    "Gitea"),
-        (["hydrahive-conduwuit", "octopos-conduwuit"],                 "Matrix (conduwuit)"),
-        (["hydrahive-whatsapp-bridge", "octopos-whatsapp-bridge"],     "WhatsApp Bridge"),
-        (["hydrahive-amem", "octopos-amem"],                           "A-MEM MCP"),
+        (["hydrahive-conduwuit", "hydrahive-conduwuit"],                 "Matrix (conduwuit)"),
+        (["hydrahive-whatsapp-bridge", "hydrahive-whatsapp-bridge"],     "WhatsApp Bridge"),
+        (["hydrahive-amem", "hydrahive-amem"],                           "A-MEM MCP"),
         (["tailscaled"],                                               "Tailscale VPN"),
     ]
     for units, label in services:
@@ -134,10 +134,10 @@ def _check_configs() -> list[dict]:
     """Prüft wichtige Konfigurationsdateien."""
     results = []
     configs = [
-        ([Path("/etc/hydrahive/llm_config.json"), Path("/etc/octopos/llm_config.json")],                       "LLM-Konfiguration"),
-        ([Path("/etc/hydrahive/users.json"), Path("/etc/octopos/users.json")],                                 "Benutzer-Datenbank"),
-        ([Path("/etc/nginx/sites-enabled/hydrahive-console"), Path("/etc/nginx/sites-enabled/octopos-console")], "Nginx-Konfiguration"),
-        ([Path("/opt/hydrahive/venv"), Path("/opt/octopos/venv")],                                             "Python-Virtualenv"),
+        ([Path("/etc/hydrahive/llm_config.json"), Path("/etc/hydrahive/llm_config.json")],                       "LLM-Konfiguration"),
+        ([Path("/etc/hydrahive/users.json"), Path("/etc/hydrahive/users.json")],                                 "Benutzer-Datenbank"),
+        ([Path("/etc/nginx/sites-enabled/hydrahive-console"), Path("/etc/nginx/sites-enabled/hydrahive-console")], "Nginx-Konfiguration"),
+        ([Path("/opt/hydrahive/venv"), Path("/opt/hydrahive/venv")],                                             "Python-Virtualenv"),
     ]
     for paths, label in configs:
         existing = next((p for p in paths if p.exists()), None)
@@ -185,9 +185,9 @@ def _check_disk() -> list[dict]:
     results = []
     try:
         import shutil
-        # Prüfe hydrahive zuerst, dann octopos als Fallback
+        # Prüfe hydrahive zuerst, dann hydrahive als Fallback
         check_path = "/opt/hydrahive"
-        for candidate in ["/opt/hydrahive", "/opt/octopos"]:
+        for candidate in ["/opt/hydrahive", "/opt/hydrahive"]:
             if Path(candidate).exists():
                 check_path = candidate
                 break
@@ -214,7 +214,7 @@ async def _check_api() -> list[dict]:
 
     # Update-Status — beide Pfade prüfen
     status_file = None
-    for sf in [Path("/var/run/hydrahive-update.json"), Path("/var/run/octopos-update.json")]:
+    for sf in [Path("/var/run/hydrahive-update.json"), Path("/var/run/hydrahive-update.json")]:
         if sf.exists():
             status_file = sf
             break

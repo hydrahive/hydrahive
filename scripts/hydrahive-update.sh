@@ -14,7 +14,7 @@ INSTALL_USER="hydrahive"
 SERVICE_NAME="hydrahive-core"
 [ -f "$CONF" ] && source "$CONF"
 SSH="ssh -i $SSH_KEY"
-SSH_USER="${VM%%@*}"   # Login-User aus VM-String (z.B. "octopos" aus "octopos@host")
+SSH_USER="${VM%%@*}"   # Login-User aus VM-String (z.B. "hydrahive" aus "hydrahive@host")
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> [1/5] git pull (hydrahive remote)"

@@ -120,13 +120,13 @@ HydraHive is designed for self-hosted, private-network deployment. Key security 
 
 ## Secret Rotation Runbook
 
-All secrets live in `/etc/hydrahive/` (or `/etc/octopos/` on older installs). The service must be restarted after rotation.
+All secrets live in `/etc/hydrahive/` (or `/etc/hydrahive/` on older installs). The service must be restarted after rotation.
 
 ### JWT Secret (invalidates all active user sessions)
 
 ```bash
-sudo rm /etc/hydrahive/jwt_secret   # or /etc/octopos/jwt_secret
-sudo systemctl restart octopos-core  # new secret generated on startup
+sudo rm /etc/hydrahive/jwt_secret   # or /etc/hydrahive/jwt_secret
+sudo systemctl restart hydrahive-core  # new secret generated on startup
 # All users must log in again
 ```
 
@@ -134,7 +134,7 @@ sudo systemctl restart octopos-core  # new secret generated on startup
 
 ```bash
 sudo rm /etc/hydrahive/internal_secret
-sudo systemctl restart octopos-core
+sudo systemctl restart hydrahive-core
 ```
 
 ### API Keys / LLM credentials
@@ -142,7 +142,7 @@ sudo systemctl restart octopos-core
 Edit `/etc/hydrahive/llm_config.json` or the relevant config file directly, then:
 
 ```bash
-sudo systemctl restart octopos-core
+sudo systemctl restart hydrahive-core
 ```
 
 ### Admin Password
@@ -163,6 +163,6 @@ Update `/etc/hydrahive/gitea_config.json`, then restart the service.
 
 ### After Any Rotation
 
-1. Verify the service starts: `systemctl status octopos-core`
-2. Check logs: `journalctl -u octopos-core -n 20`
+1. Verify the service starts: `systemctl status hydrahive-core`
+2. Check logs: `journalctl -u hydrahive-core -n 20`
 3. Test a login via the Console UI

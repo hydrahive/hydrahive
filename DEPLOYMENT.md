@@ -167,7 +167,7 @@ certbot --nginx -d mein.server.de
     ├── hydrahive.crt       # TLS-Zertifikat
     └── hydrahive.key       # TLS-Private-Key (Modus 600)
 
-/etc/octopos → /etc/hydrahive  # Symlink (Rückwärtskompatibilität)
+/etc/hydrahive → /etc/hydrahive  # Symlink (Rückwärtskompatibilität)
 ```
 
 ### 3.2 LLM-Konfiguration (`/etc/hydrahive/llm_env`)
@@ -358,7 +358,7 @@ zieht Daten per rsync von der VM. Empfohlene Cron-Zeit: 03:00 Uhr.
 
 ```bash
 # Crontab auf dem lokalen Rechner
-0 3 * * * /home/till/octopos/scripts/hydrahive-backup.sh >> /home/till/hydrahive-backups/cron.log 2>&1
+0 3 * * * /home/till/hydrahive/scripts/hydrahive-backup.sh >> /home/till/hydrahive-backups/cron.log 2>&1
 ```
 
 **Konfiguration:** Gleiche `scripts/hydrahive.conf` wie das Update-Script.

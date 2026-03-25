@@ -204,7 +204,7 @@ def register_core_misc_routes(
         from pathlib import Path as _Path
         users = load_users()
         kas_ok  = _Path("/etc/hydrahive/kas.json").exists()
-        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/octopos/llm_config.json").exists()
+        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/hydrahive/llm_config.json").exists()
         wizard_done = _Path("/etc/hydrahive/setup_wizard_done").exists()
         return {
             "needs_setup":   len(users) == 0,

@@ -3,7 +3,7 @@ whatsapp_agent.py — WhatsApp Bridge Integration für persönliche Agenten
 
 Kommuniziert mit dem Node.js WhatsApp Bridge Service (Baileys).
 
-Config: /etc/octopos/agent_tokens/personal_{username}_whatsapp.json
+Config: /etc/hydrahive/agent_tokens/personal_{username}_whatsapp.json
 Format: {"enabled": true}
 
 Bridge läuft auf http://127.0.0.1:8767
@@ -15,7 +15,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR  = Path("/etc/octopos/agent_tokens")
+TOKEN_DIR  = Path("/etc/hydrahive/agent_tokens")
 BRIDGE_URL = "http://127.0.0.1:8767"
 
 

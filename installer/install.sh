@@ -32,16 +32,16 @@ if [ "$EUID" -ne 0 ]; then
   error "Bitte als root ausfuehren: sudo bash install.sh"
 fi
 
-# --- Upgrade-Pfad: /etc/octopos → /etc/hydrahive ---
-if [ -d "/etc/octopos" ] && [ ! -d "/etc/hydrahive" ]; then
-  warn "Alte Installation erkannt: /etc/octopos gefunden — migriere nach /etc/hydrahive ..."
-  mv /etc/octopos /etc/hydrahive
-  ln -s /etc/hydrahive /etc/octopos
-  success "Migration abgeschlossen (/etc/octopos → /etc/hydrahive, Symlink gesetzt)"
-elif [ -d "/etc/octopos" ] && [ -d "/etc/hydrahive" ]; then
+# --- Upgrade-Pfad: /etc/hydrahive → /etc/hydrahive ---
+if [ -d "/etc/hydrahive" ] && [ ! -d "/etc/hydrahive" ]; then
+  warn "Alte Installation erkannt: /etc/hydrahive gefunden — migriere nach /etc/hydrahive ..."
+  mv /etc/hydrahive /etc/hydrahive
+  ln -s /etc/hydrahive /etc/hydrahive
+  success "Migration abgeschlossen (/etc/hydrahive → /etc/hydrahive, Symlink gesetzt)"
+elif [ -d "/etc/hydrahive" ] && [ -d "/etc/hydrahive" ]; then
   # Beide existieren — Symlink setzen falls noch nicht vorhanden
-  if [ ! -L "/etc/octopos" ]; then
-    ln -s /etc/hydrahive /etc/octopos 2>/dev/null || true
+  if [ ! -L "/etc/hydrahive" ]; then
+    ln -s /etc/hydrahive /etc/hydrahive 2>/dev/null || true
   fi
 fi
 

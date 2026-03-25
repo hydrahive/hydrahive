@@ -182,7 +182,7 @@ matrix_agent.py → BossMatrixAgent.on_message()
 ## 4. Verzeichnisstruktur
 
 ```
-/home/till/octopos/                # Entwicklungs-Repository (lokal)
+/home/till/hydrahive/                # Entwicklungs-Repository (lokal)
 │
 ├── core/                          # Python-Backend
 │   ├── pyproject.toml             # Abhängigkeiten, Entry-Points
@@ -484,7 +484,7 @@ Muster (Auszug):
 | `$(...)`, `` ` `` (backticks)       | Command Substitution             |
 
 Hintergrund: Im März 2026 hat ein Test-Agent über `shell_exec git`-Kommandos
-das `/opt/octopos/`-Verzeichnis gelöscht. Die Blocklist wurde daraufhin eingeführt.
+das `/opt/hydrahive/`-Verzeichnis gelöscht. Die Blocklist wurde daraufhin eingeführt.
 
 ### 6.6 Internes Shared-Secret
 

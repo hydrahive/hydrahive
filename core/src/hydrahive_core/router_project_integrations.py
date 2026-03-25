@@ -49,13 +49,13 @@ async def _fire_webhook(webhook: dict, event: str, data: dict, *, logger) -> Non
     })
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "OctopOS-Webhook/1.0",
-        "X-OctopOS-Event": event,
+        "User-Agent": "HydraHive-Webhook/1.0",
+        "X-HydraHive-Event": event,
     }
     secret = webhook.get("secret", "")
     if secret:
         sig = _hm.new(secret.encode(), payload.encode(), _hl.sha256).hexdigest()
-        headers["X-OctopOS-Signature"] = f"sha256={sig}"
+        headers["X-HydraHive-Signature"] = f"sha256={sig}"
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -176,7 +176,7 @@ def register_project_integration_routes(
         secret = body.get("secret", "")
         if not url:
             raise HTTPException(400, "url fehlt")
-        await _fire_webhook({"url": url, "secret": secret}, "ping", {"project_id": project_id, "message": "OctopOS Webhook Test"}, logger=logger)
+        await _fire_webhook({"url": url, "secret": secret}, "ping", {"project_id": project_id, "message": "HydraHive Webhook Test"}, logger=logger)
         return {"sent": True, "url": url}
 
     @public_router.post("/hooks/{project_id}/wake")
@@ -188,14 +188,14 @@ def register_project_integration_routes(
         webhooks = _load_webhooks(projects_dir, project_id)
         wake_hooks = [w for w in webhooks if "agent_start" in w.get("events", [])]
         body_bytes = await request.body()
-        sig_header = request.headers.get("X-OctopOS-Signature", "")
+        sig_header = request.headers.get("X-HydraHive-Signature", "")
 
         if wake_hooks:
             # Wenn Wake-Hooks konfiguriert sind, ist Signatur verpflichtend
             hooks_with_secret = [w for w in wake_hooks if w.get("secret", "")]
             if hooks_with_secret:
                 if not sig_header:
-                    raise HTTPException(401, "Signatur erforderlich (X-OctopOS-Signature fehlt)")
+                    raise HTTPException(401, "Signatur erforderlich (X-HydraHive-Signature fehlt)")
                 import hashlib as _hl
                 import hmac as _hm
                 valid = False
