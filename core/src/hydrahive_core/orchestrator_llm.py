@@ -47,12 +47,12 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
                 result.append({
                     "role": "system",
                     "content": [{"type": "text", "text": content,
-                                 "cache_control": {"type": "ephemeral"}}],
+                                 "cache_control": {"type": "ephemeral", "ttl": 3600}}],
                 })
             elif isinstance(content, list) and content:
                 new_c = list(content)
                 if not new_c[-1].get("cache_control"):
-                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral", "ttl": 3600}}
                 result.append({**m, "content": new_c})
             else:
                 result.append(m)
@@ -61,7 +61,7 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
             result.append({
                 **m,
                 "content": [{"type": "text", "text": content,
-                             "cache_control": {"type": "ephemeral"}}],
+                             "cache_control": {"type": "ephemeral", "ttl": 3600}}],
             })
             non_sys_i += 1
 
@@ -286,7 +286,7 @@ async def _anthropic_oauth_call(
     oauth_system = [{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}]
     if system_msg:
         oauth_system.append({"type": "text", "text": system_msg,
-                              "cache_control": {"type": "ephemeral"}})
+                              "cache_control": {"type": "ephemeral", "ttl": 3600}})
 
     # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
     cache_cutoff = max(0, len(filtered) - 4)
@@ -295,11 +295,11 @@ async def _anthropic_oauth_call(
             content = fm.get("content", "")
             if isinstance(content, str) and content:
                 filtered[idx] = {**fm, "content": [
-                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral", "ttl": 3600}}
                 ]}
             elif isinstance(content, list) and content and not content[-1].get("cache_control"):
                 new_c = list(content)
-                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral", "ttl": 3600}}
                 filtered[idx] = {**fm, "content": new_c}
 
     kwargs: dict = {

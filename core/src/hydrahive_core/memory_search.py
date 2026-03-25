@@ -26,7 +26,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-SKIP_FILES: frozenset[str] = frozenset({"learned-facts.md", "MEMORY.md"})
+SKIP_FILES: frozenset[str] = frozenset({"learned-facts.md", "MEMORY.md", "INDEX.md"})
 MAX_CHUNK_CHARS = 1500   # max chars pro Chunk beim Indexieren
 SNIPPET_CHARS   = 700    # max chars pro Treffer im System-Prompt
 

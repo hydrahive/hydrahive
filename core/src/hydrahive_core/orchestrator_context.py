@@ -95,9 +95,21 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
     # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
     if boss_cfg.agent_dir:
         mem_parts = []
+        memory_dir = boss_cfg.agent_dir / "memory"
+
+        # INDEX.md — Vault-Pattern (OpenClaw boot-md Äquivalent):
+        # Immer direkt geladen (nicht via BM25), max 1500 chars.
+        # Agent hält diese Datei slim (Inhaltsverzeichnis / Kernfakten).
+        if memory_dir.exists():
+            index_path = memory_dir / "INDEX.md"
+            if index_path.exists():
+                index_text = index_path.read_text(encoding="utf-8").strip()
+                if index_text:
+                    if len(index_text) > 1500:
+                        index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
+                    mem_parts.append(f"### Index\n{index_text}")
 
         # Learning-Snippet (bleibt wie bisher — schon kompakt)
-        memory_dir = boss_cfg.agent_dir / "memory"
         if memory_dir.exists():
             learning_snippet = build_learning_prompt_snippet(
                 boss_cfg.agent_dir,
