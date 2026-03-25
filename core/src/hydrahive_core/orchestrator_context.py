@@ -14,6 +14,7 @@ import logging
 import litellm
 
 from .learning_memory import build_learning_prompt_snippet
+from .memory_search import search_memory, update_index as update_memory_index
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def _context_mode(user_text: str) -> str:
     return "full" if any(t in text for t in full_triggers) else "normal"
 
 
-def _build_system_prompt(boss_cfg, user_text: str) -> str:
+async def _build_system_prompt(boss_cfg, user_text: str) -> str:
     mode  = _context_mode(user_text)
     parts = [f"Du bist {boss_cfg.identity}."]
 
@@ -49,56 +50,33 @@ def _build_system_prompt(boss_cfg, user_text: str) -> str:
         if soul_path.exists():
             parts.append(soul_path.read_text(encoding="utf-8").strip())
 
-    # Persistentes Gedächtnis laden (#85)
+    # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
     if boss_cfg.agent_dir:
+        mem_parts = []
+
+        # Learning-Snippet (bleibt wie bisher — schon kompakt)
         memory_dir = boss_cfg.agent_dir / "memory"
         if memory_dir.exists():
-            mem_parts = []
-
-            # Learning-Snippet: normal=5/2048, full=12/4096
-            if mode == "full":
-                learning_snippet = build_learning_prompt_snippet(boss_cfg.agent_dir)
-            else:
-                learning_snippet = build_learning_prompt_snippet(
-                    boss_cfg.agent_dir, max_entries=5, max_chars=2048
-                )
+            learning_snippet = build_learning_prompt_snippet(
+                boss_cfg.agent_dir,
+                **({"max_entries": 12, "max_chars": 4096} if mode == "full"
+                   else {"max_entries": 5, "max_chars": 2048}),
+            )
             if learning_snippet:
                 mem_parts.append(learning_snippet)
 
-            # Memory-Dateien: neueste zuerst, mit hartem Budget-Limit
-            # Strategie: newest-first, konservative Schätzung (chars statt Tokens)
-            # normal: max 5 Dateien, 8k chars/Datei, 30k chars gesamt
-            # full:   max 15 Dateien, 25k chars/Datei, 150k chars gesamt
-            if mode == "full":
-                max_mem_files, per_file_chars, total_mem_chars = 15, 25_000, 150_000
-            else:
-                max_mem_files, per_file_chars, total_mem_chars = 5, 8_000, 30_000
+        # Index aktualisieren (lazy — nur geänderte Dateien, <5ms wenn nichts geändert)
+        update_memory_index(boss_cfg.agent_dir)
 
-            mem_files = sorted(
-                (mf for mf in memory_dir.glob("*.md") if mf.name not in ("learned-facts.md", "MEMORY.md")),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )[:max_mem_files]
+        # BM25-Suche: normal=6, full=12 Treffer × max 700 chars ≈ 4-8k chars
+        k = 12 if mode == "full" else 6
+        snippets = search_memory(boss_cfg.agent_dir, user_text, k=k)
 
-            mem_budget_used = 0
-            for mf in mem_files:
-                if mem_budget_used >= total_mem_chars:
-                    break
-                try:
-                    text = mf.read_text(encoding="utf-8").strip()
-                    if not text:
-                        continue
-                    if len(text) > per_file_chars:
-                        text = text[:per_file_chars] + "\n…[gekürzt]"
-                    remaining = total_mem_chars - mem_budget_used
-                    if len(text) > remaining:
-                        text = text[:remaining] + "\n…[Budget erschöpft]"
-                    mem_parts.append(f"### {mf.stem}\n{text}")
-                    mem_budget_used += len(text)
-                except OSError:
-                    pass
-            if mem_parts:
-                parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
+        if snippets:
+            mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
+
+        if mem_parts:
+            parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
 
     # QMD-Skills laden (scope=always immer, on-demand bei Keyword-Match)
     if boss_cfg.agent_dir:
@@ -142,6 +120,26 @@ def _repo_review_guidance(agent_cfg, user_text: str) -> str:
         "- Keine breite Bewertung ohne mindestens Struktur oder konkrete Dateien geprüft zu haben.\n"
         "- Wenn ein Repo-Link nicht direkt öffnet, über Repo-Auflösung, API oder owner/repo weiterarbeiten statt abzubrechen."
     )
+
+
+def _flush_summary_to_memory(agent_dir, summary: str) -> None:
+    """Memory Flush (OpenClaw-Stil): Kompaktierungs-Summary in tagesaktuelle
+    Memory-Datei schreiben, damit zukünftige BM25-Suchen relevante Fakten finden.
+    Append-only — bestehende Einträge werden nie überschrieben.
+    """
+    import datetime
+    memory_dir = agent_dir / "memory"
+    try:
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        today = datetime.date.today().isoformat()
+        flush_file = memory_dir / f"session-summary-{today}.md"
+        timestamp = datetime.datetime.now().strftime("%H:%M")
+        entry = f"\n## Session Summary {timestamp}\n\n{summary.strip()}\n"
+        with flush_file.open("a", encoding="utf-8") as fh:
+            fh.write(entry)
+        logger.debug("Memory Flush: Summary in %s geschrieben", flush_file.name)
+    except OSError as e:
+        logger.warning("Memory Flush fehlgeschlagen: %s", e)
 
 
 async def _compact_if_needed(
@@ -202,6 +200,10 @@ async def _compact_if_needed(
                 "Context kompaktiert (Projekt: %s, ~%d Tokens → Summary)",
                 project_id, sessions.estimated_tokens(project_id),
             )
+            # Memory Flush (OpenClaw-Stil): Summary in Memory-Datei schreiben
+            # damit zukünftige Sessions relevante Fakten via BM25 finden
+            if boss_cfg.agent_dir:
+                _flush_summary_to_memory(boss_cfg.agent_dir, summary)
     except Exception as e:
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
         # Notfall-Reset: wenn Session zu gross ist um kompaktiert zu werden

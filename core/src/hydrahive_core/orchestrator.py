@@ -253,8 +253,8 @@ class Orchestrator:
         if not boss_cfg:
             return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden.", []
 
-        # 3. System-Prompt aufbauen (Soul + Skills)
-        system_prompt = self._build_system_prompt(boss_cfg, content)
+        # 3. System-Prompt aufbauen (Soul + A-MEM + Skills)
+        system_prompt = await self._build_system_prompt(boss_cfg, content)
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
@@ -325,8 +325,8 @@ class Orchestrator:
     def _context_mode(user_text: str) -> str:
         return _context_mode(user_text)
 
-    def _build_system_prompt(self, boss_cfg, user_text: str) -> str:
-        return _build_system_prompt_fn(boss_cfg, user_text)
+    async def _build_system_prompt(self, boss_cfg, user_text: str) -> str:
+        return await _build_system_prompt_fn(boss_cfg, user_text)
 
     @staticmethod
     def _repo_review_guidance(agent_cfg, user_text: str) -> str:
@@ -397,7 +397,7 @@ class Orchestrator:
         # Context-Kompaktierung vor dem LLM-Aufruf
         await self._compact_if_needed(project_id, boss_cfg)
 
-        system_prompt = self._build_system_prompt(boss_cfg, content)
+        system_prompt = await self._build_system_prompt(boss_cfg, content)
         history       = self._sessions.get_context(project_id, max_messages=12)
         messages      = [{"role": "system", "content": system_prompt}] + history
         logger.debug(
