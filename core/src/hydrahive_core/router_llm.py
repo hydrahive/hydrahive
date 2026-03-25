@@ -68,6 +68,36 @@ def register_llm_routes(
             }
         return {"providers": masked}
 
+    @admin_router.get("/llm/config/system_default")
+    def get_system_default():
+        config = _load_llm_config()
+        return {"model": config.get("system_default", {}).get("model", "")}
+
+    @admin_router.put("/llm/config/system_default")
+    async def set_system_default(body: dict):
+        import yaml as _yaml
+        model = body.get("model", "").strip()
+        if not model:
+            raise HTTPException(400, "model fehlt")
+        config = _load_llm_config()
+        config["system_default"] = {"model": model}
+        _save_llm_config(config)
+        system_agents = ["hydrahive_support"]
+        updated = []
+        for agent_id in system_agents:
+            yaml_path = Path(f"/agents/{agent_id}/agent.yaml")
+            if yaml_path.exists():
+                try:
+                    data = _yaml.safe_load(yaml_path.read_text())
+                    data["llm"]["model"] = model
+                    yaml_path.write_text(_yaml.dump(data, default_flow_style=False, allow_unicode=True))
+                    updated.append(agent_id)
+                except Exception:
+                    pass
+        logger.info("System-Standard-LLM gesetzt: %s (aktualisiert: %s)", model, updated)
+        audit_log("llm.system_default_set", details={"model": model, "updated_agents": updated})
+        return {"updated": True, "model": model, "agents_updated": updated}
+
     @admin_router.put("/llm/config/claude_max")
     async def set_claude_oauth_token(body: dict):
         token = body.get("api_key", "").strip()

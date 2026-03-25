@@ -17,6 +17,8 @@ class CreateAgentRequest(BaseModel):
     tools: list[str] = Field(default_factory=list)
     fallback_models: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
+    allowed_agents: list[str] = Field(default_factory=list)
+    max_tool_rounds: int | None = None
     heartbeat_interval: str = "30s"
     heartbeat_timeout: str = "90s"
     heartbeat_on_failure: str = "restart"
@@ -38,6 +40,7 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         "identity": req.identity,
         "llm": build_agent_admin_llm_data(req),
         "tools": list(req.tools),
+        "allowed_agents": list(req.allowed_agents),
         "mcp_servers": list(req.mcp_servers),
         "heartbeat": {
             "interval": req.heartbeat_interval,
@@ -47,6 +50,8 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
     }
     if req.soul:
         agent_data["soul"] = "./soul.md"
+    if req.max_tool_rounds is not None:
+        agent_data["max_tool_rounds"] = req.max_tool_rounds
     return agent_data
 
 

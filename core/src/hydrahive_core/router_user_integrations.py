@@ -103,6 +103,10 @@ class DiscordConfigRequest(BaseModel):
     channel_ids: list[str] = []
     ignore_bots: bool = True      # Nachrichten von anderen Bots ignorieren
     require_mention: bool = False  # Nur bei @Mention antworten
+    loop_detection: bool = True   # Loop-Detektion aktiv
+    loop_bot_threshold: int = 3   # Aufeinanderfolgende Bot-Nachrichten bis Circuit Breaker
+    loop_pingpong_seconds: int = 30  # Zeitfenster für PingPong-Erkennung (s)
+    loop_cooldown_seconds: int = 300  # Circuit-Breaker-Cooldown (s)
 
 
 SUPPORTED_PLATFORMS = {
@@ -258,9 +262,13 @@ async def setup_discord_clients(*, load_users, runtime, orchestrator, logger) ->
             guild_id=cfg.get("guild_id", ""),
             channel_ids=cfg.get("channel_ids", []),
             ignore_bots=cfg.get("ignore_bots", True),
+            loop_detection=cfg.get("loop_detection", True),
+            loop_bot_threshold=cfg.get("loop_bot_threshold", 3),
+            loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
+            loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
             orchestrator=orchestrator,
         )
-        _discord_clients[username] = client
+        _discord_clients[personal_agent_id] = client
         await runtime.attach_discord_client(username, client)
         logger.info("Discord-Bot fuer User '%s' (Agent: %s) gestartet", username, personal_agent_id)
 
@@ -463,6 +471,10 @@ def register_user_integration_routes(
             "channel_ids": cfg.get("channel_ids", []),
             "ignore_bots": cfg.get("ignore_bots", True),
             "require_mention": cfg.get("require_mention", False),
+            "loop_detection": cfg.get("loop_detection", True),
+            "loop_bot_threshold": cfg.get("loop_bot_threshold", 6),
+            "loop_pingpong_seconds": cfg.get("loop_pingpong_seconds", 30),
+            "loop_cooldown_seconds": cfg.get("loop_cooldown_seconds", 300),
             "connected": discord_client_connected(username),
         }
 
@@ -518,6 +530,10 @@ def register_user_integration_routes(
             "channel_ids": [c.strip() for c in req.channel_ids if c.strip()],
             "ignore_bots": req.ignore_bots,
             "require_mention": req.require_mention,
+            "loop_detection": req.loop_detection,
+            "loop_bot_threshold": max(2, req.loop_bot_threshold),
+            "loop_pingpong_seconds": max(5, req.loop_pingpong_seconds),
+            "loop_cooldown_seconds": max(10, req.loop_cooldown_seconds),
         }
         save_discord_config(username, cfg)
         personal_agent_id = f"personal_{username}"
@@ -528,6 +544,10 @@ def register_user_integration_routes(
             guild_id=cfg["guild_id"],
             channel_ids=cfg["channel_ids"],
             ignore_bots=cfg.get("ignore_bots", True),
+            loop_detection=cfg.get("loop_detection", True),
+            loop_bot_threshold=cfg.get("loop_bot_threshold", 6),
+            loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
+            loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
             orchestrator=orchestrator,
         )
         test_result = await test_client.test_connection()
@@ -542,9 +562,13 @@ def register_user_integration_routes(
             guild_id=cfg["guild_id"],
             channel_ids=cfg["channel_ids"],
             ignore_bots=cfg.get("ignore_bots", True),
+            loop_detection=cfg.get("loop_detection", True),
+            loop_bot_threshold=cfg.get("loop_bot_threshold", 6),
+            loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
+            loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
             orchestrator=orchestrator,
         )
-        _discord_clients[username] = client
+        _discord_clients[personal_agent_id] = client
         await runtime.attach_discord_client(username, client)
 
         audit_log("discord.configured", details={"user": username, "bot": test_result.get("bot_name", "")})

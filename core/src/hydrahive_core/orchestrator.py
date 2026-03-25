@@ -461,6 +461,15 @@ class Orchestrator:
                 )
         except Exception as e:
             logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
+            # Notfall-Reset: wenn Session zu gross ist um kompaktiert zu werden
+            current_tokens = self._sessions.estimated_tokens(project_id)
+            if current_tokens > 150_000:
+                logger.error(
+                    "Context-Notfall-Reset (Projekt: %s, ~%d Tokens > 150k Limit) — "
+                    "Session wird geleert um Token-Overflow zu verhindern",
+                    project_id, current_tokens,
+                )
+                self._sessions.new_session(project_id)
 
     @staticmethod
     def _context_mode(user_text: str) -> str:

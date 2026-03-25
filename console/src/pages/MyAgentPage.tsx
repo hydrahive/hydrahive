@@ -55,6 +55,19 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "wks_file_write",   label: "WKS Datei schreiben" },
   { id: "send_mail",        label: "Mail senden" },
   { id: "receive_mail",     label: "Mail empfangen" },
+  { id: "discord_send",              label: "Discord: Nachricht senden" },
+  { id: "discord_read",              label: "Discord: Nachrichten lesen" },
+  { id: "discord_list_channels",     label: "Discord: Text-Channels auflisten" },
+  { id: "discord_list_all_channels", label: "Discord: Alle Channels auflisten" },
+  { id: "discord_create_category",   label: "Discord: Kategorie erstellen" },
+  { id: "discord_create_channel",    label: "Discord: Channel erstellen" },
+  { id: "discord_delete_channel",    label: "Discord: Channel löschen" },
+  { id: "discord_set_topic",         label: "Discord: Channel-Topic setzen" },
+  { id: "discord_rename_channel",    label: "Discord: Channel umbenennen" },
+  { id: "discord_list_members",      label: "Discord: Mitglieder auflisten" },
+  { id: "discord_list_roles",        label: "Discord: Rollen auflisten" },
+  { id: "discord_delete_message",    label: "Discord: Nachricht löschen" },
+  { id: "discord_pin_message",       label: "Discord: Nachricht anpinnen" },
 ];
 
 const BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
@@ -1418,8 +1431,12 @@ function DiscordTab() {
   const [changeToken,  setChangeToken]  = useState(false);
   const [guildId,      setGuildId]      = useState("");
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
-  const [ignoreBots,      setIgnoreBots]      = useState(true);
-  const [requireMention,  setRequireMention]  = useState(false);
+  const [ignoreBots,           setIgnoreBots]           = useState(true);
+  const [requireMention,       setRequireMention]       = useState(false);
+  const [loopDetection,        setLoopDetection]        = useState(true);
+  const [loopBotThreshold,     setLoopBotThreshold]     = useState(3);
+  const [loopPingpongSeconds,  setLoopPingpongSeconds]  = useState(30);
+  const [loopCooldownSeconds,  setLoopCooldownSeconds]  = useState(300);
   const [channels,     setChannels]     = useState<{id:string;name:string}[]>([]);
   const [loadingCh,    setLoadingCh]    = useState(false);
   const [saving,       setSaving]       = useState(false);
@@ -1433,6 +1450,10 @@ function DiscordTab() {
       setSelectedIds(new Set(d.channel_ids ?? []));
       setIgnoreBots(d.ignore_bots ?? true);
       setRequireMention(d.require_mention ?? false);
+      setLoopDetection(d.loop_detection ?? true);
+      setLoopBotThreshold(d.loop_bot_threshold ?? 6);
+      setLoopPingpongSeconds(d.loop_pingpong_seconds ?? 30);
+      setLoopCooldownSeconds(d.loop_cooldown_seconds ?? 300);
     }).catch(() => {});
   }, []);
 
@@ -1460,11 +1481,15 @@ function DiscordTab() {
     setSaving(true); setMsg("");
     try {
       const res = await api.updateDiscord({
-        bot_token: changeToken ? botToken.trim() : "",
+        bot_token: (!cfg?.configured || changeToken) ? botToken.trim() : "",
         guild_id: guildId.trim(),
         channel_ids: [...selectedIds],
         ignore_bots: ignoreBots,
         require_mention: requireMention,
+        loop_detection: loopDetection,
+        loop_bot_threshold: loopBotThreshold,
+        loop_pingpong_seconds: loopPingpongSeconds,
+        loop_cooldown_seconds: loopCooldownSeconds,
       });
       setMsg(`✓ Bot "${res.bot_name}" verbunden`);
       setBotToken(""); setChangeToken(false);
@@ -1585,6 +1610,37 @@ function DiscordTab() {
             className="accent-primary" />
           <span>{t("myAgent.discordRequireMention")}</span>
         </label>
+
+        {/* Loop-Detektion */}
+        <div className="border rounded-md p-3 space-y-3">
+          <label className="flex items-center gap-2 text-xs cursor-pointer font-medium">
+            <input type="checkbox" checked={loopDetection} onChange={e => setLoopDetection(e.target.checked)}
+              className="accent-primary" />
+            <span>Loop-Detektion (Circuit Breaker)</span>
+          </label>
+          {loopDetection && (
+            <div className="grid grid-cols-3 gap-3 pl-5">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Max. Bot-Nachrichten</label>
+                <input type="number" min={2} max={50} value={loopBotThreshold}
+                  onChange={e => setLoopBotThreshold(Number(e.target.value))}
+                  className="w-full text-xs border rounded px-2 py-1 bg-background" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">PingPong-Fenster (s)</label>
+                <input type="number" min={5} max={300} value={loopPingpongSeconds}
+                  onChange={e => setLoopPingpongSeconds(Number(e.target.value))}
+                  className="w-full text-xs border rounded px-2 py-1 bg-background" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Cooldown (s)</label>
+                <input type="number" min={10} max={3600} value={loopCooldownSeconds}
+                  onChange={e => setLoopCooldownSeconds(Number(e.target.value))}
+                  className="w-full text-xs border rounded px-2 py-1 bg-background" />
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button type="submit" disabled={saving || (!cfg?.configured && !botToken.trim())}

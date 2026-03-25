@@ -18,6 +18,9 @@ import {
   ShieldAlert,
   Boxes,
   GitBranch,
+  Pencil,
+  X,
+  Save,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -45,6 +48,14 @@ interface CreateForm {
   samba: boolean;
 }
 
+interface EditForm {
+  name: string;
+  description: string;
+  boss: string;
+  workers: string;
+  show_swarm: boolean;
+}
+
 const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true };
 
 export function ProjectsPage() {
@@ -64,6 +75,10 @@ export function ProjectsPage() {
   const [agentlinkProject, setAgentlinkProject] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [editProject, setEditProject] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", description: "", boss: "", workers: "", show_swarm: false });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState("");
 
   async function load() {
     try {
@@ -126,6 +141,33 @@ export function ProjectsPage() {
     } finally {
       setDeleting(null);
     }
+  }
+
+  function openEdit(id: string) {
+    const p = projects[id];
+    if (!p) return;
+    setEditForm({ name: p.name, description: p.description, boss: p.boss, workers: p.workers.join(", "), show_swarm: p.show_swarm });
+    setEditErr("");
+    setEditProject(id);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editProject) return;
+    setEditSaving(true); setEditErr("");
+    try {
+      await api.updateProject(editProject, {
+        name: editForm.name,
+        description: editForm.description,
+        boss: editForm.boss,
+        workers: editForm.workers.split(",").map(w => w.trim()).filter(Boolean),
+        show_swarm: editForm.show_swarm,
+      });
+      setEditProject(null);
+      await load();
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : "Fehler beim Speichern");
+    } finally { setEditSaving(false); }
   }
 
   const projectList = Object.entries(projects);
@@ -486,7 +528,13 @@ export function ProjectsPage() {
                     <p className="mt-3 text-sm text-muted-foreground">
                       {t("projects.dangerZoneDesc")}
                     </p>
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-2">
+                      {isAdmin && (
+                        <button onClick={() => openEdit(id)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
+                          <Pencil className="h-4 w-4" />
+                          Projekt bearbeiten
+                        </button>
+                      )}
                       {isAdmin && (confirmDel === id ? (
                         <div className="space-y-2">
                           <button onClick={() => handleDelete(id)} disabled={deleting === id} className="w-full rounded-2xl bg-destructive px-3 py-2 text-sm text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
@@ -512,6 +560,60 @@ export function ProjectsPage() {
           ))}
         </section>
       )}
+    {/* Edit-Dialog */}
+    {editProject && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="w-full max-w-lg rounded-2xl border bg-card shadow-2xl">
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <h2 className="font-semibold">Projekt bearbeiten — <span className="font-mono text-sm text-muted-foreground">{editProject}</span></h2>
+            <button onClick={() => setEditProject(null)} className="rounded-lg p-1.5 hover:bg-muted"><X className="h-4 w-4" /></button>
+          </div>
+          <form onSubmit={handleEdit} className="space-y-4 p-6">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} required
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Beschreibung</label>
+              <input value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))}
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Boss-Agent</label>
+              <select value={editForm.boss} onChange={e => setEditForm(f => ({...f, boss: e.target.value}))} required
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="">— Agent wählen —</option>
+                {agents.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Worker-Agenten</label>
+              <input value={editForm.workers} onChange={e => setEditForm(f => ({...f, workers: e.target.value}))}
+                placeholder="agent1, agent2, agent3"
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              <p className="text-xs text-muted-foreground">Kommagetrennt</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={editForm.show_swarm} onChange={e => setEditForm(f => ({...f, show_swarm: e.target.checked}))} className="rounded" />
+              Swarm-Ansicht anzeigen
+            </label>
+            {editErr && <p className="text-sm text-destructive">{editErr}</p>}
+            <div className="flex gap-2 pt-1">
+              <button type="submit" disabled={editSaving || !editForm.boss}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                <Save className="h-4 w-4" />
+                {editSaving ? "Speichere…" : "Speichern"}
+              </button>
+              <button type="button" onClick={() => setEditProject(null)}
+                className="rounded-xl border px-4 py-2.5 text-sm hover:bg-accent transition-colors">
+                Abbrechen
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

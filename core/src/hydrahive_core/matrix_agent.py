@@ -87,12 +87,21 @@ class MatrixAgent(ABC):
         """Sync-Loop — läuft bis stop() aufgerufen wird."""
         if not self._client:
             raise RuntimeError("start() muss vor run() aufgerufen werden")
+        _sync_save_counter = 0
         try:
             while self._running:
                 resp = await self._client.sync(timeout=SYNC_TIMEOUT_MS)
                 if isinstance(resp, SyncError):
                     logger.warning("%s Sync-Fehler: %s", self._mxid, resp.message)
                     await asyncio.sleep(5)
+                    continue
+                # next_batch alle 10 Syncs persistieren
+                _sync_save_counter += 1
+                if _sync_save_counter >= 10 and self._client.next_batch:
+                    _sync_save_counter = 0
+                    token = self._load_token() or {}
+                    token["next_batch"] = self._client.next_batch
+                    self._save_token(token)
         except asyncio.CancelledError:
             pass
         finally:
@@ -145,6 +154,9 @@ class MatrixAgent(ABC):
             self._client.access_token  = token["access_token"]
             self._client.user_id       = token["user_id"]
             self._client.device_id     = token.get("device_id")
+            if token.get("next_batch"):
+                self._client.next_batch = token["next_batch"]
+                logger.debug("%s: next_batch aus Disk geladen (%s)", self._mxid, token["next_batch"])
             logger.debug("%s: Token aus Disk geladen", self._mxid)
             return
 
@@ -210,8 +222,10 @@ class MatrixAgent(ABC):
 
     async def _on_message(self, room: MatrixRoom, event: RoomMessageText) -> None:
         """Eingehende Nachrichten filtern und weiterleiten (#28)."""
-        # Eigene Nachrichten ignorieren
-        if event.sender == self._mxid:
+        # Eigene Nachrichten ignorieren (MXID-Vergleich inkl. lokalem Teil)
+        sender_local = event.sender.split(":")[0] if ":" in event.sender else event.sender
+        own_local    = self._mxid.split(":")[0]   if ":" in self._mxid   else self._mxid
+        if event.sender == self._mxid or sender_local == own_local:
             return
         # Nur Bot-relevante Rooms
         if room.room_id not in self.rooms:

@@ -165,6 +165,10 @@ export function LlmConfigPage() {
   const [claudeStatus,   setClaudeStatus]   = useState<ClaudeStatus|null>(null);
   const [codexStatus,    setCodexStatus]    = useState<OAuthStatus|null>(null);
   const [oauthFlow,      setOauthFlow]      = useState<OAuthFlow|null>(null);
+  const [systemModel,    setSystemModel]    = useState("");
+  const [availModels,    setAvailModels]    = useState<{id:string;label:string;provider:string}[]>([]);
+  const [savingSystem,   setSavingSystem]   = useState(false);
+  const [savedSystem,    setSavedSystem]    = useState(false);
 
   // Ref so exchange handler always sees current flow state
   const oauthFlowRef = useRef<OAuthFlow | null>(null);
@@ -172,11 +176,13 @@ export function LlmConfigPage() {
 
   async function load() {
     try {
-      const [cfg, ollama, claudeSt, codexSt] = await Promise.allSettled([
+      const [cfg, ollama, claudeSt, codexSt, sysModel, avail] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
         api.claudeTokenStatus(),
         api.openaiCodexStatus(),
+        api.getSystemDefaultModel(),
+        api.availableModels(),
       ]);
       if (claudeSt.status  === "fulfilled") setClaudeStatus(claudeSt.value);
       if (codexSt.status   === "fulfilled") setCodexStatus(codexSt.value);
@@ -185,6 +191,8 @@ export function LlmConfigPage() {
         setOllamaOk(ollama.value.available);
         setOllamaModels(ollama.value.models ?? []);
       }
+      if (sysModel.status  === "fulfilled") setSystemModel(sysModel.value.model ?? "");
+      if (avail.status     === "fulfilled") setAvailModels(avail.value.models ?? []);
     } finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -395,6 +403,57 @@ export function LlmConfigPage() {
           </div>
         )}
         <p className="text-xs text-muted-foreground">Läuft auf http://127.0.0.1:11434</p>
+      </div>
+
+      {/* System-Standard-LLM */}
+      <div className="bg-card border rounded-lg p-5 space-y-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-muted-foreground" />
+            <h2 className="font-medium text-sm">Standard-Modell für System-Agenten</h2>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Wird für den Support-Agenten und andere System-Dienste verwendet. Auch im Setup-Wizard abfragbar.
+          </p>
+        </div>
+        <div className="flex gap-2 items-end">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs text-muted-foreground">Modell</label>
+            {availModels.length > 0 ? (
+              <select value={systemModel} onChange={e => setSystemModel(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="">— Modell wählen —</option>
+                {availModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input value={systemModel} onChange={e => setSystemModel(e.target.value)}
+                placeholder="z.B. claude-haiku-4-5-20251001 oder ollama/mistral-nemo:12b"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            )}
+          </div>
+          <button
+            onClick={async () => {
+              if (!systemModel.trim()) return;
+              setSavingSystem(true);
+              try {
+                await api.setSystemDefaultModel(systemModel.trim());
+                setSavedSystem(true);
+                setTimeout(() => setSavedSystem(false), 3000);
+              } finally { setSavingSystem(false); }
+            }}
+            disabled={savingSystem || !systemModel.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5"/>
+            {savingSystem ? "Speichere…" : "Speichern"}
+          </button>
+        </div>
+        {savedSystem && (
+          <p className="flex items-center gap-1.5 text-xs text-green-600">
+            <CheckCircle className="h-3.5 w-3.5"/> Gespeichert — System-Agenten aktualisiert
+          </p>
+        )}
       </div>
 
       <div className="bg-muted/30 border rounded-lg p-4 text-xs text-muted-foreground space-y-1">

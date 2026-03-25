@@ -58,9 +58,11 @@ export const api = {
   agents:        ()           => api.get<Record<string,unknown>>("/agents"),
   projects:      ()           => api.get<Record<string,unknown>>("/projects"),
   createProject:  (d: unknown) => api.post("/projects", d),
+  updateProject:  (id: string, d: {name?:string;description?:string;boss?:string;workers?:string[];show_swarm?:boolean}) => api.put(`/projects/${id}`, d),
   deleteProject:  (id: string) => api.delete(`/projects/${id}`),
   createAgent:  (d: unknown) => api.post("/agents", d),
   updateAgent:  (id: string, d: unknown) => api.put(`/agents/${id}`, d),
+  updateUser:   (username: string, d: {role?:string;allowed_projects?:string[];allowed_agents?:string[];datasources?:string[];wks_ip?:string}) => api.put(`/users/${username}`, d),
   deleteAgent:  (id: string) => api.delete(`/agents/${id}`),
   patchAgentHeartbeat: (id: string, d: {enabled: boolean; interval: string; timeout: string; on_failure: string}) =>
     api.patch<{ok: boolean}>(`/agents/${id}/heartbeat`, d),
@@ -119,6 +121,9 @@ export const api = {
   // LLM Token Status
   claudeTokenStatus:         () => api.get<{configured:boolean;token_age_days:number|null;remaining_days:number|null;warning:string|null;ttl_days:number}>("/llm/claude_token_status"),
   openaiCodexStatus:         () => api.get<{configured:boolean;account_id:string|null;models?:string[]}>("/llm/openai_codex_status"),
+  getSystemDefaultModel:     () => api.get<{model:string}>("/llm/config/system_default"),
+  setSystemDefaultModel:     (model: string) => api.put<{updated:boolean;model:string;agents_updated:string[]}>("/llm/config/system_default", { model }),
+  availableModels:           () => api.get<{models:{id:string;label:string;provider:string}[]}>("/llm/available-models"),
   setOpenaiCodexToken:       (d: {access_token:string;account_id:string;refresh_token?:string}) => api.put("/llm/config/openai_codex", d),
   // OAuth PKCE Flow
   startOAuth:    (provider: string) => api.post<{auth_url:string;state:string}>(`/llm/oauth/${provider}/start`, {}),
@@ -256,20 +261,28 @@ export interface WksConfigPayload {
 }
 
 export interface DiscordConfig {
-  configured:      boolean;
-  guild_id?:       string;
-  channel_ids?:    string[];
-  ignore_bots?:    boolean;
-  require_mention?: boolean;
-  connected?:      boolean;
+  configured:           boolean;
+  guild_id?:            string;
+  channel_ids?:         string[];
+  ignore_bots?:         boolean;
+  require_mention?:     boolean;
+  loop_detection?:      boolean;
+  loop_bot_threshold?:  number;
+  loop_pingpong_seconds?: number;
+  loop_cooldown_seconds?: number;
+  connected?:           boolean;
 }
 
 export interface DiscordConfigPayload {
-  bot_token:       string;
-  guild_id:        string;
-  channel_ids:     string[];
-  ignore_bots:     boolean;
-  require_mention: boolean;
+  bot_token:            string;
+  guild_id:             string;
+  channel_ids:          string[];
+  ignore_bots:          boolean;
+  require_mention:      boolean;
+  loop_detection:       boolean;
+  loop_bot_threshold:   number;
+  loop_pingpong_seconds: number;
+  loop_cooldown_seconds: number;
 }
 
 export interface WhatsAppConfig {

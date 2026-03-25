@@ -2925,6 +2925,212 @@ class DiscordListChannelsTool(BaseTool):
             return {"error": str(e)}
 
 
+class DiscordListAllChannelsTool(BaseTool):
+    """Alle Discord-Channels inkl. Kategorien und Voice auflisten."""
+    @property
+    def id(self) -> str:          return "discord_list_all_channels"
+    @property
+    def name(self) -> str:        return "Discord List All Channels"
+    @property
+    def description(self) -> str: return "Listet alle Channels der Guild auf inkl. Kategorien, Voice-Channels und deren Positionen."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict: return {"type": "object", "properties": {}, "required": []}
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return {"channels": await client.list_all_channels()}
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordCreateCategoryTool(BaseTool):
+    """Neue Kategorie in der Discord-Guild erstellen."""
+    @property
+    def id(self) -> str:          return "discord_create_category"
+    @property
+    def name(self) -> str:        return "Discord Create Category"
+    @property
+    def description(self) -> str: return "Erstellt eine neue Kategorie im Discord-Server."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"name": {"type": "string", "description": "Name der Kategorie"}}, "required": ["name"]}
+    async def execute(self, agent_id: str, project_id: str, name: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.create_category(name)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordCreateChannelTool(BaseTool):
+    """Neuen Text-Channel im Discord-Server erstellen."""
+    @property
+    def id(self) -> str:          return "discord_create_channel"
+    @property
+    def name(self) -> str:        return "Discord Create Channel"
+    @property
+    def description(self) -> str: return "Erstellt einen neuen Text-Channel, optional in einer Kategorie."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "name":        {"type": "string",  "description": "Channel-Name (lowercase, keine Leerzeichen)"},
+                "category_id": {"type": "string",  "description": "ID der Eltern-Kategorie (optional)"},
+                "topic":       {"type": "string",  "description": "Channel-Beschreibung (optional)"},
+            },
+            "required": ["name"],
+        }
+    async def execute(self, agent_id: str, project_id: str, name: str, category_id: str = "", topic: str = "", **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.create_channel(name, category_id=category_id, topic=topic)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordDeleteChannelTool(BaseTool):
+    """Channel oder Kategorie aus der Discord-Guild löschen."""
+    @property
+    def id(self) -> str:          return "discord_delete_channel"
+    @property
+    def name(self) -> str:        return "Discord Delete Channel"
+    @property
+    def description(self) -> str: return "Löscht einen Channel oder eine Kategorie aus dem Discord-Server."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"channel_id": {"type": "string", "description": "ID des zu löschenden Channels/der Kategorie"}}, "required": ["channel_id"]}
+    async def execute(self, agent_id: str, project_id: str, channel_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.delete_channel(channel_id)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordSetTopicTool(BaseTool):
+    """Channel-Topic/Beschreibung setzen."""
+    @property
+    def id(self) -> str:          return "discord_set_topic"
+    @property
+    def name(self) -> str:        return "Discord Set Topic"
+    @property
+    def description(self) -> str: return "Setzt das Topic (Beschreibung) eines Discord-Channels."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "topic": {"type": "string", "description": "Neues Channel-Topic"}}, "required": ["channel_id", "topic"]}
+    async def execute(self, agent_id: str, project_id: str, channel_id: str, topic: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.set_channel_topic(channel_id, topic)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordRenameChannelTool(BaseTool):
+    """Channel umbenennen."""
+    @property
+    def id(self) -> str:          return "discord_rename_channel"
+    @property
+    def name(self) -> str:        return "Discord Rename Channel"
+    @property
+    def description(self) -> str: return "Benennt einen Discord-Channel um."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "name": {"type": "string", "description": "Neuer Channel-Name"}}, "required": ["channel_id", "name"]}
+    async def execute(self, agent_id: str, project_id: str, channel_id: str, name: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.rename_channel(channel_id, name)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordListMembersTool(BaseTool):
+    """Mitglieder der Discord-Guild auflisten."""
+    @property
+    def id(self) -> str:          return "discord_list_members"
+    @property
+    def name(self) -> str:        return "Discord List Members"
+    @property
+    def description(self) -> str: return "Listet Mitglieder der Discord-Guild mit ihren Rollen auf."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"limit": {"type": "integer", "description": "Max. Anzahl Mitglieder", "default": 100}}, "required": []}
+    async def execute(self, agent_id: str, project_id: str, limit: int = 100, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return {"members": await client.list_members(limit=min(limit, 200))}
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordListRolesTool(BaseTool):
+    """Alle Rollen der Discord-Guild auflisten."""
+    @property
+    def id(self) -> str:          return "discord_list_roles"
+    @property
+    def name(self) -> str:        return "Discord List Roles"
+    @property
+    def description(self) -> str: return "Listet alle Rollen des Discord-Servers auf."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict: return {"type": "object", "properties": {}, "required": []}
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return {"roles": await client.list_roles()}
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordDeleteMessageTool(BaseTool):
+    """Nachricht in einem Discord-Channel löschen."""
+    @property
+    def id(self) -> str:          return "discord_delete_message"
+    @property
+    def name(self) -> str:        return "Discord Delete Message"
+    @property
+    def description(self) -> str: return "Löscht eine bestimmte Nachricht aus einem Discord-Channel."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "message_id": {"type": "string", "description": "ID der zu löschenden Nachricht"}}, "required": ["channel_id", "message_id"]}
+    async def execute(self, agent_id: str, project_id: str, channel_id: str, message_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.delete_message(channel_id, message_id)
+        except Exception as e: return {"error": str(e)}
+
+
+class DiscordPinMessageTool(BaseTool):
+    """Nachricht in einem Discord-Channel anpinnen."""
+    @property
+    def id(self) -> str:          return "discord_pin_message"
+    @property
+    def name(self) -> str:        return "Discord Pin Message"
+    @property
+    def description(self) -> str: return "Pinnt eine Nachricht in einem Discord-Channel an."
+    @property
+    def permissions_required(self) -> list[str]: return ["discord"]
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "message_id": {"type": "string"}}, "required": ["channel_id", "message_id"]}
+    async def execute(self, agent_id: str, project_id: str, channel_id: str, message_id: str, **kwargs) -> dict:
+        client = _discord_clients.get(agent_id)
+        if not client: return {"error": "Discord nicht konfiguriert"}
+        try: return await client.pin_message(channel_id, message_id)
+        except Exception as e: return {"error": str(e)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -2967,3 +3173,13 @@ registry.register(ReceiveMailTool())
 registry.register(DiscordSendTool())
 registry.register(DiscordReadTool())
 registry.register(DiscordListChannelsTool())
+registry.register(DiscordListAllChannelsTool())
+registry.register(DiscordCreateCategoryTool())
+registry.register(DiscordCreateChannelTool())
+registry.register(DiscordDeleteChannelTool())
+registry.register(DiscordSetTopicTool())
+registry.register(DiscordRenameChannelTool())
+registry.register(DiscordListMembersTool())
+registry.register(DiscordListRolesTool())
+registry.register(DiscordDeleteMessageTool())
+registry.register(DiscordPinMessageTool())

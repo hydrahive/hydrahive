@@ -56,6 +56,16 @@ rsync -av --delete --no-owner --no-group \
 $SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/ && sudo systemctl restart ${SERVICE_NAME}"
 
 echo ""
+echo "==> [5b/5] Docs rsync → VM"
+$SSH "$VM" "sudo mkdir -p ${INSTALL_DIR}/docs && sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/docs/"
+rsync -av --delete --no-owner --no-group \
+  -e "ssh -i $SSH_KEY" \
+  "$REPO/docs/" \
+  "$VM:${INSTALL_DIR}/docs/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/docs/"
+$SSH "$VM" "sudo cp ${INSTALL_DIR}/docs/handbook.md /agents/hydrahive_support/memory/handbook.md && sudo chown ${INSTALL_USER}:${INSTALL_USER} /agents/hydrahive_support/memory/handbook.md"
+
+echo ""
 echo "==> Warte auf Start..."
 sleep 3
 $SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"

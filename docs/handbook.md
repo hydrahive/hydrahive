@@ -115,7 +115,7 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
 | **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
-| **Einstellungen** | LLM, MCP-Server, Gitea und VPN konfigurieren (Tab-basiert) | admin |
+| **Einstellungen** | LLM, MCP-Server, Gitea, VPN und Mail/KAS konfigurieren (Tab-basiert) | admin |
 | **Benutzer** | Benutzer anlegen und verwalten | admin |
 | **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
@@ -1038,6 +1038,33 @@ Die Bridge-Konfiguration liegt in `/etc/hydrahive/whatsapp_config.json`:
 - `transcribe_voice`: Ob eingehende Voice Notes transkribiert werden (erfordert Whisper).
 
 > **Hinweis:** Die WhatsApp-Verknüpfung muss nach einem Geräte-Reset oder nach längerer Inaktivität erneuert werden. Der QR-Code wird dann erneut im Service-Log angezeigt.
+
+---
+
+## 24. Mail / All-Inkl KAS
+
+HydraHive kann automatisch E-Mail-Postfächer bei All-Inkl anlegen. Die Zugangsdaten dafür werden in der Webkonsole eingetragen.
+
+### Einrichtung in der Webkonsole
+
+**Einstellungen → Tab "Mail / KAS"**
+
+| Feld | Beschreibung | Beispiel |
+|---|---|---|
+| **KAS-Login** | KAS-API-Benutzername (nicht der E-Mail-Login!) | `w012345e` |
+| **KAS-Passwort** | KAS-API-Passwort | `••••••••` |
+| **Standard-Domain** | Wird verwendet wenn beim Mailanlegen keine Domain angegeben wird | `deine-domain.de` |
+| **SMTP-Host** | Ausgehender Mail-Server | `dd12345.kasserver.com` |
+| **SMTP-Port** | Port für SMTP (Standard: 587) | `587` |
+
+### Wo finde ich diese Daten?
+
+- **KAS-Login und Passwort**: All-Inkl KAS-Panel → Zugangsdaten → *KAS-API-Zugang* (nicht der normale E-Mail-Login)
+- **SMTP-Host**: KAS-Panel → E-Mail → Server-Einstellungen
+
+### Wo werden die Daten gespeichert?
+
+Die Konfiguration liegt verschlüsselt in `/etc/hydrahive/kas.json` (nur für den Service-User lesbar, chmod 600).
 
 ---
 

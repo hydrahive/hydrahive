@@ -1,13 +1,27 @@
 import { useEffect, useState } from "react";
-import { Users, Plus, RefreshCw, Trash2, KeyRound, ShieldCheck, User } from "lucide-react";
+import { Users, Plus, RefreshCw, Trash2, KeyRound, ShieldCheck, User, Pencil, X, Save } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
 interface OctoUser {
-  username:   string;
-  role:       string;
-  matrix_id:  string;
-  created_at: string;
+  username:          string;
+  role:              string;
+  matrix_id:         string;
+  created_at:        string;
+  allowed_projects:  string[];
+  allowed_agents:    string[];
+  datasources:       string[];
+  wks_ip:            string;
+  discord_user_id:   string;
+}
+
+interface EditForm {
+  role:             string;
+  allowed_projects: string[];
+  allowed_agents:   string[];
+  datasources:      string[];
+  wks_ip:           string;
+  discord_user_id:  string;
 }
 
 const EMPTY = { username: "", password: "", role: "user" };
@@ -26,6 +40,13 @@ export function UserPage() {
   const [newPw,      setNewPw]      = useState("");
   const [pwSaving,   setPwSaving]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [editUser,   setEditUser]   = useState<string|null>(null);
+  const [editForm,   setEditForm]   = useState<EditForm>({ role: "user", allowed_projects: [], allowed_agents: [], datasources: [], wks_ip: "", discord_user_id: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr,    setEditErr]    = useState("");
+  const [dsInput,    setDsInput]    = useState("");
+  const [allProjects, setAllProjects] = useState<{id:string;name:string}[]>([]);
+  const [allAgents,   setAllAgents]   = useState<{id:string;identity:string}[]>([]);
 
   async function load() {
     try {
@@ -37,6 +58,40 @@ export function UserPage() {
 
   useEffect(() => { load(); }, []);
   function refresh() { setRefreshing(true); load(); }
+
+  async function openEdit(u: OctoUser) {
+    setEditErr("");
+    setDsInput("");
+    setEditForm({
+      role: u.role,
+      allowed_projects: u.allowed_projects ?? [],
+      allowed_agents: u.allowed_agents ?? [],
+      datasources: u.datasources ?? [],
+      wks_ip: u.wks_ip ?? "",
+      discord_user_id: u.discord_user_id ?? "",
+    });
+    // Load projects + agents for multi-select
+    const [pData, aData] = await Promise.allSettled([
+      api.get<Record<string,{name:string}>>("/projects"),
+      api.get<Record<string,{config:{identity:string}}>>("/agents"),
+    ]);
+    if (pData.status === "fulfilled") {
+      setAllProjects(Object.entries(pData.value).map(([id, v]) => ({ id, name: v.name })));
+    }
+    if (aData.status === "fulfilled") {
+      setAllAgents(Object.entries(aData.value).filter(([id]) => !id.startsWith("personal_")).map(([id, v]) => ({ id, identity: v.config?.identity || id })));
+    }
+    setEditUser(u.username);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault(); setEditSaving(true); setEditErr("");
+    try {
+      await api.updateUser(editUser!, editForm);
+      setEditUser(null); await load();
+    } catch(e) { setEditErr(e instanceof Error ? e.message : "Fehler"); }
+    finally { setEditSaving(false); }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setSaveErr("");
@@ -184,6 +239,11 @@ export function UserPage() {
                 </span>
               )}
               <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => openEdit(u)}
+                  className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                  title="Benutzer bearbeiten">
+                  <Pencil className="h-3.5 w-3.5"/>
+                </button>
                 <button onClick={() => { setPwUser(u.username); setNewPw(""); }}
                   className="p-1.5 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
                   title={t("users.changePasswordTitle")}>
@@ -205,6 +265,142 @@ export function UserPage() {
       <p className="text-xs text-muted-foreground">
         {t("users.footer")}
       </p>
+
+      {/* Edit-Modal */}
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl border bg-card shadow-xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <h2 className="font-semibold">Benutzer bearbeiten — {editUser}</h2>
+              <button onClick={() => setEditUser(null)} className="rounded-xl p-2 hover:bg-accent">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleEdit} className="space-y-5 p-6">
+
+              {/* Rolle */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rolle</label>
+                <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={editUser === "admin"}>
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+
+              {/* WKS IP + Discord */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Workstation IP</label>
+                  <input value={editForm.wks_ip} onChange={e => setEditForm(f => ({ ...f, wks_ip: e.target.value }))}
+                    placeholder="192.168.1.50"
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <p className="text-xs text-muted-foreground">Für wks_shell_exec</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Discord User ID</label>
+                  <input value={editForm.discord_user_id} onChange={e => setEditForm(f => ({ ...f, discord_user_id: e.target.value }))}
+                    placeholder="123456789012345678"
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <p className="text-xs text-muted-foreground">Für Bot-Erkennung</p>
+                </div>
+              </div>
+
+              {/* Erlaubte Projekte */}
+              {allProjects.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Projekte</label>
+                  <p className="text-xs text-muted-foreground">Leer = Zugriff auf alle Projekte</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allProjects.map(p => (
+                      <button key={p.id} type="button"
+                        onClick={() => setEditForm(f => ({
+                          ...f,
+                          allowed_projects: f.allowed_projects.includes(p.id)
+                            ? f.allowed_projects.filter(x => x !== p.id)
+                            : [...f.allowed_projects, p.id]
+                        }))}
+                        className={`rounded-full border px-3 py-1.5 text-xs transition ${editForm.allowed_projects.includes(p.id) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+                        {p.name || p.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Erlaubte Agenten */}
+              {allAgents.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Agenten</label>
+                  <p className="text-xs text-muted-foreground">Leer = Zugriff auf alle Agenten</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allAgents.map(a => (
+                      <button key={a.id} type="button"
+                        onClick={() => setEditForm(f => ({
+                          ...f,
+                          allowed_agents: f.allowed_agents.includes(a.id)
+                            ? f.allowed_agents.filter(x => x !== a.id)
+                            : [...f.allowed_agents, a.id]
+                        }))}
+                        className={`rounded-full border px-3 py-1.5 text-xs transition ${editForm.allowed_agents.includes(a.id) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+                        {a.identity || a.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Datenquellen */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Datenquellen</label>
+                <p className="text-xs text-muted-foreground">z.B. nfs://server/pfad, smb://server/share</p>
+                <div className="flex flex-wrap gap-1.5 min-h-7">
+                  {editForm.datasources.map(ds => (
+                    <span key={ds} className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-mono">
+                      {ds}
+                      <button type="button" onClick={() => setEditForm(f => ({ ...f, datasources: f.datasources.filter(x => x !== ds) }))}
+                        className="text-muted-foreground hover:text-destructive">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input value={dsInput} onChange={e => setDsInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const v = dsInput.trim();
+                        if (v && !editForm.datasources.includes(v)) setEditForm(f => ({ ...f, datasources: [...f.datasources, v] }));
+                        setDsInput("");
+                      }
+                    }}
+                    placeholder="nfs://192.168.1.5/data"
+                    className="flex-1 px-3 py-2 text-sm border rounded-lg bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <button type="button" onClick={() => {
+                    const v = dsInput.trim();
+                    if (v && !editForm.datasources.includes(v)) setEditForm(f => ({ ...f, datasources: [...f.datasources, v] }));
+                    setDsInput("");
+                  }} disabled={!dsInput.trim()} className="rounded-lg border px-3 py-2 text-sm hover:bg-accent disabled:opacity-40">
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {editErr && <p className="text-sm text-destructive">{editErr}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditUser(null)}
+                  className="px-4 py-2 text-sm border rounded-lg hover:bg-accent transition-colors">Abbrechen</button>
+                <button type="submit" disabled={editSaving}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  <Save className="h-3.5 w-3.5" />{editSaving ? "Speichere..." : "Speichern"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

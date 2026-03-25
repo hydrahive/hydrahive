@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { SupportWidget } from "@/components/SupportWidget";
 import {
   LayoutDashboard,
   Bot,
@@ -271,6 +272,7 @@ export function AdminLayout() {
           <Outlet />
         </div>
       </main>
+      <SupportWidget />
     </div>
   );
 }

@@ -10,6 +10,14 @@ from .execution_mode_policy import resolve_request_execution_mode
 from .session_manager import MessageRole
 
 
+class UpdateProjectRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    boss: str | None = None
+    workers: list[str] | None = None
+    show_swarm: bool | None = None
+
+
 class CreateProjectRequest(BaseModel):
     id: str
     name: str
@@ -94,6 +102,42 @@ def register_project_routes(
             }
             for agent_id in cfg.all_agents
         }
+
+    @admin_router.put("/projects/{project_id}")
+    async def update_project(project_id: str, req: UpdateProjectRequest):
+        import yaml as _yaml
+
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        if req.boss and not discovery.get(req.boss):
+            raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht gefunden")
+        if req.workers:
+            missing = [w for w in req.workers if not discovery.get(w)]
+            if missing:
+                raise HTTPException(422, f"Worker-Agenten nicht gefunden: {missing}")
+
+        project_dir = Path(projects_dir) / project_id
+        yaml_path = project_dir / "project.yaml"
+        data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+
+        if req.name is not None:
+            data["identity"]["name"] = req.name
+        if req.description is not None:
+            data["identity"]["description"] = req.description
+        if req.boss is not None:
+            data["agents"]["boss"] = req.boss
+        if req.workers is not None:
+            data["agents"]["workers"] = req.workers
+        if req.show_swarm is not None:
+            data.setdefault("chat", {})["show_swarm"] = req.show_swarm
+
+        yaml_path.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+        projects.register(project_dir)  # neu einlesen
+        audit_log("project.update", target=project_id, project_id=project_id)
+        logger.info("Projekt aktualisiert: %s", project_id)
+        return {"updated": True, "project_id": project_id}
 
     @admin_router.post("/projects", status_code=201)
     async def create_project(req: CreateProjectRequest):

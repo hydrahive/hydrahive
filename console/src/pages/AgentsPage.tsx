@@ -32,12 +32,14 @@ const EMPTY_FORM = {
   tools: [] as string[],
   fallback_models: [] as string[],
   mcp_servers: [] as string[],
+  allowed_agents: [] as string[],
+  max_tool_rounds: null as number | null,
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
   heartbeat_on_failure: "restart",
 };
 
-const KNOWN_TOOLS = ["file_read", "file_write", "shell_exec", "web_search", "http_request", "read_memory", "write_memory", "ask_agent", "delegate_agent", "write_handoff", "read_handoff", "wks_file_read", "wks_file_write", "wks_shell_exec", "dispatch_task", "spawn_agent", "git_status", "git_diff", "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits", "gitea_repo_diff", "gitea_create_issue", "gitea_comment_issue", "gitea_update_issue"];
+const KNOWN_TOOLS = ["file_read", "file_write", "shell_exec", "web_search", "http_request", "read_memory", "write_memory", "ask_agent", "delegate_agent", "write_handoff", "read_handoff", "wks_file_read", "wks_file_write", "wks_shell_exec", "dispatch_task", "spawn_agent", "git_status", "git_diff", "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits", "gitea_repo_diff", "gitea_create_issue", "gitea_comment_issue", "gitea_update_issue", "discord_send", "discord_read", "discord_list_channels", "discord_list_all_channels", "discord_create_category", "discord_create_channel", "discord_delete_channel", "discord_set_topic", "discord_rename_channel", "discord_list_members", "discord_list_roles", "discord_delete_message", "discord_pin_message"];
 const KNOWN_MODELS = ["llama3.2:3b", "llama3.1:8b", "mistral-nemo:12b", "claude-sonnet-4-20250514", "gpt-4o"];
 const STATUS_COLORS: Record<string, string> = {
   running: "text-green-500",
@@ -188,6 +190,8 @@ export function AgentsPage() {
       tools: cfg?.tools ?? [],
       fallback_models: cfg?.llm?.fallback_models ?? [],
       mcp_servers: cfg?.mcp_servers ?? [],
+      allowed_agents: cfg?.allowed_agents ?? [],
+      max_tool_rounds: cfg?.max_tool_rounds ?? null,
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
       heartbeat_on_failure: cfg?.heartbeat?.on_failure ?? "restart",
@@ -457,6 +461,33 @@ export function AgentsPage() {
               </div>
             </div>
 
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Max Tool Rounds" hint="Maximale Anzahl Tool-Aufrufe pro Nachricht (leer = Standard)">
+                <Input
+                  type="number"
+                  value={form.max_tool_rounds ?? ""}
+                  onChange={(e) => set("max_tool_rounds", e.target.value === "" ? null : parseInt(e.target.value))}
+                  min={1} max={50} placeholder="Standard (6)"
+                />
+              </Field>
+            </div>
+
+            {agentList.filter(([aid]) => aid !== editId).length > 0 && (
+              <div>
+                <p className="metric-kicker mb-3">Erlaubte Agenten (allowed_agents)</p>
+                <p className="text-xs text-muted-foreground mb-2">Welche Agenten darf dieser Agent via ask_agent / delegate_agent ansprechen?</p>
+                <div className="flex flex-wrap gap-2">
+                  {agentList.filter(([aid]) => aid !== editId).map(([aid, ag]) => (
+                    <button key={aid} type="button"
+                      onClick={() => set("allowed_agents", form.allowed_agents.includes(aid) ? form.allowed_agents.filter((x: string) => x !== aid) : [...form.allowed_agents, aid])}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${form.allowed_agents.includes(aid) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
+                      {ag.config.identity || aid}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isAdmin && mcpServers.length > 0 && (
               <div>
                 <p className="metric-kicker mb-3">{t("agents.mcpServers")}</p>
@@ -512,202 +543,134 @@ export function AgentsPage() {
       )}
 
       {!loading && agentList.length > 0 && (
-        <section className="space-y-4">
-          {agentList.map(([id, agent]) => {
-            const rt = agent.runtime;
-            const status = rt?.status ?? "unbekannt";
-            const color = STATUS_COLORS[status] ?? "text-muted-foreground";
-            const hbAge = rt?.last_heartbeat_age;
-            const hbWarn = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
-            const taskCount = hbTasks.filter((t) => t.agent_id === id).length;
-            return (
-              <div key={id} className="app-panel overflow-hidden">
-                <div className="p-5 space-y-5">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                        <Bot className="h-5 w-5" />
+        <section className="section-card overflow-hidden p-0">
+          <div className="divide-y">
+            {agentList.map(([id, agent]) => {
+              const rt = agent.runtime;
+              const status = rt?.status ?? "unbekannt";
+              const color = STATUS_COLORS[status] ?? "text-muted-foreground";
+              const hbAge = rt?.last_heartbeat_age;
+              const hbWarn = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
+              const taskCount = hbTasks.filter((t) => t.agent_id === id).length;
+              const expanded = skillsAgent === id || hbEditAgent === id || logAgent === id;
+              return (
+                <div key={id}>
+                  {/* Kompakte Zeile */}
+                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                    {/* Status-Dot */}
+                    <Circle className={`h-2.5 w-2.5 flex-shrink-0 fill-current ${color}`} />
+
+                    {/* Name + Badges */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium text-sm truncate">{agent.config.identity}</span>
+                        <span className="rounded-full bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground font-mono">{id}</span>
+                        <span className="rounded-full border px-1.5 py-0.5 text-xs text-muted-foreground">{agent.config.type}</span>
+                        {taskCount > 0 && <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-xs flex items-center gap-1"><Timer className="h-2.5 w-2.5" />{taskCount}</span>}
+                        {rt?.status === "error" && <span className="rounded-full bg-destructive/10 text-destructive px-1.5 py-0.5 text-xs">error</span>}
                       </div>
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-lg font-semibold tracking-tight">{agent.config.identity}</span>
-                          <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{id}</span>
-                          <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{agent.config.type}</span>
-                          {taskCount > 0 && <span className="status-pill status-pill-ok"><Timer className="h-3 w-3" />{taskCount} HB</span>}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{agent.config.model}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <span className={`status-pill ${status === "running" ? "status-pill-ok" : ""}`}>
-                            <Circle className={`h-2.5 w-2.5 fill-current ${color}`} />
-                            {status}
-                          </span>
-                          {rt && (
-                            <span className={`status-pill ${hbWarn ? "text-orange-500" : ""}`}>
-                              <Timer className="h-3.5 w-3.5" />
-                              HB {hbAge?.toFixed(0)}s / {rt.heartbeat_timeout}s
-                            </span>
-                          )}
-                          {rt && rt.restart_count > 0 && (
-                            <span className="status-pill">
-                              <RefreshCw className="h-3.5 w-3.5" />
-                              {rt.restart_count} {t("agents.restarts")}
-                            </span>
-                          )}
-                          {rt?.status === "error" && <span className="status-pill text-destructive"><ShieldAlert className="h-3.5 w-3.5" />{t("agents.errors")}</span>}
-                        </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-xs text-muted-foreground truncate max-w-[14rem]">{agent.config.model}</span>
+                        {rt && <span className={`text-xs ${hbWarn ? "text-orange-500" : "text-muted-foreground"}`}>HB {hbAge?.toFixed(0)}s</span>}
+                        {rt && rt.restart_count > 0 && <span className="text-xs text-muted-foreground">{rt.restart_count}x restart</span>}
                       </div>
                     </div>
 
-                    <div className="grid gap-3 md:grid-cols-2 xl:w-[26rem]">
-                      <button onClick={() => navigate(`/agents/${id}/chat`)} className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background">
-                        <span className="flex items-center gap-3">
-                          <span className="rounded-2xl bg-primary/12 p-2 text-primary"><MessageSquare className="h-4 w-4" /></span>
-                          <span>
-                            <span className="block font-medium">{t("agents.chat")}</span>
-                            <span className="text-xs text-muted-foreground">{t("agents.openChat")}</span>
-                          </span>
-                        </span>
-                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                    {/* Action Icons */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => navigate(`/agents/${id}/chat`)} title={t("agents.chat")}
+                        className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
+                        <MessageSquare className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => setSkillsAgent((s) => (s === id ? null : id))} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${skillsAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
-                        <span className="flex items-center gap-3">
-                          <span className={`rounded-2xl p-2 ${skillsAgent === id ? "bg-primary/15" : "bg-secondary"}`}><BookOpen className="h-4 w-4" /></span>
-                          <span>
-                            <span className="block font-medium">{t("agents.skills")}</span>
-                            <span className="text-xs text-muted-foreground">{t("agents.openSkills")}</span>
-                          </span>
-                        </span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <button onClick={() => setSkillsAgent((s) => s === id ? null : id)} title={t("agents.skills")}
+                        className={`p-1.5 rounded-lg transition-colors ${skillsAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                        <BookOpen className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => openLogs(id)} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${logAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
-                        <span className="flex items-center gap-3">
-                          <span className={`rounded-2xl p-2 ${logAgent === id ? "bg-primary/15" : "bg-secondary"}`}><ScrollText className="h-4 w-4" /></span>
-                          <span>
-                            <span className="block font-medium">{t("agents.logs")}</span>
-                            <span className="text-xs text-muted-foreground">{t("agents.openLogs")}</span>
-                          </span>
-                        </span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <button onClick={() => openLogs(id)} title={t("agents.logs")}
+                        className={`p-1.5 rounded-lg transition-colors ${logAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                        <ScrollText className="h-3.5 w-3.5" />
                       </button>
                       {isAdmin && (
-                        <button onClick={() => openHbEdit(id, rt)} className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${hbEditAgent === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}>
-                          <span className="flex items-center gap-3">
-                            <span className={`rounded-2xl p-2 ${hbEditAgent === id ? "bg-primary/15" : "bg-secondary"}`}><Activity className="h-4 w-4" /></span>
-                            <span>
-                              <span className="block font-medium">{t("agents.heartbeat")}</span>
-                              <span className="text-xs text-muted-foreground">{rt?.heartbeat_enabled === false ? t("agents.noRuntime") : `alle ${Math.round(rt?.heartbeat_interval ?? 30)}s`}</span>
-                            </span>
-                          </span>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <button onClick={() => openHbEdit(id, rt)} title={t("agents.heartbeat")}
+                          className={`p-1.5 rounded-lg transition-colors ${hbEditAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                          <Activity className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button onClick={() => openEdit(id, agent)} title={t("agents.editBtn")}
+                          className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button onClick={() => handleDelete(id)} disabled={deleting === id} title={t("common.delete")}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive disabled:opacity-50">
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.1fr_1fr_0.9fr]">
-                    <div className="rounded-3xl border bg-background/55 p-4">
-                      <p className="metric-kicker">{t("agents.runtime")}</p>
-                      <div className="mt-3 space-y-3 text-sm">
-                        <div className="flex items-start gap-3">
-                          <Cpu className="mt-0.5 h-4 w-4 text-primary" />
-                          <div>
-                            <p className="font-medium">{t("agents.llmModel")}</p>
-                            <p className="break-all text-muted-foreground">{agent.config.model}</p>
+                  {/* Aufklappbare Panels */}
+                  {skillsAgent === id && <div className="border-t"><SkillsPanel agentId={id} /></div>}
+                  {logAgent === id && (
+                    <div className="border-t">
+                      <div className="flex items-center justify-between bg-muted/30 px-4 py-2">
+                        <span className="flex items-center gap-2 text-xs font-medium"><ScrollText className="h-3.5 w-3.5" />{t("agents.logs")} — {id} <span className="inline-flex items-center gap-1 text-green-500"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />live</span></span>
+                        <button onClick={closeLogs} className="p-1 rounded hover:bg-accent"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      {logErr ? <p className="p-4 text-sm text-destructive">{logErr}</p> : (
+                        <div className="h-52 overflow-y-auto bg-[#0d0d0d] px-4 py-3 font-mono text-xs leading-relaxed text-[#d4d4d4]">
+                          {logLines.length === 0 ? <span className="text-muted-foreground">{t("agents.noLogs")}</span> : logLines.map((line, i) => (
+                            <div key={i} className={`whitespace-pre-wrap break-all ${line.includes(" ERROR ") || line.includes(" error ") ? "text-red-400" : line.includes(" WARNING ") ? "text-yellow-400" : ""}`}>{line}</div>
+                          ))}
+                          <div ref={logBottomRef} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {hbEditAgent === id && (
+                    <div className="border-t px-4 py-4 space-y-3 bg-muted/10">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium flex items-center gap-2"><Activity className="h-3.5 w-3.5" />{t("agents.heartbeatEdit")}</p>
+                        <button onClick={() => setHbEditAgent(null)} className="p-1 rounded hover:bg-accent"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm">
+                          <input type="checkbox" checked={hbForm.enabled} onChange={(e) => setHbForm((f) => ({ ...f, enabled: e.target.checked }))} className="h-4 w-4 rounded" />
+                          {t("agents.heartbeatEnabled")}
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {[["interval", t("agents.interval"), "30s"], ["timeout", t("agents.timeout"), "90s"]].map(([k, label, ph]) => (
+                          <div key={k} className="space-y-1">
+                            <label className="text-xs text-muted-foreground uppercase tracking-wide">{label}</label>
+                            <input value={(hbForm as any)[k]} onChange={(e) => setHbForm((f) => ({ ...f, [k]: e.target.value }))} placeholder={ph}
+                              className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                           </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <Workflow className="mt-0.5 h-4 w-4 text-primary" />
-                          <div>
-                            <p className="font-medium">{t("agents.running")}</p>
-                            <p className={`${color}`}>{status}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <Timer className="mt-0.5 h-4 w-4 text-primary" />
-                          <div>
-                            <p className="font-medium">{t("agents.heartbeat")}</p>
-                            <p className={hbWarn ? "text-orange-500" : "text-muted-foreground"}>
-                              {rt ? `${hbAge?.toFixed(0)}s ${t("agents.lastHeartbeat")}, Timeout ${rt.heartbeat_timeout}s` : t("agents.noRuntime")}
-                            </p>
-                          </div>
+                        ))}
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground uppercase tracking-wide">{t("agents.onFailure")}</label>
+                          <select value={hbForm.on_failure} onChange={(e) => setHbForm((f) => ({ ...f, on_failure: e.target.value }))}
+                            className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="restart">restart</option>
+                            <option value="stop">stop</option>
+                            <option value="alert">alert</option>
+                            <option value="ignore">ignore</option>
+                          </select>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="rounded-3xl border bg-background/55 p-4 md:col-span-2 xl:col-span-1">
-                      <p className="metric-kicker">{t("agents.templateAgent")}</p>
-                      <div className="mt-3 space-y-3 text-sm">
-                        <div className="rounded-2xl bg-secondary/60 px-3 py-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("agents.type")}</p>
-                          <p className="mt-1 font-medium">{agent.config.type}</p>
-                        </div>
-                        <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("agents.knownTasks")}</p>
-                          <p className="mt-1 font-medium">{taskCount}</p>
-                        </div>
-                        <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("agents.onFailure")}</p>
-                          <p className="mt-1 font-medium">{rt?.on_failure ?? "n/a"}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-destructive/15 bg-destructive/5 p-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                        <ShieldAlert className="h-4 w-4" />
-                        Admin Actions
-                      </div>
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {t("agents.configuration")}
-                      </p>
-                      <div className="mt-4 space-y-2">
-                        {isAdmin && <button onClick={() => openEdit(id, agent)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent"><Pencil className="h-4 w-4" />{t("agents.editBtn")}</button>}
-                        {isAdmin && <button onClick={() => handleDelete(id)} disabled={deleting === id} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50"><Trash2 className="h-4 w-4" />{t("common.delete")}</button>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {skillsAgent === id && <SkillsPanel agentId={id} />}
-                {hbEditAgent === id && (
-                  <div className="border-t p-5 space-y-4">
-                    <p className="metric-kicker flex items-center gap-2"><Activity className="h-3.5 w-3.5" />{t("agents.heartbeatEdit")}</p>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={hbForm.enabled} onChange={(e) => setHbForm((f) => ({ ...f, enabled: e.target.checked }))} className="h-4 w-4 rounded" />
-                        <span className="text-sm font-medium">{t("agents.heartbeatEnabled")}</span>
-                      </label>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("agents.interval")}</label>
-                        <input value={hbForm.interval} onChange={(e) => setHbForm((f) => ({ ...f, interval: e.target.value }))} placeholder="30s" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("agents.timeout")}</label>
-                        <input value={hbForm.timeout} onChange={(e) => setHbForm((f) => ({ ...f, timeout: e.target.value }))} placeholder="90s" className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("agents.onFailure")}</label>
-                        <select value={hbForm.on_failure} onChange={(e) => setHbForm((f) => ({ ...f, on_failure: e.target.value }))} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                          <option value="restart">restart</option>
-                          <option value="stop">stop</option>
-                          <option value="alert">alert</option>
-                          <option value="ignore">ignore</option>
-                        </select>
-                      </div>
-                    </div>
-                    {hbErr && <p className="text-sm text-destructive">{hbErr}</p>}
-                    <div className="flex gap-2">
-                      <button onClick={() => saveHbForm(id)} disabled={hbSaving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                      {hbErr && <p className="text-sm text-destructive">{hbErr}</p>}
+                      <button onClick={() => saveHbForm(id)} disabled={hbSaving}
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
                         <Save className="h-3.5 w-3.5" />{hbSaving ? t("agents.hbSaving") : t("agents.saveHeartbeat")}
                       </button>
-                      <button onClick={() => setHbEditAgent(null)} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">{t("agents.cancel")}</button>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

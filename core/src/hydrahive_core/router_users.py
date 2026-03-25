@@ -119,6 +119,15 @@ class CreateUserRequest(BaseModel):
     role: str = "user"
 
 
+class UpdateUserRequest(BaseModel):
+    role: str | None = None
+    allowed_projects: list[str] | None = None
+    allowed_agents: list[str] | None = None
+    datasources: list[str] | None = None
+    wks_ip: str | None = None
+    discord_user_id: str | None = None
+
+
 class MyAgentUpdateRequest(BaseModel):
     identity: str
     soul: str = ""
@@ -210,6 +219,11 @@ def register_user_routes(
                 "role": data.get("role", "user"),
                 "matrix_id": f"@{username}:{read_server_name()}",
                 "created_at": data.get("created_at", ""),
+                "allowed_projects": data.get("allowed_projects", []),
+                "allowed_agents": data.get("allowed_agents", []),
+                "datasources": data.get("datasources", []),
+                "wks_ip": (data.get("wks") or {}).get("ip", ""),
+                "discord_user_id": data.get("discord_user_id", ""),
             }
             for username, data in users.items()
         }
@@ -267,6 +281,39 @@ def register_user_routes(
         logger.info("User gelöscht: %s", username)
         audit_log("user.delete", target=username)
         return {"deleted": True, "username": username}
+
+    @admin_router.put("/users/{username}")
+    async def update_user(username: str, req: UpdateUserRequest):
+        users = load_users()
+        if username not in users:
+            raise HTTPException(404, f"User '{username}' nicht gefunden")
+        if req.role is not None:
+            if req.role not in {"user", "admin"}:
+                raise HTTPException(400, "Rolle muss 'user' oder 'admin' sein")
+            if username == "admin" and req.role != "admin":
+                raise HTTPException(403, "Admin-User kann nicht auf 'user' gesetzt werden")
+            users[username]["role"] = req.role
+        if req.allowed_projects is not None:
+            users[username]["allowed_projects"] = req.allowed_projects
+        if req.allowed_agents is not None:
+            users[username]["allowed_agents"] = req.allowed_agents
+        if req.datasources is not None:
+            users[username]["datasources"] = req.datasources
+        if req.wks_ip is not None:
+            wks = users[username].get("wks") or {}
+            if req.wks_ip:
+                wks["ip"] = req.wks_ip
+                users[username]["wks"] = wks
+            else:
+                users[username].pop("wks", None)
+        if req.discord_user_id is not None:
+            if req.discord_user_id.strip():
+                users[username]["discord_user_id"] = req.discord_user_id.strip()
+            else:
+                users[username].pop("discord_user_id", None)
+        save_users(users)
+        audit_log("user.update", target=username, details={"fields": [k for k, v in req.model_dump().items() if v is not None]})
+        return {"updated": True, "username": username}
 
     @admin_router.put("/users/{username}/password")
     async def change_user_password(username: str, body: dict):

@@ -10,8 +10,10 @@ Format: {"bot_token": "...", "guild_id": "...", "channel_ids": ["..."]}
 """
 
 import asyncio
+import collections
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -68,6 +70,10 @@ class DiscordAgentClient(ABC):
         channel_ids:    list[str],
         ignore_bots:    bool = True,
         require_mention: bool = False,
+        loop_detection: bool = True,
+        loop_bot_threshold: int = 3,
+        loop_pingpong_seconds: int = 30,
+        loop_cooldown_seconds: int = 300,
     ) -> None:
         self.agent_id        = agent_id
         self.bot_token       = bot_token
@@ -75,8 +81,79 @@ class DiscordAgentClient(ABC):
         self.channel_ids     = set(channel_ids)
         self.ignore_bots     = ignore_bots
         self.require_mention = require_mention
+        self.loop_detection        = loop_detection
+        self.loop_bot_threshold    = max(2, loop_bot_threshold)
+        self.loop_pingpong_seconds = max(5, loop_pingpong_seconds)
+        self.loop_cooldown_seconds = max(10, loop_cooldown_seconds)
         self._client         = None
         self._running        = False
+        # Loop-Detektion: pro Channel eine deque mit (timestamp, is_bot) Einträgen
+        self._loop_history: dict[str, collections.deque] = {}
+        # Circuit Breaker: channel_id → Zeitpunkt der Öffnung
+        self._circuit_open: dict[str, float] = {}
+
+    LOOP_HISTORY_SIZE = 20  # Wie viele Nachrichten zurückschauen
+    LOOP_PINGPONG_THRESHOLD = 4  # Fenster-Größe für PingPong-Detektor
+
+    def _check_loop(self, channel_id: str, is_bot: bool) -> bool:
+        """
+        Prüft ob ein Loop erkannt wurde. Gibt True zurück wenn die Nachricht
+        geblockt werden soll (Circuit offen oder Loop erkannt).
+        Gibt immer False zurück wenn loop_detection=False.
+        """
+        if not self.loop_detection:
+            return False
+
+        now = time.monotonic()
+
+        # Mensch schreibt: nie blockieren, aber auch nicht zählen
+        # Der Circuit Breaker bleibt für Bots offen, auch wenn ein Mensch schreibt
+        if not is_bot:
+            return False
+
+        # Circuit Breaker: noch offen? (gilt nur für Bots)
+        if channel_id in self._circuit_open:
+            if now - self._circuit_open[channel_id] < self.loop_cooldown_seconds:
+                return True  # Bot geblockt, Circuit noch offen
+            else:
+                # Circuit schliessen nach Cooldown
+                logger.info("Loop-Detektion [%s]: Circuit Breaker schliesst wieder (Channel %s)",
+                            self.agent_id, channel_id)
+                del self._circuit_open[channel_id]
+                self._loop_history.pop(channel_id, None)
+
+        # Nur Bot-Nachrichten zur History hinzufügen
+        # → Human-Nachrichten setzen den Zähler NICHT zurück
+        if channel_id not in self._loop_history:
+            self._loop_history[channel_id] = collections.deque(maxlen=self.LOOP_HISTORY_SIZE)
+        history = self._loop_history[channel_id]
+        history.append(now)
+
+        # Detektor 1: Zu viele Bot-Nachrichten insgesamt
+        if len(history) >= self.loop_bot_threshold:
+            logger.warning(
+                "Loop-Detektion [%s]: %d Bot-Nachrichten in Channel %s "
+                "— Circuit Breaker ausgelöst (%ds Cooldown)",
+                self.agent_id, len(history), channel_id, self.loop_cooldown_seconds,
+            )
+            self._circuit_open[channel_id] = now
+            return True
+
+        # Detektor 2: PingPong — viele Bot-Nachrichten in kurzem Zeitfenster
+        recent = list(history)
+        if len(recent) >= self.LOOP_PINGPONG_THRESHOLD * 2:
+            window = recent[-self.LOOP_PINGPONG_THRESHOLD * 2:]
+            timespan = window[-1] - window[0]
+            if timespan < self.loop_pingpong_seconds:
+                logger.warning(
+                    "Loop-Detektion [%s]: PingPong erkannt in Channel %s "
+                    "(%d Bot-Nachrichten in %.1fs) — Circuit Breaker ausgelöst",
+                    self.agent_id, channel_id, len(window), timespan,
+                )
+                self._circuit_open[channel_id] = now
+                return True
+
+        return False
 
     async def start(self) -> None:
         """Discord-Client initialisieren und verbinden (blockiert bis stop())."""
@@ -84,6 +161,7 @@ class DiscordAgentClient(ABC):
 
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True  # Für list_members (muss im Developer Portal aktiviert sein)
 
         self._client = discord.Client(intents=intents)
 
@@ -98,14 +176,18 @@ class DiscordAgentClient(ABC):
             # Eigene Nachrichten ignorieren
             if message.author == self._client.user:
                 return
-            # Bots ignorieren wenn konfiguriert
-            if self.ignore_bots and message.author.bot:
-                return
             # Nur in konfigurierten Channels
             if self.channel_ids and str(message.channel.id) not in self.channel_ids:
                 return
             # @Mention erforderlich wenn konfiguriert
             if self.require_mention and self._client.user not in message.mentions:
+                return
+            is_bot = message.author.bot
+            # Bots hart ignorieren wenn konfiguriert (kein Cross-Agent-Chat)
+            if self.ignore_bots and is_bot:
+                return
+            # Loop-Detektion (Circuit Breaker + PingPong)
+            if self._check_loop(str(message.channel.id), is_bot):
                 return
             # @Mention aus Content entfernen bevor weitergegeben
             content = message.content
@@ -116,6 +198,7 @@ class DiscordAgentClient(ABC):
                     channel_id=str(message.channel.id),
                     content=content,
                     author=str(message.author),
+                    author_id=str(message.author.id),
                     message_id=str(message.id),
                 )
             except Exception as e:
@@ -186,6 +269,114 @@ class DiscordAgentClient(ABC):
             if ch.type == _discord.ChannelType.text
         ]
 
+    async def _get_guild(self):
+        """Guild-Objekt laden."""
+        if not self._client or self._client.is_closed():
+            raise RuntimeError("Discord-Client nicht verbunden")
+        guild = self._client.get_guild(int(self.guild_id))
+        if guild is None:
+            guild = await self._client.fetch_guild(int(self.guild_id))
+        return guild
+
+    async def list_all_channels(self) -> list[dict]:
+        """Alle Channels inkl. Kategorien und Voice-Channels auflisten."""
+        guild = await self._get_guild()
+        result = []
+        for ch in sorted(guild.channels, key=lambda c: (getattr(c, "position", 0))):
+            result.append({
+                "id":          str(ch.id),
+                "name":        ch.name,
+                "type":        str(ch.type),
+                "category_id": str(ch.category_id) if getattr(ch, "category_id", None) else None,
+                "position":    getattr(ch, "position", 0),
+            })
+        return result
+
+    async def create_category(self, name: str) -> dict:
+        """Neue Kategorie erstellen."""
+        guild = await self._get_guild()
+        cat = await guild.create_category(name)
+        return {"id": str(cat.id), "name": cat.name}
+
+    async def create_channel(self, name: str, category_id: str = "", topic: str = "") -> dict:
+        """Neuen Text-Channel erstellen, optional in einer Kategorie."""
+        guild = await self._get_guild()
+        category = None
+        if category_id:
+            category = guild.get_channel(int(category_id))
+        channel = await guild.create_text_channel(name, category=category, topic=topic or None)
+        return {"id": str(channel.id), "name": channel.name, "category_id": str(channel.category_id) if channel.category_id else None}
+
+    async def delete_channel(self, channel_id: str) -> dict:
+        """Channel oder Kategorie löschen."""
+        channel = self._client.get_channel(int(channel_id))
+        if channel is None:
+            channel = await self._client.fetch_channel(int(channel_id))
+        await channel.delete()
+        return {"deleted": True, "channel_id": channel_id}
+
+    async def set_channel_topic(self, channel_id: str, topic: str) -> dict:
+        """Channel-Topic setzen."""
+        channel = self._client.get_channel(int(channel_id))
+        if channel is None:
+            channel = await self._client.fetch_channel(int(channel_id))
+        await channel.edit(topic=topic)
+        return {"updated": True, "channel_id": channel_id}
+
+    async def rename_channel(self, channel_id: str, name: str) -> dict:
+        """Channel umbenennen."""
+        channel = self._client.get_channel(int(channel_id))
+        if channel is None:
+            channel = await self._client.fetch_channel(int(channel_id))
+        await channel.edit(name=name)
+        return {"updated": True, "channel_id": channel_id, "new_name": name}
+
+    async def list_roles(self) -> list[dict]:
+        """Alle Rollen der Guild auflisten."""
+        guild = await self._get_guild()
+        return [{"id": str(r.id), "name": r.name, "color": str(r.color)} for r in guild.roles if r.name != "@everyone"]
+
+    async def list_members(self, limit: int = 100) -> list[dict]:
+        """Mitglieder der Guild auflisten (benötigt Members Intent)."""
+        guild = await self._get_guild()
+        members = []
+        try:
+            async for member in guild.fetch_members(limit=limit):
+                members.append({
+                    "id":           str(member.id),
+                    "username":     str(member.name),
+                    "display_name": member.display_name,
+                    "roles":        [r.name for r in member.roles if r.name != "@everyone"],
+                })
+        except Exception:
+            # Fallback: gecachte Mitglieder (nur wenn Members Intent nicht aktiviert)
+            for member in guild.members:
+                members.append({
+                    "id":           str(member.id),
+                    "username":     str(member.name),
+                    "display_name": member.display_name,
+                    "roles":        [r.name for r in member.roles if r.name != "@everyone"],
+                })
+        return members
+
+    async def delete_message(self, channel_id: str, message_id: str) -> dict:
+        """Nachricht in einem Channel löschen."""
+        channel = self._client.get_channel(int(channel_id))
+        if channel is None:
+            channel = await self._client.fetch_channel(int(channel_id))
+        msg = await channel.fetch_message(int(message_id))
+        await msg.delete()
+        return {"deleted": True, "message_id": message_id}
+
+    async def pin_message(self, channel_id: str, message_id: str) -> dict:
+        """Nachricht anpinnen."""
+        channel = self._client.get_channel(int(channel_id))
+        if channel is None:
+            channel = await self._client.fetch_channel(int(channel_id))
+        msg = await channel.fetch_message(int(message_id))
+        await msg.pin()
+        return {"pinned": True, "message_id": message_id}
+
     async def test_connection(self) -> dict:
         """Bot-Token testen — gibt Bot-Name und ID zurück."""
         import aiohttp
@@ -220,6 +411,7 @@ class DiscordAgentClient(ABC):
         channel_id: str,
         content:    str,
         author:     str,
+        author_id:  str,
         message_id: str,
     ) -> None:
         """Eingehende Nachricht verarbeiten — Subklassen implementieren dies."""
@@ -233,13 +425,27 @@ class AgentDiscordClient(DiscordAgentClient):
 
     def __init__(
         self,
-        agent_id:    str,
-        bot_token:   str,
-        guild_id:    str,
-        channel_ids: list[str],
-        orchestrator,          # Orchestrator-Instanz
+        agent_id:        str,
+        bot_token:       str,
+        guild_id:        str,
+        channel_ids:     list[str],
+        orchestrator,
+        ignore_bots:          bool = True,
+        require_mention:      bool = False,
+        loop_detection:       bool = True,
+        loop_bot_threshold:   int = 3,
+        loop_pingpong_seconds: int = 30,
+        loop_cooldown_seconds: int = 300,
     ) -> None:
-        super().__init__(agent_id, bot_token, guild_id, channel_ids)
+        super().__init__(
+            agent_id, bot_token, guild_id, channel_ids,
+            ignore_bots=ignore_bots,
+            require_mention=require_mention,
+            loop_detection=loop_detection,
+            loop_bot_threshold=loop_bot_threshold,
+            loop_pingpong_seconds=loop_pingpong_seconds,
+            loop_cooldown_seconds=loop_cooldown_seconds,
+        )
         self._orchestrator = orchestrator
 
     async def on_user_message(
@@ -247,13 +453,26 @@ class AgentDiscordClient(DiscordAgentClient):
         channel_id: str,
         content:    str,
         author:     str,
+        author_id:  str,
         message_id: str,
     ) -> None:
         """Nachricht an Orchestrator weiterleiten und Antwort zurück in Channel."""
         if not content.strip():
             return
 
-        logger.info("Discord [%s] %s: %s", self.agent_id, author, content[:80])
+        # Bekannten HydraHive-User anhand Discord-User-ID ermitteln
+        sender = author
+        try:
+            from .main import _load_users
+            users = _load_users()
+            for uname, udata in users.items():
+                if udata.get("discord_user_id") == author_id:
+                    sender = uname
+                    break
+        except Exception:
+            pass
+
+        logger.info("Discord [%s] %s (id=%s, sender=%s): %s", self.agent_id, author, author_id, sender, content[:80])
 
         # Antwort sammeln und senden
         response_parts: list[str] = []
@@ -262,7 +481,7 @@ class AgentDiscordClient(DiscordAgentClient):
                 project_id  = self.agent_id,
                 project_cfg = _build_virtual_cfg(self.agent_id),
                 content     = content,
-                sender      = author,
+                sender      = sender,
                 execution_mode = "safe",
             ):
                 import json as _json
