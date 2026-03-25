@@ -156,9 +156,13 @@ class SessionManager:
         logger.info("SessionManager gestartet — %d aktive Sessions wiederhergestellt", restored)
 
     def get_or_create(self, project_id: str) -> Session:
-        """Gibt aktive Session zurück oder startet eine neue."""
+        """Gibt aktive Session zurück oder startet eine neue (synchron, ohne Lock)."""
         if project_id not in self._active:
-            return self.new_session(project_id)
+            session = Session.new(project_id)
+            self._active[project_id] = session
+            self._persist(session)
+            logger.info("Neue Session (sync): %s (Projekt: %s)", session.id[:8], project_id)
+            return session
         return self._active[project_id]
 
     async def new_session(self, project_id: str) -> Session:
