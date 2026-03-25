@@ -23,6 +23,9 @@ AGENTS_ROOT   = Path("/agents")
 # Wird von main.py im Lifespan gesetzt; ermöglicht interne Core-Calls ohne IP-Bypass
 _internal_secret: str = ""
 
+# Wird von main.py im Lifespan gesetzt; None = Rate-Limiting deaktiviert
+_rate_limiter: Any = None
+
 
 # ============================================================= Path Safety (#54)
 
@@ -1450,6 +1453,9 @@ class AskAgentTool(BaseTool):
         import hmac as _hmac
         import time as _time
 
+        if _rate_limiter is not None:
+            _rate_limiter.check_agent_call(agent_id)
+
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
         headers: dict = {}
@@ -1531,6 +1537,9 @@ class DelegateAgentTool(BaseTool):
     ) -> dict:
         from pathlib import Path as _Path
         from .agentlink import write_handoff as _wh
+
+        if _rate_limiter is not None:
+            _rate_limiter.check_agent_call(agent_id)
 
         # Handoff im /agents-Verzeichnis des Ziel-Agenten ablegen
         # (agent_id hier = aufrufender Agent, target = Ziel-Agent)

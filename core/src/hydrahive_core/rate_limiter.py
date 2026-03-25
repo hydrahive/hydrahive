@@ -36,6 +36,11 @@ class RateLimitSettings:
     login_window_s: int = 60
     message_max: int = 50
     message_window_s: int = 60
+    # Agent-interne Calls (ask_agent, delegate_agent, spawn_agent)
+    agent_call_max: int = 30       # max. interne Calls pro Agent pro Minute
+    agent_call_window_s: int = 60
+    # Token-Budget-Warning (grobe Schätzung, nicht exact)
+    agent_token_warn_per_hour: int = 10_000
     max_login_keys: int = 10000
     max_message_keys: int = 50000
     redis_retry_after_s: int = 30
@@ -64,6 +69,8 @@ class RateLimiter:
         self._redis_failed_at = 0.0
         self._login_attempts: dict[str, list[float]] = defaultdict(list)
         self._message_attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
+        self._agent_call_attempts: dict[str, list[float]] = defaultdict(list)
+        self._agent_token_usage: dict[str, list[tuple[float, int]]] = defaultdict(list)
 
         if self._redis_client is None and self._redis_script is None:
             self._configure_redis_backend()
@@ -197,3 +204,41 @@ class RateLimiter:
             window_s=self.settings.message_window_s,
         ):
             raise HTTPException(429, f"Zu viele Nachrichten — max. {self.settings.message_max} pro Minute")
+
+    def check_agent_call(self, agent_id: str) -> None:
+        """Rate-Limit für interne Agent-Calls (ask_agent, delegate_agent, spawn_agent).
+        Verhindert unkontrollierte Agent-Kaskaden und Kostenexplosionen.
+        """
+        if not self._check_local(
+            self._agent_call_attempts,
+            agent_id,
+            limit=self.settings.agent_call_max,
+            window_s=self.settings.agent_call_window_s,
+        ):
+            raise RuntimeError(
+                f"Agent '{agent_id}' hat das Call-Limit überschritten "
+                f"({self.settings.agent_call_max} interne Calls/Minute). "
+                f"Möglicher Agent-Loop oder Kostenexplosion — wird blockiert."
+            )
+
+    def track_token_usage(self, agent_id: str, tokens: int) -> None:
+        """Tokn-Verbrauch eines Agents tracken und Warning loggen wenn zu hoch."""
+        now = time.time()
+        hour_ago = now - 3600
+        usage = self._agent_token_usage[agent_id]
+        # Alte Einträge bereinigen
+        self._agent_token_usage[agent_id] = [(t, n) for t, n in usage if t > hour_ago]
+        self._agent_token_usage[agent_id].append((now, tokens))
+        total_hour = sum(n for _, n in self._agent_token_usage[agent_id])
+        if total_hour > self.settings.agent_token_warn_per_hour:
+            self.logger.warning(
+                "Token-Budget-Warnung: Agent '%s' hat ~%d Tokens in der letzten Stunde verbraucht "
+                "(Limit: %d). Prüfe auf Agent-Loops oder unerwartete Aktivität.",
+                agent_id, total_hour, self.settings.agent_token_warn_per_hour,
+            )
+
+    def get_token_usage_hour(self, agent_id: str) -> int:
+        """Gibt den geschätzten Token-Verbrauch des Agents in der letzten Stunde zurück."""
+        now = time.time()
+        hour_ago = now - 3600
+        return sum(n for t, n in self._agent_token_usage.get(agent_id, []) if t > hour_ago)

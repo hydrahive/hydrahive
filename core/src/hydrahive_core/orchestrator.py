@@ -29,6 +29,7 @@ from .project_config import ProjectConfig
 from .session_manager import MessageRole, SessionManager
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt
 from .tool_registry import ToolRegistry, registry as default_registry
+from . import tool_registry as _tool_reg
 
 logger = logging.getLogger(__name__)
 
@@ -1458,6 +1459,9 @@ class Orchestrator:
                 project_id, MessageRole.ASSISTANT,
                 full_response, agent_id=boss_cfg.id
             )
+            total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
+            if total_tokens > 0 and _tool_reg._rate_limiter is not None:
+                _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
             yield f"data: {_json.dumps({'done': True, 'session_id': None, 'usage': _usage})}\n\n"
 
         except Exception as e:

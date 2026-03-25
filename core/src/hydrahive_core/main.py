@@ -162,6 +162,7 @@ async def lifespan(app: FastAPI):
     _INTERNAL_SECRET = _load_or_create_internal_secret()
     from . import tool_registry as _tr
     _tr._internal_secret = _INTERNAL_SECRET
+    _tr._rate_limiter = rate_limiter
     logger.info("Internal-Secret geladen")
 
     # Audit-Log-Pfad vorbereiten
