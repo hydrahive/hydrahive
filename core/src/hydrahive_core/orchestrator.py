@@ -259,12 +259,16 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._sessions.get_context(project_id, max_messages=10))
-        logger.debug(
-            "token-budget [sync] proj=%s sys≈%d hist≈%d",
-            project_id,
-            len(system_prompt) // 4,
-            sum(len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4 for m in messages[1:]),
+        history = self._sessions.get_context(project_id, max_messages=10)
+        messages.extend(history)
+        sys_tokens  = len(system_prompt) // 4
+        hist_tokens = sum(
+            len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
+            for m in history
+        )
+        logger.info(
+            "token-budget proj=%s sys≈%d hist≈%d (%d msgs) total≈%d",
+            project_id, sys_tokens, hist_tokens, len(history), sys_tokens + hist_tokens,
         )
 
         # 5. Verfügbare Tools für Boss ermitteln
@@ -398,13 +402,16 @@ class Orchestrator:
         await self._compact_if_needed(project_id, boss_cfg)
 
         system_prompt = await self._build_system_prompt(boss_cfg, content)
-        history       = self._sessions.get_context(project_id, max_messages=12)
+        history       = self._sessions.get_context(project_id, max_messages=10)
         messages      = [{"role": "system", "content": system_prompt}] + history
-        logger.debug(
-            "token-budget [stream] proj=%s sys≈%d hist≈%d",
-            project_id,
-            len(system_prompt) // 4,
-            sum(len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4 for m in history),
+        sys_tokens_s  = len(system_prompt) // 4
+        hist_tokens_s = sum(
+            len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
+            for m in history
+        )
+        logger.info(
+            "token-budget [stream] proj=%s sys≈%d hist≈%d (%d msgs) total≈%d",
+            project_id, sys_tokens_s, hist_tokens_s, len(history), sys_tokens_s + hist_tokens_s,
         )
 
         # Tool-Schema
