@@ -336,14 +336,17 @@ export function ActivityPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [selected, setSelected] = useState<AgentLiveEntry | null>(null);
+  const selectedRef = useRef<AgentLiveEntry | null>(null);
+  selectedRef.current = selected;
 
   const fetchData = useCallback(async () => {
     try {
       const r = await api.agentsLive();
       setData(r.agents);
-      // selected-Agent-Daten synchron halten
-      if (selected) {
-        const updated = r.agents.find(a => a.id === selected.id);
+      // selected-Agent-Daten synchron halten — via Ref, nicht Closure,
+      // damit der Interval nicht verhindert dass das Panel geschlossen wird
+      if (selectedRef.current) {
+        const updated = r.agents.find(a => a.id === selectedRef.current!.id);
         if (updated) setSelected(updated);
       }
       setLastUpdate(new Date());
@@ -353,7 +356,7 @@ export function ActivityPage() {
     } finally {
       setLoading(false);
     }
-  }, [selected]);
+  }, []); // keine Dependency auf selected — Ref übernimmt das
 
   useEffect(() => {
     fetchData();
