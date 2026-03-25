@@ -91,9 +91,12 @@ class Orchestrator:
         self,
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
+        user_text: str = "",
     ) -> list:
+        from .tool_groups import select_tools
         permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        return self._reg.tools_for_agent(agent_cfg.tools, agent_permissions=permissions)
+        filtered_ids = select_tools(agent_cfg.tools, user_text)
+        return self._reg.tools_for_agent(filtered_ids, agent_permissions=permissions)
 
     def _allowed_tool_map(
         self,
@@ -253,27 +256,33 @@ class Orchestrator:
         if not boss_cfg:
             return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden.", []
 
-        # 3. System-Prompt aufbauen (Soul + A-MEM + Skills)
-        system_prompt = await self._build_system_prompt(boss_cfg, content)
+        # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache
+        _refresh = content.strip().startswith("!refresh")
+        if _refresh:
+            content = content.strip()[8:].strip()
+        system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
         history = self._sessions.get_context(project_id, max_messages=10)
         messages.extend(history)
-        sys_tokens  = len(system_prompt) // 4
-        hist_tokens = sum(
+        # 5. Verfügbare Tools für Boss ermitteln (on-demand gefiltert)
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+
+        import json as _json
+        sys_tokens   = len(system_prompt) // 4
+        hist_tokens  = sum(
             len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
             for m in history
         )
+        tool_tokens  = len(_json.dumps(litellm_tools or [])) // 4
         logger.info(
-            "token-budget proj=%s sys≈%d hist≈%d (%d msgs) total≈%d",
-            project_id, sys_tokens, hist_tokens, len(history), sys_tokens + hist_tokens,
+            "token-budget proj=%s sys≈%d hist≈%d (%d msgs) tools≈%d total≈%d",
+            project_id, sys_tokens, hist_tokens, len(history), tool_tokens,
+            sys_tokens + hist_tokens + tool_tokens,
         )
-
-        # 5. Verfügbare Tools für Boss ermitteln
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         # 6. LLM aufrufen
         self._runtime.set_activity(boss_cfg.id, "Denkt…")
@@ -303,19 +312,31 @@ class Orchestrator:
                 boss_cfg, project_id, project_cfg, messages, response, execution_mode=execution_mode
             )
 
-        # 8. Antwort in Session speichern
-        await self._sessions.append(
-            project_id, MessageRole.ASSISTANT,
-            final_response, agent_id=boss_cfg.id
-        )
-
-        # Token-Tracking (analog Streaming-Pfad)
+        # 8. Antwort in Session speichern (mit echten Token-Counts aus API)
+        _usage_meta: dict = {}
         if hasattr(response, "usage") and response.usage is not None:
-            input_t  = getattr(response.usage, "input_tokens",  0) or getattr(response.usage, "prompt_tokens",     0)
-            output_t = getattr(response.usage, "output_tokens", 0) or getattr(response.usage, "completion_tokens", 0)
-            total_t  = input_t + output_t
+            u = response.usage
+            input_t  = getattr(u, "input_tokens",  0) or getattr(u, "prompt_tokens",     0) or 0
+            output_t = getattr(u, "output_tokens", 0) or getattr(u, "completion_tokens", 0) or 0
+            cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+            cache_read  = getattr(u, "cache_read_input_tokens",     0) or 0
+            if input_t or output_t:
+                _usage_meta = {
+                    "model": boss_cfg.llm.model,
+                    "input_tokens":       input_t,
+                    "output_tokens":      output_t,
+                    "cache_write_tokens": cache_write,
+                    "cache_read_tokens":  cache_read,
+                }
+            total_t = input_t + output_t
             if total_t > 0 and _tool_reg._rate_limiter is not None:
                 _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
+
+        await self._sessions.append(
+            project_id, MessageRole.ASSISTANT,
+            final_response, agent_id=boss_cfg.id,
+            **_usage_meta,
+        )
 
         self._runtime.set_activity(boss_cfg.id, None)
         return final_response, workers_used
@@ -329,8 +350,8 @@ class Orchestrator:
     def _context_mode(user_text: str) -> str:
         return _context_mode(user_text)
 
-    async def _build_system_prompt(self, boss_cfg, user_text: str) -> str:
-        return await _build_system_prompt_fn(boss_cfg, user_text)
+    async def _build_system_prompt(self, boss_cfg, user_text: str, *, invalidate: bool = False) -> str:
+        return await _build_system_prompt_fn(boss_cfg, user_text, invalidate=invalidate)
 
     @staticmethod
     def _repo_review_guidance(agent_cfg, user_text: str) -> str:
@@ -391,7 +412,7 @@ class Orchestrator:
             return
 
         # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
-        _usage: dict[str, int] = {"input": 0, "output": 0}
+        _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
 
         # Session + System-Prompt aufbauen
         user_msg_saved = False
@@ -401,22 +422,28 @@ class Orchestrator:
         # Context-Kompaktierung vor dem LLM-Aufruf
         await self._compact_if_needed(project_id, boss_cfg)
 
-        system_prompt = await self._build_system_prompt(boss_cfg, content)
+        _refresh = content.strip().startswith("!refresh")
+        if _refresh:
+            content = content.strip()[8:].strip()
+        system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
         history       = self._sessions.get_context(project_id, max_messages=10)
         messages      = [{"role": "system", "content": system_prompt}] + history
+        # Tool-Schema (on-demand gefiltert)
+        boss_tools    = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+
+        import json as _json
         sys_tokens_s  = len(system_prompt) // 4
         hist_tokens_s = sum(
             len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
             for m in history
         )
+        tool_tokens_s = len(_json.dumps(litellm_tools or [])) // 4
         logger.info(
-            "token-budget [stream] proj=%s sys≈%d hist≈%d (%d msgs) total≈%d",
-            project_id, sys_tokens_s, hist_tokens_s, len(history), sys_tokens_s + hist_tokens_s,
+            "token-budget [stream] proj=%s sys≈%d hist≈%d (%d msgs) tools≈%d total≈%d",
+            project_id, sys_tokens_s, hist_tokens_s, len(history), tool_tokens_s,
+            sys_tokens_s + hist_tokens_s + tool_tokens_s,
         )
-
-        # Tool-Schema
-        boss_tools    = self._allowed_tools(boss_cfg, execution_mode)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
 
@@ -570,8 +597,10 @@ class Orchestrator:
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 final_msg = await stream.get_final_message()
                             if hasattr(final_msg, "usage"):
-                                _usage["input"]  += getattr(final_msg.usage, "input_tokens", 0)
-                                _usage["output"] += getattr(final_msg.usage, "output_tokens", 0)
+                                _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)
+                                _usage["output"]      += getattr(final_msg.usage, "output_tokens", 0)
+                                _usage["cache_write"] += getattr(final_msg.usage, "cache_creation_input_tokens", 0)
+                                _usage["cache_read"]  += getattr(final_msg.usage, "cache_read_input_tokens", 0)
 
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
@@ -606,8 +635,10 @@ class Orchestrator:
                                         yield f"data: {_json.dumps({'text': text})}\n\n"
                                     _fm = await stream.get_final_message()
                                 if hasattr(_fm, "usage"):
-                                    _usage["input"]  += getattr(_fm.usage, "input_tokens", 0)
-                                    _usage["output"] += getattr(_fm.usage, "output_tokens", 0)
+                                    _usage["input"]       += getattr(_fm.usage, "input_tokens", 0)
+                                    _usage["output"]      += getattr(_fm.usage, "output_tokens", 0)
+                                    _usage["cache_write"] += getattr(_fm.usage, "cache_creation_input_tokens", 0)
+                                    _usage["cache_read"]  += getattr(_fm.usage, "cache_read_input_tokens", 0)
                                 break
                             if _round == boss_cfg.max_tool_rounds - 2:
                                 # Vorletzter Durchlauf — Agent soll jetzt abschließen
@@ -660,8 +691,10 @@ class Orchestrator:
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 _fm2 = await stream.get_final_message()
                             if hasattr(_fm2, "usage"):
-                                _usage["input"]  += getattr(_fm2.usage, "input_tokens", 0)
-                                _usage["output"] += getattr(_fm2.usage, "output_tokens", 0)
+                                _usage["input"]       += getattr(_fm2.usage, "input_tokens", 0)
+                                _usage["output"]      += getattr(_fm2.usage, "output_tokens", 0)
+                                _usage["cache_write"] += getattr(_fm2.usage, "cache_creation_input_tokens", 0)
+                                _usage["cache_read"]  += getattr(_fm2.usage, "cache_read_input_tokens", 0)
 
                     else:
                         # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
@@ -690,8 +723,10 @@ class Orchestrator:
                             async for chunk in await litellm.acompletion(**kwargs, drop_params=True):
                                 # litellm liefert usage im letzten Chunk (stream_options)
                                 if getattr(chunk, "usage", None):
-                                    _usage["input"]  += getattr(chunk.usage, "prompt_tokens", 0)
-                                    _usage["output"] += getattr(chunk.usage, "completion_tokens", 0)
+                                    _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)
+                                    _usage["output"]      += getattr(chunk.usage, "completion_tokens", 0)
+                                    _usage["cache_write"] += getattr(chunk.usage, "cache_creation_input_tokens", 0)
+                                    _usage["cache_read"]  += getattr(chunk.usage, "cache_read_input_tokens", 0)
                                 choice = chunk.choices[0]
                                 delta  = choice.delta
                                 if delta.content:
@@ -812,10 +847,20 @@ class Orchestrator:
                         continue
                     raise
 
-            # Antwort in Session speichern
+            # Antwort in Session speichern (mit echten Token-Counts aus API)
+            _stream_meta: dict = {}
+            if _usage.get("input") or _usage.get("output"):
+                _stream_meta = {
+                    "model":              boss_cfg.llm.model,
+                    "input_tokens":       _usage.get("input",       0),
+                    "output_tokens":      _usage.get("output",      0),
+                    "cache_write_tokens": _usage.get("cache_write", 0),
+                    "cache_read_tokens":  _usage.get("cache_read",  0),
+                }
             await self._sessions.append(
                 project_id, MessageRole.ASSISTANT,
-                full_response, agent_id=boss_cfg.id
+                full_response, agent_id=boss_cfg.id,
+                **_stream_meta,
             )
             total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
             if total_tokens > 0 and _tool_reg._rate_limiter is not None:
@@ -853,7 +898,12 @@ class Orchestrator:
         Max. max_rounds Runden um Endlosschleifen zu vermeiden.
         Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
         """
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode)
+        # user_text für on-demand Tool-Filterung aus letzter User-Message
+        _last_user = next(
+            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+            "",
+        )
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
         current_messages = list(messages)
         workers_used: list[str] = []

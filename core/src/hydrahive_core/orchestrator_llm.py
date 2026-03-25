@@ -21,6 +21,58 @@ import litellm
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------- Prompt Caching
+
+def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]:
+    """
+    Fügt Anthropic Prompt Caching Cache-Breakpoints ein (max 4 erlaubt).
+    - System-Message:        letzter Block → cache_control (größter Gewinn)
+    - Ältere History:        alles außer den letzten 4 Nachrichten → cache_control
+    Für nicht-Anthropic-Modelle werden die Messages unverändert zurückgegeben.
+    """
+    if not is_anthropic:
+        return messages
+
+    non_sys = [m for m in messages if m.get("role") != "system"]
+    cache_cutoff = max(0, len(non_sys) - 4)   # Index ab dem NICHT gecacht wird
+    non_sys_i = 0
+    result = []
+
+    for m in messages:
+        role    = m.get("role", "")
+        content = m.get("content", "")
+
+        if role == "system":
+            if isinstance(content, str):
+                result.append({
+                    "role": "system",
+                    "content": [{"type": "text", "text": content,
+                                 "cache_control": {"type": "ephemeral"}}],
+                })
+            elif isinstance(content, list) and content:
+                new_c = list(content)
+                if not new_c[-1].get("cache_control"):
+                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+                result.append({**m, "content": new_c})
+            else:
+                result.append(m)
+
+        elif role in ("user", "assistant") and non_sys_i < cache_cutoff and isinstance(content, str) and content:
+            result.append({
+                **m,
+                "content": [{"type": "text", "text": content,
+                             "cache_control": {"type": "ephemeral"}}],
+            })
+            non_sys_i += 1
+
+        else:
+            result.append(m)
+            if role in ("user", "assistant"):
+                non_sys_i += 1
+
+    return result
+
+
 # ---------------------------------------------------------------- Failover
 
 _FAILOVER_SIGNALS = [
@@ -157,7 +209,7 @@ async def _anthropic_oauth_call(
         api_key="",
         auth_token=token,
         default_headers={
-            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
             "user-agent":     "claude-cli/2.1.62",
             "x-app":          "cli",
         },
@@ -230,9 +282,25 @@ async def _anthropic_oauth_call(
         model = "claude-haiku-4-5"
 
     # OAuth erfordert Claude-Code-Identity als ersten System-Block
+    # Letzter Block bekommt cache_control → gesamter System-Prompt wird gecacht
     oauth_system = [{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}]
     if system_msg:
-        oauth_system.append({"type": "text", "text": system_msg})
+        oauth_system.append({"type": "text", "text": system_msg,
+                              "cache_control": {"type": "ephemeral"}})
+
+    # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
+    cache_cutoff = max(0, len(filtered) - 4)
+    for idx, fm in enumerate(filtered):
+        if idx < cache_cutoff and fm.get("role") in ("user", "assistant"):
+            content = fm.get("content", "")
+            if isinstance(content, str) and content:
+                filtered[idx] = {**fm, "content": [
+                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+                ]}
+            elif isinstance(content, list) and content and not content[-1].get("cache_control"):
+                new_c = list(content)
+                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+                filtered[idx] = {**fm, "content": new_c}
 
     kwargs: dict = {
         "model":       model,
@@ -252,6 +320,19 @@ async def _anthropic_oauth_call(
         ]
 
     resp = await _llm_with_retry(lambda: client.messages.create(**kwargs))
+
+    # Cache-Usage loggen (zeigt ob Prompt Caching aktiv ist)
+    if hasattr(resp, "usage") and resp.usage:
+        u = resp.usage
+        cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+        cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
+        input_tok   = getattr(u, "input_tokens", 0) or 0
+        if cache_write or cache_read:
+            logger.info(
+                "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
+                model, input_tok, cache_write, cache_read,
+                100 * cache_read / max(input_tok, 1),
+            )
 
     # Anthropic Response → litellm-kompatibles SimpleNamespace
     text = ""
@@ -275,7 +356,21 @@ async def _anthropic_oauth_call(
         tool_calls=tool_calls_out if tool_calls_out else None,
     )
     choice  = SimpleNamespace(message=message, finish_reason=resp.stop_reason)
-    return  SimpleNamespace(choices=[choice], model=model)
+
+    # Usage-Daten weiterreichen (für Usage-Seite und Rate-Limiter)
+    usage_ns = None
+    if hasattr(resp, "usage") and resp.usage:
+        u = resp.usage
+        usage_ns = SimpleNamespace(
+            input_tokens          = getattr(u, "input_tokens", 0) or 0,
+            output_tokens         = getattr(u, "output_tokens", 0) or 0,
+            prompt_tokens         = getattr(u, "input_tokens", 0) or 0,
+            completion_tokens     = getattr(u, "output_tokens", 0) or 0,
+            cache_creation_input_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0,
+            cache_read_input_tokens     = getattr(u, "cache_read_input_tokens", 0) or 0,
+        )
+
+    return SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
 
 
 async def _openai_codex_call(
@@ -490,9 +585,11 @@ async def _llm_call_single(
         return await _anthropic_oauth_call(agent_cfg, messages, tools, oauth_token, model_name)
 
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
+    is_anthropic = model.startswith(("anthropic/", "claude-"))
+    cached_messages = _apply_cache_control(messages, is_anthropic)
     kwargs: dict = {
         "model":       model,
-        "messages":    messages,
+        "messages":    cached_messages,
         "temperature": agent_cfg.llm.temperature,
         "max_tokens":  agent_cfg.llm.max_tokens,
     }
@@ -502,7 +599,25 @@ async def _llm_call_single(
         kwargs["tools"]       = tools
         kwargs["tool_choice"] = "auto"
 
-    return await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True))
+    resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True))
+
+    # Cache-Usage loggen (Anthropic Prompt Caching)
+    try:
+        u = getattr(resp, "usage", None)
+        if u:
+            cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
+            cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
+            input_tok   = getattr(u, "prompt_tokens", 0) or 0
+            if cache_write or cache_read:
+                logger.info(
+                    "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
+                    model, input_tok, cache_write, cache_read,
+                    100 * cache_read / max(input_tok, 1),
+                )
+    except Exception:
+        pass
+
+    return resp
 
 
 async def _llm_call(

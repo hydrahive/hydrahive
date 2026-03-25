@@ -9,7 +9,10 @@ Standalone-Funktionen für System-Prompt-Aufbau und Context-Kompaktierung:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
+from pathlib import Path
 
 import litellm
 
@@ -18,6 +21,28 @@ from .memory_search import search_memory, update_index as update_memory_index
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt
 
 logger = logging.getLogger(__name__)
+
+# Python-seitiger System-Prompt-Cache (ergänzt Anthropic Server-Side-Caching)
+# Format: agent_id → (prompt_str, timestamp, cache_hash)
+_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
+_PROMPT_CACHE_TTL = 300  # 5 Min — gleich wie Anthropic ephemeral cache
+
+
+def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
+    """Hash über alle Faktoren die den System-Prompt beeinflussen."""
+    parts = [mode]
+    soul = agent_dir / "soul.md"
+    if soul.exists():
+        parts.append(f"soul:{soul.stat().st_mtime:.0f}")
+    memory_dir = agent_dir / "memory"
+    if memory_dir.exists():
+        for f in sorted(memory_dir.glob("*.md")):
+            parts.append(f"{f.name}:{f.stat().st_mtime:.0f}")
+    skills_dir = agent_dir / "skills"
+    if skills_dir.exists():
+        for f in sorted(skills_dir.glob("*.md")):
+            parts.append(f"{f.name}:{f.stat().st_mtime:.0f}")
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 def _context_mode(user_text: str) -> str:
@@ -44,8 +69,21 @@ def _context_mode(user_text: str) -> str:
     return "full" if any(t in text for t in full_triggers) else "normal"
 
 
-async def _build_system_prompt(boss_cfg, user_text: str) -> str:
-    mode  = _context_mode(user_text)
+async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = False) -> str:
+    """Baut den System-Prompt — mit Python-Cache (5 Min TTL, hash-basiert)."""
+    mode = _context_mode(user_text)
+
+    if not invalidate and boss_cfg.agent_dir:
+        cached = _PROMPT_CACHE.get(boss_cfg.id)
+        if cached:
+            prompt, ts, h = cached
+            if (time.time() - ts) < _PROMPT_CACHE_TTL:
+                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+                if current_h == h:
+                    logger.debug("system-prompt cache-hit (agent=%s age=%.0fs)", boss_cfg.id, time.time() - ts)
+                    return prompt
+        logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
+
     parts = [f"Du bist {boss_cfg.identity}."]
 
     # Soul laden wenn vorhanden (immer — klein und identitätskritisch)
@@ -94,7 +132,14 @@ async def _build_system_prompt(boss_cfg, user_text: str) -> str:
         parts.append(repo_guidance)
 
     logger.debug("context-mode=%s agent=%s", mode, boss_cfg.id)
-    return "\n\n".join(parts)
+    prompt = "\n\n".join(parts)
+
+    # In Python-Cache speichern
+    if boss_cfg.agent_dir:
+        h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+        _PROMPT_CACHE[boss_cfg.id] = (prompt, time.time(), h)
+
+    return prompt
 
 
 def _repo_review_guidance(agent_cfg, user_text: str) -> str:
