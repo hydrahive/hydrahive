@@ -45,6 +45,25 @@ website/    Static landing page (hydrahive.luckydevs.net)
 - **Commits**: conventional-ish messages — `feat:`, `fix:`, `security:`, `docs:`
 - **Docs**: if your change affects user-facing behavior, update `docs/handbook.md` in the same commit
 
+## Atomic Commits
+
+Each commit should represent a single logical change. The goal is that every commit on `main` is deployable and passes CI.
+
+**Do:**
+- One commit per feature / bug fix
+- Include related test and doc changes in the same commit as the code change
+- `feat: add X` + `tests/test_x.py` + `docs/handbook.md` update — all in one commit
+
+**Don't:**
+- Mix unrelated changes ("fix login + refactor session manager + update README")
+- Commit broken/half-done code to `main` — use a feature branch
+- Commit generated files (`dist/`, `__pycache__/`, `*.lock` changes without actual dependency changes)
+
+**Why:**
+- `git bisect` works reliably — each commit can be tested independently
+- Code review is easier when commits are focused
+- Rollbacks are clean: `git revert <commit>` reverts exactly one logical change
+
 ## What to contribute
 
 Good first areas:

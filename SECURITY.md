@@ -48,3 +48,52 @@ HydraHive is designed for self-hosted, private-network deployment. Key security 
 - Keep `/etc/hydrahive/` readable only by the `hydrahive` user (`chmod 700`)
 - Rotate the JWT secret (`/etc/hydrahive/jwt_secret`) if you suspect compromise — this invalidates all active sessions
 - Use a dedicated non-root system user (`hydrahive`) as the service account
+
+## Secret Rotation Runbook
+
+All secrets live in `/etc/hydrahive/` (or `/etc/octopos/` on older installs). The service must be restarted after rotation.
+
+### JWT Secret (invalidates all active user sessions)
+
+```bash
+sudo rm /etc/hydrahive/jwt_secret   # or /etc/octopos/jwt_secret
+sudo systemctl restart octopos-core  # new secret generated on startup
+# All users must log in again
+```
+
+### Internal Secret (used for agent-to-agent calls)
+
+```bash
+sudo rm /etc/hydrahive/internal_secret
+sudo systemctl restart octopos-core
+```
+
+### API Keys / LLM credentials
+
+Edit `/etc/hydrahive/llm_config.json` or the relevant config file directly, then:
+
+```bash
+sudo systemctl restart octopos-core
+```
+
+### Admin Password
+
+Use the HydraHive Console → Admin → User Management, or update `/etc/hydrahive/users.json` directly:
+
+```bash
+# The password is stored as pbkdf2b:<salt>:<hash>
+# The easiest way is via the API:
+curl -X POST http://localhost:8765/admin/users/<username>/password \
+  -H "Authorization: Bearer <admin-jwt>" \
+  -d '{"password": "NewSecurePassword123"}'
+```
+
+### Gitea Token (for git_push tool)
+
+Update `/etc/hydrahive/gitea_config.json`, then restart the service.
+
+### After Any Rotation
+
+1. Verify the service starts: `systemctl status octopos-core`
+2. Check logs: `journalctl -u octopos-core -n 20`
+3. Test a login via the Console UI

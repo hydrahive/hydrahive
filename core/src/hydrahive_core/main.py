@@ -58,6 +58,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Optionales Sentry Error-Tracking — nur aktiv wenn SENTRY_DSN gesetzt
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+        logger.info("Sentry Error-Tracking aktiviert")
+    except ImportError:
+        logger.warning("SENTRY_DSN gesetzt aber sentry-sdk nicht installiert — pip install sentry-sdk[fastapi]")
+
 AGENTS_DIR   = "/agents"
 PROJECTS_DIR = "/projects"
 
@@ -1390,6 +1407,21 @@ register_system_routes(
     app_version=APP_VERSION,
     logger=logger,
 )
+
+@admin_router.get("/admin/metrics")
+def get_metrics():
+    """Zeigt Token-Verbrauch pro Agent (letzte Stunde) und andere Runtime-Metriken."""
+    agent_tokens: dict[str, int] = {}
+    for agent_id in list(rate_limiter._agent_token_usage.keys()):
+        usage = rate_limiter.get_token_usage_hour(agent_id)
+        if usage > 0:
+            agent_tokens[agent_id] = usage
+    return {
+        "token_usage_last_hour": agent_tokens,
+        "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+        "agent_call_limit_per_min": rate_limiter.settings.agent_call_max,
+        "sentry_active": bool(_SENTRY_DSN),
+    }
 
 app.include_router(public_router)
 app.include_router(auth_router)
