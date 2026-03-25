@@ -53,7 +53,7 @@ rsync -av --delete --no-owner --no-group \
   "$REPO/console/dist/" \
   "$VM:${INSTALL_DIR}/console/"
 
-$SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/ && sudo systemctl restart ${SERVICE_NAME}"
+$SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/ && sudo fuser -k 8765/tcp 2>/dev/null; sleep 1; sudo systemctl restart ${SERVICE_NAME}"
 
 echo ""
 echo "==> [5b/5] Docs rsync → VM"
