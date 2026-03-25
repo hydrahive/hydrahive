@@ -708,8 +708,8 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r":\(\)\s*\{",                 "Fork-Bombe verboten"),
     (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
     (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
-    # Schreiben in geschützte Systempfade via Redirects
-    (r">\s*/opt/(octopos|hydrahive)/(?!.*\bjournald?\b)",  "Redirect nach /opt/hydrahive/ (bzw. /opt/octopos/) verboten"),
+    # Schreiben in geschützte Systempfade via Redirects / tee / install / cp
+    (r">\s*/opt/(octopos|hydrahive)/", "Redirect nach /opt/hydrahive/ verboten"),
     (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
     (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
     (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
@@ -718,6 +718,10 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r">\s*/dev/",                  "Redirect nach /dev/ verboten"),
     (r">\s*/sys/",                  "Redirect nach /sys/ verboten"),
     (r">\s*/proc/",                 "Redirect nach /proc/ verboten"),
+    (r"\btee\s+(/etc/|/opt/|/usr/|/bin/|/boot/|/lib|/sys/|/proc/)", "tee auf Systempfad verboten"),
+    (r"\bcp\b.+\s(/etc/|/opt/(octopos|hydrahive)/|/usr/|/bin/|/boot/)", "cp nach Systempfad verboten"),
+    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/etc/", "Download nach /etc/ verboten"),
+    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/opt/(octopos|hydrahive)/", "Download nach /opt/hydrahive/ verboten"),
     # chmod/chown auf Systempfade
     (r"\b(chmod|chown)\b.*/opt/",   "chmod/chown auf /opt/ verboten"),
     (r"\b(chmod|chown)\b.*/etc/",   "chmod/chown auf /etc/ verboten"),
@@ -725,17 +729,33 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     # git clone/reset --hard auf /opt/
     (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
     (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
-    (r"cd\s+/opt/(octopos|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ (bzw. /opt/octopos/) verboten"),
+    (r"cd\s+/opt/(octopos|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
+    # Inline-Code-Ausführung in Interpreter (python -c, perl -e, etc.)
+    (r"\bpython[23]?\s+-[a-zA-Z]*c\b", "python -c (Inline-Code) verboten"),
+    (r"\bperl\s+-[a-zA-Z]*e\b",     "perl -e (Inline-Code) verboten"),
+    (r"\bruby\s+-[a-zA-Z]*e\b",     "ruby -e (Inline-Code) verboten"),
+    (r"\bnode\s+-[a-zA-Z]*e\b",     "node -e (Inline-Code) verboten"),
+    (r"\bnodejs\s+-[a-zA-Z]*e\b",   "nodejs -e (Inline-Code) verboten"),
+    # sudo — Agenten brauchen keine Root-Rechte
+    (r"\bsudo\b",                   "sudo verboten — Agenten laufen ohne Root"),
     # Subshell-/Command-Substitution-Gefahr
-    (r"\$\(",                     "Command Substitution $(...) verboten"),
-    (r"`",                        "Backticks verboten"),
+    (r"\$\(",                       "Command Substitution $(...) verboten"),
+    (r"`",                          "Backticks verboten"),
+    # CWD-Manipulation zu Systempfaden
+    (r"\bcd\s+(/etc|/opt/(octopos|hydrahive)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
 ]
 
+# Shell-Wrapper-Programme: erste Token prüfen, ob -c folgt
 _SHELL_WRAPPERS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
+# Wrapper-Programme die weitere Befehle einleiten (env, nohup, etc.)
+_EXEC_WRAPPERS  = {"env", "nohup", "nice", "ionice", "timeout", "xargs", "sudo", "su"}
 
 
 def _check_shell_blocklist(command: str) -> str | None:
-    """Gibt die Fehlermeldung zurück wenn der Befehl blockiert ist, sonst None."""
+    """
+    Gibt die Fehlermeldung zurück wenn der Befehl blockiert ist, sonst None.
+    Prüft Regex-Patterns und löst Shell-/Exec-Wrapper rekursiv auf.
+    """
     for pattern, reason in _SHELL_BLOCKLIST:
         if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
             return reason
@@ -752,14 +772,43 @@ def _check_shell_blocklist(command: str) -> str | None:
         if token == "eval":
             return "eval verboten"
 
-    shell_name = Path(tokens[0]).name.lower()
-    if shell_name in _SHELL_WRAPPERS:
+    exe = Path(tokens[0]).name.lower()
+
+    # Shell-Wrapper: bash -c "...", sh -c "..."
+    if exe in _SHELL_WRAPPERS:
         for idx, token in enumerate(tokens[1:], start=1):
             if token == "-c" or (token.startswith("-") and "c" in token[1:]):
                 if idx + 1 < len(tokens):
                     return _check_shell_blocklist(tokens[idx + 1])
                 break
+
+    # Exec-Wrapper: env bash -c "...", nohup rm -rf ..., timeout 30 rm -rf ...
+    if exe in _EXEC_WRAPPERS:
+        # Überspringe Optionen und env-Variablen (VAR=value), prüfe den echten Befehl
+        rest = tokens[1:]
+        while rest and (rest[0].startswith("-") or "=" in rest[0]):
+            rest = rest[1:]
+        if rest:
+            return _check_shell_blocklist(" ".join(rest))
+
     return None
+
+
+# Erlaubte CWD-Präfixe für shell_exec (verhindert Ausführung aus Systempfaden)
+_ALLOWED_CWD_PREFIXES = ("/tmp", "/projects", "/home", "/agents", "/var/tmp")
+
+
+def _validate_shell_cwd(cwd: str) -> str | None:
+    """Gibt Fehlermeldung zurück wenn CWD nicht in einem erlaubten Verzeichnis liegt."""
+    try:
+        import os
+        normalized = os.path.normpath(cwd)
+        for prefix in _ALLOWED_CWD_PREFIXES:
+            if normalized == prefix or normalized.startswith(prefix + "/"):
+                return None
+        return f"CWD '{cwd}' nicht erlaubt — nur {', '.join(_ALLOWED_CWD_PREFIXES)}"
+    except Exception:
+        return None  # Im Zweifel: nicht blockieren
 
 
 def _validate_gitea_issue_text(title: str, body: str = "") -> str | None:
@@ -833,6 +882,11 @@ class ShellExecTool(BaseTool):
                 "exit_code": -1,
                 "blocked":   True,
             }
+
+        cwd_error = _validate_shell_cwd(cwd)
+        if cwd_error:
+            logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
+            return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
 
         timeout = min(max(timeout, 1), 120)
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
