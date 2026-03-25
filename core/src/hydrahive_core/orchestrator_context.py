@@ -24,18 +24,22 @@ def _context_mode(user_text: str) -> str:
     """
     Bestimmt den Kontext-Modus anhand des Inhalts der User-Nachricht.
 
-    normal  — Standard: kompakter Kontext (5 Learning-Einträge, max 5 Memory-Dateien)
-    full    — Vollständiger Kontext: alle Memory-Dateien, 12 Learning-Einträge
+    normal  — Standard: kompakter Kontext (5 Learning-Einträge, k=4 BM25-Snippets)
+    full    — Erweiterter Kontext: 12 Learning-Einträge, k=8 BM25-Snippets
 
-    full wird ausgelöst bei expliziten Repo-/Audit-/Deep-Dive-Anfragen —
-    Trigger-Wörter sind bewusst eng gewählt, um unnötige full-Aufrufe zu vermeiden.
+    full nur bei explizitem Prefix "!full" oder klar intentionalen Deep-Dive-Phrasen.
+    Einzelne Wörter wie "diff", "audit", "patch" reichen NICHT — zu viele False Positives.
     """
     text = (user_text or "").lower()
+    # Expliziter Opt-in
+    if text.startswith("!full"):
+        return "full"
+    # Nur bei klar intentionalen Phrasen (keine Einzelwörter)
     full_triggers = (
-        "diff ", "diff\n", "patch", "pull request", " pr #", " pr:",
-        "audit", "deep dive", "deep-dive", "vollständig", "alles zeigen",
-        "review mein", "review den", "review die", "analysiere alles",
-        "zeig mir alle", "komplett analysier",
+        "deep dive", "deep-dive",
+        "analysiere alles", "zeig mir alles",
+        "komplett analysier", "vollständiger kontext",
+        "full context",
     )
     return "full" if any(t in text for t in full_triggers) else "normal"
 
@@ -59,8 +63,8 @@ async def _build_system_prompt(boss_cfg, user_text: str) -> str:
         if memory_dir.exists():
             learning_snippet = build_learning_prompt_snippet(
                 boss_cfg.agent_dir,
-                **({"max_entries": 12, "max_chars": 4096} if mode == "full"
-                   else {"max_entries": 5, "max_chars": 2048}),
+                **({"max_entries": 8, "max_chars": 3000} if mode == "full"
+                   else {"max_entries": 3, "max_chars": 1500}),
             )
             if learning_snippet:
                 mem_parts.append(learning_snippet)
@@ -68,8 +72,8 @@ async def _build_system_prompt(boss_cfg, user_text: str) -> str:
         # Index aktualisieren (lazy — nur geänderte Dateien, <5ms wenn nichts geändert)
         update_memory_index(boss_cfg.agent_dir)
 
-        # BM25-Suche: normal=6, full=12 Treffer × max 700 chars ≈ 4-8k chars
-        k = 12 if mode == "full" else 6
+        # BM25-Suche: normal=4, full=8 Treffer × max 700 chars ≈ 2.8-5.6k chars
+        k = 8 if mode == "full" else 4
         snippets = search_memory(boss_cfg.agent_dir, user_text, k=k)
 
         if snippets:
@@ -160,9 +164,9 @@ async def _compact_if_needed(
 
     model = boss_cfg.llm.model.lower()
     if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
-        token_threshold = 8_000
+        token_threshold = 4_000   # estimated_tokens unterschätzt ~5x → real ~20k
     else:
-        token_threshold = 2_000  # lokale Modelle haben kleine Kontextfenster
+        token_threshold = 1_000  # lokale Modelle haben kleine Kontextfenster
 
     if sessions.estimated_tokens(project_id) < token_threshold:
         return
@@ -208,9 +212,9 @@ async def _compact_if_needed(
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
         # Notfall-Reset: wenn Session zu gross ist um kompaktiert zu werden
         current_tokens = sessions.estimated_tokens(project_id)
-        if current_tokens > 30_000:
+        if current_tokens > 15_000:
             logger.error(
-                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 30k) — "
+                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 15k) — "
                 "Session wird geleert um Token-Overflow zu verhindern",
                 project_id, current_tokens,
             )
