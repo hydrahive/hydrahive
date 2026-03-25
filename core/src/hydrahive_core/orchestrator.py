@@ -537,19 +537,36 @@ class Orchestrator:
                 if learning_snippet:
                     mem_parts.append(learning_snippet)
 
-                # Memory-Dateien: full=alle, normal=max 2 (neueste zuerst)
+                # Memory-Dateien: neueste zuerst, mit hartem Budget-Limit
+                # (OpenClaw-Ansatz: conservative estimation, newest-first retention)
+                # normal: max 5 Dateien, 8k chars/Datei, 30k chars gesamt
+                # full:   max 15 Dateien, 25k chars/Datei, 150k chars gesamt
+                if mode == "full":
+                    max_mem_files, per_file_chars, total_mem_chars = 15, 25_000, 150_000
+                else:
+                    max_mem_files, per_file_chars, total_mem_chars = 5, 8_000, 30_000
+
                 mem_files = sorted(
                     (mf for mf in memory_dir.glob("*.md") if mf.name != "learned-facts.md"),
                     key=lambda p: p.stat().st_mtime,
                     reverse=True,
-                )
-                if mode != "full":
-                    mem_files = mem_files[:2]
+                )[:max_mem_files]
+
+                mem_budget_used = 0
                 for mf in mem_files:
+                    if mem_budget_used >= total_mem_chars:
+                        break
                     try:
                         text = mf.read_text(encoding="utf-8").strip()
-                        if text:
-                            mem_parts.append(f"### {mf.stem}\n{text}")
+                        if not text:
+                            continue
+                        if len(text) > per_file_chars:
+                            text = text[:per_file_chars] + "\n…[gekürzt]"
+                        remaining = total_mem_chars - mem_budget_used
+                        if len(text) > remaining:
+                            text = text[:remaining] + "\n…[Budget erschöpft]"
+                        mem_parts.append(f"### {mf.stem}\n{text}")
+                        mem_budget_used += len(text)
                     except OSError:
                         pass
                 if mem_parts:
