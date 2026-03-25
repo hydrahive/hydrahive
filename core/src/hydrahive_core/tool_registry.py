@@ -2418,10 +2418,9 @@ class GitPushTool(BaseTool):
         except Exception as e:
             return {"error": str(e)}
 
-        # Remote-URL mit Token setzen
+        # Remote-URL sauber setzen (kein Token in URL — Auth via GIT_ASKPASS)
         remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
-        token_url  = remote_url.replace("://", f"://hydrahive:{cfg['token']}@")
-        await GiteaClient._git(["remote", "set-url", "origin", token_url], ws)
+        await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
 
         # Branch ermitteln
         branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
@@ -2429,8 +2428,10 @@ class GitPushTool(BaseTool):
         if not branch:
             return {"error": "Kein aktiver Branch"}
 
-        # Push
-        _, err, rc = await GiteaClient._git(["push", "-u", "origin", branch], ws)
+        # Push mit Token via GIT_ASKPASS (Token landet nicht in URL oder History)
+        _, err, rc = await GiteaClient._git(
+            ["push", "-u", "origin", branch], ws, token=cfg.get("token", "")
+        )
         if rc != 0:
             return {"error": f"git push fehlgeschlagen: {err[:300]}", "branch": branch}
 

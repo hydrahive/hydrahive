@@ -34,6 +34,44 @@ _DEFAULT_CONFIG = {
 }
 
 
+def _git_env_with_auth(token: str) -> dict:
+    """
+    Gibt eine git-Umgebung zurück die den Token via GIT_ASKPASS übergibt
+    statt ihn in die Remote-URL einzubetten.
+
+    GIT_ASKPASS ist ein Script das git aufruft wenn es nach Credentials fragt.
+    Der Token landet NICHT in git-URLs, git-History oder Prozesslisten.
+    """
+    import os
+    import stat
+    import tempfile
+
+    # Einmaliges ASKPASS-Script in tmpfs schreiben
+    askpass = Path(tempfile.mktemp(prefix="hydrahive-askpass-", suffix=".sh", dir="/tmp"))
+    askpass.write_text(
+        f"#!/bin/sh\n"
+        f"case \"$1\" in\n"
+        f"  *Username*) echo hydrahive ;;\n"
+        f"  *Password*) echo '{token}' ;;\n"
+        f"  *) echo '' ;;\n"
+        f"esac\n",
+        encoding="utf-8",
+    )
+    askpass.chmod(stat.S_IRWXU)  # 700
+
+    env = {
+        "GIT_AUTHOR_NAME":     "HydraHive Agent",
+        "GIT_AUTHOR_EMAIL":    "agent@hydrahive.local",
+        "GIT_COMMITTER_NAME":  "HydraHive Agent",
+        "GIT_COMMITTER_EMAIL": "agent@hydrahive.local",
+        "HOME":                "/tmp",
+        "PATH":                "/usr/bin:/bin",
+        "GIT_ASKPASS":         str(askpass),
+        "GIT_TERMINAL_PROMPT": "0",   # Niemals interaktiv nach Credentials fragen
+    }
+    return env
+
+
 def _load_config() -> dict:
     if GITEA_CONFIG_FILE.exists():
         try:
@@ -339,13 +377,12 @@ class GiteaClient:
             repo_owner = owner or cfg.get("org", "hydrahive")
             repo_name = repo or repo_key
             clone_url = f"{cfg['url']}/{repo_owner}/{repo_name}.git"
-            # URL mit Token für Auth
-            token_url = clone_url.replace("://", f"://hydrahive:{cfg['token']}@")
             workspace.parent.mkdir(parents=True, exist_ok=True)
             proc = await asyncio.create_subprocess_exec(
-                "git", "clone", token_url, str(workspace),
+                "git", "clone", clone_url, str(workspace),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=_git_env_with_auth(cfg["token"]),
             )
             _, stderr = await proc.communicate()
             if proc.returncode != 0:
@@ -353,10 +390,15 @@ class GiteaClient:
         return workspace
 
     @staticmethod
-    async def _git(args: list[str], cwd: Path) -> tuple[str, str, int]:
-        """Führt einen git-Befehl aus und gibt (stdout, stderr, returncode) zurück."""
+    async def _git(
+        args: list[str], cwd: Path, token: str | None = None
+    ) -> tuple[str, str, int]:
+        """Führt einen git-Befehl aus und gibt (stdout, stderr, returncode) zurück.
+        Wenn token übergeben wird, wird GIT_ASKPASS für sichere Auth genutzt
+        (Token landet NICHT in der Remote-URL oder Git-History).
+        """
         import asyncio
-        env = {
+        env = _git_env_with_auth(token) if token else {
             "GIT_AUTHOR_NAME":     "HydraHive Agent",
             "GIT_AUTHOR_EMAIL":    "agent@hydrahive.local",
             "GIT_COMMITTER_NAME":  "HydraHive Agent",
