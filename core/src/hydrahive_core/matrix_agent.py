@@ -35,8 +35,14 @@ from .agent_config import AgentConfig
 logger = logging.getLogger(__name__)
 
 CONDUWUIT_URL   = "http://127.0.0.1:6167"
+def _token_dir_exists(p: Path) -> bool:
+    try:
+        return p.exists()
+    except OSError:
+        return False
+
 TOKEN_DIR       = next(
-    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/octopos/agent_tokens")] if p.exists()),
+    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/octopos/agent_tokens")] if _token_dir_exists(p)),
     Path("/etc/hydrahive/agent_tokens"),
 )
 SYNC_TIMEOUT_MS = 30_000    # 30s Long-Poll
