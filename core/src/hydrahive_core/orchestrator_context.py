@@ -75,7 +75,7 @@ def _build_system_prompt(boss_cfg, user_text: str) -> str:
                 max_mem_files, per_file_chars, total_mem_chars = 5, 8_000, 30_000
 
             mem_files = sorted(
-                (mf for mf in memory_dir.glob("*.md") if mf.name != "learned-facts.md"),
+                (mf for mf in memory_dir.glob("*.md") if mf.name not in ("learned-facts.md", "MEMORY.md")),
                 key=lambda p: p.stat().st_mtime,
                 reverse=True,
             )[:max_mem_files]
