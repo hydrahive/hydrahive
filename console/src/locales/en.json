@@ -774,6 +774,16 @@
       "restarting": "Restarting",
       "stopped": "Stopped",
       "error": "Error"
+    },
+    "alertError": "Agent crashed",
+    "alertHung": "No heartbeat for {{s}}s — hung?",
+    "alerts": "alerts",
+    "detail": {
+      "model": "Model",
+      "heartbeat": "Heartbeat",
+      "restarts": "Restarts",
+      "logs": "Logs (live)",
+      "noLogs": "No log entries"
     }
   }
 }

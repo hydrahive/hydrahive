@@ -774,6 +774,16 @@
       "restarting": "Neustart",
       "stopped": "Gestoppt",
       "error": "Fehler"
+    },
+    "alertError": "Agent abgestürzt",
+    "alertHung": "Kein Heartbeat seit {{s}}s — hängt?",
+    "alerts": "Alarme",
+    "detail": {
+      "model": "Modell",
+      "heartbeat": "Heartbeat",
+      "restarts": "Neustarts",
+      "logs": "Logs (live)",
+      "noLogs": "Keine Log-Einträge"
     }
   }
 }
