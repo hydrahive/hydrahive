@@ -36,7 +36,7 @@ $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
 
 echo ""
 echo "==> [3/5] pip install auf VM"
-$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e ${INSTALL_DIR}/core -q"
+$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e '${INSTALL_DIR}/core[dev]' -q"
 
 echo ""
 echo "==> [4/5] Console bauen"
