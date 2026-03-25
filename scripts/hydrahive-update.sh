@@ -53,7 +53,12 @@ rsync -av --delete --no-owner --no-group \
   "$REPO/console/dist/" \
   "$VM:${INSTALL_DIR}/console/"
 
-$SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/ && sudo fuser -k 8765/tcp 2>/dev/null; sleep 1; sudo systemctl restart ${SERVICE_NAME}"
+$SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/"
+
+# Sauberer Neustart: stop (synchron, wartet auf vollständiges Beenden),
+# dann Port-Cleanup für eventuelle Zombies, dann start.
+# Kein sleep-Raten — systemctl stop kehrt erst zurück wenn der Prozess wirklich weg ist.
+$SSH "$VM" "sudo systemctl stop ${SERVICE_NAME}; sudo fuser -k 8765/tcp 2>/dev/null; sudo systemctl start ${SERVICE_NAME}"
 
 echo ""
 echo "==> [5b/5] Docs rsync → VM"
@@ -67,7 +72,8 @@ $SSH "$VM" "sudo cp ${INSTALL_DIR}/docs/handbook.md /agents/hydrahive_support/me
 
 echo ""
 echo "==> Warte auf Start..."
-sleep 3
+# Aktiv warten bis active oder max 20s
+$SSH "$VM" "for i in \$(seq 1 20); do sleep 1; state=\$(systemctl is-active ${SERVICE_NAME}); [ \"\$state\" = 'active' ] && break; done"
 $SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"
 
 echo ""
