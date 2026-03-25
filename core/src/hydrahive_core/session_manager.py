@@ -8,6 +8,7 @@ Vergangene Sessions werden auf Disk persistiert und können geladen werden.
 Analog zu OpenClaw (O2: unverändert übernehmen), integriert in neuen Lifecycle.
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -132,7 +133,13 @@ class SessionManager:
 
     def __init__(self, projects_dir: str | Path = "/projects") -> None:
         self._projects_dir = Path(projects_dir)
-        self._active: dict[str, Session] = {}    # project_id → Session
+        self._active: dict[str, Session] = {}       # project_id → Session
+        self._locks: dict[str, asyncio.Lock] = {}   # project_id → Lock
+
+    def _get_lock(self, project_id: str) -> asyncio.Lock:
+        if project_id not in self._locks:
+            self._locks[project_id] = asyncio.Lock()
+        return self._locks[project_id]
 
     # ------------------------------------------------------------------ public
 
@@ -154,31 +161,35 @@ class SessionManager:
             return self.new_session(project_id)
         return self._active[project_id]
 
-    def new_session(self, project_id: str) -> Session:
+    async def new_session(self, project_id: str) -> Session:
         """Neue Session starten — alte wird automatisch beendet und gespeichert."""
-        if project_id in self._active:
-            old = self._active[project_id]
-            old.end()
-            self._persist(old)
-            logger.info("Session beendet: %s (Projekt: %s, %d Nachrichten)",
-                        old.id[:8], project_id, len(old.messages))
+        async with self._get_lock(project_id):
+            if project_id in self._active:
+                old = self._active[project_id]
+                old.end()
+                self._persist(old)
+                logger.info("Session beendet: %s (Projekt: %s, %d Nachrichten)",
+                            old.id[:8], project_id, len(old.messages))
 
-        session = Session.new(project_id)
-        self._active[project_id] = session
-        self._persist(session)
-        logger.info("Neue Session: %s (Projekt: %s)", session.id[:8], project_id)
-        return session
-
-    def end_session(self, project_id: str) -> Session | None:
-        """Aktive Session beenden und speichern."""
-        session = self._active.pop(project_id, None)
-        if session:
-            session.end()
+            session = Session.new(project_id)
+            self._active[project_id] = session
             self._persist(session)
-            logger.info("Session %s beendet", session.id[:8])
-        return session
+            logger.info("Neue Session: %s (Projekt: %s)", session.id[:8], project_id)
+            return session
 
-    def append(
+    async def end_session(self, project_id: str) -> Session | None:
+        """Aktive Session beenden und speichern."""
+        async with self._get_lock(project_id):
+            session = self._active.pop(project_id, None)
+            if session:
+                session.end()
+                self._persist(session)
+                logger.info("Session %s beendet", session.id[:8])
+            if project_id in self._locks:
+                del self._locks[project_id]
+            return session
+
+    async def append(
         self,
         project_id: str,
         role: MessageRole,
@@ -187,24 +198,27 @@ class SessionManager:
         **metadata,
     ) -> Message:
         """Nachricht an aktive Session anhängen (Session wird ggf. angelegt)."""
-        session = self.get_or_create(project_id)
-        message = Message.create(role, content, agent_id=agent_id, **metadata)
-        session.append(message)
-        self._persist(session)
-        return message
-
-    def replace_messages(self, project_id: str, messages: list[Message]) -> None:
-        """Session-Nachrichten komplett ersetzen (für /compact)."""
-        session = self.get_or_create(project_id)
-        session.messages = messages
-        self._persist(session)
-
-    def pop_last(self, project_id: str) -> None:
-        """Letzte Nachricht aus der aktiven Session entfernen (Rollback bei Fehler)."""
-        session = self._active.get(project_id)
-        if session and session.messages:
-            session.messages.pop()
+        async with self._get_lock(project_id):
+            session = self.get_or_create(project_id)
+            message = Message.create(role, content, agent_id=agent_id, **metadata)
+            session.append(message)
             self._persist(session)
+            return message
+
+    async def replace_messages(self, project_id: str, messages: list[Message]) -> None:
+        """Session-Nachrichten komplett ersetzen (für /compact)."""
+        async with self._get_lock(project_id):
+            session = self.get_or_create(project_id)
+            session.messages = messages
+            self._persist(session)
+
+    async def pop_last(self, project_id: str) -> None:
+        """Letzte Nachricht aus der aktiven Session entfernen (Rollback bei Fehler)."""
+        async with self._get_lock(project_id):
+            session = self._active.get(project_id)
+            if session and session.messages:
+                session.messages.pop()
+                self._persist(session)
 
     def get_context(self, project_id: str, max_messages: int = 50) -> list[dict]:
         """LLM-Context der aktiven Session (für Boss-Agent in #8)."""
@@ -264,25 +278,26 @@ class SessionManager:
         except Exception:
             return None
 
-    def compact(self, project_id: str, summary: str, keep_last: int = 10) -> None:
+    async def compact(self, project_id: str, summary: str, keep_last: int = 10) -> None:
         """
         Context-Kompaktierung (#74): ersetzt alte Nachrichten durch eine Summary-Message.
         Die letzten keep_last Nachrichten bleiben erhalten.
         """
-        session = self._active.get(project_id)
-        if not session or len(session.messages) <= keep_last:
-            return
-        tail = session.messages[-keep_last:]
-        summary_msg = Message.create(
-            role=MessageRole.SYSTEM,
-            content=f"[Zusammenfassung früherer Konversation]\n{summary}",
-        )
-        session.messages = [summary_msg] + tail
-        self._persist(session)
-        logger.info(
-            "Session %s kompaktiert: Summary + %d Nachrichten behalten",
-            session.id[:8], keep_last,
-        )
+        async with self._get_lock(project_id):
+            session = self._active.get(project_id)
+            if not session or len(session.messages) <= keep_last:
+                return
+            tail = session.messages[-keep_last:]
+            summary_msg = Message.create(
+                role=MessageRole.SYSTEM,
+                content=f"[Zusammenfassung früherer Konversation]\n{summary}",
+            )
+            session.messages = [summary_msg] + tail
+            self._persist(session)
+            logger.info(
+                "Session %s kompaktiert: Summary + %d Nachrichten behalten",
+                session.id[:8], keep_last,
+            )
 
     # ----------------------------------------------------------------- private
 

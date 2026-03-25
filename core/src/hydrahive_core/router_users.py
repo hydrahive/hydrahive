@@ -398,13 +398,13 @@ def register_user_routes(
         }
 
     @auth_router.delete("/me/agent/session")
-    def my_agent_session_clear(auth: tuple[str, str] = Depends(require_auth)):
+    async def my_agent_session_clear(auth: tuple[str, str] = Depends(require_auth)):
         from .router_agent_chat import _save_session_transcript
         username, _role = auth
         agent_id = f"personal_{username}"
         context = agent_sessions.get_context(agent_id, max_messages=200)
         _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
-        agent_sessions.end_session(agent_id)
+        await agent_sessions.end_session(agent_id)
         return {"cleared": True}
 
     @auth_router.put("/me/agent")

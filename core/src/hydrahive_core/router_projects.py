@@ -226,30 +226,30 @@ def register_project_routes(
         }
 
     @auth_router.post("/projects/{project_id}/session/start")
-    def start_session(project_id: str):
+    async def start_session(project_id: str):
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-        session = sessions.new_session(project_id)
+        session = await sessions.new_session(project_id)
         return {"session_id": session.id, "started_at": session.started_at}
 
     @auth_router.post("/projects/{project_id}/session/end")
-    def end_session(project_id: str):
+    async def end_session(project_id: str):
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-        session = sessions.end_session(project_id)
+        session = await sessions.end_session(project_id)
         if not session:
             return {"ended": False}
         return {"ended": True, "session_id": session.id, "message_count": len(session.messages)}
 
     @auth_router.post("/projects/{project_id}/session/message")
-    def append_message(project_id: str, req: MessageRequest):
+    async def append_message(project_id: str, req: MessageRequest):
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         try:
             role = MessageRole(req.role)
         except ValueError:
             raise HTTPException(400, f"Ungültige Rolle: {req.role}. Erlaubt: user, assistant, system, tool")
-        msg = sessions.append(project_id, role, req.content, agent_id=req.agent_id)
+        msg = await sessions.append(project_id, role, req.content, agent_id=req.agent_id)
         session = sessions.get_active(project_id)
         return {
             "appended": True,

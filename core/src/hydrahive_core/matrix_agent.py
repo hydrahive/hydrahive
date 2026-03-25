@@ -13,8 +13,10 @@ damit der Bot-Account bei Core-Neustart nicht neu registriert werden muss.
 """
 
 import asyncio
+import collections
 import json
 import logging
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -46,11 +48,18 @@ class MatrixAgent(ABC):
     Kapselt Login, Room-Joining und Message-Listening.
     """
 
+    LOOP_HISTORY_SIZE      = 20
+    LOOP_PINGPONG_THRESHOLD = 4
+
     def __init__(
         self,
         config:      AgentConfig,
         server_name: str,
         rooms:       list[str],          # Room-IDs die dieser Agent joined
+        loop_detection:        bool = True,
+        loop_bot_threshold:    int  = 3,
+        loop_pingpong_seconds: int  = 30,
+        loop_cooldown_seconds: int  = 300,
     ) -> None:
         self.config      = config
         self.server_name = server_name
@@ -58,6 +67,13 @@ class MatrixAgent(ABC):
         self._client:    AsyncClient | None = None
         self._running    = False
         self._mxid       = f"@{config.id}:{server_name}"
+        # Loop-Detektion (Circuit Breaker) — analog zu discord_agent.py
+        self.loop_detection        = loop_detection
+        self.loop_bot_threshold    = max(2, loop_bot_threshold)
+        self.loop_pingpong_seconds = max(5, loop_pingpong_seconds)
+        self.loop_cooldown_seconds = max(10, loop_cooldown_seconds)
+        self._loop_history: dict[str, collections.deque] = {}   # room_id → deque
+        self._circuit_open: dict[str, float] = {}               # room_id → open_time
 
     # ------------------------------------------------------------------ public
 
@@ -135,6 +151,61 @@ class MatrixAgent(ABC):
     @property
     def mxid(self) -> str:
         return self._mxid
+
+    def _check_loop(self, room_id: str, is_bot: bool) -> bool:
+        """
+        Circuit Breaker Loop-Detektion — analog zu discord_agent.py.
+        Gibt True zurück wenn die Nachricht geblockt werden soll.
+        Human-Nachrichten werden nie geblockt, setzen den Zähler aber auch nicht zurück.
+        """
+        if not self.loop_detection:
+            return False
+
+        now = time.monotonic()
+
+        if not is_bot:
+            return False  # Menschen nie blocken
+
+        # Circuit noch offen?
+        if room_id in self._circuit_open:
+            if now - self._circuit_open[room_id] < self.loop_cooldown_seconds:
+                return True
+            else:
+                logger.info("Matrix Loop-Detektion [%s]: Circuit schließt wieder (Room %s)",
+                            self._mxid, room_id)
+                del self._circuit_open[room_id]
+                self._loop_history.pop(room_id, None)
+
+        if room_id not in self._loop_history:
+            self._loop_history[room_id] = collections.deque(maxlen=self.LOOP_HISTORY_SIZE)
+        history = self._loop_history[room_id]
+        history.append(now)
+
+        # Detektor 1: Zu viele Bot-Nachrichten
+        if len(history) >= self.loop_bot_threshold:
+            logger.warning(
+                "Matrix Loop-Detektion [%s]: %d Bot-Nachrichten in Room %s "
+                "— Circuit Breaker ausgelöst (%ds Cooldown)",
+                self._mxid, len(history), room_id, self.loop_cooldown_seconds,
+            )
+            self._circuit_open[room_id] = now
+            return True
+
+        # Detektor 2: PingPong
+        recent = list(history)
+        if len(recent) >= self.LOOP_PINGPONG_THRESHOLD * 2:
+            window = recent[-self.LOOP_PINGPONG_THRESHOLD * 2:]
+            timespan = window[-1] - window[0]
+            if timespan < self.loop_pingpong_seconds:
+                logger.warning(
+                    "Matrix Loop-Detektion [%s]: PingPong in Room %s "
+                    "(%d Bot-Nachrichten in %.1fs) — Circuit Breaker ausgelöst",
+                    self._mxid, room_id, len(window), timespan,
+                )
+                self._circuit_open[room_id] = now
+                return True
+
+        return False
 
     # ----------------------------------------------------------------- abstrakt
 
@@ -233,6 +304,19 @@ class MatrixAgent(ABC):
 
         text = event.body.strip()
         if not text:
+            return
+
+        # Bot-Detection: Sender-MXID endet typischerweise auf einen bekannten Bot-Pattern
+        # Heuristik: kein @-Präfix im lokalen Teil → lokaler User; Bot-Accounts haben oft
+        # deterministischen lokalen Namen ohne menschliche Muster (z.B. "claude_boss")
+        is_bot = (
+            sender_local.startswith("@") is False  # immer False hier, nur zur Klarheit
+            and any(pat in event.sender.lower() for pat in ("bot", "agent", "claude", "boss", "worker"))
+        )
+
+        if self._check_loop(room.room_id, is_bot):
+            logger.info("%s: Loop-Detektion geblockt (Room %s, Sender %s)",
+                        self._mxid, room.room_id, event.sender)
             return
 
         logger.debug("%s ← %s: %s", self._mxid, event.sender, text[:80])

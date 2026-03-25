@@ -107,10 +107,10 @@ def register_agent_chat_routes(
         return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
 
     @auth_router.delete("/agents/{agent_id}/session")
-    def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
+    async def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
         context = agent_sessions.get_context(agent_id, max_messages=200)
         _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
-        agent_sessions.end_session(agent_id)
+        await agent_sessions.end_session(agent_id)
         return {"cleared": True}
 
     @auth_router.post("/agents/{agent_id}/session/compact")
@@ -180,7 +180,7 @@ def register_agent_chat_routes(
             MessageRole.ASSISTANT,
             "Verstanden. Ich habe die Zusammenfassung der bisherigen Konversation gelesen und kann nahtlos weiterarbeiten.",
         )
-        agent_sessions.replace_messages(agent_id, [summary_user, summary_asst])
+        await agent_sessions.replace_messages(agent_id, [summary_user, summary_asst])
         learning_snapshot = None
         try:
             learning_snapshot = append_learning_snapshot(

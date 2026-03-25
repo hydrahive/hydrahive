@@ -646,21 +646,7 @@ def _save_users(users: dict) -> None:
     tmp.replace(USERS_FILE)   # atomares Rename (#71)
 
 
-def _hash_password(password: str) -> str:
-    import hashlib, secrets
-    salt = secrets.token_hex(16)
-    h    = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260000)
-    return f"pbkdf2:{salt}:{h.hex()}"
-
-
-def _verify_password(password: str, stored: str) -> bool:
-    import hashlib
-    try:
-        _, salt, h = stored.split(":", 2)
-        check = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 260000)
-        return check.hex() == h
-    except Exception:
-        return False
+from .auth_utils import hash_password as _hash_password, verify_password as _verify_password
 
 
 async def _matrix_register(username: str, password: str, server_name: str) -> bool:

@@ -337,7 +337,14 @@ class Orchestrator:
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         await self._get_queue(project_id).put((future, project_cfg, content, sender, execution_mode))
         self._queue_last_used[project_id] = asyncio.get_event_loop().time()
-        return await future
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), timeout=300.0)
+        except asyncio.TimeoutError:
+            future.cancel()
+            raise RuntimeError(
+                f"Agent-Queue Timeout: Projekt '{project_id}' hat nach 300s nicht geantwortet. "
+                "Worker möglicherweise abgestürzt oder überlastet."
+            )
 
     async def _handle_message_impl(
         self,
@@ -354,7 +361,7 @@ class Orchestrator:
         workers_used: list[str] = []
 
         # 1. Nachricht in Session speichern
-        self._sessions.append(project_id, MessageRole.USER, content)
+        await self._sessions.append(project_id, MessageRole.USER, content)
 
         # 2. Boss-Agent-Config holen
         boss_cfg = self._discovery.get(project_cfg.agents.boss)
@@ -396,7 +403,7 @@ class Orchestrator:
             )
 
         # 8. Antwort in Session speichern
-        self._sessions.append(
+        await self._sessions.append(
             project_id, MessageRole.ASSISTANT,
             final_response, agent_id=boss_cfg.id
         )
@@ -454,7 +461,7 @@ class Orchestrator:
             ))
             summary = resp.choices[0].message.content or ""
             if summary:
-                self._sessions.compact(project_id, summary, keep_last=keep_last)
+                await self._sessions.compact(project_id, summary, keep_last=keep_last)
                 logger.info(
                     "Context kompaktiert (Projekt: %s, ~%d Tokens → Summary)",
                     project_id, self._sessions.estimated_tokens(project_id),
@@ -469,7 +476,7 @@ class Orchestrator:
                     "Session wird geleert um Token-Overflow zu verhindern",
                     project_id, current_tokens,
                 )
-                self._sessions.new_session(project_id)
+                await self._sessions.new_session(project_id)
 
     @staticmethod
     def _context_mode(user_text: str) -> str:
@@ -1032,7 +1039,7 @@ class Orchestrator:
 
         # Session + System-Prompt aufbauen
         user_msg_saved = False
-        self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
+        await self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
         user_msg_saved = True
 
         # Context-Kompaktierung vor dem LLM-Aufruf
@@ -1447,7 +1454,7 @@ class Orchestrator:
                     raise
 
             # Antwort in Session speichern
-            self._sessions.append(
+            await self._sessions.append(
                 project_id, MessageRole.ASSISTANT,
                 full_response, agent_id=boss_cfg.id
             )
@@ -1456,7 +1463,7 @@ class Orchestrator:
         except Exception as e:
             logger.error("Streaming-Fehler: %s", e)
             if user_msg_saved:
-                self._sessions.pop_last(project_id)
+                await self._sessions.pop_last(project_id)
             yield f"data: {_json.dumps({'error': str(e)})}\n\n"
 
     async def _tool_loop(
