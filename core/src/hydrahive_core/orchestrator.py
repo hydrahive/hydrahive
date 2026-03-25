@@ -259,7 +259,7 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._sessions.get_context(project_id, max_messages=20))
+        messages.extend(self._sessions.get_context(project_id, max_messages=10))
         logger.debug(
             "token-budget [sync] proj=%s sys≈%d hist≈%d",
             project_id,

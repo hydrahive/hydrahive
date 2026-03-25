@@ -160,7 +160,7 @@ async def _compact_if_needed(
 
     model = boss_cfg.llm.model.lower()
     if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
-        token_threshold = 20_000
+        token_threshold = 8_000
     else:
         token_threshold = 2_000  # lokale Modelle haben kleine Kontextfenster
 
