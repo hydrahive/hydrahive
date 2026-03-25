@@ -386,8 +386,9 @@ export interface AgentLiveEntry {
   status:             string;
   current_activity:   string | null;
   restart_count:      number;
-  last_heartbeat_age: number | null;
-  heartbeat_timeout:  number | null;
+  last_heartbeat_age:  number | null;
+  heartbeat_timeout:   number | null;
+  heartbeat_interval:  number | null;
   tokens_1h:          number;
   token_warn_threshold: number;
 }

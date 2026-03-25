@@ -7,13 +7,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const POLL_MS      = 3000;
-const HB_ALERT_S   = 30;   // Heartbeat-Alarm ab dieser Sekunden-Schwelle
+const POLL_MS = 3000;
+
+// Alarm-Schwelle: Interval + 15s Puffer (passt sich an Agent-Konfiguration an)
+function hbAlertThreshold(agent: AgentLiveEntry) {
+  return (agent.heartbeat_interval ?? 30) + 15;
+}
 
 // ---------------------------------------------------------------- helpers
 
 function isHung(agent: AgentLiveEntry) {
-  return agent.status === "running" && (agent.last_heartbeat_age ?? 0) > HB_ALERT_S;
+  return agent.status === "running" && (agent.last_heartbeat_age ?? 0) > hbAlertThreshold(agent);
 }
 
 function needsAttention(agent: AgentLiveEntry) {

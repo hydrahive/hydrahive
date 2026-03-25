@@ -1442,8 +1442,9 @@ def get_agents_live(_a=Depends(require_admin)):
             "status":           rs.get("status"),
             "current_activity": rs.get("current_activity"),
             "restart_count":    rs.get("restart_count", 0),
-            "last_heartbeat_age": rs.get("last_heartbeat_age"),
-            "heartbeat_timeout":  rs.get("heartbeat_timeout"),
+            "last_heartbeat_age":  rs.get("last_heartbeat_age"),
+            "heartbeat_timeout":   rs.get("heartbeat_timeout"),
+            "heartbeat_interval":  rs.get("heartbeat_interval"),
             "tokens_1h":        tokens_1h,
             "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
         })
