@@ -838,11 +838,8 @@ class ShellExecTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Führt einen Bash-Befehl aus und gibt stdout, stderr und Exit-Code zurück. "
-            "Verwende dies für Systemverwaltung, git, pip, systemctl, Dateioperationen, etc. "
-            "Timeout standard 30 Sekunden, maximal 120 Sekunden. "
-            "VERBOTEN: rm -rf, dd auf Blockdevices, mkfs, fdisk, Schreiben nach /opt/hydrahive/ (bzw. /opt/hydrahive/), "
-            "git clone/reset in /opt/hydrahive/, systemctl stop/disable hydrahive/hydrahive."
+            "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). Timeout max 120s. "
+            "VERBOTEN: rm -rf, dd, mkfs, fdisk, Schreiben nach /opt/hydrahive/, systemctl stop hydrahive."
         )
 
     @property
@@ -1122,11 +1119,7 @@ class WriteMemoryTool(BaseTool):
     def name(self) -> str: return "Gedächtnis schreiben"
     @property
     def description(self) -> str:
-        return (
-            "Speichert Information dauerhaft im eigenen Gedächtnis. "
-            "Verwende aussagekräftige Dateinamen wie 'project-context', 'learned-facts', 'user-preferences'. "
-            "mode=overwrite (Standard) ersetzt die Datei, mode=append hängt Text an."
-        )
+        return "Speichert Text dauerhaft im Gedächtnis. mode=overwrite ersetzt, append hängt an."
 
     @property
     def permissions_required(self) -> list[str]:
@@ -1139,16 +1132,15 @@ class WriteMemoryTool(BaseTool):
             "properties": {
                 "filename": {
                     "type":        "string",
-                    "description": "Dateiname ohne Pfad (z.B. 'learned-facts' oder 'learned-facts.md')",
+                    "description": "Dateiname (z.B. 'learned-facts')",
                 },
                 "content": {
                     "type":        "string",
-                    "description": "Inhalt der gespeichert werden soll (Markdown empfohlen)",
+                    "description": "Inhalt (Markdown)",
                 },
                 "mode": {
                     "type":        "string",
                     "enum":        ["overwrite", "append"],
-                    "description": "overwrite (Standard) oder append",
                 },
             },
             "required": ["filename", "content"],
@@ -1205,11 +1197,8 @@ class CreateSkillTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Erstellt einen neuen Skill (wiederverwendbares Wissen/Prozedur) im eigenen Skill-Verzeichnis. "
-            "Skill wird beim nächsten passenden Trigger automatisch in den System-Prompt geladen. "
-            "scope='on-demand': nur wenn ein Trigger-Keyword in der Nachricht vorkommt. "
-            "scope='always': immer geladen (sparsam einsetzen). "
-            "Nur für Wissen geeignet das regelmäßig gebraucht wird — kein Einmalwissen."
+            "Erstellt/aktualisiert einen Skill (wiederverwendbares Wissen). "
+            "on-demand: bei Keyword-Match geladen; always: immer geladen."
         )
 
     @property
@@ -1223,29 +1212,28 @@ class CreateSkillTool(BaseTool):
             "properties": {
                 "filename": {
                     "type":        "string",
-                    "description": "Dateiname ohne Pfad (z.B. 'deploy-prozess' → deploy-prozess.md)",
+                    "description": "Dateiname (z.B. 'deploy-prozess')",
                 },
                 "skill_id": {
                     "type":        "string",
-                    "description": "Eindeutiger Skill-Name (z.B. 'deploy-prozess')",
+                    "description": "Skill-Bezeichner",
                 },
                 "triggers": {
                     "type":        "array",
                     "items":       {"type": "string"},
-                    "description": "Keywords die diesen Skill aktivieren (z.B. ['deploy', 'rollout', 'update'])",
+                    "description": "Aktivierungs-Keywords",
                 },
                 "content": {
                     "type":        "string",
-                    "description": "Inhalt des Skills — Anleitung, Wissen oder Prozedur in Markdown",
+                    "description": "Skill-Inhalt (Markdown)",
                 },
                 "scope": {
                     "type":        "string",
                     "enum":        ["on-demand", "always"],
-                    "description": "on-demand (Standard, empfohlen) oder always",
                 },
                 "priority": {
                     "type":        "integer",
-                    "description": "Ladereihenfolge, niedrigere Zahl = früher (Standard: 50)",
+                    "description": "Sortierung (Standard: 50)",
                 },
             },
             "required": ["filename", "skill_id", "triggers", "content"],
@@ -1413,11 +1401,7 @@ class AskAgentTool(BaseTool):
     def name(self) -> str: return "Agenten fragen (sync)"
     @property
     def description(self) -> str:
-        return (
-            "Stellt eine synchrone Frage oder gibt einen Task an einen anderen Agenten. "
-            "Der Ziel-Agent antwortet direkt. Nutze dies um spezialisierte Agenten "
-            "für bestimmte Aufgaben einzusetzen. Gibt die Antwort des Agenten zurück."
-        )
+        return "Synchrone Frage/Task an einen anderen Agenten — antwortet direkt."
 
     @property
     def permissions_required(self) -> list[str]:
@@ -1430,15 +1414,15 @@ class AskAgentTool(BaseTool):
             "properties": {
                 "target": {
                     "type":        "string",
-                    "description": "ID des Ziel-Agenten (z.B. 'hydrahive-dev', 'claude_boss')",
+                    "description": "Ziel-Agent-ID",
                 },
                 "question": {
                     "type":        "string",
-                    "description": "Frage oder Aufgabe für den Ziel-Agenten",
+                    "description": "Frage/Task",
                 },
                 "context": {
                     "type":        "string",
-                    "description": "Zusätzlicher Kontext der für den Agenten hilfreich ist (optional)",
+                    "description": "Zusätzlicher Kontext (optional)",
                 },
             },
             "required": ["target", "question"],
@@ -1496,11 +1480,7 @@ class DelegateAgentTool(BaseTool):
     def name(self) -> str: return "Agenten beauftragen (async)"
     @property
     def description(self) -> str:
-        return (
-            "Beauftragt einen anderen Agenten asynchron mit einem Task via AgentLink-Handoff. "
-            "Für lange Tasks die im Hintergrund laufen — kein direktes Warten auf Ergebnis. "
-            "Gibt eine handoff_id zurück. Der Ziel-Agent holt sich den Auftrag über read_handoff."
-        )
+        return "Beauftragt einen Agenten asynchron via Handoff — kein direktes Warten auf Ergebnis."
 
     @property
     def permissions_required(self) -> list[str]:
@@ -1513,19 +1493,19 @@ class DelegateAgentTool(BaseTool):
             "properties": {
                 "target": {
                     "type":        "string",
-                    "description": "ID des Ziel-Agenten",
+                    "description": "Ziel-Agent-ID",
                 },
                 "task": {
                     "type":        "string",
-                    "description": "Aufgabe die der Ziel-Agent erledigen soll",
+                    "description": "Task für den Agenten",
                 },
                 "context": {
                     "type":        "string",
-                    "description": "Kontext und Daten für den Agenten (optional)",
+                    "description": "Kontext (optional)",
                 },
                 "ttl_seconds": {
                     "type":        "integer",
-                    "description": "Gültigkeit des Handoffs in Sekunden (Standard: 3600)",
+                    "description": "Gültigkeit in Sekunden (Standard: 3600)",
                 },
             },
             "required": ["target", "task"],
@@ -1724,7 +1704,7 @@ class GiteaRepoTreeTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "path": {"type": "string", "description": "Optionaler Unterpfad im Repo"},
                 "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
             },
@@ -1783,7 +1763,7 @@ class GiteaRepoFileTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "path": {"type": "string", "description": "Dateipfad im Repo"},
                 "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
             },
@@ -1833,7 +1813,7 @@ class GiteaRepoCommitsTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "limit": {"type": "integer", "description": "Anzahl der Commits (Standard: 10, max: 30)"},
             },
             "required": ["repo"],
@@ -1894,7 +1874,7 @@ class GiteaRepoDiffTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "base": {"type": "string", "description": "Basis-Ref oder Commit (optional)"},
                 "head": {"type": "string", "description": "Ziel-Ref oder Commit (optional)"},
                 "path": {"type": "string", "description": "Optionaler Pfad im Repo"},
@@ -1987,7 +1967,7 @@ class GiteaCreateIssueTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "title": {"type": "string", "description": "Issue-Titel"},
                 "body": {"type": "string", "description": "Issue-Beschreibung in Markdown"},
                 "labels": {
@@ -2052,7 +2032,7 @@ class GiteaCommentIssueTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
                 "body": {"type": "string", "description": "Kommentar in Markdown"},
             },
@@ -2111,7 +2091,7 @@ class GiteaUpdateIssueTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "repo": {"type": "string", "description": "Repo-Referenz als URL, owner/repo oder Repo-Name"},
+                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
                 "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
                 "title": {"type": "string", "description": "Neuer Titel (optional)"},
                 "body": {"type": "string", "description": "Neuer Body (optional)"},
@@ -3247,3 +3227,52 @@ registry.register(DiscordListMembersTool())
 registry.register(DiscordListRolesTool())
 registry.register(DiscordDeleteMessageTool())
 registry.register(DiscordPinMessageTool())
+
+
+class RequestToolsTool(BaseTool):
+    """Meta-Tool: Lädt Tool-Kategorien on-demand nach."""
+
+    @property
+    def id(self) -> str:
+        return "request_tools"
+
+    @property
+    def name(self) -> str:
+        return "Request Tools"
+
+    @property
+    def description(self) -> str:
+        from .tool_loader import TOOL_CATEGORIES
+        cats = ", ".join(sorted(TOOL_CATEGORIES.keys()))
+        return (
+            "Request additional tools by category when you need capabilities beyond memory/coordination. "
+            "Call this BEFORE using any tool in the requested category. "
+            f"Available categories: {cats}. "
+            "Example: request_tools(categories=['discord']) before using discord_send."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tool categories to load, e.g. ['discord', 'git']",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Brief reason why these tools are needed",
+                },
+            },
+            "required": ["categories"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        # Actual loading is handled by the orchestrator — this is just a stub
+        categories = kwargs.get("categories", [])
+        return {"ok": True, "categories": categories}
+
+
+registry.register(RequestToolsTool())

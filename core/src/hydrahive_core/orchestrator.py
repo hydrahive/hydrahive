@@ -92,11 +92,34 @@ class Orchestrator:
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
         user_text: str = "",
+        meta_only: bool = False,
     ) -> list:
         from .tool_groups import select_tools
+        from .tool_loader import META_TOOLS
         permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
+        if meta_only:
+            # Nur Meta-Tools laden (Phase 1: request_tools + Kern-Tools)
+            ids = [t for t in META_TOOLS if t in (agent_cfg.tools or [])]
+            # request_tools immer dabei wenn es in agent.yaml steht
+            if "request_tools" in (agent_cfg.tools or []) and "request_tools" not in ids:
+                ids.insert(0, "request_tools")
+            return self._reg.tools_for_agent(ids, agent_permissions=permissions)
         filtered_ids = select_tools(agent_cfg.tools, user_text)
         return self._reg.tools_for_agent(filtered_ids, agent_permissions=permissions)
+
+    def _category_tools_schema(
+        self,
+        agent_cfg: AgentConfig,
+        execution_mode: str | None,
+        categories: list[str],
+    ) -> list[dict]:
+        """Gibt litellm-Tool-Schemas für angegebene Kategorien zurück."""
+        from .tool_loader import tools_for_categories
+        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
+        tool_objects = tools_for_categories(
+            self._reg, agent_cfg.tools or [], permissions, categories
+        )
+        return self._reg.as_litellm_tools(tool_objects)
 
     def _allowed_tool_map(
         self,
@@ -267,8 +290,9 @@ class Orchestrator:
         messages = [{"role": "system", "content": system_prompt}]
         history = self._sessions.get_context(project_id, max_messages=10)
         messages.extend(history)
-        # 5. Verfügbare Tools für Boss ermitteln (on-demand gefiltert)
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
+        # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
+        use_meta_only = "request_tools" in (boss_cfg.tools or [])
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=use_meta_only)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         import json as _json
@@ -428,8 +452,9 @@ class Orchestrator:
         system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
         history       = self._sessions.get_context(project_id, max_messages=10)
         messages      = [{"role": "system", "content": system_prompt}] + history
-        # Tool-Schema (on-demand gefiltert)
-        boss_tools    = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
+        # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
+        _use_meta = "request_tools" in (boss_cfg.tools or [])
+        boss_tools    = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=_use_meta)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         import json as _json
@@ -903,8 +928,10 @@ class Orchestrator:
             (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
             "",
         )
+        # Im _tool_loop immer alle Tools (Kategorien wurden ggf. schon per request_tools nachgeladen)
         boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+        litellm_tools: list[dict] = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
+        _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
         current_messages = list(messages)
         workers_used: list[str] = []
         last_signature: tuple[str, ...] | None = None
@@ -967,8 +994,35 @@ class Orchestrator:
             })
 
             # dispatch_task separat → paralleles Worker-Dispatch
-            dispatch_tcs = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
-            other_tcs    = [tc for tc in tool_calls if tc.function.name != "dispatch_task"]
+            # request_tools separat → on-demand Tool-Kategorien nachladen
+            dispatch_tcs     = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
+            request_tool_tcs = [tc for tc in tool_calls if tc.function.name == "request_tools"]
+            other_tcs        = [tc for tc in tool_calls if tc.function.name not in ("dispatch_task", "request_tools")]
+
+            # On-Demand Tool-Kategorien nachladen
+            for tc in request_tool_tcs:
+                try:
+                    args       = json.loads(tc.function.arguments)
+                    categories = args.get("categories", [])
+                    new_cats   = [c for c in categories if c not in _loaded_categories]
+                    if new_cats:
+                        new_schemas = self._category_tools_schema(boss_cfg, execution_mode, new_cats)
+                        existing    = {t["function"]["name"] for t in litellm_tools}
+                        added = [s for s in new_schemas if s["function"]["name"] not in existing]
+                        litellm_tools.extend(added)
+                        _loaded_categories.update(new_cats)
+                        logger.info(
+                            "request_tools: +%d Tools (Kategorien: %s, Agent: %s)",
+                            len(added), new_cats, boss_cfg.id,
+                        )
+                    tool_results[tc.id] = json.dumps({
+                        "ok": True,
+                        "categories": categories,
+                        "tools_added": len([c for c in categories if c not in (_loaded_categories - set(new_cats))]),
+                        "note": "Du kannst die geladenen Tools jetzt direkt verwenden.",
+                    }, ensure_ascii=False)
+                except Exception as e:
+                    tool_results[tc.id] = f"[Fehler] request_tools: {e}"
 
             tool_results: dict[str, str] = {}  # call_id → content
 
