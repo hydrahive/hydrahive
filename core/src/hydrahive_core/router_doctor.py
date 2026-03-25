@@ -16,7 +16,59 @@ from fastapi import APIRouter, Depends
 logger = logging.getLogger(__name__)
 
 
+def _find_install_dir() -> Path:
+    for candidate in [Path("/opt/hydrahive"), Path("/opt/octopos")]:
+        if candidate.exists():
+            return candidate
+    return Path("/opt/hydrahive")
+
+
 def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
+
+    @admin_router.get("/admin/tests")
+    async def run_tests(_a=Depends(require_admin)):
+        install_dir = _find_install_dir()
+        pytest_bin  = install_dir / "venv" / "bin" / "pytest"
+        tests_dir   = install_dir / "core" / "tests"
+
+        if not tests_dir.exists():
+            return {"status": "error", "passed": 0, "failed": 0, "total": 0,
+                    "duration": 0.0, "output": f"Tests-Verzeichnis nicht gefunden: {tests_dir}"}
+
+        cmd = [str(pytest_bin), str(tests_dir), "-q", "--tb=short", "--no-header"]
+        try:
+            r = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=120),
+            )
+        except subprocess.TimeoutExpired:
+            return {"status": "error", "passed": 0, "failed": 0, "total": 0,
+                    "duration": 0.0, "output": "Timeout — Tests liefen länger als 120s"}
+        except Exception as e:
+            return {"status": "error", "passed": 0, "failed": 0, "total": 0,
+                    "duration": 0.0, "output": str(e)}
+
+        output = (r.stdout or "") + (r.stderr or "")
+
+        # Letzte Zeile parsen: "22 passed in 0.14s" oder "1 failed, 21 passed in 0.15s"
+        import re
+        passed = failed = total = 0
+        duration = 0.0
+        for line in reversed(output.splitlines()):
+            m = re.search(
+                r"(?:(\d+) failed,?\s*)?(\d+) passed(?:,\s*\d+ \w+)* in ([\d.]+)s",
+                line,
+            )
+            if m:
+                failed   = int(m.group(1) or 0)
+                passed   = int(m.group(2))
+                duration = float(m.group(3))
+                total    = passed + failed
+                break
+
+        status = "ok" if r.returncode == 0 else "error"
+        return {"status": status, "passed": passed, "failed": failed,
+                "total": total, "duration": duration, "output": output}
 
     @admin_router.get("/admin/doctor")
     async def run_doctor(_a=Depends(require_admin)):

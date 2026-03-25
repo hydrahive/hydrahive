@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle } from "lucide-react";
-import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck } from "@/lib/api";
+import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle, FlaskConical } from "lucide-react";
+import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck, TestReport } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -182,6 +182,86 @@ function DoctorPanel() {
   );
 }
 
+function TestsPanel() {
+  const { t } = useTranslation();
+  const { isAdmin } = useAuth();
+  const [report,  setReport]  = useState<TestReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [showOutput, setShowOutput] = useState(false);
+
+  if (!isAdmin) return null;
+
+  async function runTests() {
+    setLoading(true);
+    setError(null);
+    setShowOutput(false);
+    try {
+      const r = await api.runTests();
+      setReport(r);
+      if (r.status === "error") setShowOutput(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const allPassed = report?.status === "ok";
+
+  return (
+    <div className="bg-card border rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FlaskConical className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">{t("tests.title")}</h2>
+          {report && (
+            <span className={`text-xs font-semibold ${allPassed ? "text-green-500" : "text-destructive"}`}>
+              — {allPassed ? t("tests.allPassed") : t("tests.someFaild")}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={runTests}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+        >
+          <FlaskConical className={`h-3.5 w-3.5 ${loading ? "animate-pulse" : ""}`} />
+          {loading ? t("tests.running") : t("tests.runBtn")}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {report && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="text-green-500">{t("tests.passed")}: <strong>{report.passed}</strong></span>
+            {report.failed > 0 && (
+              <span className="text-destructive">{t("tests.failed")}: <strong>{report.failed}</strong></span>
+            )}
+            <span>{t("tests.total")}: <strong>{report.total}</strong></span>
+            <span className="ml-auto">{t("tests.duration")}: {report.duration.toFixed(2)}s</span>
+          </div>
+
+          <button
+            onClick={() => setShowOutput(v => !v)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showOutput ? "▲" : "▼"} {t("tests.output")}
+          </button>
+
+          {showOutput && (
+            <pre className="text-xs bg-muted rounded p-3 overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto font-mono">
+              {report.output}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SystemPage() {
   const { t } = useTranslation();
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
@@ -322,6 +402,7 @@ export function SystemPage() {
       )}
 
       <DoctorPanel />
+      <TestsPanel />
     </div>
   );
 }

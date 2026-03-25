@@ -146,7 +146,8 @@ export const api = {
   getSessionById: (projectId: string, sessionId: string) =>
     api.get<SessionFull>(`/projects/${projectId}/sessions/${sessionId}`),
   // Doctor
-  doctor: () => api.get<DoctorReport>("/admin/doctor"),
+  doctor:   () => api.get<DoctorReport>("/admin/doctor"),
+  runTests: () => api.get<TestReport>("/admin/tests"),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
@@ -363,6 +364,15 @@ export interface VpnStatus {
   peers?:            VpnPeer[];
   headscale_running?: boolean | null;
   error?:            string;
+}
+
+export interface TestReport {
+  status:   "ok" | "error";
+  passed:   number;
+  failed:   number;
+  total:    number;
+  duration: number;
+  output:   string;
 }
 
 export interface DoctorCheck {

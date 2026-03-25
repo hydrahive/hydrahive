@@ -294,6 +294,18 @@
     "allOk": "All systems nominal",
     "issuesFound": "Issues found"
   },
+  "tests": {
+    "title": "Unit Tests",
+    "runBtn": "Run tests",
+    "running": "Running tests...",
+    "passed": "Passed",
+    "failed": "Failed",
+    "total": "Total",
+    "duration": "Duration",
+    "allPassed": "All tests passed",
+    "someFaild": "Tests failed",
+    "output": "Output"
+  },
   "tools": {
     "title": "Tools",
     "subtitle": "{{count}} tool in core registry",

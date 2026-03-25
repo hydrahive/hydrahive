@@ -294,6 +294,18 @@
     "allOk": "Alles in Ordnung",
     "issuesFound": "Probleme gefunden"
   },
+  "tests": {
+    "title": "Unit-Tests",
+    "runBtn": "Tests ausführen",
+    "running": "Tests laufen...",
+    "passed": "Bestanden",
+    "failed": "Fehlgeschlagen",
+    "total": "Gesamt",
+    "duration": "Laufzeit",
+    "allPassed": "Alle Tests bestanden",
+    "someFaild": "Tests fehlgeschlagen",
+    "output": "Ausgabe"
+  },
   "tools": {
     "title": "Tools",
     "subtitle": "{{count}} Tool im Core-Registry",
