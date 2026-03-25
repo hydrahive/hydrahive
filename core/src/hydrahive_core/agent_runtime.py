@@ -86,13 +86,14 @@ class AgentStatus(str, Enum):
 
 @dataclass
 class AgentHandle:
-    config:         AgentConfig
-    heartbeat_cfg:  HeartbeatConfig
-    status:         AgentStatus = AgentStatus.STARTING
-    last_heartbeat: float = field(default_factory=time.monotonic)
-    restart_count:  int   = 0
-    task:           asyncio.Task | None = field(default=None, repr=False)
-    matrix_client:  object | None = field(default=None, repr=False)  # MatrixAgent
+    config:           AgentConfig
+    heartbeat_cfg:    HeartbeatConfig
+    status:           AgentStatus = AgentStatus.STARTING
+    last_heartbeat:   float = field(default_factory=time.monotonic)
+    restart_count:    int   = 0
+    task:             asyncio.Task | None = field(default=None, repr=False)
+    matrix_client:    object | None = field(default=None, repr=False)  # MatrixAgent
+    current_activity: str | None = field(default=None, repr=False)  # Live-Aktivität (z.B. "Denkt…", "Tool: shell_exec")
     discord_client: object | None = field(default=None, repr=False)  # AgentDiscordClient
 
 
@@ -209,15 +210,38 @@ class AgentRuntime:
             aid: {
                 "status":             h.status,
                 "type":               h.config.type,
+                "model":              getattr(getattr(h.config, "llm", None), "model", None),
+                "identity":           getattr(h.config, "identity", aid),
                 "restart_count":      h.restart_count,
                 "last_heartbeat_age": round(now - h.last_heartbeat, 1),
                 "heartbeat_timeout":  h.heartbeat_cfg.timeout,
                 "heartbeat_interval": h.heartbeat_cfg.interval,
                 "on_failure":         h.heartbeat_cfg.on_failure,
                 "heartbeat_enabled":  h.heartbeat_cfg.enabled,
+                "current_activity":   h.current_activity,
             }
             for aid, h in self._handles.items()
         }
+
+    def set_activity(self, agent_id: str, activity: str | None) -> None:
+        """Setzt die aktuelle Aktivität eines Agenten (für Live-Statusanzeige)."""
+        if handle := self._handles.get(agent_id):
+            handle.current_activity = activity
+
+    async def stop_agent_task(self, agent_id: str) -> bool:
+        """
+        Bricht den laufenden Task eines Agenten ab (Notfall-Stop).
+        Gibt True zurück wenn ein Task gecancelt wurde, sonst False.
+        """
+        handle = self._handles.get(agent_id)
+        if not handle:
+            return False
+        if handle.task and not handle.task.done():
+            await self._cancel_handle(handle)
+            handle.current_activity = None
+            logger.warning("Agent '%s' per Notfall-Stop abgebrochen", agent_id)
+            return True
+        return False
 
     # ----------------------------------------------------------------- private
 

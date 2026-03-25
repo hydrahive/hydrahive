@@ -112,10 +112,14 @@ class Orchestrator:
         return allowed.get(tool_name)
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None):
-        return await _execute_tool_fn(
-            tool, boss_cfg=boss_cfg, project_id=project_id,
-            tool_name=tool_name, tool_input=tool_input,
-        )
+        self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
+        try:
+            return await _execute_tool_fn(
+                tool, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=tool_name, tool_input=tool_input,
+            )
+        finally:
+            self._runtime.set_activity(boss_cfg.id, "Denkt…")
 
     @staticmethod
     def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
@@ -268,6 +272,7 @@ class Orchestrator:
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
 
         # 6. LLM aufrufen
+        self._runtime.set_activity(boss_cfg.id, "Denkt…")
         try:
             response = await self._llm_call(boss_cfg, messages, litellm_tools)
         except Exception as e:
@@ -308,6 +313,7 @@ class Orchestrator:
             if total_t > 0 and _tool_reg._rate_limiter is not None:
                 _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
 
+        self._runtime.set_activity(boss_cfg.id, None)
         return final_response, workers_used
 
     # ----------------------------------------------------------------- private (delegiert an Sub-Module)

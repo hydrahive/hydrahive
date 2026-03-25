@@ -1423,6 +1423,32 @@ def get_metrics():
         "sentry_active": bool(_SENTRY_DSN),
     }
 
+
+@admin_router.get("/admin/agents/live")
+def get_agents_live(_a=Depends(require_admin)):
+    """
+    Live-Status aller Agenten: Runtime-Status + Token-Verbrauch + aktuelle Aktivität.
+    Für die Live-Übersichtsseite — Polling alle 3s empfohlen.
+    """
+    runtime_status = runtime.status_all()
+    result = []
+    for agent_id, rs in runtime_status.items():
+        tokens_1h = rate_limiter.get_token_usage_hour(agent_id)
+        result.append({
+            "id":               agent_id,
+            "identity":         rs.get("identity", agent_id),
+            "type":             rs.get("type"),
+            "model":            rs.get("model"),
+            "status":           rs.get("status"),
+            "current_activity": rs.get("current_activity"),
+            "restart_count":    rs.get("restart_count", 0),
+            "last_heartbeat_age": rs.get("last_heartbeat_age"),
+            "heartbeat_timeout":  rs.get("heartbeat_timeout"),
+            "tokens_1h":        tokens_1h,
+            "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+        })
+    return {"agents": result, "count": len(result)}
+
 app.include_router(public_router)
 app.include_router(auth_router)
 app.include_router(admin_router)

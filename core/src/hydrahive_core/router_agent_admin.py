@@ -168,6 +168,14 @@ def register_agent_admin_routes(
         await runtime.spawn_task_agent(cfg)
         return {"spawned": req.agent_id}
 
+    @admin_router.post("/agents/{agent_id}/stop")
+    async def stop_agent(agent_id: str, _a: tuple = Depends(require_admin)):
+        """Bricht den laufenden Task eines Agenten ab (Notfall-Stop)."""
+        stopped = await runtime.stop_agent_task(agent_id)
+        if not stopped:
+            raise HTTPException(404, f"Agent '{agent_id}' hat keinen laufenden Task")
+        return {"stopped": agent_id}
+
     @auth_router.post("/agents/{agent_id}/heartbeat")
     def agent_heartbeat(agent_id: str, _a: tuple = Depends(require_auth_or_localhost)):
         runtime.heartbeat(agent_id)

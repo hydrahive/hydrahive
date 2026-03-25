@@ -9,7 +9,8 @@
     "users": "Users",
     "auditLog": "Audit Log",
     "backup": "Backup",
-    "settings": "Settings"
+    "settings": "Settings",
+    "activity": "Activity"
   },
   "navHint": {
     "dashboard": "Operations overview",
@@ -21,7 +22,8 @@
     "users": "Accounts and roles",
     "auditLog": "Traceability",
     "backup": "Snapshots and restore",
-    "settings": "LLM, MCP, Gitea, VPN"
+    "settings": "LLM, MCP, Gitea, VPN",
+    "activity": "Live status of all agents"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -753,5 +755,25 @@
     "model": "Show current LLM model",
     "compact": "Summarize conversation via LLM (saves tokens)",
     "remember": "Save session to agent memory (/remember [name])"
+  },
+  "activity": {
+    "title": "Agent Activity",
+    "subtitle": "Live status · refreshes every 3 seconds",
+    "loading": "Loading agents…",
+    "noAgents": "No agents registered",
+    "idle": "Waiting for messages",
+    "running": "running",
+    "active": "active",
+    "updated": "Updated",
+    "pollInterval": "Polling every {{s}}s",
+    "stopBtn": "Stop",
+    "stopConfirm": "Confirm?",
+    "status": {
+      "running": "Running",
+      "starting": "Starting",
+      "restarting": "Restarting",
+      "stopped": "Stopped",
+      "error": "Error"
+    }
   }
 }

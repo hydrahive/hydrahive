@@ -148,6 +148,9 @@ export const api = {
   // Doctor
   doctor:   () => api.get<DoctorReport>("/admin/doctor"),
   runTests: () => api.get<TestReport>("/admin/tests"),
+  // Live-Agent-Übersicht
+  agentsLive: () => api.get<AgentsLiveReport>("/admin/agents/live"),
+  stopAgent:  (id: string) => api.post<{stopped: string}>(`/admin/agents/${id}/stop`, {}),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
@@ -373,6 +376,25 @@ export interface TestReport {
   total:    number;
   duration: number;
   output:   string;
+}
+
+export interface AgentLiveEntry {
+  id:                 string;
+  identity:           string;
+  type:               string | null;
+  model:              string | null;
+  status:             string;
+  current_activity:   string | null;
+  restart_count:      number;
+  last_heartbeat_age: number | null;
+  heartbeat_timeout:  number | null;
+  tokens_1h:          number;
+  token_warn_threshold: number;
+}
+
+export interface AgentsLiveReport {
+  agents: AgentLiveEntry[];
+  count:  number;
 }
 
 export interface DoctorCheck {
