@@ -417,19 +417,20 @@ class Orchestrator:
         self,
         project_id: str,
         boss_cfg: AgentConfig,
-        keep_last: int = 8,
+        keep_last: int = 4,
     ) -> None:
         """
         Context-Kompaktierung (#74): wenn Session zu gross wird, aelteren Kontext
         per LLM zusammenfassen und durch eine Summary-Message ersetzen.
-        Threshold ist model-aware: Claude/GPT-4/Gemini/Mistral-Large = 40000 Tokens,
-        lokale/kleine Modelle = 3000 Tokens.
+        Threshold ist model-aware: Claude/GPT-4/Gemini/Mistral-Large = 20000 Tokens
+        (estimated_tokens() unterschaetzt echte Tokens um ~5x, daher konservativ),
+        lokale/kleine Modelle = 2000 Tokens.
         """
         model = boss_cfg.llm.model.lower()
         if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
-            token_threshold = 40_000
+            token_threshold = 20_000
         else:
-            token_threshold = 3_000  # lokale Modelle haben kleine Kontextfenster
+            token_threshold = 2_000  # lokale Modelle haben kleine Kontextfenster
 
         if self._sessions.estimated_tokens(project_id) < token_threshold:
             return
@@ -471,9 +472,9 @@ class Orchestrator:
             logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
             # Notfall-Reset: wenn Session zu gross ist um kompaktiert zu werden
             current_tokens = self._sessions.estimated_tokens(project_id)
-            if current_tokens > 150_000:
+            if current_tokens > 30_000:
                 logger.error(
-                    "Context-Notfall-Reset (Projekt: %s, ~%d Tokens > 150k Limit) — "
+                    "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 30k) — "
                     "Session wird geleert um Token-Overflow zu verhindern",
                     project_id, current_tokens,
                 )
@@ -1465,10 +1466,19 @@ class Orchestrator:
             yield f"data: {_json.dumps({'done': True, 'session_id': None, 'usage': _usage})}\n\n"
 
         except Exception as e:
-            logger.error("Streaming-Fehler: %s", e)
-            if user_msg_saved:
-                await self._sessions.pop_last(project_id)
-            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+            err_str = str(e).lower()
+            if "prompt is too long" in err_str or "maximum context length" in err_str or "context_length_exceeded" in err_str:
+                logger.warning(
+                    "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
+                    project_id, e,
+                )
+                await self._sessions.new_session(project_id)
+                yield f"data: {_json.dumps({'error': 'Der Konversationsverlauf war zu lang für das Sprachmodell. Die Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.'})}\n\n"
+            else:
+                logger.error("Streaming-Fehler: %s", e)
+                if user_msg_saved:
+                    await self._sessions.pop_last(project_id)
+                yield f"data: {_json.dumps({'error': str(e)})}\n\n"
 
     async def _tool_loop(
         self,
