@@ -391,6 +391,17 @@ class Orchestrator:
         try:
             response = await self._llm_call(boss_cfg, messages, litellm_tools)
         except Exception as e:
+            err_str = str(e).lower()
+            if "prompt is too long" in err_str or "maximum context length" in err_str or "context_length_exceeded" in err_str:
+                logger.warning(
+                    "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
+                    project_id, e,
+                )
+                await self._sessions.new_session(project_id)
+                return (
+                    "Der Konversationsverlauf war zu lang für das Sprachmodell. "
+                    "Die Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
+                ), []
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
             return f"[Fehler] LLM nicht erreichbar: {e}", []
 
