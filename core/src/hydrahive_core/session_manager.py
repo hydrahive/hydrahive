@@ -86,13 +86,20 @@ class Session:
     ) -> list[dict]:
         """
         Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning)
+        - Kompaktierungs-Summary (System-Message an pos[0]) immer erhalten
         - Tool-Results älter als prune_tool_results → Platzhalter
-        - Alle Tool-Results werden auf max_tool_result_chars gekürzt (verhindert
-          dass große file_read / shell_exec Outputs den Context fluten)
+        - Alle Tool-Results werden auf max_tool_result_chars gekürzt
         """
-        window = self.messages[-max_messages:]
+        # Kompaktierungs-Summary immer als erste Nachricht erhalten
+        summary_msgs = []
+        rest = self.messages
+        if self.messages and self.messages[0].role == MessageRole.SYSTEM:
+            summary_msgs = [self.messages[0]]
+            rest = self.messages[1:]
+
+        window = rest[-(max_messages - len(summary_msgs)):]
         cutoff = max(0, len(window) - prune_tool_results)
-        result = []
+        result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
                 if i < cutoff and len(m.content) > 200:
