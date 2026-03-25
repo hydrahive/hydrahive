@@ -541,11 +541,66 @@ journalctl -u nginx -n 20
 # conduwuit läuft?
 systemctl status hydrahive-conduwuit
 
-# Port prüfen
+# Port prüfen (6167 intern)
 curl http://127.0.0.1:6167/_matrix/client/versions
 
 # Logs
 journalctl -u hydrahive-conduwuit -n 30
+```
+
+**conduwuit neu starten:**
+```bash
+sudo systemctl restart hydrahive-conduwuit
+sleep 3
+curl http://127.0.0.1:6167/_matrix/client/versions
+```
+
+**conduwuit komplett zurücksetzen** (löscht alle Matrix-Nachrichten!):
+```bash
+sudo systemctl stop hydrahive-conduwuit
+sudo rm -f /var/lib/hydrahive/conduwuit/conduwuit.db*
+sudo systemctl start hydrahive-conduwuit
+# Danach: Agenten-Matrix-Accounts über den Installer neu anlegen
+sudo bash /opt/hydrahive/installer/07_matrix_accounts.sh
+```
+
+**Matrix-Raum für Agenten neu anlegen** (nach Reset):
+```bash
+# Accounts prüfen
+curl -s http://127.0.0.1:6167/_matrix/client/v3/login \
+  -d '{"type":"m.login.password","user":"hydrahive_support","password":"<pw>"}' | python3 -m json.tool
+```
+
+### A-MEM (Semantisches Gedächtnis) nicht erreichbar
+
+A-MEM ist ein MCP/SSE-Server — `GET /` gibt **404 zurück, das ist normal**.
+
+```bash
+# A-MEM läuft?
+systemctl is-active hydrahive-amem  # muss "active" sein
+
+# MCP-Endpoint testen (SSE, nicht REST)
+curl -N http://127.0.0.1:8020/sse   # sollte SSE-Stream öffnen
+
+# Logs
+journalctl -u hydrahive-amem -n 30
+```
+
+**A-MEM neu starten:**
+```bash
+sudo systemctl restart hydrahive-amem
+```
+
+**A-MEM Datenpersistenz:**
+- Notizen: `/opt/amem/data/` (SQLite + Vektor-Index)
+- Redis-Cache: läuft als Dependency auf `127.0.0.1:6379`
+- Backup: Redis-Daten werden von `hydrahive-backup.sh` eingeschlossen
+
+```bash
+# Redis läuft?
+redis-cli ping   # → PONG
+# Wenn nicht:
+sudo systemctl start redis
 ```
 
 ### Agent antwortet nicht / LLM-Fehler

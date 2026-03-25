@@ -42,8 +42,55 @@ website/    Static landing page (hydrahive.luckydevs.net)
 
 - **Python**: follow existing style (no strict linter enforced yet); type hints where practical
 - **TypeScript**: strict mode, no `any` without comment
-- **Commits**: conventional-ish messages — `feat:`, `fix:`, `security:`, `docs:`
 - **Docs**: if your change affects user-facing behavior, update `docs/handbook.md` in the same commit
+
+## Commit Message Format
+
+We follow a conventional commit style. Every commit message must have the form:
+
+```
+<type>(<scope>): <short description>
+
+[optional body — what and why, not how]
+[optional footer — BREAKING CHANGE: ...]
+```
+
+**Allowed types:**
+
+| Type | When to use |
+|------|-------------|
+| `feat` | New feature or capability |
+| `fix` | Bug fix |
+| `refactor` | Code restructuring without behavior change |
+| `test` | Adding or fixing tests |
+| `docs` | Documentation only |
+| `security` | Security hardening or vulnerability fix |
+| `perf` | Performance improvement |
+| `ci` | CI/CD pipeline changes |
+| `chore` | Build tooling, dependency updates, maintenance |
+
+**Scope** (optional but encouraged): the module or area affected, e.g. `orchestrator`, `session`, `console`, `installer`, `rate-limiter`.
+
+**Examples:**
+
+```
+feat(orchestrator): add streaming failover for OAuth models
+
+fix(session): get_or_create returned coroutine instead of Session
+
+security: block rm -rf and mkfs in shell_exec tool
+
+docs: add A-MEM architecture section to DEPLOYMENT.md
+
+refactor(#19): split orchestrator.py into 4 focused modules
+```
+
+**Breaking changes** must be marked in the footer:
+```
+feat(api): rename /admin/agents → /admin/agent-configs
+
+BREAKING CHANGE: all clients using /admin/agents must update their URLs
+```
 
 ## Atomic Commits
 

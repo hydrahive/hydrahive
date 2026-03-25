@@ -30,6 +30,75 @@ Alternatively, contact the maintainer directly via Matrix or Discord (see profil
 - Acknowledgement within **48 hours**
 - Assessment and patch target within **7 days** for critical issues
 
+## Threat Model
+
+HydraHive is a **self-hosted agent server with code execution capabilities**. Understanding the threat model is required before deployment.
+
+### What HydraHive can do
+
+- Execute shell commands on the host system (via `shell_exec` tool)
+- Read and write files in configured agent directories
+- Make outbound HTTP requests to external APIs
+- Spawn subprocesses (via `run_process` tool)
+- Access credentials stored in `/etc/hydrahive/`
+
+### Trust boundaries
+
+| Boundary | Trust level | Notes |
+|----------|-------------|-------|
+| Admin user (JWT) | Full trust | Can configure agents, approve execution modes |
+| Regular user (JWT) | Limited trust | Can only interact with assigned project |
+| Agent (LLM output) | Untrusted | Treated as adversarial input — blocked by sandbox |
+| External LLM API | Untrusted | Prompt injection from tool outputs possible |
+
+### Privilege Escalation Risks
+
+**Prompt injection via tool output:** An agent reads a malicious file containing "ignore all previous instructions". HydraHive does not sanitize tool outputs before feeding them back to the LLM. Mitigation: `shell_exec` blocklist prevents the most dangerous follow-up commands.
+
+**Execution mode escalation:** If an agent is configured with `elevated` or `root` execution mode, it has broader shell access. Never grant `root` mode to agents that process user-supplied content.
+
+**Session fixation:** JWTs do not expire by default. Rotate `jwt_secret` to invalidate all sessions if a token is compromised.
+
+**Path traversal in memory tools:** `read_memory`/`write_memory` tools are scoped to `/agents/<id>/memory/`. The path is validated server-side, but agent directory misconfiguration could expose other paths.
+
+## Sandbox Guarantees
+
+### shell_exec Blocklist
+
+The following command patterns are **always blocked**, regardless of execution mode or agent permissions:
+
+```
+rm -rf /          # recursive delete from root
+rm -rf /opt/      # delete installation
+dd if=            # disk write
+mkfs              # filesystem format
+git -C /opt/      # git operations in install dir
+systemctl stop    # stop services
+systemctl disable # disable services
+kill -9 1         # kill init
+> /etc/           # overwrite system config
+chmod -R 777 /    # mass permission change
+```
+
+The blocklist is enforced in `tool_registry.py::ShellExecTool.execute()` before any subprocess is spawned. It cannot be bypassed via execution mode.
+
+### Execution Modes
+
+| Mode | Shell access | Filesystem | Network |
+|------|-------------|------------|---------|
+| `safe` | None | Agent dir only (read) | Outbound HTTP |
+| `elevated` | Scoped (`/tmp`, `/home/hydrahive`) | Agent dir (read/write) | Outbound HTTP |
+| `root` | Broad (`/opt/hydrahive` excluded) | Most paths | Outbound HTTP |
+
+`root` mode requires explicit admin approval in the Console. It is intended for DevOps agents running on trusted infrastructure, not for user-facing chatbots.
+
+### What is NOT sandboxed
+
+- Outbound network requests — agents can call external URLs
+- Memory usage — no per-agent RAM limits
+- LLM token spend — rate limiting helps but does not hard-cap per session
+- Inter-agent calls — `ask_agent` / `delegate_agent` are rate-limited but not sandboxed
+
 ## Security Architecture
 
 HydraHive is designed for self-hosted, private-network deployment. Key security properties:

@@ -66,7 +66,7 @@ def _build_system_prompt(boss_cfg, user_text: str) -> str:
                 mem_parts.append(learning_snippet)
 
             # Memory-Dateien: neueste zuerst, mit hartem Budget-Limit
-            # (OpenClaw-Ansatz: conservative estimation, newest-first retention)
+            # Strategie: newest-first, konservative Schätzung (chars statt Tokens)
             # normal: max 5 Dateien, 8k chars/Datei, 30k chars gesamt
             # full:   max 15 Dateien, 25k chars/Datei, 150k chars gesamt
             if mode == "full":
