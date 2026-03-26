@@ -1464,9 +1464,15 @@ class AskAgentTool(BaseTool):
             ts = str(int(_time.time()))
             sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
             headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
-        # Optionale project_id: wenn angegeben, arbeitet der Ziel-Agent im selben Projektkontext
+        # project_id: wenn explizit angegeben → nehmen. Sonst: Caller-Projekt erben
+        # (außer personal_* Agenten — die haben kein echtes Projektverzeichnis)
         explicit_project_id = kwargs.get("project_id", "")
-        session_id = explicit_project_id.strip() if explicit_project_id else f"{target}_{_uuid.uuid4().hex[:8]}"
+        if explicit_project_id.strip():
+            session_id = explicit_project_id.strip()
+        elif project_id and not project_id.startswith("personal_"):
+            session_id = project_id
+        else:
+            session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
         try:
             async with _aio.ClientSession() as session:
                 async with session.post(
