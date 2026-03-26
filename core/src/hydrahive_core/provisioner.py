@@ -13,6 +13,7 @@ Core läuft als 'hydrahive'-User — Root-Operationen via sudo (NOPASSWD konfigu
 import asyncio
 import json
 import logging
+import secrets
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,10 +24,11 @@ from .project_config import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
-CONDUWUIT_URL  = "http://127.0.0.1:6167"
-SAMBA_CONF     = "/etc/samba/smb.conf"
-SAMBA_INCLUDES = "/etc/samba/hydrahive-shares.conf"
-PROJECTS_DIR   = "/projects"
+CONDUWUIT_URL    = "http://127.0.0.1:6167"
+SAMBA_CONF       = "/etc/samba/smb.conf"
+SAMBA_INCLUDES   = "/etc/samba/hydrahive-shares.conf"
+SAMBA_CREDS_FILE = "/etc/hydrahive/samba_credentials"
+PROJECTS_DIR     = "/projects"
 
 
 @dataclass
@@ -178,6 +180,11 @@ class Provisioner:
         # Include in smb.conf einhängen (einmalig)
         self._ensure_samba_include()
 
+        # Samba-User anlegen / Passwort setzen
+        pw_warn = self._set_samba_password(username)
+        if pw_warn:
+            logger.warning(pw_warn)
+
         # smbd neu laden
         r = subprocess.run(
             ["sudo", "smbcontrol", "smbd", "reload-config"],
@@ -188,7 +195,7 @@ class Provisioner:
             subprocess.run(["sudo", "systemctl", "reload", "smbd"],
                            capture_output=True)
         logger.info("Samba-Share '%s' eingerichtet", project_id)
-        return None
+        return pw_warn
 
     def _write_samba_share(self, project_id: str, username: str, files_dir: str) -> None:
         includes_path = Path(SAMBA_INCLUDES)
@@ -227,6 +234,59 @@ class Provisioner:
             check=True, capture_output=True
         )
         subprocess.run(["sudo", "chmod", "644", SAMBA_INCLUDES], capture_output=True)
+
+    def _set_samba_password(self, username: str) -> str | None:
+        """
+        Legt Samba-User an und setzt ein zufälliges Passwort.
+        Idempotent: existierender User bekommt ein neues Passwort (smbpasswd ohne -a).
+        Speichert Klartext-Passwort in SAMBA_CREDS_FILE (chmod 600, nur root).
+        Gibt None zurück wenn OK, sonst Warnmeldung.
+        """
+        password = secrets.token_urlsafe(16)
+
+        # Prüfen ob User bereits in Samba-Datenbank
+        r = subprocess.run(
+            ["sudo", "pdbedit", "-L", "-u", username],
+            capture_output=True, text=True
+        )
+        samba_user_exists = r.returncode == 0
+
+        flag = "" if samba_user_exists else "-a"
+        flags = ["-s", flag] if flag else ["-s"]
+        cmd = ["sudo", "smbpasswd"] + flags + [username]
+
+        proc = subprocess.run(
+            cmd,
+            input=f"{password}\n{password}\n",
+            capture_output=True, text=True
+        )
+        if proc.returncode != 0:
+            return f"smbpasswd für '{username}' fehlgeschlagen: {proc.stderr.strip()}"
+
+        # Passwort in Credentials-Datei speichern
+        try:
+            creds_path = Path(SAMBA_CREDS_FILE)
+            # Datei anlegen falls nicht vorhanden (sudo, da /etc/hydrahive root-owned)
+            subprocess.run(
+                ["sudo", "bash", "-c",
+                 f"touch {SAMBA_CREDS_FILE} && chmod 600 {SAMBA_CREDS_FILE}"],
+                capture_output=True
+            )
+            # Bestehenden Eintrag für diesen User entfernen, neuen anhängen
+            # grep -v gibt exit 1 wenn kein Output → || true verhindert Chain-Break
+            subprocess.run(
+                ["sudo", "bash", "-c",
+                 f"grep -v '^{username}:' {SAMBA_CREDS_FILE} > /tmp/hh-sambacreds.tmp || true"
+                 f" && echo '{username}:{password}' >> /tmp/hh-sambacreds.tmp"
+                 f" && cp /tmp/hh-sambacreds.tmp {SAMBA_CREDS_FILE}"
+                 f" && chmod 600 {SAMBA_CREDS_FILE}"],
+                capture_output=True
+            )
+        except Exception as e:
+            return f"Samba-Passwort gesetzt, aber Credentials-Datei konnte nicht geschrieben werden: {e}"
+
+        logger.info("Samba-Passwort für '%s' gesetzt", username)
+        return None
 
     def _remove_samba_share(self, project_id: str) -> str | None:
         includes_path = Path(SAMBA_INCLUDES)
