@@ -168,7 +168,7 @@ def _check_ports() -> list[dict]:
         (8765, "Core API"),
         (80,   "HTTP/nginx"),
         (3002, "Gitea"),
-        (8008, "Matrix"),
+        (6167, "Matrix (conduwuit)"),
     ]
     for port, label in ports:
         try:
