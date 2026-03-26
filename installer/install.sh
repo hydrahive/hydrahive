@@ -113,8 +113,11 @@ for _f in jwt_secret internal_secret llm_env llm_config.json gitea_config.json; 
 done
 
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh" "${HYDRAHIVE_DIR}/install_amem.sh"
-"$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh"
-success "A-MEM installiert"
+if "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh"; then
+  success "A-MEM installiert"
+else
+  warn "A-MEM konnte nicht installiert werden — manuell nachholen: sudo bash ${HYDRAHIVE_DIR}/install_amem.sh"
+fi
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
