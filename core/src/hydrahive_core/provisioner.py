@@ -154,9 +154,11 @@ class Provisioner:
         return None
 
     def _ensure_dir(self, path: str, owner: str) -> None:
+        # Owner: proj_<id> (Samba-User), Gruppe: hydrahive (Core-Prozess)
+        # 770: Owner + hydrahive können lesen/schreiben, Others nichts
         subprocess.run(["sudo", "mkdir", "-p", path], check=True, capture_output=True)
-        subprocess.run(["sudo", "chown", f"{owner}:{owner}", path], check=True, capture_output=True)
-        subprocess.run(["sudo", "chmod", "750", path], check=True, capture_output=True)
+        subprocess.run(["sudo", "chown", f"{owner}:hydrahive", path], check=True, capture_output=True)
+        subprocess.run(["sudo", "chmod", "770", path], check=True, capture_output=True)
 
     # ----------------------------------------------------------------- Schritt 2: Samba (#10)
 
