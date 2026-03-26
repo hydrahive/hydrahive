@@ -1,6 +1,6 @@
 # HydraHive — Infrastruktur-Dokumentation
 
-Stand: März 2026 | VM: YOUR-VM-IP | Hostname: your-hostname
+Stand: März 2026 | VM: <your-vm-ip> | Hostname: <your-hostname>
 
 ---
 
@@ -22,7 +22,7 @@ Stand: März 2026 | VM: YOUR-VM-IP | Hostname: your-hostname
 
 | Interface | IP | Zweck |
 |-----------|-----|-------|
-| `ens3` | `YOUR-VM-IP/24` | LAN (Heimnetz) |
+| `ens3` | `<your-vm-ip>/24` | LAN (Heimnetz) |
 | `tailscale0` | `100.110.63.75/32` | Tailscale VPN (Remote-Zugriff) |
 | `docker0` | `172.17.0.1/16` | Docker (keine Container aktiv) |
 
@@ -96,8 +96,8 @@ Stand: März 2026 | VM: YOUR-VM-IP | Hostname: your-hostname
 - **Ports**: intern `:3001`, öffentlich via nginx `:3002`
 - **User**: `git`
 - **Repos**: Lokaler Spiegel des HydraHive-Repos, Projektrepos
-- **URL**: `http://YOUR-VM-IP:3002`
-- **Credentials**: User `claude`, Token in `/etc/hydrahive/gitea_config.json`
+- **URL**: `http://<your-vm-ip>:3002`
+- **Credentials**: User `<gitea-user>`, Token in `/etc/hydrahive/gitea_config.json`
 - **Zweck**: Primäre Quelle für `update.sh`; Agents können Repos anlegen/pushen
 
 ### 4.5 Matrix / Conduwuit (`hydrahive-conduwuit.service`)
@@ -338,9 +338,9 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | System | Zugang | Wo |
 |--------|--------|-----|
-| HydraHive Console | `admin` / in `/etc/hydrahive/admin_credentials` | http://YOUR-VM-IP |
-| Gitea | User `claude` / Token in `gitea_config.json` | http://YOUR-VM-IP:3002 |
-| SSH | Key `~/.ssh/your-ssh-key` | `hydrahive@YOUR-VM-IP` |
+| HydraHive Console | `admin` / in `/etc/hydrahive/admin_credentials` | http://<your-vm-ip> |
+| Gitea | User `<gitea-user>` / Token in `gitea_config.json` | http://<your-vm-ip>:3002 |
+| SSH | Key `~/.ssh/<your-ssh-key>` | `hydrahive@<your-vm-ip>` |
 | Tailscale | `eulenspiegel41@` Account | Tailscale Dashboard |
 | Matrix | Conduwuit Admin | `/etc/conduwuit/` |
 | Ollama | kein Auth | nur localhost |
