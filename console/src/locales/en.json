@@ -10,7 +10,8 @@
     "auditLog": "Audit Log",
     "backup": "Backup",
     "settings": "Settings",
-    "activity": "Activity"
+    "activity": "Activity",
+    "usage": "Usage"
   },
   "navHint": {
     "dashboard": "Operations overview",
@@ -23,7 +24,8 @@
     "auditLog": "Traceability",
     "backup": "Snapshots and restore",
     "settings": "LLM, MCP, Gitea, VPN",
-    "activity": "Live status of all agents"
+    "activity": "Live status of all agents",
+    "usage": "Token stats & costs"
   },
   "layout": {
     "controlFabric": "Control Fabric",

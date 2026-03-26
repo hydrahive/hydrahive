@@ -20,6 +20,7 @@ const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => (
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
 const ActivityPage      = lazy(() => import("@/pages/ActivityPage").then((m) => ({ default: m.ActivityPage })));
+const UsagePage         = lazy(() => import("@/pages/UsagePage").then((m) => ({ default: m.UsagePage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="dashboard"         element={<DashboardPage />} />
             <Route path="agents"            element={<AgentsPage />} />
             <Route path="activity"          element={<ActivityPage />} />
+            <Route path="usage"             element={<UsagePage />} />
             <Route path="projects"          element={<ProjectsPage />} />
             <Route path="projects/new"      element={<ProjectCreatePage />} />
             <Route path="chat/:id"          element={<ChatPage />} />

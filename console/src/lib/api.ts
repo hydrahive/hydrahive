@@ -108,6 +108,7 @@ export const api = {
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
   updateMcpServer: (id: string, d: unknown) => api.put<{server: McpServer}>(`/mcp/servers/${id}`, d),
   deleteMcpServer: (id: string) => api.delete(`/mcp/servers/${id}`),
+  usageStats:    () => api.get<UsageStats>("/admin/usage"),
   listBackups:   () => api.get<{backups: BackupEntry[]}>("/admin/backups"),
   createBackup:  () => api.post<BackupEntry>("/admin/backup", {}),
   deleteBackup:  (name: string) => api.delete(`/admin/backups/${name}`),
@@ -448,6 +449,26 @@ export interface SessionFull {
   started_at: string;
   ended_at:   string | null;
   messages:   SessionMessage[];
+}
+
+export interface UsageModelBreakdown {
+  tokens: { input: number; output: number; cache_read: number; cache_write: number };
+  cost:   { input: number; output: number; cache_read: number; cache_write: number; total: number };
+}
+export interface UsageProject {
+  project_id:          string;
+  total_input:         number;
+  total_output:        number;
+  total_cache_read:    number;
+  total_cache_write:   number;
+  sessions_with_usage: number;
+  total_cost:          number;
+  model_breakdown:     Record<string, UsageModelBreakdown>;
+}
+export interface UsageStats {
+  projects:    UsageProject[];
+  grand_total: { input: number; output: number; cache_read: number; cache_write: number; cost: number };
+  pricing_ref: Record<string, { input: number; output: number; cache_write: number; cache_read: number }>;
 }
 
 export interface UpdateStatus {

@@ -256,6 +256,73 @@ class SessionManager:
     def active_projects(self) -> list[str]:
         return list(self._active.keys())
 
+    def get_usage_stats(self, limit_sessions_per_project: int = 50) -> dict:
+        """
+        Aggregiert Token-Usage aus allen Session-Dateien aller Projekte.
+        Liest nur Sessions die echte Usage-Metadata haben (input_tokens > 0).
+        Gibt {project_id: {total_input, total_output, total_cache_read, total_cache_write,
+                           model_breakdown: {model: {...}}, sessions_with_usage}} zurück.
+        """
+        result: dict[str, dict] = {}
+
+        for project_dir in self._projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            project_id = project_dir.name
+            sessions_dir = project_dir / self.SESSIONS_SUBDIR
+            if not sessions_dir.exists():
+                continue
+
+            files = sorted(
+                sessions_dir.glob("*.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[:limit_sessions_per_project]
+
+            proj_stats: dict = {
+                "total_input":       0,
+                "total_output":      0,
+                "total_cache_read":  0,
+                "total_cache_write": 0,
+                "sessions_with_usage": 0,
+                "model_breakdown": {},
+            }
+
+            for f in files:
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    has_usage = False
+                    for m in data.get("messages", []):
+                        meta = m.get("metadata", {})
+                        inp = meta.get("input_tokens", 0)
+                        out = meta.get("output_tokens", 0)
+                        if not (inp or out):
+                            continue
+                        has_usage = True
+                        cw  = meta.get("cache_write_tokens", 0)
+                        cr  = meta.get("cache_read_tokens",  0)
+                        mdl = meta.get("model", "unknown")
+                        proj_stats["total_input"]       += inp
+                        proj_stats["total_output"]      += out
+                        proj_stats["total_cache_read"]  += cr
+                        proj_stats["total_cache_write"] += cw
+                        mb = proj_stats["model_breakdown"].setdefault(mdl, {
+                            "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
+                        })
+                        mb["input"]       += inp
+                        mb["output"]      += out
+                        mb["cache_read"]  += cr
+                        mb["cache_write"] += cw
+                    if has_usage:
+                        proj_stats["sessions_with_usage"] += 1
+                except Exception:
+                    continue
+
+            if proj_stats["total_input"] or proj_stats["total_output"]:
+                result[project_id] = proj_stats
+
+        return result
+
     def estimated_tokens(self, project_id: str) -> int:
         """Grobe Token-Schaetzung der aktiven Session (1 Token ≈ 4 Zeichen)."""
         session = self._active.get(project_id)

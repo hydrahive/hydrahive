@@ -43,6 +43,7 @@ from .router_project_integrations import register_project_integration_routes
 from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
+from .router_usage import register_usage_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
 from .whatsapp_agent import setup_whatsapp_sessions
 from .router_users import (
@@ -1191,6 +1192,7 @@ register_backup_restore_routes(
 
 register_vpn_routes(admin_router, require_admin=require_admin)
 register_doctor_routes(admin_router, require_admin=require_admin)
+register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 
 
 # ================================================================== Status
