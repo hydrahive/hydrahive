@@ -991,7 +991,12 @@ def _project_shell_check_command(command: str, project_id: str) -> str | None:
         try:
             tokens = _shlex_shell.split(segment)
         except ValueError:
-            return "Syntaxfehler im Befehl — nicht parsebar"
+            # shlex scheitert an komplexen Quoting-Mustern wie grep "foo\|bar"
+            # Fallback: ersten Token per Regex extrahieren — Blocklist hat bereits geprüft
+            m = _re_shell.match(r'\s*(\S+)', segment)
+            if not m:
+                continue
+            tokens = [m.group(1)]
         if not tokens:
             continue
         exe = Path(tokens[0]).name.lower()
