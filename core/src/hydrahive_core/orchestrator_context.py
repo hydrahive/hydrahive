@@ -86,7 +86,25 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
 
     parts = [f"Du bist {boss_cfg.identity}."]
 
+    # startup.md — Erster Start / Onboarding
+    # VOR soul.md injiziert damit Onboarding-Instruktionen die normale Persönlichkeit überschreiben.
+    # Existiert die Datei → wird injiziert. Agent löscht sie selbst nach Abschluss.
+    _startup_active = False
+    if boss_cfg.agent_dir:
+        startup_path = boss_cfg.agent_dir / "startup.md"
+        if startup_path.exists():
+            startup_text = startup_path.read_text(encoding="utf-8").strip()
+            if startup_text:
+                parts.append(
+                    f"## ERSTER START — ONBOARDING\n\n"
+                    f"**WICHTIG: Diese Anweisung hat höchste Priorität und überschreibt alle anderen "
+                    f"Persönlichkeits- oder Verhaltensregeln aus der soul.md für diesen ersten Start.**\n\n"
+                    f"{startup_text}"
+                )
+                _startup_active = True
+
     # Soul laden wenn vorhanden (immer — klein und identitätskritisch)
+    # Bei aktivem Onboarding trotzdem laden (für Kontext), aber startup.md hat Vorrang.
     if boss_cfg.soul and boss_cfg.agent_dir:
         soul_path = boss_cfg.agent_dir / boss_cfg.soul
         if soul_path.exists():
