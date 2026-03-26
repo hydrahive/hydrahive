@@ -965,6 +965,53 @@ _GIT_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({
 })
 
 
+def _split_pipeline_segments(command: str) -> list[str]:
+    """
+    Splittet Shell-Befehl in Pipeline-Segmente auf — respektiert Quotes.
+    'grep "foo|bar" | wc' → ['grep "foo|bar"', 'wc']
+    'grep "foo|bar"'      → ['grep "foo|bar"']   (kein False-Split)
+    """
+    segments: list[str] = []
+    current: list[str] = []
+    in_double = False
+    in_single = False
+    i = 0
+    while i < len(command):
+        ch = command[i]
+        # Backslash-Escape außerhalb von Single-Quotes
+        if ch == '\\' and not in_single:
+            current.append(ch)
+            if i + 1 < len(command):
+                current.append(command[i + 1])
+                i += 2
+            else:
+                i += 1
+            continue
+        # Quote-Tracking
+        if ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "'" and not in_double:
+            in_single = not in_single
+        # Operatoren nur außerhalb von Quotes auswerten
+        if not in_double and not in_single:
+            rest = command[i:]
+            if rest.startswith('&&') or rest.startswith('||'):
+                segments.append(''.join(current).strip())
+                current = []
+                i += 2
+                continue
+            if ch in ('|', ';'):
+                segments.append(''.join(current).strip())
+                current = []
+                i += 1
+                continue
+        current.append(ch)
+        i += 1
+    if current:
+        segments.append(''.join(current).strip())
+    return [s for s in segments if s]
+
+
 def _project_shell_check_command(command: str, project_id: str) -> str | None:
     """
     Prüft ob der Befehl für project_shell erlaubt ist.
@@ -982,9 +1029,8 @@ def _project_shell_check_command(command: str, project_id: str) -> str | None:
         return blocked
 
     # Schicht 2: Pipeline-Segmente parsen und Whitelist prüfen
-    # Splittet auf |, &&, ||, ; — einfache lineare Analyse (kein vollständiger Parser)
-    segment_pattern = _re_shell.split(r'\|{1,2}|&&|;', command)
-    for segment in segment_pattern:
+    # Quote-aware Split — | innerhalb von "..." oder '...' wird nicht als Trenner gewertet
+    for segment in _split_pipeline_segments(command):
         segment = segment.strip()
         if not segment:
             continue
