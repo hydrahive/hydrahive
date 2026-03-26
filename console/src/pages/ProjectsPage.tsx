@@ -21,6 +21,9 @@ import {
   Pencil,
   X,
   Save,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -79,6 +82,10 @@ export function ProjectsPage() {
   const [editForm, setEditForm] = useState<EditForm>({ name: "", description: "", boss: "", workers: "", show_swarm: false });
   const [editSaving, setEditSaving] = useState(false);
   const [editErr, setEditErr] = useState("");
+  const [sambaCreds, setSambaCreds] = useState<Record<string, {username: string; password: string} | null>>({});
+  const [sambaLoading, setSambaLoading] = useState<Record<string, boolean>>({});
+  const [showSambaPw, setShowSambaPw] = useState<Record<string, boolean>>({});
+  const [sambaResetting, setSambaResetting] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -101,6 +108,30 @@ export function ProjectsPage() {
   function refresh() {
     setRefreshing(true);
     load();
+  }
+
+  async function loadSambaCreds(id: string) {
+    setSambaLoading(l => ({...l, [id]: true}));
+    try {
+      const data = await api.sambaCreds(id);
+      setSambaCreds(c => ({...c, [id]: data}));
+      setShowSambaPw(s => ({...s, [id]: true}));
+    } catch {
+      setSambaCreds(c => ({...c, [id]: null}));
+    } finally {
+      setSambaLoading(l => ({...l, [id]: false}));
+    }
+  }
+
+  async function resetSambaPw(id: string) {
+    setSambaResetting(id);
+    try {
+      const data = await api.sambaResetPassword(id);
+      setSambaCreds(c => ({...c, [id]: data}));
+      setShowSambaPw(s => ({...s, [id]: true}));
+    } catch { /* ignore */ } finally {
+      setSambaResetting(null);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -493,6 +524,37 @@ export function ProjectsPage() {
                           <p className="break-all text-muted-foreground">{proj.matrix_room || t("projects.noMatrixRoom")}</p>
                         </div>
                       </div>
+                      {proj.system_user && isAdmin && (
+                        <div className="flex items-start gap-3">
+                          <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">Samba-Zugangsdaten</p>
+                            {sambaCreds[id] ? (
+                              <div className="mt-1 space-y-1">
+                                <p className="text-xs text-muted-foreground font-mono">{sambaCreds[id]!.username}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-mono text-muted-foreground tracking-wider">
+                                    {showSambaPw[id] ? sambaCreds[id]!.password : "••••••••••••"}
+                                  </p>
+                                  <button type="button" onClick={() => setShowSambaPw(s => ({...s, [id]: !s[id]}))}
+                                    className="text-muted-foreground hover:text-foreground transition-colors">
+                                    {showSambaPw[id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                  </button>
+                                  <button type="button" onClick={() => resetSambaPw(id)} disabled={sambaResetting === id}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                                    {sambaResetting === id ? "…" : "Reset"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => loadSambaCreds(id)} disabled={sambaLoading[id]}
+                                className="mt-0.5 text-xs text-primary hover:underline disabled:opacity-50">
+                                {sambaLoading[id] ? "Lade…" : "Zugangsdaten anzeigen"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

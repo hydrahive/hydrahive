@@ -235,6 +235,30 @@ class Provisioner:
         )
         subprocess.run(["sudo", "chmod", "644", SAMBA_INCLUDES], capture_output=True)
 
+    def reset_samba_password(self, username: str) -> tuple[str | None, str | None]:
+        """
+        Öffentliche Methode: Setzt Samba-Passwort zurück.
+        Gibt (error_msg, new_password) zurück.
+        """
+        warn = self._set_samba_password(username)
+        if warn:
+            return warn, None
+        password = self._read_samba_password(username)
+        return None, password
+
+    def _read_samba_password(self, username: str) -> str | None:
+        """Liest aktuelles Samba-Passwort aus SAMBA_CREDS_FILE (via sudo grep)."""
+        try:
+            r = subprocess.run(
+                ["sudo", "grep", f"^{username}:", SAMBA_CREDS_FILE],
+                capture_output=True, text=True
+            )
+            if r.returncode == 0 and ":" in r.stdout.strip():
+                return r.stdout.strip().split(":", 1)[1]
+        except Exception:
+            pass
+        return None
+
     def _set_samba_password(self, username: str) -> str | None:
         """
         Legt Samba-User an und setzt ein zufälliges Passwort.

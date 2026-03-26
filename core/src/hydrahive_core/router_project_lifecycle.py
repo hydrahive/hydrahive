@@ -136,3 +136,31 @@ def register_project_lifecycle_routes(
 
         warnings = await provisioner.deprovision(cfg)
         return {'project_id': project_id, 'deprovisioned': True, 'warnings': warnings}
+
+    @admin_router.get("/projects/{project_id}/samba-credentials")
+    async def get_samba_credentials(project_id: str, _a: tuple = Depends(require_admin)):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        provisioner = get_provisioner()
+        if provisioner is None:
+            raise HTTPException(503, 'Provisioner nicht initialisiert')
+        username = cfg.effective_system_user()
+        password = provisioner._read_samba_password(username)
+        if password is None:
+            raise HTTPException(404, 'Keine Samba-Credentials gefunden — Provisioning erforderlich')
+        return {'project_id': project_id, 'username': username, 'password': password}
+
+    @admin_router.post("/projects/{project_id}/samba-reset-password")
+    async def reset_samba_password(project_id: str, _a: tuple = Depends(require_admin)):
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        provisioner = get_provisioner()
+        if provisioner is None:
+            raise HTTPException(503, 'Provisioner nicht initialisiert')
+        username = cfg.effective_system_user()
+        error, new_password = provisioner.reset_samba_password(username)
+        if error:
+            raise HTTPException(500, error)
+        return {'project_id': project_id, 'username': username, 'password': new_password}

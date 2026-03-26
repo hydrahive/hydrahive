@@ -178,6 +178,8 @@ export const api = {
   updateDiscord:      (d: DiscordConfigPayload) => api.put<{updated:boolean;bot_name:string;bot_id:string}>("/me/discord", d),
   deleteDiscord:      () => api.delete<{deleted:boolean}>("/me/discord"),
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
+  sambaCreds:         (id: string) => api.get<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-credentials`),
+  sambaResetPassword: (id: string) => api.post<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-reset-password`, {}),
 };
 
 export interface AuditEntry {
