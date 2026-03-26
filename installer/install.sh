@@ -77,7 +77,11 @@ source "${MODULES_DIR}/12_vpn.sh"
 
 # --- Modul 13: WhatsApp Bridge (optional) ---
 echo ""
-read -rp "WhatsApp Bridge installieren? (y/N) " INSTALL_WHATSAPP
+if [ -t 0 ]; then
+    read -rp "WhatsApp Bridge installieren? (y/N) " INSTALL_WHATSAPP
+else
+    INSTALL_WHATSAPP="n"
+fi
 if [[ "${INSTALL_WHATSAPP,,}" == "y" ]]; then
     source "${MODULES_DIR}/13_whatsapp_bridge.sh"
 fi

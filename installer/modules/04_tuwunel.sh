@@ -171,14 +171,14 @@ fi
 
 # Health-Check — Retry-Loop (3x mit 3s Pause)
 HEALTH_OK=0
-for i in 1 2 3; do
-  sleep 3
+for i in 1 2 3 4 5 6; do
+  sleep 5
   if curl -sf "http://127.0.0.1:6167/_matrix/client/versions" &>/dev/null; then
     success "conduwuit antwortet auf http://127.0.0.1:6167"
     HEALTH_OK=1
     break
   fi
-  info "Warte auf conduwuit... ($i/3)"
+  info "Warte auf conduwuit... ($i/6)"
 done
 if [ "$HEALTH_OK" -eq 0 ]; then
   warn "conduwuit antwortet nicht — pruefe: journalctl -u hydrahive-conduwuit -n 30"

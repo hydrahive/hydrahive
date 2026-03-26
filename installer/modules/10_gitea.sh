@@ -35,7 +35,7 @@ else
     if ! curl -fsSL -o "${GITEA_BINARY}.tmp" "${GITEA_URL}"; then
         warn "Gitea-Download fehlgeschlagen (${GITEA_URL}) — Gitea wird nicht installiert"
         warn "Projektverwaltung ohne Git-Versionierung möglich, aber Agent-Git-Tools stehen nicht zur Verfügung"
-        exit 0   # kein harter Fehler — HydraHive funktioniert ohne Gitea
+        return 0   # kein harter Fehler — HydraHive funktioniert ohne Gitea
     fi
     mv "${GITEA_BINARY}.tmp" "${GITEA_BINARY}"
     chmod +x "${GITEA_BINARY}"
@@ -163,7 +163,7 @@ done
 if [ "${GITEA_OK}" -eq 0 ]; then
     warn "Gitea antwortet nicht — pruefe: journalctl -u ${GITEA_SERVICE} -n 20"
     warn "Git-Tools stehen möglicherweise nicht zur Verfügung"
-    exit 0
+    return 0  # kein exit — sourced module darf den Installer nicht beenden
 fi
 success "Gitea läuft auf http://127.0.0.1:${GITEA_PORT}"
 
