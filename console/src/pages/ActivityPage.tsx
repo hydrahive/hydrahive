@@ -404,19 +404,20 @@ export function ActivityPage() {
         </div>
       </div>
 
-      {loading && (
+      {loading && data.length === 0 && (
         <div className="flex items-center justify-center h-40 text-gray-400">
           <Loader2 className="w-6 h-6 animate-spin mr-2" />{t("activity.loading")}
         </div>
       )}
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-400 text-sm flex items-center gap-2">
-          <XCircle className="w-4 h-4 shrink-0" />{error}
+        <div className="rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-3 text-orange-700 dark:text-orange-400 text-sm flex items-center gap-2">
+          <XCircle className="w-4 h-4 shrink-0" />
+          <span>{t("activity.reconnecting", "Verbindung unterbrochen — reconnecting…")}</span>
         </div>
       )}
 
-      {!loading && !error && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {data.length > 0 && (
+        <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4", error && "opacity-60")}>
           {data.map(agent => (
             <AgentCard
               key={agent.id}
@@ -425,10 +426,10 @@ export function ActivityPage() {
               onSelect={setSelected}
             />
           ))}
-          {data.length === 0 && (
-            <div className="col-span-full text-center text-gray-400 py-16">{t("activity.noAgents")}</div>
-          )}
         </div>
+      )}
+      {!loading && !error && data.length === 0 && (
+        <div className="text-center text-gray-400 py-16">{t("activity.noAgents")}</div>
       )}
 
       <p className="text-xs text-gray-400 dark:text-gray-600 text-right">
