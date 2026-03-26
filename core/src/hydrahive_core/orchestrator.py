@@ -104,6 +104,8 @@ class Orchestrator:
             if "request_tools" in (agent_cfg.tools or []) and "request_tools" not in ids:
                 ids.insert(0, "request_tools")
             return self._reg.tools_for_agent(ids, agent_permissions=permissions)
+        if getattr(agent_cfg, "tool_selection", "auto") == "always":
+            return self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
         filtered_ids = select_tools(agent_cfg.tools, user_text)
         return self._reg.tools_for_agent(filtered_ids, agent_permissions=permissions)
 

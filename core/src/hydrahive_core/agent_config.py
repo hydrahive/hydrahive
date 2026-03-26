@@ -84,6 +84,7 @@ class AgentConfig(BaseModel):
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
     tools:           list[str] = Field(default_factory=list)
+    tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
     allowed_agents:  list[str] = Field(default_factory=list)
     mcp_servers:     list[str] = Field(default_factory=list)
     max_tool_rounds: int       = 20
