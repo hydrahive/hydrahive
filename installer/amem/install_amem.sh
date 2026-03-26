@@ -24,6 +24,8 @@ warn()    { echo "[A-MEM] WARN: $1"; }
 [ "$(id -u)" -eq 0 ] || { echo "Bitte als root ausfuehren"; exit 1; }
 
 mkdir -p /etc/hydrahive /var/log/hydrahive /var/lib/hydrahive/amem
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" /var/log/hydrahive
+chmod 755 /var/log/hydrahive
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_GROUP}" /var/lib/hydrahive/amem
 
 git config --global --add safe.directory "${AMEM_DIR}" >/dev/null 2>&1 || true

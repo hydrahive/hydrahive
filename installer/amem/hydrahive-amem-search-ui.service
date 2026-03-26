@@ -1,12 +1,12 @@
 [Unit]
-Description=OctopOS A-MEM Search UI
-After=network.target octopos-amem.service
-Wants=octopos-amem.service
+Description=HydraHive A-MEM Search UI
+After=network.target hydrahive-amem.service
+Wants=hydrahive-amem.service
 
 [Service]
 Type=simple
-User=octopos
-Group=octopos
+User=hydrahive
+Group=hydrahive
 WorkingDirectory=/opt/amem-search
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/amem/.venv/bin/python /opt/amem-search/search_ui.py
