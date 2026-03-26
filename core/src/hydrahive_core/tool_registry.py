@@ -324,8 +324,10 @@ class FileWriteTool(BaseTool):
 
     async def execute(
         self, agent_id: str, project_id: str,
-        path: str, content: str, mode: str = "overwrite",
+        path: str, content: str = "", mode: str = "overwrite", **kwargs,
     ) -> dict:
+        if content is None or content == "":
+            return {"error": "content darf nicht leer sein — bitte Dateiinhalt übergeben", "path": path}
         try:
             safe_path = assert_path_within_project(path, project_id)
         except PathSafetyError as e:
