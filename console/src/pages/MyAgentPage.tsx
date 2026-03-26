@@ -68,6 +68,10 @@ const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "discord_list_roles",        label: "Discord: Rollen auflisten" },
   { id: "discord_delete_message",    label: "Discord: Nachricht löschen" },
   { id: "discord_pin_message",       label: "Discord: Nachricht anpinnen" },
+  { id: "create_agent",   label: "⚠ Agent anlegen (Admin)" },
+  { id: "delete_agent",   label: "⚠ Agent löschen (Admin)" },
+  { id: "create_project", label: "⚠ Projekt anlegen (Admin)" },
+  { id: "delete_project", label: "⚠ Projekt löschen (Admin)" },
 ];
 
 const BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
@@ -1168,14 +1172,17 @@ function SettingsPanel({
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
           <div className="grid grid-cols-2 gap-2">
-            {ALL_TOOLS.map(t => (
-              <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
-                  className="rounded" />
-                <span className="text-xs">{t.label}</span>
-                <span className="text-xs text-muted-foreground font-mono">({t.id})</span>
-              </label>
-            ))}
+            {ALL_TOOLS.map(t => {
+              const isDanger = ["create_agent","delete_agent","create_project","delete_project"].includes(t.id);
+              return (
+                <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
+                  <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
+                    className="rounded" />
+                  <span className="text-xs">{t.label}</span>
+                  <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
+                </label>
+              );
+            })}
           </div>
         </section>
 
