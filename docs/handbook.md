@@ -43,7 +43,11 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 20. [GPU-Monitoring](#20-gpu-monitoring)
 21. [System-Update](#21-system-update)
 22. [WhatsApp-Integration](#22-whatsapp-integration)
-23. [Troubleshooting](#23-troubleshooting)
+23. [Discord-Integration](#23-discord-integration)
+24. [Aktivitäts-Übersicht](#24-aktivitäts-übersicht)
+25. [API Usage & Kostenübersicht](#25-api-usage--kostenübersicht)
+26. [Diagnose & Tests](#26-diagnose--tests)
+27. [Troubleshooting](#27-troubleshooting)
 
 ---
 
@@ -112,13 +116,15 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Dashboard** | Überblick über Agenten, Projekte, System-Status | alle |
 | **Mein Agent** | Persönlicher Agent: Chat, Einstellungen, Skills, WKS | alle |
 | **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten | alle (Schreiben: admin) |
-| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks konfigurieren | alle (Schreiben: admin) |
-| **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung | alle |
+| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten | alle (Schreiben: admin) |
+| **Aktivität** | Live-Übersicht aller aktiven Agenten mit Notfall-Stop und Detail-Logs | alle |
+| **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose & Tests | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
 | **Einstellungen** | LLM, MCP-Server, Gitea, VPN und Mail/KAS konfigurieren (Tab-basiert) | admin |
 | **Benutzer** | Benutzer anlegen und verwalten | admin |
 | **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
+| **API Usage** | Token-Verbrauch und API-Kosten nach Projekt und Modell | admin |
 | **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
 
 ### Konsolidierte Einstellungen
@@ -304,7 +310,19 @@ HydraHive richtet automatisch ein:
 - Linux-User `proj_<id>` mit eigenem Home-Verzeichnis
 - Verzeichnis `/projects/<id>/` für Agenten-Dateien
 - Matrix-Room (wenn Matrix konfiguriert)
-- Samba-Freigabe (wenn aktiviert)
+- Samba-Freigabe inkl. automatisch generiertem Passwort (wenn aktiviert)
+
+### Samba-Zugangsdaten
+
+Nach dem Anlegen erscheinen in der Projektkarte (Workspace-Bereich) die Samba-Zugangsdaten:
+
+- **Benutzername:** `proj_<id>` (Linux-User)
+- **Passwort:** automatisch generiert, versteckt — per Auge-Icon aufdecken
+- **Reset:** Neues Zufallspasswort setzen per Klick auf "Reset"
+
+Die Zugangsdaten werden auf dem Server in `/etc/hydrahive/samba_credentials` (chmod 600, nur root) gespeichert.
+
+**Samba-Pfad:** `\\<server-ip>\<projekt-id>` oder `smb://<server-ip>/<projekt-id>`
 
 ### Projekt-Konfiguration (Datei)
 
@@ -989,6 +1007,23 @@ Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann s
 sudo bash /opt/hydrahive/update.sh
 ```
 
+### Automatische Updates (systemd)
+
+Der `hydrahive-selfupdate.service` ermöglicht geplante automatische Updates:
+
+```bash
+# Status prüfen
+sudo systemctl status hydrahive-selfupdate
+
+# Manuell auslösen
+sudo systemctl start hydrahive-selfupdate
+
+# Automatisch täglich um 03:00 Uhr (Beispiel-Cron):
+# sudo crontab -e → 0 3 * * * systemctl start hydrahive-selfupdate
+```
+
+Der `update.sh` aktualisiert sich beim Update selbst — die neueste Version liegt immer unter `/opt/hydrahive/update.sh`.
+
 ---
 
 ## 22. WhatsApp-Integration
@@ -1068,7 +1103,101 @@ Die Konfiguration liegt verschlüsselt in `/etc/hydrahive/kas.json` (nur für de
 
 ---
 
-## 23. Troubleshooting
+## 23. Discord-Integration
+
+HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen und antworten.
+
+### Konfiguration
+
+1. **Mein Agent** → Tab **Plattformen** → Discord
+2. Bot-Token eingeben (aus dem Discord Developer Portal)
+3. Kanal-ID auswählen oder eingeben
+4. **Verbinden** klicken
+
+### Funktionsumfang
+
+- Eingehende Nachrichten werden an den persönlichen Agenten weitergeleitet
+- Antworten werden im gleichen Kanal gepostet
+- **Loop-Detektion:** Bot-zu-Bot-Nachrichten werden automatisch unterdrückt (kein Echo-Loop)
+
+### Hinweis
+
+Discord gilt als „untrusted" Eingangskanal — Nachrichten werden wie externe Nutzer-Inputs behandelt und nicht mit erhöhten Rechten ausgeführt.
+
+---
+
+## 24. Aktivitäts-Übersicht
+
+Die Seite **Aktivität** zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status.
+
+### Funktionen
+
+| Funktion | Beschreibung |
+|---|---|
+| **Live-Status** | Jeder laufende Agent mit aktuellem Task, Laufzeit und Modell |
+| **Farbkategorien** | Boss (blau), Specialist (lila), Worker (grün), Personal (orange) |
+| **Detail-Modal** | Klick auf Agent → Live-Logs und Session-Details |
+| **Notfall-Stop** | Agent sofort stoppen ohne SSH-Zugriff |
+| **Alert-System** | Kritische Fehler werden als Banner angezeigt |
+| **Stale-Daten** | Bei Verbindungsunterbrechung bleiben letzte Daten sichtbar (gedimmt) |
+
+Die Seite aktualisiert sich automatisch alle paar Sekunden.
+
+---
+
+## 25. API Usage & Kostenübersicht
+
+Die Seite **API Usage** (`/admin/usage`) zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten.
+
+### Übersicht
+
+| Kennzahl | Beschreibung |
+|---|---|
+| **Input Tokens** | Tokens im System-Prompt + Nutzer-Nachrichten |
+| **Output Tokens** | Vom LLM generierte Tokens |
+| **Cache Hits** | Wiederverwendete Tokens dank Prompt Caching |
+| **API-Kosten** | Geschätzte Kosten in USD nach Modell-Preistabelle |
+
+### Aufschlüsselung
+
+Jedes Projekt hat eine eigene Karte mit Aufklapp-Funktion:
+- Kosten und Tokens nach Modell
+- Sessions mit Token-Daten
+- Cache-Effizienz-Anzeige
+
+Die Seite enthält außerdem eine **Preisreferenz-Tabelle** ($/1M Tokens) für alle konfigurierten Modelle.
+
+> Token-Daten werden ab dem ersten Agent-Gespräch nach dem Update gespeichert. Ältere Sessions ohne Token-Counts werden als solche gekennzeichnet.
+
+---
+
+## 26. Diagnose & Tests
+
+Unter **System** → **Diagnose** gibt es zwei Werkzeuge zur Selbst-Diagnose:
+
+### Doctor
+
+Prüft automatisch die wichtigsten Systemkomponenten:
+
+- Core-Erreichbarkeit und Response-Time
+- Matrix/conduwuit-Verbindung
+- Samba-Status und Share-Konfiguration
+- Freier Speicher auf allen Partitionen
+- Agent-Konfigurationsfehler
+- VPN-Verbindungsstatus
+
+### Unit-Tests
+
+Führt die integrierten Unit-Tests (22+ Tests) direkt aus der Konsole aus:
+- Orchestrator-Tests
+- Sicherheits-Tests (Shell-Exec Sandbox, Rate-Limiting)
+- Tool-Registry-Tests
+
+Beide Tools sind nur für Admins sichtbar und schreiben keine Änderungen.
+
+---
+
+## 27. Troubleshooting
 
 ### Konsole nicht erreichbar
 

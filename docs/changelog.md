@@ -1,5 +1,86 @@
 # HydraHive Changelog
 
+## 2026-03-26
+
+### Added
+
+- **Samba-Zugangsdaten in der Projektkarte**
+  - Projektkarte zeigt Samba-Benutzername + Passwort (versteckt, per Auge-Icon aufdeckbar)
+  - Reset-Button setzt sofort ein neues Zufallspasswort und zeigt es an
+  - Nur für Admins sichtbar; Abruf via `GET /projects/{id}/samba-credentials`
+  - Zurücksetzen via `POST /projects/{id}/samba-reset-password`
+
+- **Samba-Automatik beim Provisioning**
+  - Beim Anlegen eines Projekts wird automatisch `smbpasswd -a` aufgerufen
+  - Zufallspasswort generiert, in `/etc/hydrahive/samba_credentials` (chmod 600) gespeichert
+  - Idempotent: bestehender Samba-User bekommt neues Passwort statt Fehler
+
+## 2026-03-25
+
+### Added
+
+- **Aktivitäts-Übersicht (Live Agent Monitor)**
+  - Neue Seite `/activity` zeigt alle aktiven Agenten in Echtzeit
+  - Agent-Status, letzter Task, Laufzeit — alles auf einen Blick
+  - Detail-Modal mit Live-Logs beim Klick auf einen Agent
+  - Notfall-Stop-Button direkt aus der Übersicht
+  - Alert-System: kritische Agent-Fehler werden als Banner angezeigt
+  - Stale-Data-Anzeige bei 502/Verbindungsunterbrechung statt leerem Grid
+
+- **API Usage & Kostenübersicht**
+  - Neue Seite `/admin/usage` zeigt Token-Verbrauch und API-Kosten
+  - Aufschlüsselung nach Projekt, Modell (Input/Output/Cache-Tokens)
+  - Prompt-Caching-Effizienz wird automatisch berechnet und angezeigt
+  - Preisreferenz-Tabelle für alle konfigurierten Modelle
+
+- **Agent-Typ-Farbkategorien**
+  - Alle Agent-Karten (Agents, Activity, Usage) sind farblich nach Typ kategorisiert
+  - Boss: blau · Specialist: lila · Worker: grün · Personal: orange
+  - Kategorie-Badge mit Typ-Label in jeder Karte
+
+- **Discord-Integration & Loop-Detektion**
+  - Discord-Loop-Detektion verhindert Echo-Schleifen bei Bot-zu-Bot-Nachrichten
+  - Agent-Editor in der Konsole: Agent-Konfiguration direkt im Browser bearbeiten
+  - User-Editor: Benutzer-Rechte und Projektgrenzen über die UI verwalten
+  - AgentsPage-Redesign: kompaktere Übersicht mit Heartbeat-Status und schnellerem Zugriff
+
+- **Session-History im Chat**
+  - Vergangene Gespräche können direkt im Chat-Interface durchgeblättert werden
+  - Sessions nach Datum sortiert, Vorschau des ersten Satzes
+
+- **Self-Update-Service (systemd)**
+  - `hydrahive-selfupdate.service` ermöglicht automatische Updates über systemd
+  - Kann per Cron oder manuell getriggert werden
+  - `update.sh` aktualisiert sich selbst und den Service-Unit bei jedem Update
+
+- **HydraHive Doctor**
+  - Neue Diagnose-Funktion unter System → Diagnose
+  - Prüft: Core-Erreichbarkeit, Matrix-Verbindung, Samba-Status, freier Speicher, Agent-Konfiguration
+  - Unit-Tests direkt aus der Konsole ausführbar (22 Tests)
+
+- **Setup-Wizard**
+  - Geführte Ersteinrichtung nach der Installation
+  - Schritte: Admin-Passwort, LLM-Konfiguration, erster Agent
+
+- **Sicherheit & Stabilität**
+  - Agent-Rate-Limiting vollständig aktiv (pro Agent, pro Zeitfenster)
+  - Shell-Exec Sandbox-Hardening: `$()`, Backticks und `bash -c` blockiert (48 neue Tests)
+  - Git-Token aus URLs entfernt — `GIT_ASKPASS` statt Credential-in-URL
+  - Context-Overflow-Detection: Session wird bei zu großem Kontext automatisch zurückgesetzt
+  - Memory-Budget-Limit im System-Prompt (verhindert Kontext-Überfüllung)
+  - Sentry-Integration für Fehler-Tracking (optional konfigurierbar)
+
+- **nginx 502-Wartungsseite**
+  - Bei Core-Neustart erscheint statt einem weißen 502-Fehler eine auto-refreshende Wartungsseite
+  - Seite lädt automatisch neu sobald der Core wieder erreichbar ist
+
+### Fixed
+
+- nginx: `Connection: ""` statt `Connection: upgrade` verhindert uvicorn-Keep-Alive-Drops
+- nginx: `proxy_next_upstream error timeout` für automatischen Reconnect nach Core-Neustart
+- update.sh: `fuser -k 8765/tcp` vor systemctl restart — Port wird sauber freigegeben
+- Activity-Page zeigt Stale-Daten statt leerem Grid bei temporären 502-Fehlern
+
 ## 2026-03-24
 
 ### Added

@@ -251,7 +251,7 @@
 <aside class="sidebar">
   <div class="sidebar-header">
     <a href="index.htm">
-      <div class="sidebar-logo">Octo<span>POS</span></div>
+      <div class="sidebar-logo">Hydra<span>Hive</span></div>
     </a>
     <div class="sidebar-back">← Zurück zur Startseite</div>
     <div style="margin-top:0.8rem;font-size:0.8rem;font-weight:600;color:var(--text)">Handbuch</div>
@@ -281,7 +281,11 @@
     <a href="#matrix">18. Matrix-Integration</a>
     <a href="#gpu">19. GPU-Monitoring</a>
     <a href="#update">20. System-Update</a>
-    <a href="#troubleshooting">21. Troubleshooting</a>
+    <a href="#discord">21. Discord</a>
+    <a href="#aktivitaet">22. Aktivität (Live Monitor)</a>
+    <a href="#api-usage">23. API Usage & Kosten</a>
+    <a href="#diagnose">24. Diagnose & Tests</a>
+    <a href="#troubleshooting">25. Troubleshooting</a>
   </nav>
 </aside>
 
@@ -347,14 +351,15 @@ certbot --nginx -d mein.domain.de</code></pre>
       <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td><td>alle</td></tr>
       <tr><td><strong>Mein Agent</strong></td><td>Persönlicher Agent: Chat, Einstellungen, Skills, WKS</td><td>alle</td></tr>
       <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td><td>alle (Schreiben: admin)</td></tr>
-      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks konfigurieren</td><td>alle (Schreiben: admin)</td></tr>
-      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen, GPU-Auslastung</td><td>alle</td></tr>
+      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten</td><td>alle (Schreiben: admin)</td></tr>
+      <tr><td><strong>Aktivität</strong></td><td>Live-Übersicht aller aktiven Agenten mit Notfall-Stop und Detail-Logs</td><td>alle</td></tr>
+      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose & Tests</td><td>alle</td></tr>
       <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td><td>alle</td></tr>
-      <tr><td><strong>LLM-Config</strong></td><td>Sprachmodell konfigurieren (Ollama, Claude, OpenAI, Gitea)</td><td>admin</td></tr>
-      <tr><td><strong>MCP-Server</strong></td><td>Externe Tool-Server konfigurieren</td><td>admin</td></tr>
+      <tr><td><strong>Einstellungen</strong></td><td>LLM, MCP-Server, Gitea, VPN und Mail/KAS konfigurieren (Tab-basiert)</td><td>admin</td></tr>
       <tr><td><strong>Benutzer</strong></td><td>Benutzer anlegen und verwalten</td><td>admin</td></tr>
       <tr><td><strong>Backup</strong></td><td>Backups erstellen, herunterladen und wiederherstellen</td><td>admin</td></tr>
       <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td><td>admin</td></tr>
+      <tr><td><strong>API Usage</strong></td><td>Token-Verbrauch und API-Kosten nach Projekt und Modell</td><td>admin</td></tr>
       <tr><td><strong>Update</strong></td><td>System auf neuesten Stand bringen (Sidebar-Button)</td><td>admin</td></tr>
     </table>
   </section>
@@ -488,8 +493,17 @@ heartbeat_tasks:
       <li>Linux-User <code>proj_&lt;id&gt;</code> mit eigenem Home-Verzeichnis</li>
       <li>Verzeichnis <code>/projects/&lt;id&gt;/</code> für Agenten-Dateien</li>
       <li>Matrix-Room (wenn Matrix konfiguriert)</li>
-      <li>Samba-Freigabe (wenn aktiviert)</li>
+      <li>Samba-Freigabe inkl. automatisch generiertem Passwort (wenn aktiviert)</li>
     </ul>
+
+    <h3>Samba-Zugangsdaten</h3>
+    <p>Nach dem Anlegen erscheinen in der Projektkarte (Workspace-Bereich) die Samba-Zugangsdaten:</p>
+    <ul>
+      <li><strong>Benutzername:</strong> <code>proj_&lt;id&gt;</code></li>
+      <li><strong>Passwort:</strong> automatisch generiert — per Auge-Icon aufdecken</li>
+      <li><strong>Reset:</strong> Neues Zufallspasswort per Klick auf "Reset"</li>
+    </ul>
+    <p><strong>Samba-Pfad:</strong> <code>\\&lt;server-ip&gt;\&lt;projekt-id&gt;</code> oder <code>smb://&lt;server-ip&gt;/&lt;projekt-id&gt;</code></p>
 
     <h3>Projekt-Konfiguration (Datei)</h3>
     <pre><code># /projects/buchhaltung/project.yaml
@@ -907,11 +921,75 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     <p>Der Update-Status ist live einsehbar — inkl. Log-Ausgaben und Commit-Hash nach Abschluss. Nach einem Update die Seite neu laden.</p>
 
     <div class="note"><strong>Vorsicht:</strong> Während des Updates ist der Core kurz nicht erreichbar. Laufende Agenten werden nach dem Neustart automatisch wieder gestartet.</div>
+
+    <h3>Automatische Updates (systemd)</h3>
+    <p>Der <code>hydrahive-selfupdate.service</code> ermöglicht geplante automatische Updates:</p>
+    <pre><code># Status prüfen
+sudo systemctl status hydrahive-selfupdate
+
+# Manuell auslösen
+sudo systemctl start hydrahive-selfupdate</code></pre>
   </section>
 
-  <!-- 21. TROUBLESHOOTING (was 15) -->
+  <!-- 21. DISCORD -->
+  <section class="chapter" id="discord">
+    <h2>21. Discord-Integration</h2>
+    <p>HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen und antworten.</p>
+
+    <h3>Konfiguration</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Mein Agent</strong> → Tab <strong>Plattformen</strong> → Discord</span></li>
+      <li><span class="step-num">2</span><span>Bot-Token eingeben (aus dem Discord Developer Portal)</span></li>
+      <li><span class="step-num">3</span><span>Kanal-ID eingeben → <strong>Verbinden</strong></span></li>
+    </ol>
+
+    <p>Die eingebaute <strong>Loop-Detektion</strong> verhindert Echo-Schleifen bei Bot-zu-Bot-Nachrichten automatisch.</p>
+    <div class="note">Discord gilt als „untrusted" Kanal — Nachrichten werden wie externe Inputs behandelt, nicht mit erhöhten Rechten.</div>
+  </section>
+
+  <!-- 22. AKTIVITÄT -->
+  <section class="chapter" id="aktivitaet">
+    <h2>22. Aktivitäts-Übersicht</h2>
+    <p>Die Seite <strong>Aktivität</strong> zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status.</p>
+    <table>
+      <tr><th>Funktion</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Live-Status</strong></td><td>Jeder laufende Agent mit aktuellem Task, Laufzeit und Modell</td></tr>
+      <tr><td><strong>Farbkategorien</strong></td><td>Boss (blau), Specialist (lila), Worker (grün), Personal (orange)</td></tr>
+      <tr><td><strong>Detail-Modal</strong></td><td>Klick auf Agent → Live-Logs und Session-Details</td></tr>
+      <tr><td><strong>Notfall-Stop</strong></td><td>Agent sofort stoppen ohne SSH</td></tr>
+      <tr><td><strong>Alert-System</strong></td><td>Kritische Fehler werden als Banner angezeigt</td></tr>
+    </table>
+  </section>
+
+  <!-- 23. API USAGE -->
+  <section class="chapter" id="api-usage">
+    <h2>23. API Usage &amp; Kostenübersicht</h2>
+    <p>Die Seite <strong>API Usage</strong> zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten.</p>
+    <table>
+      <tr><th>Kennzahl</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Input Tokens</strong></td><td>System-Prompt + Nutzer-Nachrichten</td></tr>
+      <tr><td><strong>Output Tokens</strong></td><td>Vom LLM generierte Tokens</td></tr>
+      <tr><td><strong>Cache Hits</strong></td><td>Wiederverwendete Tokens dank Prompt Caching</td></tr>
+      <tr><td><strong>API-Kosten</strong></td><td>Geschätzte Kosten in USD nach Modell-Preistabelle</td></tr>
+    </table>
+    <p>Aufschlüsselung nach Projekt und Modell. Preisreferenz-Tabelle für alle konfigurierten Modelle inklusive.</p>
+  </section>
+
+  <!-- 24. DIAGNOSE -->
+  <section class="chapter" id="diagnose">
+    <h2>24. Diagnose &amp; Tests</h2>
+    <p>Unter <strong>System → Diagnose</strong> gibt es zwei Werkzeuge zur Selbst-Diagnose:</p>
+
+    <h3>Doctor</h3>
+    <p>Prüft automatisch die wichtigsten Systemkomponenten: Core, Matrix, Samba, Speicher, Agent-Konfiguration, VPN.</p>
+
+    <h3>Unit-Tests</h3>
+    <p>Führt die integrierten Unit-Tests (22+ Tests) direkt aus der Konsole aus — Orchestrator, Sicherheit, Tool-Registry. Nur für Admins sichtbar.</p>
+  </section>
+
+  <!-- 25. TROUBLESHOOTING -->
   <section class="chapter" id="troubleshooting">
-    <h2>21. Troubleshooting</h2>
+    <h2>25. Troubleshooting</h2>
 
     <h3>Konsole nicht erreichbar</h3>
     <pre><code>sudo systemctl status nginx
