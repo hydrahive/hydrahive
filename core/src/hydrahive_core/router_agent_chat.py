@@ -226,8 +226,10 @@ def register_agent_chat_routes(
             identity=_PI(name=cfg.identity),
             agents=_PA(boss=agent_id, workers=[]),
         )
+        # Optionale project_id aus Body — ask_agent übergibt UUID für isolierte Sessions
+        project_id = body.get("project_id") or agent_id
         response, _ = await agent_orchestrator.handle_message(
-            project_id=agent_id,
+            project_id=project_id,
             project_cfg=virtual_cfg,
             content=req.content,
             sender=req.sender,

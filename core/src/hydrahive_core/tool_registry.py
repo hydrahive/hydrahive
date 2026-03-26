@@ -1440,6 +1440,7 @@ class AskAgentTool(BaseTool):
         if _rate_limiter is not None:
             _rate_limiter.check_agent_call(agent_id)
 
+        import uuid as _uuid
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
         headers: dict = {}
@@ -1447,11 +1448,13 @@ class AskAgentTool(BaseTool):
             ts = str(int(_time.time()))
             sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
             headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
+        # Unique project_id damit jeder ask_agent Call eine frische Session bekommt
+        session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
         try:
             async with _aio.ClientSession() as session:
                 async with session.post(
                     f"http://127.0.0.1:8765/agents/{target}/message",
-                    json={"content": content, "sender": agent_id},
+                    json={"content": content, "sender": agent_id, "project_id": session_id},
                     headers=headers,
                     timeout=_aio.ClientTimeout(total=120),
                 ) as resp:
