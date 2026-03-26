@@ -682,6 +682,7 @@ class Orchestrator:
                                 kwargs["messages"] = filtered
 
                             tool_results = []
+                            any_tool_error = False
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
                                 tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
@@ -698,12 +699,18 @@ class Orchestrator:
                                         result = {"error": str(te)}
                                 else:
                                     result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
+                                if isinstance(result, dict) and "error" in result:
+                                    any_tool_error = True
                                 result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
                                 tool_results.append({
                                     "type":        "tool_result",
                                     "tool_use_id": block.id,
                                     "content":     result_str,
                                 })
+                            # Loop-Counter zurücksetzen wenn ein Tool-Fehler aufgetreten ist
+                            # (verhindert fälschliche Loop-Erkennung bei Retry nach Fehler)
+                            if any_tool_error:
+                                repeated_tool_signature_count = 0
 
                             asst_content = []
                             for b in final_msg.content:
