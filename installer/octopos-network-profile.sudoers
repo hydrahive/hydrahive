@@ -1,1 +1,0 @@
-octopos ALL=(root) NOPASSWD: /opt/octopos/apply-network-profile.sh *

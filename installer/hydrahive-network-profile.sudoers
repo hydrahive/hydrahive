@@ -1,0 +1,1 @@
+hydrahive ALL=(root) NOPASSWD: /opt/hydrahive/apply-network-profile.sh *

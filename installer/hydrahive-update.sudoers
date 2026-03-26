@@ -1,0 +1,1 @@
+hydrahive ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block hydrahive-selfupdate.service
