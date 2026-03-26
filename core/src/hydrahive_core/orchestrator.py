@@ -512,7 +512,7 @@ class Orchestrator:
                                 else:
                                     repeated_signature_count = 0
                                 last_signature = signature
-                                if repeated_signature_count >= 1:
+                                if repeated_signature_count >= 2:
                                     final = await self._finalize_tool_loop_response(
                                         boss_cfg,
                                         cur_messages,
@@ -649,7 +649,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 1:
+                            if repeated_tool_signature_count >= 2:
                                 kwargs_final = dict(kwargs)
                                 kwargs_final.pop("tools", None)
                                 kwargs_final["messages"] = filtered + [
@@ -801,7 +801,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 1:
+                            if repeated_tool_signature_count >= 2:
                                 loop_messages.append({
                                     "role": "user",
                                     "content": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",
@@ -962,7 +962,7 @@ class Orchestrator:
                 repeated_signature_count = 0
             last_signature = signature
 
-            if repeated_signature_count >= 1:
+            if repeated_signature_count >= 2:
                 logger.warning(
                     "Tool-Loop: wiederholte Tool-Signatur erkannt (%s) — erzwinge Abschluss",
                     ", ".join(signature[:3])[:180],

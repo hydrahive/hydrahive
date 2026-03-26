@@ -1434,13 +1434,17 @@ class AskAgentTool(BaseTool):
                     "type":        "string",
                     "description": "Zusätzlicher Kontext (optional)",
                 },
+                "project_id": {
+                    "type":        "string",
+                    "description": "Projekt-ID in dessen Kontext der Ziel-Agent arbeiten soll (optional). Standardmäßig bekommt der Agent eine eigene Sandbox. Übergib die eigene project_id damit der Ziel-Agent auf dieselben Projektdateien zugreifen kann.",
+                },
             },
             "required": ["target", "question"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        target: str, question: str, context: str = "",
+        target: str, question: str, context: str = "", **kwargs
     ) -> dict:
         import aiohttp as _aio
 
@@ -1458,15 +1462,16 @@ class AskAgentTool(BaseTool):
             ts = str(int(_time.time()))
             sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
             headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
-        # Unique project_id damit jeder ask_agent Call eine frische Session bekommt
-        session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
+        # Optionale project_id: wenn angegeben, arbeitet der Ziel-Agent im selben Projektkontext
+        explicit_project_id = kwargs.get("project_id", "")
+        session_id = explicit_project_id.strip() if explicit_project_id else f"{target}_{_uuid.uuid4().hex[:8]}"
         try:
             async with _aio.ClientSession() as session:
                 async with session.post(
                     f"http://127.0.0.1:8765/agents/{target}/message",
                     json={"content": content, "sender": agent_id, "project_id": session_id},
                     headers=headers,
-                    timeout=_aio.ClientTimeout(total=120),
+                    timeout=_aio.ClientTimeout(total=300),
                 ) as resp:
                     if resp.status == 404:
                         return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
