@@ -3,6 +3,17 @@ import { api, type UsageStats, type UsageProject } from "@/lib/api";
 import { RefreshCw, Database, TrendingUp, Zap, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function agentCategoryBadge(projectId: string): { label: string; cls: string } | null {
+  // UUID-Session-IDs (z.B. "personal_till_a3f2c1b0") → Basis-ID extrahieren
+  const id = projectId.replace(/_[0-9a-f]{8}$/, "");
+  if (id.startsWith("personal_")) return { label: "user", cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" };
+  if (id.endsWith("_specialist"))  return { label: "specialist", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" };
+  if (id === "monitor_agent" || id === "notify_agent" || id.includes("support")) return { label: "system", cls: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30" };
+  if (id.includes("boss") || id.includes("main")) return { label: "boss", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" };
+  if (id.includes("worker") || id.includes("coder") || id.includes("researcher")) return { label: "worker", cls: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" };
+  return null;
+}
+
 function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
@@ -67,6 +78,7 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
         <div className="flex items-center gap-3 min-w-0">
           <Database className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           <span className="font-medium truncate">{proj.project_id}</span>
+          {(() => { const b = agentCategoryBadge(proj.project_id); return b ? <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium shrink-0 ${b.cls}`}>{b.label}</span> : null; })()}
           <span className="text-xs text-muted-foreground shrink-0">{proj.sessions_with_usage} Sessions</span>
         </div>
         <div className="flex items-center gap-4 shrink-0">

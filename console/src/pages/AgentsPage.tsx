@@ -6,6 +6,24 @@ import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 
+/** Visuelle Agent-Kategorie aus ID + Typ ableiten */
+function agentCategory(id: string, type: string): "user" | "boss" | "specialist" | "system" | "worker" {
+  if (type === "boss") return "boss";
+  if (type === "worker") return "worker";
+  if (id.startsWith("personal_")) return "user";
+  if (id.endsWith("_specialist")) return "specialist";
+  if (id === "monitor_agent" || id === "notify_agent" || id.includes("support")) return "system";
+  return "specialist";
+}
+
+const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
+  user:       { label: "user",       cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" },
+  boss:       { label: "boss",       cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" },
+  specialist: { label: "specialist", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" },
+  system:     { label: "system",     cls: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30" },
+  worker:     { label: "worker",     cls: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" },
+};
+
 interface AgentRuntime {
   status: string;
   type: string;
@@ -565,7 +583,7 @@ export function AgentsPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-sm truncate">{agent.config.identity}</span>
                         <span className="rounded-full bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground font-mono">{id}</span>
-                        <span className="rounded-full border px-1.5 py-0.5 text-xs text-muted-foreground">{agent.config.type}</span>
+                        {(() => { const cat = agentCategory(id, agent.config.type); const b = CATEGORY_BADGE[cat]; return <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${b.cls}`}>{b.label}</span>; })()}
                         {taskCount > 0 && <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-xs flex items-center gap-1"><Timer className="h-2.5 w-2.5" />{taskCount}</span>}
                         {rt?.status === "error" && <span className="rounded-full bg-destructive/10 text-destructive px-1.5 py-0.5 text-xs">error</span>}
                       </div>
