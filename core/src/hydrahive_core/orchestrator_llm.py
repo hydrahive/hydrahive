@@ -161,6 +161,77 @@ def _load_openai_codex_token() -> dict | None:
     return None
 
 
+# ---------------------------------------------------------------- Provider-Check
+
+def check_llm_provider_available(models: list[str]) -> str | None:
+    """
+    Prüft ob für die übergebenen Modelle ein Provider verfügbar ist.
+    Gibt None zurück wenn OK, sonst eine nutzerfreundliche Fehlermeldung.
+    """
+    import os
+    import socket
+
+    for model in models:
+        if not model:
+            continue
+        is_claude  = model.startswith(("claude-", "anthropic/"))
+        is_openai  = model.startswith(("gpt-", "o1-", "o3-", "openai/", "openai-codex/"))
+        is_ollama  = model.startswith(("ollama/", "ollama_chat/")) or (
+            not is_claude and not is_openai and "/" not in model
+        )
+
+        if is_claude:
+            if _load_claude_oauth_token():
+                return None
+            if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+                return None
+            try:
+                cfg = _load_llm_config()
+                for p in ("anthropic", "claude_max"):
+                    if cfg.get("providers", {}).get(p, {}).get("api_key", "").strip():
+                        return None
+            except Exception:
+                pass
+
+        elif is_openai:
+            if _load_openai_codex_token():
+                return None
+            if os.environ.get("OPENAI_API_KEY", "").strip():
+                return None
+            try:
+                cfg = _load_llm_config()
+                if cfg.get("providers", {}).get("openai", {}).get("api_key", "").strip():
+                    return None
+            except Exception:
+                pass
+
+        elif is_ollama:
+            try:
+                with socket.create_connection(("127.0.0.1", 11434), timeout=1):
+                    return None
+            except Exception:
+                pass
+
+    return (
+        "⚠️ Kein LLM-Provider konfiguriert.\n\n"
+        "Um mit HydraHive zu arbeiten, benötigst du eine der folgenden Optionen:\n\n"
+        "**Cloud-Anbieter (kein GPU nötig)**\n"
+        "• Anthropic API-Key (Claude) oder OpenAI API-Key unter **Einstellungen → LLM** eintragen\n"
+        "• Claude Max Abo: unter **Einstellungen → LLM → Claude Max** via OAuth verbinden\n\n"
+        "**Lokales Modell (GPU empfohlen)**\n"
+        "• Ollama installieren und ein Modell laden: `ollama pull mistral-nemo:12b`\n"
+        "• Dann unter **Einstellungen → LLM** die Ollama-URL eintragen"
+    )
+
+
+def _load_llm_config() -> dict:
+    import json as _json
+    try:
+        return _json.loads(Path("/etc/hydrahive/llm_config.json").read_text())
+    except (OSError, ValueError):
+        return {"providers": {}}
+
+
 # ---------------------------------------------------------------- Model-Resolution
 
 def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str, str | None]:

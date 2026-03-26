@@ -31,6 +31,7 @@ from .tool_registry import ToolRegistry, registry as default_registry
 from . import tool_registry as _tool_reg
 
 # Sub-Module importieren und für Backward-Compat re-exportieren
+import litellm
 from .orchestrator_llm import (
     _should_failover,
     _llm_with_retry,
@@ -41,6 +42,7 @@ from .orchestrator_llm import (
     _openai_codex_call,
     _llm_call_single as _llm_call_single_fn,
     _llm_call as _llm_call_fn,
+    check_llm_provider_available,
 )
 from .orchestrator_context import (
     _context_mode,
@@ -480,6 +482,12 @@ class Orchestrator:
         )
 
         models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
+
+        _provider_err = check_llm_provider_available(models_to_try)
+        if _provider_err:
+            yield f"data: {_json.dumps({'text': _provider_err})}\n\n"
+            yield "data: {\"done\": true}\n\n"
+            return
 
         try:
             full_response = ""
