@@ -6,7 +6,7 @@
 - HydraHive VM: `YOUR-VM-IP` (User: `octopos`)
 - Gitea: `http://YOUR-GITEA-IP:3000` (User: `claude`)
 - Konsole: `https://YOUR-VM-IP`
-- Admin-Login: `admin` / `CHANGEME_ADMIN_PASSWORD`
+- Admin-Login: `admin` / (Passwort aus `/etc/hydrahive/admin_credentials`)
 
 ---
 
@@ -1073,7 +1073,7 @@ sudo journalctl -u hydrahive-core -n 100 --no-pager
 
 | Ursache | Lösung |
 |---|---|
-| Gitea-Token nicht konfiguriert | Konsole → Einstellungen → Gitea → Token eintragen: `YOUR_GITEA_TOKEN` |
+| Gitea-Token nicht konfiguriert | Konsole → Einstellungen → Gitea → Token eintragen: `<your-gitea-token>` |
 | Gitea-URL falsch | `http://YOUR-GITEA-IP:3000` ohne trailing Slash |
 | Repo existiert noch nicht | Boss muss zuerst Repo anlegen (via http_request POST zu Gitea API oder gitea_create_issue triggert Repo-Erstellung nicht — Boss muss `http_request` verwenden) |
 | Kein Remote gesetzt | Agent muss zuerst `git init` + `git remote add origin` via shell_exec ausführen |
@@ -1081,7 +1081,7 @@ sudo journalctl -u hydrahive-core -n 100 --no-pager
 **Gitea API — Repo manuell anlegen (Fallback):**
 ```bash
 curl -s -X POST http://YOUR-GITEA-IP:3000/api/v1/user/repos \
-  -H "Authorization: token YOUR_GITEA_TOKEN" \
+  -H "Authorization: token <your-gitea-token>" \
   -H "Content-Type: application/json" \
   -d '{"name":"tetris","description":"Tetris KI-Projekt","private":false}'
 ```
@@ -1101,7 +1101,7 @@ curl -s -X POST http://YOUR-GITEA-IP:3000/api/v1/user/repos \
 **Gitea-Verbindung testen:**
 ```bash
 curl -s http://YOUR-GITEA-IP:3000/api/v1/repos/claude/tetris \
-  -H "Authorization: token YOUR_GITEA_TOKEN" | python3 -m json.tool
+  -H "Authorization: token <your-gitea-token>" | python3 -m json.tool
 ```
 
 ### 6.4 Samba-Freigabe nicht erreichbar

@@ -740,7 +740,7 @@ def _write_system_topology(dest: Path) -> None:
 
 **Dieser Agent** läuft auf dem **HydraHive-Server**:
 - Hostname: `{hostname}`
-- IP: `{local_ip}` (intern: `YOUR-VM-IP`)
+- IP: `{local_ip}`
 
 `wks_shell_exec` führt Befehle auf der **Workstation des Users** aus — NICHT auf dem Server.
 `shell_exec` läuft auf dem Server selbst (mit Einschränkungen durch die Blocklist).
@@ -833,7 +833,7 @@ priority: 10
 
 ## KRITISCH: Richtiges Tool für Server-Diagnose
 
-**`shell_exec`** → läuft LOKAL auf dem HydraHive-Server (YOUR-VM-IP). Benutze dies für alle Server-Checks.
+**`shell_exec`** → läuft LOKAL auf dem HydraHive-Server. Benutze dies für alle Server-Checks.
 **`wks_shell_exec`** → läuft auf der WORKSTATION des Users. NIEMALS für Server-Diagnose verwenden — dort laufen keine HydraHive-Services.
 
 ## Korrekte Befehle für einen Systemtest (alle via `shell_exec`)
