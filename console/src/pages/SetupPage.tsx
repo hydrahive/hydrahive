@@ -19,7 +19,7 @@ export function SetupPage() {
     try {
       await api.post("/setup", { username, password });
       // Auto-Login und direkt zum Wizard
-      const tokenRes = await api.post<{access_token: string}>("/token", { username, password });
+      const tokenRes = await api.post<{access_token: string}>("/auth/login", { username, password });
       localStorage.setItem("hydrahive_token", tokenRes.access_token);
       navigate("/wizard");
     } catch (e) {
@@ -34,7 +34,7 @@ export function SetupPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
           <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mx-auto">
-            <span className="text-primary-foreground font-bold text-xl">O</span>
+            <span className="text-primary-foreground font-bold text-xl">H</span>
           </div>
           <h1 className="text-2xl font-semibold">{t("setup.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("setup.subtitle")}</p>

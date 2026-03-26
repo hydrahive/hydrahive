@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, ChevronRight, Cpu, Mail, Rocket, SkipForward } from "lucide-react";
+import { CheckCircle, ChevronRight, Cpu, Key, Mail, Rocket, SkipForward } from "lucide-react";
 import { api } from "@/lib/api";
 
-type Step = "welcome" | "llm" | "kas" | "done";
+type Step = "welcome" | "apikey" | "llm" | "kas" | "done";
 
-const STEPS: Step[] = ["welcome", "llm", "kas", "done"];
+const STEPS: Step[] = ["welcome", "apikey", "llm", "kas", "done"];
 
 function StepIndicator({ current }: { current: Step }) {
-  const labels = ["Start", "LLM", "Mail", "Fertig"];
+  const labels = ["Start", "API-Key", "LLM", "Mail", "Fertig"];
   const idx = STEPS.indexOf(current);
   return (
     <div className="flex items-center justify-center gap-2 mb-8">
@@ -21,7 +21,7 @@ function StepIndicator({ current }: { current: Step }) {
           }`}>
             {i < idx ? <CheckCircle className="h-4 w-4" /> : i + 1}
           </div>
-          {i < STEPS.length - 1 && <div className={`h-px w-8 ${i < idx ? "bg-primary" : "bg-muted"}`} />}
+          {i < STEPS.length - 1 && <div className={`h-px w-6 ${i < idx ? "bg-primary" : "bg-muted"}`} />}
         </div>
       ))}
       <span className="ml-2 text-xs text-muted-foreground">{labels[idx]}</span>
@@ -46,7 +46,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </div>
       <div className="grid gap-3 text-left text-sm">
         {[
-          { icon: <Cpu className="h-4 w-4" />, label: "LLM-Modell", desc: "Ollama, Claude oder OpenAI verbinden" },
+          { icon: <Key className="h-4 w-4" />, label: "API-Schlüssel", desc: "Anthropic- oder OpenAI-Schlüssel für Claude / GPT" },
+          { icon: <Cpu className="h-4 w-4" />, label: "LLM-Modell", desc: "Ollama lokal oder Standard-Modell für System-Agenten" },
           { icon: <Mail className="h-4 w-4" />, label: "Mail (All-Inkl)", desc: "KAS-Zugangsdaten für automatische Postfach-Anlage" },
         ].map((item) => (
           <div key={item.label} className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3">
@@ -61,6 +62,89 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       <button onClick={onNext} className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
         Einrichten <ChevronRight className="h-4 w-4" />
       </button>
+    </div>
+  );
+}
+
+function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [openaiKey,    setOpenaiKey]    = useState("");
+  const [saving,       setSaving]       = useState(false);
+  const [error,        setError]        = useState("");
+
+  async function save() {
+    setSaving(true); setError("");
+    try {
+      if (anthropicKey.trim()) {
+        await api.put("/llm/config/anthropic", { provider: "anthropic", api_key: anthropicKey.trim(), enabled: true });
+      }
+      if (openaiKey.trim()) {
+        await api.put("/llm/config/openai", { provider: "openai", api_key: openaiKey.trim(), enabled: true });
+      }
+      onNext();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+    } finally { setSaving(false); }
+  }
+
+  const hasInput = anthropicKey.trim() || openaiKey.trim();
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+          <Key className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">API-Schlüssel</h2>
+          <p className="text-sm text-muted-foreground">Cloud-LLM-Anbieter einrichten (optional)</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Anthropic API-Key</label>
+          <input
+            value={anthropicKey}
+            onChange={e => setAnthropicKey(e.target.value)}
+            placeholder="sk-ant-api03-..."
+            type="password"
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+          />
+          <p className="text-xs text-muted-foreground">Für Claude 3/4-Modelle — Key aus <strong>console.anthropic.com</strong></p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">OpenAI API-Key</label>
+          <input
+            value={openaiKey}
+            onChange={e => setOpenaiKey(e.target.value)}
+            placeholder="sk-..."
+            type="password"
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+          />
+          <p className="text-xs text-muted-foreground">Für GPT-4-Modelle — Key aus <strong>platform.openai.com</strong></p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-600 dark:text-blue-400">
+        Claude Max (OAuth)? Nach dem Login unter <strong>Einstellungen → LLM → Claude Max</strong> verbinden.
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving || !hasInput}
+          className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
+        </button>
+        <button onClick={onSkip} className="flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted transition-colors">
+          <SkipForward className="h-4 w-4" /> Überspringen
+        </button>
+      </div>
     </div>
   );
 }
@@ -93,7 +177,7 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
         </div>
         <div>
           <h2 className="text-lg font-semibold">LLM-Modell</h2>
-          <p className="text-sm text-muted-foreground">Sprachmodelle einrichten</p>
+          <p className="text-sm text-muted-foreground">Ollama & System-Standardmodell</p>
         </div>
       </div>
 
@@ -121,10 +205,6 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
           <p className="text-xs text-muted-foreground">Für Support-Agent und interne Dienste. Claude Haiku empfohlen, alternativ ein Ollama-Modell.</p>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-600 dark:text-blue-400">
-        Claude oder OpenAI? Nach dem Login unter <strong>Einstellungen → LLM</strong> via OAuth verbinden.
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -270,6 +350,7 @@ export function WizardPage() {
           <StepIndicator current={step} />
 
           {step === "welcome" && <WelcomeStep onNext={next} />}
+          {step === "apikey"  && <ApiKeyStep onNext={next} onSkip={next} />}
           {step === "llm"     && <LlmStep onNext={next} onSkip={next} />}
           {step === "kas"     && <KasStep onNext={next} onSkip={next} />}
           {step === "done"    && <DoneStep onFinish={finish} />}
