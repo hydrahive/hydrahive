@@ -126,7 +126,14 @@ class Orchestrator:
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
     ) -> dict[str, object]:
-        return {tool.id: tool for tool in self._allowed_tools(agent_cfg, execution_mode)}
+        # Bei der Ausführung alle erlaubten Tools ohne select_tools-Filter laden.
+        # select_tools ist nur für Token-Optimierung des LLM-Schemas gedacht,
+        # nicht für die Ausführungs-Whitelist.
+        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
+        return {
+            tool.id: tool
+            for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
+        }
 
     def _resolve_allowed_tool(
         self,
