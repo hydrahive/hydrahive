@@ -289,18 +289,24 @@ async def _anthropic_oauth_call(
                               "cache_control": {"type": "ephemeral", "ttl": "1h"}})
 
     # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
+    # Max 3 History-Blöcke (+ 1 System-Block = 4 total, Anthropic-Limit)
     cache_cutoff = max(0, len(filtered) - 4)
+    history_cache_count = 0
     for idx, fm in enumerate(filtered):
+        if history_cache_count >= 3:
+            break
         if idx < cache_cutoff and fm.get("role") in ("user", "assistant"):
             content = fm.get("content", "")
             if isinstance(content, str) and content:
                 filtered[idx] = {**fm, "content": [
                     {"type": "text", "text": content, "cache_control": {"type": "ephemeral", "ttl": "1h"}}
                 ]}
+                history_cache_count += 1
             elif isinstance(content, list) and content and not content[-1].get("cache_control"):
                 new_c = list(content)
                 new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral", "ttl": "1h"}}
                 filtered[idx] = {**fm, "content": new_c}
+                history_cache_count += 1
 
     kwargs: dict = {
         "model":       model,
