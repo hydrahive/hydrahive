@@ -106,6 +106,20 @@ def register_agent_admin_routes(
         soul_path = agent_dir / "soul.md"
         soul_path.write_text(req.soul or f"# {req.identity}\n\nDu bist {req.identity}, ein KI-Agent.\n", encoding="utf-8")
 
+        startup_path = agent_dir / "startup.md"
+        startup_path.write_text(
+            f"# Erster Start — Onboarding\n\n"
+            f"Du startest zum ersten Mal. Begrüsse den Nutzer herzlich, stell dich vor "
+            f"({req.identity}) und frag nach seinem Namen und womit du helfen kannst.\n\n"
+            f"Sobald das Onboarding abgeschlossen ist (du den Namen weißt und die ersten "
+            f"Wünsche notiert hast), frag den Nutzer:\n"
+            f"\"Ich habe mich fertig eingerichtet — darf ich meine Startdatei nun löschen?\"\n\n"
+            f"Wenn der Nutzer zustimmt, lösche die Datei `/agents/{req.id}/startup.md` "
+            f"mit dem Tool `delete_file` oder `shell_exec` (rm /agents/{req.id}/startup.md). "
+            f"Danach erscheint diese Anleitung nicht mehr beim Start.\n",
+            encoding="utf-8",
+        )
+
         logger.info("Agent angelegt: %s (%s)", req.id, req.type)
         audit_log("agent.create", target=req.id, details={"type": req.type, "model": req.model})
         await _asyncio.sleep(0.3)
