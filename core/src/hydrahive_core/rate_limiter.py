@@ -40,7 +40,7 @@ class RateLimitSettings:
     agent_call_max: int = 30       # max. interne Calls pro Agent pro Minute
     agent_call_window_s: int = 60
     # Token-Budget-Warning (grobe Schätzung, nicht exact)
-    agent_token_warn_per_hour: int = 10_000
+    agent_token_warn_per_hour: int = 500_000
     max_login_keys: int = 10000
     max_message_keys: int = 50000
     redis_retry_after_s: int = 30

@@ -1445,7 +1445,9 @@ def get_agents_live(_a=Depends(require_admin)):
     """
     runtime_status = runtime.status_all()
     result = []
+    seen = set()
     for agent_id, rs in runtime_status.items():
+        seen.add(agent_id)
         tokens_1h = rate_limiter.get_token_usage_hour(agent_id)
         result.append({
             "id":               agent_id,
@@ -1461,6 +1463,23 @@ def get_agents_live(_a=Depends(require_admin)):
             "tokens_1h":        tokens_1h,
             "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
         })
+    # Auch registrierte Agenten aus Discovery anzeigen die noch nie gestartet wurden
+    for cfg in discovery.agents.values():
+        if cfg.id not in seen:
+            result.append({
+                "id":               cfg.id,
+                "identity":         cfg.identity,
+                "type":             cfg.type,
+                "model":            cfg.llm.model if cfg.llm else None,
+                "status":           "stopped",
+                "current_activity": None,
+                "restart_count":    0,
+                "last_heartbeat_age":  None,
+                "heartbeat_timeout":   None,
+                "heartbeat_interval":  None,
+                "tokens_1h":        rate_limiter.get_token_usage_hour(cfg.id),
+                "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            })
     return {"agents": result, "count": len(result)}
 
 app.include_router(public_router)
