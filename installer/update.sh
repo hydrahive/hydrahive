@@ -124,7 +124,8 @@ main() {
     systemctl daemon-reload
     systemctl restart hydrahive-core
     # Aktiv warten bis active oder max 30s
-    for i in $(seq 1 30); do sleep 1; systemctl is-active --quiet hydrahive-core && break; done
+    # || true weil set -e sonst beim ersten is-active=1 (noch nicht active) abbricht
+    for i in $(seq 1 30); do sleep 1; systemctl is-active --quiet hydrahive-core && break || true; done
 
     if systemctl is-active --quiet hydrahive-core; then
         success "hydrahive-core läuft"
