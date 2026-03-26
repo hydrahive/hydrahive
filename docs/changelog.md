@@ -4,6 +4,16 @@
 
 ### Added
 
+- **Admin-Tools für persönliche Agenten**
+  - `create_agent`, `delete_agent`, `create_project`, `delete_project` als Tool-Registry-Tools
+  - Automatisch im persönlichen Agenten jedes Admins verfügbar (per `upgrade_personal_agent_data`)
+  - Permission `admin.manage` in elevated + root Execution-Mode aller Admin-Personal-Agenten
+  - Sicherheits-Gate in `execute()`: persönliche Agenten prüfen ob Owner Admin ist
+  - Andere Agenten: per Admin manuell freigebbar über die Tool-Auswahl in der Konsole
+  - `create_project` führt vollständiges Provisioning durch (Linux-User, Samba, Matrix, Gitea)
+  - `delete_project` stoppt laufende Agenten und entfernt Samba-Share vor dem Umbenennen
+  - **Konsole**: Admin-Tools in der Agenten-Toolauswahl **rot** markiert mit ⚠-Präfix (Danger-Kategorie)
+
 - **Samba-Zugangsdaten in der Projektkarte**
   - Projektkarte zeigt Samba-Benutzername + Passwort (versteckt, per Auge-Icon aufdeckbar)
   - Reset-Button setzt sofort ein neues Zufallspasswort und zeigt es an

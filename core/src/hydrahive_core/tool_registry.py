@@ -26,6 +26,16 @@ _internal_secret: str = ""
 # Wird von main.py im Lifespan gesetzt; None = Rate-Limiting deaktiviert
 _rate_limiter: Any = None
 
+# Admin-Tool-Globals — gesetzt von main.py im Lifespan
+_discovery: Any = None
+_projects_registry: Any = None
+_get_provisioner: Any = None
+_load_users_fn: Any = None
+_audit_log_fn: Any = None
+_admin_agents_dir: str = "/agents"
+_admin_projects_dir: str = "/projects"
+_admin_runtime: Any = None
+
 
 # ============================================================= Path Safety (#54)
 
@@ -3238,6 +3248,457 @@ registry.register(DiscordDeleteMessageTool())
 registry.register(DiscordPinMessageTool())
 
 
+# ============================================================= Admin Tools (Danger)
+
+def _verify_admin_permission(calling_agent_id: str) -> None:
+    """
+    Sicherheits-Gate für Admin-Tools.
+    Personal-Agenten (personal_{username}): prüft ob Owner Admin ist.
+    Andere Agenten: vertraut dem permissions_required-Filter in tools_for_agent().
+    """
+    if _load_users_fn is None:
+        raise PermissionError("Admin-Tools nicht konfiguriert (kein User-Store gesetzt)")
+    if calling_agent_id.startswith("personal_"):
+        username = calling_agent_id[len("personal_"):]
+        users = _load_users_fn()
+        if users.get(username, {}).get("role") != "admin":
+            raise PermissionError(f"User '{username}' hat keine Admin-Berechtigung für dieses Tool")
+
+
+class CreateAgentTool(BaseTool):
+    """Legt einen neuen Agenten an (Verzeichnis, agent.yaml, soul.md)."""
+
+    @property
+    def id(self) -> str:
+        return "create_agent"
+
+    @property
+    def name(self) -> str:
+        return "Create Agent"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Legt einen neuen Agenten an. "
+            "Erstellt Verzeichnis, agent.yaml und soul.md. "
+            "Agent-ID: nur Kleinbuchstaben, Ziffern, _ und - erlaubt."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["admin.manage"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Eindeutige Agent-ID (a-z, 0-9, _, -)",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["boss", "specialist", "worker"],
+                    "description": "Agent-Typ",
+                },
+                "identity": {
+                    "type": "string",
+                    "description": "Anzeigename / Persönlichkeit des Agenten",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "LLM-Modell, z.B. claude-haiku-4-5-20251001",
+                },
+                "soul": {
+                    "type": "string",
+                    "description": "System-Prompt / Charakter (Markdown), optional",
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Liste der Tool-IDs für diesen Agenten",
+                },
+            },
+            "required": ["id", "type", "identity", "model"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        import re as _re
+        import yaml as _yaml
+
+        _verify_admin_permission(agent_id)
+
+        new_id = kwargs.get("id", "").strip()
+        agent_type = kwargs.get("type", "worker")
+        identity = kwargs.get("identity", new_id)
+        model = kwargs.get("model", "claude-haiku-4-5-20251001")
+        soul_text = kwargs.get("soul", "")
+        tools = list(kwargs.get("tools") or [])
+
+        if not _re.match(r"^[a-z0-9_-]+$", new_id):
+            return {"error": "Agent-ID darf nur a-z, 0-9, _ und - enthalten"}
+        if agent_type not in {"boss", "specialist", "worker"}:
+            return {"error": f"Ungültiger Typ: {agent_type}"}
+        if _discovery and _discovery.get(new_id):
+            return {"error": f"Agent '{new_id}' existiert bereits"}
+
+        agent_dir = Path(_admin_agents_dir) / new_id
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        (agent_dir / "skills").mkdir(exist_ok=True)
+        (agent_dir / "memory").mkdir(exist_ok=True)
+
+        agent_data = {
+            "id": new_id,
+            "type": agent_type,
+            "identity": identity,
+            "llm": {"model": model, "temperature": 0.7, "max_tokens": 4096, "fallback_models": []},
+            "tools": tools,
+            "allowed_agents": [],
+            "mcp_servers": [],
+            "heartbeat": {"interval": "30s", "timeout": "90s", "on_failure": "restart"},
+        }
+        if soul_text:
+            agent_data["soul"] = "./soul.md"
+
+        (agent_dir / "agent.yaml").write_text(
+            _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+        (agent_dir / "soul.md").write_text(
+            soul_text or f"# {identity}\n\nDu bist {identity}, ein KI-Agent.\n",
+            encoding="utf-8",
+        )
+
+        if _audit_log_fn:
+            _audit_log_fn("agent.create", target=new_id, details={"type": agent_type, "model": model, "by_agent": agent_id})
+
+        if _discovery:
+            try:
+                import asyncio as _asyncio
+                await _asyncio.sleep(0.2)
+                from .agent_config import load_agent_config as _lac
+                cfg = _lac(agent_dir)
+                if cfg:
+                    with _discovery._lock:
+                        _discovery._agents[cfg.id] = cfg
+            except Exception as _e:
+                logger.warning("Discovery-Update nach create_agent fehlgeschlagen: %s", _e)
+
+        logger.info("create_agent tool: %s (%s) angelegt von %s", new_id, agent_type, agent_id)
+        return {"created": True, "agent_id": new_id, "agent_dir": str(agent_dir)}
+
+
+class DeleteAgentTool(BaseTool):
+    """Deaktiviert einen Agenten (umbenennen in _{id}_disabled)."""
+
+    @property
+    def id(self) -> str:
+        return "delete_agent"
+
+    @property
+    def name(self) -> str:
+        return "Delete Agent"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Deaktiviert einen Agenten durch Umbenennen des Verzeichnisses. "
+            "Kein Datenverlust — Verzeichnis bleibt als _{id}_disabled erhalten."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["admin.manage"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID des zu deaktivierenden Agenten",
+                },
+            },
+            "required": ["agent_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        _verify_admin_permission(agent_id)
+
+        target_id = kwargs.get("agent_id", "").strip()
+        if not target_id:
+            return {"error": "agent_id fehlt"}
+        if target_id == agent_id:
+            return {"error": "Du kannst dich nicht selbst deaktivieren"}
+
+        agent_dir = Path(_admin_agents_dir) / target_id
+        if not agent_dir.exists():
+            return {"error": f"Agent '{target_id}' nicht gefunden"}
+
+        disabled_dir = Path(_admin_agents_dir) / f"_{target_id}_disabled"
+        agent_dir.rename(disabled_dir)
+
+        if _audit_log_fn:
+            _audit_log_fn("agent.delete", target=target_id, details={"by_agent": agent_id})
+
+        logger.info("delete_agent tool: %s deaktiviert von %s", target_id, agent_id)
+        return {"disabled": True, "agent_id": target_id, "moved_to": str(disabled_dir)}
+
+
+class CreateProjectTool(BaseTool):
+    """Legt ein neues Projekt an inkl. Provisioning (Linux-User, Samba, Matrix)."""
+
+    @property
+    def id(self) -> str:
+        return "create_project"
+
+    @property
+    def name(self) -> str:
+        return "Create Project"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Legt ein neues Projekt an und führt das vollständige Provisioning durch: "
+            "Linux-User, Verzeichnisse, Samba-Share, Matrix-Room, Gitea-Repo. "
+            "Projekt-ID: nur Kleinbuchstaben, Ziffern, _ und - erlaubt."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["admin.manage"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Eindeutige Projekt-ID (a-z, 0-9, _, -)",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Anzeigename des Projekts",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Kurze Projektbeschreibung",
+                },
+                "boss": {
+                    "type": "string",
+                    "description": "ID des Boss-Agenten für dieses Projekt",
+                },
+                "workers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Liste weiterer Agenten-IDs (optional)",
+                },
+                "samba": {
+                    "type": "boolean",
+                    "description": "Samba-Share anlegen (Standard: true)",
+                },
+            },
+            "required": ["id", "name", "boss"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        import re as _re
+        import yaml as _yaml
+
+        _verify_admin_permission(agent_id)
+
+        new_id = kwargs.get("id", "").strip()
+        name = kwargs.get("name", new_id)
+        description = kwargs.get("description", "")
+        boss = kwargs.get("boss", "").strip()
+        workers = list(kwargs.get("workers") or [])
+        samba = kwargs.get("samba", True)
+
+        if not _re.match(r"^[a-z0-9_-]+$", new_id):
+            return {"error": "Projekt-ID darf nur a-z, 0-9, _ und - enthalten"}
+        if not boss:
+            return {"error": "boss-Agent fehlt"}
+        if _projects_registry and _projects_registry.get(new_id):
+            return {"error": f"Projekt '{new_id}' existiert bereits"}
+        if _discovery and not _discovery.get(boss):
+            return {"error": f"Boss-Agent '{boss}' nicht in Discovery gefunden"}
+
+        project_dir = Path(_admin_projects_dir) / new_id
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        project_data = {
+            "id": new_id,
+            "version": "1.0.0",
+            "identity": {"name": name, "description": description},
+            "agents": {"boss": boss, "workers": workers},
+            "matrix": {"room": ""},
+            "filesystem": {"path": f"/projects/{new_id}", "samba": samba, "nfs": False},
+            "system": {"user": f"proj_{new_id}", "group": f"proj_{new_id}"},
+            "chat": {"show_swarm": False},
+        }
+        (project_dir / "project.yaml").write_text(
+            _yaml.dump(project_data, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+
+        if _audit_log_fn:
+            _audit_log_fn("project.create", target=new_id, project_id=new_id, details={"boss": boss, "by_agent": agent_id})
+
+        import asyncio as _asyncio
+        await _asyncio.sleep(0.3)
+
+        cfg = None
+        if _projects_registry:
+            cfg = _projects_registry.get(new_id) or _projects_registry.register(project_dir)
+        if cfg is None:
+            return {"error": "Projekt konnte nach Anlage nicht geladen werden", "project_id": new_id}
+
+        provisioner = _get_provisioner() if _get_provisioner else None
+        if provisioner is None:
+            logger.warning("create_project tool: Provisioner nicht verfügbar für %s", new_id)
+            return {"warning": "Provisioner nicht verfügbar — Projekt angelegt aber nicht provisioniert", "project_id": new_id}
+
+        result = await provisioner.provision(cfg)
+        if _audit_log_fn:
+            _audit_log_fn("project.provision", target=new_id, project_id=new_id)
+
+        if result.matrix_room and not cfg.matrix.room:
+            try:
+                from .router_project_lifecycle import update_project_matrix_room as _upmr
+                _upmr(_admin_projects_dir, new_id, result.matrix_room, logger=logger)
+            except Exception as _e:
+                logger.warning("Matrix-Room konnte nicht gespeichert werden: %s", _e)
+
+        gitea_repo_url = ""
+        gitea_error = ""
+        try:
+            from .gitea import get_gitea_client
+            gitea = get_gitea_client()
+            repo = await gitea.create_repo(new_id, description=description or "")
+            gitea_repo_url = repo.get("html_url", "")
+            webhook_url = f"http://127.0.0.1:8765/webhooks/gitea/{new_id}"
+            await gitea.create_webhook(new_id, webhook_url)
+        except Exception as _e:
+            gitea_error = str(_e)
+            logger.warning("Gitea-Repo für '%s' fehlgeschlagen: %s", new_id, _e)
+
+        logger.info("create_project tool: %s angelegt von %s", new_id, agent_id)
+        return {
+            "created": True,
+            "project_id": new_id,
+            "linux_user": result.linux_user,
+            "files_dir": result.files_dir,
+            "samba_share": result.samba_share,
+            "matrix_room": result.matrix_room,
+            "warnings": result.warnings,
+            "ok": result.ok,
+            "gitea_repo": gitea_repo_url,
+            "gitea_error": gitea_error,
+        }
+
+
+class DeleteProjectTool(BaseTool):
+    """Löscht ein Projekt (stoppt Agenten, entfernt Samba, verschiebt Verzeichnis)."""
+
+    @property
+    def id(self) -> str:
+        return "delete_project"
+
+    @property
+    def name(self) -> str:
+        return "Delete Project"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Löscht ein Projekt: stoppt laufende Agenten, entfernt Samba-Share, "
+            "verschiebt das Projektverzeichnis (kein Datenverlust, nur umbenannt). "
+            "Muss mit confirm=true aufgerufen werden."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["admin.manage"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "ID des zu löschenden Projekts",
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Muss true sein um den Löschvorgang zu bestätigen",
+                },
+            },
+            "required": ["project_id", "confirm"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        import time as _time
+
+        _verify_admin_permission(agent_id)
+
+        target_id = kwargs.get("project_id", "").strip()
+        confirm = kwargs.get("confirm", False)
+
+        if not target_id:
+            return {"error": "project_id fehlt"}
+        if not confirm:
+            return {"error": "confirm muss true sein um das Projekt zu löschen"}
+
+        cfg = _projects_registry.get(target_id) if _projects_registry else None
+        if not cfg:
+            return {"error": f"Projekt '{target_id}' nicht gefunden"}
+
+        proj_dir = Path(_admin_projects_dir) / target_id
+        if not proj_dir.exists():
+            return {"error": "Projektverzeichnis nicht gefunden"}
+
+        stopped_agents = []
+        if _admin_runtime and cfg:
+            boss_id = cfg.agents.boss
+            handle = _admin_runtime.get_handle(boss_id)
+            if handle:
+                await _admin_runtime.stop_agent(boss_id)
+                stopped_agents.append(boss_id)
+
+        smb_conf = Path("/etc/samba/smb.conf")
+        if smb_conf.exists():
+            try:
+                import re as _re
+                import subprocess as _sub
+                smb_content = smb_conf.read_text(encoding="utf-8")
+                smb_content = _re.sub(rf"\[{_re.escape(target_id)}\][^\[]*", "", smb_content, flags=_re.DOTALL)
+                smb_conf.write_text(smb_content, encoding="utf-8")
+                _sub.run(["systemctl", "reload", "smbd"], check=False, timeout=5)
+            except Exception as _e:
+                logger.warning("Samba-Share Entfernung fehlgeschlagen: %s", _e)
+
+        timestamp = int(_time.time())
+        deleted_dir = Path(_admin_projects_dir) / f"_deleted_{target_id}_{timestamp}"
+        proj_dir.rename(deleted_dir)
+
+        if _audit_log_fn:
+            _audit_log_fn("project.delete", target=target_id, project_id=target_id, details={"by_agent": agent_id})
+
+        logger.info("delete_project tool: %s gelöscht von %s", target_id, agent_id)
+        return {
+            "deleted": True,
+            "project_id": target_id,
+            "moved_to": str(deleted_dir),
+            "stopped_agents": stopped_agents,
+        }
+
+
+# ============================================================= Meta-Tools
+
 class RequestToolsTool(BaseTool):
     """Meta-Tool: Lädt Tool-Kategorien on-demand nach."""
 
@@ -3284,4 +3745,8 @@ class RequestToolsTool(BaseTool):
         return {"ok": True, "categories": categories}
 
 
+registry.register(CreateAgentTool())
+registry.register(DeleteAgentTool())
+registry.register(CreateProjectTool())
+registry.register(DeleteProjectTool())
 registry.register(RequestToolsTool())

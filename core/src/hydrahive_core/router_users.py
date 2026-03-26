@@ -9,7 +9,56 @@ from pydantic import BaseModel, Field
 from .execution_mode_policy import resolve_request_execution_mode
 
 
-def default_personal_agent_execution_modes() -> dict:
+ADMIN_TOOLS = ["create_agent", "delete_agent", "create_project", "delete_project"]
+
+
+def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
+    elevated_perms = [
+        "filesystem.read",
+        "filesystem.write",
+        "system.read",
+        "system.write",
+        "memory.read",
+        "memory.write",
+        "handoff.read",
+        "handoff.write",
+        "agents.ask",
+        "agents.delegate",
+        "git.read",
+        "git.issue",
+        "git.write",
+        "workstation.read",
+        "workstation.write",
+        "workstation.shell",
+        "discord",
+        "mail",
+    ]
+    root_perms = [
+        "filesystem.read",
+        "filesystem.write",
+        "system.read",
+        "system.write",
+        "memory.read",
+        "memory.write",
+        "handoff.read",
+        "handoff.write",
+        "agents.ask",
+        "agents.delegate",
+        "git.read",
+        "git.issue",
+        "git.write",
+        "git.push",
+        "git.pr",
+        "shell.exec",
+        "workstation.read",
+        "workstation.write",
+        "workstation.shell",
+        "discord",
+        "mail",
+    ]
+    if is_admin:
+        elevated_perms.append("admin.manage")
+        root_perms.append("admin.manage")
     return {
         "default": "elevated",
         "safe": {
@@ -29,59 +78,14 @@ def default_personal_agent_execution_modes() -> dict:
                 "mail",
             ],
         },
-        "elevated": {
-            "permissions": [
-                "filesystem.read",
-                "filesystem.write",
-                "system.read",
-                "system.write",
-                "memory.read",
-                "memory.write",
-                "handoff.read",
-                "handoff.write",
-                "agents.ask",
-                "agents.delegate",
-                "git.read",
-                "git.issue",
-                "git.write",
-                "workstation.read",
-                "workstation.write",
-                "workstation.shell",
-                "discord",
-                "mail",
-            ],
-        },
-        "root": {
-            "permissions": [
-                "filesystem.read",
-                "filesystem.write",
-                "system.read",
-                "system.write",
-                "memory.read",
-                "memory.write",
-                "handoff.read",
-                "handoff.write",
-                "agents.ask",
-                "agents.delegate",
-                "git.read",
-                "git.issue",
-                "git.write",
-                "git.push",
-                "git.pr",
-                "shell.exec",
-                "workstation.read",
-                "workstation.write",
-                "workstation.shell",
-                "discord",
-                "mail",
-            ],
-        },
+        "elevated": {"permissions": elevated_perms},
+        "root": {"permissions": root_perms},
     }
 
 
-def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None) -> tuple[dict, bool]:
+def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None, *, is_admin: bool = False) -> tuple[dict, bool]:
     changed = False
-    defaults = default_personal_agent_execution_modes()
+    defaults = default_personal_agent_execution_modes(is_admin=is_admin)
     execution_modes = agent_data.setdefault("execution_modes", {})
     if execution_modes.get("default") != defaults["default"]:
         execution_modes["default"] = defaults["default"]
@@ -105,6 +109,14 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None)
 
     if agent_dir is not None and (agent_dir / "mail.json").exists():
         for tool_id in ("send_mail", "receive_mail"):
+            if tool_id not in tools:
+                tools.append(tool_id)
+                agent_data["tools"] = tools
+                changed = True
+
+    # Admin-Tools automatisch für Admin-Personal-Agenten
+    if is_admin:
+        for tool_id in ADMIN_TOOLS:
             if tool_id not in tools:
                 tools.append(tool_id)
                 agent_data["tools"] = tools

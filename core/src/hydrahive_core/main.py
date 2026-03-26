@@ -181,6 +181,14 @@ async def lifespan(app: FastAPI):
     from . import tool_registry as _tr
     _tr._internal_secret = _INTERNAL_SECRET
     _tr._rate_limiter = rate_limiter
+    _tr._discovery = discovery
+    _tr._projects_registry = projects
+    _tr._get_provisioner = lambda: provisioner
+    _tr._load_users_fn = _load_users
+    _tr._audit_log_fn = audit_log
+    _tr._admin_agents_dir = AGENTS_DIR
+    _tr._admin_projects_dir = PROJECTS_DIR
+    _tr._admin_runtime = runtime
     logger.info("Internal-Secret geladen")
 
     # Audit-Log-Pfad vorbereiten
@@ -941,6 +949,9 @@ def _ensure_personal_agent(username: str):
     """Persönlichen Agenten laden oder lazy anlegen."""
     import yaml as _yaml
 
+    users = _load_users()
+    is_admin = users.get(username, {}).get("role") == "admin"
+
     agent_id = f"personal_{username}"
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
@@ -949,7 +960,7 @@ def _ensure_personal_agent(username: str):
     if agent_yaml.exists():
         try:
             agent_data = _yaml.safe_load(agent_yaml.read_text(encoding="utf-8")) or {}
-            agent_data, changed = upgrade_personal_agent_data(agent_data, agent_dir)
+            agent_data, changed = upgrade_personal_agent_data(agent_data, agent_dir, is_admin=is_admin)
             if changed:
                 agent_yaml.write_text(
                     _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
