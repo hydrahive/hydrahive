@@ -351,7 +351,9 @@ def _load_or_create_jwt_secret(secret_file: str = "/etc/hydrahive/jwt_secret") -
     """JWT-Secret aus Datei laden oder einmalig generieren und speichern."""
     path = Path(secret_file)
     if path.exists():
-        return path.read_text().strip()
+        val = path.read_text().strip()
+        if val:
+            return val
     secret = secrets.token_hex(32)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(secret)
