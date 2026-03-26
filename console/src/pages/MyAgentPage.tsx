@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2 } from "lucide-react";
+import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
-interface Message { id: string; role: "user"|"assistant"|"system"; content: string; tokenUsage?: { input: number; output: number }; }
+interface Message { id: string; role: "user"|"assistant"|"system"; content: string; tokenUsage?: { input: number; output: number; rounds?: number }; }
 
 interface AgentCfg {
   identity:        string;
@@ -448,8 +448,11 @@ export function MyAgentPage() {
                           </div>
                           {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
                             <div className="flex gap-1 px-1 pt-1">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort (inkl. aller Tool-Runden)">
                                 ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                                {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
+                                  <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
+                                )}
                               </span>
                             </div>
                           )}
@@ -1985,6 +1988,7 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
   const [saving,     setSaving]     = useState(false);
   const [msg,        setMsg]        = useState("");
   const [editIdx,    setEditIdx]    = useState<number | null>(null);
+  const [editTask,   setEditTask]   = useState<HbTask | null>(null);
   const [newTask,    setNewTask]    = useState<HbTask>({ id: "", message: "", interval: 1800, schedule: null, active_hours: null });
 
   async function save() {
@@ -2009,6 +2013,23 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 
   function removeTask(idx: number) {
     setTasks(t => t.filter((_, i) => i !== idx));
+  }
+
+  function startEdit(idx: number) {
+    setEditIdx(idx);
+    setEditTask({ ...tasks[idx] });
+  }
+
+  function saveEdit() {
+    if (!editTask || editIdx === null) return;
+    setTasks(t => t.map((item, i) => i === editIdx ? { ...editTask } : item));
+    setEditIdx(null);
+    setEditTask(null);
+  }
+
+  function cancelEdit() {
+    setEditIdx(null);
+    setEditTask(null);
   }
 
   function applyPreset(id: string, message: string) {
@@ -2057,21 +2078,70 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
         {/* Bestehende Tasks */}
         {tasks.length > 0 && (
           <div className="space-y-2">
-            {tasks.map((t, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-xl border bg-secondary/30 p-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <span className="font-mono font-medium text-foreground">{t.id}</span>
-                    {t.interval && <span>alle {t.interval >= 3600 ? `${t.interval/3600}h` : `${t.interval/60}min`}</span>}
-                    {t.schedule && <span>Cron: {t.schedule}</span>}
-                    {t.active_hours && <span>{t.active_hours}</span>}
+            {tasks.map((task, i) => (
+              editIdx === i && editTask ? (
+                <div key={i} className="rounded-xl border bg-secondary/30 p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskId")}</label>
+                      <input value={editTask.id} onChange={e => setEditTask(et => et && ({ ...et, id: e.target.value }))}
+                        className={inputCls} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskInterval")}</label>
+                      <input type="number" value={editTask.interval ?? ""} onChange={e => setEditTask(et => et && ({ ...et, interval: parseInt(e.target.value) || null, schedule: null }))}
+                        className={inputCls} />
+                    </div>
                   </div>
-                  <p className="text-sm truncate">{t.message}</p>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskMessage")}</label>
+                    <textarea value={editTask.message} onChange={e => setEditTask(et => et && ({ ...et, message: e.target.value }))}
+                      rows={4} className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskActiveHours")}</label>
+                      <input value={editTask.active_hours ?? ""} onChange={e => setEditTask(et => et && ({ ...et, active_hours: e.target.value || null }))}
+                        placeholder="07:00-22:00" className={inputCls} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">{t("myAgent.hbTaskCron")}</label>
+                      <input value={editTask.schedule ?? ""} onChange={e => setEditTask(et => et && ({ ...et, schedule: e.target.value || null, interval: e.target.value ? null : et.interval }))}
+                        placeholder="0 8 * * *" className={inputCls} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={saveEdit}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                      <Save className="h-3 w-3" />Speichern
+                    </button>
+                    <button type="button" onClick={cancelEdit}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md border hover:bg-accent transition-colors">
+                      <X className="h-3 w-3" />Abbrechen
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => removeTask(i)} className="text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+              ) : (
+                <div key={i} className="flex items-start gap-3 rounded-xl border bg-secondary/30 p-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                      <span className="font-mono font-medium text-foreground">{task.id}</span>
+                      {task.interval && <span>alle {task.interval >= 3600 ? `${task.interval/3600}h` : `${task.interval/60}min`}</span>}
+                      {task.schedule && <span>Cron: {task.schedule}</span>}
+                      {task.active_hours && <span>{task.active_hours}</span>}
+                    </div>
+                    <p className="text-sm truncate">{task.message}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => startEdit(i)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => removeTask(i)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
             ))}
           </div>
         )}

@@ -11,7 +11,7 @@ interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   workers?: string[];
-  tokenUsage?: { input: number; output: number };
+  tokenUsage?: { input: number; output: number; rounds?: number };
 }
 
 let msgCounter = 0;
@@ -459,8 +459,11 @@ export function ChatPage() {
                       )}
                       {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
                         <div className="flex gap-1 px-1">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort (inkl. aller Tool-Runden)">
                             ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                            {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
+                              <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
+                            )}
                           </span>
                         </div>
                       )}

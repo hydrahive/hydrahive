@@ -445,7 +445,7 @@ class Orchestrator:
             return
 
         # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
-        _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
+        _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0}
 
         # Session + System-Prompt aufbauen
         user_msg_saved = False
@@ -630,6 +630,7 @@ class Orchestrator:
                                     streamed_any   = True
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 final_msg = await stream.get_final_message()
+                            _usage["rounds"] += 1
                             if hasattr(final_msg, "usage"):
                                 _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)
                                 _usage["output"]      += getattr(final_msg.usage, "output_tokens", 0)
@@ -668,6 +669,7 @@ class Orchestrator:
                                         streamed_any = True
                                         yield f"data: {_json.dumps({'text': text})}\n\n"
                                     _fm = await stream.get_final_message()
+                                _usage["rounds"] += 1
                                 if hasattr(_fm, "usage"):
                                     _usage["input"]       += getattr(_fm.usage, "input_tokens", 0)
                                     _usage["output"]      += getattr(_fm.usage, "output_tokens", 0)
@@ -724,6 +726,7 @@ class Orchestrator:
                                     streamed_any   = True
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 _fm2 = await stream.get_final_message()
+                            _usage["rounds"] += 1
                             if hasattr(_fm2, "usage"):
                                 _usage["input"]       += getattr(_fm2.usage, "input_tokens", 0)
                                 _usage["output"]      += getattr(_fm2.usage, "output_tokens", 0)
