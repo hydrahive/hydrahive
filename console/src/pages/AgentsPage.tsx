@@ -5,24 +5,7 @@ import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
-
-/** Visuelle Agent-Kategorie aus ID + Typ ableiten */
-function agentCategory(id: string, type: string): "user" | "boss" | "specialist" | "system" | "worker" {
-  if (type === "boss") return "boss";
-  if (type === "worker") return "worker";
-  if (id.startsWith("personal_")) return "user";
-  if (id.endsWith("_specialist")) return "specialist";
-  if (id === "monitor_agent" || id === "notify_agent" || id.includes("support")) return "system";
-  return "specialist";
-}
-
-const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
-  user:       { label: "user",       cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30" },
-  boss:       { label: "boss",       cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30" },
-  specialist: { label: "specialist", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" },
-  system:     { label: "system",     cls: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30" },
-  worker:     { label: "worker",     cls: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30" },
-};
+import { agentCategory, AGENT_COLORS } from "@/lib/utils";
 
 interface AgentRuntime {
   status: string;
@@ -574,7 +557,11 @@ export function AgentsPage() {
               return (
                 <div key={id}>
                   {/* Kompakte Zeile */}
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+                  {(() => {
+                    const cat = agentCategory(id, agent.config.type);
+                    const colors = AGENT_COLORS[cat];
+                    return (
+                  <div className={`flex items-center gap-3 px-4 py-3 transition-colors hover:brightness-95 dark:hover:brightness-110 ${colors.bg} border-l-2 ${colors.border}`}>
                     {/* Status-Dot */}
                     <Circle className={`h-2.5 w-2.5 flex-shrink-0 fill-current ${color}`} />
 
@@ -583,7 +570,7 @@ export function AgentsPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-sm truncate">{agent.config.identity}</span>
                         <span className="rounded-full bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground font-mono">{id}</span>
-                        {(() => { const cat = agentCategory(id, agent.config.type); const b = CATEGORY_BADGE[cat]; return <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${b.cls}`}>{b.label}</span>; })()}
+                        <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${colors.badge}`}>{colors.label}</span>
                         {taskCount > 0 && <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-xs flex items-center gap-1"><Timer className="h-2.5 w-2.5" />{taskCount}</span>}
                         {rt?.status === "error" && <span className="rounded-full bg-destructive/10 text-destructive px-1.5 py-0.5 text-xs">error</span>}
                       </div>
@@ -628,6 +615,8 @@ export function AgentsPage() {
                       )}
                     </div>
                   </div>
+                    );
+                  })()}
 
                   {/* Aufklappbare Panels */}
                   {skillsAgent === id && <div className="border-t"><SkillsPanel agentId={id} /></div>}

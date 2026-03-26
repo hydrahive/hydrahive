@@ -5,7 +5,7 @@ import {
   Activity, Square, RefreshCw, Zap, AlertTriangle,
   CheckCircle2, XCircle, Loader2, X, Terminal,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, agentCategory, AGENT_COLORS } from "@/lib/utils";
 
 const POLL_MS = 3000;
 
@@ -82,12 +82,14 @@ function AgentCard({
       onClick={() => onSelect(agent)}
       className={cn(
         "rounded-xl border p-4 flex flex-col gap-3 shadow-sm cursor-pointer transition-all",
-        "bg-white dark:bg-gray-800 hover:shadow-md hover:-translate-y-px",
+        "hover:shadow-md hover:-translate-y-px",
+        // Kategorie-Farbe als Basis
+        !alert && AGENT_COLORS[agentCategory(agent.id, agent.type ?? undefined)].bg,
+        !alert && AGENT_COLORS[agentCategory(agent.id, agent.type ?? undefined)].border,
+        // Alerts überschreiben Kategorie-Farbe
         alert && agent.status === "error" && "border-red-400 bg-red-50/30 dark:bg-red-900/10",
         alert && hung                     && "border-orange-400 bg-orange-50/30 dark:bg-orange-900/10",
-        !alert && agent.status === "running" && "border-green-300 dark:border-green-700",
-        !alert && agent.status === "stopped" && "border-gray-300 dark:border-gray-600 opacity-60",
-        !alert && !["running","stopped"].includes(agent.status) && "border-gray-200 dark:border-gray-700",
+        agent.status === "stopped" && "opacity-60",
       )}
     >
       {/* Alert-Banner */}
@@ -114,9 +116,9 @@ function AgentCard({
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-            {agent.type}
-          </span>
+          {(() => { const c = AGENT_COLORS[agentCategory(agent.id, agent.type ?? undefined)]; return (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.badge}`}>{c.label}</span>
+          ); })()}
           <button
             onClick={handleStop}
             disabled={stopping || agent.status === "stopped"}
