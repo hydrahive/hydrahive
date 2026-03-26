@@ -85,6 +85,8 @@ fi
 # pyproject.toml wurde bereits kopiert — immer verwenden
 "${VENV_DIR}/bin/pip" install -q -e "${CORE_DIR}" \
     || error "pip install -e fehlgeschlagen — pruefe ${CORE_DIR}/pyproject.toml"
+"${VENV_DIR}/bin/pip" install -q pytest pytest-asyncio httpx \
+    || warn "pytest konnte nicht installiert werden — Unit-Tests nicht verfügbar"
 success "Python-Abhängigkeiten aus pyproject.toml installiert"
 
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${CORE_DIR}" "${VENV_DIR}"
