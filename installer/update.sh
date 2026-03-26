@@ -38,11 +38,12 @@ if [ -f "${GITEA_CONFIG}" ]; then
     GITEA_URL=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('url',''))" 2>/dev/null || echo "")
     GITEA_TOKEN=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('token',''))" 2>/dev/null || echo "")
     GITEA_ORG=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('org','hydrahive'))" 2>/dev/null || echo "hydrahive")
+    GITEA_REPO=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('repo', d.get('org','hydrahive')))" 2>/dev/null || echo "${GITEA_ORG}")
     if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
         # Interne URL umbauen: http://127.0.0.1:3001 → mit Token
-        CLONE_URL="${GITEA_URL}/hydrahive/hydrahive.git"
+        CLONE_URL="${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}.git"
         CLONE_URL="${CLONE_URL/http:\/\//http:\/\/${GITEA_ORG}:${GITEA_TOKEN}@}"
-        info "Klone von lokalem Gitea: ${GITEA_URL}/hydrahive/hydrahive"
+        info "Klone von lokalem Gitea: ${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}"
     fi
 fi
 
@@ -146,16 +147,35 @@ if systemctl is-enabled --quiet gitea 2>/dev/null; then
     fi
 fi
 
-# --- 9. A-MEM aktualisieren ---
-info "Aktualisiere A-MEM..."
-bash "${TMPDIR_BASE}/installer/amem/install_amem.sh" \
-    || error "A-MEM Update fehlgeschlagen"
-success "A-MEM aktualisiert"
+# --- 9. A-MEM aktualisieren (optional — Fehler sind nicht fatal) ---
+if [ -f "${TMPDIR_BASE}/installer/amem/install_amem.sh" ]; then
+    info "Aktualisiere A-MEM..."
+    bash "${TMPDIR_BASE}/installer/amem/install_amem.sh" \
+        && success "A-MEM aktualisiert" \
+        || warn "A-MEM Update fehlgeschlagen — wird übersprungen"
+fi
 
-# --- 10. Versions-Info + Status-Datei ---
+# --- 10. Versions-Info sammeln (VOR Self-Copy — Script darf sich nicht selbst überschreiben
+#         während bash noch von der Datei liest, sonst springt der Interpreter falsch) ---
 COMMIT=$(git -C "${TMPDIR_BASE}" rev-parse --short HEAD 2>/dev/null || echo "unbekannt")
 COMMIT_FULL=$(git -C "${TMPDIR_BASE}" rev-parse HEAD 2>/dev/null || echo "")
 COMMIT_MSG=$(git -C "${TMPDIR_BASE}" log -1 --pretty=format:'%s' 2>/dev/null || echo "")
+
+# --- 11. update.sh + Service-Datei selbst aktualisieren ---
+# WICHTIG: Läuft nach COMMIT-Zuweisung, damit der Self-Copy den laufenden Bash-Interpreter
+#           nicht mehr verwirrt (alle verbleibenden Zeilen sind dann nur noch echo/write).
+if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then
+    cp "${TMPDIR_BASE}/installer/update.sh" "${HYDRAHIVE_DIR}/update.sh"
+    chmod +x "${HYDRAHIVE_DIR}/update.sh"
+    info "update.sh aktualisiert"
+fi
+if [ -f "${TMPDIR_BASE}/installer/hydrahive-selfupdate.service" ]; then
+    cp "${TMPDIR_BASE}/installer/hydrahive-selfupdate.service" /etc/systemd/system/
+    systemctl daemon-reload
+    info "hydrahive-selfupdate.service aktualisiert"
+fi
+
+# --- 12. Status-Datei schreiben ---
 
 echo "{\"status\":\"ok\",\"finished_at\":\"$(date -Iseconds)\",\"commit\":\"${COMMIT}\",\"commit_full\":\"${COMMIT_FULL}\",\"message\":\"${COMMIT_MSG}\"}" \
     > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
