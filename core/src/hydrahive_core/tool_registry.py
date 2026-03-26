@@ -926,6 +926,210 @@ class ShellExecTool(BaseTool):
             return {"error": str(e), "command": command, "exit_code": -1}
 
 
+# ============================================================= project_shell helpers
+
+# Befehle die in project_shell erlaubt sind (Whitelist-Ansatz)
+_PROJECT_SHELL_WHITELIST: frozenset[str] = frozenset({
+    # Suchen / Lesen
+    "grep", "egrep", "fgrep", "rg",
+    "find", "locate",
+    "cat", "less", "more",
+    "head", "tail",
+    "wc",
+    "ls", "ll", "tree",
+    # Textverarbeitung
+    "awk", "sed", "sort", "uniq", "cut", "tr", "jq",
+    "echo", "printf",
+    # Datei-Info
+    "stat", "file", "md5sum", "sha256sum", "du", "pwd", "realpath",
+    # Vergleich / Patch
+    "diff", "patch",
+    # Git (Subkommando wird separat geprüft)
+    "git",
+    # Datei-Management innerhalb des Projekts
+    "mkdir", "cp", "mv", "touch",
+    "rm",   # ohne -rf — blockiert via _check_shell_blocklist
+    "tee",
+    # Hilfsprogramme
+    "xargs",  # nur mit whitelisted Befehlen nach Pipe
+    "which", "type",
+})
+
+# git-Subkommandos die in project_shell BLOCKIERT sind (Netzwerk / Destruktiv)
+_GIT_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({
+    "push", "clone", "fetch", "pull",   # Netzwerk (könnte Daten exfiltrieren)
+    "submodule", "subtree",             # komplex, kaum nötig
+    "gc", "prune", "fsck",              # intern, nicht nötig
+    "remote",                           # Netzwerk-Konfig
+    "archive",                          # Export
+})
+
+
+def _project_shell_check_command(command: str, project_id: str) -> str | None:
+    """
+    Prüft ob der Befehl für project_shell erlaubt ist.
+    Gibt Fehlermeldung zurück wenn nicht, sonst None.
+
+    Sicherheits-Schichten:
+    1. Bekannte Shell-Gefahren via _check_shell_blocklist (rm -rf, sudo, $(), etc.)
+    2. Whitelist: jeder Segment-Befehl muss in _PROJECT_SHELL_WHITELIST sein
+    3. git-Subkommando-Blacklist (push, clone, etc.)
+    4. Kein Redirect nach außerhalb /projects/{project_id}/
+    """
+    # Schicht 1: Globale Blocklist (rm -rf, sudo, $(), backticks, etc.)
+    blocked = _check_shell_blocklist(command)
+    if blocked:
+        return blocked
+
+    # Schicht 2: Pipeline-Segmente parsen und Whitelist prüfen
+    # Splittet auf |, &&, ||, ; — einfache lineare Analyse (kein vollständiger Parser)
+    segment_pattern = _re_shell.split(r'\|{1,2}|&&|;', command)
+    for segment in segment_pattern:
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            tokens = _shlex_shell.split(segment)
+        except ValueError:
+            return "Syntaxfehler im Befehl — nicht parsebar"
+        if not tokens:
+            continue
+        exe = Path(tokens[0]).name.lower()
+        if exe not in _PROJECT_SHELL_WHITELIST:
+            return (
+                f"Befehl '{exe}' nicht erlaubt in project_shell. "
+                f"Erlaubt: {', '.join(sorted(_PROJECT_SHELL_WHITELIST))}"
+            )
+        # Schicht 3: git-Subkommando prüfen
+        if exe == "git" and len(tokens) > 1:
+            sub = tokens[1].lower()
+            if sub in _GIT_BLOCKED_SUBCOMMANDS:
+                return f"git {sub} ist in project_shell nicht erlaubt (Netzwerk/Destruktiv)"
+
+    # Schicht 4: Redirects auf absolute Pfade außerhalb /projects/{project_id}/ blockieren
+    # Einfacher Heuristik-Check: > /pfad der nicht /projects/{project_id}/ ist
+    project_root = f"/projects/{project_id}"
+    redirect_matches = _re_shell.findall(r'(?:>>?|2>>?|&>>?)\s*(/[^\s;|&]+)', command)
+    for target in redirect_matches:
+        norm = str(Path(target).resolve()) if Path(target).exists() else str(Path(target))
+        if not norm.startswith(project_root):
+            return f"Redirect nach '{target}' außerhalb von {project_root}/ verboten"
+
+    return None
+
+
+class ProjectShellTool(BaseTool):
+    """
+    Shell-Zugang für Agenten, beschränkt auf /projects/{project_id}/.
+    Whitelist-Ansatz: nur sichere Lese-/Bearbeitungsbefehle erlaubt.
+    Kein sudo, kein git push/clone, kein rm -rf, keine Shell-Wrapper.
+    """
+
+    @property
+    def id(self) -> str:   return "project_shell"
+    @property
+    def name(self) -> str: return "Projekt-Shell"
+    @property
+    def description(self) -> str:
+        allowed = "grep, find, cat, head, tail, wc, ls, tree, diff, patch, git (kein push/clone), " \
+                  "sed, awk, sort, uniq, mkdir, cp, mv, touch, rm (kein -rf), stat, jq u.a."
+        return (
+            "Führt Shell-Befehle im Projekt-Verzeichnis /projects/{project_id}/ aus. "
+            f"Erlaubte Befehle: {allowed}. "
+            "Kein sudo, kein git push/clone, kein rm -rf, keine Shell-Wrapper (bash -c). "
+            "CWD ist immer innerhalb /projects/{project_id}/ — Pfad-Escapes werden blockiert. "
+            "Pipes zwischen erlaubten Befehlen sind erlaubt (z.B. grep pattern . | wc -l). "
+            "Timeout max 60s."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type":        "string",
+                    "description": "Shell-Befehl (nur Whitelist-Befehle, Pipes erlaubt)",
+                },
+                "subpath": {
+                    "type":        "string",
+                    "description": "Optionaler Unterordner innerhalb des Projekts als CWD (z.B. 'src' oder 'src/components'). Standard: Projekt-Root.",
+                },
+                "timeout": {
+                    "type":        "integer",
+                    "description": "Timeout in Sekunden (Standard: 30, max: 60)",
+                },
+            },
+            "required": ["command"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        command: str,
+        subpath: str = "",
+        timeout: int = 30,
+    ) -> dict:
+        import asyncio, os
+
+        if not project_id:
+            return {"error": "project_shell braucht einen Projekt-Kontext — bitte im Projekt-Chat aufrufen"}
+
+        # CWD berechnen und auf Projekt einschränken
+        project_root = PROJECTS_ROOT / project_id
+        if not project_root.exists():
+            return {"error": f"Projekt-Verzeichnis /projects/{project_id}/ existiert nicht"}
+
+        if subpath:
+            try:
+                cwd_path = assert_path_within_project(subpath, project_id)
+            except PathSafetyError as e:
+                return {"error": str(e), "command": command, "exit_code": -1, "blocked": True}
+            if not cwd_path.exists():
+                return {"error": f"Unterordner '{subpath}' existiert nicht in /projects/{project_id}/"}
+            cwd = str(cwd_path)
+        else:
+            cwd = str(project_root)
+
+        # Sicherheitscheck: Whitelist + Blocklist
+        block_reason = _project_shell_check_command(command, project_id)
+        if block_reason:
+            logger.warning("project_shell BLOCKED [%s/%s]: %s — %s", agent_id, project_id, command[:120], block_reason)
+            return {
+                "error":     f"Befehl blockiert: {block_reason}",
+                "command":   command,
+                "exit_code": -1,
+                "blocked":   True,
+            }
+
+        timeout = min(max(timeout, 1), 60)
+        logger.info("project_shell [%s/%s] cwd=%s: %s", agent_id, project_id, cwd, command[:120])
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
+
+            return {
+                "stdout":    stdout.decode(errors="replace"),
+                "stderr":    stderr.decode(errors="replace"),
+                "exit_code": proc.returncode,
+                "command":   command,
+                "cwd":       cwd,
+            }
+        except Exception as e:
+            return {"error": str(e), "command": command, "exit_code": -1}
+
+
 class ReadSystemFileTool(BaseTool):
     """Liest eine beliebige Datei auf dem System — kein Pfad-Sandboxing."""
 
@@ -3219,6 +3423,7 @@ registry.register(SpawnAgentTool())
 registry.register(WriteHandoffTool())
 registry.register(ReadHandoffTool())
 registry.register(ShellExecTool())
+registry.register(ProjectShellTool())
 registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())

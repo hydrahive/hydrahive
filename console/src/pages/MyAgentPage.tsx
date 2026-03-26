@@ -31,6 +31,7 @@ interface AgentInfo { agent_id: string; config: AgentCfg; }
 const ALL_TOOLS: { id: string; label: string }[] = [
   { id: "file_read",        label: "Datei lesen" },
   { id: "file_write",       label: "Datei schreiben" },
+  { id: "project_shell",    label: "⚠ Projekt-Shell (Whitelist)" },
   { id: "web_search",       label: "Web-Suche" },
   { id: "http_request",     label: "HTTP-Request" },
   { id: "shell_exec",       label: "Shell-Befehl (Server)" },
@@ -1173,7 +1174,7 @@ function SettingsPanel({
           <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
           <div className="grid grid-cols-2 gap-2">
             {ALL_TOOLS.map(t => {
-              const isDanger = ["create_agent","delete_agent","create_project","delete_project"].includes(t.id);
+              const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
               return (
                 <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
                   <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
