@@ -98,17 +98,37 @@ def _check(name: str, status: str, detail: str, hint: str = "") -> dict:
 async def _check_services() -> list[dict]:
     """Prüft systemd-Services."""
     results = []
-    services = [
-        (["hydrahive-core", "hydrahive-core"],                          "HydraHive Core"),
-        (["nginx"],                                                    "Nginx Reverse Proxy"),
-        (["gitea"],                                                    "Gitea"),
-        (["hydrahive-conduwuit", "hydrahive-conduwuit"],                 "Matrix (conduwuit)"),
-        (["hydrahive-whatsapp-bridge", "hydrahive-whatsapp-bridge"],     "WhatsApp Bridge"),
-        (["hydrahive-amem", "hydrahive-amem"],                           "A-MEM MCP"),
-        (["tailscaled"],                                               "Tailscale VPN"),
+    required = [
+        (["hydrahive-core"],         "HydraHive Core"),
+        (["nginx"],                  "Nginx Reverse Proxy"),
+        (["gitea"],                  "Gitea"),
+        (["hydrahive-conduwuit"],    "Matrix (conduwuit)"),
+        (["hydrahive-amem"],         "A-MEM MCP"),
     ]
-    for units, label in services:
-        # Ersten aktiven Service aus der Liste nehmen
+    optional = [
+        (["hydrahive-whatsapp-bridge"], "WhatsApp Bridge"),
+        (["tailscaled"],               "Tailscale VPN"),
+    ]
+    for units, label in required:
+        found_active = False
+        for unit in units:
+            try:
+                r = subprocess.run(
+                    ["systemctl", "is-active", unit],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if r.stdout.strip() == "active":
+                    results.append(_check(f"Service: {label}", "ok", f"aktiv ({unit})"))
+                    found_active = True
+                    break
+            except Exception:
+                continue
+        if not found_active:
+            results.append(_check(
+                f"Service: {label}", "error", "nicht aktiv",
+                f"sudo systemctl start {units[0]}",
+            ))
+    for units, label in optional:
         found_active = False
         for unit in units:
             try:
