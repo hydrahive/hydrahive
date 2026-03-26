@@ -137,7 +137,7 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
         <button
           onClick={save}
           disabled={saving || !hasInput}
-          className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none transition-colors"
         >
           {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
         </button>
@@ -150,8 +150,6 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
 }
 
 function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
-  const [ollamaUrl,    setOllamaUrl]    = useState("http://127.0.0.1:11434");
-  const [ollamaModel,  setOllamaModel]  = useState("mistral-nemo:12b");
   const [systemModel,  setSystemModel]  = useState("claude-haiku-4-5-20251001");
   const [saving,       setSaving]       = useState(false);
   const [error,        setError]        = useState("");
@@ -159,7 +157,6 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
   async function save() {
     setSaving(true); setError("");
     try {
-      await api.put("/llm/config/ollama", { ollama_url: ollamaUrl, default_model: ollamaModel });
       if (systemModel.trim()) {
         await api.setSystemDefaultModel(systemModel.trim());
       }
@@ -182,35 +179,24 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       </div>
 
       <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ollama (lokal)</p>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Ollama URL</label>
-          <input value={ollamaUrl} onChange={e => setOllamaUrl(e.target.value)}
-            placeholder="http://127.0.0.1:11434"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Standard Ollama-Modell</label>
-          <input value={ollamaModel} onChange={e => setOllamaModel(e.target.value)}
-            placeholder="mistral-nemo:12b"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          <p className="text-xs text-muted-foreground">Muss in Ollama bereits heruntergeladen sein (<code>ollama pull</code>)</p>
-        </div>
-
-        <div className="border-t pt-3 space-y-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">System-Agenten</p>
-          <label className="text-sm font-medium">Standard-Modell für System-Dienste</label>
+          <label className="text-sm font-medium">Standard-Modell</label>
           <input value={systemModel} onChange={e => setSystemModel(e.target.value)}
             placeholder="claude-haiku-4-5-20251001"
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          <p className="text-xs text-muted-foreground">Für Support-Agent und interne Dienste. Claude Haiku empfohlen, alternativ ein Ollama-Modell.</p>
+          <p className="text-xs text-muted-foreground">
+            Für System-Agenten und interne Dienste. Claude Haiku empfohlen — oder ein lokales Ollama-Modell (z.B. <code>ollama/mistral-nemo:12b</code>).
+          </p>
+        </div>
+        <div className="rounded-xl border border-muted bg-muted/20 p-3 text-xs text-muted-foreground">
+          Ollama-URL und Modell-Konfiguration unter <strong>Einstellungen → LLM</strong> nach dem Login.
         </div>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex gap-2">
-        <button onClick={save} disabled={saving || !ollamaUrl || !ollamaModel}
+        <button onClick={save} disabled={saving}
           className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
           {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
         </button>
