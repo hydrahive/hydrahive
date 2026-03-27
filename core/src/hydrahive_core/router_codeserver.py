@@ -50,17 +50,18 @@ def register_codeserver_routes(admin_router: APIRouter, *, require_admin) -> Non
             logger.debug("systemctl show hydrahive-codeserver: %s", e)
 
         # Versionslabel aus Binary
+        CS_BIN = Path("/opt/codeserver/bin/code-server")
         version = ""
         try:
             r2 = subprocess.run(
-                ["code-server", "--version"],
+                [str(CS_BIN), "--version"],
                 capture_output=True, text=True, timeout=5,
             )
             version = r2.stdout.strip().splitlines()[0] if r2.returncode == 0 else ""
         except Exception:
             pass
 
-        installed = _safe_exists(Path("/usr/bin/code-server")) or _safe_exists(Path("/usr/local/bin/code-server"))
+        installed = _safe_exists(CS_BIN)
 
         return {
             "installed":       installed,
