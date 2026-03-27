@@ -8,7 +8,7 @@ AGENTLINK_PORT="${AGENTLINK_PORT:-8010}"
 AGENTLINK_CONFIG="/etc/hydrahive/agentlink.json"
 AGENTLINK_DATA="/var/lib/hydrahive/agentlink"
 AGENTLINK_DB_PASS="${AGENTLINK_DB_PASS:-$(openssl rand -hex 16)}"
-AGENTLINK_REPO="https://github.com/hydrahive/agentlink.git"
+AGENTLINK_REPO="https://github.com/tilleulenspiegel/agentlink.git"
 HYDRAHIVE_USER="hydrahive"
 
 info "Installiere AgentLink (nativ)..."
@@ -49,11 +49,15 @@ success "Redis bereit"
 # ─── 3. AgentLink-Repo ───────────────────────────────────────────────────────
 if [ -d "${AGENTLINK_DIR}/.git" ]; then
     info "AgentLink-Repo aktualisieren..."
-    git -C "${AGENTLINK_DIR}" pull -q
+    git -C "${AGENTLINK_DIR}" pull -q || warn "AgentLink-Update fehlgeschlagen — fahre mit vorhandenem Stand fort"
     success "AgentLink-Repo aktuell"
 else
     info "Klone AgentLink-Repo..."
-    git clone -q "${AGENTLINK_REPO}" "${AGENTLINK_DIR}"
+    if ! git clone -q "${AGENTLINK_REPO}" "${AGENTLINK_DIR}" 2>/dev/null; then
+        warn "AgentLink-Repo nicht erreichbar — AgentLink wird übersprungen"
+        warn "AgentLink kann später manuell installiert werden: git clone ${AGENTLINK_REPO} ${AGENTLINK_DIR}"
+        return 0
+    fi
     success "AgentLink geklont"
 fi
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DIR}"
