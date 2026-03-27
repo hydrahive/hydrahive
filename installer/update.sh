@@ -119,6 +119,14 @@ main() {
     chown -R www-data:www-data "${HYDRAHIVE_DIR}/console/"
     success "Console deployed"
 
+    # --- 5b. sudoers: !requiretty sicherstellen (für In-Console-Installation) ---
+    if [ -f /etc/sudoers.d/hydrahive ]; then
+        if ! grep -q "!requiretty" /etc/sudoers.d/hydrahive; then
+            echo "Defaults:hydrahive !requiretty" >> /etc/sudoers.d/hydrahive
+            info "sudoers: !requiretty für hydrahive ergänzt"
+        fi
+    fi
+
     # --- 6. Service neustarten ---
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
