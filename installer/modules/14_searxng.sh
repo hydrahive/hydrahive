@@ -2,6 +2,18 @@
 # HydraHive Installer - Modul 14: SearXNG (nativ, kein Docker)
 # Installiert SearXNG als systemd-Service auf Port 8888 (nur localhost).
 # Idempotent: erneuter Aufruf aktualisiert Code + Konfiguration.
+# Kann standalone ausgeführt werden: sudo bash 14_searxng.sh
+
+set -euo pipefail
+
+# Standalone-kompatible Helper (werden von install.sh ggf. überschrieben)
+if ! command -v info &>/dev/null 2>&1 || ! type -t info | grep -q function; then
+    GREEN="\033[0;32m"; BLUE="\033[0;34m"; YELLOW="\033[1;33m"; RED="\033[0;31m"; NC="\033[0m"
+    info()    { echo -e "${BLUE}[SearXNG]${NC} $1"; }
+    success() { echo -e "${GREEN}[OK]${NC} $1"; }
+    warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+    error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+fi
 
 SEARXNG_DIR="/opt/searxng"
 SEARXNG_VENV="${SEARXNG_DIR}/venv"
@@ -52,7 +64,10 @@ fi
 
 # --- pip install ---
 info "Installiere SearXNG-Abhängigkeiten..."
-"${SEARXNG_VENV}/bin/pip" install --quiet --upgrade pip
+"${SEARXNG_VENV}/bin/pip" install --quiet --upgrade pip setuptools wheel
+if [ -f "${SEARXNG_DIR}/requirements.txt" ]; then
+    "${SEARXNG_VENV}/bin/pip" install --quiet -r "${SEARXNG_DIR}/requirements.txt"
+fi
 "${SEARXNG_VENV}/bin/pip" install --quiet -e "${SEARXNG_DIR}"
 success "SearXNG-Pakete installiert"
 
