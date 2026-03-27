@@ -1809,32 +1809,32 @@ class AskAgentTool(BaseTool):
                     "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer mit dass Agent '{target}' nicht gefunden wurde.",
                 }
             response = data.get("response", "")
-                    if not response or not response.strip():
-                        return {
-                            "agent_id":      target,
-                            "worker_failed": True,
-                            "directive":     (
-                                f"WICHTIG: Agent '{target}' hat keine Antwort geliefert (leer oder Loop-Abbruch). "
-                                f"Übernimm diese Aufgabe NICHT selbst. "
-                                f"Teile dem Nutzer mit dass die Delegation fehlgeschlagen ist und frage wie weiter verfahren werden soll."
-                            ),
-                        }
-                    # Fehler-Indikatoren in Worker-Response erkennen
-                    _error_keywords = (
-                        "konnte nicht", "fehlgeschlagen", "fehler:", "error:", "permission denied",
-                        "nicht abgeschlossen", "nicht möglich", "nicht erlaubt", "nicht gefunden",
-                        "gescheitert", "abgebrochen", "konnte keine",
-                    )
-                    response_lower = response.lower()
-                    worker_errors = [kw for kw in _error_keywords if kw in response_lower]
-                    result: dict = {"agent_id": target, "response": response, "success": True}
-                    if worker_errors:
-                        result["worker_reported_errors"] = True
-                        result["hint"] = (
-                            "Der Worker hat Fehler oder Blocker gemeldet (siehe response). "
-                            "Informiere den Nutzer über die gemeldeten Probleme damit sie behoben werden können."
-                        )
-                    return result
+            if not response or not response.strip():
+                return {
+                    "agent_id":      target,
+                    "worker_failed": True,
+                    "directive":     (
+                        f"WICHTIG: Agent '{target}' hat keine Antwort geliefert (leer oder Loop-Abbruch). "
+                        f"Übernimm diese Aufgabe NICHT selbst. "
+                        f"Teile dem Nutzer mit dass die Delegation fehlgeschlagen ist und frage wie weiter verfahren werden soll."
+                    ),
+                }
+            # Fehler-Indikatoren in Worker-Response erkennen
+            _error_keywords = (
+                "konnte nicht", "fehlgeschlagen", "fehler:", "error:", "permission denied",
+                "nicht abgeschlossen", "nicht möglich", "nicht erlaubt", "nicht gefunden",
+                "gescheitert", "abgebrochen", "konnte keine",
+            )
+            response_lower = response.lower()
+            worker_errors = [kw for kw in _error_keywords if kw in response_lower]
+            result: dict = {"agent_id": target, "response": response, "success": True}
+            if worker_errors:
+                result["worker_reported_errors"] = True
+                result["hint"] = (
+                    "Der Worker hat Fehler oder Blocker gemeldet (siehe response). "
+                    "Informiere den Nutzer über die gemeldeten Probleme damit sie behoben werden können."
+                )
+            return result
         except Exception as e:
             return {
                 "error":     f"Fehler bei Kommunikation mit '{target}': {e}",
