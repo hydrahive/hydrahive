@@ -171,6 +171,7 @@ export const api = {
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
+  coreRestart:   () => api.post<{status: string; message: string}>("/admin/core/restart", {}),
   // WKS (Workstation)
   getWks:             () => api.get<WksConfig>("/me/wks"),
   updateWks:          (d: WksConfigPayload) => api.put("/me/wks", d),

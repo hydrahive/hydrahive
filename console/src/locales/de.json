@@ -296,7 +296,10 @@
     "activeProjects": "Aktive Projekte",
     "gpu": "GPU",
     "gpuRefresh": "aktualisiert alle 15s",
-    "agentRuntime": "Agent-Laufzeit"
+    "agentRuntime": "Agent-Laufzeit",
+    "restartCore": "Core neu starten",
+    "restartConfirm": "Sicher?",
+    "restarting": "Neustart..."
   },
   "doctor": {
     "title": "Systemdiagnose",

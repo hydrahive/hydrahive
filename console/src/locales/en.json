@@ -296,7 +296,10 @@
     "activeProjects": "Active projects",
     "gpu": "GPU",
     "gpuRefresh": "updated every 15s",
-    "agentRuntime": "Agent runtime"
+    "agentRuntime": "Agent runtime",
+    "restartCore": "Restart core",
+    "restartConfirm": "Sure?",
+    "restarting": "Restarting..."
   },
   "doctor": {
     "title": "System Diagnostics",

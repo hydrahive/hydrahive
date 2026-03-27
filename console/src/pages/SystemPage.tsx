@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle, FlaskConical } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle, FlaskConical, RotateCcw } from "lucide-react";
 import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck, TestReport } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
@@ -301,6 +301,8 @@ export function SystemPage() {
   const [gpu,       setGpu]       = useState<GpuInfo | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [restartConfirm, setRestartConfirm] = useState(false);
+  const [restarting,     setRestarting]     = useState(false);
 
   async function load() {
     const [h, s, g] = await Promise.allSettled([api.health(), api.status(), api.gpuInfo()]);
@@ -315,6 +317,13 @@ export function SystemPage() {
 
   function refresh() { setRefreshing(true); load(); }
 
+  async function handleRestart() {
+    if (!restartConfirm) { setRestartConfirm(true); setTimeout(() => setRestartConfirm(false), 4000); return; }
+    setRestarting(true);
+    setRestartConfirm(false);
+    try { await api.coreRestart(); } catch { /* core stirbt — normal */ }
+  }
+
   const runtime = status?.runtime ?? {};
   const agentList = Object.entries(runtime);
   const runningCount = agentList.filter(([,a]) => a.status === "running").length;
@@ -327,11 +336,22 @@ export function SystemPage() {
           <h1 className="text-xl font-semibold">{t("system.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("system.subtitle")}</p>
         </div>
-        <button onClick={refresh} disabled={refreshing}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          {t("system.refresh")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleRestart} disabled={restarting}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md transition-colors disabled:opacity-50 ${
+              restartConfirm
+                ? "border-red-500 bg-red-500 text-white hover:bg-red-600"
+                : "border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+            }`}>
+            <RotateCcw className={`h-3.5 w-3.5 ${restarting ? "animate-spin" : ""}`} />
+            {restarting ? t("system.restarting") : restartConfirm ? t("system.restartConfirm") : t("system.restartCore")}
+          </button>
+          <button onClick={refresh} disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {t("system.refresh")}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

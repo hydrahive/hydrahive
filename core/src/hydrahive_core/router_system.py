@@ -240,6 +240,20 @@ def register_system_routes(
         asyncio.create_task(_run_and_notify())
         return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
 
+    @admin_router.post("/admin/core/restart")
+    async def restart_core():
+        async def _do_restart():
+            await asyncio.sleep(1.5)
+            proc = await asyncio.create_subprocess_exec(
+                "sudo", "systemctl", "restart", "hydrahive-core",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+
+        asyncio.create_task(_do_restart())
+        return {"status": "restarting", "message": "Core-Neustart ausgelöst — Seite lädt automatisch neu"}
+
     @admin_router.get("/gitea/config")
     def get_gitea_config():
         p = Path(gitea_config_file)
