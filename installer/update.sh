@@ -46,9 +46,18 @@ trap on_error ERR
 main() {
     [ "$(id -u)" -eq 0 ] || error "Bitte als root ausführen: sudo bash $0"
 
-    # Gitea als primäre Quelle, GitHub als Fallback
-    local CLONE_URL=""
-    if [ -f "${GITEA_CONFIG}" ]; then
+    # GitHub ist primäre Quelle — funktioniert für alle User
+    # Lokales Gitea wird als Override genutzt wenn /etc/hydrahive/use_local_gitea existiert
+    local CLONE_URL="${GITHUB_REPO}"
+    if [ -f "${TOKEN_FILE}" ]; then
+        local GH_TOKEN
+        GH_TOKEN=$(tr -d '[:space:]' < "${TOKEN_FILE}")
+        CLONE_URL="https://${GH_TOKEN}@github.com/hydrahive/hydrahive.git"
+    fi
+    info "Klone von GitHub: ${GITHUB_REPO}"
+
+    # Optionaler lokaler Gitea-Override (nur für Entwickler mit use_local_gitea-Flag)
+    if [ -f "/etc/hydrahive/use_local_gitea" ] && [ -f "${GITEA_CONFIG}" ]; then
         local GITEA_URL GITEA_TOKEN GITEA_ORG GITEA_REPO
         GITEA_URL=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('url',''))" 2>/dev/null || echo "")
         GITEA_TOKEN=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('token',''))" 2>/dev/null || echo "")
@@ -57,17 +66,8 @@ main() {
         if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
             CLONE_URL="${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}.git"
             CLONE_URL="${CLONE_URL/http:\/\//http:\/\/${GITEA_ORG}:${GITEA_TOKEN}@}"
-            info "Klone von lokalem Gitea: ${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}"
+            info "Lokaler Gitea-Override aktiv: ${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}"
         fi
-    fi
-    if [ -z "${CLONE_URL}" ]; then
-        CLONE_URL="${GITHUB_REPO}"
-        if [ -f "${TOKEN_FILE}" ]; then
-            local GH_TOKEN
-            GH_TOKEN=$(tr -d '[:space:]' < "${TOKEN_FILE}")
-            CLONE_URL="https://${GH_TOKEN}@github.com/hydrahive/hydrahive.git"
-        fi
-        info "Fallback: klone von GitHub"
     fi
 
     mkdir -p "$(dirname "${UPDATE_LOG}")"
