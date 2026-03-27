@@ -187,7 +187,7 @@ main() {
     success "Update abgeschlossen (Commit: ${COMMIT})"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    exit 0
 }
 
 main "$@"
-exit 0
