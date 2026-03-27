@@ -178,13 +178,19 @@ main() {
         info "SearXNG nicht installiert — überspringe Update"
     fi
 
-    # --- 10. Installer-Module aktualisieren (für Nachinstallation aus Console) ---
+    # --- 10. Installer-Module + Installer-Assets aktualisieren ---
     if [ -d "${TMPDIR_BASE}/installer/modules" ]; then
         mkdir -p "${HYDRAHIVE_DIR}/installer/modules"
         rsync -a "${TMPDIR_BASE}/installer/modules/" "${HYDRAHIVE_DIR}/installer/modules/"
         chmod +x "${HYDRAHIVE_DIR}/installer/modules/"*.sh 2>/dev/null || true
         info "Installer-Module aktualisiert"
     fi
+    # Installer-Assets (nginx-Template etc.) im installer/-Verzeichnis aktuell halten
+    for _asset in hydrahive-console.nginx hydrahive-installer.sudoers; do
+        if [ -f "${TMPDIR_BASE}/installer/${_asset}" ]; then
+            cp "${TMPDIR_BASE}/installer/${_asset}" "${HYDRAHIVE_DIR}/installer/${_asset}"
+        fi
+    done
 
     # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then
