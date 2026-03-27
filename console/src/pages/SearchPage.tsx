@@ -22,7 +22,7 @@ export function SearchPage() {
       if (engines.length === 0 && d.engines.length > 0) setEngines(d.engines);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      setError(e instanceof Error ? e.message : t("searchPage.loadError"));
     } finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -38,14 +38,14 @@ export function SearchPage() {
       const r = await api.searxngTest({ query: query.trim(), engines: engines.join(",") || undefined });
       setResult(r);
     } catch (e) {
-      setResult({ results: [], error: e instanceof Error ? e.message : "Fehler" });
+      setResult({ results: [], error: e instanceof Error ? e.message : t("searchPage.genericError") });
     } finally { setSearching(false); }
   }
 
   const isRunning = status?.service_active && status?.http_ok;
 
   if (loading) return (
-    <div className="p-8 text-sm text-muted-foreground">Lade SearXNG-Status…</div>
+    <div className="p-8 text-sm text-muted-foreground">{t("searchPage.loading")}</div>
   );
 
   return (
@@ -55,31 +55,29 @@ export function SearchPage() {
           <div className="space-y-4 lg:col-span-8">
             <div className="flex flex-wrap items-center gap-3">
               <span className={`status-pill ${isRunning ? "status-pill-ok" : "status-pill-warn"}`}>
-                {isRunning ? "● Aktiv" : "● Inaktiv"}
+                {isRunning ? t("searchPage.active") : t("searchPage.inactive")}
               </span>
             </div>
             <div>
-              <h1 className="shell-title">Web-Suche</h1>
-              <p className="shell-copy mt-2 max-w-2xl">
-                Lokale Metasuchmaschine für Agenten — kein API-Key, kein Tracking, mehrere Engines gleichzeitig.
-              </p>
+              <h1 className="shell-title">{t("searchPage.title")}</h1>
+              <p className="shell-copy mt-2 max-w-2xl">{t("searchPage.subtitle")}</p>
             </div>
           </div>
           <div className="lg:col-span-4">
             <div className="app-panel app-panel-muted p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Status</p>
+                <p className="text-sm font-medium">{t("searchPage.statusLabel")}</p>
                 <button onClick={refresh} disabled={refreshing}
                   className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs hover:bg-accent transition-colors">
                   <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
-                  Aktualisieren
+                  {t("searchPage.refresh")}
                 </button>
               </div>
               <div className="mt-3 space-y-2">
-                <StatusRow label="systemd-Service" ok={status?.service_active ?? false} />
-                <StatusRow label="HTTP :8888"       ok={status?.http_ok       ?? false} />
-                <StatusRow label="Installation"     ok={status?.installed     ?? false} detail="/opt/searxng" />
-                <StatusRow label="Konfiguration"    ok={status?.config_exists ?? false} detail="/etc/searxng/settings.yml" />
+                <StatusRow label={t("searchPage.statusService")} ok={status?.service_active ?? false} />
+                <StatusRow label={t("searchPage.statusHttp")}    ok={status?.http_ok       ?? false} />
+                <StatusRow label={t("searchPage.statusInstall")} ok={status?.installed     ?? false} detail="/opt/searxng" />
+                <StatusRow label={t("searchPage.statusConfig")}  ok={status?.config_exists ?? false} detail="/etc/searxng/settings.yml" />
               </div>
               {status?.version && (
                 <p className="mt-3 text-xs text-muted-foreground font-mono">{status.version}</p>
@@ -95,20 +93,18 @@ export function SearchPage() {
 
       {!isRunning && (
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-600 dark:text-yellow-400">
-          SearXNG ist nicht aktiv. Installieren mit:{" "}
+          {t("searchPage.notRunning")}{" "}
           <code className="font-mono bg-yellow-500/10 px-1 rounded">sudo bash /opt/hydrahive/installer/modules/14_searxng.sh</code>
         </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        {/* Test-Suche */}
         <div className="section-card p-5 space-y-4">
-          <h2 className="text-sm font-semibold">Test-Suche</h2>
+          <h2 className="text-sm font-semibold">{t("searchPage.testSearch")}</h2>
 
-          {/* Engine-Filter */}
           {(status?.engines ?? []).length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Engines:</p>
+              <p className="text-xs text-muted-foreground">{t("searchPage.enginesLabel")}</p>
               <div className="flex flex-wrap gap-3">
                 {status!.engines.map(eng => (
                   <label key={eng} className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
@@ -131,7 +127,7 @@ export function SearchPage() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSearch()}
-              placeholder="Suchanfrage eingeben…"
+              placeholder={t("searchPage.searchPlaceholder")}
               className="flex-1 rounded-2xl border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <button onClick={handleSearch}
@@ -140,11 +136,10 @@ export function SearchPage() {
               {searching
                 ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                 : <Play className="h-3.5 w-3.5" />}
-              Suchen
+              {t("searchPage.searchButton")}
             </button>
           </div>
 
-          {/* Ergebnisse */}
           {result && (
             <div className="space-y-2">
               {result.error ? (
@@ -152,10 +147,10 @@ export function SearchPage() {
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground">
-                    {result.total ?? result.results.length} Ergebnisse
+                    {t("searchPage.resultCount", { count: result.total ?? result.results.length })}
                     {result.suggestions && result.suggestions.length > 0 && (
                       <span className="ml-2 opacity-60">
-                        Vorschläge: {result.suggestions.slice(0, 3).join(", ")}
+                        {t("searchPage.suggestions")} {result.suggestions.slice(0, 3).join(", ")}
                       </span>
                     )}
                   </p>
@@ -190,11 +185,9 @@ export function SearchPage() {
           )}
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-4">
-          {/* Konfigurierte Engines */}
           <div className="section-card p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Konfigurierte Engines</h3>
+            <h3 className="text-sm font-semibold">{t("searchPage.configuredEngines")}</h3>
             {(status?.engines ?? []).length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {status!.engines.map(eng => (
@@ -204,22 +197,21 @@ export function SearchPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Keine Engines konfiguriert</p>
+              <p className="text-xs text-muted-foreground">{t("searchPage.noEngines")}</p>
             )}
           </div>
 
-          {/* Agenten-Integration */}
           <div className="section-card p-4 space-y-2">
-            <h3 className="text-sm font-semibold">Agenten-Integration</h3>
+            <h3 className="text-sm font-semibold">{t("searchPage.agentIntegration")}</h3>
             <p className="text-xs text-muted-foreground">
-              Tool <code className="font-mono text-primary">web_search</code> in der Agenten-Konfiguration aktivieren:
+              {t("searchPage.agentIntegrationDesc")}
             </p>
             <pre className="text-xs bg-muted/40 rounded-lg p-2 overflow-x-auto font-mono">
 {`tools:
   - web_search`}
             </pre>
             <a href="/agents" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
-              <Search className="h-3 w-3" /> Zur Agenten-Verwaltung
+              <Search className="h-3 w-3" /> {t("searchPage.toAgents")}
             </a>
           </div>
         </div>

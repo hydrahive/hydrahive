@@ -789,5 +789,32 @@
       "logs": "Logs (live)",
       "noLogs": "Keine Log-Einträge"
     }
+  },
+  "searchPage": {
+    "loading": "Lade SearXNG-Status…",
+    "active": "● Aktiv",
+    "inactive": "● Inaktiv",
+    "title": "Web-Suche",
+    "subtitle": "Lokale Metasuchmaschine für Agenten — kein API-Key, kein Tracking, mehrere Engines gleichzeitig.",
+    "statusLabel": "Status",
+    "refresh": "Aktualisieren",
+    "statusService": "systemd-Service",
+    "statusHttp": "HTTP :8888",
+    "statusInstall": "Installation",
+    "statusConfig": "Konfiguration",
+    "notRunning": "SearXNG ist nicht aktiv. Installieren mit:",
+    "testSearch": "Test-Suche",
+    "enginesLabel": "Engines:",
+    "searchPlaceholder": "Suchanfrage eingeben…",
+    "searchButton": "Suchen",
+    "resultCount": "{{count}} Ergebnisse",
+    "suggestions": "Vorschläge:",
+    "configuredEngines": "Konfigurierte Engines",
+    "noEngines": "Keine Engines konfiguriert",
+    "agentIntegration": "Agenten-Integration",
+    "agentIntegrationDesc": "Tool web_search in der Agenten-Konfiguration aktivieren:",
+    "toAgents": "Zur Agenten-Verwaltung",
+    "loadError": "Fehler beim Laden",
+    "genericError": "Fehler"
   }
 }

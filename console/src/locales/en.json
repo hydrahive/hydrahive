@@ -789,5 +789,32 @@
       "logs": "Logs (live)",
       "noLogs": "No log entries"
     }
+  },
+  "searchPage": {
+    "loading": "Loading SearXNG status…",
+    "active": "● Active",
+    "inactive": "● Inactive",
+    "title": "Web Search",
+    "subtitle": "Local metasearch engine for agents — no API key, no tracking, multiple engines simultaneously.",
+    "statusLabel": "Status",
+    "refresh": "Refresh",
+    "statusService": "systemd service",
+    "statusHttp": "HTTP :8888",
+    "statusInstall": "Installation",
+    "statusConfig": "Configuration",
+    "notRunning": "SearXNG is not active. Install with:",
+    "testSearch": "Test Search",
+    "enginesLabel": "Engines:",
+    "searchPlaceholder": "Enter search query…",
+    "searchButton": "Search",
+    "resultCount": "{{count}} results",
+    "suggestions": "Suggestions:",
+    "configuredEngines": "Configured Engines",
+    "noEngines": "No engines configured",
+    "agentIntegration": "Agent Integration",
+    "agentIntegrationDesc": "Enable the web_search tool in the agent configuration:",
+    "toAgents": "Go to Agent Management",
+    "loadError": "Error loading status",
+    "genericError": "Error"
   }
 }
