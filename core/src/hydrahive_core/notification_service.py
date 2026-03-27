@@ -29,7 +29,7 @@ from typing import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/var/lib/hydrahive/notifications.db")
+DB_PATH = Path("/var/log/hydrahive/notifications.db")
 
 
 @dataclass
