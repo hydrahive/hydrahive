@@ -128,7 +128,7 @@
   }
 
   .nav-item {
-    @apply flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all;
+    @apply flex items-center gap-3 rounded-2xl px-4 py-2 text-sm font-medium transition-all;
     color: hsl(var(--sidebar-muted));
   }
 

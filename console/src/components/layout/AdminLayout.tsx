@@ -196,13 +196,11 @@ export function AdminLayout() {
                 <NavLink
                   key={to}
                   to={to}
+                  title={hint}
                   className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <div className="truncate">{label}</div>
-                    <div className="truncate text-xs text-[hsl(var(--sidebar-muted))]">{hint}</div>
-                  </div>
+                  <span className="truncate">{label}</span>
                 </NavLink>
               ))}
             </div>
