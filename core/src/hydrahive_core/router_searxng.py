@@ -21,7 +21,7 @@ async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
     """GET via curl-Subprocess — umgeht Python-HTTP-Library-Probleme mit SearXNG."""
     proc = await asyncio.create_subprocess_exec(
         "curl", "-s", "-o", "-", "-w", "\n__STATUS__%{http_code}",
-        "--max-time", str(timeout), "-L", url,
+        "--max-time", str(timeout), "--noproxy", "*", "-L", url,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )

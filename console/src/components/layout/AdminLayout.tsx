@@ -101,15 +101,15 @@ function useCoreConnection() {
           window.location.reload();
           return;
         }
-        timer = setTimeout(check, 8_000);
+        timer = setTimeout(check, 6_000);
       } catch {
         fails.current += 1;
         if (fails.current >= 2) setOnline(false); // erst nach 2 Fehlern Overlay
-        timer = setTimeout(check, 3_000);
+        timer = setTimeout(check, 2_000);
       }
     }
 
-    timer = setTimeout(check, 8_000);
+    timer = setTimeout(check, 3_000); // erster Check früh damit Overlay schnell erscheint
     return () => clearTimeout(timer);
   }, []);
 

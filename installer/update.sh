@@ -108,7 +108,7 @@ main() {
     info "Baue Console..."
     local CONSOLE_SRC="${TMPDIR_BASE}/console"
     cd "${CONSOLE_SRC}"
-    npm install 2>&1 | grep -v "^npm warn" || error "npm install fehlgeschlagen"
+    npm ci --prefer-offline 2>&1 | grep -v "^npm warn" || error "npm install fehlgeschlagen"
     npm run build 2>&1 | tail -5 || error "npm run build fehlgeschlagen"
     success "Console gebaut"
 
