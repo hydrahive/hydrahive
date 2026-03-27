@@ -172,8 +172,15 @@ main() {
         info "SearXNG nicht installiert — überspringe Update"
     fi
 
-    # --- 10. update.sh + Service-Datei selbst aktualisieren ---
-    # Sicher: main() ist vollständig in Memory — Self-Copy verwirrt bash nicht mehr.
+    # --- 10. Installer-Module aktualisieren (für Nachinstallation aus Console) ---
+    if [ -d "${TMPDIR_BASE}/installer/modules" ]; then
+        mkdir -p "${HYDRAHIVE_DIR}/installer/modules"
+        rsync -a "${TMPDIR_BASE}/installer/modules/" "${HYDRAHIVE_DIR}/installer/modules/"
+        chmod +x "${HYDRAHIVE_DIR}/installer/modules/"*.sh 2>/dev/null || true
+        info "Installer-Module aktualisiert"
+    fi
+
+    # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then
         cp "${TMPDIR_BASE}/installer/update.sh" "${HYDRAHIVE_DIR}/update.sh"
         chmod +x "${HYDRAHIVE_DIR}/update.sh"

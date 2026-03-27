@@ -42,10 +42,32 @@ export function SearchPage() {
     } finally { setSearching(false); }
   }
 
-  const isRunning = status?.service_active && status?.http_ok;
+  const isRunning  = status?.service_active && status?.http_ok;
+  const isInstalled = status?.installed ?? true;
 
   if (loading) return (
     <div className="p-8 text-sm text-muted-foreground">{t("searchPage.loading")}</div>
+  );
+
+  if (!isInstalled) return (
+    <div className="p-8 max-w-xl space-y-4">
+      <div className="flex items-center gap-3">
+        <XCircle className="w-6 h-6 text-yellow-500 shrink-0" />
+        <h2 className="text-lg font-semibold">{t("searchPage.notInstalledTitle")}</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">{t("searchPage.notInstalledBody")}</p>
+      <div className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 font-mono text-sm">
+        <span className="select-all flex-1">sudo bash /opt/hydrahive/installer/modules/14_searxng.sh</span>
+        <button
+          onClick={() => navigator.clipboard.writeText("sudo bash /opt/hydrahive/installer/modules/14_searxng.sh")}
+          className="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-zinc-700"
+          title={t("common.copy")}
+        >
+          {t("common.copy")}
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("searchPage.notInstalledHint")}</p>
+    </div>
   );
 
   return (

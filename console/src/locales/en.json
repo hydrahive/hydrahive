@@ -753,7 +753,9 @@
     "loading": "Loading...",
     "error": "Error",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "copy": "Copy",
+    "edit": "Edit"
   },
   "slashCommands": {
     "help": "Show available commands",
@@ -819,7 +821,10 @@
     "agentIntegrationDesc": "Enable the web_search tool in the agent configuration:",
     "toAgents": "Go to Agent Management",
     "loadError": "Error loading status",
-    "genericError": "Error"
+    "genericError": "Error",
+    "notInstalledTitle": "SearXNG is not installed",
+    "notInstalledBody": "SearXNG was not set up during initial installation. Run the following command on the server to install it:",
+    "notInstalledHint": "Reload this page after installation."
   },
   "notifications": {
     "title": "Notifications",

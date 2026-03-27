@@ -753,7 +753,9 @@
     "loading": "Wird geladen...",
     "error": "Fehler",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "copy": "Kopieren",
+    "edit": "Bearbeiten"
   },
   "slashCommands": {
     "help": "Verfuegbare Commands anzeigen",
@@ -819,7 +821,10 @@
     "agentIntegrationDesc": "Tool web_search in der Agenten-Konfiguration aktivieren:",
     "toAgents": "Zur Agenten-Verwaltung",
     "loadError": "Fehler beim Laden",
-    "genericError": "Fehler"
+    "genericError": "Fehler",
+    "notInstalledTitle": "SearXNG ist nicht installiert",
+    "notInstalledBody": "SearXNG wurde bei der Erstinstallation nicht eingerichtet. Führe folgenden Befehl auf dem Server aus um es nachzuinstallieren:",
+    "notInstalledHint": "Nach der Installation diese Seite neu laden."
   },
   "notifications": {
     "title": "Benachrichtigungen",
