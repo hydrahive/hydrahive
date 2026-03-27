@@ -504,6 +504,7 @@ export interface SearxngStatus {
   service_active: boolean;
   service_uptime: string;
   http_ok:        boolean;
+  json_ok:        boolean;
   url:            string;
   version:        string | null;
   engines:        string[];

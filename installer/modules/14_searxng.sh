@@ -87,18 +87,52 @@ if [ ! -f "${SEARXNG_CONF}" ]; then
     # SEARXNG_SECRET env-override deaktivieren (inline-Kommentar entfernen nicht nötig, nur den Wert setzen)
     # instance_name setzen
     sed -i 's|instance_name: "SearXNG"|instance_name: "HydraHive Search"|' "${SEARXNG_CONF}"
-    # JSON-Format aktivieren (für API-Nutzung durch Agenten)
-    sed -i 's|^  # formats:.*|  formats:|; s|^  #   - html|    - html|; s|^  #   - csv|    - json|' "${SEARXNG_CONF}" || true
-    # Falls obiger sed nicht trifft: formats-Block sicher einfügen
-    if ! grep -q "^  formats:" "${SEARXNG_CONF}"; then
-        sed -i '/^search:/a\  formats:\n    - html\n    - json' "${SEARXNG_CONF}"
-    fi
     chown root:"${SEARXNG_USER}" "${SEARXNG_CONF}"
     chmod 644 "${SEARXNG_CONF}"
     success "${SEARXNG_CONF} geschrieben"
-else
-    info "${SEARXNG_CONF} bereits vorhanden — wird nicht überschrieben"
 fi
+
+# JSON-Format sicherstellen (auch bei bereits vorhandener settings.yml)
+# sed ist hier nicht portabel (unterschiedliche Kommentar-Formate je SearXNG-Version)
+python3 - "${SEARXNG_CONF}" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+try:
+    content = open(path).read()
+except Exception:
+    sys.exit(0)
+# Normalisiere den formats-Block auf html + json, unabhängig vom Ausgangsformat
+if re.search(r'^  formats:', content, re.MULTILINE):
+    # formats-Block vorhanden — sicherstellen dass json drin ist
+    if '- json' not in content:
+        content = re.sub(
+            r'^(  formats:\n(?:    - \w+\n)*)',
+            lambda m: m.group(0) + '    - json\n',
+            content, flags=re.MULTILINE,
+        )
+        # Edge-case: leerer formats-Block (kein einziger Eintrag)
+        content = re.sub(
+            r'^  formats:\s*\n(?!    - )',
+            '  formats:\n    - html\n    - json\n',
+            content, flags=re.MULTILINE,
+        )
+elif re.search(r'^  # formats:', content, re.MULTILINE):
+    # Kommentierter formats-Block — durch echten ersetzen
+    content = re.sub(
+        r'^  # formats:.*\n',
+        '  formats:\n    - html\n    - json\n',
+        content, flags=re.MULTILINE,
+    )
+else:
+    # Kein formats-Block — direkt nach search: einfügen
+    content = re.sub(
+        r'^(search:\n)',
+        r'\g<1>  formats:\n    - html\n    - json\n',
+        content, flags=re.MULTILINE,
+    )
+open(path, 'w').write(content)
+PYEOF
+info "JSON-Format in ${SEARXNG_CONF} sichergestellt"
 
 # --- systemd-Service ---
 cat > /etc/systemd/system/searxng.service << 'UNIT'

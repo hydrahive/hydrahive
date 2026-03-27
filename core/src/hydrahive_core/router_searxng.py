@@ -51,8 +51,9 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         except Exception as e:
             logger.debug("systemctl show searxng: %s", e)
 
-        # 2. HTTP-Erreichbarkeit
+        # 2. HTTP-Erreichbarkeit + JSON-Format-Check
         http_ok = False
+        json_ok = False
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -60,6 +61,13 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
                     timeout=aiohttp.ClientTimeout(total=3),
                 ) as resp:
                     http_ok = resp.status in (200, 302)
+            if http_ok:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{SEARXNG_URL}/search?q=ping&format=json",
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        json_ok = resp.status == 200
         except Exception:
             pass
 
@@ -94,6 +102,7 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
             "service_active": service_active,
             "service_uptime": service_uptime,
             "http_ok":        http_ok,
+            "json_ok":        json_ok,
             "url":            SEARXNG_URL,
             "version":        version,
             "engines":        engines,
@@ -152,7 +161,8 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
                         return {"error": f"HTTP {resp.status}", "detail": body[:200], "results": []}
                     data = await resp.json(content_type=None)
         except Exception as e:
-            return {"error": f"SearXNG nicht erreichbar: {e}", "results": []}
+            detail = str(e) or type(e).__name__
+            return {"error": f"SearXNG nicht erreichbar: {detail}", "results": []}
 
         results = [
             {

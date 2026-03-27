@@ -42,7 +42,7 @@ export function SearchPage() {
     } finally { setSearching(false); }
   }
 
-  const isRunning   = status?.service_active && status?.http_ok;
+  const isRunning   = status?.service_active && status?.http_ok && status?.json_ok;
   const isInstalled = status?.installed ?? true;
 
   const [installing, setInstalling] = useState(false);
@@ -168,6 +168,7 @@ export function SearchPage() {
               <div className="mt-3 space-y-2">
                 <StatusRow label={t("searchPage.statusService")} ok={status?.service_active ?? false} />
                 <StatusRow label={t("searchPage.statusHttp")}    ok={status?.http_ok       ?? false} />
+                <StatusRow label={t("searchPage.statusJson")}    ok={status?.json_ok       ?? false} />
                 <StatusRow label={t("searchPage.statusInstall")} ok={status?.installed     ?? false} detail="/opt/searxng" />
                 <StatusRow label={t("searchPage.statusConfig")}  ok={status?.config_exists ?? false} detail="/etc/searxng/settings.yml" />
               </div>
@@ -183,7 +184,13 @@ export function SearchPage() {
         <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
       )}
 
-      {!isRunning && (
+      {!isRunning && status?.http_ok && !status?.json_ok && (
+        <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-600 dark:text-orange-400">
+          {t("searchPage.jsonNotEnabled")}
+        </div>
+      )}
+
+      {!isRunning && !status?.http_ok && (
         <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-600 dark:text-yellow-400">
           {t("searchPage.notRunning")}{" "}
           <code className="font-mono bg-yellow-500/10 px-1 rounded">sudo bash /opt/hydrahive/installer/modules/14_searxng.sh</code>
