@@ -68,6 +68,7 @@ REPO_CORE="${REPO_ROOT}/core"
 if [ -d "${REPO_CORE}/src/hydrahive_core" ]; then
     cp -r "${REPO_CORE}/src" "${CORE_DIR}/"
     cp "${REPO_CORE}/pyproject.toml" "${CORE_DIR}/"
+    [ -d "${REPO_CORE}/tests" ] && cp -r "${REPO_CORE}/tests" "${CORE_DIR}/"
     success "hydrahive-core Quellcode bereit (${CORE_DIR})"
 else
     error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"

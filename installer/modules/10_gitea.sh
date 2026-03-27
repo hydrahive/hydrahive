@@ -207,7 +207,7 @@ GITEA_TOKEN=$(sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
     --username "${GITEA_ADMIN}" \
     --token-name "hydrahive-core-$(date +%s)" \
     --scopes "write:repository,read:repository,write:user,read:user,write:issue,read:issue,write:notification" \
-    --raw 2>/dev/null | tr -d '[:space:]')
+    --raw 2>/dev/null | tr -d '[:space:]') || true
 
 if [ -z "${GITEA_TOKEN}" ]; then
     warn "API-Token konnte nicht generiert werden — Git-Tools arbeiten ohne Authentifizierung"

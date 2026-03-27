@@ -7,8 +7,8 @@ CONDUWUIT_URL="http://127.0.0.1:6167"
 CONDUWUIT_TOML="/etc/conduwuit/conduwuit.toml"
 
 # --- Config lesen ---
-SERVER_NAME=$(grep -E '^server_name\s*=' "$CONDUWUIT_TOML" | sed 's/.*=\s*"\(.*\)"/\1/')
-REG_TOKEN=$(grep -E '^registration_token\s*=' "$CONDUWUIT_TOML" | sed 's/.*=\s*"\(.*\)"/\1/')
+SERVER_NAME=$(grep -E '^server_name\s*=' "$CONDUWUIT_TOML" | sed 's/.*=\s*"\(.*\)"/\1/') || true
+REG_TOKEN=$(grep -E '^registration_token\s*=' "$CONDUWUIT_TOML" | sed 's/.*=\s*"\(.*\)"/\1/') || true
 
 [ -z "$SERVER_NAME" ] && error "server_name nicht in $CONDUWUIT_TOML gefunden"
 [ -z "$REG_TOKEN" ]   && error "registration_token nicht in $CONDUWUIT_TOML gefunden"
@@ -19,7 +19,7 @@ ADMIN_MXID="@${ADMIN_USER}:${SERVER_NAME}"
 # Admin-Passwort aus Datei lesen oder neu generieren
 CRED_FILE="/etc/hydrahive/admin_credentials"
 if [ -f "$CRED_FILE" ]; then
-    ADMIN_PASS=$(grep -E '^matrix_admin_password=' "$CRED_FILE" | cut -d= -f2-)
+    ADMIN_PASS=$(grep -E '^matrix_admin_password=' "$CRED_FILE" | cut -d= -f2-) || true
 fi
 if [ -z "${ADMIN_PASS:-}" ]; then
     _raw="$(openssl rand -base64 40)"; _clean="${_raw//[\/+=]/}"; ADMIN_PASS="${_clean:0:32}"

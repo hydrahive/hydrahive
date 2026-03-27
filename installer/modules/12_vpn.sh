@@ -77,7 +77,7 @@ if [ "${VPN_MODE}" = "headscale" ]; then
     chown -R headscale:headscale /var/lib/headscale /var/run/headscale
 
     # Config schreiben (idempotent)
-    SERVER_IP="$(hostname -I | awk '{print $1}')"
+    SERVER_IP="$(hostname -I | awk '{print $1}')" || SERVER_IP="127.0.0.1"
     if [ ! -f "${HEADSCALE_CFG}" ]; then
         cat > "${HEADSCALE_CFG}" << HSCFG
 ---

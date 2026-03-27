@@ -10,7 +10,7 @@ CERT_DIR="/etc/hydrahive/tls"
 CERT_FILE="${CERT_DIR}/hydrahive.crt"
 KEY_FILE="${CERT_DIR}/hydrahive.key"
 NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
-SERVER_IP="$(hostname -I | awk '{print $1}')"
+SERVER_IP="$(hostname -I | awk '{print $1}')" || SERVER_IP="127.0.0.1"
 SERVER_HOST="${DOMAIN:-${SERVER_IP}}"
 
 info "Konfiguriere HTTPS (TLS)..."
