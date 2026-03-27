@@ -2,7 +2,7 @@
 provisioner.py — Projekt-Provisioning (#9, #10, #11)
 
 Bei Projekt-Anlage drei Schritte in Reihe:
-1. Linux-User anlegen: proj_<id>, Heimverzeichnis /projects/<id>/files (I3, PR4)
+1. Linux-User anlegen: proj_<id>, Heimverzeichnis /projects/<id>/ (I3, PR4)
 2. Samba-Share einrichten: Share für proj_<id>, smbd neu laden (I4)
 3. Matrix-Room erstellen: #<id>:server, Boss + Worker einladen (A1, PR3)
 
@@ -58,7 +58,7 @@ class Provisioner:
         warnings: list[str] = []
         project_id = cfg.id
         linux_user = cfg.effective_system_user()           # proj_<id>
-        files_dir  = f"{PROJECTS_DIR}/{project_id}/files"
+        files_dir  = f"{PROJECTS_DIR}/{project_id}"
 
         logger.info("Provisioniere Projekt '%s'", project_id)
 
@@ -113,7 +113,7 @@ class Provisioner:
 
     def _create_linux_user(self, username: str, files_dir: str) -> str | None:
         """
-        Legt Linux-User an, erstellt Heimverzeichnis /projects/<id>/files.
+        Legt Linux-User an, setzt Heimverzeichnis auf /projects/<id>/.
         Gibt None zurück wenn OK, sonst Warnmeldung.
         """
         # Idempotenz: User bereits vorhanden?
@@ -216,8 +216,8 @@ class Provisioner:
             f"   valid users = {username}\n"
             f"   read only = no\n"
             f"   browseable = yes\n"
-            f"   create mask = 0640\n"
-            f"   directory mask = 0750\n"
+            f"   create mask = 0660\n"
+            f"   directory mask = 0770\n"
             f"{marker_end}\n"
         )
 

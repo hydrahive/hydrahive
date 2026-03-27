@@ -244,7 +244,8 @@ class FileReadTool(BaseTool):
     def description(self) -> str:
         return (
             "Liest den Inhalt einer Datei aus dem Projekt-Verzeichnis. "
-            "Pfad relativ zu /projects/<projekt>/ oder absolut innerhalb davon."
+            "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
+            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt."
         )
     @property
     def permissions_required(self) -> list[str]:
@@ -293,8 +294,9 @@ class FileWriteTool(BaseTool):
     def description(self) -> str:
         return (
             "Schreibt Inhalt in eine Datei im Projekt-Verzeichnis. "
-            "Erstellt die Datei wenn sie nicht existiert. "
-            "Pfad relativ zu /projects/<projekt>/ oder absolut innerhalb davon."
+            "Erstellt die Datei (und fehlende Unterordner) wenn sie nicht existiert. "
+            "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
+            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt."
         )
     @property
     def permissions_required(self) -> list[str]:
