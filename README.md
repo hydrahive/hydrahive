@@ -1,90 +1,83 @@
 # HydraHive
 
-**Selbst-gehosteter KI-Agent-Server** — Agenten-Swarms, Matrix-Kommunikation, Projekt-Isolation.
+**Self-hosted AI Agent Platform** — Multi-agent swarms, Matrix communication, project isolation.
 
-> Installiere Linux → Installiere HydraHive → Verwalte alles über die Webkonsole.
+> Install Linux → Install HydraHive → Manage everything through the web console.
 
 ---
 
 ## Features
 
-- **Multi-Agent Swarms** — Boss-Agent koordiniert Worker-Agenten parallel
-- **Projekt-Isolation** — Jedes Projekt bekommt eigenen Linux-User, Samba-Share und Matrix-Room
-- **Multi-LLM** — Ollama (lokal), Claude Max (OAuth), OpenAI — pro Agent konfigurierbar; Fallback-Ketten
-- **Matrix-Integration** — Agenten sind echte Matrix-Bots, du kannst mit Element eingreifen
-- **Discord-Integration** — Persönliche Agenten können auf Discord lesen und antworten
-- **QMD-Skills** — Angelerntes Wissen in Markdown-Dateien mit YAML-Frontmatter
-- **Persönlicher Agent** — Jeder User bekommt einen eigenen privaten Agenten (`personal_<username>`)
-- **Memory-System** — Agenten speichern Wissen persistent in Markdown-Dateien, auto-injiziert in System-Prompt
-- **A-MEM Shared Memory** — Zentrale agentenuebergreifende Wissensdatenbank fuer Fehler, Loesungen und Learnings
-- **WKS-Zugang** — Persönliche Agenten verbinden sich per SSH/SFTP mit der eigenen Workstation
-- **WKS-Ollama** — Ollama auf der Workstation wird automatisch im Modell-Dropdown angeboten
-- **Git-Tools** — Agenten können committen, pushen und Pull Requests auf Gitea erstellen
-- **Gitea-Issues** — Agenten können Issues anlegen, kommentieren, updaten und schliessen
-- **MCP-Server** — Externe Tool-Server per streamableHttp einbinden (z.B. QMD Memory Search)
-- **Execution Modes** — safe/elevated/root fuer kontrollierte Eskalation von Agentenrechten
-- **Webkonsole** — Vollständige Verwaltung ohne SSH: Agenten, Projekte, Users, Logs, Skills, MCP
-- **Streaming** — Antworten erscheinen Token für Token
-- **Webhook-System** — Externe Trigger für Agenten (`/hooks/{project}/wake`)
-- **Audit-Log** — Alle User-Aktionen protokolliert
-- **System-Update** — Ein-Klick-Update aus der Webkonsole (git pull + Build + Restart)
+- **Multi-Agent Swarms** — Boss agent coordinates worker agents in parallel
+- **Project Isolation** — Each project gets its own Linux user, Samba share and Matrix room
+- **Multi-LLM** — Ollama (local), Claude (OAuth), OpenAI — configurable per agent with fallback chains
+- **Matrix Integration** — Agents are real Matrix bots; intervene directly via Element
+- **Discord Integration** — Personal agents can read and respond on Discord
+- **Web Search** — Built-in SearXNG metasearch engine (no API key, no tracking)
+- **QMD Skills** — Learned knowledge in Markdown files with YAML frontmatter
+- **Personal Agent** — Every user gets their own private agent (`personal_<username>`)
+- **Memory System** — Agents store knowledge persistently in Markdown files, auto-injected into system prompt
+- **A-MEM Shared Memory** — Central cross-agent knowledge base for errors, solutions and learnings
+- **Workstation Access** — Personal agents connect via SSH/SFTP to the user's workstation
+- **Git Tools** — Agents can commit, push and create pull requests on Gitea
+- **MCP Servers** — Attach external tool servers via streamableHttp (e.g. QMD Memory Search)
+- **Execution Modes** — safe/elevated/root for controlled privilege escalation
+- **Web Console** — Full management without SSH: agents, projects, users, logs, skills, MCP, search
+- **Streaming** — Responses appear token by token with stop-button interrupt
+- **Webhook System** — External triggers for agents (`/hooks/{project}/wake`)
+- **Audit Log** — All user actions logged
+- **One-Click Update** — Update from the web console (git pull + build + restart)
 
-## Deployment-Profile
+## Deployment Profiles
 
-| Profil | GPU | LLM | Geeignet für |
-|--------|-----|-----|-------------|
-| **Lite** | Nein | Cloud-APIs | VPS, Test, Demo |
-| **Full** | Ja (PCIe-Passthrough) | Ollama + Cloud | Produktion, volle Kontrolle |
+| Profile | GPU | LLM | Good for |
+|---------|-----|-----|----------|
+| **Lite** | No | Cloud APIs | VPS, testing, demo |
+| **Full** | Yes (PCIe passthrough) | Ollama + Cloud | Production, full control |
 
-Referenz-Setup: GTX 1080 Ti (11GB VRAM) auf Proxmox VM, Ubuntu 24.04
+Reference setup: GTX 1080 Ti (11 GB VRAM) on Proxmox VM, Ubuntu 24.04
 
-## Schnellstart
+## Quick Start
 
 ```bash
 git clone https://github.com/hydrahive/hydrahive.git
 cd hydrahive
 sudo bash installer/install.sh
-# → https://<IP> öffnen → Setup-Wizard
+# → open https://<IP> → Setup Wizard
 ```
 
-## Dokumentation
+## Documentation
 
-| Dokument | Inhalt |
-|----------|--------|
-| [Handbuch](docs/handbook.md) | Installation, Erste Schritte, alle Features |
-| [Technische Doku](docs/technical.md) | Architektur, Module, Datenfluss |
-| [API-Referenz](docs/api-reference.md) | Alle REST-Endpoints |
-| [Entwickler-Guide](docs/development.md) | Tools, Skills, Endpoints, Console-Seiten hinzufügen |
+| Document | Content |
+|----------|---------|
+| [Handbook](docs/handbook.md) | Installation, getting started, all features |
+| [Technical Docs](docs/technical.md) | Architecture, modules, data flow |
+| [API Reference](docs/api-reference.md) | All REST endpoints |
+| [Developer Guide](docs/development.md) | Tools, skills, endpoints, adding console pages |
 
-## Architektur
+## Architecture
 
 ```
 Browser (React) → nginx (HTTPS) → FastAPI Core → Orchestrator
                                               ↓
-                                   Boss-Agent → Worker-Agenten
+                                   Boss Agent → Worker Agents
                                               ↓
                                    conduwuit (Matrix) ← Element
 ```
 
 ## Stack
 
-- **Core:** Python 3.12, FastAPI, litellm, matrix-nio, anthropic SDK
+- **Core:** Python 3.12, FastAPI, litellm, matrix-nio, Anthropic SDK
 - **Console:** React 18, TypeScript, Vite, Tailwind CSS
 - **Matrix:** conduwuit (Rust, single binary, RocksDB)
+- **Search:** SearXNG (native, no Docker)
 - **LLM:** Ollama + Anthropic OAuth + OpenAI
-- **Installer:** Bash + Systemd (kein Docker)
-
-## Aktueller Stand
-
-- Produktiv nutzbar und aktiv weiterentwickelt
-- Router- und Auth-Architektur ist modularisiert statt monolithisch
-- Persönliche Agenten arbeiten mit klaren Sicherheitsstufen und A-MEM als Shared Memory
-- Die Webkonsole deckt Agenten, Projekte, MCP, Gitea, WKS, Discord, Audit und Updates ab
+- **Installer:** Bash + systemd (no Docker)
 
 ## Status
 
-🚧 Aktive Entwicklung — produktiv nutzbar
+🚧 Active development — production-ready core
 
-## Lizenz
+## License
 
 MIT
