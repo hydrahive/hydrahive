@@ -155,6 +155,11 @@ export const api = {
   // SearXNG Web-Suche
   searxngStatus: () => api.get<SearxngStatus>("/admin/searxng/status"),
   searxngTest:   (body: { query: string; engines?: string }) => api.post<SearxngTestResult>("/admin/searxng/test", body),
+  // Schedules
+  schedules:        () => api.get<{ schedules: Schedule[] }>("/schedules"),
+  createSchedule:   (d: SchedulePayload) => api.post<Schedule>("/schedules", d),
+  updateSchedule:   (id: string, d: Partial<SchedulePayload>) => api.patch<Schedule>(`/schedules/${id}`, d),
+  deleteSchedule:   (id: string) => api.delete<void>(`/schedules/${id}`),
   // Notifications
   notifications:    () => api.get<{ notifications: AppNotification[] }>("/notifications"),
   unreadCount:      () => api.get<{ count: number }>("/notifications/unread-count"),
@@ -517,6 +522,30 @@ export interface SearxngTestResult {
   results:      SearxngResult[];
   suggestions?: string[];
   error?:       string;
+}
+
+export interface Schedule {
+  id:         string;
+  name:       string;
+  project_id: string;
+  agent_id:   string;
+  cron:       string;
+  message:    string;
+  enabled:    boolean;
+  timezone:   string;
+  last_run:   string | null;
+  next_run:   string | null;
+  created_by: string;
+}
+
+export interface SchedulePayload {
+  name:       string;
+  project_id: string;
+  agent_id:   string;
+  cron:       string;
+  message:    string;
+  enabled?:   boolean;
+  timezone?:  string;
 }
 
 export interface AppNotification {

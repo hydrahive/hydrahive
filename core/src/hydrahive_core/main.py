@@ -39,6 +39,8 @@ from .router_doctor import register_doctor_routes
 from .router_searxng import register_searxng_routes
 from .router_notifications import register_notification_routes
 from .notification_service import notification_service
+from .router_schedules import register_schedule_routes
+from .scheduler_service import scheduler_service
 from .router_core_misc import register_core_misc_routes
 from .router_llm import register_llm_routes
 from .router_mcp import register_mcp_routes
@@ -302,8 +304,14 @@ async def lifespan(app: FastAPI):
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
     notification_service.start()
+    scheduler_service.start(
+        orchestrator=orchestrator,
+        load_project_cfg_fn=projects.get,
+        load_users_fn=_load_users,
+    )
     logger.info("HydraHive Core bereit")
     yield
+    scheduler_service.stop()
     notification_service.stop()
     hb_task.cancel()
     cleanup_task.cancel()
@@ -1212,6 +1220,7 @@ register_vpn_routes(admin_router, require_admin=require_admin)
 register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
 register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=_verify_jwt)
+register_schedule_routes(auth_router, require_auth=require_auth)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 
 

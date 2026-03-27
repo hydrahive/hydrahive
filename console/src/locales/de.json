@@ -13,6 +13,7 @@
     "activity": "Aktivität",
     "usage": "Usage",
     "search": "Web-Suche",
+    "schedules": "Schedules",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
@@ -29,7 +30,8 @@
     "settings": "LLM, MCP, Gitea, VPN",
     "activity": "Live-Status aller Agenten",
     "usage": "Token-Statistik & Kosten",
-    "search": "SearXNG Metasuchmaschine"
+    "search": "SearXNG Metasuchmaschine",
+    "schedules": "Automatisierte Agenten-Tasks"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -825,5 +827,27 @@
     "markRead": "Als gelesen markieren",
     "markAllRead": "Alle als gelesen markieren",
     "delete": "Löschen"
+  },
+  "schedules": {
+    "title": "Geplante Aufgaben",
+    "new": "Neuer Schedule",
+    "newTitle": "Schedule erstellen",
+    "editTitle": "Schedule bearbeiten",
+    "empty": "Keine Schedules konfiguriert",
+    "confirmDelete": "Schedule \"{{name}}\" wirklich löschen?",
+    "fieldName": "Name",
+    "fieldProject": "Projekt",
+    "fieldAgent": "Agent",
+    "fieldCron": "Cron-Ausdruck",
+    "fieldTimezone": "Zeitzone",
+    "fieldMessage": "Nachricht",
+    "fieldEnabled": "Aktiviert",
+    "messagePlaceholder": "Nachricht, die an den Agenten gesendet wird...",
+    "project": "Projekt",
+    "agent": "Agent",
+    "lastRun": "Letzter Lauf",
+    "nextRun": "Nächster Lauf",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren"
   }
 }

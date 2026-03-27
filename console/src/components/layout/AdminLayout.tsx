@@ -20,6 +20,7 @@ import {
   Settings,
   BarChart2,
   Search,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -123,7 +124,8 @@ export function AdminLayout() {
       { to: "/agents",   icon: Bot,      label: t("nav.agents"),   hint: t("navHint.agents") },
       { to: "/activity", icon: Activity, label: t("nav.activity"), hint: t("navHint.activity") },
       { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
-      { to: "/search",   icon: Search,   label: t("nav.search"),   hint: t("navHint.search") },
+      { to: "/search",     icon: Search,    label: t("nav.search"),     hint: t("navHint.search") },
+      { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
     ],
   };
 
