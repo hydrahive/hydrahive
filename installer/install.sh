@@ -91,6 +91,13 @@ cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
 chmod +x "${HYDRAHIVE_DIR}/update.sh"
 success "Update-Script: sudo bash ${HYDRAHIVE_DIR}/update.sh"
 
+# Installations-Commit in Update-Status schreiben
+_install_commit="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+_install_date="$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")"
+echo "{\"status\":\"ok\",\"commit\":\"${_install_commit}\",\"finished_at\":\"${_install_date}\",\"source\":\"installer\"}" \
+    > /var/run/hydrahive-update.json
+chown hydrahive:hydrahive /var/run/hydrahive-update.json 2>/dev/null || true
+
 install -m 755 "$(dirname "${BASH_SOURCE[0]}")/apply-network-profile.sh" "${HYDRAHIVE_DIR}/apply-network-profile.sh"
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-network-profile.sudoers" /etc/sudoers.d/hydrahive-network-profile
 success "Network-Profile-Skript installiert"
