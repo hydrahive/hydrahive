@@ -62,8 +62,8 @@ export CONSOLE_PASS
 
 # --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
 info "Kopiere hydrahive-core Quellcode..."
-REPO_CORE="$(dirname "${BASH_SOURCE[0]}")/../../core"
-REPO_CORE="$(realpath "${REPO_CORE}" 2>/dev/null || echo "${REPO_CORE}")"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_CORE="${REPO_ROOT}/core"
 
 if [ -d "${REPO_CORE}/src/hydrahive_core" ]; then
     cp -r "${REPO_CORE}/src" "${CORE_DIR}/"
@@ -71,6 +71,21 @@ if [ -d "${REPO_CORE}/src/hydrahive_core" ]; then
     success "hydrahive-core Quellcode bereit (${CORE_DIR})"
 else
     error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
+fi
+
+# --- System-Agenten anlegen (idempotent — vorhandene soul.md/memory bleibt erhalten) ---
+REPO_AGENTS="${REPO_ROOT}/agents"
+if [ -d "${REPO_AGENTS}" ]; then
+    for _agent_src in "${REPO_AGENTS}"/*/; do
+        _agent_id="$(basename "${_agent_src}")"
+        _agent_dst="/agents/${_agent_id}"
+        mkdir -p "${_agent_dst}/memory"
+        # agent.yaml und soul.md immer aktualisieren
+        [ -f "${_agent_src}/agent.yaml" ] && cp "${_agent_src}/agent.yaml" "${_agent_dst}/agent.yaml"
+        [ -f "${_agent_src}/soul.md"    ] && cp "${_agent_src}/soul.md"    "${_agent_dst}/soul.md"
+        chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${_agent_dst}"
+    done
+    success "System-Agenten bereit (/agents)"
 fi
 
 # --- Python-Venv einrichten (idempotent) ---

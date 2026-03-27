@@ -27,7 +27,6 @@ console/.vite/
 Thumbs.db
 
 # OctopOS Runtime
-/agents/
 /projects/
 *.log
 

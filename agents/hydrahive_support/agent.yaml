@@ -1,0 +1,33 @@
+id: hydrahive_support
+identity: HydraHive Support
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: claude-haiku-4-5-20251001
+  fallback_models: []
+  temperature: 0.5
+  max_tokens: 2048
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - system.read
+    - memory.read
+    - memory.write
+    - handoff.read
+    - agents.ask
+
+heartbeat:
+  interval: 60s
+  timeout: 180s
+  on_failure: ignore
+
+tools:
+- file_read
+- read_memory
+
+mcp_servers: []
+allowed_agents: []
