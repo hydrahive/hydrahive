@@ -108,9 +108,10 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
 
         async def stream():
             proc = await asyncio.create_subprocess_exec(
-                "sudo", "bash", str(INSTALL_SCRIPT),
+                "sudo", "-n", "bash", str(INSTALL_SCRIPT),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                env={**__import__("os").environ, "DEBIAN_FRONTEND": "noninteractive"},
             )
             import json as _j
             assert proc.stdout
