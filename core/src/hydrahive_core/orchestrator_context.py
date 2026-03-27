@@ -27,6 +27,29 @@ logger = logging.getLogger(__name__)
 _PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 _PROMPT_CACHE_TTL = 300  # 5 Min — gleich wie Anthropic ephemeral cache
 
+# Kontextfenster je Modell-Familie (Tokens)
+_MODEL_CONTEXT_TOKENS: dict[str, int] = {
+    "claude":   200_000,
+    "gpt-4o":   128_000,
+    "gpt-4":    128_000,
+    "gpt-3.5":   16_000,
+    "gemini":   128_000,
+    "mistral":   32_000,
+}
+_MAX_HISTORY_SHARE = 0.30  # max 30% des Kontextfensters für History (OpenClaw-Stil)
+
+
+def _history_token_budget(model: str) -> int:
+    """Maximale Token-Anzahl für die Message-History (30% des Modell-Kontextfensters).
+
+    Gibt einen konservativen Wert für unbekannte Modelle zurück (8k × 30% = 2400 Tokens).
+    """
+    model_lower = (model or "").lower()
+    for key, ctx_tokens in _MODEL_CONTEXT_TOKENS.items():
+        if key in model_lower:
+            return int(ctx_tokens * _MAX_HISTORY_SHARE)
+    return int(8_000 * _MAX_HISTORY_SHARE)  # Fallback für lokale/unbekannte Modelle
+
 
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""

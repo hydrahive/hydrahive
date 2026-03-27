@@ -49,6 +49,7 @@ from .orchestrator_context import (
     _build_system_prompt as _build_system_prompt_fn,
     _repo_review_guidance,
     _compact_if_needed as _compact_if_needed_fn,
+    _history_token_budget,
 )
 from .orchestrator_tools import (
     DispatchResult,
@@ -301,7 +302,10 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        history = self._sessions.get_context(project_id, max_messages=10)
+        history = self._sessions.get_context(
+            project_id, max_messages=10,
+            max_history_tokens=_history_token_budget(boss_cfg.llm.model),
+        )
         messages.extend(history)
         # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
         use_meta_only = "request_tools" in (boss_cfg.tools or [])
@@ -463,7 +467,10 @@ class Orchestrator:
         if _refresh:
             content = content.strip()[8:].strip()
         system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
-        history       = self._sessions.get_context(project_id, max_messages=10)
+        history       = self._sessions.get_context(
+            project_id, max_messages=10,
+            max_history_tokens=_history_token_budget(boss_cfg.llm.model),
+        )
         messages      = [{"role": "system", "content": system_prompt}] + history
         # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
         _use_meta = "request_tools" in (boss_cfg.tools or [])

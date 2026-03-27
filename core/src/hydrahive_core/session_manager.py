@@ -83,12 +83,15 @@ class Session:
         max_messages: int = 50,
         prune_tool_results: int = 3,
         max_tool_result_chars: int = 1500,
+        max_history_tokens: int | None = None,
     ) -> list[dict]:
         """
-        Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning)
+        Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning, #29 maxHistoryShare)
         - Kompaktierungs-Summary (System-Message an pos[0]) immer erhalten
         - Tool-Results älter als prune_tool_results → Platzhalter
         - Alle Tool-Results werden auf max_tool_result_chars gekürzt
+        - max_history_tokens: Token-Budget für History (30% des Kontextfensters)
+          → älteste Nachrichten werden entfernt bis Budget eingehalten
         """
         # Kompaktierungs-Summary immer als erste Nachricht erhalten
         summary_msgs = []
@@ -97,7 +100,16 @@ class Session:
             summary_msgs = [self.messages[0]]
             rest = self.messages[1:]
 
-        window = rest[-(max_messages - len(summary_msgs)):]
+        window = list(rest[-(max_messages - len(summary_msgs)):])
+
+        # Token-Budget: älteste Nachrichten entfernen bis Budget eingehalten (chars // 4 ≈ Tokens)
+        if max_history_tokens is not None and max_history_tokens > 0:
+            while len(window) > 2:
+                estimated = sum(len(m.content) for m in window) // 4
+                if estimated <= max_history_tokens:
+                    break
+                window.pop(0)  # älteste Nachricht entfernen
+
         cutoff = max(0, len(window) - prune_tool_results)
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
@@ -243,12 +255,17 @@ class SessionManager:
                 session.messages.pop()
                 self._persist(session)
 
-    def get_context(self, project_id: str, max_messages: int = 50) -> list[dict]:
+    def get_context(
+        self,
+        project_id: str,
+        max_messages: int = 50,
+        max_history_tokens: int | None = None,
+    ) -> list[dict]:
         """LLM-Context der aktiven Session (für Boss-Agent in #8)."""
         session = self._active.get(project_id)
         if not session:
             return []
-        return session.llm_context(max_messages)
+        return session.llm_context(max_messages, max_history_tokens=max_history_tokens)
 
     def get_active(self, project_id: str) -> Session | None:
         return self._active.get(project_id)
