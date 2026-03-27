@@ -65,7 +65,7 @@ if [ ! -f "${GITEA_CONF}" ]; then
 
     SK=$(openssl rand -hex 32)
     IT=$(openssl rand -hex 32)
-    JWT=$(openssl rand -base64 32 | tr -d '=+/' | head -c 43)
+    _raw="$(openssl rand -base64 64)"; _clean="${_raw//[\/+=]/}"; JWT="${_clean:0:43}"
     SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
     cat > "${GITEA_CONF}" << APPINI
@@ -170,7 +170,9 @@ success "Gitea läuft auf http://127.0.0.1:${GITEA_PORT}"
 # ────────────────────────────────────────────────── Admin-User + API-Token
 
 # Gitea-Admin-Passwort: gleich wie HydraHive-Admin oder generiert
-GITEA_ADMIN_PASS="${CONSOLE_PASS:-$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)}"
+if [ -z "${GITEA_ADMIN_PASS:-}" ]; then
+    _raw="$(openssl rand -base64 32)"; _clean="${_raw//[\/+=]/}"; GITEA_ADMIN_PASS="${CONSOLE_PASS:-${_clean:0:20}}"
+fi
 
 # Prüfen ob Admin bereits existiert
 EXISTING_USER=$(curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/users/search?q=${GITEA_ADMIN}" \

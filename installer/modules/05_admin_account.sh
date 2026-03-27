@@ -22,7 +22,7 @@ if [ -f "$CRED_FILE" ]; then
     ADMIN_PASS=$(grep -E '^matrix_admin_password=' "$CRED_FILE" | cut -d= -f2-)
 fi
 if [ -z "${ADMIN_PASS:-}" ]; then
-    ADMIN_PASS="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
+    _raw="$(openssl rand -base64 40)"; _clean="${_raw//[\/+=]/}"; ADMIN_PASS="${_clean:0:32}"
     mkdir -p /etc/hydrahive
     echo "matrix_admin_password=${ADMIN_PASS}" >> "$CRED_FILE"
     chmod 600 "$CRED_FILE"

@@ -50,7 +50,9 @@ if [ -n "${ADMIN_PASSWORD:-}" ]; then
 elif [ -n "${EXISTING_CONSOLE_PASS:-}" ]; then
     CONSOLE_PASS="${EXISTING_CONSOLE_PASS}"
 else
-    CONSOLE_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)"
+    _raw="$(openssl rand -base64 32)"
+    _clean="${_raw//[\/+=]/}"
+    CONSOLE_PASS="${_clean:0:24}"
 fi
 # Nur schreiben wenn noch nicht vorhanden
 if ! grep -q '^console_password=' "${CRED_FILE}" 2>/dev/null; then
