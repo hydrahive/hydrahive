@@ -280,8 +280,11 @@ class SchedulerService:
                     try:
                         import json as _j
                         d = _j.loads(chunk[6:])
+                        # {"type":"text","content":"..."} oder {"text":"..."}
                         if d.get("type") == "text":
                             response += d.get("content", "")
+                        elif "text" in d and isinstance(d["text"], str):
+                            response += d["text"]
                     except Exception:
                         pass
             await self._notify(s, success=True, detail=response[:120])

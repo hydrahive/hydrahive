@@ -848,6 +848,7 @@
     "lastRun": "Letzter Lauf",
     "nextRun": "Nächster Lauf",
     "enable": "Aktivieren",
-    "disable": "Deaktivieren"
+    "disable": "Deaktivieren",
+    "runNow": "Jetzt ausführen"
   }
 }

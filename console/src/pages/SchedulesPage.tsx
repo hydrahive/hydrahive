@@ -3,7 +3,7 @@ import { api, type Schedule, type SchedulePayload } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import {
   Clock, Plus, Trash2, Pencil, CheckCircle2, XCircle,
-  Loader2, Calendar,
+  Loader2, Calendar, Play,
 } from "lucide-react";
 
 // ---------------------------------------------------------------- helpers
@@ -212,6 +212,15 @@ export default function SchedulesPage() {
     }
   }
 
+  async function handleRun(s: Schedule) {
+    try {
+      await api.runScheduleNow(s.id);
+      load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   async function handleDelete(s: Schedule) {
     if (!confirm(t("schedules.confirmDelete", { name: s.name }))) return;
     try {
@@ -292,6 +301,13 @@ export default function SchedulesPage() {
 
               {/* Actions */}
               <div className="flex gap-1 shrink-0">
+                <button
+                  onClick={() => handleRun(s)}
+                  className="p-1.5 rounded hover:bg-green-900/40 text-zinc-400 hover:text-green-400"
+                  title={t("schedules.runNow")}
+                >
+                  <Play className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => setModal(s)}
                   className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400 hover:text-white"

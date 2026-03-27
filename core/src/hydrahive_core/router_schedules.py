@@ -67,3 +67,16 @@ def register_schedule_routes(router: APIRouter, *, require_auth) -> None:
         ok = scheduler_service.delete(schedule_id, user, role)
         if not ok:
             raise HTTPException(404, "Schedule nicht gefunden")
+
+    @router.post("/schedules/{schedule_id}/run", status_code=202)
+    def run_schedule_now(
+        schedule_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        import asyncio
+        user, role = auth
+        s = scheduler_service.get(schedule_id, user, role)
+        if s is None:
+            raise HTTPException(404, "Schedule nicht gefunden")
+        asyncio.create_task(scheduler_service._run(s))
+        return {"triggered": True, "schedule_id": schedule_id}

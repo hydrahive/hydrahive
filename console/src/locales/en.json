@@ -848,6 +848,7 @@
     "lastRun": "Last Run",
     "nextRun": "Next Run",
     "enable": "Enable",
-    "disable": "Disable"
+    "disable": "Disable",
+    "runNow": "Run now"
   }
 }

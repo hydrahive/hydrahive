@@ -160,6 +160,7 @@ export const api = {
   createSchedule:   (d: SchedulePayload) => api.post<Schedule>("/schedules", d),
   updateSchedule:   (id: string, d: Partial<SchedulePayload>) => api.patch<Schedule>(`/schedules/${id}`, d),
   deleteSchedule:   (id: string) => api.delete<void>(`/schedules/${id}`),
+  runScheduleNow:   (id: string) => api.post<{ triggered: boolean }>(`/schedules/${id}/run`, {}),
   // Notifications
   notifications:    () => api.get<{ notifications: AppNotification[] }>("/notifications"),
   unreadCount:      () => api.get<{ count: number }>("/notifications/unread-count"),
