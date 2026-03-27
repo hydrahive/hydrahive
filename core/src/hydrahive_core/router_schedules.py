@@ -69,7 +69,7 @@ def register_schedule_routes(router: APIRouter, *, require_auth) -> None:
             raise HTTPException(404, "Schedule nicht gefunden")
 
     @router.post("/schedules/{schedule_id}/run", status_code=202)
-    def run_schedule_now(
+    async def run_schedule_now(
         schedule_id: str,
         auth: tuple[str, str] = Depends(require_auth),
     ):
