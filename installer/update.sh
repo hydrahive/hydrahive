@@ -211,7 +211,8 @@ main() {
         if ! diff -q "${NGINX_TEMPLATE}" "${NGINX_SITE}" > /dev/null 2>&1; then
             cp "${NGINX_TEMPLATE}" "${NGINX_SITE}"
             if nginx -t 2>/dev/null; then
-                systemctl reload nginx
+                # reload wenn nginx läuft, restart wenn gestoppt
+                systemctl reload nginx 2>/dev/null || systemctl restart nginx
                 info "nginx-Konfig aktualisiert und neu geladen"
             else
                 warn "nginx-Konfig fehlerhaft — Reload übersprungen"
