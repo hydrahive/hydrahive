@@ -12,7 +12,9 @@
     "settings": "Einstellungen",
     "activity": "Aktivität",
     "usage": "Usage",
-    "search": "Web-Suche"
+    "search": "Web-Suche",
+    "groupOperations": "Operations",
+    "groupSystem": "System"
   },
   "navHint": {
     "dashboard": "Lagebild",

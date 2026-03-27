@@ -11,11 +11,9 @@ const ProjectsPage      = lazy(() => import("@/pages/ProjectsPage").then((m) => 
 const ProjectCreatePage = lazy(() => import("@/pages/ProjectCreatePage").then((m) => ({ default: m.ProjectCreatePage })));
 const SystemPage        = lazy(() => import("@/pages/SystemPage").then((m) => ({ default: m.SystemPage })));
 const ToolsPage         = lazy(() => import("@/pages/ToolsPage").then((m) => ({ default: m.ToolsPage })));
-const UserPage          = lazy(() => import("@/pages/UserPage").then((m) => ({ default: m.UserPage })));
 const ChatPage          = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AgentChatPage     = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
 const AuditPage         = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
-const BackupPage        = lazy(() => import("@/pages/BackupPage").then((m) => ({ default: m.BackupPage })));
 const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
@@ -67,16 +65,16 @@ export default function App() {
             <Route path="search"            element={<SearchPage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
-            <Route path="users"             element={<UserPage />} />
             <Route path="audit"             element={<AuditPage />} />
-            <Route path="backup"            element={<BackupPage />} />
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
             {/* Redirects für alte Bookmarks */}
-            <Route path="llm"   element={<Navigate to="/settings" replace />} />
-            <Route path="mcp"   element={<Navigate to="/settings" replace />} />
-            <Route path="gitea" element={<Navigate to="/settings" replace />} />
-            <Route path="vpn"   element={<Navigate to="/settings" replace />} />
+            <Route path="llm"    element={<Navigate to="/settings" replace />} />
+            <Route path="mcp"    element={<Navigate to="/settings" replace />} />
+            <Route path="gitea"  element={<Navigate to="/settings" replace />} />
+            <Route path="vpn"    element={<Navigate to="/settings" replace />} />
+            <Route path="users"  element={<Navigate to="/settings" replace />} />
+            <Route path="backup" element={<Navigate to="/settings" replace />} />
           </Route>
         </Routes>
       </Suspense>

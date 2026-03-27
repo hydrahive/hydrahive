@@ -12,7 +12,9 @@
     "settings": "Settings",
     "activity": "Activity",
     "usage": "Usage",
-    "search": "Web Search"
+    "search": "Web Search",
+    "groupOperations": "Operations",
+    "groupSystem": "System"
   },
   "navHint": {
     "dashboard": "Operations overview",

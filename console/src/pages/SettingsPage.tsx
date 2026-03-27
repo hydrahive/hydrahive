@@ -1,19 +1,23 @@
 import { useState } from "react";
-import { Cpu, Plug, GitBranch, Network, Settings, Mail } from "lucide-react";
+import { Cpu, Plug, GitBranch, Network, Settings, Mail, Users, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
 import { VpnPage } from "@/pages/VpnPage";
 import { KasConfigPage } from "@/pages/KasConfigPage";
+import { UserPage } from "@/pages/UserPage";
+import { BackupPage } from "@/pages/BackupPage";
 import { useTranslation } from "react-i18next";
 
 const TABS = [
-  { id: "llm",   label: "LLM-Config",  icon: Cpu,       component: LlmConfigPage },
-  { id: "mcp",   label: "MCP-Server",  icon: Plug,      component: McpConfigPage },
-  { id: "gitea", label: "Gitea",       icon: GitBranch, component: GiteaConfigPage },
-  { id: "vpn",   label: "VPN",         icon: Network,   component: VpnPage },
-  { id: "kas",   label: "Mail / KAS",  icon: Mail,      component: KasConfigPage },
+  { id: "llm",    label: "LLM",        icon: Cpu,       component: LlmConfigPage },
+  { id: "mcp",    label: "MCP",        icon: Plug,      component: McpConfigPage },
+  { id: "gitea",  label: "Gitea",      icon: GitBranch, component: GiteaConfigPage },
+  { id: "vpn",    label: "VPN",        icon: Network,   component: VpnPage },
+  { id: "kas",    label: "Mail / KAS", icon: Mail,      component: KasConfigPage },
+  { id: "users",  label: "Users",      icon: Users,     component: UserPage },
+  { id: "backup", label: "Backup",     icon: Archive,   component: BackupPage },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];

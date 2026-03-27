@@ -1,3 +1,4 @@
+import React from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { SupportWidget } from "@/components/SupportWidget";
 import {
@@ -7,10 +8,8 @@ import {
   FolderKanban,
   Server,
   Wrench,
-  Users,
   LogOut,
   ShieldCheck,
-  Archive,
   Sun,
   Moon,
   Sparkles,
@@ -105,26 +104,42 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const navAll = [
-    { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
-    { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
-    { to: "/projects", icon: FolderKanban, label: t("nav.projects"), hint: t("navHint.projects") },
-    { to: "/tools", icon: Wrench, label: t("nav.tools"), hint: t("navHint.tools") },
-  ];
+  type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
+  type NavGroup = { label?: string; items: NavItem[] };
 
-  const navAdmin = [
-    { to: "/agents",   icon: Bot,        label: t("nav.agents"),   hint: t("navHint.agents") },
-    { to: "/activity", icon: Activity,   label: t("nav.activity"), hint: t("navHint.activity") },
-    { to: "/usage",    icon: BarChart2,  label: t("nav.usage"),    hint: t("navHint.usage") },
-    { to: "/search",   icon: Search,     label: t("nav.search"),   hint: t("navHint.search") },
-    { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
-    { to: "/users",    icon: Users,      label: t("nav.users"),    hint: t("navHint.users") },
-    { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
-    { to: "/backup",   icon: Archive,    label: t("nav.backup"),   hint: t("navHint.backup") },
-    { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
-  ];
+  const groupWorkspace: NavGroup = {
+    items: [
+      { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
+      { to: "/my-agent",  icon: Sparkles,        label: t("nav.myAgent"),   hint: t("navHint.myAgent") },
+      { to: "/projects",  icon: FolderKanban,    label: t("nav.projects"),  hint: t("navHint.projects") },
+      { to: "/tools",     icon: Wrench,          label: t("nav.tools"),     hint: t("navHint.tools") },
+    ],
+  };
 
-  const nav = isAdmin ? [...navAll, ...navAdmin] : navAll;
+  const groupOperations: NavGroup = {
+    label: t("nav.groupOperations"),
+    items: [
+      { to: "/agents",   icon: Bot,      label: t("nav.agents"),   hint: t("navHint.agents") },
+      { to: "/activity", icon: Activity, label: t("nav.activity"), hint: t("navHint.activity") },
+      { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
+      { to: "/search",   icon: Search,   label: t("nav.search"),   hint: t("navHint.search") },
+    ],
+  };
+
+  const groupSystem: NavGroup = {
+    label: t("nav.groupSystem"),
+    items: [
+      { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
+      { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
+      { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
+    ],
+  };
+
+  const groups: NavGroup[] = isAdmin
+    ? [groupWorkspace, groupOperations, groupSystem]
+    : [groupWorkspace];
+
+  const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
@@ -168,19 +183,30 @@ export function AdminLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {nav.map(({ to, icon: Icon, label, hint }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
-          >
-            <Icon className="h-4 w-4 flex-shrink-0" />
-            <div className="min-w-0">
-              <div className="truncate">{label}</div>
-              <div className="truncate text-xs text-[hsl(var(--sidebar-muted))]">{hint}</div>
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+        {groups.map((group, gi) => (
+          <div key={gi}>
+            {group.label && (
+              <p className="px-2 mb-1 text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] select-none">
+                {group.label}
+              </p>
+            )}
+            <div className="space-y-1">
+              {group.items.map(({ to, icon: Icon, label, hint }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="truncate">{label}</div>
+                    <div className="truncate text-xs text-[hsl(var(--sidebar-muted))]">{hint}</div>
+                  </div>
+                </NavLink>
+              ))}
             </div>
-          </NavLink>
+          </div>
         ))}
       </nav>
 
