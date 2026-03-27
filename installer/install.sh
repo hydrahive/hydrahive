@@ -45,6 +45,11 @@ elif [ -d "/etc/hydrahive" ] && [ -d "/etc/hydrahive" ]; then
   fi
 fi
 
+# --- Dangling nginx-Symlinks bereinigen (von fehlgeschlagenen Vorinstalls) ---
+for _sl in /etc/nginx/sites-enabled/*; do
+    [ -L "$_sl" ] && [ ! -e "$_sl" ] && rm -f "$_sl" && warn "Veralteten nginx-Symlink entfernt: $_sl"
+done
+
 # --- Phase 1: Fundament ---
 echo -e "${BLUE}--- Phase 1: Fundament ---${NC}"
 source "${MODULES_DIR}/01_os_check.sh"
