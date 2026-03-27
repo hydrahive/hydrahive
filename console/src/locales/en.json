@@ -823,8 +823,12 @@
     "loadError": "Error loading status",
     "genericError": "Error",
     "notInstalledTitle": "SearXNG is not installed",
-    "notInstalledBody": "SearXNG was not set up during initial installation. Run the following command on the server to install it:",
-    "notInstalledHint": "Reload this page after installation."
+    "notInstalledBody": "SearXNG was not set up during initial installation. Click Install to add it now.",
+    "installBtn": "Install SearXNG",
+    "installing": "Installing…",
+    "installSuccess": "Installation successful!",
+    "installFailed": "Installation failed — see log above.",
+    "reload": "Reload page"
   },
   "notifications": {
     "title": "Notifications",

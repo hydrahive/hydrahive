@@ -6,19 +6,22 @@ POST /admin/searxng/test    → Test-Suche aus der Console (body: {query, engine
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import subprocess
 from pathlib import Path
 
 import aiohttp
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-SEARXNG_URL  = "http://127.0.0.1:8888"
-SEARXNG_CONF = Path("/etc/searxng/settings.yml")
-SEARXNG_DIR  = Path("/opt/searxng")
+SEARXNG_URL      = "http://127.0.0.1:8888"
+SEARXNG_CONF     = Path("/etc/searxng/settings.yml")
+SEARXNG_DIR      = Path("/opt/searxng")
+INSTALL_SCRIPT   = Path("/opt/hydrahive/installer/modules/14_searxng.sh")
 
 
 class SearchTestRequest(BaseModel):
@@ -96,6 +99,32 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
             "engines":        engines,
             "config_exists":  _safe_exists(SEARXNG_CONF),
         }
+
+    @admin_router.post("/admin/searxng/install")
+    async def searxng_install(_a=Depends(require_admin)):
+        if not INSTALL_SCRIPT.exists():
+            from fastapi import HTTPException
+            raise HTTPException(500, "Installer-Script nicht gefunden: Bitte erst ein Update durchführen.")
+
+        async def stream():
+            proc = await asyncio.create_subprocess_exec(
+                "sudo", "bash", str(INSTALL_SCRIPT),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            import json as _j
+            assert proc.stdout
+            async for line in proc.stdout:
+                text = line.decode("utf-8", errors="replace").rstrip()
+                yield f"data: {_j.dumps({'line': text})}\n\n"
+            rc = await proc.wait()
+            yield f"data: {_j.dumps({'done': True, 'ok': rc == 0})}\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @admin_router.post("/admin/searxng/test")
     async def searxng_test(req: SearchTestRequest, _a=Depends(require_admin)):

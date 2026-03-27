@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Search, CheckCircle, XCircle, RefreshCw, Play, ExternalLink } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, CheckCircle, XCircle, RefreshCw, Play, ExternalLink, Download, Loader2 } from "lucide-react";
 import { api, SearxngStatus, SearxngTestResult } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -42,31 +42,101 @@ export function SearchPage() {
     } finally { setSearching(false); }
   }
 
-  const isRunning  = status?.service_active && status?.http_ok;
+  const isRunning   = status?.service_active && status?.http_ok;
   const isInstalled = status?.installed ?? true;
+
+  const [installing, setInstalling] = useState(false);
+  const [installLog, setInstallLog] = useState<string[]>([]);
+  const [installDone, setInstallDone] = useState<boolean | null>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  async function handleInstall() {
+    setInstalling(true);
+    setInstallLog([]);
+    setInstallDone(null);
+    const token = localStorage.getItem("hydrahive_token") || "";
+    const res = await fetch("/api/admin/searxng/install", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok || !res.body) {
+      setInstallLog([`Fehler: HTTP ${res.status}`]);
+      setInstalling(false);
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() ?? "";
+      for (const part of parts) {
+        const line = part.replace(/^data: /, "").trim();
+        if (!line) continue;
+        try {
+          const d = JSON.parse(line);
+          if (d.line !== undefined) setInstallLog(l => [...l, d.line]);
+          if (d.done) { setInstallDone(d.ok); setInstalling(false); }
+        } catch { /* ignore */ }
+      }
+    }
+    setInstalling(false);
+  }
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [installLog]);
 
   if (loading) return (
     <div className="p-8 text-sm text-muted-foreground">{t("searchPage.loading")}</div>
   );
 
   if (!isInstalled) return (
-    <div className="p-8 max-w-xl space-y-4">
+    <div className="p-8 max-w-xl space-y-5">
       <div className="flex items-center gap-3">
         <XCircle className="w-6 h-6 text-yellow-500 shrink-0" />
         <h2 className="text-lg font-semibold">{t("searchPage.notInstalledTitle")}</h2>
       </div>
       <p className="text-sm text-muted-foreground">{t("searchPage.notInstalledBody")}</p>
-      <div className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 font-mono text-sm">
-        <span className="select-all flex-1">sudo bash /opt/hydrahive/installer/modules/14_searxng.sh</span>
+
+      {installDone === null && (
         <button
-          onClick={() => navigator.clipboard.writeText("sudo bash /opt/hydrahive/installer/modules/14_searxng.sh")}
-          className="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded hover:bg-zinc-700"
-          title={t("common.copy")}
+          onClick={handleInstall}
+          disabled={installing}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium"
         >
-          {t("common.copy")}
+          {installing
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Download className="w-4 h-4" />}
+          {installing ? t("searchPage.installing") : t("searchPage.installBtn")}
         </button>
-      </div>
-      <p className="text-xs text-muted-foreground">{t("searchPage.notInstalledHint")}</p>
+      )}
+
+      {installLog.length > 0 && (
+        <div
+          ref={logRef}
+          className="rounded-xl bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs text-zinc-300 max-h-72 overflow-y-auto space-y-0.5"
+        >
+          {installLog.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
+        </div>
+      )}
+
+      {installDone === true && (
+        <div className="flex items-center gap-2 text-green-400 text-sm">
+          <CheckCircle className="w-4 h-4" />
+          {t("searchPage.installSuccess")}
+          <button onClick={load} className="ml-2 underline">{t("searchPage.reload")}</button>
+        </div>
+      )}
+      {installDone === false && (
+        <div className="flex items-center gap-2 text-red-400 text-sm">
+          <XCircle className="w-4 h-4" />
+          {t("searchPage.installFailed")}
+        </div>
+      )}
     </div>
   );
 
