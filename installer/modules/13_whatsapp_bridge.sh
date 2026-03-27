@@ -64,12 +64,11 @@ fi
 
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}"
 
-# --- npm ci --production ---
-info "Installiere Node.js-Abhängigkeiten (npm ci --production)..."
-# npm ci muss als root laufen, aber der install-Pfad gehört hydrahive
+# --- npm install --omit=dev ---
+info "Installiere Node.js-Abhängigkeiten..."
 # PUPPETEER_SKIP_DOWNLOAD=1 weil wir system-Chromium verwenden
-PUPPETEER_SKIP_DOWNLOAD=1 npm ci --production --prefix "${BRIDGE_INSTALL_DIR}" \
-    || error "npm ci fehlgeschlagen — pruefe ${BRIDGE_INSTALL_DIR}/package.json"
+PUPPETEER_SKIP_DOWNLOAD=1 npm install --omit=dev --prefix "${BRIDGE_INSTALL_DIR}" \
+    || error "npm install fehlgeschlagen — pruefe ${BRIDGE_INSTALL_DIR}/package.json"
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}/node_modules"
 success "Node.js-Abhängigkeiten installiert"
 
