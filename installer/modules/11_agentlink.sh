@@ -87,7 +87,7 @@ info "Datenbank-Schema..."
 pushd "${AGENTLINK_DIR}/backend" > /dev/null
 DATABASE_URL="postgresql://agentlink:${AGENTLINK_DB_PASS}@localhost:5432/agentlink" \
     "${AGENTLINK_DIR}/venv/bin/python" -c \
-    "from database import Base, engine; Base.metadata.create_all(bind=engine); print('OK')" \
+    "from database import Base, engine; Base.metadata.create_all(engine); print('OK')" \
     && success "DB-Schema bereit" \
     || warn "DB-Schema konnte nicht initialisiert werden — ggf. beim ersten Start nachholen"
 popd > /dev/null
