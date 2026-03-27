@@ -84,12 +84,13 @@ chmod 640 "${AGENTLINK_DIR}/backend/.env"
 
 # ─── 6. DB-Schema initialisieren ─────────────────────────────────────────────
 info "Datenbank-Schema..."
-cd "${AGENTLINK_DIR}/backend"
+pushd "${AGENTLINK_DIR}/backend" > /dev/null
 DATABASE_URL="postgresql://agentlink:${AGENTLINK_DB_PASS}@localhost:5432/agentlink" \
     "${AGENTLINK_DIR}/venv/bin/python" -c \
     "from database import Base, engine; Base.metadata.create_all(bind=engine); print('OK')" \
     && success "DB-Schema bereit" \
     || warn "DB-Schema konnte nicht initialisiert werden — ggf. beim ersten Start nachholen"
+popd > /dev/null
 
 # ─── 7. ChromaDB-Service ─────────────────────────────────────────────────────
 cat > /etc/systemd/system/hydrahive-chromadb.service << UNIT

@@ -5,7 +5,7 @@ set -euo pipefail
 
 HYDRAHIVE_VERSION="0.1.0"
 export HYDRAHIVE_DIR="/opt/hydrahive"
-MODULES_DIR="$(dirname "${BASH_SOURCE[0]}")/modules"
+MODULES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/modules"
 
 # Farben — zentral definiert, alle Module nutzen diese
 export RED="\033[0;31m"
