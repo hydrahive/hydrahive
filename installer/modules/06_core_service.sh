@@ -44,7 +44,7 @@ fi
 # --- Console-Admin-Passwort (idempotent) ---
 # Aus Env-Variable, vorhandenem Eintrag oder neu generiert
 CRED_FILE="/etc/hydrahive/admin_credentials"
-EXISTING_CONSOLE_PASS=$(grep -E '^console_password=' "${CRED_FILE}" 2>/dev/null | cut -d= -f2-)
+EXISTING_CONSOLE_PASS=$(grep -E '^console_password=' "${CRED_FILE}" 2>/dev/null | cut -d= -f2-) || true
 if [ -n "${ADMIN_PASSWORD:-}" ]; then
     CONSOLE_PASS="${ADMIN_PASSWORD}"
 elif [ -n "${EXISTING_CONSOLE_PASS:-}" ]; then
