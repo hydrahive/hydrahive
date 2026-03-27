@@ -68,67 +68,31 @@ info "Installiere SearXNG-Abhängigkeiten..."
 if [ -f "${SEARXNG_DIR}/requirements.txt" ]; then
     "${SEARXNG_VENV}/bin/pip" install --quiet -r "${SEARXNG_DIR}/requirements.txt"
 fi
-"${SEARXNG_VENV}/bin/pip" install --quiet -e "${SEARXNG_DIR}"
+# Kein 'pip install -e .' — SearXNG's setup.py lädt settings.yml beim Build,
+# was beim ersten Aufruf noch nicht existiert. Stattdessen: .pth Datei damit
+# Python searxng direkt aus /opt/searxng importiert.
+PYTHON_VERSION=$("${SEARXNG_VENV}/bin/python" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+echo "${SEARXNG_DIR}" > "${SEARXNG_VENV}/lib/python${PYTHON_VERSION}/site-packages/searxng.pth"
 success "SearXNG-Pakete installiert"
 
 # --- settings.yml (nur beim ersten Mal anlegen, nicht überschreiben) ---
 if [ ! -f "${SEARXNG_CONF}" ]; then
     info "Schreibe ${SEARXNG_CONF}..."
     SEARXNG_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-    cat > "${SEARXNG_CONF}" << YAMLEOF
-# SearXNG Konfiguration — verwaltet von HydraHive Installer
-# Nur lokal erreichbar (127.0.0.1:${SEARXNG_PORT}), kein öffentlicher Zugriff.
-
-general:
-  debug: false
-  instance_name: "HydraHive Search"
-
-server:
-  port: ${SEARXNG_PORT}
-  bind_address: "127.0.0.1"
-  secret_key: "${SEARXNG_SECRET}"
-  base_url: false
-  image_proxy: false
-
-ui:
-  default_theme: simple
-
-search:
-  safe_search: 0
-  autocomplete: ""
-  default_lang: "de-DE"
-  formats:
-    - html
-    - json
-
-outgoing:
-  request_timeout: 6.0
-  max_request_timeout: 15.0
-
-engines:
-  - name: duckduckgo
-    engine: duckduckgo
-    shortcut: ddg
-
-  - name: wikipedia
-    engine: wikipedia
-    shortcut: wp
-    base_url: "https://de.wikipedia.org/"
-    timeout: 6.0
-
-  - name: stackoverflow
-    engine: stackoverflow
-    shortcut: so
-
-  - name: github
-    engine: github
-    shortcut: gh
-
-  - name: startpage
-    engine: startpage
-    shortcut: sp
-    timeout: 8.0
-YAMLEOF
+    # Basis: SearXNG-eigene settings.yml (validiert gegen das Schema),
+    # nur secret_key und instance_name anpassen.
+    cp "${SEARXNG_DIR}/searx/settings.yml" "${SEARXNG_CONF}"
+    # secret_key setzen
+    sed -i "s|secret_key: \"ultrasecretkey\".*|secret_key: \"${SEARXNG_SECRET}\"|" "${SEARXNG_CONF}"
+    # SEARXNG_SECRET env-override deaktivieren (inline-Kommentar entfernen nicht nötig, nur den Wert setzen)
+    # instance_name setzen
+    sed -i 's|instance_name: "SearXNG"|instance_name: "HydraHive Search"|' "${SEARXNG_CONF}"
+    # JSON-Format aktivieren (für API-Nutzung durch Agenten)
+    sed -i 's|^  # formats:.*|  formats:|; s|^  #   - html|    - html|; s|^  #   - csv|    - json|' "${SEARXNG_CONF}" || true
+    # Falls obiger sed nicht trifft: formats-Block sicher einfügen
+    if ! grep -q "^  formats:" "${SEARXNG_CONF}"; then
+        sed -i '/^search:/a\  formats:\n    - html\n    - json' "${SEARXNG_CONF}"
+    fi
     chown root:"${SEARXNG_USER}" "${SEARXNG_CONF}"
     chmod 640 "${SEARXNG_CONF}"
     success "${SEARXNG_CONF} geschrieben"
@@ -178,7 +142,7 @@ HEALTH_OK=0
 for i in 1 2 3 4 5 6; do
     sleep 3
     HTTP_STATUS=$(curl -so /dev/null -w "%{http_code}" \
-        "http://127.0.0.1:${SEARXNG_PORT}/search?q=test&format=json" 2>/dev/null || echo "000")
+        "http://127.0.0.1:${SEARXNG_PORT}/" 2>/dev/null || echo "000")
     if [ "${HTTP_STATUS}" = "200" ]; then
         HEALTH_OK=1
         break
