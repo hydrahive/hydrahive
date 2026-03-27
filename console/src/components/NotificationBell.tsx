@@ -32,6 +32,7 @@ export function NotificationBell() {
 
   useEffect(() => {
     loadAll();
+
     // SSE-Stream für Live-Updates
     const token = localStorage.getItem("hydrahive_token") || "";
     const es = new EventSource(`/api/notifications/stream?token=${token}`);
@@ -43,7 +44,11 @@ export function NotificationBell() {
         setUnread(prev => prev + 1);
       } catch { /* ignore parse errors */ }
     };
-    return () => es.close();
+
+    // Polling als Fallback falls SSE-Chunk verpasst wurde
+    const poll = setInterval(loadAll, 30_000);
+
+    return () => { es.close(); clearInterval(poll); };
   }, []);
 
   // Klick außerhalb schließt Dropdown
