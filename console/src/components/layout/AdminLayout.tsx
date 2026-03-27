@@ -21,6 +21,7 @@ import {
   BarChart2,
   Search,
   Calendar,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,36 @@ function useUpdateStatus(isAdmin: boolean) {
   return { updating, lastCommit, error, trigger };
 }
 
+function useCoreConnection() {
+  const [online, setOnline] = useState(true);
+  const fails = React.useRef(0);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function check() {
+      try {
+        await api.health();
+        if (fails.current > 0) {
+          // Core wieder erreichbar — Seite neu laden für frische Assets
+          window.location.reload();
+          return;
+        }
+        timer = setTimeout(check, 8_000);
+      } catch {
+        fails.current += 1;
+        if (fails.current >= 2) setOnline(false); // erst nach 2 Fehlern Overlay
+        timer = setTimeout(check, 3_000);
+      }
+    }
+
+    timer = setTimeout(check, 8_000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return online;
+}
+
 function useDarkMode() {
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem("theme");
@@ -146,6 +177,7 @@ export function AdminLayout() {
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
+  const coreOnline = useCoreConnection();
 
   useEffect(() => {
     setMobileOpen(false);
@@ -264,6 +296,18 @@ export function AdminLayout() {
 
   return (
     <div className="app-shell lg:grid lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
+      {!coreOnline && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95 backdrop-blur-sm">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <div className="text-center">
+            <p className="text-lg font-semibold">
+              {updating ? t("layout.restartingUpdate") : t("layout.restartingCore")}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("layout.restartingWait")}</p>
+          </div>
+        </div>
+      )}
+
       <div className="hidden lg:block lg:h-screen lg:overflow-hidden">
         <div className="sticky top-0 h-screen">{sidebar}</div>
       </div>

@@ -50,7 +50,10 @@
     "operationsConsole": "Operations Console",
     "systemView": "Systemansicht",
     "updateActive": "Update aktiv",
-    "systemReady": "System bereit"
+    "systemReady": "System bereit",
+    "restartingUpdate": "Update wird abgeschlossen...",
+    "restartingCore": "System startet neu...",
+    "restartingWait": "Bitte warten, Verbindung wird automatisch wiederhergestellt."
   },
   "dashboard": {
     "title": "Operations-Dashboard fuer den laufenden HydraHive-Stack",
