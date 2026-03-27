@@ -11,15 +11,31 @@ import logging
 import subprocess
 from pathlib import Path
 
-import httpx
+import json as _json
 from fastapi import APIRouter, Depends
-
-def _httpx_get(url: str, timeout: float) -> httpx.Response:
-    """Synchroner httpx-Aufruf — wird per asyncio.to_thread aus dem Event-Loop ausgelagert."""
-    with httpx.Client() as client:
-        return client.get(url, timeout=timeout, follow_redirects=True)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+
+async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
+    """GET via curl-Subprocess — umgeht Python-HTTP-Library-Probleme mit SearXNG."""
+    proc = await asyncio.create_subprocess_exec(
+        "curl", "-s", "-o", "-", "-w", "\n__STATUS__%{http_code}",
+        "--max-time", str(timeout), "-L", url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    # Letzten Marker extrahieren
+    marker = b"\n__STATUS__"
+    idx = stdout.rfind(marker)
+    if idx >= 0:
+        status = int(stdout[idx + len(marker):])
+        body = stdout[:idx]
+    else:
+        status = 0
+        body = stdout
+    return status, body
 
 logger = logging.getLogger(__name__)
 
@@ -56,20 +72,18 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         except Exception as e:
             logger.debug("systemctl show searxng: %s", e)
 
-        # 2. HTTP-Erreichbarkeit + JSON-Format-Check (sync in Thread → kein Event-Loop-Timeout)
+        # 2. HTTP-Erreichbarkeit + JSON-Format-Check
         http_ok = False
         json_ok = False
         try:
-            r = await asyncio.to_thread(_httpx_get, f"{SEARXNG_URL}/", 3.0)
-            http_ok = r.status_code in (200, 302)
+            status, _ = await _curl_get(f"{SEARXNG_URL}/", timeout=3)
+            http_ok = status in (200, 302)
         except Exception:
             pass
         if http_ok:
             try:
-                r = await asyncio.to_thread(
-                    _httpx_get, f"{SEARXNG_URL}/search?q=ping&format=json", 8.0,
-                )
-                json_ok = r.status_code == 200
+                status, _ = await _curl_get(f"{SEARXNG_URL}/search?q=ping&format=json", timeout=8)
+                json_ok = status == 200
             except Exception:
                 pass
 
@@ -153,10 +167,10 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
 
         url = f"{SEARXNG_URL}/search?{urlencode(params)}"
         try:
-            resp = await asyncio.to_thread(_httpx_get, url, 30.0)
-            if resp.status_code != 200:
-                return {"error": f"HTTP {resp.status_code}", "detail": resp.text[:200], "results": []}
-            data = resp.json()
+            status, body = await _curl_get(url, timeout=30)
+            if status != 200:
+                return {"error": f"HTTP {status}", "detail": body[:200].decode("utf-8", errors="replace"), "results": []}
+            data = _json.loads(body)
         except Exception as e:
             detail = str(e) or type(e).__name__
             return {"error": f"SearXNG nicht erreichbar: {detail}", "results": []}
