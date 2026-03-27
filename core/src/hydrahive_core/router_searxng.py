@@ -17,16 +17,16 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 
-async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
-    """GET via curl-Subprocess — umgeht Python-HTTP-Library-Probleme mit SearXNG."""
-    proc = await asyncio.create_subprocess_exec(
-        "curl", "-s", "-o", "-", "-w", "\n__STATUS__%{http_code}",
-        "--max-time", str(timeout), "--noproxy", "*", "-L", url,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
+def _curl_get_sync(url: str, timeout: int = 20) -> tuple[int, bytes]:
+    """Synchroner curl-Aufruf im Thread-Pool — umgeht uvloop/subprocess-Kompatibilitätsprobleme."""
+    import subprocess as _sp
+    result = _sp.run(
+        ["curl", "-s", "-o", "-", "-w", "\n__STATUS__%{http_code}",
+         "--max-time", str(timeout), "--noproxy", "*", "-L", url],
+        capture_output=True,
+        timeout=timeout + 5,
     )
-    stdout, _ = await proc.communicate()
-    # Letzten Marker extrahieren
+    stdout = result.stdout
     marker = b"\n__STATUS__"
     idx = stdout.rfind(marker)
     if idx >= 0:
@@ -36,6 +36,11 @@ async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
         status = 0
         body = stdout
     return status, body
+
+
+async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
+    """Async-Wrapper: führt _curl_get_sync in asyncio.to_thread aus."""
+    return await asyncio.to_thread(_curl_get_sync, url, timeout)
 
 logger = logging.getLogger(__name__)
 
