@@ -1483,6 +1483,16 @@ function DiscordTab() {
   const [saving,       setSaving]       = useState(false);
   const [testing,      setTesting]      = useState(false);
   const [msg,          setMsg]          = useState("");
+  const [channelModes,   setChannelModes]   = useState<Record<string,string>>({});
+  const [channelNames,   setChannelNames]   = useState<Record<string,string>>({});
+  const [roles,          setRoles]          = useState<{id:string;name:string;color:string}[]>([]);
+  const [loadingRoles,   setLoadingRoles]   = useState(false);
+  const [roleWhitelist,  setRoleWhitelist]  = useState<Set<string>>(new Set());
+  const [roleBlacklist,  setRoleBlacklist]  = useState<Set<string>>(new Set());
+  const [userWhitelist,  setUserWhitelist]  = useState<string[]>([]);
+  const [userBlacklist,  setUserBlacklist]  = useState<string[]>([]);
+  const [userWlInput,    setUserWlInput]    = useState("");
+  const [userBlInput,    setUserBlInput]    = useState("");
 
   useEffect(() => {
     api.getDiscord().then(d => {
@@ -1495,6 +1505,12 @@ function DiscordTab() {
       setLoopBotThreshold(d.loop_bot_threshold ?? 6);
       setLoopPingpongSeconds(d.loop_pingpong_seconds ?? 30);
       setLoopCooldownSeconds(d.loop_cooldown_seconds ?? 300);
+      setChannelModes(d.channel_modes ?? {});
+      setChannelNames(d.channel_names ?? {});
+      setRoleWhitelist(new Set(d.role_whitelist ?? []));
+      setRoleBlacklist(new Set(d.role_blacklist ?? []));
+      setUserWhitelist(d.user_whitelist ?? []);
+      setUserBlacklist(d.user_blacklist ?? []);
     }).catch(() => {});
   }, []);
 
@@ -1503,10 +1519,24 @@ function DiscordTab() {
     try {
       const res = await api.getDiscordChannels();
       setChannels(res.channels ?? []);
+      const nameMap: Record<string,string> = {};
+      (res.channels ?? []).forEach((ch: {id:string;name:string}) => { nameMap[ch.id] = ch.name; });
+      setChannelNames(prev => ({...prev, ...nameMap}));
       if ((res.channels ?? []).length === 0) setMsg("Keine Text-Channels gefunden");
     } catch (err: unknown) {
       setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
     } finally { setLoadingCh(false); }
+  }
+
+  async function loadRoles() {
+    setLoadingRoles(true); setMsg("");
+    try {
+      const res = await api.getDiscordRoles();
+      setRoles(res.roles ?? []);
+      if ((res.roles ?? []).length === 0) setMsg("Keine Rollen gefunden");
+    } catch (err: unknown) {
+      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+    } finally { setLoadingRoles(false); }
   }
 
   function toggleChannel(id: string) {
@@ -1531,12 +1561,24 @@ function DiscordTab() {
         loop_bot_threshold: loopBotThreshold,
         loop_pingpong_seconds: loopPingpongSeconds,
         loop_cooldown_seconds: loopCooldownSeconds,
+        channel_modes: channelModes,
+        channel_names: channelNames,
+        role_whitelist: [...roleWhitelist],
+        role_blacklist: [...roleBlacklist],
+        user_whitelist: userWhitelist,
+        user_blacklist: userBlacklist,
       });
       setMsg(`✓ Bot "${res.bot_name}" verbunden`);
       setBotToken(""); setChangeToken(false);
       const updated = await api.getDiscord();
       setCfg(updated);
       setSelectedIds(new Set(updated.channel_ids ?? []));
+      setChannelModes(updated.channel_modes ?? {});
+      setChannelNames(updated.channel_names ?? {});
+      setRoleWhitelist(new Set(updated.role_whitelist ?? []));
+      setRoleBlacklist(new Set(updated.role_blacklist ?? []));
+      setUserWhitelist(updated.user_whitelist ?? []);
+      setUserBlacklist(updated.user_blacklist ?? []);
     } catch (err: unknown) {
       setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
     } finally { setSaving(false); }
@@ -1547,6 +1589,9 @@ function DiscordTab() {
     await api.deleteDiscord();
     setCfg({ configured: false });
     setGuildId(""); setSelectedIds(new Set()); setChannels([]);
+    setChannelModes({}); setChannelNames({}); setRoles([]);
+    setRoleWhitelist(new Set()); setRoleBlacklist(new Set());
+    setUserWhitelist([]); setUserBlacklist([]);
     setMsg("Bot entfernt");
   }
 
@@ -1624,18 +1669,118 @@ function DiscordTab() {
                 <label key={ch.id} className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-accent">
                   <input type="checkbox" checked={selectedIds.has(ch.id)} onChange={() => toggleChannel(ch.id)}
                     className="accent-primary" />
-                  <span className="font-medium">#{ch.name}</span>
-                  <span className="text-muted-foreground font-mono ml-auto">{ch.id}</span>
+                  <span className="font-medium">#{channelNames[ch.id] ?? ch.name ?? ch.id}</span>
+                  {selectedIds.has(ch.id) && (
+                    <select value={channelModes[ch.id] ?? "rw"}
+                      onChange={e => setChannelModes(prev => ({...prev, [ch.id]: e.target.value}))}
+                      onClick={e => e.stopPropagation()}
+                      className="ml-auto text-xs border rounded px-1 py-0.5 bg-background">
+                      <option value="rw">Antworten</option>
+                      <option value="ro">Nur lesen</option>
+                    </select>
+                  )}
+                  <span className="text-muted-foreground font-mono text-xs ml-auto">{ch.id}</span>
                 </label>
+              ))}
+            </div>
+          ) : selectedIds.size > 0 ? (
+            <div className="border rounded-md divide-y max-h-48 overflow-y-auto">
+              {[...selectedIds].map(id => (
+                <div key={id} className="flex items-center gap-2 px-3 py-2 text-xs border-b last:border-0">
+                  <span className="font-medium">#{channelNames[id] ?? id}</span>
+                  <select value={channelModes[id] ?? "rw"}
+                    onChange={e => setChannelModes(prev => ({...prev, [id]: e.target.value}))}
+                    className="ml-auto text-xs border rounded px-1 py-0.5 bg-background">
+                    <option value="rw">Antworten</option>
+                    <option value="ro">Nur lesen</option>
+                  </select>
+                  <button type="button" onClick={() => toggleChannel(id)} className="text-muted-foreground hover:text-destructive">×</button>
+                </div>
               ))}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {selectedIds.size > 0
-                ? t("myAgent.discordSelectedChannels", { count: selectedIds.size })
-                : t("myAgent.discordNoChannels")}
+              {t("myAgent.discordNoChannels")}
             </p>
           )}
+        </div>
+
+        {/* Rollen-Filter */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium">{t("myAgent.discordRoles")}</label>
+            <button type="button" onClick={loadRoles} disabled={loadingRoles || !cfg?.configured}
+              className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-40">
+              {loadingRoles ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {t("myAgent.discordLoadRoles")}
+            </button>
+          </div>
+          {roles.length > 0 && (
+            <div className="border rounded-md divide-y max-h-40 overflow-y-auto">
+              {roles.map(r => (
+                <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                  <span className="flex-1 font-medium">@{r.name}</span>
+                  <label className="flex items-center gap-1 text-green-600">
+                    <input type="checkbox" checked={roleWhitelist.has(r.id)}
+                      onChange={() => setRoleWhitelist(prev => { const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} />
+                    WL
+                  </label>
+                  <label className="flex items-center gap-1 text-destructive">
+                    <input type="checkbox" checked={roleBlacklist.has(r.id)}
+                      onChange={() => setRoleBlacklist(prev => { const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} />
+                    BL
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{t("myAgent.discordRolesHint")}</p>
+        </div>
+
+        {/* User-Filter */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium block">{t("myAgent.discordUserFilter")}</label>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Whitelist */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">{t("myAgent.discordUserWL")}</p>
+              <div className="flex gap-1">
+                <input value={userWlInput} onChange={e => setUserWlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && userWlInput.trim()) { setUserWhitelist(p => [...p, userWlInput.trim()]); setUserWlInput(""); }}}
+                  placeholder="User-ID" className="text-xs border rounded px-2 py-1 flex-1 bg-background" />
+                <button type="button" onClick={() => { if (userWlInput.trim()) { setUserWhitelist(p => [...p, userWlInput.trim()]); setUserWlInput(""); }}}
+                  className="text-xs px-2 py-1 border rounded hover:bg-accent">+</button>
+              </div>
+              <div className="mt-1 space-y-0.5">
+                {userWhitelist.map(id => (
+                  <div key={id} className="flex items-center gap-1 text-xs">
+                    <span className="font-mono flex-1">{id}</span>
+                    <button type="button" onClick={() => setUserWhitelist(p => p.filter(x => x !== id))} className="text-muted-foreground hover:text-destructive">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Blacklist */}
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">{t("myAgent.discordUserBL")}</p>
+              <div className="flex gap-1">
+                <input value={userBlInput} onChange={e => setUserBlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && userBlInput.trim()) { setUserBlacklist(p => [...p, userBlInput.trim()]); setUserBlInput(""); }}}
+                  placeholder="User-ID" className="text-xs border rounded px-2 py-1 flex-1 bg-background" />
+                <button type="button" onClick={() => { if (userBlInput.trim()) { setUserBlacklist(p => [...p, userBlInput.trim()]); setUserBlInput(""); }}}
+                  className="text-xs px-2 py-1 border rounded hover:bg-accent">+</button>
+              </div>
+              <div className="mt-1 space-y-0.5">
+                {userBlacklist.map(id => (
+                  <div key={id} className="flex items-center gap-1 text-xs">
+                    <span className="font-mono flex-1">{id}</span>
+                    <button type="button" onClick={() => setUserBlacklist(p => p.filter(x => x !== id))} className="text-muted-foreground hover:text-destructive">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("myAgent.discordUserHint")}</p>
         </div>
 
         {/* Bots ignorieren */}

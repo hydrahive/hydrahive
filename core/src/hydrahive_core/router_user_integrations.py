@@ -107,6 +107,12 @@ class DiscordConfigRequest(BaseModel):
     loop_bot_threshold: int = 3   # Aufeinanderfolgende Bot-Nachrichten bis Circuit Breaker
     loop_pingpong_seconds: int = 30  # Zeitfenster für PingPong-Erkennung (s)
     loop_cooldown_seconds: int = 300  # Circuit-Breaker-Cooldown (s)
+    user_whitelist:  list[str] = []
+    user_blacklist:  list[str] = []
+    role_whitelist:  list[str] = []
+    role_blacklist:  list[str] = []
+    channel_modes:   dict[str, str] = {}   # channel_id → "rw"|"ro"
+    channel_names:   dict[str, str] = {}   # channel_id → name (cache)
 
 
 SUPPORTED_PLATFORMS = {
@@ -267,6 +273,11 @@ async def setup_discord_clients(*, load_users, runtime, orchestrator, logger) ->
             loop_bot_threshold=cfg.get("loop_bot_threshold", 3),
             loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
             loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
+            user_whitelist=cfg.get("user_whitelist", []),
+            user_blacklist=cfg.get("user_blacklist", []),
+            role_whitelist=cfg.get("role_whitelist", []),
+            role_blacklist=cfg.get("role_blacklist", []),
+            channel_modes=cfg.get("channel_modes", {}),
             orchestrator=orchestrator,
         )
         _discord_clients[personal_agent_id] = client
@@ -477,6 +488,12 @@ def register_user_integration_routes(
             "loop_pingpong_seconds": cfg.get("loop_pingpong_seconds", 30),
             "loop_cooldown_seconds": cfg.get("loop_cooldown_seconds", 300),
             "connected": discord_client_connected(username),
+            "user_whitelist": cfg.get("user_whitelist", []),
+            "user_blacklist": cfg.get("user_blacklist", []),
+            "role_whitelist": cfg.get("role_whitelist", []),
+            "role_blacklist": cfg.get("role_blacklist", []),
+            "channel_modes": cfg.get("channel_modes", {}),
+            "channel_names": cfg.get("channel_names", {}),
         }
 
     @auth_router.get("/me/discord/channels")
@@ -513,6 +530,26 @@ def register_user_integration_routes(
         except Exception as e:
             raise HTTPException(502, f"Discord-Fehler: {e}")
 
+    @auth_router.get("/me/discord/roles")
+    async def get_my_discord_roles(auth: tuple = Depends(require_auth)):
+        """Rollen der konfigurierten Guild auflisten."""
+        username, _ = auth
+        from .discord_agent import load_discord_config
+        from .tool_registry import _discord_clients
+
+        cfg = load_discord_config(username)
+        if not cfg:
+            raise HTTPException(400, "Discord nicht konfiguriert")
+        personal_agent_id = f"personal_{username}"
+        client = _discord_clients.get(personal_agent_id)
+        if not client:
+            raise HTTPException(400, "Discord-Bot nicht verbunden")
+        try:
+            roles = await client.list_roles()
+            return {"roles": roles}
+        except Exception as e:
+            raise HTTPException(500, str(e))
+
     @auth_router.put("/me/discord", status_code=200)
     async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
         username, _ = auth
@@ -535,6 +572,12 @@ def register_user_integration_routes(
             "loop_bot_threshold": max(2, req.loop_bot_threshold),
             "loop_pingpong_seconds": max(5, req.loop_pingpong_seconds),
             "loop_cooldown_seconds": max(10, req.loop_cooldown_seconds),
+            "user_whitelist":  req.user_whitelist,
+            "user_blacklist":  req.user_blacklist,
+            "role_whitelist":  req.role_whitelist,
+            "role_blacklist":  req.role_blacklist,
+            "channel_modes":   req.channel_modes,
+            "channel_names":   req.channel_names,
         }
         save_discord_config(username, cfg)
         personal_agent_id = f"personal_{username}"
@@ -550,6 +593,11 @@ def register_user_integration_routes(
             loop_bot_threshold=cfg.get("loop_bot_threshold", 6),
             loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
             loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
+            user_whitelist=cfg.get("user_whitelist", []),
+            user_blacklist=cfg.get("user_blacklist", []),
+            role_whitelist=cfg.get("role_whitelist", []),
+            role_blacklist=cfg.get("role_blacklist", []),
+            channel_modes=cfg.get("channel_modes", {}),
             orchestrator=orchestrator,
         )
         test_result = await test_client.test_connection()
@@ -569,6 +617,11 @@ def register_user_integration_routes(
             loop_bot_threshold=cfg.get("loop_bot_threshold", 6),
             loop_pingpong_seconds=cfg.get("loop_pingpong_seconds", 30),
             loop_cooldown_seconds=cfg.get("loop_cooldown_seconds", 300),
+            user_whitelist=cfg.get("user_whitelist", []),
+            user_blacklist=cfg.get("user_blacklist", []),
+            role_whitelist=cfg.get("role_whitelist", []),
+            role_blacklist=cfg.get("role_blacklist", []),
+            channel_modes=cfg.get("channel_modes", {}),
             orchestrator=orchestrator,
         )
         _discord_clients[personal_agent_id] = client
@@ -603,6 +656,11 @@ def register_user_integration_routes(
             bot_token=cfg["bot_token"],
             guild_id=cfg["guild_id"],
             channel_ids=cfg.get("channel_ids", []),
+            user_whitelist=cfg.get("user_whitelist", []),
+            user_blacklist=cfg.get("user_blacklist", []),
+            role_whitelist=cfg.get("role_whitelist", []),
+            role_blacklist=cfg.get("role_blacklist", []),
+            channel_modes=cfg.get("channel_modes", {}),
             orchestrator=orchestrator,
         )
         return await test_client.test_connection()

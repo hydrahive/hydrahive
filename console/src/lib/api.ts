@@ -192,6 +192,7 @@ export const api = {
   deleteMail:         () => api.delete("/me/mail"),
   getDiscord:         () => api.get<DiscordConfig>("/me/discord"),
   getDiscordChannels: () => api.get<{channels:{id:string;name:string}[]}>("/me/discord/channels"),
+  getDiscordRoles:    () => api.get<{roles:{id:string;name:string;color:string}[]}>("/me/discord/roles"),
   updateDiscord:      (d: DiscordConfigPayload) => api.put<{updated:boolean;bot_name:string;bot_id:string}>("/me/discord", d),
   deleteDiscord:      () => api.delete<{deleted:boolean}>("/me/discord"),
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
@@ -320,6 +321,12 @@ export interface DiscordConfig {
   loop_pingpong_seconds?: number;
   loop_cooldown_seconds?: number;
   connected?:           boolean;
+  user_whitelist?:      string[];
+  user_blacklist?:      string[];
+  role_whitelist?:      string[];
+  role_blacklist?:      string[];
+  channel_modes?:       Record<string, string>;
+  channel_names?:       Record<string, string>;
 }
 
 export interface DiscordConfigPayload {
@@ -332,6 +339,12 @@ export interface DiscordConfigPayload {
   loop_bot_threshold:   number;
   loop_pingpong_seconds: number;
   loop_cooldown_seconds: number;
+  user_whitelist:       string[];
+  user_blacklist:       string[];
+  role_whitelist:       string[];
+  role_blacklist:       string[];
+  channel_modes:        Record<string, string>;
+  channel_names:        Record<string, string>;
 }
 
 export interface WhatsAppConfig {

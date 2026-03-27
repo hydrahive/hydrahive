@@ -74,6 +74,11 @@ class DiscordAgentClient(ABC):
         loop_bot_threshold: int = 3,
         loop_pingpong_seconds: int = 30,
         loop_cooldown_seconds: int = 300,
+        user_whitelist:  list[str] = [],   # noqa: B006
+        user_blacklist:  list[str] = [],   # noqa: B006
+        role_whitelist:  list[str] = [],   # noqa: B006
+        role_blacklist:  list[str] = [],   # noqa: B006
+        channel_modes:   dict[str, str] = {},  # noqa: B006
     ) -> None:
         self.agent_id        = agent_id
         self.bot_token       = bot_token
@@ -85,6 +90,11 @@ class DiscordAgentClient(ABC):
         self.loop_bot_threshold    = max(2, loop_bot_threshold)
         self.loop_pingpong_seconds = max(5, loop_pingpong_seconds)
         self.loop_cooldown_seconds = max(10, loop_cooldown_seconds)
+        self.user_whitelist  = set(user_whitelist)
+        self.user_blacklist  = set(user_blacklist)
+        self.role_whitelist  = set(role_whitelist)
+        self.role_blacklist  = set(role_blacklist)
+        self.channel_modes   = dict(channel_modes)
         self._client         = None
         self._running        = False
         # Loop-Detektion: pro Channel eine deque mit (timestamp, is_bot) Einträgen
@@ -188,6 +198,23 @@ class DiscordAgentClient(ABC):
                 return
             # Loop-Detektion (Circuit Breaker + PingPong)
             if self._check_loop(str(message.channel.id), is_bot):
+                return
+            # User-Filter
+            author_id = str(message.author.id)
+            if author_id in self.user_blacklist:
+                return
+            if self.user_whitelist and author_id not in self.user_whitelist:
+                return
+            # Rollen-Filter (nur wenn Member-Objekt verfügbar)
+            if (self.role_whitelist or self.role_blacklist) and hasattr(message.author, 'roles'):
+                author_role_ids = {str(r.id) for r in message.author.roles}
+                if self.role_blacklist and author_role_ids & self.role_blacklist:
+                    return
+                if self.role_whitelist and not (author_role_ids & self.role_whitelist):
+                    return
+            # Channel-Modus: "ro" = nur lesen, nicht antworten
+            channel_mode = self.channel_modes.get(str(message.channel.id), "rw")
+            if channel_mode == "ro":
                 return
             # @Mention aus Content entfernen bevor weitergegeben
             content = message.content
@@ -436,6 +463,11 @@ class AgentDiscordClient(DiscordAgentClient):
         loop_bot_threshold:   int = 3,
         loop_pingpong_seconds: int = 30,
         loop_cooldown_seconds: int = 300,
+        user_whitelist:  list[str] = [],   # noqa: B006
+        user_blacklist:  list[str] = [],   # noqa: B006
+        role_whitelist:  list[str] = [],   # noqa: B006
+        role_blacklist:  list[str] = [],   # noqa: B006
+        channel_modes:   dict[str, str] = {},  # noqa: B006
     ) -> None:
         super().__init__(
             agent_id, bot_token, guild_id, channel_ids,
@@ -445,6 +477,11 @@ class AgentDiscordClient(DiscordAgentClient):
             loop_bot_threshold=loop_bot_threshold,
             loop_pingpong_seconds=loop_pingpong_seconds,
             loop_cooldown_seconds=loop_cooldown_seconds,
+            user_whitelist=user_whitelist,
+            user_blacklist=user_blacklist,
+            role_whitelist=role_whitelist,
+            role_blacklist=role_blacklist,
+            channel_modes=channel_modes,
         )
         self._orchestrator = orchestrator
 
