@@ -818,5 +818,12 @@
     "toAgents": "Go to Agent Management",
     "loadError": "Error loading status",
     "genericError": "Error"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "markRead": "Mark as read",
+    "markAllRead": "Mark all as read",
+    "delete": "Delete"
   }
 }

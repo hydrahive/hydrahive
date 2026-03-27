@@ -818,5 +818,12 @@
     "toAgents": "Zur Agenten-Verwaltung",
     "loadError": "Fehler beim Laden",
     "genericError": "Fehler"
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "empty": "Keine Benachrichtigungen",
+    "markRead": "Als gelesen markieren",
+    "markAllRead": "Alle als gelesen markieren",
+    "delete": "Löschen"
   }
 }

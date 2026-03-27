@@ -155,6 +155,12 @@ export const api = {
   // SearXNG Web-Suche
   searxngStatus: () => api.get<SearxngStatus>("/admin/searxng/status"),
   searxngTest:   (body: { query: string; engines?: string }) => api.post<SearxngTestResult>("/admin/searxng/test", body),
+  // Notifications
+  notifications:    () => api.get<{ notifications: AppNotification[] }>("/notifications"),
+  unreadCount:      () => api.get<{ count: number }>("/notifications/unread-count"),
+  markRead:         (id: string) => api.patch<{ ok: boolean }>(`/notifications/${id}/read`, {}),
+  markAllRead:      () => api.post<{ marked: number }>("/notifications/read-all", {}),
+  deleteNotif:      (id: string) => api.delete<{ ok: boolean }>(`/notifications/${id}`),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
@@ -511,4 +517,15 @@ export interface SearxngTestResult {
   results:      SearxngResult[];
   suggestions?: string[];
   error?:       string;
+}
+
+export interface AppNotification {
+  id:         string;
+  user:       string;
+  type:       string;
+  title:      string;
+  body:       string;
+  link:       string | null;
+  read:       boolean;
+  created_at: string;
 }

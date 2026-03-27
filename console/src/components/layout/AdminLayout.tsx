@@ -1,5 +1,6 @@
 import React from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NotificationBell } from "@/components/NotificationBell";
 import { SupportWidget } from "@/components/SupportWidget";
 import {
   LayoutDashboard,
@@ -294,6 +295,7 @@ export function AdminLayout() {
               <span className={cn("status-pill", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
                 {updating ? t("layout.updateActive") : t("layout.systemReady")}
               </span>
+              <NotificationBell />
             </div>
           </div>
         </div>
