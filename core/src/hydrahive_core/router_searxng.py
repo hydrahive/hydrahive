@@ -107,11 +107,13 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
             raise HTTPException(500, "Installer-Script nicht gefunden: Bitte erst ein Update durchführen.")
 
         async def stream():
+            import os as _os
+            env = {**_os.environ, "DEBIAN_FRONTEND": "noninteractive"}
             proc = await asyncio.create_subprocess_exec(
-                "sudo", "-n", "bash", str(INSTALL_SCRIPT),
+                "sudo", "-n", "/bin/bash", str(INSTALL_SCRIPT),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
-                env={**__import__("os").environ, "DEBIAN_FRONTEND": "noninteractive"},
+                env=env,
             )
             import json as _j
             assert proc.stdout

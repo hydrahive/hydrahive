@@ -1,0 +1,2 @@
+Defaults:hydrahive !requiretty
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/*.sh

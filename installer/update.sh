@@ -119,12 +119,10 @@ main() {
     chown -R www-data:www-data "${HYDRAHIVE_DIR}/console/"
     success "Console deployed"
 
-    # --- 5b. sudoers: !requiretty sicherstellen (für In-Console-Installation) ---
-    if [ -f /etc/sudoers.d/hydrahive ]; then
-        if ! grep -q "!requiretty" /etc/sudoers.d/hydrahive; then
-            echo "Defaults:hydrahive !requiretty" >> /etc/sudoers.d/hydrahive
-            info "sudoers: !requiretty für hydrahive ergänzt"
-        fi
+    # --- 5b. sudoers: hydrahive-installer deployen (In-Console-Installation) ---
+    if [ -f "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" ]; then
+        install -m 440 "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" /etc/sudoers.d/hydrahive-installer
+        info "sudoers: hydrahive-installer aktualisiert"
     fi
 
     # --- 6. Service neustarten ---

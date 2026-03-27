@@ -106,6 +106,7 @@ success "Network-Profile-Skript installiert"
 install -m 644 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-selfupdate.service" /etc/systemd/system/hydrahive-selfupdate.service
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-update.sudoers" /etc/sudoers.d/hydrahive-update
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-provisioner.sudoers" /etc/sudoers.d/hydrahive-provisioner
+install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-installer.sudoers" /etc/sudoers.d/hydrahive-installer
 systemctl daemon-reload
 success "Self-Update-Service installiert"
 
