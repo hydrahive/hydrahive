@@ -21,13 +21,15 @@ FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 @dataclass
 class Skill:
-    skill:    str           # Skill-Name / ID
-    version:  str = "1.0"
-    scope:    str = "on-demand"   # always | on-demand
-    triggers: list[str] = field(default_factory=list)
-    priority: int = 50
-    content:  str = ""      # Markdown-Body (ohne Frontmatter)
-    source:   Path | None = None
+    skill:         str           # Skill-Name / ID
+    version:       str = "1.0"
+    scope:         str = "on-demand"   # always | on-demand
+    triggers:      list[str] = field(default_factory=list)
+    priority:      int = 50
+    content:       str = ""      # Markdown-Body (ohne Frontmatter)
+    source:        Path | None = None
+    allowed_tools: list[str] = field(default_factory=list)  # Allowlist (leer = keine Einschränkung)
+    blocked_tools: list[str] = field(default_factory=list)  # Blocklist (leer = keine Einschränkung)
 
     def matches(self, text: str) -> bool:
         """True wenn scope=always oder ein Trigger-Keyword im Text vorkommt."""
@@ -35,6 +37,20 @@ class Skill:
             return True
         lower = text.lower()
         return any(kw.lower() in lower for kw in self.triggers)
+
+    def apply_tool_constraints(self, tool_ids: list[str]) -> list[str]:
+        """
+        Wendet allowed_tools / blocked_tools auf eine Tool-ID-Liste an.
+        - allowed_tools nicht leer → nur diese Tools erlaubt (Schnittmenge)
+        - blocked_tools nicht leer → diese Tools entfernen
+        - blocked_tools gewinnt bei Konflikt
+        """
+        result = tool_ids
+        if self.allowed_tools:
+            result = [t for t in result if t in self.allowed_tools]
+        if self.blocked_tools:
+            result = [t for t in result if t not in self.blocked_tools]
+        return result
 
 
 def load_skills(agent_dir: Path) -> list[Skill]:
@@ -89,6 +105,8 @@ def _parse_skill_file(path: Path) -> Skill | None:
         priority=int(meta.get("priority", 50)),
         content=body.strip(),
         source=path,
+        allowed_tools=meta.get("allowed_tools", []) or [],
+        blocked_tools=meta.get("blocked_tools", []) or [],
     )
 
 

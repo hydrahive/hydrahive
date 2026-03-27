@@ -50,6 +50,7 @@ from .orchestrator_context import (
     _repo_review_guidance,
     _compact_if_needed as _compact_if_needed_fn,
     _history_token_budget,
+    get_skill_tool_constraints,
 )
 from .orchestrator_tools import (
     DispatchResult,
@@ -108,9 +109,19 @@ class Orchestrator:
                 ids.insert(0, "request_tools")
             return self._reg.tools_for_agent(ids, agent_permissions=permissions)
         if getattr(agent_cfg, "tool_selection", "auto") == "always":
-            return self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
-        filtered_ids = select_tools(agent_cfg.tools, user_text)
-        return self._reg.tools_for_agent(filtered_ids, agent_permissions=permissions)
+            base_ids = [t.id for t in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)]
+        else:
+            base_ids = [t.id for t in self._reg.tools_for_agent(
+                select_tools(agent_cfg.tools, user_text), agent_permissions=permissions
+            )]
+        # Skill-Tool-Constraints anwenden (#48)
+        if user_text:
+            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
+            if skill_allowed or skill_blocked:
+                from .skill_loader import Skill as _Skill
+                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
+                base_ids = dummy.apply_tool_constraints(base_ids)
+        return self._reg.tools_for_agent(base_ids, agent_permissions=permissions)
 
     def _category_tools_schema(
         self,
@@ -130,23 +141,34 @@ class Orchestrator:
         self,
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
+        user_text: str = "",
     ) -> dict[str, object]:
         # Bei der Ausführung alle erlaubten Tools ohne select_tools-Filter laden.
         # select_tools ist nur für Token-Optimierung des LLM-Schemas gedacht,
         # nicht für die Ausführungs-Whitelist.
         permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        return {
+        all_tools = {
             tool.id: tool
             for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
         }
+        # Skill-Tool-Constraints anwenden (#48)
+        if user_text:
+            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
+            if skill_allowed or skill_blocked:
+                from .skill_loader import Skill as _Skill
+                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
+                filtered_ids = dummy.apply_tool_constraints(list(all_tools.keys()))
+                return {k: v for k, v in all_tools.items() if k in filtered_ids}
+        return all_tools
 
     def _resolve_allowed_tool(
         self,
         agent_cfg: AgentConfig,
         tool_name: str,
         execution_mode: str | None = None,
+        user_text: str = "",
     ):
-        allowed = self._allowed_tool_map(agent_cfg, execution_mode)
+        allowed = self._allowed_tool_map(agent_cfg, execution_mode, user_text=user_text)
         return allowed.get(tool_name)
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None):
@@ -552,7 +574,7 @@ class Orchestrator:
                                 cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
                                 for tc in msg.tool_calls:
                                     yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
-                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
+                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
                                     try:
                                         args = _json.loads(tc.function.arguments or "{}")
                                         result = await self._execute_tool(
@@ -710,7 +732,7 @@ class Orchestrator:
                             any_tool_error = False
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
-                                tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
+                                tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
                                 if tool:
                                     try:
                                         result = await self._execute_tool(

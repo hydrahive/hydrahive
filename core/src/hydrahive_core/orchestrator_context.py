@@ -18,7 +18,7 @@ import litellm
 
 from .learning_memory import build_learning_prompt_snippet
 from .memory_search import search_memory, update_index as update_memory_index
-from .skill_loader import load_skills, select_skills, skills_to_system_prompt
+from .skill_loader import load_skills, select_skills, skills_to_system_prompt, Skill
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +242,31 @@ def _flush_summary_to_memory(agent_dir, summary: str) -> None:
         logger.debug("Memory Flush: Summary in %s geschrieben", flush_file.name)
     except OSError as e:
         logger.warning("Memory Flush fehlgeschlagen: %s", e)
+
+
+def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], list[str]]:
+    """
+    Gibt (allowed_tools, blocked_tools) der aktiven Skills zurück.
+    Kombinationsregel über mehrere aktive Skills:
+    - allowed_tools: Vereinigung (jeder Skill kann Tools freischalten)
+    - blocked_tools: Vereinigung (jeder Skill kann Tools sperren)
+    - blocked_tools gewinnt bei Konflikt
+    Wenn kein aktiver Skill Tool-Constraints hat → leere Listen (keine Einschränkung).
+    """
+    if not boss_cfg.agent_dir:
+        return [], []
+    all_skills = load_skills(boss_cfg.agent_dir)
+    active = select_skills(all_skills, user_text)
+    combined_allowed: set[str] = set()
+    combined_blocked: set[str] = set()
+    has_allowed_constraint = False
+    for skill in active:
+        if skill.allowed_tools:
+            has_allowed_constraint = True
+            combined_allowed.update(skill.allowed_tools)
+        combined_blocked.update(skill.blocked_tools)
+    allowed = list(combined_allowed) if has_allowed_constraint else []
+    return allowed, list(combined_blocked)
 
 
 async def _compact_if_needed(
