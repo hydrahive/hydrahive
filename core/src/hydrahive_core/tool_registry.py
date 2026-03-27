@@ -245,7 +245,8 @@ class FileReadTool(BaseTool):
         return (
             "Liest den Inhalt einer Datei aus dem Projekt-Verzeichnis. "
             "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
-            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt."
+            "Bei großen Dateien offset+limit nutzen um seitenweise zu lesen — "
+            "has_more=true im Ergebnis zeigt an dass weitere Zeichen folgen."
         )
     @property
     def permissions_required(self) -> list[str]:
@@ -260,11 +261,22 @@ class FileReadTool(BaseTool):
                     "type":        "string",
                     "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis",
                 },
+                "offset": {
+                    "type":        "integer",
+                    "description": "Zeichen-Offset ab dem gelesen wird (Standard: 0)",
+                },
+                "limit": {
+                    "type":        "integer",
+                    "description": "Maximale Zeichen die zurückgegeben werden (Standard: 8000, Max: 32000)",
+                },
             },
             "required": ["path"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, path: str) -> dict:
+    async def execute(
+        self, agent_id: str, project_id: str,
+        path: str, offset: int = 0, limit: int = 8000, **kwargs,
+    ) -> dict:
         try:
             safe_path = assert_path_within_project(path, project_id)
         except PathSafetyError as e:
@@ -277,8 +289,20 @@ class FileReadTool(BaseTool):
 
         try:
             content = safe_path.read_text(encoding="utf-8", errors="replace")
-            logger.info("file_read: %s liest %s (Projekt: %s)", agent_id, safe_path, project_id)
-            return {"content": content, "path": str(safe_path), "size": len(content)}
+            total   = len(content)
+            limit   = min(max(1, limit), 32000)
+            offset  = max(0, offset)
+            chunk   = content[offset:offset + limit]
+            has_more = (offset + limit) < total
+            logger.info(
+                "file_read: %s liest %s offset=%d limit=%d (Projekt: %s)",
+                agent_id, safe_path, offset, limit, project_id,
+            )
+            result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
+            if has_more:
+                result["has_more"] = True
+                result["next_offset"] = offset + limit
+            return result
         except OSError as e:
             return {"error": f"Lesefehler: {e}", "path": str(safe_path)}
 
