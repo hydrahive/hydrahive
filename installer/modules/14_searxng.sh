@@ -41,7 +41,7 @@ fi
 # --- Konfig-Verzeichnis ---
 mkdir -p "${SEARXNG_CONF_DIR}"
 chown root:"${SEARXNG_USER}" "${SEARXNG_CONF_DIR}"
-chmod 750 "${SEARXNG_CONF_DIR}"
+chmod 755 "${SEARXNG_CONF_DIR}"
 
 # --- Git clone / pull ---
 if [ ! -d "${SEARXNG_DIR}/.git" ]; then
@@ -94,7 +94,7 @@ if [ ! -f "${SEARXNG_CONF}" ]; then
         sed -i '/^search:/a\  formats:\n    - html\n    - json' "${SEARXNG_CONF}"
     fi
     chown root:"${SEARXNG_USER}" "${SEARXNG_CONF}"
-    chmod 640 "${SEARXNG_CONF}"
+    chmod 644 "${SEARXNG_CONF}"
     success "${SEARXNG_CONF} geschrieben"
 else
     info "${SEARXNG_CONF} bereits vorhanden — wird nicht überschrieben"

@@ -80,15 +80,21 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         except Exception:
             pass
 
+        def _safe_exists(p: Path) -> bool:
+            try:
+                return p.exists()
+            except OSError:
+                return False
+
         return {
-            "installed":      SEARXNG_DIR.joinpath(".git").exists(),
+            "installed":      _safe_exists(SEARXNG_DIR.joinpath(".git")),
             "service_active": service_active,
             "service_uptime": service_uptime,
             "http_ok":        http_ok,
             "url":            SEARXNG_URL,
             "version":        version,
             "engines":        engines,
-            "config_exists":  SEARXNG_CONF.exists(),
+            "config_exists":  _safe_exists(SEARXNG_CONF),
         }
 
     @admin_router.post("/admin/searxng/test")
