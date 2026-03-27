@@ -520,7 +520,7 @@ class Orchestrator:
                                 else:
                                     repeated_signature_count = 0
                                 last_signature = signature
-                                if repeated_signature_count >= 2:
+                                if repeated_signature_count >= 3:
                                     final = await self._finalize_tool_loop_response(
                                         boss_cfg,
                                         cur_messages,
@@ -648,8 +648,12 @@ class Orchestrator:
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
                                 break
+                            def _oauth_sig_args(name: str, inp: dict) -> str:
+                                if name == "file_write":
+                                    inp = {k: v for k, v in inp.items() if k != "content"}
+                                return _json.dumps(inp, ensure_ascii=False, sort_keys=True)
                             signature = tuple(
-                                f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
+                                f"{block.name}:{_oauth_sig_args(block.name, block.input)}"
                                 for block in tool_use_blocks
                             )
                             if signature and signature == last_tool_signature:
@@ -657,7 +661,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 2:
+                            if repeated_tool_signature_count >= 3:
                                 kwargs_final = dict(kwargs)
                                 kwargs_final.pop("tools", None)
                                 kwargs_final["messages"] = filtered + [
@@ -818,8 +822,18 @@ class Orchestrator:
 
                             # Assistant-Nachricht mit tool_calls in History
                             tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
+                            def _litellm_sig_args(name: str, raw: str) -> str:
+                                if name == "file_write":
+                                    try:
+                                        import json as _jj
+                                        d = _jj.loads(raw)
+                                        d.pop("content", None)
+                                        return _jj.dumps(d, sort_keys=True)
+                                    except Exception:
+                                        pass
+                                return raw
                             signature = tuple(
-                                f"{tc['name']}:{tc['arguments']}"
+                                f"{tc['name']}:{_litellm_sig_args(tc['name'], tc['arguments'])}"
                                 for tc in tc_list
                             )
                             if signature and signature == last_tool_signature:
@@ -827,7 +841,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 2:
+                            if repeated_tool_signature_count >= 3:
                                 loop_messages.append({
                                     "role": "user",
                                     "content": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",

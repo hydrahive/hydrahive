@@ -45,13 +45,25 @@ def _truncate_tool_result(result_str: str) -> str:
 
 
 def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
-    """Fingerprint eines Tool-Call-Sets für Endlosschleifen-Erkennung."""
+    """Fingerprint eines Tool-Call-Sets für Endlosschleifen-Erkennung.
+
+    file_write: content wird aus der Signatur ausgeschlossen — unterschiedlicher
+    Inhalt beim selben Pfad ist kein Loop, großer Content kann identisch aussehen.
+    """
+    import json as _j
     signature: list[str] = []
     for tc in tool_calls:
-        fn   = getattr(tc, "function", None)
-        name = getattr(fn, "name", "") or ""
-        args = getattr(fn, "arguments", "") or ""
-        signature.append(f"{name}:{args}")
+        fn      = getattr(tc, "function", None)
+        name    = getattr(fn, "name", "") or ""
+        args_raw = getattr(fn, "arguments", "") or ""
+        if name == "file_write":
+            try:
+                args = _j.loads(args_raw)
+                args.pop("content", None)
+                args_raw = _j.dumps(args, sort_keys=True)
+            except Exception:
+                pass
+        signature.append(f"{name}:{args_raw}")
     return tuple(signature)
 
 
