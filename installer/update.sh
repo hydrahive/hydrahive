@@ -196,6 +196,12 @@ main() {
         chmod +x "${HYDRAHIVE_DIR}/installer/modules/"*.sh 2>/dev/null || true
         info "Installer-Module aktualisiert"
     fi
+    if [ -d "${TMPDIR_BASE}/installer/extensions" ]; then
+        mkdir -p "${HYDRAHIVE_DIR}/installer/extensions"
+        rsync -a "${TMPDIR_BASE}/installer/extensions/" "${HYDRAHIVE_DIR}/installer/extensions/"
+        chmod +x "${HYDRAHIVE_DIR}/installer/extensions/uninstall/"*.sh 2>/dev/null || true
+        info "Extension-Manifeste aktualisiert"
+    fi
     # Installer-Assets (nginx-Template etc.) im installer/-Verzeichnis aktuell halten
     for _asset in hydrahive-console.nginx hydrahive-installer.sudoers; do
         if [ -f "${TMPDIR_BASE}/installer/${_asset}" ]; then

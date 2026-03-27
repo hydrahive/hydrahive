@@ -1,0 +1,13 @@
+{
+  "id": "ollama",
+  "name": "Lokale KI (Ollama)",
+  "description": "Lokale LLM-Laufzeitumgebung — Llama, Mistral, Gemma und mehr ohne Cloud-Abhängigkeit.",
+  "icon": "Cpu",
+  "category": "ai",
+  "install_script": "modules/08_ollama.sh",
+  "uninstall_script": "extensions/uninstall/ollama.sh",
+  "service": "ollama",
+  "health_url": "http://127.0.0.1:11434/api/version",
+  "open_url": null,
+  "installed_check": "/usr/local/bin/ollama"
+}

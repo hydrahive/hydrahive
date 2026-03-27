@@ -13,6 +13,7 @@
     "activity": "Activity",
     "usage": "Usage",
     "search": "Web Search",
+    "extensions": "Extensions",
     "codeEditor": "Code Editor",
     "schedules": "Schedules",
     "federation": "Federation",
@@ -33,6 +34,7 @@
     "activity": "Live status of all agents",
     "usage": "Token stats & costs",
     "search": "SearXNG metasearch engine",
+    "extensions": "Manage optional components",
     "codeEditor": "VS Code in browser",
     "schedules": "Automated agent tasks",
     "federation": "Peer-to-peer agent federation"
@@ -863,6 +865,25 @@
     "markRead": "Mark as read",
     "markAllRead": "Mark all as read",
     "delete": "Delete"
+  },
+  "extensions": {
+    "title": "Extensions",
+    "subtitle": "Install, update or remove optional system components.",
+    "loading": "Loading extensions...",
+    "loadError": "Failed to load extensions",
+    "refresh": "Refresh",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "open": "Open",
+    "installing": "Installing",
+    "uninstalling": "Uninstalling",
+    "installSuccess": "Installation complete",
+    "uninstallSuccess": "Uninstallation complete",
+    "actionFailed": "Action failed — please check the log",
+    "close": "Close",
+    "statusActive": "Active",
+    "statusStopped": "Stopped",
+    "statusNotInstalled": "Not installed"
   },
   "codeEditor": {
     "title": "Code Editor",

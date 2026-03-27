@@ -24,6 +24,7 @@ import {
   Loader2,
   Globe,
   Code2,
+  Puzzle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -158,6 +159,7 @@ export function AdminLayout() {
       { to: "/activity", icon: Activity, label: t("nav.activity"), hint: t("navHint.activity") },
       { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
       { to: "/search",     icon: Search,    label: t("nav.search"),     hint: t("navHint.search") },
+      { to: "/extensions", icon: Puzzle,    label: t("nav.extensions"), hint: t("navHint.extensions") },
       { to: "/code-editor",icon: Code2,     label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
       { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
       { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },

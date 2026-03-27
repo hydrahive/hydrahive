@@ -1,0 +1,13 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp Bridge",
+  "description": "Verbindet HydraHive-Agenten mit WhatsApp — Nachrichten empfangen und senden.",
+  "icon": "MessageCircle",
+  "category": "communication",
+  "install_script": "modules/13_whatsapp_bridge.sh",
+  "uninstall_script": "extensions/uninstall/whatsapp.sh",
+  "service": "hydrahive-whatsapp-bridge",
+  "health_url": "http://127.0.0.1:8767/health",
+  "open_url": null,
+  "installed_check": "/opt/hydrahive/whatsapp-bridge"
+}

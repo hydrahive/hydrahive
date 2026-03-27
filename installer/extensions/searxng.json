@@ -1,0 +1,13 @@
+{
+  "id": "searxng",
+  "name": "Web-Suche (SearXNG)",
+  "description": "Datenschutzfreundliche Metasuchmaschine — bündelt Google, Bing, DuckDuckGo und mehr ohne Tracking.",
+  "icon": "Search",
+  "category": "tools",
+  "install_script": "modules/14_searxng.sh",
+  "uninstall_script": "extensions/uninstall/searxng.sh",
+  "service": "searxng",
+  "health_url": "http://127.0.0.1:8888/",
+  "open_url": "/search",
+  "installed_check": "/opt/searxng"
+}

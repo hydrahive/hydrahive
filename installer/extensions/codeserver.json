@@ -1,0 +1,13 @@
+{
+  "id": "codeserver",
+  "name": "Code Editor (code-server)",
+  "description": "VS Code im Browser — direkt in die Projekte schauen und bearbeiten ohne SSH.",
+  "icon": "Code2",
+  "category": "tools",
+  "install_script": "modules/15_codeserver.sh",
+  "uninstall_script": "extensions/uninstall/codeserver.sh",
+  "service": "hydrahive-codeserver",
+  "health_url": "http://127.0.0.1:8766/healthz",
+  "open_url": "/code/",
+  "installed_check": "/opt/codeserver/bin/code-server"
+}

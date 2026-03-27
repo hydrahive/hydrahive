@@ -1,0 +1,13 @@
+{
+  "id": "gitea",
+  "name": "Git-Server (Gitea)",
+  "description": "Self-hosted Git-Hosting — Repositories, Issues und CI für Agenten-Projekte.",
+  "icon": "GitBranch",
+  "category": "tools",
+  "install_script": "modules/10_gitea.sh",
+  "uninstall_script": "extensions/uninstall/gitea.sh",
+  "service": "gitea",
+  "health_url": "http://127.0.0.1:3001/api/v1/version",
+  "open_url": null,
+  "installed_check": "/usr/local/bin/gitea"
+}

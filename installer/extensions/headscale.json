@@ -1,0 +1,13 @@
+{
+  "id": "headscale",
+  "name": "VPN-Koordinator (Headscale)",
+  "description": "Self-hosted Tailscale-Koordinator — eigenes VPN-Netz ohne externen Account.",
+  "icon": "Network",
+  "category": "network",
+  "install_script": "modules/12_vpn.sh",
+  "uninstall_script": "extensions/uninstall/headscale.sh",
+  "service": "headscale",
+  "health_url": null,
+  "open_url": null,
+  "installed_check": "/usr/local/bin/headscale"
+}

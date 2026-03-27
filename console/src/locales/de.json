@@ -13,6 +13,7 @@
     "activity": "Aktivität",
     "usage": "Usage",
     "search": "Web-Suche",
+    "extensions": "Erweiterungen",
     "codeEditor": "Code Editor",
     "schedules": "Schedules",
     "federation": "Federation",
@@ -33,6 +34,7 @@
     "activity": "Live-Status aller Agenten",
     "usage": "Token-Statistik & Kosten",
     "search": "SearXNG Metasuchmaschine",
+    "extensions": "Optionale Komponenten verwalten",
     "codeEditor": "VS Code im Browser",
     "schedules": "Automatisierte Agenten-Tasks",
     "federation": "Peer-zu-Peer Agenten-Federation"
@@ -863,6 +865,25 @@
     "markRead": "Als gelesen markieren",
     "markAllRead": "Alle als gelesen markieren",
     "delete": "Löschen"
+  },
+  "extensions": {
+    "title": "Erweiterungen",
+    "subtitle": "Optionale Systemkomponenten installieren, aktualisieren oder entfernen.",
+    "loading": "Lade Erweiterungen...",
+    "loadError": "Erweiterungen konnten nicht geladen werden",
+    "refresh": "Aktualisieren",
+    "install": "Installieren",
+    "uninstall": "Deinstallieren",
+    "open": "Öffnen",
+    "installing": "Installiere",
+    "uninstalling": "Deinstalliere",
+    "installSuccess": "Installation abgeschlossen",
+    "uninstallSuccess": "Deinstallation abgeschlossen",
+    "actionFailed": "Vorgang fehlgeschlagen — bitte Log prüfen",
+    "close": "Schließen",
+    "statusActive": "Aktiv",
+    "statusStopped": "Gestoppt",
+    "statusNotInstalled": "Nicht installiert"
   },
   "codeEditor": {
     "title": "Code Editor",
