@@ -204,23 +204,9 @@ main() {
         info "hydrahive-selfupdate.service aktualisiert"
     fi
 
-    # --- 10c. nginx-Konfig aktualisieren (A2A-Proxy-Regeln etc.) ---
-    NGINX_TEMPLATE="${TMPDIR_BASE}/installer/hydrahive-console.nginx"
-    NGINX_SITE="/etc/nginx/sites-enabled/hydrahive-console"
-    if [ -f "${NGINX_TEMPLATE}" ] && [ -f "${NGINX_SITE}" ]; then
-        if ! diff -q "${NGINX_TEMPLATE}" "${NGINX_SITE}" > /dev/null 2>&1; then
-            cp "${NGINX_TEMPLATE}" "${NGINX_SITE}"
-            if nginx -t 2>/dev/null; then
-                # reload wenn nginx läuft, restart wenn gestoppt
-                systemctl reload nginx 2>/dev/null || systemctl restart nginx
-                info "nginx-Konfig aktualisiert und neu geladen"
-            else
-                warn "nginx-Konfig fehlerhaft — Reload übersprungen"
-            fi
-        else
-            info "nginx-Konfig ist aktuell — kein Reload nötig"
-        fi
-    fi
+    # nginx-Konfig wird absichtlich NICHT automatisch aktualisiert.
+    # Nutzer können ihre Konfig (SSL, custom rules etc.) angepasst haben.
+    # Fehlende A2A-Regeln → Doctor-Seite → Fix-Button.
 
     # --- 11. Versions-Info + Status-Datei ---
     local COMMIT COMMIT_FULL COMMIT_MSG
