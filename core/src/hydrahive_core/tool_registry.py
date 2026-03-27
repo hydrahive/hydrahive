@@ -1763,15 +1763,34 @@ class AskAgentTool(BaseTool):
                     timeout=_aio.ClientTimeout(total=300),
                 ) as resp:
                     if resp.status == 404:
-                        return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
+                        return {
+                            "error": f"Agent '{target}' nicht gefunden",
+                            "agent_id": target,
+                            "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer mit dass Agent '{target}' nicht gefunden wurde.",
+                        }
                     data = await resp.json()
+                    response = data.get("response", "")
+                    if not response or not response.strip():
+                        return {
+                            "agent_id":      target,
+                            "worker_failed": True,
+                            "directive":     (
+                                f"WICHTIG: Agent '{target}' hat keine Antwort geliefert (leer oder Loop-Abbruch). "
+                                f"Übernimm diese Aufgabe NICHT selbst. "
+                                f"Teile dem Nutzer mit dass die Delegation fehlgeschlagen ist und frage wie weiter verfahren werden soll."
+                            ),
+                        }
                     return {
                         "agent_id": target,
-                        "response": data.get("response", ""),
+                        "response": response,
                         "success":  True,
                     }
         except Exception as e:
-            return {"error": f"Fehler bei Kommunikation mit '{target}': {e}", "agent_id": target}
+            return {
+                "error":     f"Fehler bei Kommunikation mit '{target}': {e}",
+                "agent_id":  target,
+                "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer den Fehler mit.",
+            }
 
 
 class DelegateAgentTool(BaseTool):
