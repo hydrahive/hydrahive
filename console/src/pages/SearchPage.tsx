@@ -185,8 +185,35 @@ export function SearchPage() {
       )}
 
       {!isRunning && status?.http_ok && !status?.json_ok && (
-        <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-600 dark:text-orange-400">
-          {t("searchPage.jsonNotEnabled")}
+        <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-600 dark:text-orange-400 space-y-3">
+          <p>{t("searchPage.jsonNotEnabled")}</p>
+          {installDone === null && (
+            <button
+              onClick={handleInstall}
+              disabled={installing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-sm font-medium"
+            >
+              {installing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {installing ? t("searchPage.installing") : t("searchPage.fixJsonBtn")}
+            </button>
+          )}
+          {installLog.length > 0 && (
+            <div ref={logRef} className="rounded-xl bg-zinc-950 border border-zinc-800 p-3 font-mono text-xs text-zinc-300 max-h-48 overflow-y-auto space-y-0.5">
+              {installLog.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
+            </div>
+          )}
+          {installDone === true && (
+            <div className="flex items-center gap-2 text-green-400 text-sm">
+              <CheckCircle className="w-4 h-4" />
+              {t("searchPage.installSuccess")}
+              <button onClick={load} className="ml-2 underline">{t("searchPage.reload")}</button>
+            </div>
+          )}
+          {installDone === false && (
+            <div className="flex items-center gap-2 text-red-400 text-sm">
+              <XCircle className="w-4 h-4" />{t("searchPage.installFailed")}
+            </div>
+          )}
         </div>
       )}
 

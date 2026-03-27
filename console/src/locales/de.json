@@ -833,7 +833,8 @@
     "installFailed": "Installation fehlgeschlagen — Details im Log oben.",
     "reload": "Seite neu laden",
     "statusJson": "JSON-API",
-    "jsonNotEnabled": "JSON-Format ist in settings.yml nicht aktiviert. Installer nochmals ausführen: sudo bash /opt/hydrahive/installer/modules/14_searxng.sh"
+    "jsonNotEnabled": "JSON-Format ist in settings.yml nicht aktiviert. Installer nochmals ausführen: sudo bash /opt/hydrahive/installer/modules/14_searxng.sh",
+    "fixJsonBtn": "JSON-Format reparieren"
   },
   "notifications": {
     "title": "Benachrichtigungen",

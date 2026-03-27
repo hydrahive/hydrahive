@@ -13,6 +13,11 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends
+
+def _httpx_get(url: str, timeout: float) -> httpx.Response:
+    """Synchroner httpx-Aufruf — wird per asyncio.to_thread aus dem Event-Loop ausgelagert."""
+    with httpx.Client() as client:
+        return client.get(url, timeout=timeout, follow_redirects=True)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -51,21 +56,22 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         except Exception as e:
             logger.debug("systemctl show searxng: %s", e)
 
-        # 2. HTTP-Erreichbarkeit + JSON-Format-Check
+        # 2. HTTP-Erreichbarkeit + JSON-Format-Check (sync in Thread → kein Event-Loop-Timeout)
         http_ok = False
         json_ok = False
         try:
-            async with httpx.AsyncClient() as client:
-                r = await client.get(f"{SEARXNG_URL}/", timeout=3, follow_redirects=True)
-                http_ok = r.status_code in (200, 302)
-            if http_ok:
-                async with httpx.AsyncClient() as client:
-                    r = await client.get(
-                        f"{SEARXNG_URL}/search?q=ping&format=json", timeout=5,
-                    )
-                    json_ok = r.status_code == 200
+            r = await asyncio.to_thread(_httpx_get, f"{SEARXNG_URL}/", 3.0)
+            http_ok = r.status_code in (200, 302)
         except Exception:
             pass
+        if http_ok:
+            try:
+                r = await asyncio.to_thread(
+                    _httpx_get, f"{SEARXNG_URL}/search?q=ping&format=json", 8.0,
+                )
+                json_ok = r.status_code == 200
+            except Exception:
+                pass
 
         # 3. Version aus git tag
         version = None
@@ -147,8 +153,7 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
 
         url = f"{SEARXNG_URL}/search?{urlencode(params)}"
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, timeout=20)
+            resp = await asyncio.to_thread(_httpx_get, url, 30.0)
             if resp.status_code != 200:
                 return {"error": f"HTTP {resp.status_code}", "detail": resp.text[:200], "results": []}
             data = resp.json()
