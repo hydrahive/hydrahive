@@ -43,6 +43,36 @@ def clear_interrupt(context_id: str) -> None:
 
 # Admin-Tool-Globals — gesetzt von main.py im Lifespan
 _discovery: Any = None
+
+# ---------------------------------------------------------------------------
+# Notification-Helper — project_id → User(s) ermitteln und push aufrufen
+# ---------------------------------------------------------------------------
+import asyncio as _asyncio_notif
+
+def _notify(project_id: str, type: str, title: str, body: str, link: str | None = None) -> None:
+    """Feuert eine Notification ohne den aufrufenden Code zu blockieren."""
+    try:
+        from .notification_service import notification_service as _ns
+
+        # Empfänger: personal_X → User X, sonst alle Admins
+        users: list[str] = []
+        if project_id and project_id.startswith("personal_"):
+            users = [project_id[len("personal_"):]]
+        elif _load_users_fn:
+            try:
+                all_users = _load_users_fn()
+                users = [u for u, d in all_users.items() if d.get("role") == "admin"]
+            except Exception:
+                pass
+        if not users:
+            users = ["admin"]
+
+        for user in users:
+            _asyncio_notif.create_task(
+                _ns.push(user=user, type=type, title=title, body=body, link=link)
+            )
+    except Exception:
+        pass  # Notifications nie fatal
 _projects_registry: Any = None
 _get_provisioner: Any = None
 _load_users_fn: Any = None
@@ -1855,6 +1885,9 @@ class AskAgentTool(BaseTool):
                     task.cancel()
                     clear_interrupt(project_id)
                     clear_interrupt(agent_id)
+                    _notify(project_id, "task_failed", f"Abgebrochen: {target}",
+                            f"Delegierter Agent '{target}' wurde vom Nutzer unterbrochen.",
+                            link=f"/chat/{project_id}")
                     return {
                         "interrupted": True,
                         "agent_id":    target,
@@ -1897,8 +1930,15 @@ class AskAgentTool(BaseTool):
                     "Der Worker hat Fehler oder Blocker gemeldet (siehe response). "
                     "Informiere den Nutzer über die gemeldeten Probleme damit sie behoben werden können."
                 )
+                _notify(project_id, "task_failed", f"Fehler: {target}",
+                        response[:120], link=f"/chat/{project_id}")
+            else:
+                _notify(project_id, "task_done", f"Fertig: {target}",
+                        response[:120], link=f"/chat/{project_id}")
             return result
         except Exception as e:
+            _notify(project_id, "task_failed", f"Kommunikationsfehler: {target}",
+                    str(e)[:120], link=f"/chat/{project_id}")
             return {
                 "error":     f"Fehler bei Kommunikation mit '{target}': {e}",
                 "agent_id":  target,

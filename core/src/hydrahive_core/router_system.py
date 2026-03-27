@@ -203,7 +203,41 @@ def register_system_routes(
 
     @admin_router.post("/admin/update/trigger")
     async def trigger_update():
-        asyncio.create_task(run_self_update(pusher="admin-manual", commits=0))
+        async def _run_and_notify():
+            await run_self_update(pusher="admin-manual", commits=0)
+            # Kurz warten bis Status-Datei geschrieben ist
+            import asyncio as _aio
+            await _aio.sleep(5)
+            try:
+                status = _load_update_status()
+                from .notification_service import notification_service as _ns
+                from .tool_registry import _load_users_fn as _luf
+                users: list[str] = []
+                if _luf:
+                    try:
+                        all_users = _luf()
+                        users = [u for u, d in all_users.items() if d.get("role") == "admin"]
+                    except Exception:
+                        pass
+                users = users or ["admin"]
+                if status.get("status") == "ok":
+                    commit = status.get("commit", "")
+                    msg = status.get("message", "")
+                    for u in users:
+                        await _ns.push(user=u, type="system",
+                                       title=f"Update abgeschlossen ({commit})",
+                                       body=msg or "System erfolgreich aktualisiert.",
+                                       link="/system")
+                elif status.get("status") == "error":
+                    for u in users:
+                        await _ns.push(user=u, type="system",
+                                       title="Update fehlgeschlagen",
+                                       body=status.get("error", "Unbekannter Fehler")[:120],
+                                       link="/system")
+            except Exception:
+                pass
+
+        asyncio.create_task(_run_and_notify())
         return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
 
     @admin_router.get("/gitea/config")

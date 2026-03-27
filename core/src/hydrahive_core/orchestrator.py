@@ -1035,6 +1035,14 @@ class Orchestrator:
             if _round == max_rounds - 1:
                 logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
                 try:
+                    from .tool_registry import _notify as _tr_notify
+                    _tr_notify(project_id, "agent_warning",
+                               f"Tool-Loop Limit erreicht",
+                               f"Agent hat {max_rounds} Runden durchlaufen — Antwort wird erzwungen.",
+                               link=f"/chat/{project_id}")
+                except Exception:
+                    pass
+                try:
                     final = await self._finalize_tool_loop_response(
                         boss_cfg,
                         current_messages,
