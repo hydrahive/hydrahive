@@ -435,7 +435,6 @@ export function LlmConfigPage() {
           </div>
           <button
             onClick={async () => {
-              if (!systemModel.trim()) return;
               setSavingSystem(true);
               try {
                 await api.setSystemDefaultModel(systemModel.trim());
@@ -443,7 +442,7 @@ export function LlmConfigPage() {
                 setTimeout(() => setSavedSystem(false), 3000);
               } finally { setSavingSystem(false); }
             }}
-            disabled={savingSystem || !systemModel.trim()}
+            disabled={savingSystem}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5"/>
             {savingSystem ? "Speichere…" : "Speichern"}

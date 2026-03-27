@@ -21,7 +21,29 @@ else
   success "Ollama installiert"
 fi
 
-# Systemd-Service sicherstellen
+# Systemd-Service sicherstellen (Ollama-Installer legt Unit manchmal nicht an)
+if ! systemctl list-unit-files --state=enabled,disabled ollama.service 2>/dev/null | grep -q ollama; then
+  useradd -r -s /bin/false -m -d /usr/share/ollama ollama 2>/dev/null || true
+  mkdir -p /usr/share/ollama/.ollama
+  chown -R ollama:ollama /usr/share/ollama
+  cat > /etc/systemd/system/ollama.service <<'UNIT'
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=default.target
+UNIT
+  systemctl daemon-reload
+fi
 if ! systemctl is-enabled --quiet ollama 2>/dev/null; then
   systemctl enable ollama
 fi

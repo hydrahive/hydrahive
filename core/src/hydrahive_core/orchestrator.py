@@ -755,6 +755,7 @@ class Orchestrator:
                         loop_messages = list(messages)
                         last_tool_signature: tuple[str, ...] | None = None
                         repeated_tool_signature_count = 0
+                        _tools_disabled = False  # wird gesetzt wenn Modell keine Tools unterstützt
 
                         for _round in range(boss_cfg.max_tool_rounds):
                             kwargs = {
@@ -766,13 +767,23 @@ class Orchestrator:
                             }
                             if api_base:
                                 kwargs["api_base"] = api_base
-                            if litellm_tools:
+                            if litellm_tools and not _tools_disabled:
                                 kwargs["tools"] = litellm_tools
 
                             round_text = ""
                             accumulated_tcs: dict = {}  # index → {id, name, arguments}
 
-                            async for chunk in await litellm.acompletion(**kwargs, drop_params=True):
+                            try:
+                              _stream = await litellm.acompletion(**kwargs, drop_params=True)
+                            except Exception as _e:
+                                if "does not support tools" in str(_e) and "tools" in kwargs:
+                                    _tools_disabled = True
+                                    kwargs.pop("tools")
+                                    _stream = await litellm.acompletion(**kwargs, drop_params=True)
+                                else:
+                                    raise
+
+                            async for chunk in _stream:
                                 # litellm liefert usage im letzten Chunk (stream_options)
                                 if getattr(chunk, "usage", None):
                                     _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)

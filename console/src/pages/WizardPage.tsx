@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, ChevronRight, Cpu, Key, Mail, Rocket, SkipForward } from "lucide-react";
 import { api } from "@/lib/api";
@@ -150,9 +150,21 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
 }
 
 function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
-  const [systemModel,  setSystemModel]  = useState("claude-haiku-4-5-20251001");
-  const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState("");
+  const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string}[]>([]);
+  const [systemModel,     setSystemModel]     = useState("");
+  const [saving,          setSaving]          = useState(false);
+  const [error,           setError]           = useState("");
+
+  useEffect(() => {
+    api.availableModels().then(r => {
+      // Im Wizard nur Ollama-Modelle zeigen — Cloud-Provider werden nach dem Login konfiguriert
+      const ollamaModels = (r.models ?? []).filter(m => m.provider === "ollama" || m.provider === "wks_ollama");
+      setAvailableModels(ollamaModels);
+      if (!systemModel && ollamaModels.length > 0) {
+        setSystemModel(ollamaModels[0].id);
+      }
+    }).catch(() => {});
+  }, []);
 
   async function save() {
     setSaving(true); setError("");
@@ -181,15 +193,22 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       <div className="space-y-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Standard-Modell</label>
-          <input value={systemModel} onChange={e => setSystemModel(e.target.value)}
-            placeholder="claude-haiku-4-5-20251001"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          <select
+            value={systemModel}
+            onChange={e => setSystemModel(e.target.value)}
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">— kein Standard-Modell —</option>
+            {availableModels.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
           <p className="text-xs text-muted-foreground">
-            Für System-Agenten und interne Dienste. Claude Haiku empfohlen — oder ein lokales Ollama-Modell (z.B. <code>ollama/mistral-nemo:12b</code>).
+            Für System-Agenten und interne Dienste. Weitere Modelle unter <strong>Einstellungen → LLM</strong>.
           </p>
         </div>
         <div className="rounded-xl border border-muted bg-muted/20 p-3 text-xs text-muted-foreground">
-          Ollama-URL und Modell-Konfiguration unter <strong>Einstellungen → LLM</strong> nach dem Login.
+          Ollama-URL und Cloud-Provider unter <strong>Einstellungen → LLM</strong> nach dem Login.
         </div>
       </div>
 

@@ -77,9 +77,11 @@ def register_llm_routes(
     async def set_system_default(body: dict):
         import yaml as _yaml
         model = body.get("model", "").strip()
-        if not model:
-            raise HTTPException(400, "model fehlt")
         config = _load_llm_config()
+        if not model:
+            config.pop("system_default", None)
+            _save_llm_config(config)
+            return {"updated": True, "model": "", "agents_updated": []}
         config["system_default"] = {"model": model}
         _save_llm_config(config)
         system_agents = ["hydrahive_support"]
