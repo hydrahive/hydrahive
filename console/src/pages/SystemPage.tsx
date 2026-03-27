@@ -104,9 +104,11 @@ function DoctorStatusIcon({ status }: { status: DoctorCheck["status"] }) {
 function DoctorPanel() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
-  const [report,  setReport]  = useState<DoctorReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [report,   setReport]   = useState<DoctorReport | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [fixing,   setFixing]   = useState<string | null>(null);
+  const [fixMsg,   setFixMsg]   = useState<Record<string, string>>({});
 
   if (!isAdmin) return null;
 
@@ -120,6 +122,20 @@ function DoctorPanel() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function applyFix(fixId: string) {
+    setFixing(fixId);
+    setFixMsg(prev => ({ ...prev, [fixId]: "" }));
+    try {
+      const r = await api.doctorFix(fixId);
+      setFixMsg(prev => ({ ...prev, [fixId]: r.ok ? (r.output || t("doctor.fixOk")) : (r.error || t("doctor.fixFailed")) }));
+      if (r.ok) await runDoctor();
+    } catch (e: unknown) {
+      setFixMsg(prev => ({ ...prev, [fixId]: e instanceof Error ? e.message : t("doctor.fixFailed") }));
+    } finally {
+      setFixing(null);
     }
   }
 
@@ -167,10 +183,26 @@ function DoctorPanel() {
               <div key={i} className="flex items-start gap-3 py-2.5 border-b last:border-0">
                 <DoctorStatusIcon status={check.status} />
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{check.name}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">{check.name}</span>
+                    {check.fix && (
+                      <button
+                        onClick={() => applyFix(check.fix!)}
+                        disabled={fixing === check.fix}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-50 transition-colors"
+                      >
+                        {fixing === check.fix ? t("doctor.fixing") : t("doctor.fixBtn")}
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
-                  {check.hint && (
+                  {check.hint && !check.fix && (
                     <p className="text-xs text-muted-foreground/60 mt-0.5 font-mono">{check.hint}</p>
+                  )}
+                  {check.fix && fixMsg[check.fix] && (
+                    <p className={`text-xs mt-0.5 font-mono ${fixMsg[check.fix].startsWith("nginx") || fixMsg[check.fix] === t("doctor.fixOk") ? "text-green-500" : "text-destructive"}`}>
+                      {fixMsg[check.fix]}
+                    </p>
                   )}
                 </div>
               </div>

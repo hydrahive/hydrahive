@@ -307,7 +307,11 @@
     "warnings": "Warnungen",
     "errors": "Fehler",
     "allOk": "Alles in Ordnung",
-    "issuesFound": "Probleme gefunden"
+    "issuesFound": "Probleme gefunden",
+    "fixBtn": "Automatisch fixen",
+    "fixing": "Wird gefixt...",
+    "fixOk": "Fix erfolgreich",
+    "fixFailed": "Fix fehlgeschlagen"
   },
   "tests": {
     "title": "Unit-Tests",

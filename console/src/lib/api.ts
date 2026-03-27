@@ -147,8 +147,9 @@ export const api = {
   getSessionById: (projectId: string, sessionId: string) =>
     api.get<SessionFull>(`/projects/${projectId}/sessions/${sessionId}`),
   // Doctor
-  doctor:   () => api.get<DoctorReport>("/admin/doctor"),
-  runTests: () => api.get<TestReport>("/admin/tests"),
+  doctor:    () => api.get<DoctorReport>("/admin/doctor"),
+  doctorFix: (fixId: string) => api.post<{ok:boolean;output?:string;error?:string}>(`/admin/doctor/fix/${fixId}`, {}),
+  runTests:  () => api.get<TestReport>("/admin/tests"),
   // Live-Agent-Übersicht
   agentsLive: () => api.get<AgentsLiveReport>("/admin/agents/live"),
   stopAgent:  (id: string) => api.post<{stopped: string}>(`/admin/agents/${id}/stop`, {}),
@@ -446,6 +447,7 @@ export interface DoctorCheck {
   status: "ok" | "warn" | "error";
   detail: string;
   hint?:  string;
+  fix?:   string;
 }
 export interface DoctorReport {
   status:  "ok" | "warn" | "error";

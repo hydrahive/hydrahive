@@ -70,11 +70,19 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         return {"status": status, "passed": passed, "failed": failed,
                 "total": total, "duration": duration, "output": output}
 
+    @admin_router.post("/admin/doctor/fix/{fix_id}")
+    async def run_fix(fix_id: str, _a=Depends(require_admin)):
+        from fastapi import HTTPException as _HTTP
+        if fix_id == "nginx_a2a":
+            return await _fix_nginx_a2a()
+        raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
+
     @admin_router.get("/admin/doctor")
     async def run_doctor(_a=Depends(require_admin)):
         checks = []
         checks += await _check_services()
         checks += _check_configs()
+        checks += _check_nginx_a2a()
         checks += _check_ports()
         checks += _check_disk()
         checks += await _check_api()
@@ -91,8 +99,11 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         }
 
 
-def _check(name: str, status: str, detail: str, hint: str = "") -> dict:
-    return {"name": name, "status": status, "detail": detail, "hint": hint}
+def _check(name: str, status: str, detail: str, hint: str = "", fix: str = "") -> dict:
+    result: dict = {"name": name, "status": status, "detail": detail, "hint": hint}
+    if fix:
+        result["fix"] = fix
+    return result
 
 
 async def _check_services() -> list[dict]:
@@ -249,6 +260,46 @@ async def _check_api() -> list[dict]:
         results.append(_check("Deployment: Commit-Stand", "warn", "Noch nie deployed"))
 
     return results
+
+
+def _check_nginx_a2a() -> list[dict]:
+    """Prüft ob nginx die A2A-Proxy-Regeln (/.well-known/ und /a2a/) enthält."""
+    nginx_site = Path("/etc/nginx/sites-enabled/hydrahive-console")
+    if not nginx_site.exists():
+        return []
+    try:
+        content = nginx_site.read_text(encoding="utf-8")
+        has_well_known = "/.well-known/" in content
+        has_a2a        = "/a2a/" in content
+        if has_well_known and has_a2a:
+            return [_check("Nginx: A2A-Proxy", "ok", "/.well-known/ und /a2a/ konfiguriert")]
+        missing = ([".well-known"] if not has_well_known else []) + (["/a2a/"] if not has_a2a else [])
+        return [_check(
+            "Nginx: A2A-Proxy", "warn",
+            f"Proxy-Regeln fehlen: {', '.join(missing)}",
+            hint="Fix-Button klicken um nginx automatisch zu aktualisieren",
+            fix="nginx_a2a",
+        )]
+    except Exception as e:
+        return [_check("Nginx: A2A-Proxy", "warn", f"Konfig nicht lesbar: {e}")]
+
+
+async def _fix_nginx_a2a() -> dict:
+    """Kopiert hydrahive-console.nginx → sites-enabled und lädt nginx neu."""
+    script = Path("/opt/hydrahive/installer/modules/16_nginx_update.sh")
+    if not script.exists():
+        return {"ok": False, "error": "Fix-Script nicht gefunden — bitte zuerst ein Update ausführen"}
+
+    def _run():
+        return subprocess.run(
+            ["sudo", "-n", "/bin/bash", str(script)],
+            capture_output=True, text=True, timeout=30,
+        )
+
+    r = await asyncio.to_thread(_run)
+    if r.returncode == 0:
+        return {"ok": True, "output": (r.stdout or "").strip()}
+    return {"ok": False, "error": (r.stderr or r.stdout or "unbekannter Fehler").strip()}
 
 
 def _check_vpn() -> list[dict]:

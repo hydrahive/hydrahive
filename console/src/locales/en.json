@@ -307,7 +307,11 @@
     "warnings": "Warnings",
     "errors": "Errors",
     "allOk": "All systems nominal",
-    "issuesFound": "Issues found"
+    "issuesFound": "Issues found",
+    "fixBtn": "Auto-fix",
+    "fixing": "Fixing...",
+    "fixOk": "Fix applied",
+    "fixFailed": "Fix failed"
   },
   "tests": {
     "title": "Unit Tests",
