@@ -274,71 +274,135 @@ async def _compact_if_needed(
     project_id: str,
     boss_cfg,
     *,
-    keep_last: int = 4,
+    keep_last: int = 6,
 ) -> None:
     """
-    Context-Kompaktierung (#74): wenn Session zu gross wird, älteren Kontext
-    per LLM zusammenfassen und durch eine Summary-Message ersetzen.
-    Threshold ist model-aware: Claude/GPT-4/Gemini/Mistral-Large = 20000 Tokens
-    (estimated_tokens() unterschätzt echte Tokens um ~5x, daher konservativ),
-    lokale/kleine Modelle = 2000 Tokens.
+    Mehrstufige Context-Kompaktierung (#47).
+
+    Stufe 1 — Rolling Summary:
+      Wenn estimated_tokens > token_threshold: die ältesten Nachrichten (alles
+      außer den letzten keep_last) werden per LLM zusammengefasst.
+      Eine bereits vorhandene Summary-Message wird dabei als Vorwissen
+      in den neuen Zusammenfassungs-Prompt eingebaut (Rolling-Kette).
+
+    Stufe 2 — Meta-Summary:
+      Wenn nach Stufe 1 die Session immer noch > token_threshold ist
+      (z. B. keep_last-Nachrichten selbst sehr groß), wird die neue Summary
+      nochmal auf max 300 Token verdichtet.
+
+    Threshold ist model-aware:
+      Claude/GPT-4/Gemini/Mistral-Large → 4000 estimated (~20k real)
+      Lokale/kleine Modelle             → 1000 estimated (~5k real)
     """
     from .orchestrator_llm import _llm_with_retry
+    from .session_manager import MessageRole
 
     model = boss_cfg.llm.model.lower()
     if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
-        token_threshold = 4_000   # estimated_tokens unterschätzt ~5x → real ~20k
+        token_threshold = 4_000
     else:
-        token_threshold = 1_000  # lokale Modelle haben kleine Kontextfenster
+        token_threshold = 1_000
 
     if sessions.estimated_tokens(project_id) < token_threshold:
         return
 
     session = sessions.get_active(project_id)
-    if not session or len(session.messages) <= keep_last + 2:
+    if not session or len(session.messages) < 4:
         return
 
-    to_summarize = session.messages[:-keep_last]
-    history_text = "\n".join(
-        f"{m.role.value.upper()}: {m.content[:500]}"
+    # Vorhandene Summary-Message (Stufe-1-Kette) extrahieren
+    existing_summary = ""
+    msgs = session.messages
+    if msgs and msgs[0].role == MessageRole.SYSTEM and msgs[0].content.startswith("[Zusammenfassung"):
+        existing_summary = msgs[0].content
+        msgs = msgs[1:]
+
+    # Nachrichten die kompaktiert werden (alles außer den letzten keep_last)
+    to_summarize = msgs[:-keep_last] if len(msgs) > keep_last else msgs[:]
+    if not to_summarize and not existing_summary:
+        return
+
+    history_lines = "\n".join(
+        f"{m.role.value.upper()}: {m.content[:1500]}"
         for m in to_summarize
     )
 
-    summary_prompt = [
-        {"role": "system", "content": (
+    if existing_summary:
+        user_content = (
+            f"BISHERIGE ZUSAMMENFASSUNG:\n{existing_summary}\n\n"
+            f"NEUE NACHRICHTEN:\n{history_lines}"
+        )
+        system_instruction = (
+            "Du bekommst eine bisherige Zusammenfassung plus neue Nachrichten. "
+            "Erstelle eine aktualisierte, vollständige Zusammenfassung. "
+            "Behalte alle wichtigen Fakten, Entscheidungen und offenen Aufgaben. "
+            "Antworte nur mit der Zusammenfassung, keine Einleitung."
+        )
+    else:
+        user_content = history_lines
+        system_instruction = (
             "Fasse die folgende Konversation prägnant zusammen. "
             "Behalte alle wichtigen Fakten, Entscheidungen und Aufgaben. "
             "Antworte nur mit der Zusammenfassung, keine Einleitung."
-        )},
-        {"role": "user", "content": history_text},
+        )
+
+    summary_prompt = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user",   "content": user_content},
     ]
 
     try:
         resp = await _llm_with_retry(lambda: litellm.acompletion(
             model=boss_cfg.llm.model,
             messages=summary_prompt,
-            max_tokens=400,
+            max_tokens=700,
             drop_params=True,
         ))
         summary = resp.choices[0].message.content or ""
-        if summary:
-            await sessions.compact(project_id, summary, keep_last=keep_last)
-            logger.info(
-                "Context kompaktiert (Projekt: %s, ~%d Tokens → Summary)",
-                project_id, sessions.estimated_tokens(project_id),
-            )
-            # Memory Flush (OpenClaw-Stil): Summary in Memory-Datei schreiben
-            # damit zukünftige Sessions relevante Fakten via BM25 finden
-            if boss_cfg.agent_dir:
-                _flush_summary_to_memory(boss_cfg.agent_dir, summary)
+        if not summary:
+            return
+
+        await sessions.compact(project_id, summary, keep_last=keep_last)
+        logger.info(
+            "Context kompaktiert Stufe-1 (Projekt: %s, ~%d Tokens nach Kompaktierung)",
+            project_id, sessions.estimated_tokens(project_id),
+        )
+
+        # Stufe 2: wenn immer noch zu groß, Summary selbst verdichten
+        if sessions.estimated_tokens(project_id) >= token_threshold and len(summary) > 400:
+            meta_prompt = [
+                {"role": "system", "content": (
+                    "Verdichte die folgende Zusammenfassung auf das Wesentlichste. "
+                    "Maximal 250 Wörter. Nur die Zusammenfassung, keine Einleitung."
+                )},
+                {"role": "user", "content": summary},
+            ]
+            resp2 = await _llm_with_retry(lambda: litellm.acompletion(
+                model=boss_cfg.llm.model,
+                messages=meta_prompt,
+                max_tokens=350,
+                drop_params=True,
+            ))
+            meta = resp2.choices[0].message.content or ""
+            if meta:
+                await sessions.compact(project_id, meta, keep_last=keep_last)
+                summary = meta
+                logger.info(
+                    "Context kompaktiert Stufe-2 (Projekt: %s, ~%d Tokens nach Meta-Summary)",
+                    project_id, sessions.estimated_tokens(project_id),
+                )
+
+        # Memory Flush: Summary in Memory-Datei schreiben
+        # damit zukünftige Sessions relevante Fakten via BM25 finden
+        if boss_cfg.agent_dir:
+            _flush_summary_to_memory(boss_cfg.agent_dir, summary)
+
     except Exception as e:
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
-        # Notfall-Reset: wenn Session zu gross ist um kompaktiert zu werden
         current_tokens = sessions.estimated_tokens(project_id)
         if current_tokens > 15_000:
             logger.error(
-                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 15k) — "
-                "Session wird geleert um Token-Overflow zu verhindern",
+                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 15k)",
                 project_id, current_tokens,
             )
             await sessions.new_session(project_id)

@@ -406,7 +406,7 @@ class Orchestrator:
 
     # ----------------------------------------------------------------- private (delegiert an Sub-Module)
 
-    async def _compact_if_needed(self, project_id: str, boss_cfg, keep_last: int = 4) -> None:
+    async def _compact_if_needed(self, project_id: str, boss_cfg, keep_last: int = 6) -> None:
         return await _compact_if_needed_fn(self._sessions, project_id, boss_cfg, keep_last=keep_last)
 
     @staticmethod
