@@ -255,7 +255,9 @@
     "dangerZone": "Danger Zone",
     "dangerZoneDesc": "Deleting a project removes the workspace, sessions and integrations. This action is intentionally kept separate.",
     "deleteConfirm": "Yes, permanently delete project",
-    "deleteBtn": "Delete project"
+    "deleteBtn": "Delete project",
+    "codeEditor": "Code Editor",
+    "openInCode": "Open in Code Editor"
   },
   "projectCreate": {
     "title": "New project",

@@ -157,6 +157,17 @@ main() {
         fi
     fi
 
+    # --- 8b. code-server neu starten falls installiert ---
+    if systemctl is-enabled --quiet hydrahive-codeserver 2>/dev/null; then
+        if systemctl is-active --quiet hydrahive-codeserver; then
+            systemctl restart hydrahive-codeserver && success "code-server neu gestartet" \
+                || warn "code-server Neustart fehlgeschlagen"
+        else
+            systemctl start hydrahive-codeserver && success "code-server gestartet" \
+                || warn "code-server konnte nicht gestartet werden"
+        fi
+    fi
+
     # --- 9. A-MEM aktualisieren (optional — Fehler nicht fatal) ---
     if [ -f "${TMPDIR_BASE}/installer/amem/install_amem.sh" ]; then
         info "Aktualisiere A-MEM..."

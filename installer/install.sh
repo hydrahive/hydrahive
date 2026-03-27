@@ -91,6 +91,10 @@ if [[ "${INSTALL_WHATSAPP,,}" == "y" ]]; then
     source "${MODULES_DIR}/13_whatsapp_bridge.sh"
 fi
 
+echo ""
+echo -e "${BLUE}--- Phase 7: Code Editor ---${NC}"
+source "${MODULES_DIR}/15_codeserver.sh"
+
 # Update-Script nach /opt/hydrahive/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"
 chmod +x "${HYDRAHIVE_DIR}/update.sh"
@@ -147,4 +151,9 @@ info "AgentLink:     http://127.0.0.1:${AGENTLINK_PORT:-8010}/docs"
 if systemctl is-active --quiet gitea 2>/dev/null; then
   SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
   info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / ${GITEA_ADMIN_PASS:-siehe /etc/hydrahive/gitea_config.json})"
+fi
+if systemctl is-active --quiet hydrahive-codeserver 2>/dev/null; then
+  SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+  _CS_PASS=$(grep '^codeserver_password=' /etc/hydrahive/admin_credentials 2>/dev/null | cut -d= -f2- || echo "siehe /etc/hydrahive/admin_credentials")
+  info "Code Editor:   https://${SERVER_IP_OUT}/code/  (Passwort: ${_CS_PASS})"
 fi

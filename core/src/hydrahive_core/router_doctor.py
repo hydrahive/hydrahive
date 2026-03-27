@@ -119,6 +119,7 @@ async def _check_services() -> list[dict]:
     optional = [
         (["hydrahive-whatsapp-bridge"], "WhatsApp Bridge"),
         (["tailscaled"],               "Tailscale VPN"),
+        (["hydrahive-codeserver"],     "Code Editor (code-server)"),
     ]
     for units, label in required:
         found_active = False
@@ -195,18 +196,21 @@ def _check_ports() -> list[dict]:
     """Prüft ob wichtige Ports erreichbar sind."""
     import socket
     results = []
+    # (port, label, required)
     ports = [
-        (8765, "Core API"),
-        (80,   "HTTP/nginx"),
-        (3002, "Gitea"),
-        (6167, "Matrix (conduwuit)"),
+        (8765, "Core API",              True),
+        (80,   "HTTP/nginx",            True),
+        (3002, "Gitea",                 True),
+        (6167, "Matrix (conduwuit)",    True),
+        (8766, "Code Editor (code-server)", False),
     ]
-    for port, label in ports:
+    for port, label, required in ports:
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 results.append(_check(f"Port {port}: {label}", "ok", "erreichbar"))
         except Exception:
-            results.append(_check(f"Port {port}: {label}", "error", "nicht erreichbar",
+            severity = "error" if required else "warn"
+            results.append(_check(f"Port {port}: {label}", severity, "nicht erreichbar",
                                   f"Prüfe: sudo ss -tlnp | grep {port}"))
     return results
 

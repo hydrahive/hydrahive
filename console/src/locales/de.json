@@ -255,7 +255,9 @@
     "dangerZone": "Danger Zone",
     "dangerZoneDesc": "Projektloeschung entfernt Arbeitsraum, Sessions und Integrationen. Diese Aktion bleibt bewusst getrennt.",
     "deleteConfirm": "Ja, Projekt endgueltig loeschen",
-    "deleteBtn": "Projekt loeschen"
+    "deleteBtn": "Projekt loeschen",
+    "codeEditor": "Code Editor",
+    "openInCode": "In Code Editor öffnen"
   },
   "projectCreate": {
     "title": "Neues Projekt",

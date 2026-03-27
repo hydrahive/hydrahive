@@ -24,6 +24,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Code2,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -485,6 +486,23 @@ export function ProjectsPage() {
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     </button>
+                    <a
+                      href={`/code/?folder=/projects/${id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background"
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="rounded-2xl bg-secondary p-2">
+                          <Code2 className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block font-medium">{t("projects.codeEditor")}</span>
+                          <span className="text-xs text-muted-foreground">{t("projects.openInCode")}</span>
+                        </span>
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </a>
                     <div className="rounded-3xl border bg-secondary/50 px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className="rounded-2xl bg-background p-2 text-foreground/75">
