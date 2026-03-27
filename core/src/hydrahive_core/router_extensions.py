@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
+
+_EXT_ID_RE = re.compile(r'^[a-z0-9_-]+$')
 
 INSTALLER_DIR   = Path("/opt/hydrahive/installer")
 MANIFESTS_DIR   = INSTALLER_DIR / "extensions"
@@ -93,11 +96,23 @@ async def _stream_script(script_path: Path):
         env=env,
     )
     assert proc.stdout
-    async for line in proc.stdout:
-        text = line.decode("utf-8", errors="replace").rstrip()
-        yield f"data: {_j.dumps({'line': text})}\n\n"
-    rc = await proc.wait()
-    yield f"data: {_j.dumps({'done': True, 'ok': rc == 0})}\n\n"
+    try:
+        async for line in proc.stdout:
+            text = line.decode("utf-8", errors="replace").rstrip()
+            yield f"data: {_j.dumps({'line': text})}\n\n"
+        rc = await asyncio.wait_for(proc.wait(), timeout=600)
+        yield f"data: {_j.dumps({'done': True, 'ok': rc == 0})}\n\n"
+    except asyncio.TimeoutError:
+        yield f"data: {_j.dumps({'line': '[TIMEOUT] Script überschritt 10 Minuten — abgebrochen', 'done': True, 'ok': False})}\n\n"
+    except Exception as e:
+        yield f"data: {_j.dumps({'line': f'[ERROR] {e}', 'done': True, 'ok': False})}\n\n"
+    finally:
+        if proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
 
 
 def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None:
@@ -126,6 +141,8 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
 
     @admin_router.post("/admin/extensions/{ext_id}/install")
     async def install_extension(ext_id: str, _a=Depends(require_admin)):
+        if not _EXT_ID_RE.match(ext_id):
+            raise HTTPException(400, "Ungültige Extension-ID")
         manifests = {m["id"]: m for m in _load_manifests()}
         if ext_id not in manifests:
             raise HTTPException(404, f"Extension '{ext_id}' nicht gefunden")
@@ -143,6 +160,8 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
 
     @admin_router.post("/admin/extensions/{ext_id}/uninstall")
     async def uninstall_extension(ext_id: str, _a=Depends(require_admin)):
+        if not _EXT_ID_RE.match(ext_id):
+            raise HTTPException(400, "Ungültige Extension-ID")
         manifests = {m["id"]: m for m in _load_manifests()}
         if ext_id not in manifests:
             raise HTTPException(404, f"Extension '{ext_id}' nicht gefunden")

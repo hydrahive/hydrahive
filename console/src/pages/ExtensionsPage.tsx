@@ -111,7 +111,11 @@ export function ExtensionsPage() {
   const [log,         setLog]         = useState<string[]>([]);
   const [logDone,     setLogDone]     = useState<boolean | null>(null);
   const [logExpanded, setLogExpanded] = useState(true);
-  const logRef = useRef<HTMLDivElement>(null);
+  const logRef    = useRef<HTMLDivElement>(null);
+  const abortRef  = useRef<AbortController | null>(null);
+
+  // Cleanup bei Unmount: laufenden Stream abbrechen
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   async function load(quiet = false) {
     if (!quiet) setLoading(true);
@@ -139,6 +143,10 @@ export function ExtensionsPage() {
   }, [log]);
 
   async function handleAction(id: string, action: "install" | "uninstall") {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setActiveId(id);
     setActiveAction(action);
     setLog([]);
@@ -146,38 +154,48 @@ export function ExtensionsPage() {
     setLogExpanded(true);
 
     const token = localStorage.getItem("hydrahive_token") || "";
-    const res = await fetch(`/api/admin/extensions/${id}/${action}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok || !res.body) {
-      setLog([`Fehler: HTTP ${res.status}`]);
-      setLogDone(false);
-      return;
-    }
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const parts = buf.split("\n\n");
-      buf = parts.pop() ?? "";
-      for (const part of parts) {
-        const line = part.replace(/^data: /, "").trim();
-        if (!line) continue;
-        try {
-          const d = JSON.parse(line);
-          if (d.line !== undefined) setLog(l => [...l, d.line]);
-          if (d.done) {
-            setLogDone(d.ok);
-            if (d.ok) load(true);
-          }
-        } catch { /* ignore */ }
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    try {
+      const res = await fetch(`/api/admin/extensions/${id}/${action}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) {
+        setLog([`Fehler: HTTP ${res.status}`]);
+        setLogDone(false);
+        return;
       }
+      reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.replace(/^data: /, "").trim();
+          if (!line) continue;
+          try {
+            const d = JSON.parse(line);
+            if (d.line !== undefined) setLog(l => [...l.slice(-199), d.line]);
+            if (d.done) {
+              setLogDone(d.ok);
+              if (d.ok) load(true);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") {
+        setLog(l => [...l.slice(-199), `[ERROR] ${e.message}`]);
+        setLogDone(false);
+      }
+    } finally {
+      reader?.cancel().catch(() => {});
     }
-    if (logDone === null) setLogDone(false);
   }
 
   function clearLog() {

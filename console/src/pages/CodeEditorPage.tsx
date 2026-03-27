@@ -19,7 +19,10 @@ export function CodeEditorPage() {
   const [installing,   setInstalling]   = useState(false);
   const [installLog,   setInstallLog]   = useState<string[]>([]);
   const [installDone,  setInstallDone]  = useState<boolean | null>(null);
-  const logRef = useRef<HTMLDivElement>(null);
+  const logRef   = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   async function load() {
     try {
@@ -40,43 +43,57 @@ export function CodeEditorPage() {
   useEffect(() => { load(); }, []);
 
   async function handleInstall() {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setInstalling(true);
     setInstallLog([]);
     setInstallDone(null);
-    const token = localStorage.getItem("hydrahive_token") || "";
-    const res = await fetch("/api/admin/codeserver/install", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok || !res.body) {
-      setInstallLog([`Fehler: HTTP ${res.status}`]);
-      setInstalling(false);
-      return;
-    }
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const parts = buf.split("\n\n");
-      buf = parts.pop() ?? "";
-      for (const part of parts) {
-        const line = part.replace(/^data: /, "").trim();
-        if (!line) continue;
-        try {
-          const d = JSON.parse(line);
-          if (d.line !== undefined) setInstallLog(l => [...l, d.line]);
-          if (d.done) {
-            setInstallDone(d.ok);
-            setInstalling(false);
-            if (d.ok) load();
-          }
-        } catch { /* ignore */ }
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    try {
+      const token = localStorage.getItem("hydrahive_token") || "";
+      const res = await fetch("/api/admin/codeserver/install", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) {
+        setInstallLog([`Fehler: HTTP ${res.status}`]);
+        setInstallDone(false);
+        return;
       }
+      reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.replace(/^data: /, "").trim();
+          if (!line) continue;
+          try {
+            const d = JSON.parse(line);
+            if (d.line !== undefined) setInstallLog(l => [...l.slice(-199), d.line]);
+            if (d.done) {
+              setInstallDone(d.ok);
+              if (d.ok) load();
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") {
+        setInstallLog(l => [...l.slice(-199), `[ERROR] ${e.message}`]);
+        setInstallDone(false);
+      }
+    } finally {
+      reader?.cancel().catch(() => {});
+      setInstalling(false);
     }
-    setInstalling(false);
   }
 
   useEffect(() => {

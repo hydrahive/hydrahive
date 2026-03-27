@@ -56,11 +56,24 @@ def delete_discord_config(agent_id: str) -> None:
         token_file.unlink()
 
 
+def _is_valid_discord_id(s: str) -> bool:
+    """Discord-IDs sind rein numerisch (Snowflake, 17–20 Stellen)."""
+    return s.isdigit() and 15 <= len(s) <= 20
+
+
 class DiscordAgentClient(ABC):
     """
     Basisklasse für Discord-Bot-Agenten.
     Kapselt discord.py Client, Message-Handling und Channel-Operationen.
     """
+
+    @staticmethod
+    def _sanitize_ids(ids: list[str]) -> set[str]:
+        valid = {s for s in ids if _is_valid_discord_id(s)}
+        invalid = set(ids) - valid
+        if invalid:
+            logger.warning("Discord: ungültige IDs ignoriert: %s", invalid)
+        return valid
 
     def __init__(
         self,
@@ -90,10 +103,10 @@ class DiscordAgentClient(ABC):
         self.loop_bot_threshold    = max(2, loop_bot_threshold)
         self.loop_pingpong_seconds = max(5, loop_pingpong_seconds)
         self.loop_cooldown_seconds = max(10, loop_cooldown_seconds)
-        self.user_whitelist  = set(user_whitelist)
-        self.user_blacklist  = set(user_blacklist)
-        self.role_whitelist  = set(role_whitelist)
-        self.role_blacklist  = set(role_blacklist)
+        self.user_whitelist  = self._sanitize_ids(user_whitelist)
+        self.user_blacklist  = self._sanitize_ids(user_blacklist)
+        self.role_whitelist  = self._sanitize_ids(role_whitelist)
+        self.role_blacklist  = self._sanitize_ids(role_blacklist)
         self.channel_modes   = dict(channel_modes)
         self._client         = None
         self._running        = False
@@ -205,13 +218,23 @@ class DiscordAgentClient(ABC):
                 return
             if self.user_whitelist and author_id not in self.user_whitelist:
                 return
-            # Rollen-Filter (nur wenn Member-Objekt verfügbar)
-            if (self.role_whitelist or self.role_blacklist) and hasattr(message.author, 'roles'):
-                author_role_ids = {str(r.id) for r in message.author.roles}
-                if self.role_blacklist and author_role_ids & self.role_blacklist:
-                    return
-                if self.role_whitelist and not (author_role_ids & self.role_whitelist):
-                    return
+            # Rollen-Filter (nur wenn Member-Objekt mit roles verfügbar)
+            if self.role_whitelist or self.role_blacklist:
+                try:
+                    roles = getattr(message.author, 'roles', None)
+                    if roles is not None:
+                        author_role_ids = {str(r.id) for r in roles}
+                        if self.role_blacklist and author_role_ids & self.role_blacklist:
+                            return
+                        if self.role_whitelist and not (author_role_ids & self.role_whitelist):
+                            return
+                    # Kein roles-Attribut (z.B. Webhook/DM) → Whitelist blockiert
+                    elif self.role_whitelist:
+                        return
+                except Exception:
+                    logger.debug("Rollen-Filter: roles nicht lesbar für %s", message.author.id)
+                    if self.role_whitelist:
+                        return
             # Channel-Modus: "ro" = nur lesen, nicht antworten
             channel_mode = self.channel_modes.get(str(message.channel.id), "rw")
             if channel_mode == "ro":

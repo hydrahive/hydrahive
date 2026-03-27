@@ -23,6 +23,9 @@ class GiteaConfigRequest(BaseModel):
     webhook_secret: str = ""
 
 
+_restart_lock = asyncio.Lock()
+
+
 def register_system_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -242,14 +245,23 @@ def register_system_routes(
 
     @admin_router.post("/admin/core/restart")
     async def restart_core():
+        if _restart_lock.locked():
+            raise HTTPException(409, "Neustart läuft bereits")
+
         async def _do_restart():
-            await asyncio.sleep(1.5)
-            proc = await asyncio.create_subprocess_exec(
-                "sudo", "systemctl", "restart", "hydrahive-core",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.wait()
+            async with _restart_lock:
+                await asyncio.sleep(1.5)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        "sudo", "systemctl", "restart", "hydrahive-core",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await asyncio.wait_for(proc.wait(), timeout=30)
+                except asyncio.TimeoutError:
+                    logger.error("core/restart: systemctl timed out")
+                except Exception as e:
+                    logger.error("core/restart: %s", e)
 
         asyncio.create_task(_do_restart())
         return {"status": "restarting", "message": "Core-Neustart ausgelöst — Seite lädt automatisch neu"}

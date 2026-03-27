@@ -2,6 +2,7 @@
 # HydraHive Installer - Modul 15: code-server (Browser-IDE)
 # Installiert code-server, richtet es als Service ein und injiziert nginx /code/ Proxy.
 # Idempotent.
+set -euo pipefail
 
 CODESERVER_PORT="8766"
 CODESERVER_CONFIG_DIR="/opt/hydrahive/.config/code-server"
@@ -169,11 +170,15 @@ for i in 1 2 3 4 5; do
 done
 [ "${HEALTH_OK}" -eq 0 ] && warn "code-server nicht erreichbar — prüfe: journalctl -u ${CODESERVER_SERVICE} -n 20"
 
-# --- 8. Passwort in CRED_FILE speichern ---
-if ! grep -q '^codeserver_password=' "${CRED_FILE}" 2>/dev/null; then
+# --- 8. Passwort in CRED_FILE speichern (idempotent, kein Doppeleintrag) ---
+touch "${CRED_FILE}"
+chmod 600 "${CRED_FILE}"
+if grep -q '^codeserver_password=' "${CRED_FILE}" 2>/dev/null; then
+    sed -i "s|^codeserver_password=.*|codeserver_password=${CS_PASS}|" "${CRED_FILE}"
+else
     echo "codeserver_password=${CS_PASS}" >> "${CRED_FILE}"
-    success "code-server Passwort in ${CRED_FILE} gespeichert"
 fi
+success "code-server Passwort in ${CRED_FILE} gespeichert"
 
 SERVER_IP="$(hostname -I | awk '{print $1}')" || SERVER_IP="127.0.0.1"
 echo ""
