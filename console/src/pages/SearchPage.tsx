@@ -19,7 +19,7 @@ export function SearchPage() {
     try {
       const d = await api.searxngStatus();
       setStatus(d);
-      if (engines.length === 0 && d.engines.length > 0) setEngines(d.engines);
+      // Standardmäßig keine Engines vorauswählen — leere Liste = SearXNG wählt selbst
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("searchPage.loadError"));

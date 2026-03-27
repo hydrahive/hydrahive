@@ -168,7 +168,10 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
 
         params: dict = {"q": req.query, "format": "json"}
         if req.engines:
-            params["engines"] = req.engines
+            # Engines-Liste auf max. 20 begrenzen — zu viele Engines = URL zu lang → SearXNG Fehler
+            engine_list = [e.strip() for e in req.engines.split(",") if e.strip()][:20]
+            if engine_list:
+                params["engines"] = ",".join(engine_list)
 
         url = f"{SEARXNG_URL}/search?{urlencode(params)}"
         try:
