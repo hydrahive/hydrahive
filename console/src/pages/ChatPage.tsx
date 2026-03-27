@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -53,6 +53,9 @@ export function ChatPage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   function toolDetail(name: string, input: Record<string, unknown>): string {
     if (name === "read_system_file" || name === "file_read") return String(input.path ?? input.file_path ?? "");
@@ -166,6 +169,14 @@ export function ChatPage() {
     return true;
   }
 
+  async function stop() {
+    if (abortRef.current) abortRef.current.abort();
+    if (id) {
+      const token = localStorage.getItem("hydrahive_token") || "";
+      fetch(`/api/projects/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
+  }
+
   async function send() {
     if (!input.trim() || sending || !id) return;
     const content = input.trim();
@@ -182,6 +193,10 @@ export function ChatPage() {
     const assistantMsg = mkMsg("assistant", "");
     setMessages((ms) => [...ms, userMsg]);
     setSending(true);
+    setElapsed(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
 
     try {
       const token = localStorage.getItem("hydrahive_token") || "";
@@ -189,6 +204,7 @@ export function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ content }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({ detail: res.statusText }));
@@ -234,11 +250,18 @@ export function ChatPage() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Senden");
-      setMessages((ms) => ms.filter((m) => m.id !== userMsg.id && m.id !== assistantMsg.id));
-      setInput(content);
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // User aborted — keep partial response, no error
+      } else {
+        setError(e instanceof Error ? e.message : "Fehler beim Senden");
+        setMessages((ms) => ms.filter((m) => m.id !== userMsg.id && m.id !== assistantMsg.id));
+        setInput(content);
+      }
     } finally {
       setSending(false);
+      abortRef.current = null;
+      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+      setElapsed(0);
       setActiveTool(null);
       if (streamingMsgId) setDoneMsgId(streamingMsgId);
       setStreamingMsgId(null);
@@ -517,7 +540,7 @@ export function ChatPage() {
                     <span className="status-pill">{t("chat.shiftEnterBreak")}</span>
                     <span className="status-pill">{t("chat.slashCommands")}</span>
                   </div>
-                  {sending && <span className="status-pill status-pill-ok">{t("chat.streamingActive")}</span>}
+                  {sending && <span className="status-pill status-pill-ok">{t("chat.streamingActive")}{elapsed > 0 ? ` (${elapsed}s)` : ""}</span>}
                 </div>
                 {showEmoji && (
                   <>
@@ -544,16 +567,21 @@ export function ChatPage() {
                     onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
                     placeholder={t("chat.messagePlaceholder")}
                     rows={1}
-                    disabled={sending}
-                    className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                    className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     style={{ maxHeight: "140px", overflowY: "auto" }}
                   />
                   <button onClick={() => setShowEmoji(v => !v)} type="button" className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted">
                     <Smile className="h-5 w-5 text-muted-foreground" />
                   </button>
-                  <button onClick={send} disabled={!input.trim() || sending} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
-                    <Send className="h-4 w-4" />
-                  </button>
+                  {sending ? (
+                    <button onClick={stop} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90">
+                      <Square className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button onClick={send} disabled={!input.trim()} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
+                      <Send className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -452,6 +452,10 @@ class Orchestrator:
             yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
             return
 
+        # Stale Interrupt-Flags löschen (von eventuell vorangegangenem abgebrochenem Request)
+        from .tool_registry import clear_interrupt as _clear_interrupt
+        _clear_interrupt(project_id)
+
         # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
         _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0}
 

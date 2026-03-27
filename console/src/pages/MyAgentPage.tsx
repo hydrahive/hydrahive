@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -141,8 +141,11 @@ export function MyAgentPage() {
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [doneMsgId,      setDoneMsgId]      = useState<string | null>(null);
 
-  const bottomRef   = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef       = useRef<HTMLDivElement>(null);
+  const textareaRef     = useRef<HTMLTextAreaElement>(null);
+  const abortRef        = useRef<AbortController | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   function toolDetail(name: string, input: Record<string,unknown>): string {
     if (name === "read_system_file" || name === "file_read")   return String(input.path ?? input.file_path ?? "");
@@ -232,6 +235,12 @@ export function MyAgentPage() {
     sysMsg(`Unbekannter Command: \`${base}\`. /help für Übersicht.`); return true;
   }
 
+  async function stop() {
+    if (abortRef.current) abortRef.current.abort();
+    const token = localStorage.getItem("hydrahive_token") || "";
+    fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  }
+
   async function send() {
     if (!input.trim() || sending) return;
     const content = input.trim();
@@ -242,12 +251,17 @@ export function MyAgentPage() {
     const asstMsg = mkMsg("assistant", "");
     setMessages(ms => [...ms, userMsg]);
     setSending(true);
+    setElapsed(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
     try {
       const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/me/agent/message/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ content }),
+        signal: controller.signal,
       });
       if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail||`HTTP ${res.status}`); }
       setMessages(ms => [...ms, asstMsg]);
@@ -276,11 +290,19 @@ export function MyAgentPage() {
         }
       }
     } catch(e) {
-      setChatError(e instanceof Error ? e.message : "Fehler");
-      setMessages(ms => ms.filter(m => m.id!==userMsg.id && m.id!==asstMsg.id));
-      setInput(content);
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // User aborted — keep partial response, no error
+      } else {
+        setChatError(e instanceof Error ? e.message : "Fehler");
+        setMessages(ms => ms.filter(m => m.id!==userMsg.id && m.id!==asstMsg.id));
+        setInput(content);
+      }
     } finally {
-      setSending(false); setActiveTool(null);
+      setSending(false);
+      abortRef.current = null;
+      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+      setElapsed(0);
+      setActiveTool(null);
       if (streamingMsgId) setDoneMsgId(streamingMsgId);
       setStreamingMsgId(null);
       textareaRef.current?.focus();
@@ -555,17 +577,25 @@ export function MyAgentPage() {
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                          placeholder={t("myAgent.messagePlaceholder")} rows={1} disabled={sending}
-                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                          placeholder={t("myAgent.messagePlaceholder")} rows={1}
+                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
                           className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
                           <Smile className="h-5 w-5 text-muted-foreground" />
                         </button>
-                        <button onClick={send} disabled={sending || !input.trim()}
-                          className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-                          <Send className="h-4 w-4" />
-                        </button>
+                        {sending ? (
+                          <button onClick={stop}
+                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
+                            title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
+                            <Square className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button onClick={send} disabled={!input.trim()}
+                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                            <Send className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

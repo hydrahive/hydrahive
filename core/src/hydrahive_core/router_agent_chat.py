@@ -280,6 +280,16 @@ def register_agent_chat_routes(
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    @auth_router.post("/agents/{agent_id}/interrupt")
+    async def interrupt_agent_stream(
+        agent_id: str,
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        """Bricht einen laufenden ask_agent-Request ab (#34)."""
+        from .tool_registry import set_interrupt as _set_interrupt
+        _set_interrupt(agent_id)
+        return {"ok": True, "agent_id": agent_id}
+
     @auth_router.get("/agents/{agent_id}/logs")
     def get_agent_logs(agent_id: str, lines: int = 100, _a: tuple[str, str] = Depends(require_auth)):
         import subprocess as _sub

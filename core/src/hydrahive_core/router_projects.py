@@ -320,6 +320,16 @@ def register_project_routes(
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    @auth_router.post("/projects/{project_id}/interrupt")
+    async def interrupt_project_stream(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Bricht einen laufenden ask_agent-Request ab (#34)."""
+        from .tool_registry import set_interrupt as _set_interrupt
+        _set_interrupt(project_id)
+        return {"ok": True, "project_id": project_id}
+
     @auth_router.post("/projects/{project_id}/message")
     async def send_message(
         project_id: str,

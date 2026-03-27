@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Bot, User, Terminal, Smile } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
@@ -42,8 +42,11 @@ export function AgentChatPage() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [suggestIdx,  setSuggestIdx]  = useState(0);
 
-  const bottomRef   = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bottomRef       = useRef<HTMLDivElement>(null);
+  const textareaRef     = useRef<HTMLTextAreaElement>(null);
+  const abortRef        = useRef<AbortController | null>(null);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   const suggestions = input.startsWith("/")
     ? SLASH_COMMANDS.filter(c => c.cmd.startsWith(input.split(" ")[0]))
@@ -148,6 +151,14 @@ export function AgentChatPage() {
     return true;
   }
 
+  async function stop() {
+    if (abortRef.current) abortRef.current.abort();
+    if (id) {
+      const token = localStorage.getItem("hydrahive_token") || "";
+      fetch(`/api/agents/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    }
+  }
+
   async function send() {
     if (!input.trim() || sending || !id) return;
     const content = input.trim();
@@ -164,6 +175,10 @@ export function AgentChatPage() {
     const assistantMsg = mkMsg("assistant", "");
     setMessages(ms => [...ms, userMsg]);
     setSending(true);
+    setElapsed(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
 
     try {
       const token = localStorage.getItem("hydrahive_token") || "";
@@ -171,6 +186,7 @@ export function AgentChatPage() {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ content }),
+        signal:  controller.signal,
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({ detail: res.statusText }));
@@ -211,11 +227,18 @@ export function AgentChatPage() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Senden");
-      setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
-      setInput(content);
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // User aborted — keep partial response, no error
+      } else {
+        setError(e instanceof Error ? e.message : "Fehler beim Senden");
+        setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
+        setInput(content);
+      }
     } finally {
       setSending(false);
+      abortRef.current = null;
+      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
+      setElapsed(0);
       textareaRef.current?.focus();
     }
   }
@@ -369,17 +392,25 @@ export function AgentChatPage() {
             onKeyDown={onKeyDown}
             onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
             placeholder={t("agentChat.messagePlaceholder")}
-            rows={1} disabled={sending}
-            className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none disabled:opacity-50"
+            rows={1}
+            className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
           <button onClick={() => setShowEmoji(v => !v)} type="button"
             className="p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0">
             <Smile className="h-4 w-4 text-muted-foreground" />
           </button>
-          <button onClick={send} disabled={sending || !input.trim()}
-            className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
-            <Send className="h-4 w-4" />
-          </button>
+          {sending ? (
+            <button onClick={stop}
+              className="p-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors flex-shrink-0"
+              title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
+              <Square className="h-4 w-4" />
+            </button>
+          ) : (
+            <button onClick={send} disabled={!input.trim()}
+              className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
+              <Send className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -394,6 +394,15 @@ def register_user_routes(
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    @auth_router.post("/me/agent/interrupt")
+    async def my_agent_interrupt(auth: tuple[str, str] = Depends(require_auth)):
+        """Bricht einen laufenden ask_agent-Request des persönlichen Agenten ab (#34)."""
+        from .tool_registry import set_interrupt as _set_interrupt
+        username, _role = auth
+        agent_id = f"personal_{username}"
+        _set_interrupt(agent_id)
+        return {"ok": True, "agent_id": agent_id}
+
     @auth_router.get("/me/agent/session/history")
     def my_agent_session_history(
         limit: int = 50,

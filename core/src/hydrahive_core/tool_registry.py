@@ -26,6 +26,21 @@ _internal_secret: str = ""
 # Wird von main.py im Lifespan gesetzt; None = Rate-Limiting deaktiviert
 _rate_limiter: Any = None
 
+# Interrupt-Flags für laufende ask_agent-Requests (#34)
+# project_id (oder agent_id) → True wenn Nutzer Abbruch angefordert hat
+_interrupt_flags: dict[str, bool] = {}
+
+
+def set_interrupt(context_id: str) -> None:
+    """Interrupt-Flag setzen — bricht den nächsten ask_agent-Polling-Zyklus ab."""
+    _interrupt_flags[context_id] = True
+
+
+def clear_interrupt(context_id: str) -> None:
+    """Interrupt-Flag löschen (nach Abbruch oder am Ende des Streams)."""
+    _interrupt_flags.pop(context_id, None)
+
+
 # Admin-Tool-Globals — gesetzt von main.py im Lifespan
 _discovery: Any = None
 _projects_registry: Any = None
@@ -1755,21 +1770,45 @@ class AskAgentTool(BaseTool):
         else:
             session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
         try:
-            async with _aio.ClientSession() as session:
-                async with session.post(
-                    f"http://127.0.0.1:8765/agents/{target}/message",
-                    json={"content": content, "sender": agent_id, "project_id": session_id},
-                    headers=headers,
-                    timeout=_aio.ClientTimeout(total=300),
-                ) as resp:
-                    if resp.status == 404:
-                        return {
-                            "error": f"Agent '{target}' nicht gefunden",
-                            "agent_id": target,
-                            "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer mit dass Agent '{target}' nicht gefunden wurde.",
-                        }
-                    data = await resp.json()
-                    response = data.get("response", "")
+            import asyncio as _asyncio
+
+            async def _do_post():
+                async with _aio.ClientSession() as _s:
+                    async with _s.post(
+                        f"http://127.0.0.1:8765/agents/{target}/message",
+                        json={"content": content, "sender": agent_id, "project_id": session_id},
+                        headers=headers,
+                        timeout=_aio.ClientTimeout(total=300),
+                    ) as _resp:
+                        return _resp.status, await _resp.json()
+
+            task = _asyncio.create_task(_do_post())
+            while not task.done():
+                try:
+                    await _asyncio.wait_for(_asyncio.shield(task), timeout=2.0)
+                except _asyncio.TimeoutError:
+                    pass
+                if _interrupt_flags.get(project_id) or _interrupt_flags.get(agent_id):
+                    task.cancel()
+                    clear_interrupt(project_id)
+                    clear_interrupt(agent_id)
+                    return {
+                        "interrupted": True,
+                        "agent_id":    target,
+                        "directive":   (
+                            f"WICHTIG: Der Nutzer hat den Request abgebrochen. "
+                            f"Beende die aktuelle Aufgabe und teile dem Nutzer mit dass der Vorgang abgebrochen wurde."
+                        ),
+                    }
+
+            status, data = task.result()
+            if status == 404:
+                return {
+                    "error": f"Agent '{target}' nicht gefunden",
+                    "agent_id": target,
+                    "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer mit dass Agent '{target}' nicht gefunden wurde.",
+                }
+            response = data.get("response", "")
                     if not response or not response.strip():
                         return {
                             "agent_id":      target,
