@@ -53,7 +53,7 @@ fi
 
 info "Installiere npm-Abhaengigkeiten..."
 pushd "${CONSOLE_SRC}" > /dev/null || error "cd ${CONSOLE_SRC} fehlgeschlagen"
-npm ci --silent 2>&1 | grep -v "^npm warn" || true
+npm install --silent 2>&1 | grep -v "^npm warn" || true
 success "npm-Abhaengigkeiten installiert"
 
 info "Baue Console (npm run build)..."
