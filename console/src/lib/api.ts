@@ -152,6 +152,9 @@ export const api = {
   // Live-Agent-Übersicht
   agentsLive: () => api.get<AgentsLiveReport>("/admin/agents/live"),
   stopAgent:  (id: string) => api.post<{stopped: string}>(`/admin/agents/${id}/stop`, {}),
+  // SearXNG Web-Suche
+  searxngStatus: () => api.get<SearxngStatus>("/admin/searxng/status"),
+  searxngTest:   (body: { query: string; engines?: string }) => api.post<SearxngTestResult>("/admin/searxng/test", body),
   // System-Update
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
@@ -482,4 +485,30 @@ export interface UpdateStatus {
   message?:    string;
   log_tail?:   string[];
   error?:      string;
+}
+
+export interface SearxngStatus {
+  installed:      boolean;
+  service_active: boolean;
+  service_uptime: string;
+  http_ok:        boolean;
+  url:            string;
+  version:        string | null;
+  engines:        string[];
+  config_exists:  boolean;
+}
+
+export interface SearxngResult {
+  title:   string;
+  url:     string;
+  snippet: string;
+  engine:  string;
+}
+
+export interface SearxngTestResult {
+  query?:       string;
+  total?:       number;
+  results:      SearxngResult[];
+  suggestions?: string[];
+  error?:       string;
 }

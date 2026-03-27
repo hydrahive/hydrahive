@@ -389,17 +389,24 @@ class FileWriteTool(BaseTool):
 
 
 class WebSearchTool(BaseTool):
-    """Web-Suche via DuckDuckGo Instant Answer API (#17). Kein API-Key noetig."""
+    """
+    Web-Suche via lokalem SearXNG (#51).
+    Fallback auf DuckDuckGo Instant Answer wenn SearXNG nicht läuft.
+    SearXNG läuft auf 127.0.0.1:8888 (nativ, kein Docker).
+    """
+
+    SEARXNG_URL = "http://127.0.0.1:8888/search"
 
     @property
     def id(self) -> str:   return "web_search"
     @property
-    def name(self) -> str: return "Web-Suche"
+    def name(self) -> str: return "Web-Suche (SearXNG)"
     @property
     def description(self) -> str:
         return (
-            "Sucht im Web nach aktuellen Informationen. "
-            "Gibt eine Liste von Ergebnissen mit Titel, URL und Zusammenfassung zurueck."
+            "Sucht im Web nach aktuellen Informationen via SearXNG. "
+            "Nutzt mehrere Suchmaschinen gleichzeitig. "
+            "Gibt Ergebnisse mit Titel, URL und Zusammenfassung zurück."
         )
 
     @property
@@ -407,28 +414,80 @@ class WebSearchTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Suchanfrage"},
+                "query": {
+                    "type":        "string",
+                    "description": "Suchanfrage",
+                },
+                "engines": {
+                    "type":        "string",
+                    "description": "Komma-getrennte Engine-Liste (z.B. 'duckduckgo,wikipedia'). Standard: alle konfigurierten Engines.",
+                },
                 "max_results": {
                     "type":        "integer",
-                    "description": "Maximale Anzahl Ergebnisse (Standard: 5)",
+                    "description": "Maximale Anzahl Ergebnisse (Standard: 8)",
                 },
             },
             "required": ["query"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, query: str, max_results: int = 5) -> dict:
+    async def execute(
+        self,
+        agent_id:    str,
+        project_id:  str,
+        query:       str,
+        engines:     str = "",
+        max_results: int = 8,
+        **kwargs,
+    ) -> dict:
         import aiohttp
         from urllib.parse import urlencode
 
-        params = urlencode({"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"})
-        url = f"https://api.duckduckgo.com/?{params}"
-
+        # --- SearXNG versuchen ---
+        params: dict = {"q": query, "format": "json"}
+        if engines:
+            params["engines"] = engines
+        searxng_url = f"{self.SEARXNG_URL}?{urlencode(params)}"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(
+                    searxng_url,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        results = [
+                            {
+                                "title":   r.get("title", ""),
+                                "url":     r.get("url", ""),
+                                "snippet": r.get("content", ""),
+                                "engine":  r.get("engine", ""),
+                            }
+                            for r in data.get("results", [])
+                            if r.get("url")
+                        ]
+                        logger.info(
+                            "web_search [searxng]: %s sucht '%s' → %d Ergebnisse",
+                            agent_id, query, len(results),
+                        )
+                        return {
+                            "query":   query,
+                            "engine":  "searxng",
+                            "results": results[:max_results],
+                        }
+        except Exception as e:
+            logger.debug("web_search: SearXNG nicht erreichbar (%s) — Fallback auf DDG", e)
+
+        # --- Fallback: DuckDuckGo Instant Answer ---
+        ddg_params = urlencode({"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"})
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.duckduckgo.com/?{ddg_params}",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
                     data = await resp.json(content_type=None)
         except Exception as e:
-            return {"error": f"Suche fehlgeschlagen: {e}", "results": []}
+            return {"error": f"Suche fehlgeschlagen (SearXNG + DDG): {e}", "results": []}
 
         results = []
         if data.get("AbstractText"):
@@ -436,6 +495,7 @@ class WebSearchTool(BaseTool):
                 "title":   data.get("Heading", "Direkte Antwort"),
                 "url":     data.get("AbstractURL", ""),
                 "snippet": data["AbstractText"],
+                "engine":  "duckduckgo",
             })
         for topic in data.get("RelatedTopics", []):
             if len(results) >= max_results:
@@ -449,10 +509,13 @@ class WebSearchTool(BaseTool):
                     "title":   link.split("/")[-1].replace("_", " "),
                     "url":     link,
                     "snippet": text,
+                    "engine":  "duckduckgo",
                 })
-
-        logger.info("web_search: %s sucht '%s' -> %d Ergebnisse", agent_id, query, len(results))
-        return {"query": query, "results": results[:max_results]}
+        logger.info(
+            "web_search [ddg-fallback]: %s sucht '%s' → %d Ergebnisse",
+            agent_id, query, len(results),
+        )
+        return {"query": query, "engine": "duckduckgo_fallback", "results": results[:max_results]}
 
 
 class HttpRequestTool(BaseTool):

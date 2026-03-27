@@ -159,6 +159,19 @@ main() {
             || warn "A-MEM Update fehlgeschlagen — wird übersprungen"
     fi
 
+    # --- 9b. SearXNG aktualisieren (optional — Fehler nicht fatal) ---
+    if [ -d "/opt/searxng/.git" ]; then
+        info "Aktualisiere SearXNG..."
+        (
+            sudo -u searxng git -C /opt/searxng pull --ff-only --quiet 2>/dev/null || true
+            /opt/searxng/venv/bin/pip install --quiet -e /opt/searxng
+            systemctl restart searxng
+        ) && success "SearXNG aktualisiert" \
+          || warn "SearXNG Update fehlgeschlagen — wird übersprungen"
+    else
+        info "SearXNG nicht installiert — überspringe Update"
+    fi
+
     # --- 10. update.sh + Service-Datei selbst aktualisieren ---
     # Sicher: main() ist vollständig in Memory — Self-Copy verwirrt bash nicht mehr.
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then

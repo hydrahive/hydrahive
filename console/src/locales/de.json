@@ -11,7 +11,8 @@
     "backup": "Backup",
     "settings": "Einstellungen",
     "activity": "Aktivität",
-    "usage": "Usage"
+    "usage": "Usage",
+    "search": "Web-Suche"
   },
   "navHint": {
     "dashboard": "Lagebild",
@@ -25,7 +26,8 @@
     "backup": "Snapshots und Restore",
     "settings": "LLM, MCP, Gitea, VPN",
     "activity": "Live-Status aller Agenten",
-    "usage": "Token-Statistik & Kosten"
+    "usage": "Token-Statistik & Kosten",
+    "search": "SearXNG Metasuchmaschine"
   },
   "layout": {
     "controlFabric": "Control Fabric",

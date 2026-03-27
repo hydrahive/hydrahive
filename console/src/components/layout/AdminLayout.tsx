@@ -19,6 +19,7 @@ import {
   X,
   Settings,
   BarChart2,
+  Search,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -115,6 +116,7 @@ export function AdminLayout() {
     { to: "/agents",   icon: Bot,        label: t("nav.agents"),   hint: t("navHint.agents") },
     { to: "/activity", icon: Activity,   label: t("nav.activity"), hint: t("navHint.activity") },
     { to: "/usage",    icon: BarChart2,  label: t("nav.usage"),    hint: t("navHint.usage") },
+    { to: "/search",   icon: Search,     label: t("nav.search"),   hint: t("navHint.search") },
     { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
     { to: "/users",    icon: Users,      label: t("nav.users"),    hint: t("navHint.users") },
     { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
