@@ -1,14 +1,34 @@
 from __future__ import annotations
 
 import logging
+import re
 import subprocess as _sp
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 
 logger = logging.getLogger(__name__)
+
+# Agent-IDs dürfen nur sicher für Dateipfade verwendbare Zeichen enthalten
+_AGENT_ID_RE = re.compile(r"^[a-z0-9_-]+$")
+
+
+class _AgentIdError(ValueError):
+    """Ungültige Agent-ID — wird in Route-Handlern zu HTTPException(400)."""
+
+
+def _sanitize_agent_id(agent_id: str) -> str:
+    """Wirft _AgentIdError wenn agent_id Path-Traversal oder ungültige Zeichen enthält."""
+    if not agent_id or not _AGENT_ID_RE.fullmatch(agent_id):
+        raise _AgentIdError(f"Ungültige Agent-ID: '{agent_id}'")
+    return agent_id
+
+
+def _username_from_auth(auth: tuple) -> str:
+    username, _ = auth
+    return _sanitize_agent_id(username)
 
 
 class WksConfigRequest(BaseModel):
@@ -113,6 +133,27 @@ class DiscordConfigRequest(BaseModel):
     role_blacklist:  list[str] = []
     channel_modes:   dict[str, str] = {}   # channel_id → "rw"|"ro"
     channel_names:   dict[str, str] = {}   # channel_id → name (cache)
+
+    @validator("guild_id")
+    def _v_guild_id(cls, v: str) -> str:
+        v = v.strip()
+        if v and (not v.isdigit() or len(v) > 20):
+            raise ValueError("Ungültige Guild-ID — muss numerische Snowflake sein")
+        return v
+
+    @validator("channel_ids", each_item=True)
+    def _v_channel_ids(cls, v: str) -> str:
+        v = v.strip()
+        if v and (not v.isdigit() or len(v) > 20):
+            raise ValueError(f"Ungültige Channel-ID '{v}' — muss numerische Snowflake sein")
+        return v
+
+    @validator("user_whitelist", "user_blacklist", "role_whitelist", "role_blacklist", each_item=True)
+    def _v_snowflake_ids(cls, v: str) -> str:
+        v = v.strip()
+        if v and (not v.isdigit() or len(v) > 20):
+            raise ValueError(f"Ungültige Discord-ID '{v}' — muss numerische Snowflake sein")
+        return v
 
 
 SUPPORTED_PLATFORMS = {
@@ -300,7 +341,7 @@ def register_user_integration_routes(
 ) -> None:
     @auth_router.get("/me/wks")
     def get_my_wks(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         users = load_users()
         wks = users.get(username, {}).get("wks", {})
         return {
@@ -313,7 +354,7 @@ def register_user_integration_routes(
 
     @auth_router.get("/me/platforms")
     def get_my_platforms(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         users = load_users()
         return {
             "username": username,
@@ -322,7 +363,7 @@ def register_user_integration_routes(
 
     @auth_router.put("/me/wks")
     async def update_my_wks(req: WksConfigRequest, auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         users = load_users()
         if username not in users:
             raise HTTPException(404, "User nicht gefunden")
@@ -349,7 +390,7 @@ def register_user_integration_routes(
     def get_wks_pubkey(auth: tuple = Depends(require_auth)):
         import subprocess as _sp
 
-        username, _ = auth
+        username = _username_from_auth(auth)
         key_file = wks_keys_dir / username
         if not key_file.exists():
             raise HTTPException(404, "Kein SSH-Key vorhanden - bitte erst generieren oder einfuegen")
@@ -373,7 +414,7 @@ def register_user_integration_routes(
         import subprocess as _sp
         import tempfile
 
-        username, _ = auth
+        username = _username_from_auth(auth)
         wks_keys_dir.mkdir(parents=True, exist_ok=True)
         key_file = wks_keys_dir / username
         with tempfile.NamedTemporaryFile(delete=False, suffix="_wks") as tf:
@@ -404,7 +445,7 @@ def register_user_integration_routes(
     async def test_wks_ssh(auth: tuple = Depends(require_auth)):
         import asyncio as _asyncio
 
-        username, _ = auth
+        username = _username_from_auth(auth)
         users = load_users()
         wks = users.get(username, {}).get("wks", {})
         ip = wks.get("ip", "")
@@ -447,7 +488,7 @@ def register_user_integration_routes(
     async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):
         import httpx as _httpx
 
-        username, _ = auth
+        username = _username_from_auth(auth)
         users = load_users()
         wks = users.get(username, {}).get("wks", {})
         if not wks.get("ip"):
@@ -471,7 +512,7 @@ def register_user_integration_routes(
 
     @auth_router.get("/me/discord")
     def get_my_discord(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import load_discord_config
 
         cfg = load_discord_config(username)
@@ -500,7 +541,7 @@ def register_user_integration_routes(
     async def get_my_discord_channels(auth: tuple = Depends(require_auth)):
         """Channels der konfigurierten Guild per Discord REST API abrufen."""
         import httpx
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import load_discord_config
 
         cfg = load_discord_config(username)
@@ -533,7 +574,7 @@ def register_user_integration_routes(
     @auth_router.get("/me/discord/roles")
     async def get_my_discord_roles(auth: tuple = Depends(require_auth)):
         """Rollen der konfigurierten Guild auflisten."""
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import load_discord_config
         from .tool_registry import _discord_clients
 
@@ -552,7 +593,7 @@ def register_user_integration_routes(
 
     @auth_router.put("/me/discord", status_code=200)
     async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import AgentDiscordClient, delete_discord_config, load_discord_config, save_discord_config
         from .tool_registry import _discord_clients
 
@@ -633,7 +674,7 @@ def register_user_integration_routes(
 
     @auth_router.delete("/me/discord", status_code=200)
     async def delete_my_discord(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import delete_discord_config
         from .tool_registry import _discord_clients
 
@@ -645,7 +686,7 @@ def register_user_integration_routes(
 
     @auth_router.post("/me/discord/test")
     async def test_my_discord(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .discord_agent import AgentDiscordClient, load_discord_config
 
         cfg = load_discord_config(username)
@@ -669,7 +710,7 @@ def register_user_integration_routes(
 
     @auth_router.get("/me/whatsapp")
     async def get_my_whatsapp(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .whatsapp_agent import bridge_get_status, load_whatsapp_config
         cfg = load_whatsapp_config(username)
         if not cfg or not cfg.get("enabled"):
@@ -700,7 +741,7 @@ def register_user_integration_routes(
 
     @auth_router.put("/me/whatsapp/config")
     async def update_my_whatsapp_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .whatsapp_agent import load_whatsapp_config, save_whatsapp_config
         cfg = load_whatsapp_config(username) or {"enabled": True}
         cfg.update({
@@ -716,7 +757,7 @@ def register_user_integration_routes(
 
     @auth_router.post("/me/whatsapp/connect")
     async def connect_my_whatsapp(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .whatsapp_agent import bridge_start_session, load_whatsapp_config, save_whatsapp_config
         existing = load_whatsapp_config(username) or {}
         existing["enabled"] = True
@@ -728,7 +769,7 @@ def register_user_integration_routes(
 
     @auth_router.delete("/me/whatsapp")
     async def delete_my_whatsapp(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         from .whatsapp_agent import bridge_disconnect, delete_whatsapp_config
         agent_id = f"personal_{username}"
         await bridge_disconnect(agent_id)
@@ -937,7 +978,7 @@ def register_user_integration_routes(
 
     @auth_router.get("/me/mail")
     def get_my_mail(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         cfg = load_mail_config(username)
         if not cfg:
             return {"configured": False}
@@ -945,7 +986,7 @@ def register_user_integration_routes(
 
     @auth_router.put("/me/mail")
     async def update_my_mail(req: MailConfigRequest, auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         kas_cfg = _kas_config()
         domain = req.domain.strip() or kas_cfg.get("default_domain", "")
         if not domain:
@@ -997,7 +1038,7 @@ def register_user_integration_routes(
 
     @auth_router.delete("/me/mail")
     def delete_my_mail(auth: tuple = Depends(require_auth)):
-        username, _ = auth
+        username = _username_from_auth(auth)
         p = _mail_config_path(username)
         if p.exists():
             p.unlink()
@@ -1009,7 +1050,7 @@ def register_user_integration_routes(
     @auth_router.get("/me/telegram")
     async def get_my_telegram(auth: tuple = Depends(require_auth)):
         from .telegram_agent import load_telegram_config, get_bot_status
-        username, _ = auth
+        username = _username_from_auth(auth)
         cfg = load_telegram_config(username) or {}
         agent_id = f"personal_{username}"
         status = get_bot_status(agent_id) if cfg.get("enabled") else "stopped"
@@ -1032,7 +1073,7 @@ def register_user_integration_routes(
             load_telegram_config, save_telegram_config,
             start_telegram_bot, stop_telegram_bot,
         )
-        username, _ = auth
+        username = _username_from_auth(auth)
         token = body.get("bot_token", "").strip()
         if not token:
             raise HTTPException(400, "bot_token fehlt")
@@ -1068,7 +1109,7 @@ def register_user_integration_routes(
     @auth_router.put("/me/telegram/config")
     async def update_my_telegram_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
         from .telegram_agent import load_telegram_config, save_telegram_config
-        username, _ = auth
+        username = _username_from_auth(auth)
         cfg = load_telegram_config(username)
         if not cfg:
             raise HTTPException(404, "Telegram nicht konfiguriert")
@@ -1082,7 +1123,7 @@ def register_user_integration_routes(
     @auth_router.delete("/me/telegram")
     async def delete_my_telegram(auth: tuple = Depends(require_auth)):
         from .telegram_agent import delete_telegram_config, stop_telegram_bot
-        username, _ = auth
+        username = _username_from_auth(auth)
         agent_id = f"personal_{username}"
         await stop_telegram_bot(agent_id)
         delete_telegram_config(username)
