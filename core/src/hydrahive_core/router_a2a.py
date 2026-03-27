@@ -118,8 +118,8 @@ def register_a2a_routes(
             for cfg in discovery.agents.values():
                 agents.append({
                     "id":          cfg.id,
-                    "name":        cfg.identity.name if cfg.identity else cfg.id,
-                    "description": cfg.identity.description if cfg.identity else "",
+                    "name":        cfg.identity if isinstance(cfg.identity, str) else cfg.id,
+                    "description": "",
                     "type":        cfg.type,
                 })
         except Exception as e:
