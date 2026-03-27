@@ -13,6 +13,7 @@
     "activity": "Aktivität",
     "usage": "Usage",
     "search": "Web-Suche",
+    "codeEditor": "Code Editor",
     "schedules": "Schedules",
     "federation": "Federation",
     "groupOperations": "Operations",
@@ -32,6 +33,7 @@
     "activity": "Live-Status aller Agenten",
     "usage": "Token-Statistik & Kosten",
     "search": "SearXNG Metasuchmaschine",
+    "codeEditor": "VS Code im Browser",
     "schedules": "Automatisierte Agenten-Tasks",
     "federation": "Peer-zu-Peer Agenten-Federation"
   },
@@ -861,6 +863,22 @@
     "markRead": "Als gelesen markieren",
     "markAllRead": "Alle als gelesen markieren",
     "delete": "Löschen"
+  },
+  "codeEditor": {
+    "title": "Code Editor",
+    "loading": "Lade Status...",
+    "loadError": "Status konnte nicht geladen werden",
+    "notInstalledTitle": "Code Editor nicht installiert",
+    "notInstalledBody": "code-server (VS Code im Browser) ist noch nicht installiert. Klicke auf Installieren um es nachzuholen.",
+    "installBtn": "Installieren",
+    "installing": "Installiere...",
+    "installSuccess": "Installation abgeschlossen — bitte Seite neu laden.",
+    "installFailed": "Installation fehlgeschlagen — bitte Log prüfen.",
+    "statusLabel": "Service-Status",
+    "statusRunning": "Aktiv",
+    "statusStopped": "Gestoppt",
+    "openBtn": "Code Editor öffnen",
+    "notRunning": "Service läuft nicht. Bitte System-Log prüfen."
   },
   "schedules": {
     "title": "Geplante Aufgaben",
