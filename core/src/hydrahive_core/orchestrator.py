@@ -176,7 +176,9 @@ class Orchestrator:
                 "role": "user",
                 "content": (
                     f"[System: Tool-Loop wird beendet ({reason}). "
-                    "Fasse die vorliegenden Ergebnisse jetzt kurz und konkret zusammen. "
+                    "Berichte jetzt kurz und konkret: "
+                    "1) Was wurde erfolgreich abgeschlossen? "
+                    "2) Was konnte NICHT abgeschlossen werden — und warum? (Fehlermeldung, fehlendes Tool, Permission-Problem etc.) "
                     "Rufe keine weiteren Tools auf.]"
                 ),
             }
@@ -670,7 +672,7 @@ class Orchestrator:
                                         "content": [
                                             {
                                                 "type": "text",
-                                                "text": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",
+                                                "text": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
                                             }
                                         ],
                                     }
@@ -690,7 +692,7 @@ class Orchestrator:
                                 break
                             if _round == boss_cfg.max_tool_rounds - 2:
                                 # Vorletzter Durchlauf — Agent soll jetzt abschließen
-                                filtered.append({"role": "user", "content": [{"type": "text", "text": "[System: Letzte Tool-Runde — bitte Ergebnisse jetzt zusammenfassen und abschließen.]"}]})
+                                filtered.append({"role": "user", "content": [{"type": "text", "text": "[System: Letzte Tool-Runde — fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]})
                                 kwargs["messages"] = filtered
 
                             tool_results = []
@@ -738,7 +740,7 @@ class Orchestrator:
                             # Finaler Call ohne Tools damit der Agent abschließen kann
                             kwargs_final = dict(kwargs)
                             kwargs_final.pop("tools", None)
-                            kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Bitte fasse deine Ergebnisse jetzt kurz zusammen.]"}]}]
+                            kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]}]
                             async with client.messages.stream(**kwargs_final) as stream:
                                 async for text in stream.text_stream:
                                     full_response += text
@@ -844,7 +846,7 @@ class Orchestrator:
                             if repeated_tool_signature_count >= 3:
                                 loop_messages.append({
                                     "role": "user",
-                                    "content": "[System: Wiederholte Tool-Signatur erkannt. Bitte fasse die vorhandenen Ergebnisse jetzt kurz zusammen und rufe keine weiteren Tools auf.]",
+                                    "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
                                 })
                                 final_resp = await self._llm_call_single(_model_name, boss_cfg, loop_messages, tools=None)
                                 final_text = final_resp.choices[0].message.content or ""
