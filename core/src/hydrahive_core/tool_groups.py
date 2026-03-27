@@ -86,6 +86,13 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
             "create_skill", "list_skills", "delete_skill",
         }),
     ),
+    # A2A / Remote Agents
+    (
+        ("remote", "peer", "a2a", "andere instanz", "andere maschine", "federation"),
+        frozenset({
+            "remote_agent",
+        }),
+    ),
 ]
 
 

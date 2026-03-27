@@ -21,6 +21,7 @@ const ActivityPage      = lazy(() => import("@/pages/ActivityPage").then((m) => 
 const UsagePage         = lazy(() => import("@/pages/UsagePage").then((m) => ({ default: m.UsagePage })));
 const SearchPage        = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })));
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
+const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="agents/:id/chat"   element={<AgentChatPage />} />
             <Route path="search"            element={<SearchPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
+            <Route path="federation"        element={<A2APage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="audit"             element={<AuditPage />} />

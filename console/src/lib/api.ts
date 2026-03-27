@@ -195,7 +195,32 @@ export const api = {
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
   sambaCreds:         (id: string) => api.get<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-credentials`),
   sambaResetPassword: (id: string) => api.post<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-reset-password`, {}),
+  // A2A Federation (#50)
+  a2aPeers:       () => api.get<A2APeersResponse>("/admin/a2a/peers"),
+  a2aSetSecret:   (secret: string) => api.put<{ok:boolean}>("/admin/a2a/secret", { secret }),
+  a2aUpsertPeer:  (d: A2APeer) => api.put<{ok:boolean;action:string}>("/admin/a2a/peers", d),
+  a2aDeletePeer:  (name: string) => api.delete<{ok:boolean}>(`/admin/a2a/peers/${name}`),
+  a2aTestPeer:    (name: string) => api.post<A2ATestResult>(`/admin/a2a/test/${name}`, {}),
 };
+
+export interface A2APeer {
+  name:        string;
+  url:         string;
+  secret:      string;
+  description: string;
+}
+export interface A2APeersResponse {
+  has_secret: boolean;
+  peers:      (Omit<A2APeer, "secret"> & { secret: string })[];
+}
+export interface A2ATestResult {
+  ok:           boolean;
+  status:       number;
+  peer_name:    string;
+  peer_version: string;
+  agents:       { id: string; name: string; description: string }[];
+  error:        string;
+}
 
 export interface AuditEntry {
   id:         string;

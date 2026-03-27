@@ -22,6 +22,7 @@ import {
   Search,
   Calendar,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -157,6 +158,7 @@ export function AdminLayout() {
       { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
       { to: "/search",     icon: Search,    label: t("nav.search"),     hint: t("navHint.search") },
       { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
+      { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },
     ],
   };
 

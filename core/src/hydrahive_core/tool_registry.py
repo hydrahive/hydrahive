@@ -3660,6 +3660,125 @@ class DiscordPinMessageTool(BaseTool):
         except Exception as e: return {"error": str(e)}
 
 
+# ============================================================= RemoteAgentTool (#50)
+
+class RemoteAgentTool(BaseTool):
+    """
+    Sendet eine Nachricht an einen Agenten auf einer anderen HydraHive-Instanz (FastA2A).
+    Peers werden in /etc/hydrahive/a2a_peers.json konfiguriert.
+    """
+
+    A2A_CONFIG = Path("/etc/hydrahive/a2a_peers.json")
+
+    @property
+    def id(self) -> str:   return "remote_agent"
+    @property
+    def name(self) -> str: return "Remote-Agent (A2A)"
+    @property
+    def description(self) -> str:
+        return (
+            "Sendet eine Aufgabe oder Frage an einen Agenten auf einer anderen HydraHive-Instanz. "
+            "Nutze dies wenn ein Peer-System einen spezialisierten Agenten hat den du erreichen willst. "
+            "Gibt die Antwort des Remote-Agenten zurück."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "peer": {
+                    "type":        "string",
+                    "description": "Name des Peers wie in der A2A-Konfiguration (z.B. 'prod', 'test')",
+                },
+                "target": {
+                    "type":        "string",
+                    "description": "ID des Ziel-Agenten auf dem Remote-Peer",
+                },
+                "message": {
+                    "type":        "string",
+                    "description": "Aufgabe oder Frage für den Remote-Agenten",
+                },
+            },
+            "required": ["peer", "target", "message"],
+        }
+
+    def _load_peers(self) -> dict:
+        try:
+            import json as _j
+            return _j.loads(self.A2A_CONFIG.read_text(encoding="utf-8"))
+        except (FileNotFoundError, Exception):
+            return {"peers": []}
+
+    async def execute(
+        self,
+        agent_id:   str,
+        project_id: str,
+        peer:       str,
+        target:     str,
+        message:    str,
+        **kwargs,
+    ) -> dict:
+        return await self._do_call(agent_id, project_id, peer, target, message)
+
+    async def _do_call(
+        self, caller: str, project_id: str, peer_name: str, target: str, message: str
+    ) -> dict:
+        import asyncio as _asyncio
+        import json as _j
+        import urllib.request as _req
+        import urllib.error
+
+        cfg = self._load_peers()
+        peers = cfg.get("peers", [])
+        peer_cfg = next((p for p in peers if p.get("name") == peer_name), None)
+        if not peer_cfg:
+            return {
+                "error": f"Peer '{peer_name}' nicht in A2A-Konfiguration gefunden",
+                "available_peers": [p.get("name") for p in peers],
+            }
+
+        url    = peer_cfg["url"].rstrip("/") + "/a2a/tasks/send"
+        secret = peer_cfg.get("secret", "")
+        body   = _j.dumps({
+            "agent_id":    target,
+            "message":     message,
+            "sender_name": f"{caller}@local",
+        }).encode()
+
+        def _post():
+            import urllib.request as _u, urllib.error as _ue
+            req = _u.Request(
+                url, data=body,
+                headers={"Content-Type": "application/json", "X-A2A-Secret": secret},
+                method="POST",
+            )
+            try:
+                with _u.urlopen(req, timeout=120) as resp:
+                    return resp.getcode(), _j.loads(resp.read().decode())
+            except _ue.HTTPError as e:
+                try:
+                    detail = _j.loads(e.read().decode()).get("detail", str(e))
+                except Exception:
+                    detail = str(e)
+                return e.code, {"error": detail}
+            except Exception as e:
+                return 0, {"error": str(e)}
+
+        status, data = await _asyncio.to_thread(_post)
+        if status != 200:
+            return {
+                "error":     f"Remote-Fehler HTTP {status}: {data.get('error', '')}",
+                "peer":      peer_name,
+                "agent_id":  target,
+            }
+        return {
+            "peer":      peer_name,
+            "agent_id":  target,
+            "response":  data.get("response", ""),
+        }
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -3713,6 +3832,7 @@ registry.register(DiscordListMembersTool())
 registry.register(DiscordListRolesTool())
 registry.register(DiscordDeleteMessageTool())
 registry.register(DiscordPinMessageTool())
+registry.register(RemoteAgentTool())
 
 
 # ============================================================= Admin Tools (Danger)

@@ -14,6 +14,7 @@
     "usage": "Usage",
     "search": "Web-Suche",
     "schedules": "Schedules",
+    "federation": "Federation",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
@@ -31,7 +32,8 @@
     "activity": "Live-Status aller Agenten",
     "usage": "Token-Statistik & Kosten",
     "search": "SearXNG Metasuchmaschine",
-    "schedules": "Automatisierte Agenten-Tasks"
+    "schedules": "Automatisierte Agenten-Tasks",
+    "federation": "Peer-zu-Peer Agenten-Federation"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -865,5 +867,40 @@
     "enable": "Aktivieren",
     "disable": "Deaktivieren",
     "runNow": "Jetzt ausführen"
+  },
+  "a2a": {
+    "title": "Federation (A2A)",
+    "subtitle": "Verbinde diese HydraHive-Instanz mit anderen Instanzen im Netzwerk. Agenten können remote_agent nutzen um Tasks an Peers zu delegieren.",
+    "loading": "Lade Konfiguration...",
+    "loadError": "Fehler beim Laden",
+    "saveError": "Fehler beim Speichern",
+    "deleteError": "Fehler beim Löschen",
+    "configured": "Konfiguriert",
+    "notConfigured": "Nicht konfiguriert",
+    "incomingSecret": "Eingehendes Secret",
+    "incomingSecretDesc": "Dieses Secret müssen Peers im X-A2A-Secret-Header senden um uns zu erreichen.",
+    "secretSet": "Secret gesetzt (verborgen)",
+    "enterSecret": "Neues Secret eingeben...",
+    "endpointHint": "Agent Card",
+    "save": "Speichern",
+    "saving": "Speichern...",
+    "peers": "Peers",
+    "addPeer": "Peer hinzufügen",
+    "cancel": "Abbrechen",
+    "noPeers": "Keine Peers konfiguriert",
+    "peerName": "Name",
+    "peerUrl": "URL",
+    "peerSecret": "Secret",
+    "peerSecretHint": "das Secret das wir zu diesem Peer senden",
+    "peerSecretPlaceholder": "Secret des Peers...",
+    "description": "Beschreibung",
+    "descriptionPlaceholder": "z.B. Produktions-Instanz",
+    "test": "Test",
+    "testOk": "Verbindung OK",
+    "testFail": "Fehler",
+    "remoteAgents": "Agenten",
+    "toolUsage": "Tool-Nutzung in Agent-Konfiguration",
+    "toolUsageDesc": "Füge remote_agent zu den Tools eines Agenten hinzu damit er Peers erreichen kann:",
+    "toolExample": "Beispiel-Aufruf:"
   }
 }

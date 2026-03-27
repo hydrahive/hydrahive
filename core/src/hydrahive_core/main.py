@@ -37,6 +37,7 @@ from .router_backup_restore import register_backup_restore_routes
 from .router_vpn import register_vpn_routes
 from .router_doctor import register_doctor_routes
 from .router_searxng import register_searxng_routes
+from .router_a2a import register_a2a_routes
 from .router_notifications import register_notification_routes
 from .notification_service import notification_service
 from .router_schedules import register_schedule_routes
@@ -1219,6 +1220,13 @@ register_backup_restore_routes(
 register_vpn_routes(admin_router, require_admin=require_admin)
 register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
+register_a2a_routes(
+    public_router,
+    admin_router,
+    require_admin=require_admin,
+    discovery=discovery,
+    orchestrator=orchestrator,
+)
 register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=_verify_jwt, public_router=public_router)
 register_schedule_routes(auth_router, require_auth=require_auth)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)

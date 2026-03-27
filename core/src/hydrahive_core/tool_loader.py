@@ -58,6 +58,9 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "skills": [
         "create_skill", "list_skills", "delete_skill",
     ],
+    "a2a": [
+        "remote_agent",
+    ],
 }
 
 

@@ -14,6 +14,7 @@
     "usage": "Usage",
     "search": "Web Search",
     "schedules": "Schedules",
+    "federation": "Federation",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
@@ -31,7 +32,8 @@
     "activity": "Live status of all agents",
     "usage": "Token stats & costs",
     "search": "SearXNG metasearch engine",
-    "schedules": "Automated agent tasks"
+    "schedules": "Automated agent tasks",
+    "federation": "Peer-to-peer agent federation"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -865,5 +867,40 @@
     "enable": "Enable",
     "disable": "Disable",
     "runNow": "Run now"
+  },
+  "a2a": {
+    "title": "Federation (A2A)",
+    "subtitle": "Connect this HydraHive instance to others in the network. Agents can use remote_agent to delegate tasks to peers.",
+    "loading": "Loading configuration...",
+    "loadError": "Error loading configuration",
+    "saveError": "Error saving",
+    "deleteError": "Error deleting",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "incomingSecret": "Incoming Secret",
+    "incomingSecretDesc": "Peers must send this secret in the X-A2A-Secret header to reach us.",
+    "secretSet": "Secret set (hidden)",
+    "enterSecret": "Enter new secret...",
+    "endpointHint": "Agent Card",
+    "save": "Save",
+    "saving": "Saving...",
+    "peers": "Peers",
+    "addPeer": "Add peer",
+    "cancel": "Cancel",
+    "noPeers": "No peers configured",
+    "peerName": "Name",
+    "peerUrl": "URL",
+    "peerSecret": "Secret",
+    "peerSecretHint": "the secret we send to this peer",
+    "peerSecretPlaceholder": "Peer's secret...",
+    "description": "Description",
+    "descriptionPlaceholder": "e.g. production instance",
+    "test": "Test",
+    "testOk": "Connection OK",
+    "testFail": "Failed",
+    "remoteAgents": "Agents",
+    "toolUsage": "Tool usage in agent configuration",
+    "toolUsageDesc": "Add remote_agent to an agent's tools to enable peer access:",
+    "toolExample": "Example call:"
   }
 }
