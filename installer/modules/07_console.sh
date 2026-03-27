@@ -77,9 +77,16 @@ server {
     root /opt/hydrahive/console;
     index index.html;
 
+    # 502/503 nur für Browser-Navigationen → auto-refreshende Wartungsseite
+    error_page 502 503 /502.html;
+    location = /502.html {
+        internal;
+    }
+
     # SPA-Fallback: alle nicht gefundenen Routen an index.html
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-store, no-cache";
     }
 
     # API-Proxy → HydraHive Core
@@ -89,9 +96,33 @@ server {
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   Upgrade           $http_upgrade;
-        proxy_set_header   Connection        "upgrade";
-        proxy_read_timeout 300s;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+        proxy_next_upstream   error timeout;
+        proxy_intercept_errors off;
+    }
+
+    # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
+    location /.well-known/ {
+        proxy_pass         http://127.0.0.1:8765/.well-known/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    60s;
+    }
+
+    location /a2a/ {
+        proxy_pass         http://127.0.0.1:8765/a2a/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
     }
 
     # Statische Assets: lange Cache-Laufzeit
