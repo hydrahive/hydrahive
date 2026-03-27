@@ -10,6 +10,12 @@ HYDRAHIVE_USER="hydrahive"
 CRED_FILE="/etc/hydrahive/admin_credentials"
 NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
 
+# Fallback-Funktionen falls Script standalone läuft (nicht via source aus install.sh)
+if ! declare -f info  &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn  &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 info "Installiere code-server (Browser-IDE)..."
 
 # --- 1. Passwort lesen oder generieren ---
