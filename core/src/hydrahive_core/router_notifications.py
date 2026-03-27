@@ -21,7 +21,7 @@ from .notification_service import notification_service
 logger = logging.getLogger(__name__)
 
 
-def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt) -> None:
+def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt, public_router: APIRouter) -> None:
 
     @router.get("/notifications")
     async def list_notifications(auth: tuple[str, str] = Depends(require_auth)):
@@ -34,7 +34,9 @@ def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt)
         username, _ = auth
         return {"count": notification_service.unread_count(username)}
 
-    @router.get("/notifications/stream")
+    # SSE-Stream auf public_router — EventSource kann keine Auth-Header senden,
+    # Authentifizierung erfolgt über ?token= Query-Parameter
+    @public_router.get("/notifications/stream")
     async def notification_stream(token: str | None = None):
         # EventSource kann keine Custom-Headers → Token via ?token= Query-Param
         from fastapi import HTTPException as _HTTPException

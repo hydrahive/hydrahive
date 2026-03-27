@@ -1219,7 +1219,7 @@ register_backup_restore_routes(
 register_vpn_routes(admin_router, require_admin=require_admin)
 register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
-register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=_verify_jwt)
+register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=_verify_jwt, public_router=public_router)
 register_schedule_routes(auth_router, require_auth=require_auth)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 
