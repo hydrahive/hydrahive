@@ -552,7 +552,9 @@ class AgentDiscordClient(DiscordAgentClient):
                 if _sub == "agent_reply_guided":
                     _instr = str(_p.get("instruction", "")).strip()
                     if _instr:
-                        content = f"[BUTLER-VORGABE: {_instr}]\n{content}"
+                        from .butler_executor import get_agent_display_name as _gname
+                        _name = _gname(_agent_id)
+                        content = f"Dein Name ist {_name}.\n[BUTLER-VORGABE: {_instr}]\n{content}"
                 if _sub in ("agent_reply", "agent_reply_guided", "forward"):
                     _aid = str(_p.get("agent_id", "")).strip()
                     if _aid:

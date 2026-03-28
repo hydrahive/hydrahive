@@ -14,9 +14,33 @@ from datetime import datetime
 from datetime import time as dtime
 from typing import Any
 
+import re
+from pathlib import Path
+
 from .butler_rule import ButlerFlow, load_flows
 
 logger = logging.getLogger(__name__)
+
+AGENTS_DIR = Path("/agents")
+
+
+def get_agent_display_name(agent_id: str) -> str:
+    """Liest den Anzeigenamen eines Agenten aus agent.yaml (identity-Feld).
+    Entfernt Markdown-Formatierungen wie ** Lilith ** → Lilith.
+    Fallback: agent_id."""
+    try:
+        import yaml as _yaml
+        yaml_path = AGENTS_DIR / agent_id / "agent.yaml"
+        if yaml_path.exists():
+            data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            name = str(data.get("identity", "")).strip()
+            # ** Lilith ** → Lilith
+            name = re.sub(r"[\*_]+", "", name).strip()
+            if name:
+                return name
+    except Exception:
+        pass
+    return agent_id
 
 
 @dataclass

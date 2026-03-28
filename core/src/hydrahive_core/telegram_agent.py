@@ -165,7 +165,9 @@ async def start_telegram_bot(
                 if _sub == "agent_reply_guided":
                     _instr = str(_p.get("instruction", "")).strip()
                     if _instr:
-                        enriched = f"[BUTLER-VORGABE: {_instr}]\n{enriched}"
+                        from .butler_executor import get_agent_display_name as _gname
+                        _name = _gname(agent_id)
+                        enriched = f"Dein Name ist {_name}.\n[BUTLER-VORGABE: {_instr}]\n{enriched}"
                 if _sub in ("agent_reply", "agent_reply_guided", "forward"):
                     _aid = str(_p.get("agent_id", "")).strip()
                     if _aid:

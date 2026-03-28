@@ -921,7 +921,9 @@ def register_user_integration_routes(
                 elif _sub == "agent_reply_guided":
                     _instr = str(_p.get("instruction", "")).strip()
                     if _instr:
-                        message = _instr + "\n\n" + message
+                        from .butler_executor import get_agent_display_name as _gname
+                        _name = _gname(agent_id)
+                        message = f"Dein Name ist {_name}.\n{_instr}\n\n" + message
                 if _sub in ("agent_reply", "agent_reply_guided", "forward"):
                     agent_id = _p.get("agent_id", agent_id)
         except Exception as _be:
