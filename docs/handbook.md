@@ -48,6 +48,13 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 25. [API Usage & Kostenübersicht](#25-api-usage--kostenübersicht)
 26. [Diagnose & Tests](#26-diagnose--tests)
 27. [Troubleshooting](#27-troubleshooting)
+28. [Erweiterungs-Manager](#28-erweiterungs-manager)
+29. [Schedules — Zeitgesteuerte Aufgaben](#29-schedules--zeitgesteuerte-aufgaben)
+30. [Butler — Visuelle Automatisierungsregeln](#30-butler--visuelle-automatisierungsregeln)
+31. [Web-Suche (SearXNG)](#31-web-suche-searxng)
+32. [Code Editor (VS Code im Browser)](#32-code-editor-vs-code-im-browser)
+33. [A2A Federation](#33-a2a-federation)
+34. [Benachrichtigungen](#34-benachrichtigungen)
 
 ---
 
@@ -126,6 +133,13 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
 | **API Usage** | Token-Verbrauch und API-Kosten nach Projekt und Modell | admin |
 | **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
+| **Butler** | Visuelle Automatisierungsregeln für Messenger — Blueprint-Editor | admin |
+| **Schedules** | Zeitgesteuerte Agenten-Aufgaben (Cron + Einmalig) | admin |
+| **Erweiterungen** | Optionale Komponenten installieren/deinstallieren | admin |
+| **Code Editor** | VS Code im Browser (code-server) | admin |
+| **Web-Suche** | SearXNG Metasuchmaschine direkt in der Console | alle |
+| **Federation** | A2A Peer-zu-Peer Agenten-Vernetzung | admin |
+| **Benachrichtigungen** | Echtzeit-Systembenachrichtigungen via SSE | alle |
 
 ### Konsolidierte Einstellungen
 
@@ -1272,3 +1286,259 @@ sudo tail -f /var/log/hydrahive/audit.jsonl | python3 -m json.tool
 # nginx-Logs
 sudo tail -f /var/log/nginx/error.log
 ```
+
+---
+
+## 28. Erweiterungs-Manager
+
+Die Erweiterungsverwaltung ermöglicht das nachträgliche Installieren optionaler Komponenten direkt aus der Webkonsole — ohne SSH oder manuelle Befehle.
+
+### Erreichbar unter
+
+**Erweiterungen** in der linken Sidebar (nur Admin).
+
+### Verfügbare Erweiterungen
+
+| Erweiterung | Beschreibung | Port |
+|---|---|---|
+| **SearXNG** | Datenschutzfreundliche Metasuchmaschine | 8888 |
+| **Gitea** | Selbst-gehosteter Git-Server | 3000 |
+| **Ollama** | Lokale LLM-Inferenz (GPU/CPU) | 11434 |
+| **WhatsApp Bridge** | WhatsApp-Integration via whatsapp-web.js | 8767 |
+| **Headscale** | Self-hosted Tailscale-Koordinator | 8089 |
+| **code-server** | VS Code im Browser | 8080 |
+
+### Installation
+
+1. Gewünschte Erweiterung anklicken
+2. **Installieren** drücken
+3. Live-Log verfolgen — Installation läuft im Hintergrund
+4. Bei Erfolg: Status wechselt auf **Aktiv**
+
+### Deinstallation
+
+**Deinstallieren** Button neben der installierten Erweiterung. Daten bleiben erhalten — nur Service und Binaries werden entfernt.
+
+### Hinweis
+
+Neue Erweiterungen werden automatisch mit jedem System-Update mitgeliefert. Bereits installierte Erweiterungen werden nicht überschrieben.
+
+---
+
+## 29. Schedules — Zeitgesteuerte Aufgaben
+
+Mit Schedules können Agenten zu festen Zeiten oder in regelmäßigen Abständen automatisch aktiviert werden.
+
+### Erreichbar unter
+
+**Schedules** in der linken Sidebar.
+
+### Schedule anlegen
+
+1. **+ Neuer Schedule**
+2. Agent auswählen
+3. Nachricht eingeben (was der Agent tun soll)
+4. Zeitplan konfigurieren:
+   - **Einmalig:** Datum + Uhrzeit
+   - **Wiederkehrend:** Cron-Ausdruck oder Intervall (z.B. `*/30 * * * *` für alle 30 Minuten)
+5. Speichern → Schedule läuft ab sofort
+
+### Cron-Syntax
+
+```
+┌─────── Minute (0-59)
+│ ┌───── Stunde (0-23)
+│ │ ┌─── Tag des Monats (1-31)
+│ │ │ ┌─ Monat (1-12)
+│ │ │ │ └ Wochentag (0-6, 0=Sonntag)
+│ │ │ │ │
+* * * * *
+```
+
+Beispiele:
+- `0 8 * * 1-5` — Montag–Freitag um 08:00
+- `*/15 * * * *` — alle 15 Minuten
+- `0 0 * * *` — täglich um Mitternacht
+
+### Heartbeat vs. Schedule
+
+| | Heartbeat | Schedule |
+|---|---|---|
+| Konfiguriert in | Agent-Einstellungen | Schedules-Seite |
+| Trigger | Zeitintervall | Cron / Einmalig |
+| Nachricht | fest im Agent | frei wählbar |
+| Zweck | Monitoring, Watchdog | Aufgaben, Reports |
+
+---
+
+## 30. Butler — Visuelle Automatisierungsregeln
+
+Butler ist ein Blueprint-Editor für Messenger-Automatisierung. Regeln werden visuell als verbundene Knoten definiert — ähnlich Unreal Engine Blueprints oder n8n.
+
+### Erreichbar unter
+
+**Butler** in der linken Sidebar oder über **Mein Agent** → Tab **Butler**.
+
+### Konzept
+
+Ein Butler-Flow besteht aus:
+- **Trigger-Knoten** — wann die Regel greift (z.B. "WhatsApp-Nachricht empfangen")
+- **Bedingungsknoten** — Filter die true/false ausgeben
+- **Aktionsknoten** — was passiert wenn Bedingungen erfüllt sind
+
+```
+[Nachricht empfangen]
+        ↓
+[Zeitfenster 23:00–08:00]
+    ja ↓            nein ↓
+[Agent antwortet]  [Ignorieren]
+```
+
+### Knoten-Typen
+
+**Trigger:**
+| Knoten | Beschreibung |
+|---|---|
+| Nachricht empfangen | Eingehende Messenger-Nachricht — Kanal wählbar (Alle/WhatsApp/Telegram/Discord) |
+
+**Bedingungen:**
+| Knoten | Beschreibung |
+|---|---|
+| Zeitfenster | Prüft ob aktuelle Uhrzeit in einem Bereich liegt — Übernacht (23:00–08:00) unterstützt |
+| Wochentag | Wochentage als Checkboxen auswählbar |
+| Kontakt bekannt? | Prüft ob Absender in der Kontaktliste eingetragen ist |
+| Text enthält | Stichwort-Filter auf den Nachrichteninhalt |
+
+**Aktionen:**
+| Knoten | Beschreibung |
+|---|---|
+| Agent antwortet | Leitet Nachricht an gewählten Agenten weiter |
+| Agent mit Vorgabe | Wie "Agent antwortet" aber mit zusätzlicher Instruktion (z.B. "Antworte kurz auf Deutsch") |
+| Feste Antwort | Sendet direkt einen vordefinierten Text — kein LLM, sofortige Antwort |
+| In Warteschlange | Speichert Nachricht für spätere Bearbeitung |
+| Ignorieren | Verwirft die Nachricht stillschweigend |
+| Weiterleiten | Leitet an einen anderen Agenten weiter |
+
+### Flow erstellen
+
+1. **Butler** öffnen
+2. **Neuen Flow anlegen** (Dropdown oben)
+3. Knoten aus der Palette (links) auf die Canvas ziehen
+4. Knoten mit der Maus verbinden — von Ausgabe-Punkt zu Eingabe-Punkt
+5. Knoten anklicken → Properties-Panel (rechts) öffnet sich zur Bearbeitung
+6. Flow-Name vergeben und **Speichern** drücken
+7. **Aktiv** schalten
+
+### Mehrere Flows
+
+Flows laufen parallel. Bei eingehender Nachricht werden alle aktiven Flows geprüft. Der erste passende Flow wird ausgeführt.
+
+### Hinweis zur Ausführung
+
+Butler-Regeln greifen automatisch **vor** dem normalen Agenten-Processing. Wenn ein Flow "Ignorieren" ausgibt, kommt die Nachricht nie beim Agenten an.
+
+---
+
+## 31. Web-Suche (SearXNG)
+
+SearXNG ist eine selbst-gehostete Metasuchmaschine die mehrere Suchmaschinen gleichzeitig abfragt — ohne Tracking, ohne API-Key.
+
+### Voraussetzung
+
+SearXNG muss über den **Erweiterungs-Manager** installiert sein.
+
+### Nutzung durch Agenten
+
+Nach der Installation steht das Tool `web_search` automatisch allen Agenten zur Verfügung:
+
+```
+Agent: Suche nach aktuellen Nachrichten zu Python 3.13
+→ web_search(query="Python 3.13 release notes")
+→ Ergebnisse werden direkt in den Kontext injiziert
+```
+
+### Direktzugriff
+
+Die SearXNG-Oberfläche ist unter **Web-Suche** in der Sidebar erreichbar (eingebettet via iframe).
+
+### Konfiguration
+
+SearXNG läuft auf Port 8888 (intern). nginx proxied die Anfragen. Die Konfigurationsdatei liegt unter `/etc/searxng/settings.yml`.
+
+---
+
+## 32. Code Editor (VS Code im Browser)
+
+code-server bringt VS Code vollständig in den Browser — inklusive Extensions, Terminal und Git-Integration.
+
+### Voraussetzung
+
+code-server muss über den **Erweiterungs-Manager** installiert sein.
+
+### Erreichbar unter
+
+**Code Editor** in der linken Sidebar.
+
+### Funktionsumfang
+
+- Vollständige VS Code Oberfläche im Browser
+- Integriertes Terminal (SSH zum HydraHive-Server)
+- Git-Integration (Gitea)
+- Extension-Marketplace (eingeschränkt auf Open-VSX)
+- Dark Mode, Themes, alle Keybindings
+
+### Technisch
+
+code-server läuft unter dem `hydrahive`-Benutzer auf Port 8080 (intern). nginx proxied unter `/code/`. Die Konfiguration liegt unter `/opt/hydrahive/.config/code-server/config.yaml`.
+
+---
+
+## 33. A2A Federation
+
+HydraHive unterstützt das FastA2A-Protokoll für Agent-zu-Agent-Kommunikation zwischen verschiedenen HydraHive-Instanzen oder kompatiblen Systemen.
+
+### Erreichbar unter
+
+**Federation** in der linken Sidebar (nur Admin).
+
+### Funktionsweise
+
+Eine HydraHive-Instanz kann als **A2A-Server** fungieren — andere Instanzen (Peers) können Agenten direkt ansprechen und Aufgaben delegieren.
+
+### Agent-Karte (Agent Card)
+
+Jeder Agent hat eine maschinenlesbare Beschreibungsdatei die seine Fähigkeiten, Skills und Kommunikationskanäle beschreibt. Diese wird automatisch generiert.
+
+### Peer einrichten
+
+1. **Federation** → **Peers** → **+ Peer hinzufügen**
+2. URL der anderen HydraHive-Instanz eingeben
+3. Agent-Karten des Peers werden automatisch geladen
+4. Agenten können jetzt via `ask_agent` peer-übergreifend kommunizieren
+
+### Sicherheit
+
+Alle A2A-Verbindungen werden via Bearer-Token authentifiziert. Ohne gültiges Token keine Peer-Kommunikation.
+
+---
+
+## 34. Benachrichtigungen
+
+Das Notification Center zeigt systemweite Ereignisse in Echtzeit — neue Nachrichten, Agenten-Fehler, Update-Status.
+
+### Erreichbar über
+
+Glocken-Icon oben rechts in der Konsole.
+
+### Benachrichtigungstypen
+
+| Typ | Beschreibung |
+|---|---|
+| **Info** | Allgemeine Systemmeldungen |
+| **Erfolg** | Abgeschlossene Updates, erfolgreiche Aktionen |
+| **Warnung** | Nicht-kritische Probleme (z.B. Heartbeat-Verzögerung) |
+| **Fehler** | Kritische Fehler die sofortige Aufmerksamkeit erfordern |
+
+### Technisch
+
+Benachrichtigungen werden via SSE (Server-Sent Events) in Echtzeit gepusht — kein Polling. Verbindungsunterbrechungen werden automatisch wiederhergestellt.

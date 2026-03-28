@@ -572,6 +572,41 @@
       <h3 data-i18n="f20-h">Live Agent Monitor</h3>
       <p data-i18n="f20-p">Real-time view of all running agents — status, current task, runtime. Emergency stop from the UI. Auto-alerts for critical errors. Stale-data display during network issues.</p>
     </div>
+    <div class="card">
+      <div class="card-icon">🧩</div>
+      <h3 data-i18n="f21-h">Extension Manager</h3>
+      <p data-i18n="f21-p">Install optional services — SearXNG, Vaultwarden, Code-Server, Headscale — in one click. SSE-streamed install log. Extensions managed via JSON manifests, easy to add.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <h3 data-i18n="f22-h">Butler Blueprint Editor</h3>
+      <p data-i18n="f22-p">Visual node-graph automation rules (Unreal Engine-style). Wire triggers, conditions and actions into flows — auto-reply, ignore, guided responses, agent forwarding. Active in Telegram &amp; Discord.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📅</div>
+      <h3 data-i18n="f23-h">Cron Scheduler</h3>
+      <p data-i18n="f23-p">Schedule any agent task with cron syntax — directly from the web console. No SSH, no crontab editing. Tasks run in agent context with full tool access.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔍</div>
+      <h3 data-i18n="f24-h">Web Search (SearXNG)</h3>
+      <p data-i18n="f24-p">Private, self-hosted meta-search engine. Agents use it automatically via the web_search tool — no API key, no tracking, no rate limits. Install as an extension in one click.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💻</div>
+      <h3 data-i18n="f25-h">Code Editor (VS Code)</h3>
+      <p data-i18n="f25-p">Full VS Code in the browser via code-server. One-click install as an extension. Agents and users share the same project filesystem — edit, run, debug without leaving the browser.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌐</div>
+      <h3 data-i18n="f26-h">A2A Federation</h3>
+      <p data-i18n="f26-p">Agent-to-Agent protocol support. HydraHive can act as A2A server and client — expose agents as remote skills or consume external A2A agents from any compatible platform.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔔</div>
+      <h3 data-i18n="f27-h">Notification Center</h3>
+      <p data-i18n="f27-p">Agents send structured notifications — info, warning, error, success. Notification Center in the console shows a live feed. Matrix DM delivery for critical alerts included.</p>
+    </div>
   </div>
 </section>
 
@@ -903,6 +938,20 @@
       'f19-p': 'Token usage and API costs per project and model — input, output, cache hits. Prompt caching efficiency calculated automatically. No surprise bills.',
       'f20-h': 'Live Agent Monitor',
       'f20-p': 'Real-time view of all running agents — status, current task, runtime. Emergency stop from the UI. Auto-alerts for critical errors. Stale-data display during network issues.',
+      'f21-h': 'Extension Manager',
+      'f21-p': 'Install optional services — SearXNG, Vaultwarden, Code-Server, Headscale — in one click. SSE-streamed install log. Extensions managed via JSON manifests, easy to add.',
+      'f22-h': 'Butler Blueprint Editor',
+      'f22-p': 'Visual node-graph automation rules (Unreal Engine-style). Wire triggers, conditions and actions into flows — auto-reply, ignore, guided responses, agent forwarding. Active in Telegram & Discord.',
+      'f23-h': 'Cron Scheduler',
+      'f23-p': 'Schedule any agent task with cron syntax — directly from the web console. No SSH, no crontab editing. Tasks run in agent context with full tool access.',
+      'f24-h': 'Web Search (SearXNG)',
+      'f24-p': 'Private, self-hosted meta-search engine. Agents use it automatically via the web_search tool — no API key, no tracking, no rate limits. Install as an extension in one click.',
+      'f25-h': 'Code Editor (VS Code)',
+      'f25-p': 'Full VS Code in the browser via code-server. One-click install as an extension. Agents and users share the same project filesystem — edit, run, debug without leaving the browser.',
+      'f26-h': 'A2A Federation',
+      'f26-p': 'Agent-to-Agent protocol support. HydraHive can act as A2A server and client — expose agents as remote skills or consume external A2A agents from any compatible platform.',
+      'f27-h': 'Notification Center',
+      'f27-p': 'Agents send structured notifications — info, warning, error, success. Notification Center in the console shows a live feed. Matrix DM delivery for critical alerts included.',
       'how-title': 'How it works',
       'how-sub':   'A message travels through 10 layers in under a second.',
       'how-note':  'The user sees a clean streaming chat. The agents do the rest — with full Matrix audit trail.',
@@ -1018,6 +1067,20 @@
       'f19-p': 'Token-Verbrauch und API-Kosten pro Projekt und Modell — Input, Output, Cache Hits. Prompt-Caching-Effizienz wird automatisch berechnet. Keine unerwarteten Rechnungen.',
       'f20-h': 'Live Agent Monitor',
       'f20-p': 'Echtzeit-Übersicht aller laufenden Agenten — Status, aktueller Task, Laufzeit. Notfall-Stop aus der UI. Automatische Alerts bei kritischen Fehlern. Stale-Data-Anzeige bei Netzwerkproblemen.',
+      'f21-h': 'Erweiterungs-Manager',
+      'f21-p': 'Optionale Dienste — SearXNG, Vaultwarden, Code-Server, Headscale — per Klick installieren. SSE-gestreamtes Install-Log. Erweiterungen als JSON-Manifeste verwaltet, leicht erweiterbar.',
+      'f22-h': 'Butler Blueprint-Editor',
+      'f22-p': 'Visuelle Node-Graph-Automatisierungsregeln (Unreal-Engine-Stil). Trigger, Bedingungen und Aktionen zu Flows verdrahten — Auto-Antwort, Ignorieren, geführte Antworten, Agent-Weiterleitung. Aktiv in Telegram & Discord.',
+      'f23-h': 'Cron-Scheduler',
+      'f23-p': 'Beliebige Agenten-Tasks mit Cron-Syntax planen — direkt aus der Web-Konsole. Kein SSH, kein Crontab-Editieren. Tasks laufen im Agenten-Kontext mit vollem Tool-Zugriff.',
+      'f24-h': 'Web-Suche (SearXNG)',
+      'f24-p': 'Private, selbst-gehostete Meta-Suchmaschine. Agenten nutzen sie automatisch via web_search-Tool — kein API-Key, kein Tracking, keine Rate-Limits. Per Erweiterungs-Manager in einem Klick installieren.',
+      'f25-h': 'Code-Editor (VS Code)',
+      'f25-p': 'Vollständiges VS Code im Browser via code-server. Ein-Klick-Installation als Erweiterung. Agenten und Nutzer teilen dasselbe Projekt-Dateisystem — bearbeiten, ausführen, debuggen ohne den Browser zu verlassen.',
+      'f26-h': 'A2A-Federation',
+      'f26-p': 'Agent-to-Agent-Protokoll-Unterstützung. HydraHive kann als A2A-Server und -Client agieren — Agenten als Remote-Skills bereitstellen oder externe A2A-Agenten von beliebigen kompatiblen Plattformen nutzen.',
+      'f27-h': 'Benachrichtigungs-Center',
+      'f27-p': 'Agenten senden strukturierte Benachrichtigungen — Info, Warnung, Fehler, Erfolg. Das Notification Center in der Konsole zeigt einen Live-Feed. Matrix-DM-Zustellung für kritische Alerts inklusive.',
       'how-title': 'Wie es funktioniert',
       'how-sub':   'Eine Nachricht durchläuft 10 Schichten in unter einer Sekunde.',
       'how-note':  'Der Nutzer sieht einen sauberen Streaming-Chat. Die Agenten erledigen den Rest — mit vollem Matrix-Audit-Trail.',

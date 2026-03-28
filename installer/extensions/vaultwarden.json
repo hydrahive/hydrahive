@@ -1,0 +1,13 @@
+{
+  "id": "vaultwarden",
+  "name": "Vaultwarden (Passwort-Manager)",
+  "description": "Selbst-gehosteter Passwort-Manager (Bitwarden-kompatibel) — Passwörter, Tokens, sichere Notizen und Kontakte für alle Nutzer.",
+  "icon": "KeyRound",
+  "category": "security",
+  "install_script": "modules/17_vaultwarden.sh",
+  "uninstall_script": "extensions/uninstall/vaultwarden.sh",
+  "service": "vaultwarden",
+  "health_url": "http://127.0.0.1:8768/",
+  "open_url": "/vault/",
+  "installed_check": "/opt/vaultwarden"
+}

@@ -77,6 +77,10 @@ $SSH "$VM" "for i in \$(seq 1 20); do sleep 1; state=\$(systemctl is-active ${SE
 $SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"
 
 echo ""
+echo "==> [5c/5] WhatsApp Bridge — node_modules prüfen"
+$SSH "$VM" "if [ -f ${INSTALL_DIR}/whatsapp-bridge/package.json ] && [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '   node_modules fehlen — führe npm install aus...'; cd ${INSTALL_DIR}/whatsapp-bridge && sudo npm install -q && sudo systemctl restart hydrahive-whatsapp-bridge && echo '   Bridge neu gestartet'; else echo '   node_modules OK'; fi"
+
+echo ""
 echo "==> [6/5] Gitea-Status prüfen"
 $SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
 
