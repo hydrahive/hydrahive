@@ -151,14 +151,14 @@ content = open(conf_path).read()
 vault_block = f"""
     # Vaultwarden
     location /vault/ {{
-        proxy_pass http://127.0.0.1:{port}/;
+        proxy_pass http://127.0.0.1:{port};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }}
     location /vault/notifications/hub {{
-        proxy_pass http://127.0.0.1:{port}/notifications/hub;
+        proxy_pass http://127.0.0.1:{port}/vault/notifications/hub;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
