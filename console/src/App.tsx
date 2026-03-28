@@ -25,6 +25,7 @@ const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) =
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
 const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 const ButlerPage        = lazy(() => import("@/pages/ButlerPage").then((m) => ({ default: m.ButlerPage })));
+const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m) => ({ default: m.SkillPackagesPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="schedules"         element={<SchedulesPage />} />
             <Route path="federation"        element={<A2APage />} />
             <Route path="butler"           element={<ButlerPage />} />
+            <Route path="tools/skill-packages" element={<SkillPackagesPage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="audit"             element={<AuditPage />} />

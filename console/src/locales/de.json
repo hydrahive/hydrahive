@@ -18,6 +18,7 @@
     "schedules": "Schedules",
     "federation": "Federation",
     "butler": "Butler",
+    "skillPackages": "Skill-Pakete",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
@@ -39,7 +40,8 @@
     "codeEditor": "VS Code im Browser",
     "schedules": "Automatisierte Agenten-Tasks",
     "federation": "Peer-zu-Peer Agenten-Federation",
-    "butler": "Visuelle Automatisierungsregeln"
+    "butler": "Visuelle Automatisierungsregeln",
+    "skillPackages": "QMD Skills bündeln"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -960,5 +962,14 @@
     "toolUsage": "Tool-Nutzung in Agent-Konfiguration",
     "toolUsageDesc": "Füge remote_agent zu den Tools eines Agenten hinzu damit er Peers erreichen kann:",
     "toolExample": "Beispiel-Aufruf:"
+  },
+  "skillPackages": {
+    "title": "Skill-Pakete",
+    "new": "Neues Paket",
+    "noPackages": "Noch keine Pakete",
+    "nodeSkill": "Skill",
+    "nodeCondition": "Bedingung",
+    "nodeDependency": "Abhängigkeit",
+    "nodeOutput": "Ausgabe"
   }
 }
