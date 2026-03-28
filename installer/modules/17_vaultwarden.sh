@@ -39,6 +39,7 @@ if [ -x "${VW_BIN}" ]; then
 else
     # --- 3a. Build-Abhängigkeiten ---
     info "Installiere Build-Abhängigkeiten..."
+    dpkg --configure -a 2>/dev/null || true
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential pkg-config libssl-dev libsqlite3-dev curl git
