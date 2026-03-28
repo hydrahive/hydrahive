@@ -911,7 +911,7 @@ def register_user_integration_routes(
             from .butler_executor import has_active_flows as _has_flows
             _butler_actions = await _butler(_event)
             _is_owner_contact = bool(owners) and any(sender.endswith(o) for o in owners)
-            if not _butler_actions and _has_flows("whatsapp") and not _is_owner_contact:
+            if not _butler_actions and not _is_owner_contact:
                 return {"ok": True, "filtered": "butler_no_match"}
             for _act in _butler_actions:
                 _sub = _act.get("subtype")
