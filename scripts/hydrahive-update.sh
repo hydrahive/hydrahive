@@ -61,7 +61,16 @@ $SSH "$VM" "sudo chown -R www-data:www-data ${INSTALL_DIR}/console/"
 $SSH "$VM" "sudo systemctl stop ${SERVICE_NAME}; sudo fuser -k 8765/tcp 2>/dev/null; sudo systemctl start ${SERVICE_NAME}"
 
 echo ""
-echo "==> [5b/5] Docs rsync → VM"
+echo "==> [5b/5] Installer rsync → VM"
+$SSH "$VM" "sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/installer/ 2>/dev/null || true"
+rsync -av --delete --no-owner --no-group \
+  -e "ssh -i $SSH_KEY" \
+  "$REPO/installer/" \
+  "$VM:${INSTALL_DIR}/installer/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/installer/"
+
+echo ""
+echo "==> [5c/5] Docs rsync → VM"
 $SSH "$VM" "sudo mkdir -p ${INSTALL_DIR}/docs && sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/docs/"
 rsync -av --delete --no-owner --no-group \
   -e "ssh -i $SSH_KEY" \
@@ -77,7 +86,7 @@ $SSH "$VM" "for i in \$(seq 1 20); do sleep 1; state=\$(systemctl is-active ${SE
 $SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"
 
 echo ""
-echo "==> [5c/5] WhatsApp Bridge — node_modules prüfen"
+echo "==> [5d/5] WhatsApp Bridge — node_modules prüfen"
 $SSH "$VM" "if [ -f ${INSTALL_DIR}/whatsapp-bridge/package.json ] && [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '   node_modules fehlen — führe npm install aus...'; cd ${INSTALL_DIR}/whatsapp-bridge && sudo npm install -q && sudo systemctl restart hydrahive-whatsapp-bridge && echo '   Bridge neu gestartet'; else echo '   node_modules OK'; fi"
 
 echo ""
