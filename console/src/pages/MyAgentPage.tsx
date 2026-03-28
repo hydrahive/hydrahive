@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow } from "lucide-react";
+
+const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -125,7 +127,7 @@ export function MyAgentPage() {
     { cmd: "/remember", desc: t("slashCommands.remember") },
   ];
 
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat"|"butler">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -350,6 +352,7 @@ export function MyAgentPage() {
             { id: "whatsapp",  label: t("myAgent.whatsappTab"),   icon: Phone },
             { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
             { id: "mail",      label: t("myAgent.mailTab"),       icon: Mail },
+            { id: "butler",    label: "Butler",                   icon: Workflow },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -781,6 +784,15 @@ export function MyAgentPage() {
       {/* ── Mail Tab ──────────────────────────────────────────────────────── */}
       {tab === "mail" && (
         <MailTab />
+      )}
+
+      {/* ── Butler Tab ────────────────────────────────────────────────────── */}
+      {tab === "butler" && (
+        <Suspense fallback={<div className="p-8 text-muted-foreground text-sm">Lade Butler...</div>}>
+          <div style={{ height: "calc(100vh - 200px)" }}>
+            <ButlerEmbed />
+          </div>
+        </Suspense>
       )}
     </div>
   );

@@ -148,6 +148,31 @@ async def start_telegram_bot(
                 f"Antworte höflich und hilfreich, aber bleib neutral.]\n{text}"
             )
 
+        # Butler: Flows gegen eingehende Nachricht prüfen
+        try:
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
+            _bactions = await _butler(_BE(channel="telegram", contact_id=user_id, contact_name=from_name, message_text=text))
+            for _act in _bactions:
+                _sub = _act.get("subtype")
+                _p   = _act.get("params", {})
+                if _sub == "ignore":
+                    return
+                if _sub == "reply_fixed":
+                    _ft = str(_p.get("text", "")).strip()
+                    if _ft:
+                        await context.bot.send_message(chat_id=chat_id, text=_ft)
+                    return
+                if _sub == "agent_reply_guided":
+                    _instr = str(_p.get("instruction", "")).strip()
+                    if _instr:
+                        enriched = f"[BUTLER-VORGABE: {_instr}]\n{enriched}"
+                if _sub in ("agent_reply", "agent_reply_guided", "forward"):
+                    _aid = str(_p.get("agent_id", "")).strip()
+                    if _aid:
+                        agent_id = _aid  # noqa: PLW2901
+        except Exception as _be:
+            logger.debug("Butler check Telegram: %s", _be)
+
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
         virtual_cfg = _PC(
             id=agent_id,

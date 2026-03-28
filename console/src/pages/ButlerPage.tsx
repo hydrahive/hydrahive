@@ -66,10 +66,12 @@ function defaultParams(subtype: string): Record<string, unknown> {
     case "day_of_week":      return { days: ["mo","di","mi","do","fr","sa","so"] };
     case "contact_known":    return {};
     case "message_contains": return { keyword: "" };
-    case "agent_reply":      return { agent_id: "" };
-    case "queue":            return {};
-    case "ignore":           return {};
-    case "forward":          return { agent_id: "" };
+    case "agent_reply":         return { agent_id: "" };
+    case "agent_reply_guided":  return { agent_id: "", instruction: "" };
+    case "reply_fixed":         return { text: "" };
+    case "queue":               return {};
+    case "ignore":              return {};
+    case "forward":             return { agent_id: "" };
     default:                 return {};
   }
 }
@@ -97,10 +99,12 @@ const PALETTE = [
     group: "Aktion",
     color: "orange" as const,
     items: [
-      { type: "actionNode", subtype: "agent_reply", label: "Agent antwortet", icon: Bot },
-      { type: "actionNode", subtype: "queue",       label: "In Warteschlange", icon: Inbox },
-      { type: "actionNode", subtype: "ignore",      label: "Ignorieren",      icon: EyeOff },
-      { type: "actionNode", subtype: "forward",     label: "Weiterleiten",    icon: ArrowRight },
+      { type: "actionNode", subtype: "agent_reply",         label: "Agent antwortet",    icon: Bot },
+      { type: "actionNode", subtype: "agent_reply_guided",  label: "Agent mit Vorgabe",  icon: MessageCircle },
+      { type: "actionNode", subtype: "reply_fixed",         label: "Feste Antwort",      icon: Zap },
+      { type: "actionNode", subtype: "queue",               label: "In Warteschlange",   icon: Inbox },
+      { type: "actionNode", subtype: "ignore",              label: "Ignorieren",         icon: EyeOff },
+      { type: "actionNode", subtype: "forward",             label: "Weiterleiten",       icon: ArrowRight },
     ],
   },
 ];
@@ -123,6 +127,10 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
     case "agent_reply":
     case "forward":
       return (params.agent_id as string) || "—";
+    case "agent_reply_guided":
+      return (params.instruction as string)?.slice(0, 30) || "—";
+    case "reply_fixed":
+      return (params.text as string)?.slice(0, 30) || "—";
     default:
       return "";
   }
@@ -379,8 +387,8 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         </div>
       )}
 
-      {/* Action: Agent antwortet / Weiterleiten */}
-      {(d.subtype === "agent_reply" || d.subtype === "forward") && (
+      {/* Action: Agent antwortet / Weiterleiten / Mit Vorgabe */}
+      {(d.subtype === "agent_reply" || d.subtype === "forward" || d.subtype === "agent_reply_guided") && (
         <div>
           <label className="block text-xs text-white/50 mb-1">Agent</label>
           <select value={(p.agent_id as string) || ""}
@@ -390,6 +398,36 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <option value="">— wählen —</option>
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
+        </div>
+      )}
+
+      {/* Action: Agent mit Vorgabe — Instruktion */}
+      {d.subtype === "agent_reply_guided" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Vorgabe / Instruktion</label>
+          <textarea
+            rows={3}
+            placeholder="z.B. Antworte kurz und formell auf Deutsch"
+            value={(p.instruction as string) || ""}
+            onChange={e => onChange({ ...p, instruction: e.target.value })}
+            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+          />
+          <p className="text-[10px] text-white/25 mt-1">Wird dem Agent als Vorgabe vor der Nachricht übergeben.</p>
+        </div>
+      )}
+
+      {/* Action: Feste Antwort */}
+      {d.subtype === "reply_fixed" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Antworttext</label>
+          <textarea
+            rows={4}
+            placeholder="z.B. Ich bin gerade nicht erreichbar. Melde mich morgen."
+            value={(p.text as string) || ""}
+            onChange={e => onChange({ ...p, text: e.target.value })}
+            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+          />
+          <p className="text-[10px] text-white/25 mt-1">Wird direkt gesendet — kein LLM, sofort.</p>
         </div>
       )}
 

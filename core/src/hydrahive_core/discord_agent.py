@@ -534,12 +534,38 @@ class AgentDiscordClient(DiscordAgentClient):
 
         logger.info("Discord [%s] %s (id=%s, sender=%s): %s", self.agent_id, author, author_id, sender, content[:80])
 
+        # Butler: Flows gegen eingehende Nachricht prüfen
+        _agent_id = self.agent_id
+        try:
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
+            _bactions = await _butler(_BE(channel="discord", contact_id=author_id, contact_name=author, message_text=content))
+            for _act in _bactions:
+                _sub = _act.get("subtype")
+                _p   = _act.get("params", {})
+                if _sub == "ignore":
+                    return
+                if _sub == "reply_fixed":
+                    _ft = str(_p.get("text", "")).strip()
+                    if _ft:
+                        await self.send_message(channel_id, _ft)
+                    return
+                if _sub == "agent_reply_guided":
+                    _instr = str(_p.get("instruction", "")).strip()
+                    if _instr:
+                        content = f"[BUTLER-VORGABE: {_instr}]\n{content}"
+                if _sub in ("agent_reply", "agent_reply_guided", "forward"):
+                    _aid = str(_p.get("agent_id", "")).strip()
+                    if _aid:
+                        _agent_id = _aid
+        except Exception as _be:
+            logger.debug("Butler check Discord: %s", _be)
+
         # Antwort sammeln und senden
         response_parts: list[str] = []
         try:
             async for chunk in self._orchestrator.handle_message_stream(
-                project_id  = self.agent_id,
-                project_cfg = _build_virtual_cfg(self.agent_id),
+                project_id  = _agent_id,
+                project_cfg = _build_virtual_cfg(_agent_id),
                 content     = content,
                 sender      = sender,
                 execution_mode = "safe",
