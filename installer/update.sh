@@ -200,6 +200,7 @@ main() {
         mkdir -p "${HYDRAHIVE_DIR}/installer/extensions"
         rsync -a "${TMPDIR_BASE}/installer/extensions/" "${HYDRAHIVE_DIR}/installer/extensions/"
         chmod +x "${HYDRAHIVE_DIR}/installer/extensions/uninstall/"*.sh 2>/dev/null || true
+        chmod +x "${HYDRAHIVE_DIR}/installer/extensions/install/"*.sh 2>/dev/null || true
         info "Extension-Manifeste aktualisiert"
     fi
     if [ -d "${TMPDIR_BASE}/whatsapp-bridge" ]; then

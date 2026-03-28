@@ -10,6 +10,18 @@ HEADSCALE_BIN="/usr/local/bin/headscale"
 HEADSCALE_CFG="/etc/headscale/config.yaml"
 HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
 
+# Fallback-Funktionen falls Script standalone läuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
+# dpkg-Sperre aufräumen falls ein vorheriger Install abgebrochen wurde
+dpkg --configure -a 2>/dev/null || true
+
+# VPN_MODE vorbelegen damit kein interaktiver Prompt kommt (Headscale via Extension)
+VPN_MODE="${VPN_MODE:-headscale}"
+
 info "=== VPN-Setup (Tailscale / Headscale) ==="
 
 # --- VPN-Modus wählen ---

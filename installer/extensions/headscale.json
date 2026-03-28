@@ -4,7 +4,7 @@
   "description": "Self-hosted Tailscale-Koordinator — eigenes VPN-Netz ohne externen Account.",
   "icon": "Network",
   "category": "network",
-  "install_script": "modules/12_vpn.sh",
+  "install_script": "extensions/install/headscale.sh",
   "uninstall_script": "extensions/uninstall/headscale.sh",
   "service": "headscale",
   "health_url": null,
