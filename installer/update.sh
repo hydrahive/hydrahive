@@ -202,6 +202,13 @@ main() {
         chmod +x "${HYDRAHIVE_DIR}/installer/extensions/uninstall/"*.sh 2>/dev/null || true
         info "Extension-Manifeste aktualisiert"
     fi
+    if [ -d "${TMPDIR_BASE}/whatsapp-bridge" ]; then
+        mkdir -p "${HYDRAHIVE_DIR}/whatsapp-bridge"
+        rsync -a --exclude='node_modules' --exclude='.git' \
+            "${TMPDIR_BASE}/whatsapp-bridge/" "${HYDRAHIVE_DIR}/whatsapp-bridge/"
+        chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${HYDRAHIVE_DIR}/whatsapp-bridge/" 2>/dev/null || true
+        info "WhatsApp-Bridge Quellcode aktualisiert"
+    fi
     # Installer-Assets (nginx-Template etc.) im installer/-Verzeichnis aktuell halten
     for _asset in hydrahive-console.nginx hydrahive-installer.sudoers; do
         if [ -f "${TMPDIR_BASE}/installer/${_asset}" ]; then

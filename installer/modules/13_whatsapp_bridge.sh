@@ -11,6 +11,12 @@ BRIDGE_SECRET_FILE="/etc/hydrahive/whatsapp_bridge_secret"
 BRIDGE_SESSION_DIR="/etc/hydrahive/whatsapp-sessions"
 HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
 
+# Fallback-Funktionen falls Script standalone läuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 info "=== WhatsApp Bridge ==="
 
 # --- Node.js ≥18 prüfen / installieren ---
@@ -49,8 +55,12 @@ mkdir -p "${BRIDGE_INSTALL_DIR}"
 
 # --- Quellcode rsync aus dem Repo ---
 info "Kopiere whatsapp-bridge Quellcode..."
+# Suche Quellcode: erstens neben dem Installer-Script, zweitens unter /opt/hydrahive/
 REPO_BRIDGE="$(dirname "${BASH_SOURCE[0]}")/../../whatsapp-bridge"
 REPO_BRIDGE="$(realpath "${REPO_BRIDGE}" 2>/dev/null || echo "${REPO_BRIDGE}")"
+if [ ! -f "${REPO_BRIDGE}/bridge.js" ]; then
+    REPO_BRIDGE="${HYDRAHIVE_DIR:-/opt/hydrahive}/whatsapp-bridge"
+fi
 
 if [ -f "${REPO_BRIDGE}/bridge.js" ]; then
     rsync -a --delete \
@@ -59,7 +69,7 @@ if [ -f "${REPO_BRIDGE}/bridge.js" ]; then
         "${REPO_BRIDGE}/" "${BRIDGE_INSTALL_DIR}/"
     success "whatsapp-bridge Quellcode bereit (${BRIDGE_INSTALL_DIR})"
 else
-    error "whatsapp-bridge/bridge.js nicht gefunden (${REPO_BRIDGE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
+    error "whatsapp-bridge/bridge.js nicht gefunden — bitte erst ein Update durchführen"
 fi
 
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}"
