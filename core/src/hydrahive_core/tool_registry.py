@@ -1091,7 +1091,7 @@ _PROJECT_SHELL_WHITELIST: frozenset[str] = frozenset({
 
 # git-Subkommandos die in project_shell BLOCKIERT sind (Netzwerk / Destruktiv)
 _GIT_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({
-    "push", "clone", "fetch", "pull",   # Netzwerk (könnte Daten exfiltrieren)
+    "push",                              # Netzwerk-Schreib-Zugriff
     "submodule", "subtree",             # komplex, kaum nötig
     "gc", "prune", "fsck",              # intern, nicht nötig
     "remote",                           # Netzwerk-Konfig
