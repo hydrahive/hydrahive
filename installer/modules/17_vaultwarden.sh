@@ -39,8 +39,9 @@ if [ -x "${VW_BIN}" ]; then
 else
     # --- 3a. Build-Abhängigkeiten ---
     info "Installiere Build-Abhängigkeiten..."
+    apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        build-essential pkg-config libssl-dev libsqlite3-dev curl git 2>/dev/null
+        build-essential pkg-config libssl-dev libsqlite3-dev curl git
 
     # --- 3b. Rust/Cargo installieren (falls nicht vorhanden) ---
     if ! command -v cargo &>/dev/null; then
