@@ -77,7 +77,7 @@ else
     cd "${VW_SRC}"
     cargo build --features sqlite --release 2>&1
     systemctl stop "${VW_SERVICE}" 2>/dev/null || true
-    pkill -f vaultwarden 2>/dev/null || true
+    pkill -f "${VW_BIN}" 2>/dev/null || true
     sleep 1
     info "Kopiere Binary nach ${VW_BIN}..."
     ls -lh target/release/vaultwarden 2>&1 || warn "Binary nicht in target/release/ gefunden!"
