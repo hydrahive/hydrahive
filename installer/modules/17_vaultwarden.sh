@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HydraHive Installer - Modul 17: Vaultwarden (Passwort-Manager)
-# Installiert Vaultwarden als systemd-Service hinter nginx /vault/ Proxy.
-# Idempotent.
+# Installiert Vaultwarden aus Source (Rust/Cargo) als systemd-Service hinter nginx /vault/.
+# Idempotent. Bauzeit ~5-10 Minuten beim ersten Mal.
 set -euo pipefail
 
 VW_PORT="8768"
@@ -9,6 +9,7 @@ VW_DATA_DIR="/var/lib/vaultwarden"
 VW_BIN="/opt/vaultwarden/vaultwarden"
 VW_SERVICE="vaultwarden"
 VW_USER="vaultwarden"
+VW_SRC="/opt/vaultwarden/src"
 NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
 CRED_FILE="/etc/hydrahive/admin_credentials"
 
@@ -32,48 +33,59 @@ if ! id "${VW_USER}" &>/dev/null; then
     useradd -r -s /usr/sbin/nologin -d "${VW_DATA_DIR}" "${VW_USER}"
 fi
 
-# --- 3. Aktuelle Version ermitteln und Binary herunterladen ---
-VW_VERSION=$(curl -fsSL "https://api.github.com/repos/dani-garcia/vaultwarden/releases/latest" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null) || true
-if [ -z "${VW_VERSION}" ]; then
-    VW_VERSION="1.32.7"
-    warn "GitHub-API nicht erreichbar — verwende Fallback-Version ${VW_VERSION}"
-fi
-
-NEEDS_INSTALL=1
+# --- 3. Binary bereits vorhanden? ---
 if [ -x "${VW_BIN}" ]; then
-    INSTALLED_VERSION=$("${VW_BIN}" --version 2>/dev/null | head -1 | awk '{print $2}' || echo "")
-    if [ "${INSTALLED_VERSION}" = "${VW_VERSION}" ]; then
-        info "Vaultwarden ${VW_VERSION} bereits installiert — überspringe Download"
-        NEEDS_INSTALL=0
-    else
-        info "Aktualisiere Vaultwarden ${INSTALLED_VERSION:-unbekannt} → ${VW_VERSION}..."
-    fi
-fi
+    info "Vaultwarden Binary bereits vorhanden — überspringe Build"
+else
+    # --- 3a. Build-Abhängigkeiten ---
+    info "Installiere Build-Abhängigkeiten..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        build-essential pkg-config libssl-dev libsqlite3-dev curl git 2>/dev/null
 
-if [ "${NEEDS_INSTALL}" -eq 1 ]; then
-    mkdir -p /opt/vaultwarden
-    VW_URL="https://github.com/dani-garcia/vaultwarden/releases/download/${VW_VERSION}/vaultwarden-${VW_VERSION}-linux-amd64.tar.gz"
-    info "Lade Vaultwarden ${VW_VERSION} herunter..."
-    if curl -fsSL -o /tmp/vaultwarden.tar.gz "${VW_URL}"; then
-        tar -xzf /tmp/vaultwarden.tar.gz -C /opt/vaultwarden
-        chmod +x "${VW_BIN}"
-        rm -f /tmp/vaultwarden.tar.gz
-        success "Vaultwarden ${VW_VERSION} installiert"
-    else
-        warn "Vaultwarden-Download fehlgeschlagen — versuche apt-Fallback"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y vaultwarden 2>/dev/null \
-            || error "Vaultwarden konnte nicht installiert werden"
+    # --- 3b. Rust/Cargo installieren (falls nicht vorhanden) ---
+    if ! command -v cargo &>/dev/null; then
+        info "Installiere Rust-Toolchain..."
+        curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal 2>&1
+        source "$HOME/.cargo/env"
     fi
+    export PATH="$HOME/.cargo/bin:$PATH"
+
+    # --- 3c. Vaultwarden-Version ermitteln ---
+    VW_VERSION=$(curl -fsSL "https://api.github.com/repos/dani-garcia/vaultwarden/releases/latest" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])" 2>/dev/null) || true
+    if [ -z "${VW_VERSION}" ]; then
+        VW_VERSION="1.35.0"
+        warn "GitHub-API nicht erreichbar — verwende Fallback-Version ${VW_VERSION}"
+    fi
+    info "Baue Vaultwarden ${VW_VERSION} aus Source (das dauert ~5-10 Minuten)..."
+
+    # --- 3d. Source holen und bauen ---
+    mkdir -p /opt/vaultwarden
+    if [ -d "${VW_SRC}/.git" ]; then
+        git -C "${VW_SRC}" fetch --tags -q
+        git -C "${VW_SRC}" checkout "${VW_VERSION}" -q
+    else
+        git clone --branch "${VW_VERSION}" --depth 1 \
+            https://github.com/dani-garcia/vaultwarden.git "${VW_SRC}"
+    fi
+
+    cd "${VW_SRC}"
+    cargo build --features sqlite --release 2>&1
+    cp target/release/vaultwarden "${VW_BIN}"
+    chmod +x "${VW_BIN}"
+    success "Vaultwarden ${VW_VERSION} gebaut und installiert"
 fi
 
 # --- 4. Web-Vault Assets herunterladen ---
 WV_DIR="/opt/vaultwarden/web-vault"
 if [ ! -d "${WV_DIR}" ]; then
     info "Lade Web-Vault Assets herunter..."
-    WV_URL="https://github.com/dani-garcia/bw_web_builds/releases/download/v${VW_VERSION}/bw_web_v${VW_VERSION}.tar.gz"
+    # bw_web_builds liefert fertige Web-Assets ohne Build
+    WV_VERSION=$(curl -fsSL "https://api.github.com/repos/dani-garcia/bw_web_builds/releases/latest" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])" 2>/dev/null) || true
+    WV_VERSION="${WV_VERSION:-v2024.6.2}"
+    WV_URL="https://github.com/dani-garcia/bw_web_builds/releases/download/${WV_VERSION}/bw_web_${WV_VERSION}.tar.gz"
     if curl -fsSL -o /tmp/web-vault.tar.gz "${WV_URL}"; then
-        mkdir -p "${WV_DIR}"
         tar -xzf /tmp/web-vault.tar.gz -C /opt/vaultwarden
         rm -f /tmp/web-vault.tar.gz
         success "Web-Vault Assets installiert"
@@ -130,7 +142,6 @@ systemctl restart "${VW_SERVICE}"
 # --- 8. nginx /vault/ Proxy ---
 if [ -f "${NGINX_CONF}" ] && ! grep -q "location /vault/" "${NGINX_CONF}"; then
     info "Füge nginx /vault/ Proxy ein..."
-    # Vor der letzten schließenden } des server-Blocks einfügen
     python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF'
 import sys, re
 conf_path, port = sys.argv[1], sys.argv[2]
@@ -151,7 +162,6 @@ vault_block = f"""
         proxy_set_header Host $host;
     }}
 """
-# Vor der letzten } einfügen
 new_content = re.sub(r'\n}(\s*)$', vault_block + r'\n}\1', content)
 open(conf_path, 'w').write(new_content)
 PYEOF
