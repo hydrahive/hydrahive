@@ -73,6 +73,9 @@ else
 
     cd "${VW_SRC}"
     cargo build --features sqlite --release 2>&1
+    systemctl stop "${VW_SERVICE}" 2>/dev/null || true
+    pkill -f vaultwarden 2>/dev/null || true
+    sleep 1
     cp target/release/vaultwarden "${VW_BIN}"
     chmod +x "${VW_BIN}"
     success "Vaultwarden ${VW_VERSION} gebaut und installiert"
