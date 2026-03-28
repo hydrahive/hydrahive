@@ -898,6 +898,32 @@ def register_user_integration_routes(
         if keyword and keyword.lower() not in message.lower():
             return {"ok": True, "filtered": "keyword_missing"}
 
+        # Butler-Check
+        try:
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
+            _event = _BE(
+                channel="whatsapp",
+                contact_id=sender,
+                contact_name=from_name,
+                is_known=is_owner,
+                message_text=message,
+            )
+            _butler_actions = await _butler(_event)
+            for _act in _butler_actions:
+                _atype = _act.get("action")
+                if _atype == "ignore":
+                    return {"ok": True, "filtered": "butler_ignore"}
+                elif _atype == "reply_fixed":
+                    from .whatsapp_agent import bridge_send as _bsend
+                    await _bsend(agent_id, from_jid, _act.get("text", ""))
+                    return {"ok": True, "filtered": "butler_reply_fixed"}
+                elif _atype == "agent_reply_guided":
+                    message = _act.get("instruction", "") + "\n\n" + message
+                elif _atype in ("agent_reply", "forward"):
+                    agent_id = _act.get("agent_id", agent_id)
+        except Exception as _be:
+            logger.warning("Butler-Check fehlgeschlagen: %s", _be)
+
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
         virtual_cfg = _PC(
