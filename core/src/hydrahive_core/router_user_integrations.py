@@ -910,17 +910,20 @@ def register_user_integration_routes(
             )
             _butler_actions = await _butler(_event)
             for _act in _butler_actions:
-                _atype = _act.get("action")
-                if _atype == "ignore":
+                _sub = _act.get("subtype")
+                _p   = _act.get("params", {})
+                if _sub == "ignore":
                     return {"ok": True, "filtered": "butler_ignore"}
-                elif _atype == "reply_fixed":
+                elif _sub == "reply_fixed":
                     from .whatsapp_agent import bridge_send as _bsend
-                    await _bsend(agent_id, from_jid, _act.get("text", ""))
+                    await _bsend(agent_id, from_jid, _p.get("text", ""))
                     return {"ok": True, "filtered": "butler_reply_fixed"}
-                elif _atype == "agent_reply_guided":
-                    message = _act.get("instruction", "") + "\n\n" + message
-                elif _atype in ("agent_reply", "forward"):
-                    agent_id = _act.get("agent_id", agent_id)
+                elif _sub == "agent_reply_guided":
+                    _instr = str(_p.get("instruction", "")).strip()
+                    if _instr:
+                        message = _instr + "\n\n" + message
+                if _sub in ("agent_reply", "agent_reply_guided", "forward"):
+                    agent_id = _p.get("agent_id", agent_id)
         except Exception as _be:
             logger.warning("Butler-Check fehlgeschlagen: %s", _be)
 
