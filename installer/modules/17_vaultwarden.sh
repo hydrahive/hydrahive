@@ -79,7 +79,13 @@ else
     systemctl stop "${VW_SERVICE}" 2>/dev/null || true
     pkill -f vaultwarden 2>/dev/null || true
     sleep 1
-    cp target/release/vaultwarden "${VW_BIN}"
+    info "Kopiere Binary nach ${VW_BIN}..."
+    ls -lh target/release/vaultwarden 2>&1 || warn "Binary nicht in target/release/ gefunden!"
+    df -h /opt 2>/dev/null | tail -1 || true
+    cp target/release/vaultwarden "${VW_BIN}" || {
+        warn "cp fehlgeschlagen! Speicherplatz: $(df -h /opt 2>/dev/null | tail -1)"
+        error "Vaultwarden konnte nicht nach ${VW_BIN} kopiert werden"
+    }
     chmod +x "${VW_BIN}"
     success "Vaultwarden ${VW_VERSION} gebaut und installiert"
 fi
