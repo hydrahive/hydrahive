@@ -132,6 +132,15 @@ def _matches_trigger(data: dict, event: ButlerEvent) -> bool:
         event_name = params.get("discord_event", "")
         return not event_name or event_name == event.extra.get("event", "")
 
+    if subtype == "heartbeat_fired":
+        if event.event_type != "cron":
+            return False
+        agent_filter   = params.get("agent_id", "all")
+        task_id_filter = params.get("task_id", "")
+        agent_match    = agent_filter == "all" or agent_filter == event.extra.get("agent_id", "")
+        task_match     = not task_id_filter or task_id_filter == event.extra.get("task_id", "")
+        return agent_match and task_match
+
     if subtype == "git_event_received":
         if event.event_type != "webhook":
             return False

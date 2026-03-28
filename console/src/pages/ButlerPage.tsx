@@ -67,6 +67,7 @@ function defaultParams(subtype: string): Record<string, unknown> {
   switch (subtype) {
     case "message_received":       return { channel: "all" };
     case "webhook_received":       return { hook_id: "" };
+    case "heartbeat_fired":        return { agent_id: "all", task_id: "" };
     case "git_event_received":     return { git_event: "push", channel: "both", repo: "" };
     case "time_window":            return { from: "23:00", to: "08:00" };
     case "day_of_week":            return { days: ["mo","di","mi","do","fr","sa","so"] };
@@ -93,8 +94,9 @@ const PALETTE = [
     color: "green" as const,
     items: [
       { type: "triggerNode", subtype: "message_received", label: "Nachricht empfangen", icon: MessageCircle },
-      { type: "triggerNode", subtype: "webhook_received", label: "Webhook empfangen",   icon: Webhook },
-      { type: "triggerNode", subtype: "git_event_received", label: "GitHub/Gitea Event", icon: GitBranch },
+      { type: "triggerNode", subtype: "webhook_received",   label: "Webhook empfangen",  icon: Webhook },
+      { type: "triggerNode", subtype: "heartbeat_fired",    label: "Heartbeat Task",      icon: Clock },
+      { type: "triggerNode", subtype: "git_event_received", label: "GitHub/Gitea Event",  icon: GitBranch },
     ],
   },
   {
@@ -134,6 +136,11 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
     }
     case "webhook_received":
       return (params.hook_id as string) ? `/${params.hook_id}` : "— hook_id fehlt —";
+    case "heartbeat_fired": {
+      const agent = (params.agent_id as string) || "all";
+      const task  = (params.task_id as string) || "";
+      return agent === "all" ? (task ? `Alle Agenten · ${task}` : "Alle Agenten") : (task ? `${agent} · ${task}` : agent);
+    }
     case "git_event_received": {
       const evt = (params.git_event as string) || "push";
       const ch  = (params.channel as string) || "both";
@@ -386,6 +393,30 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
               GitHub: <code className="text-cyan-400">/webhooks/github</code><br />
               Gitea: <code className="text-cyan-400">/webhooks/gitea-butler</code>
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Trigger: Heartbeat Task */}
+      {d.subtype === "heartbeat_fired" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Agent</label>
+            <select value={(p.agent_id as string) || "all"}
+              onChange={e => onChange({ ...p, agent_id: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              <option value="all">Alle Agenten</option>
+              {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Task-ID (optional)</label>
+            <input type="text" placeholder="z.B. daily-report"
+              value={(p.task_id as string) || ""}
+              onChange={e => onChange({ ...p, task_id: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+            <p className="text-[10px] text-white/25 mt-1">Leer = alle Heartbeat-Tasks des Agenten.</p>
           </div>
         </div>
       )}

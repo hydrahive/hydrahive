@@ -146,7 +146,13 @@ class AgentHeartbeatScheduler:
 
         logger.info("Heartbeat-Task '%s/%s' → Projekt '%s': %s", agent_id, task.id, project_id, task.message[:60])
         try:
-            # Heartbeat ausführen und Ergebnis prüfen
+            # Butler-Check: Falls ein Flow greift, übernimmt Butler die Ausführung
+            butler_handled = await self._check_butler(agent_id, task, project_id, project_cfg)
+            if butler_handled:
+                _save_state(agent_dir, task.id, now)
+                return
+
+            # Standard-Ausführung: Heartbeat-Nachricht direkt an Orchestrator
             reply_tuple = await self._orchestrator.handle_message(project_id, project_cfg, task.message, sender="heartbeat")
             result = reply_tuple[0] if isinstance(reply_tuple, tuple) else str(reply_tuple)
             _save_state(agent_dir, task.id, now)
@@ -157,6 +163,83 @@ class AgentHeartbeatScheduler:
 
         except Exception as e:
             logger.warning("Heartbeat-Task '%s/%s' Ausführung fehlgeschlagen: %s", agent_id, task.id, e)
+
+    async def _check_butler(self, agent_id: str, task, project_id: str, project_cfg) -> bool:
+        """
+        Prüft ob ein Butler-Flow für diesen Heartbeat-Task greift.
+        Gibt True zurück wenn Butler die Ausführung übernommen hat (Standard überspringen).
+        Gibt False zurück wenn kein Flow matcht (Standard-Ausführung fortsetzen).
+        """
+        try:
+            from .butler_executor import ButlerEvent, check_flows
+        except Exception:
+            return False
+
+        event = ButlerEvent(
+            event_type="cron",
+            channel="heartbeat",
+            extra={
+                "agent_id":   agent_id,
+                "task_id":    task.id,
+                "message":    task.message,
+                "project_id": project_id,
+            },
+        )
+
+        try:
+            actions = await check_flows(event)
+        except Exception as e:
+            logger.debug("Butler-Check für Heartbeat '%s/%s' fehlgeschlagen: %s", agent_id, task.id, e)
+            return False
+
+        if not actions:
+            return False
+
+        # Butler übernimmt: Aktionen ausführen
+        for act in actions:
+            sub    = act.get("subtype")
+            params = act.get("params", {})
+
+            if sub == "ignore":
+                logger.info("Butler: Heartbeat '%s/%s' durch 'Ignorieren'-Flow unterdrückt", agent_id, task.id)
+                return True
+
+            if sub in ("agent_reply", "agent_reply_guided", "forward"):
+                target_agent_id = str(params.get("agent_id", "")).strip() or agent_id
+                msg = task.message
+                if sub == "agent_reply_guided":
+                    instr = str(params.get("instruction", "")).strip()
+                    if instr:
+                        msg = f"[BUTLER-VORGABE: {instr}]\n{msg}"
+                try:
+                    target_cfg = self._projects.get(project_id)
+                    if target_agent_id != agent_id:
+                        # Anderes Projekt suchen wenn Agent gewechselt
+                        target_cfg = self._find_project_cfg(target_agent_id) or project_cfg
+                    await self._orchestrator.handle_message(
+                        project_id if target_agent_id == agent_id else (target_agent_id),
+                        target_cfg,
+                        msg,
+                        sender=f"butler:heartbeat:{agent_id}",
+                    )
+                    logger.info(
+                        "Butler: Heartbeat '%s/%s' → Agent '%s' (subtype=%s)",
+                        agent_id, task.id, target_agent_id, sub,
+                    )
+                except Exception as e:
+                    logger.warning("Butler Heartbeat-Aktion fehlgeschlagen: %s", e)
+
+        return True
+
+    def _find_project_cfg(self, agent_id: str):
+        """Projekt-Config für einen Agent-ID suchen."""
+        try:
+            for proj_id, proj_cfg in self._projects.projects.items():
+                if getattr(proj_cfg.agents, "boss", None) == agent_id:
+                    return proj_cfg
+        except Exception:
+            pass
+        return None
 
     async def _maybe_escalate(self, agent_id: str, task, finding: str) -> None:
         """Schreibt einen AgentLink-Handoff wenn der Heartbeat etwas gefunden hat."""
