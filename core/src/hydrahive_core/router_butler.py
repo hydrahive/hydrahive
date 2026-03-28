@@ -1,10 +1,13 @@
-"""router_butler.py — Butler Flow CRUD API
+"""router_butler.py — Butler Flow CRUD API (user-scoped)
 
-GET    /admin/admin/butler/flows               → alle Flows
-POST   /admin/admin/butler/flows               → neuer Flow
-PUT    /admin/admin/butler/flows/{id}          → Flow überschreiben (Nodes + Edges)
-PATCH  /admin/admin/butler/flows/{id}/toggle   → aktivieren / deaktivieren
-DELETE /admin/admin/butler/flows/{id}          → Flow löschen
+GET    /butler/flows               → eigene Flows
+POST   /butler/flows               → neuer Flow
+PUT    /butler/flows/{id}          → Flow überschreiben (Nodes + Edges)
+PATCH  /butler/flows/{id}/toggle   → aktivieren / deaktivieren
+DELETE /butler/flows/{id}          → Flow löschen
+
+Flows sind an den eingeloggten User gebunden — andere User sehen
+und bearbeiten ihre eigenen Flows unabhängig.
 """
 from __future__ import annotations
 
@@ -37,17 +40,20 @@ def _check_id(flow_id: str) -> None:
         raise HTTPException(400, "Ungültige Flow-ID")
 
 
-def register_butler_routes(router: APIRouter, require_admin) -> None:
+def register_butler_routes(router: APIRouter, require_auth) -> None:
 
-    @router.get("/admin/butler/flows")
-    async def list_flows(_auth=Depends(require_admin)):
-        return [f.model_dump() for f in load_flows()]
+    @router.get("/butler/flows")
+    async def list_flows(auth=Depends(require_auth)):
+        username, _ = auth
+        return [f.model_dump() for f in load_flows(owner=username)]
 
-    @router.post("/admin/butler/flows")
-    async def create_flow(req: FlowSaveRequest, _auth=Depends(require_admin)):
+    @router.post("/butler/flows")
+    async def create_flow(req: FlowSaveRequest, auth=Depends(require_auth)):
+        username, _ = auth
         flow = ButlerFlow(
             id=str(uuid.uuid4()),
             name=req.name,
+            owner=username,
             enabled=req.enabled,
             nodes=req.nodes,
             edges=req.edges,
@@ -55,16 +61,18 @@ def register_butler_routes(router: APIRouter, require_admin) -> None:
         save_flow(flow)
         return flow.model_dump()
 
-    @router.put("/admin/butler/flows/{flow_id}")
+    @router.put("/butler/flows/{flow_id}")
     async def update_flow(
-        flow_id: str, req: FlowSaveRequest, _auth=Depends(require_admin)
+        flow_id: str, req: FlowSaveRequest, auth=Depends(require_auth)
     ):
+        username, _ = auth
         _check_id(flow_id)
-        if get_flow(flow_id) is None:
+        if get_flow(flow_id, username) is None:
             raise HTTPException(404, "Flow nicht gefunden")
         flow = ButlerFlow(
             id=flow_id,
             name=req.name,
+            owner=username,
             enabled=req.enabled,
             nodes=req.nodes,
             edges=req.edges,
@@ -72,19 +80,21 @@ def register_butler_routes(router: APIRouter, require_admin) -> None:
         save_flow(flow)
         return flow.model_dump()
 
-    @router.patch("/admin/butler/flows/{flow_id}/toggle")
-    async def toggle_flow(flow_id: str, _auth=Depends(require_admin)):
+    @router.patch("/butler/flows/{flow_id}/toggle")
+    async def toggle_flow(flow_id: str, auth=Depends(require_auth)):
+        username, _ = auth
         _check_id(flow_id)
-        flow = get_flow(flow_id)
+        flow = get_flow(flow_id, username)
         if not flow:
             raise HTTPException(404, "Flow nicht gefunden")
         flow.enabled = not flow.enabled
         save_flow(flow)
         return {"enabled": flow.enabled}
 
-    @router.delete("/admin/butler/flows/{flow_id}")
-    async def delete_flow_endpoint(flow_id: str, _auth=Depends(require_admin)):
+    @router.delete("/butler/flows/{flow_id}")
+    async def delete_flow_endpoint(flow_id: str, auth=Depends(require_auth)):
+        username, _ = auth
         _check_id(flow_id)
-        if not delete_flow(flow_id):
+        if not delete_flow(flow_id, username):
             raise HTTPException(404, "Flow nicht gefunden")
         return {"ok": True}

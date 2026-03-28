@@ -734,7 +734,7 @@ function ButlerPageInner() {
 
   // Load flows + agents
   useEffect(() => {
-    api.get<ButlerFlow[]>("/admin/butler/flows")
+    api.get<ButlerFlow[]>("/butler/flows")
       .then(setFlows)
       .catch(() => {});
 
@@ -781,10 +781,10 @@ function ButlerPageInner() {
         })),
       };
       if (activeFlowId) {
-        const updated = await api.put<ButlerFlow>(`/admin/butler/flows/${activeFlowId}`, payload);
+        const updated = await api.put<ButlerFlow>(`/butler/flows/${activeFlowId}`, payload);
         setFlows(fs => fs.map(f => f.id === activeFlowId ? updated : f));
       } else {
-        const created = await api.post<ButlerFlow>("/admin/butler/flows", payload);
+        const created = await api.post<ButlerFlow>("/butler/flows", payload);
         setFlows(fs => [...fs, created]);
         setActiveId(created.id);
       }
@@ -799,7 +799,7 @@ function ButlerPageInner() {
   const deleteFlow = async () => {
     if (!activeFlowId || !confirm(`Flow "${flowName}" wirklich löschen?`)) return;
     try {
-      await api.delete(`/admin/butler/flows/${activeFlowId}`);
+      await api.delete(`/butler/flows/${activeFlowId}`);
       setFlows(fs => fs.filter(f => f.id !== activeFlowId));
       newFlow();
       showToast("Gelöscht");
@@ -811,7 +811,7 @@ function ButlerPageInner() {
   const toggleFlow = async () => {
     if (!activeFlowId) { setEnabled(e => !e); return; }
     try {
-      const res = await api.patch<{ enabled: boolean }>(`/admin/butler/flows/${activeFlowId}/toggle`, {});
+      const res = await api.patch<{ enabled: boolean }>(`/butler/flows/${activeFlowId}/toggle`, {});
       setEnabled(res.enabled);
       setFlows(fs => fs.map(f => f.id === activeFlowId ? { ...f, enabled: res.enabled } : f));
     } catch (e) {

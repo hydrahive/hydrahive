@@ -1227,7 +1227,7 @@ register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
 register_codeserver_routes(admin_router, require_admin=require_admin)
 register_extension_routes(admin_router, require_admin=require_admin)
-register_butler_routes(admin_router, require_admin=require_admin)
+register_butler_routes(auth_router, require_auth=require_auth)
 register_webhook_butler_routes(
     public_router,
     admin_router,
