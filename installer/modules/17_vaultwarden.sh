@@ -140,8 +140,8 @@ PrivateTmp=true
 WantedBy=multi-user.target
 SVCEOF
 
-systemctl daemon-reload
-systemctl enable "${VW_SERVICE}"
+systemctl daemon-reload || true
+systemctl enable "${VW_SERVICE}" || warn "systemctl enable fehlgeschlagen"
 systemctl restart "${VW_SERVICE}" || {
     warn "Vaultwarden-Start fehlgeschlagen — pruefe: journalctl -u vaultwarden -n 30"
     journalctl -u "${VW_SERVICE}" -n 20 --no-pager 2>/dev/null || true
@@ -150,7 +150,7 @@ systemctl restart "${VW_SERVICE}" || {
 # --- 8. nginx /vault/ Proxy (idempotent) ---
 if [ -f "${NGINX_CONF}" ]; then
     info "Setze nginx /vault/ Proxy (idempotent)..."
-    python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF'
+    python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF' || warn "nginx-Konfiguration konnte nicht aktualisiert werden"
 import sys, re
 conf_path, port = sys.argv[1], sys.argv[2]
 content = open(conf_path).read()
