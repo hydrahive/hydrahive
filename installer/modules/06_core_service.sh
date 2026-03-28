@@ -20,6 +20,13 @@ else
     success "System-User '${HYDRAHIVE_USER}' bereits vorhanden"
 fi
 
+# --- Passwordless sudo für Extension-Manager (sudo -n braucht NOPASSWD) ---
+cat > /etc/sudoers.d/hydrahive << SUDOEOF
+hydrahive ALL=(ALL) NOPASSWD:ALL
+Defaults:hydrahive !requiretty
+SUDOEOF
+chmod 440 /etc/sudoers.d/hydrahive
+
 # --- Verzeichnisse ---
 mkdir -p "${CORE_DIR}/src/hydrahive_core" /agents /projects /etc/hydrahive
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}" /agents /projects
