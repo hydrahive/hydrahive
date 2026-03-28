@@ -905,7 +905,7 @@ def register_user_integration_routes(
                 channel="whatsapp",
                 contact_id=sender,
                 contact_name=from_name,
-                is_known=is_owner,
+                is_known=bool(owners) and any(sender.endswith(o) for o in owners),
                 message_text=message,
             )
             _butler_actions = await _butler(_event)
