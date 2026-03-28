@@ -156,6 +156,13 @@ for i in $(seq 1 15); do
 done
 
 # ─── 10. Config für HydraHive-Core schreiben ─────────────────────────────────
+
+# Fallback-Funktionen falls Script standalone laeuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 if [ ! -f "${AGENTLINK_CONFIG}" ]; then
     cat > "${AGENTLINK_CONFIG}" << CFG
 {

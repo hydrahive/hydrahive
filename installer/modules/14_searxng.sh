@@ -171,6 +171,13 @@ else
 fi
 
 # --- Health-Check ---
+
+# Fallback-Funktionen falls Script standalone laeuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 info "Warte auf SearXNG..."
 HEALTH_OK=0
 for i in 1 2 3 4 5 6; do

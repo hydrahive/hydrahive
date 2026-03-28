@@ -53,6 +53,13 @@ if ! systemctl is-active --quiet ollama; then
 fi
 
 # Modelle ziehen (idempotent — ollama pull überspringt bereits vorhandene)
+
+# Fallback-Funktionen falls Script standalone laeuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 DEFAULT_MODELS=("llama3.2:3b" "llama3.1:8b")
 
 for model in "${DEFAULT_MODELS[@]}"; do

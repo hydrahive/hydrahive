@@ -258,6 +258,13 @@ fi
 
 # ────────────────────────────────────────────────── Ergebnis
 
+# Fallback-Funktionen falls Script standalone laeuft (nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
+
 success "Gitea installiert und konfiguriert"
 info "  Intern:   http://127.0.0.1:${GITEA_PORT}"
 info "  Extern:   http://${SERVER_IP}:${GITEA_NGINX_PORT}"
