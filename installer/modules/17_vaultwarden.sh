@@ -34,9 +34,12 @@ if ! id "${VW_USER}" &>/dev/null; then
 fi
 
 # --- 3. Binary bereits vorhanden? ---
+info "Binary-Check: ${VW_BIN}"
+ls -la "$(dirname "${VW_BIN}")" 2>/dev/null || info "Verzeichnis $(dirname "${VW_BIN}") existiert noch nicht"
 if [ -x "${VW_BIN}" ]; then
     info "Vaultwarden Binary bereits vorhanden — überspringe Build"
 else
+    info "Binary nicht vorhanden oder nicht ausführbar — starte Build"
     # --- 3a. Build-Abhängigkeiten ---
     info "Installiere Build-Abhängigkeiten..."
     dpkg --configure -a 2>/dev/null || true
