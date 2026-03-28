@@ -715,8 +715,12 @@ def register_user_integration_routes(
         cfg = load_whatsapp_config(username)
         if not cfg or not cfg.get("enabled"):
             return {"configured": False, "status": "disconnected", "qr": None, "phone": None,
-                    "private_chats_enabled": True, "group_chats_enabled": False,
-                    "require_keyword": "", "allowed_numbers": [], "blocked_numbers": []}
+                    "private_chats_enabled": cfg.get("private_chats_enabled", True) if cfg else True,
+                    "group_chats_enabled":   cfg.get("group_chats_enabled", False) if cfg else False,
+                    "require_keyword":       cfg.get("require_keyword", "") if cfg else "",
+                    "allowed_numbers":       cfg.get("allowed_numbers", []) if cfg else [],
+                    "blocked_numbers":       cfg.get("blocked_numbers", []) if cfg else [],
+                    "owner_numbers":         cfg.get("owner_numbers", []) if cfg else []}
         agent_id = f"personal_{username}"
         bridge = await bridge_get_status(agent_id)
         # Telefonnummer in Config speichern (für Loop-Schutz)
