@@ -145,7 +145,7 @@ systemctl restart "${VW_SERVICE}"
 if [ -f "${NGINX_CONF}" ] && ! grep -q "location /vault/" "${NGINX_CONF}"; then
     info "Füge nginx /vault/ Proxy ein..."
     python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF'
-import sys, re
+import sys
 conf_path, port = sys.argv[1], sys.argv[2]
 content = open(conf_path).read()
 vault_block = f"""
@@ -164,8 +164,9 @@ vault_block = f"""
         proxy_set_header Host $host;
     }}
 """
-new_content = re.sub(r'\n}(\s*)$', vault_block + r'\n}\1', content)
-open(conf_path, 'w').write(new_content)
+# Vor letzter schließender } einfügen
+content = content.rstrip().rstrip('}').rstrip() + '\n' + vault_block + '\n}\n'
+open(conf_path, 'w').write(content)
 PYEOF
     nginx -t &>/dev/null && systemctl reload nginx 2>/dev/null || warn "nginx reload fehlgeschlagen — manuell prüfen"
 fi
