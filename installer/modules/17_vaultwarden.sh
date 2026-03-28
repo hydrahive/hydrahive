@@ -142,7 +142,7 @@ systemctl enable "${VW_SERVICE}"
 systemctl restart "${VW_SERVICE}"
 
 # --- 8. nginx /vault/ Proxy ---
-if [ -f "${NGINX_CONF}" ] && ! grep -q "location /vault/" "${NGINX_CONF}"; then
+if [ -f "${NGINX_CONF}" ] && ! grep -q "location /vault/ {" "${NGINX_CONF}"; then
     info "Füge nginx /vault/ Proxy ein..."
     python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF'
 import sys
