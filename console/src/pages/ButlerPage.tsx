@@ -36,6 +36,9 @@ import {
   ToggleLeft,
   ToggleRight,
   Filter,
+  Webhook,
+  Copy,
+  Check,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -61,18 +64,20 @@ type BNode = Node<ButlerNodeData>;
 // ── Default params per subtype ─────────────────────────────────────────────
 function defaultParams(subtype: string): Record<string, unknown> {
   switch (subtype) {
-    case "message_received": return { channel: "all" };
-    case "time_window":      return { from: "23:00", to: "08:00" };
-    case "day_of_week":      return { days: ["mo","di","mi","do","fr","sa","so"] };
-    case "contact_known":    return {};
-    case "message_contains": return { keyword: "" };
-    case "agent_reply":         return { agent_id: "" };
-    case "agent_reply_guided":  return { agent_id: "", instruction: "" };
-    case "reply_fixed":         return { text: "" };
-    case "queue":               return {};
-    case "ignore":              return {};
-    case "forward":             return { agent_id: "" };
-    default:                 return {};
+    case "message_received":       return { channel: "all" };
+    case "webhook_received":       return { hook_id: "" };
+    case "time_window":            return { from: "23:00", to: "08:00" };
+    case "day_of_week":            return { days: ["mo","di","mi","do","fr","sa","so"] };
+    case "contact_known":          return {};
+    case "message_contains":       return { keyword: "" };
+    case "payload_field_contains": return { field: "", value: "" };
+    case "agent_reply":            return { agent_id: "" };
+    case "agent_reply_guided":     return { agent_id: "", instruction: "" };
+    case "reply_fixed":            return { text: "" };
+    case "queue":                  return {};
+    case "ignore":                 return {};
+    case "forward":                return { agent_id: "" };
+    default:                       return {};
   }
 }
 
@@ -82,17 +87,19 @@ const PALETTE = [
     group: "Trigger",
     color: "green" as const,
     items: [
-      { type: "triggerNode",   subtype: "message_received", label: "Nachricht empfangen", icon: MessageCircle },
+      { type: "triggerNode", subtype: "message_received", label: "Nachricht empfangen", icon: MessageCircle },
+      { type: "triggerNode", subtype: "webhook_received", label: "Webhook empfangen",   icon: Webhook },
     ],
   },
   {
     group: "Bedingung",
     color: "blue" as const,
     items: [
-      { type: "conditionNode", subtype: "time_window",      label: "Zeitfenster",         icon: Clock },
-      { type: "conditionNode", subtype: "day_of_week",      label: "Wochentag",           icon: Calendar },
-      { type: "conditionNode", subtype: "contact_known",    label: "Kontakt bekannt?",    icon: Users },
-      { type: "conditionNode", subtype: "message_contains", label: "Text enthält",        icon: Filter },
+      { type: "conditionNode", subtype: "time_window",            label: "Zeitfenster",         icon: Clock },
+      { type: "conditionNode", subtype: "day_of_week",            label: "Wochentag",           icon: Calendar },
+      { type: "conditionNode", subtype: "contact_known",          label: "Kontakt bekannt?",    icon: Users },
+      { type: "conditionNode", subtype: "message_contains",       label: "Text enthält",        icon: Filter },
+      { type: "conditionNode", subtype: "payload_field_contains", label: "Payload-Feld enthält",icon: Filter },
     ],
   },
   {
@@ -116,6 +123,10 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
       const ch = (params.channel as string) || "all";
       return ch === "all" ? "Alle Kanäle" : ch.charAt(0).toUpperCase() + ch.slice(1);
     }
+    case "webhook_received":
+      return (params.hook_id as string) ? `/${params.hook_id}` : "— hook_id fehlt —";
+    case "payload_field_contains":
+      return params.field ? `${params.field} ≈ "${params.value}"` : "—";
     case "time_window":
       return `${params.from ?? "?"}–${params.to ?? "?"}`;
     case "day_of_week": {
@@ -309,6 +320,11 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         <p className="text-sm font-semibold text-white">{d.label}</p>
       </div>
 
+      {/* Trigger: Webhook empfangen */}
+      {d.subtype === "webhook_received" && (
+        <WebhookTriggerPanel params={p} onChange={onChange} />
+      )}
+
       {/* Trigger: Nachricht empfangen */}
       {d.subtype === "message_received" && (
         <div>
@@ -387,6 +403,29 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         </div>
       )}
 
+      {/* Condition: Payload-Feld enthält */}
+      {d.subtype === "payload_field_contains" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Feld (Punkt-Notation)</label>
+            <input type="text" placeholder="z.B. action oder pull_request.state"
+              value={(p.field as string) || ""}
+              onChange={e => onChange({ ...p, field: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Wert enthält</label>
+            <input type="text" placeholder="z.B. opened"
+              value={(p.value as string) || ""}
+              onChange={e => onChange({ ...p, value: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <p className="text-[10px] text-white/25">Groß-/Kleinschreibung wird ignoriert.</p>
+        </div>
+      )}
+
       {/* Action: Agent antwortet / Weiterleiten / Mit Vorgabe */}
       {(d.subtype === "agent_reply" || d.subtype === "forward" || d.subtype === "agent_reply_guided") && (
         <div>
@@ -456,6 +495,68 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           Knoten entfernen
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Webhook Trigger Panel ─────────────────────────────────────────────────
+function WebhookTriggerPanel({
+  params,
+  onChange,
+}: {
+  params: Record<string, unknown>;
+  onChange: (p: Record<string, unknown>) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const hookId = (params.hook_id as string) || "";
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const webhookUrl = hookId ? `${baseUrl}/webhooks/butler/${hookId}` : "";
+
+  const copyUrl = () => {
+    if (!webhookUrl) return;
+    navigator.clipboard.writeText(webhookUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <label className="block text-xs text-white/50 mb-1">Hook-ID</label>
+        <input
+          type="text"
+          placeholder="z.B. github-push"
+          value={hookId}
+          onChange={e => onChange({ ...params, hook_id: e.target.value.replace(/[^a-z0-9_-]/gi, "-").toLowerCase() })}
+          className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+        />
+        <p className="text-[10px] text-white/25 mt-1">Nur Buchstaben, Zahlen, Bindestriche.</p>
+      </div>
+
+      {webhookUrl && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Webhook-URL</label>
+          <div className="flex items-center gap-1">
+            <code className="flex-1 truncate rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-[11px] text-cyan-300">
+              {webhookUrl}
+            </code>
+            <button
+              type="button"
+              onClick={copyUrl}
+              className="shrink-0 p-1.5 rounded-lg bg-white/5 border border-white/15 hover:bg-white/10 transition-colors"
+              title="URL kopieren"
+            >
+              {copied
+                ? <Check className="h-3.5 w-3.5 text-green-400" />
+                : <Copy className="h-3.5 w-3.5 text-white/40" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-white/25 mt-1">
+            POST an diese URL um den Flow auszulösen.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

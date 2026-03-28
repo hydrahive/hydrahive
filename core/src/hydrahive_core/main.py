@@ -40,6 +40,7 @@ from .router_searxng import register_searxng_routes
 from .router_codeserver import register_codeserver_routes
 from .router_extensions import register_extension_routes
 from .router_butler import register_butler_routes
+from .router_webhooks_butler import register_webhook_butler_routes
 from .router_skill_packages import register_skill_package_routes
 from .router_a2a import register_a2a_routes
 from .router_notifications import register_notification_routes
@@ -1227,6 +1228,13 @@ register_searxng_routes(admin_router, require_admin=require_admin)
 register_codeserver_routes(admin_router, require_admin=require_admin)
 register_extension_routes(admin_router, require_admin=require_admin)
 register_butler_routes(admin_router, require_admin=require_admin)
+register_webhook_butler_routes(
+    public_router,
+    admin_router,
+    require_admin=require_admin,
+    orchestrator=orchestrator,
+    load_project_cfg=projects.get,
+)
 register_skill_package_routes(admin_router, require_admin=require_admin)
 register_a2a_routes(
     public_router,
