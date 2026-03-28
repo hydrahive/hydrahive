@@ -135,10 +135,16 @@ def _matches_trigger(data: dict, event: ButlerEvent) -> bool:
     if subtype == "git_event_received":
         if event.event_type != "webhook":
             return False
+        channel_filter = params.get("channel", "both")
+        if channel_filter != "both" and event.channel != channel_filter:
+            return False
         if event.channel not in ("github", "gitea"):
             return False
-        git_event = params.get("git_event", "")
-        return not git_event or git_event == event.extra.get("event", "")
+        git_event  = params.get("git_event", "")
+        repo_filter = params.get("repo", "").lower()
+        event_match = not git_event  or git_event == event.extra.get("event", "")
+        repo_match  = not repo_filter or repo_filter in event.extra.get("repo", "").lower()
+        return event_match and repo_match
 
     return False
 
@@ -241,8 +247,12 @@ def _eval_condition(data: dict, event: ButlerEvent) -> bool:
         return bool(branch) and branch == event.extra.get("branch", "")
 
     if subtype == "git_author_is":
-        author = params.get("author", "")
-        return bool(author) and author == event.extra.get("author", "")
+        author = params.get("author", "").lower()
+        return bool(author) and author == event.extra.get("author", "").lower()
+
+    if subtype == "git_action_is":
+        action = params.get("action", "")
+        return bool(action) and action == event.extra.get("action", "")
 
     # ── Discord-Event-Bedingungen ─────────────────────────────────────────────
     if subtype == "discord_emoji_is":

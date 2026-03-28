@@ -1,13 +1,12 @@
 """router_webhooks_butler.py — Eingehende Webhooks als Butler-Flow-Trigger
 
-Öffentlicher Endpunkt: POST /webhooks/butler/{hook_id}
-  - Kein Login erforderlich
-  - Optionale HMAC-Signaturprüfung (X-Hub-Signature-256)
-  - Sucht aktive Flows mit passendem webhook_received-Trigger
-  - Führt Aktionen asynchron aus (fire and forget)
+Endpunkte:
+  POST /webhooks/butler/{hook_id}  — generischer Webhook-Trigger
+  POST /webhooks/github            — GitHub Events (Push, PR, Issues, ...)
+  POST /webhooks/gitea-butler      — Gitea Events (Butler-Flows, getrennt von /webhooks/gitea/{project_id})
 
-Admin-Endpunkte: GET/POST/DELETE /admin/butler/hooks
-  - Globales Webhook-Secret verwalten
+Admin:
+  GET/PUT /admin/butler/hooks/config  — Secrets verwalten
 """
 from __future__ import annotations
 
@@ -115,7 +114,64 @@ async def execute_webhook_actions(
 # ── Route registration ─────────────────────────────────────────────────────────
 
 class HooksConfigBody(BaseModel):
-    secret: str = ""
+    secret:         str = ""
+    github_secret:  str = ""
+
+
+# ── Git-Payload Parser ─────────────────────────────────────────────────────────
+
+def _parse_git_event(event_name: str, payload: dict) -> dict:
+    """Extrahiert Kurzfelder aus GitHub/Gitea Webhook-Payload."""
+    extra: dict = {
+        "event":   event_name,
+        "payload": payload,
+        "repo":    payload.get("repository", {}).get("full_name", ""),
+        "action":  payload.get("action", ""),
+    }
+
+    if event_name == "push":
+        ref = payload.get("ref", "")
+        extra["branch"] = ref.removeprefix("refs/heads/")
+        extra["author"] = (
+            payload.get("pusher", {}).get("name", "")
+            or payload.get("pusher", {}).get("login", "")
+        )
+        commits = payload.get("commits") or []
+        extra["commit_message"] = commits[0].get("message", "") if commits else ""
+
+    elif event_name in ("pull_request", "pull_request_review"):
+        pr = payload.get("pull_request", {})
+        extra["branch"]        = pr.get("head", {}).get("ref", "")
+        extra["target_branch"] = pr.get("base", {}).get("ref", "")
+        extra["author"]        = (
+            pr.get("user", {}).get("login", "")
+            or payload.get("sender", {}).get("login", "")
+        )
+        extra["title"]      = pr.get("title", "")
+        extra["pr_number"]  = pr.get("number", 0)
+        extra["merged"]     = bool(pr.get("merged", False))
+
+    elif event_name in ("issues", "issue"):
+        issue = payload.get("issue", {})
+        extra["author"]       = issue.get("user", {}).get("login", "")
+        extra["title"]        = issue.get("title", "")
+        extra["issue_number"] = issue.get("number", 0)
+        extra["labels"]       = [lb.get("name", "") for lb in issue.get("labels", [])]
+
+    elif event_name == "issue_comment":
+        comment = payload.get("comment", {})
+        issue   = payload.get("issue", {})
+        extra["author"]       = comment.get("user", {}).get("login", "")
+        extra["comment_body"] = comment.get("body", "")
+        extra["issue_number"] = issue.get("number", 0)
+
+    elif event_name == "release":
+        release = payload.get("release", {})
+        extra["tag"]          = release.get("tag_name", "")
+        extra["release_name"] = release.get("name", "")
+        extra["author"]       = release.get("author", {}).get("login", "")
+
+    return extra
 
 
 def register_webhook_butler_routes(
@@ -166,15 +222,91 @@ def register_webhook_butler_routes(
 
         return {"ok": True, "hook_id": hook_id, "actions": len(actions)}
 
-    # ── Admin: Secret verwalten ──────────────────────────────────────────────
+    # ── GitHub Webhook ───────────────────────────────────────────────────────
+    @public_router.post("/webhooks/github")
+    async def github_webhook(request: Request):
+        body = await request.body()
+
+        cfg    = _load_config()
+        secret = cfg.get("github_secret", "")
+        sig    = request.headers.get("X-Hub-Signature-256", "")
+        if not _verify_signature(secret, body, sig):
+            logger.warning("GitHub webhook: ungültige Signatur")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = request.headers.get("X-GitHub-Event", "push")
+        try:
+            payload = json.loads(body) if body else {}
+        except Exception:
+            payload = {}
+
+        extra = _parse_git_event(event_name, payload)
+        event = ButlerEvent(
+            event_type="webhook",
+            channel="github",
+            extra=extra,
+        )
+        actions = await check_flows(event)
+        if actions:
+            asyncio.create_task(
+                execute_webhook_actions(actions, event, orchestrator, load_project_cfg)
+            )
+        logger.info("GitHub webhook [%s] repo=%s: %d Aktion(en)", event_name, extra.get("repo"), len(actions))
+        return {"ok": True, "event": event_name, "actions": len(actions)}
+
+    # ── Gitea Butler Webhook ─────────────────────────────────────────────────
+    @public_router.post("/webhooks/gitea-butler")
+    async def gitea_butler_webhook(request: Request):
+        body = await request.body()
+
+        # Gitea-Secret aus bestehender gitea_config.json lesen
+        try:
+            from .gitea import _load_config as _gitea_cfg
+            gitea_cfg = _gitea_cfg()
+            secret = gitea_cfg.get("webhook_secret", "")
+        except Exception:
+            secret = ""
+
+        sig = request.headers.get("X-Gitea-Signature", "")
+        if secret:
+            expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                logger.warning("Gitea Butler webhook: ungültige Signatur")
+                raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = request.headers.get("X-Gitea-Event", "push")
+        try:
+            payload = json.loads(body) if body else {}
+        except Exception:
+            payload = {}
+
+        extra = _parse_git_event(event_name, payload)
+        event = ButlerEvent(
+            event_type="webhook",
+            channel="gitea",
+            extra=extra,
+        )
+        actions = await check_flows(event)
+        if actions:
+            asyncio.create_task(
+                execute_webhook_actions(actions, event, orchestrator, load_project_cfg)
+            )
+        logger.info("Gitea Butler webhook [%s] repo=%s: %d Aktion(en)", event_name, extra.get("repo"), len(actions))
+        return {"ok": True, "event": event_name, "actions": len(actions)}
+
+    # ── Admin: Secrets verwalten ─────────────────────────────────────────────
     @admin_router.get("/admin/butler/hooks/config")
     def get_hooks_config(auth=Depends(require_admin)):
         cfg = _load_config()
-        return {"secret_set": bool(cfg.get("secret"))}
+        return {
+            "secret_set":        bool(cfg.get("secret")),
+            "github_secret_set": bool(cfg.get("github_secret")),
+        }
 
     @admin_router.put("/admin/butler/hooks/config")
     def update_hooks_config(body: HooksConfigBody, auth=Depends(require_admin)):
         cfg = _load_config()
-        cfg["secret"] = body.secret
+        cfg["secret"]        = body.secret
+        cfg["github_secret"] = body.github_secret
         _save_config(cfg)
         return {"updated": True}

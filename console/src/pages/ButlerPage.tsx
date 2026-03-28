@@ -39,6 +39,7 @@ import {
   Webhook,
   Copy,
   Check,
+  GitBranch,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -66,11 +67,15 @@ function defaultParams(subtype: string): Record<string, unknown> {
   switch (subtype) {
     case "message_received":       return { channel: "all" };
     case "webhook_received":       return { hook_id: "" };
+    case "git_event_received":     return { git_event: "push", channel: "both", repo: "" };
     case "time_window":            return { from: "23:00", to: "08:00" };
     case "day_of_week":            return { days: ["mo","di","mi","do","fr","sa","so"] };
     case "contact_known":          return {};
     case "message_contains":       return { keyword: "" };
     case "payload_field_contains": return { field: "", value: "" };
+    case "git_branch_is":          return { branch: "" };
+    case "git_author_is":          return { author: "" };
+    case "git_action_is":          return { action: "opened" };
     case "agent_reply":            return { agent_id: "" };
     case "agent_reply_guided":     return { agent_id: "", instruction: "" };
     case "reply_fixed":            return { text: "" };
@@ -89,6 +94,7 @@ const PALETTE = [
     items: [
       { type: "triggerNode", subtype: "message_received", label: "Nachricht empfangen", icon: MessageCircle },
       { type: "triggerNode", subtype: "webhook_received", label: "Webhook empfangen",   icon: Webhook },
+      { type: "triggerNode", subtype: "git_event_received", label: "GitHub/Gitea Event", icon: GitBranch },
     ],
   },
   {
@@ -100,6 +106,9 @@ const PALETTE = [
       { type: "conditionNode", subtype: "contact_known",          label: "Kontakt bekannt?",    icon: Users },
       { type: "conditionNode", subtype: "message_contains",       label: "Text enthält",        icon: Filter },
       { type: "conditionNode", subtype: "payload_field_contains", label: "Payload-Feld enthält",icon: Filter },
+      { type: "conditionNode", subtype: "git_branch_is",          label: "Branch ist",          icon: GitBranch },
+      { type: "conditionNode", subtype: "git_author_is",          label: "Autor ist",           icon: Users },
+      { type: "conditionNode", subtype: "git_action_is",          label: "Git-Action ist",      icon: Zap },
     ],
   },
   {
@@ -125,8 +134,20 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
     }
     case "webhook_received":
       return (params.hook_id as string) ? `/${params.hook_id}` : "— hook_id fehlt —";
+    case "git_event_received": {
+      const evt = (params.git_event as string) || "push";
+      const ch  = (params.channel as string) || "both";
+      const repo = (params.repo as string) || "";
+      return `${ch === "both" ? "GitHub/Gitea" : ch} · ${evt}${repo ? ` · ${repo}` : ""}`;
+    }
     case "payload_field_contains":
       return params.field ? `${params.field} ≈ "${params.value}"` : "—";
+    case "git_branch_is":
+      return (params.branch as string) || "—";
+    case "git_author_is":
+      return (params.author as string) || "—";
+    case "git_action_is":
+      return (params.action as string) || "—";
     case "time_window":
       return `${params.from ?? "?"}–${params.to ?? "?"}`;
     case "day_of_week": {
@@ -325,6 +346,50 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         <WebhookTriggerPanel params={p} onChange={onChange} />
       )}
 
+      {/* Trigger: GitHub/Gitea Event */}
+      {d.subtype === "git_event_received" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Dienst</label>
+            <select value={(p.channel as string) || "both"}
+              onChange={e => onChange({ ...p, channel: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              <option value="both">GitHub + Gitea</option>
+              <option value="github">GitHub</option>
+              <option value="gitea">Gitea</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Event-Typ</label>
+            <select value={(p.git_event as string) || "push"}
+              onChange={e => onChange({ ...p, git_event: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              <option value="push">Push</option>
+              <option value="pull_request">Pull Request</option>
+              <option value="issues">Issue</option>
+              <option value="issue_comment">Issue Kommentar</option>
+              <option value="release">Release</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Repository-Filter (optional)</label>
+            <input type="text" placeholder="z.B. mein-org/mein-repo"
+              value={(p.repo as string) || ""}
+              onChange={e => onChange({ ...p, repo: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+            <p className="text-[10px] text-white/25 mt-1">Leer = alle Repos.</p>
+          </div>
+          <div className="border-t border-white/10 pt-2">
+            <p className="text-[10px] text-white/40 leading-relaxed">
+              <strong className="text-white/60">Webhook-URLs:</strong><br />
+              GitHub: <code className="text-cyan-400">/webhooks/github</code><br />
+              Gitea: <code className="text-cyan-400">/webhooks/gitea-butler</code>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Trigger: Nachricht empfangen */}
       {d.subtype === "message_received" && (
         <div>
@@ -467,6 +532,49 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
           />
           <p className="text-[10px] text-white/25 mt-1">Wird direkt gesendet — kein LLM, sofort.</p>
+        </div>
+      )}
+
+      {/* Condition: Branch ist */}
+      {d.subtype === "git_branch_is" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Branch-Name</label>
+          <input type="text" placeholder="z.B. main"
+            value={(p.branch as string) || ""}
+            onChange={e => onChange({ ...p, branch: e.target.value })}
+            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+          />
+        </div>
+      )}
+
+      {/* Condition: Autor ist */}
+      {d.subtype === "git_author_is" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">GitHub/Gitea Username</label>
+          <input type="text" placeholder="z.B. tilleulenspiegel"
+            value={(p.author as string) || ""}
+            onChange={e => onChange({ ...p, author: e.target.value })}
+            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+          />
+          <p className="text-[10px] text-white/25 mt-1">Groß-/Kleinschreibung wird ignoriert.</p>
+        </div>
+      )}
+
+      {/* Condition: Git-Action ist */}
+      {d.subtype === "git_action_is" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Action</label>
+          <select value={(p.action as string) || "opened"}
+            onChange={e => onChange({ ...p, action: e.target.value })}
+            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+            <option value="opened">opened</option>
+            <option value="closed">closed</option>
+            <option value="merged">merged (PR)</option>
+            <option value="reopened">reopened</option>
+            <option value="labeled">labeled</option>
+            <option value="created">created (Kommentar)</option>
+            <option value="published">published (Release)</option>
+          </select>
         </div>
       )}
 
