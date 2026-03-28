@@ -45,24 +45,34 @@ def get_agent_display_name(agent_id: str) -> str:
 
 @dataclass
 class ButlerEvent:
-    """Ein eingehendes Messenger-Event."""
-    channel: str          # "whatsapp" | "telegram" | "discord" | "matrix"
-    contact_id: str
+    """Ein eingehendes Event — Messenger, Webhook, E-Mail, Discord-Event, ..."""
+    channel: str          # "whatsapp" | "telegram" | "discord" | "github" | "gitea" | "email" | ...
+    contact_id: str = ""
+    event_type: str = "message"   # "message" | "webhook" | "email" | "discord_event" | "cron"
     contact_name: str = ""
     is_known: bool = False
     message_text: str = ""
     extra: dict = field(default_factory=dict)
+    # extra-Felder je nach event_type:
+    #   webhook:       payload (dict), headers (dict)
+    #   email:         from, subject, body_plain, to, date
+    #   discord_event: event (str), emoji, message_id, channel_id, user_id, username, guild_id
+    #   github/gitea:  event (str), repo, branch, author, action, payload (dict)
 
 
-def has_active_flows(channel: str) -> bool:
-    """Gibt True zurück wenn mindestens ein aktiver Flow für diesen Kanal existiert."""
+def has_active_flows(channel: str, event_type: str = "message") -> bool:
+    """Gibt True zurück wenn mindestens ein aktiver Flow für diesen Kanal/Event-Typ existiert."""
     for flow in load_flows():
         if not flow.enabled:
             continue
         for node in flow.nodes:
             if node.get("type") == "triggerNode":
                 params = node.get("data", {}).get("params", {})
-                if params.get("channel") == channel:
+                node_channel = params.get("channel", "all")
+                node_event_type = params.get("event_type", "message")
+                if node_event_type != event_type:
+                    continue
+                if node_channel == "all" or node_channel == channel:
                     return True
     return False
 
@@ -98,9 +108,38 @@ def _evaluate_flow(flow: ButlerFlow, event: ButlerEvent) -> list[dict[str, Any]]
 
 def _matches_trigger(data: dict, event: ButlerEvent) -> bool:
     subtype = data.get("subtype", "")
+    params  = data.get("params", {})
+
     if subtype == "message_received":
-        channel = data.get("params", {}).get("channel", "all")
+        # Rückwärtskompatibel: event_type muss "message" sein
+        if event.event_type != "message":
+            return False
+        channel = params.get("channel", "all")
         return channel == "all" or channel == event.channel
+
+    if subtype == "webhook_received":
+        if event.event_type != "webhook":
+            return False
+        hook_id = params.get("hook_id", "")
+        return not hook_id or hook_id == event.channel
+
+    if subtype == "email_received":
+        return event.event_type == "email"
+
+    if subtype == "discord_event_received":
+        if event.event_type != "discord_event":
+            return False
+        event_name = params.get("discord_event", "")
+        return not event_name or event_name == event.extra.get("event", "")
+
+    if subtype == "git_event_received":
+        if event.event_type != "webhook":
+            return False
+        if event.channel not in ("github", "gitea"):
+            return False
+        git_event = params.get("git_event", "")
+        return not git_event or git_event == event.extra.get("event", "")
+
     return False
 
 
@@ -167,6 +206,52 @@ def _eval_condition(data: dict, event: ButlerEvent) -> bool:
     if subtype == "message_contains":
         kw = params.get("keyword", "").lower()
         return bool(kw) and kw in event.message_text.lower()
+
+    # ── E-Mail-Bedingungen ────────────────────────────────────────────────────
+    if subtype == "email_from_contains":
+        kw = params.get("keyword", "").lower()
+        return bool(kw) and kw in event.extra.get("from", "").lower()
+
+    if subtype == "email_subject_contains":
+        kw = params.get("keyword", "").lower()
+        return bool(kw) and kw in event.extra.get("subject", "").lower()
+
+    if subtype == "email_body_contains":
+        kw = params.get("keyword", "").lower()
+        return bool(kw) and kw in event.extra.get("body_plain", "").lower()
+
+    # ── Webhook / Git-Bedingungen ─────────────────────────────────────────────
+    if subtype == "payload_field_contains":
+        field_path = params.get("field", "")
+        kw = params.get("value", "").lower()
+        if not field_path or not kw:
+            return True
+        # Punkt-Notation: "pull_request.state" → payload["pull_request"]["state"]
+        val = event.extra.get("payload", {})
+        for key in field_path.split("."):
+            if isinstance(val, dict):
+                val = val.get(key, "")
+            else:
+                val = ""
+                break
+        return kw in str(val).lower()
+
+    if subtype == "git_branch_is":
+        branch = params.get("branch", "")
+        return bool(branch) and branch == event.extra.get("branch", "")
+
+    if subtype == "git_author_is":
+        author = params.get("author", "")
+        return bool(author) and author == event.extra.get("author", "")
+
+    # ── Discord-Event-Bedingungen ─────────────────────────────────────────────
+    if subtype == "discord_emoji_is":
+        emoji = params.get("emoji", "")
+        return bool(emoji) and emoji == event.extra.get("emoji", "")
+
+    if subtype == "discord_user_in_list":
+        users = params.get("users", [])
+        return event.extra.get("user_id", "") in users
 
     return True
 
