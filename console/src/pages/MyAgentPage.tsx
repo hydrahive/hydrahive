@@ -1928,7 +1928,17 @@ function WhatsAppTab() {
   async function saveCfg() {
     setCfgSaving(true); setMsg("");
     try {
-      await api.updateWhatsAppConfig(cfg);
+      // Noch offene Eingaben automatisch übernehmen
+      const finalCfg = {
+        ...cfg,
+        allowed_numbers: numInput.trim()   ? [...cfg.allowed_numbers,  numInput.trim()]   : cfg.allowed_numbers,
+        blocked_numbers: blockInput.trim() ? [...cfg.blocked_numbers, blockInput.trim()] : cfg.blocked_numbers,
+        owner_numbers:   ownerInput.trim() ? [...cfg.owner_numbers,   ownerInput.trim()] : cfg.owner_numbers,
+      };
+      if (numInput.trim())   { setCfg(finalCfg); setNumInput(""); }
+      if (blockInput.trim()) { setCfg(finalCfg); setBlockInput(""); }
+      if (ownerInput.trim()) { setCfg(finalCfg); setOwnerInput(""); }
+      await api.updateWhatsAppConfig(finalCfg);
       setMsg("Gespeichert ✓");
       setTimeout(() => setMsg(""), 3000);
     } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
