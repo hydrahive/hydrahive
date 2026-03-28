@@ -144,13 +144,16 @@ systemctl daemon-reload
 systemctl enable "${VW_SERVICE}"
 systemctl restart "${VW_SERVICE}"
 
-# --- 8. nginx /vault/ Proxy ---
-if [ -f "${NGINX_CONF}" ] && ! grep -q "location /vault/ {" "${NGINX_CONF}"; then
-    info "Füge nginx /vault/ Proxy ein..."
+# --- 8. nginx /vault/ Proxy (idempotent) ---
+if [ -f "${NGINX_CONF}" ]; then
+    info "Setze nginx /vault/ Proxy (idempotent)..."
     python3 - "${NGINX_CONF}" "${VW_PORT}" << 'PYEOF'
-import sys
+import sys, re
 conf_path, port = sys.argv[1], sys.argv[2]
 content = open(conf_path).read()
+# Alle bestehenden vault-Blöcke entfernen (verhindert Duplikate bei Reinstall)
+content = re.sub(r'\s*# Vaultwarden\n[\s\S]*?location /vault/notifications/hub \{[^}]+\}', '', content)
+content = re.sub(r'\s*location /vault/[^\{]*\{[^}]+\}', '', content)
 vault_block = f"""
     # Vaultwarden
     location /vault/ {{
@@ -167,7 +170,6 @@ vault_block = f"""
         proxy_set_header Host $host;
     }}
 """
-# Vor letzter schließender } einfügen
 content = content.rstrip().rstrip('}').rstrip() + '\n' + vault_block + '\n}\n'
 open(conf_path, 'w').write(content)
 PYEOF
