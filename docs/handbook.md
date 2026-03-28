@@ -55,6 +55,7 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 32. [Code Editor (VS Code im Browser)](#32-code-editor-vs-code-im-browser)
 33. [A2A Federation](#33-a2a-federation)
 34. [Benachrichtigungen](#34-benachrichtigungen)
+35. [Vaultwarden — Passwort-Manager](#35-vaultwarden--passwort-manager)
 
 ---
 
@@ -498,6 +499,30 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.
 ```
 
 > **Hot-Reload:** Skills werden bei jedem Request neu eingelesen. Kein Core-Neustart notwendig.
+
+### Skill-Pakete (Blueprint Editor)
+
+Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Der visuelle Blueprint Editor ermöglicht das Zusammenstellen und Verknüpfen von Skills — ähnlich wie im Butler-Editor.
+
+**Erreichbar unter:** **Skill-Pakete** in der Sidebar.
+
+**Knoten-Typen:**
+
+| Knoten | Beschreibung |
+|---|---|
+| **Skill** | Ein konkreter Skill — über Dropdown aus allen vorhandenen Skills auswählen |
+| **Bedingung** | Optionaler Bedingungsknoten — steuert ob ein Skill geladen wird |
+| **Abhängigkeit** | Verweis auf ein anderes Skill-Paket — ermöglicht Paket-Verschachtelung |
+| **Ausgabe** | Abschlussknoten — definiert den Endpunkt des Pakets |
+
+**Paket anlegen:**
+1. **Skill-Pakete** → **+ Neues Paket**
+2. Knoten aus der Palette auf die Canvas ziehen
+3. Knoten verbinden
+4. Name vergeben → **Speichern**
+5. Paket über den Toggle aktivieren/deaktivieren
+
+Aktive Pakete werden automatisch beim Laden des Agenten-Kontexts einbezogen. Pakete liegen unter `/etc/hydrahive/skill_packages/`.
 
 ### Self-Learning Skills (Agent-gesteuert)
 
@@ -1091,49 +1116,74 @@ Die Bridge-Konfiguration liegt in `/etc/hydrahive/whatsapp_config.json`:
 
 ---
 
-## 24. Mail / All-Inkl KAS
-
-HydraHive kann automatisch E-Mail-Postfächer bei All-Inkl anlegen. Die Zugangsdaten dafür werden in der Webkonsole eingetragen.
-
-### Einrichtung in der Webkonsole
-
-**Einstellungen → Tab "Mail / KAS"**
-
-| Feld | Beschreibung | Beispiel |
-|---|---|---|
-| **KAS-Login** | KAS-API-Benutzername (nicht der E-Mail-Login!) | `w012345e` |
-| **KAS-Passwort** | KAS-API-Passwort | `••••••••` |
-| **Standard-Domain** | Wird verwendet wenn beim Mailanlegen keine Domain angegeben wird | `deine-domain.de` |
-| **SMTP-Host** | Ausgehender Mail-Server | `dd12345.kasserver.com` |
-| **SMTP-Port** | Port für SMTP (Standard: 587) | `587` |
-
-### Wo finde ich diese Daten?
-
-- **KAS-Login und Passwort**: All-Inkl KAS-Panel → Zugangsdaten → *KAS-API-Zugang* (nicht der normale E-Mail-Login)
-- **SMTP-Host**: KAS-Panel → E-Mail → Server-Einstellungen
-
-### Wo werden die Daten gespeichert?
-
-Die Konfiguration liegt verschlüsselt in `/etc/hydrahive/kas.json` (nur für den Service-User lesbar, chmod 600).
-
----
-
 ## 23. Discord-Integration
 
 HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen und antworten.
 
-### Konfiguration
+### Einrichten
 
 1. **Mein Agent** → Tab **Plattformen** → Discord
 2. Bot-Token eingeben (aus dem Discord Developer Portal)
-3. Kanal-ID auswählen oder eingeben
-4. **Verbinden** klicken
+3. Guild-ID und Kanal-IDs eingeben → **Verbinden**
+
+Bot-Token und Guild-ID findest du im [Discord Developer Portal](https://discord.com/developers/applications) unter Applications → Deine App → Bot (Token) bzw. Guild Settings (Server-ID bei aktiviertem Developer Mode).
 
 ### Funktionsumfang
 
 - Eingehende Nachrichten werden an den persönlichen Agenten weitergeleitet
 - Antworten werden im gleichen Kanal gepostet
 - **Loop-Detektion:** Bot-zu-Bot-Nachrichten werden automatisch unterdrückt (kein Echo-Loop)
+
+### Discord-Tools für Agenten
+
+Über die Tool-Auswahl (**Mein Agent → Einstellungen → Erlaubte Tools**) kannst du dem Agenten weitere Discord-Werkzeuge freischalten:
+
+| Tool | Beschreibung |
+|---|---|
+| `discord_send` | Nachricht in einen Channel senden |
+| `discord_read` | Letzte Nachrichten aus einem Channel lesen |
+| `discord_list_channels` | Text-Channels der Guild auflisten |
+| `discord_list_all_channels` | Alle Channels inkl. Kategorien auflisten |
+| `discord_create_category` | Neue Kategorie erstellen |
+| `discord_create_channel` | Neuen Text-Channel erstellen |
+| `discord_delete_channel` | Channel oder Kategorie löschen |
+| `discord_set_topic` | Channel-Topic setzen |
+| `discord_rename_channel` | Channel umbenennen |
+| `discord_list_members` | Mitglieder der Guild auflisten |
+| `discord_list_roles` | Rollen der Guild auflisten |
+| `discord_delete_message` | Nachricht löschen |
+| `discord_pin_message` | Nachricht anpinnen |
+
+### Erweiterte Konfiguration
+
+**Filter:**
+
+| Einstellung | Standard | Beschreibung |
+|---|---|---|
+| **Bots ignorieren** | An | Nachrichten anderer Bots werden nicht an den Agenten weitergegeben |
+| **Nur bei @Erwähnung** | Aus | Agent reagiert nur wenn er direkt im Channel @erwähnt wird |
+| **User-Whitelist** | Leer | Nur diese Discord-User-IDs dürfen den Agenten erreichen |
+| **User-Blacklist** | Leer | Diese Discord-User-IDs werden ignoriert |
+| **Rollen-Whitelist** | Leer | Nur Mitglieder mit diesen Rollen-IDs dürfen schreiben |
+| **Rollen-Blacklist** | Leer | Mitglieder mit diesen Rollen werden ignoriert |
+
+**Channel-Modi:**
+
+Pro Channel kann ein Modus festgelegt werden:
+
+| Modus | Verhalten |
+|---|---|
+| `rw` (Standard) | Agent liest und antwortet |
+| `ro` | Agent liest nur — keine Antworten in diesem Channel |
+
+**Loop-Detektion:**
+
+| Einstellung | Standard | Beschreibung |
+|---|---|---|
+| Loop-Detektion | An | Aktiviert den Circuit Breaker |
+| Bot-Schwellenwert | 3 | Wie viele Bot-Nachrichten vor dem Auslösen |
+| PingPong-Fenster | 30s | Zeitfenster für Schnell-Nachrichten-Erkennung |
+| Cooldown | 300s | Wie lange der Circuit Breaker geschlossen bleibt |
 
 ### Hinweis
 
@@ -1543,3 +1593,44 @@ Glocken-Icon oben rechts in der Konsole.
 ### Technisch
 
 Benachrichtigungen werden via SSE (Server-Sent Events) in Echtzeit gepusht — kein Polling. Verbindungsunterbrechungen werden automatisch wiederhergestellt.
+
+---
+
+## 35. Vaultwarden — Passwort-Manager
+
+Vaultwarden ist ein selbst-gehosteter Passwort-Manager (kompatibel mit dem Bitwarden-Protokoll). Er ermöglicht das sichere Speichern und Abrufen von Passwörtern und Secrets — auch durch Agenten.
+
+### Voraussetzung
+
+Vaultwarden muss über den **Erweiterungs-Manager** installiert sein. Die Installation baut Vaultwarden aus dem Rust-Source-Code — das dauert beim ersten Mal ca. 5–10 Minuten.
+
+### Erreichbar unter
+
+- **Web-Oberfläche:** `https://<server>/vault/`
+- **Admin-Panel:** `https://<server>/vault/admin` (Token in `/etc/hydrahive/admin_credentials`)
+
+### Erstzugang
+
+Neue Konten können vom Admin per Einladung angelegt werden (`SIGNUPS_ALLOWED=false`). Im Admin-Panel unter `/vault/admin` → **Invite User** die E-Mail-Adresse eintragen. Der Nutzer erhält eine Einladung und kann sich ein Konto anlegen.
+
+### Bitwarden-Client verbinden
+
+Der Standard-Bitwarden-Client (Browser-Extension, Desktop, Mobil) verbindet sich mit der eigenen Instanz:
+
+1. Bitwarden öffnen → **Server-URL ändern**
+2. Custom URL: `https://<server>/vault`
+3. Anmelden mit den zuvor angelegten Zugangsdaten
+
+### Daten
+
+- **Daten:** `/var/lib/vaultwarden/`
+- **Konfiguration:** `/etc/hydrahive/vaultwarden.env`
+- **Admin-Token:** In `/etc/hydrahive/admin_credentials` unter `vaultwarden_admin_token`
+
+### Service-Verwaltung
+
+```bash
+sudo systemctl status vaultwarden
+sudo journalctl -u vaultwarden -n 50
+sudo systemctl restart vaultwarden
+```

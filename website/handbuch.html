@@ -265,7 +265,7 @@
     <a href="#projekte">5. Projekte anlegen</a>
     <a href="#chat">6. Chat verwenden</a>
     <a href="#llm">7. LLM-Konfiguration</a>
-    <a href="#skills">8. Skills</a>
+    <a href="#skills">8. Skills &amp; Skill-Pakete</a>
     <div class="toc-section">Mein Agent</div>
     <a href="#mein-agent">9. Persönlicher Agent</a>
     <a href="#memory">10. Gedächtnis-System</a>
@@ -286,6 +286,18 @@
     <a href="#api-usage">23. API Usage & Kosten</a>
     <a href="#diagnose">24. Diagnose & Tests</a>
     <a href="#troubleshooting">25. Troubleshooting</a>
+    <div class="toc-section">Messenger &amp; Automatisierung</div>
+    <a href="#whatsapp">26. WhatsApp</a>
+    <a href="#butler">27. Butler — Automatisierung</a>
+    <a href="#schedules">28. Schedules</a>
+    <div class="toc-section">Erweiterungs-Module</div>
+    <a href="#extensions">29. Erweiterungs-Manager</a>
+    <a href="#searxng">30. Web-Suche (SearXNG)</a>
+    <a href="#code-editor">31. Code Editor</a>
+    <a href="#vaultwarden">32. Vaultwarden</a>
+    <div class="toc-section">Verbund &amp; Benachrichtigungen</div>
+    <a href="#federation">33. A2A Federation</a>
+    <a href="#notifications">34. Benachrichtigungen</a>
   </nav>
 </aside>
 
@@ -632,6 +644,17 @@ Umsatzsteuer (USt) beträgt in Deutschland standardmäßig 19%.
 Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
 
     <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu eingelesen. Kein Neustart notwendig.</div>
+
+    <h3>Skill-Pakete (Blueprint Editor)</h3>
+    <p>Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Der visuelle Blueprint Editor ist unter <strong>Skill-Pakete</strong> in der Sidebar erreichbar.</p>
+    <table>
+      <tr><th>Knoten</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Skill</strong></td><td>Ein konkreter Skill aus der Skill-Liste</td></tr>
+      <tr><td><strong>Bedingung</strong></td><td>Optionaler Filter — wann der Skill geladen wird</td></tr>
+      <tr><td><strong>Abhängigkeit</strong></td><td>Verweis auf ein anderes Skill-Paket</td></tr>
+      <tr><td><strong>Ausgabe</strong></td><td>Abschlussknoten des Pakets</td></tr>
+    </table>
+    <p>Aktive Pakete werden automatisch beim Laden des Agenten-Kontexts einbezogen. Pakete liegen unter <code>/etc/hydrahive/skill_packages/</code>.</p>
   </section>
 
   <!-- 9. PERSÖNLICHER AGENT -->
@@ -934,16 +957,28 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
   <!-- 21. DISCORD -->
   <section class="chapter" id="discord">
     <h2>21. Discord-Integration</h2>
-    <p>HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen und antworten.</p>
+    <p>HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen, antworten und den Server aktiv verwalten.</p>
 
-    <h3>Konfiguration</h3>
+    <h3>Einrichten</h3>
     <ol class="steps">
       <li><span class="step-num">1</span><span><strong>Mein Agent</strong> → Tab <strong>Plattformen</strong> → Discord</span></li>
-      <li><span class="step-num">2</span><span>Bot-Token eingeben (aus dem Discord Developer Portal)</span></li>
-      <li><span class="step-num">3</span><span>Kanal-ID eingeben → <strong>Verbinden</strong></span></li>
+      <li><span class="step-num">2</span><span>Bot-Token eingeben (Discord Developer Portal → Applications → Bot)</span></li>
+      <li><span class="step-num">3</span><span>Guild-ID und Kanal-IDs eingeben → <strong>Verbinden</strong></span></li>
     </ol>
 
-    <p>Die eingebaute <strong>Loop-Detektion</strong> verhindert Echo-Schleifen bei Bot-zu-Bot-Nachrichten automatisch.</p>
+    <h3>Filter &amp; Channel-Modi</h3>
+    <table>
+      <tr><th>Einstellung</th><th>Standard</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Bots ignorieren</strong></td><td>An</td><td>Nachrichten anderer Bots werden nicht weitergegeben</td></tr>
+      <tr><td><strong>Nur bei @Erwähnung</strong></td><td>Aus</td><td>Agent reagiert nur wenn direkt @erwähnt</td></tr>
+      <tr><td><strong>User-Whitelist / -Blacklist</strong></td><td>Leer</td><td>Nachrichten nur von/nicht von bestimmten Discord-User-IDs</td></tr>
+      <tr><td><strong>Rollen-Whitelist / -Blacklist</strong></td><td>Leer</td><td>Filter nach Discord-Rollen-IDs</td></tr>
+      <tr><td><strong>Channel-Modus <code>ro</code></strong></td><td>—</td><td>Agent liest nur, antwortet nicht in diesem Channel</td></tr>
+    </table>
+
+    <h3>Loop-Detektion</h3>
+    <p>Der eingebaute Circuit Breaker erkennt Bot-zu-Bot-Loops automatisch und sperrt den Channel für eine konfigurierbare Cooldown-Zeit (Standard 5 Minuten). Einstellbar: Schwellenwert, PingPong-Fenster, Cooldown.</p>
+
     <div class="note">Discord gilt als „untrusted" Kanal — Nachrichten werden wie externe Inputs behandelt, nicht mit erhöhten Rechten.</div>
   </section>
 
@@ -1027,6 +1062,235 @@ sudo tail -f /var/log/hydrahive/audit.jsonl | python3 -m json.tool
 
 # nginx-Logs
 sudo tail -f /var/log/nginx/error.log</code></pre>
+  </section>
+
+  <!-- 26. WHATSAPP -->
+  <section class="chapter" id="whatsapp">
+    <h2>26. WhatsApp-Integration</h2>
+    <p>HydraHive unterstützt WhatsApp als Kommunikationskanal. Eine Node.js-basierte Bridge (Baileys) verbindet WhatsApp mit dem Agenten-System.</p>
+
+    <h3>Funktionsumfang</h3>
+    <table>
+      <tr><th>Funktion</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Nachrichten empfangen</strong></td><td>Eingehende Nachrichten werden an den konfigurierten Agenten weitergeleitet</td></tr>
+      <tr><td><strong>Nachrichten senden</strong></td><td>Agenten können Nachrichten an Kontakte oder Gruppen senden</td></tr>
+      <tr><td><strong>Sprachnachrichten</strong></td><td>Voice Notes werden automatisch per Whisper transkribiert</td></tr>
+      <tr><td><strong>Text-to-Speech</strong></td><td>Agenten-Antworten können als Sprachnachricht zurückgesendet werden</td></tr>
+    </table>
+
+    <h3>Einrichten</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Service starten: <code>sudo systemctl start hydrahive-whatsapp-bridge</code></span></li>
+      <li><span class="step-num">2</span><span>QR-Code im Log: <code>sudo journalctl -u hydrahive-whatsapp-bridge -n 50</code></span></li>
+      <li><span class="step-num">3</span><span>WhatsApp auf Mobilgerät → <strong>Verknüpfte Geräte</strong> → QR-Code scannen</span></li>
+      <li><span class="step-num">4</span><span>Bridge läuft dauerhaft im Hintergrund</span></li>
+    </ol>
+
+    <h3>Butler-Integration</h3>
+    <p>Eingehende WhatsApp-Nachrichten durchlaufen den <strong>Butler</strong> bevor sie den Agenten erreichen. Flows können Nachrichten filtern, umleiten oder mit festen Antworten abfangen — auch außerhalb der Geschäftszeiten.</p>
+
+    <div class="note">Die WhatsApp-Verknüpfung muss nach einem Geräte-Reset oder längerer Inaktivität erneuert werden. Der QR-Code erscheint dann erneut im Service-Log.</div>
+  </section>
+
+  <!-- 27. BUTLER -->
+  <section class="chapter" id="butler">
+    <h2>27. Butler — Visuelle Automatisierungsregeln</h2>
+    <p>Butler ist ein Blueprint-Editor für Messenger-Automatisierung. Regeln werden visuell als verbundene Knoten definiert — ähnlich Unreal Engine Blueprints oder n8n.</p>
+
+    <h3>Konzept</h3>
+    <p>Ein Butler-Flow besteht aus Trigger-Knoten, Bedingungsknoten und Aktionsknoten:</p>
+    <pre><code>[Nachricht empfangen]
+        ↓
+[Zeitfenster 23:00–08:00]
+    ja ↓            nein ↓
+[Agent antwortet]  [Ignorieren]</code></pre>
+
+    <h3>Knoten-Typen</h3>
+    <table>
+      <tr><th>Typ</th><th>Knoten</th><th>Beschreibung</th></tr>
+      <tr><td>Trigger</td><td>Nachricht empfangen</td><td>Kanal wählbar: Alle / WhatsApp / Telegram / Discord</td></tr>
+      <tr><td>Bedingung</td><td>Zeitfenster</td><td>Uhrzeit-Bereich — Übernacht (z.B. 23:00–08:00) unterstützt</td></tr>
+      <tr><td>Bedingung</td><td>Wochentag</td><td>Wochentage als Checkboxen</td></tr>
+      <tr><td>Bedingung</td><td>Kontakt bekannt?</td><td>Absender in der Kontaktliste?</td></tr>
+      <tr><td>Bedingung</td><td>Text enthält</td><td>Stichwort-Filter auf Nachrichteninhalt</td></tr>
+      <tr><td>Aktion</td><td>Agent antwortet</td><td>Leitet an gewählten Agenten weiter</td></tr>
+      <tr><td>Aktion</td><td>Agent mit Vorgabe</td><td>Wie „antwortet" + zusätzliche Instruktion</td></tr>
+      <tr><td>Aktion</td><td>Feste Antwort</td><td>Vordefinierter Text — kein LLM, sofortige Antwort</td></tr>
+      <tr><td>Aktion</td><td>Ignorieren</td><td>Nachricht stillschweigend verwerfen</td></tr>
+      <tr><td>Aktion</td><td>Weiterleiten</td><td>An anderen Agenten weiterleiten</td></tr>
+    </table>
+
+    <h3>Flow erstellen</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Butler</strong> → <strong>Neuen Flow anlegen</strong></span></li>
+      <li><span class="step-num">2</span><span>Knoten aus der Palette auf die Canvas ziehen</span></li>
+      <li><span class="step-num">3</span><span>Knoten verbinden — von Ausgabe-Punkt zu Eingabe-Punkt</span></li>
+      <li><span class="step-num">4</span><span>Knoten anklicken → Properties-Panel öffnet sich</span></li>
+      <li><span class="step-num">5</span><span>Name vergeben → <strong>Speichern</strong> → <strong>Aktiv</strong> schalten</span></li>
+    </ol>
+
+    <div class="note">Butler-Regeln greifen <strong>vor</strong> dem normalen Agenten-Processing. Ein „Ignorieren"-Flow verhindert dass die Nachricht den Agenten je erreicht.</div>
+  </section>
+
+  <!-- 28. SCHEDULES -->
+  <section class="chapter" id="schedules">
+    <h2>28. Schedules — Zeitgesteuerte Aufgaben</h2>
+    <p>Mit Schedules können Agenten zu festen Zeiten oder in regelmäßigen Abständen automatisch aktiviert werden.</p>
+
+    <h3>Schedule anlegen</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Schedules</strong> → <strong>+ Neuer Schedule</strong></span></li>
+      <li><span class="step-num">2</span><span>Agent auswählen und Aufgaben-Nachricht eingeben</span></li>
+      <li><span class="step-num">3</span><span>Zeitplan: einmalig (Datum + Uhrzeit) oder wiederkehrend (Cron-Ausdruck)</span></li>
+      <li><span class="step-num">4</span><span>Speichern → Schedule läuft ab sofort</span></li>
+    </ol>
+
+    <h3>Cron-Syntax</h3>
+    <pre><code>┌─────── Minute (0-59)
+│ ┌───── Stunde (0-23)
+│ │ ┌─── Tag des Monats (1-31)
+│ │ │ ┌─ Monat (1-12)
+│ │ │ │ └ Wochentag (0-6, 0=Sonntag)
+* * * * *
+
+Beispiele:
+0 8 * * 1-5    → Montag–Freitag um 08:00
+*/15 * * * *   → alle 15 Minuten
+0 0 * * *      → täglich um Mitternacht</code></pre>
+
+    <table>
+      <tr><th></th><th>Heartbeat</th><th>Schedule</th></tr>
+      <tr><td>Konfiguriert in</td><td>Agent-Einstellungen</td><td>Schedules-Seite</td></tr>
+      <tr><td>Trigger</td><td>Zeitintervall</td><td>Cron / Einmalig</td></tr>
+      <tr><td>Nachricht</td><td>Fest im Agent</td><td>Frei wählbar</td></tr>
+      <tr><td>Zweck</td><td>Monitoring, Watchdog</td><td>Aufgaben, Reports</td></tr>
+    </table>
+  </section>
+
+  <!-- 29. EXTENSIONS -->
+  <section class="chapter" id="extensions">
+    <h2>29. Erweiterungs-Manager</h2>
+    <p>Die Erweiterungsverwaltung ermöglicht das nachträgliche Installieren optionaler Komponenten direkt aus der Webkonsole — ohne SSH oder manuelle Befehle.</p>
+
+    <h3>Verfügbare Erweiterungen</h3>
+    <table>
+      <tr><th>Erweiterung</th><th>Beschreibung</th><th>Port</th></tr>
+      <tr><td><strong>SearXNG</strong></td><td>Datenschutzfreundliche Metasuchmaschine</td><td>8888</td></tr>
+      <tr><td><strong>Gitea</strong></td><td>Selbst-gehosteter Git-Server</td><td>3000</td></tr>
+      <tr><td><strong>Ollama</strong></td><td>Lokale LLM-Inferenz (GPU/CPU)</td><td>11434</td></tr>
+      <tr><td><strong>WhatsApp Bridge</strong></td><td>WhatsApp-Integration via Baileys</td><td>8767</td></tr>
+      <tr><td><strong>Headscale</strong></td><td>Self-hosted Tailscale-Koordinator</td><td>8089</td></tr>
+      <tr><td><strong>code-server</strong></td><td>VS Code im Browser</td><td>8080</td></tr>
+      <tr><td><strong>Vaultwarden</strong></td><td>Selbst-gehosteter Passwort-Manager</td><td>8768</td></tr>
+    </table>
+
+    <h3>Installation</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Gewünschte Erweiterung anklicken</span></li>
+      <li><span class="step-num">2</span><span><strong>Installieren</strong> drücken</span></li>
+      <li><span class="step-num">3</span><span>Live-Log verfolgen — Installation läuft im Hintergrund</span></li>
+      <li><span class="step-num">4</span><span>Bei Erfolg: Status wechselt auf <strong>Aktiv</strong></span></li>
+    </ol>
+
+    <div class="note"><strong>Deinstallation:</strong> Daten bleiben erhalten — nur Service und Binaries werden entfernt. Neue Erweiterungen werden automatisch mit System-Updates mitgeliefert.</div>
+  </section>
+
+  <!-- 30. SEARXNG -->
+  <section class="chapter" id="searxng">
+    <h2>30. Web-Suche (SearXNG)</h2>
+    <p>SearXNG ist eine selbst-gehostete Metasuchmaschine die mehrere Suchmaschinen gleichzeitig abfragt — ohne Tracking, ohne API-Key.</p>
+
+    <h3>Nutzung durch Agenten</h3>
+    <p>Nach der Installation steht das Tool <code>web_search</code> automatisch allen Agenten zur Verfügung:</p>
+    <pre><code>→ web_search(query="Python 3.13 release notes")
+→ Ergebnisse werden direkt in den Kontext injiziert</code></pre>
+
+    <p>Die SearXNG-Oberfläche ist unter <strong>Web-Suche</strong> in der Sidebar eingebettet (iframe). Die Konfigurationsdatei liegt unter <code>/etc/searxng/settings.yml</code>.</p>
+  </section>
+
+  <!-- 31. CODE EDITOR -->
+  <section class="chapter" id="code-editor">
+    <h2>31. Code Editor (VS Code im Browser)</h2>
+    <p>code-server bringt VS Code vollständig in den Browser — inklusive Extensions, Terminal und Git-Integration.</p>
+
+    <h3>Voraussetzung</h3>
+    <p>code-server muss über den <strong>Erweiterungs-Manager</strong> installiert sein. Erreichbar unter <strong>Code Editor</strong> in der Sidebar.</p>
+
+    <h3>Funktionsumfang</h3>
+    <ul>
+      <li>Vollständige VS Code Oberfläche im Browser</li>
+      <li>Integriertes Terminal (SSH zum HydraHive-Server)</li>
+      <li>Git-Integration (Gitea)</li>
+      <li>Extension-Marketplace (Open-VSX)</li>
+      <li>Dark Mode, Themes, alle Keybindings</li>
+    </ul>
+
+    <p>code-server läuft unter dem <code>hydrahive</code>-Benutzer auf Port 8080 (intern). nginx proxied unter <code>/code/</code>. Konfiguration: <code>/opt/hydrahive/.config/code-server/config.yaml</code>.</p>
+  </section>
+
+  <!-- 32. VAULTWARDEN -->
+  <section class="chapter" id="vaultwarden">
+    <h2>32. Vaultwarden — Passwort-Manager</h2>
+    <p>Vaultwarden ist ein selbst-gehosteter Passwort-Manager kompatibel mit dem Bitwarden-Protokoll. Er ermöglicht das sichere Speichern und Abrufen von Passwörtern und Secrets.</p>
+
+    <h3>Voraussetzung</h3>
+    <p>Vaultwarden muss über den <strong>Erweiterungs-Manager</strong> installiert sein. Die Installation baut aus Rust-Source-Code — beim ersten Mal ca. 5–10 Minuten.</p>
+
+    <h3>Zugangsdaten</h3>
+    <ul>
+      <li><strong>Web-Oberfläche:</strong> <code>https://&lt;server&gt;/vault/</code></li>
+      <li><strong>Admin-Panel:</strong> <code>https://&lt;server&gt;/vault/admin</code> (Token in <code>/etc/hydrahive/admin_credentials</code>)</li>
+    </ul>
+
+    <h3>Ersten Nutzer anlegen</h3>
+    <p>Neue Registrierungen sind standardmäßig deaktiviert. Im Admin-Panel <strong>Invite User</strong> — der Nutzer erhält eine Einladungsmail und legt ein Konto an.</p>
+
+    <h3>Bitwarden-Client verbinden</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span>Bitwarden öffnen → <strong>Server-URL ändern</strong></span></li>
+      <li><span class="step-num">2</span><span>Custom URL: <code>https://&lt;server&gt;/vault</code></span></li>
+      <li><span class="step-num">3</span><span>Anmelden mit den angelegten Zugangsdaten</span></li>
+    </ol>
+
+    <div class="note">Daten: <code>/var/lib/vaultwarden/</code> — Konfiguration: <code>/etc/hydrahive/vaultwarden.env</code></div>
+  </section>
+
+  <!-- 33. A2A FEDERATION -->
+  <section class="chapter" id="federation">
+    <h2>33. A2A Federation</h2>
+    <p>HydraHive unterstützt das FastA2A-Protokoll für Agent-zu-Agent-Kommunikation zwischen verschiedenen HydraHive-Instanzen oder kompatiblen Systemen.</p>
+
+    <h3>Funktionsweise</h3>
+    <p>Eine HydraHive-Instanz kann als <strong>A2A-Server</strong> fungieren — andere Instanzen (Peers) können Agenten direkt ansprechen und Aufgaben delegieren. Jeder Agent hat eine maschinenlesbare Agent Card die seine Fähigkeiten beschreibt.</p>
+
+    <h3>Peer einrichten</h3>
+    <ol class="steps">
+      <li><span class="step-num">1</span><span><strong>Federation</strong> → <strong>Peers</strong> → <strong>+ Peer hinzufügen</strong></span></li>
+      <li><span class="step-num">2</span><span>URL der anderen HydraHive-Instanz eingeben</span></li>
+      <li><span class="step-num">3</span><span>Agent-Karten werden automatisch geladen</span></li>
+      <li><span class="step-num">4</span><span>Agenten können via <code>remote_agent</code>-Tool peer-übergreifend kommunizieren</span></li>
+    </ol>
+
+    <div class="note">Alle A2A-Verbindungen werden via Bearer-Token authentifiziert. <strong>Federation</strong> ist nur für Admins sichtbar.</div>
+  </section>
+
+  <!-- 34. NOTIFICATIONS -->
+  <section class="chapter" id="notifications">
+    <h2>34. Benachrichtigungen</h2>
+    <p>Das Notification Center zeigt systemweite Ereignisse in Echtzeit — Agenten-Fehler, Update-Status, abgeschlossene Tasks.</p>
+
+    <h3>Erreichbar über</h3>
+    <p>Glocken-Icon oben rechts in der Konsole.</p>
+
+    <table>
+      <tr><th>Typ</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Info</strong></td><td>Allgemeine Systemmeldungen</td></tr>
+      <tr><td><strong>Erfolg</strong></td><td>Abgeschlossene Updates, erfolgreiche Aktionen</td></tr>
+      <tr><td><strong>Warnung</strong></td><td>Nicht-kritische Probleme (z.B. Heartbeat-Verzögerung)</td></tr>
+      <tr><td><strong>Fehler</strong></td><td>Kritische Fehler die sofortige Aufmerksamkeit erfordern</td></tr>
+    </table>
+
+    <p>Benachrichtigungen werden via SSE (Server-Sent Events) in Echtzeit gepusht — kein Polling. Verbindungsunterbrechungen werden automatisch wiederhergestellt.</p>
   </section>
 
 </main>
