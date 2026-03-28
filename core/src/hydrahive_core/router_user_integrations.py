@@ -419,6 +419,7 @@ def register_user_integration_routes(
         key_file = wks_keys_dir / username
         with tempfile.NamedTemporaryFile(delete=False, suffix="_wks") as tf:
             tmp_path = tf.name
+        _os.unlink(tmp_path)  # ssh-keygen braucht nicht-existente Zieldatei
         try:
             _sp.run(
                 ["ssh-keygen", "-t", "ed25519", "-f", tmp_path, "-N", "", "-C", f"hydrahive-wks@{username}"],
