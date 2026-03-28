@@ -223,10 +223,11 @@ function ActionNodeComp({ data, selected }: { data: ButlerNodeData; selected: bo
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const NODE_TYPES: NodeTypes = {
-  triggerNode:   TriggerNodeComp as unknown as React.ComponentType,
-  conditionNode: ConditionNodeComp as unknown as React.ComponentType,
-  actionNode:    ActionNodeComp as unknown as React.ComponentType,
+  triggerNode:   TriggerNodeComp as any,
+  conditionNode: ConditionNodeComp as any,
+  actionNode:    ActionNodeComp as any,
 };
 
 // ── Node Palette (left sidebar) ────────────────────────────────────────────
