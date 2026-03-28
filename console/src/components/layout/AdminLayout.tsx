@@ -25,6 +25,7 @@ import {
   Globe,
   Code2,
   Puzzle,
+  Workflow,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -163,6 +164,7 @@ export function AdminLayout() {
       { to: "/code-editor",icon: Code2,     label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
       { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
       { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },
+      { to: "/butler",     icon: Workflow,  label: t("nav.butler"),     hint: t("navHint.butler") },
     ],
   };
 

@@ -39,6 +39,7 @@ from .router_doctor import register_doctor_routes
 from .router_searxng import register_searxng_routes
 from .router_codeserver import register_codeserver_routes
 from .router_extensions import register_extension_routes
+from .router_butler import register_butler_routes
 from .router_a2a import register_a2a_routes
 from .router_notifications import register_notification_routes
 from .notification_service import notification_service
@@ -1224,6 +1225,7 @@ register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
 register_codeserver_routes(admin_router, require_admin=require_admin)
 register_extension_routes(admin_router, require_admin=require_admin)
+register_butler_routes(admin_router, require_admin=require_admin)
 register_a2a_routes(
     public_router,
     admin_router,

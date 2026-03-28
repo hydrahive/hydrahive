@@ -17,6 +17,7 @@
     "codeEditor": "Code Editor",
     "schedules": "Schedules",
     "federation": "Federation",
+    "butler": "Butler",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
@@ -37,7 +38,8 @@
     "extensions": "Optionale Komponenten verwalten",
     "codeEditor": "VS Code im Browser",
     "schedules": "Automatisierte Agenten-Tasks",
-    "federation": "Peer-zu-Peer Agenten-Federation"
+    "federation": "Peer-zu-Peer Agenten-Federation",
+    "butler": "Visuelle Automatisierungsregeln"
   },
   "layout": {
     "controlFabric": "Control Fabric",
