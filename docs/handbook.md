@@ -63,7 +63,8 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 ### Voraussetzungen
 
 - Ubuntu 22.04 oder 24.04 LTS (amd64)
-- Mindestens 4 GB RAM, 20 GB Disk
+- Mindestens 8 GB RAM, 80 GB Disk
+- Empfohlen: 32 GB RAM, 1 TB Disk (bei mehreren Nutzern, Extensions und Projekten mit großen Dateien)
 - Root-Zugriff
 - Internetzugang für Download
 
