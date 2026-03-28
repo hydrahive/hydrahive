@@ -142,7 +142,10 @@ SVCEOF
 
 systemctl daemon-reload
 systemctl enable "${VW_SERVICE}"
-systemctl restart "${VW_SERVICE}"
+systemctl restart "${VW_SERVICE}" || {
+    warn "Vaultwarden-Start fehlgeschlagen — pruefe: journalctl -u vaultwarden -n 30"
+    journalctl -u "${VW_SERVICE}" -n 20 --no-pager 2>/dev/null || true
+}
 
 # --- 8. nginx /vault/ Proxy (idempotent) ---
 if [ -f "${NGINX_CONF}" ]; then
