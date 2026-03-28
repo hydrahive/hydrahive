@@ -1,10 +1,10 @@
 """router_butler.py — Butler Flow CRUD API
 
-GET    /admin/butler/flows               → alle Flows
-POST   /admin/butler/flows               → neuer Flow
-PUT    /admin/butler/flows/{id}          → Flow überschreiben (Nodes + Edges)
-PATCH  /admin/butler/flows/{id}/toggle   → aktivieren / deaktivieren
-DELETE /admin/butler/flows/{id}          → Flow löschen
+GET    /admin/admin/butler/flows               → alle Flows
+POST   /admin/admin/butler/flows               → neuer Flow
+PUT    /admin/admin/butler/flows/{id}          → Flow überschreiben (Nodes + Edges)
+PATCH  /admin/admin/butler/flows/{id}/toggle   → aktivieren / deaktivieren
+DELETE /admin/admin/butler/flows/{id}          → Flow löschen
 """
 from __future__ import annotations
 
@@ -39,11 +39,11 @@ def _check_id(flow_id: str) -> None:
 
 def register_butler_routes(router: APIRouter, require_admin) -> None:
 
-    @router.get("/butler/flows")
+    @router.get("/admin/butler/flows")
     async def list_flows(_auth=Depends(require_admin)):
         return [f.model_dump() for f in load_flows()]
 
-    @router.post("/butler/flows")
+    @router.post("/admin/butler/flows")
     async def create_flow(req: FlowSaveRequest, _auth=Depends(require_admin)):
         flow = ButlerFlow(
             id=str(uuid.uuid4()),
@@ -55,7 +55,7 @@ def register_butler_routes(router: APIRouter, require_admin) -> None:
         save_flow(flow)
         return flow.model_dump()
 
-    @router.put("/butler/flows/{flow_id}")
+    @router.put("/admin/butler/flows/{flow_id}")
     async def update_flow(
         flow_id: str, req: FlowSaveRequest, _auth=Depends(require_admin)
     ):
@@ -72,7 +72,7 @@ def register_butler_routes(router: APIRouter, require_admin) -> None:
         save_flow(flow)
         return flow.model_dump()
 
-    @router.patch("/butler/flows/{flow_id}/toggle")
+    @router.patch("/admin/butler/flows/{flow_id}/toggle")
     async def toggle_flow(flow_id: str, _auth=Depends(require_admin)):
         _check_id(flow_id)
         flow = get_flow(flow_id)
@@ -82,7 +82,7 @@ def register_butler_routes(router: APIRouter, require_admin) -> None:
         save_flow(flow)
         return {"enabled": flow.enabled}
 
-    @router.delete("/butler/flows/{flow_id}")
+    @router.delete("/admin/butler/flows/{flow_id}")
     async def delete_flow_endpoint(flow_id: str, _auth=Depends(require_admin)):
         _check_id(flow_id)
         if not delete_flow(flow_id):
