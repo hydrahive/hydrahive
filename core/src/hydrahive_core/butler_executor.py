@@ -54,6 +54,19 @@ class ButlerEvent:
     extra: dict = field(default_factory=dict)
 
 
+def has_active_flows(channel: str) -> bool:
+    """Gibt True zurück wenn mindestens ein aktiver Flow für diesen Kanal existiert."""
+    for flow in load_flows():
+        if not flow.enabled:
+            continue
+        for node in flow.nodes:
+            if node.get("type") == "triggerNode":
+                params = node.get("data", {}).get("params", {})
+                if params.get("channel") == channel:
+                    return True
+    return False
+
+
 async def check_flows(event: ButlerEvent) -> list[dict[str, Any]]:
     """Prüft alle aktiven Flows gegen ein Event. Gibt Aktionsliste zurück."""
     result: list[dict[str, Any]] = []
