@@ -86,8 +86,16 @@ $SSH "$VM" "for i in \$(seq 1 20); do sleep 1; state=\$(systemctl is-active ${SE
 $SSH "$VM" "sudo systemctl status ${SERVICE_NAME} --no-pager | head -4"
 
 echo ""
-echo "==> [5d/5] WhatsApp Bridge — node_modules prüfen"
-$SSH "$VM" "if [ -f ${INSTALL_DIR}/whatsapp-bridge/package.json ] && [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '   node_modules fehlen — führe npm install aus...'; cd ${INSTALL_DIR}/whatsapp-bridge && sudo npm install -q; fi; echo '   node_modules OK'; sudo systemctl restart hydrahive-whatsapp-bridge 2>/dev/null && echo '   Bridge neu gestartet' || echo '   Bridge nicht aktiv (übersprungen)'"
+echo "==> [5d/5] WhatsApp Bridge rsync + Neustart"
+$SSH "$VM" "sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/whatsapp-bridge/ 2>/dev/null || true"
+rsync -av --delete --no-owner --no-group \
+  --exclude='node_modules' --exclude='.git' --exclude='*.session' \
+  -e "ssh -i $SSH_KEY" \
+  "$REPO/whatsapp-bridge/" \
+  "$VM:${INSTALL_DIR}/whatsapp-bridge/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/whatsapp-bridge/"
+$SSH "$VM" "if [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '   node_modules fehlen — führe npm install aus...'; cd ${INSTALL_DIR}/whatsapp-bridge && sudo npm install -q && echo '   npm install OK'; else echo '   node_modules OK'; fi"
+$SSH "$VM" "sudo systemctl restart hydrahive-whatsapp-bridge 2>/dev/null && echo '   Bridge neu gestartet' || echo '   Bridge nicht aktiv (übersprungen)'"
 
 echo ""
 echo "==> [6/5] Gitea-Status prüfen"
