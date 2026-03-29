@@ -74,6 +74,15 @@ class ExecutionModesConfig(BaseModel):
     root: ExecutionModeProfile | None = None
 
 
+class AgentSource(BaseModel):
+    """Eine Wissensquelle oder Suchmaschine die dem Agenten zugewiesen ist."""
+    model_config = {"extra": "ignore"}
+
+    name:        str
+    url:         str
+    description: str = ""
+
+
 class AgentConfig(BaseModel):
     model_config = {"extra": "ignore"}
 
@@ -87,6 +96,7 @@ class AgentConfig(BaseModel):
     tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
     allowed_agents:  list[str] = Field(default_factory=list)
     mcp_servers:     list[str] = Field(default_factory=list)
+    sources:         list[AgentSource] = Field(default_factory=list)
     max_tool_rounds: int       = 20
     heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
     heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)

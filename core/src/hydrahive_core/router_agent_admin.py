@@ -18,6 +18,7 @@ class CreateAgentRequest(BaseModel):
     fallback_models: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     allowed_agents: list[str] = Field(default_factory=list)
+    sources: list[dict] = Field(default_factory=list)
     max_tool_rounds: int | None = None
     heartbeat_interval: str = "30s"
     heartbeat_timeout: str = "90s"
@@ -42,6 +43,7 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         "tools": list(req.tools),
         "allowed_agents": list(req.allowed_agents),
         "mcp_servers": list(req.mcp_servers),
+        "sources": list(req.sources),
         "heartbeat": {
             "interval": req.heartbeat_interval,
             "timeout": req.heartbeat_timeout,

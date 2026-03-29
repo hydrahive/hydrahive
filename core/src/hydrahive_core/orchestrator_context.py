@@ -176,6 +176,22 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
 
+    # Agenten-Quellen — URLs/Suchmaschinen die diesem Agenten zugewiesen sind
+    if getattr(boss_cfg, "sources", None):
+        src_lines = []
+        for src in boss_cfg.sources:
+            line = f"- **{src.name}**: {src.url}"
+            if src.description:
+                line += f" — {src.description}"
+            src_lines.append(line)
+        parts.append(
+            "## Zugewiesene Quellen & Suchmaschinen\n\n"
+            "Nutze diese Quellen wenn du Informationen zu deinem Fachgebiet benötigst. "
+            "Rufe relevante Quellen mit `http_request` ab bevor du antwortest — "
+            "zitiere niemals aus dem Gedächtnis wenn eine Quelle verfügbar ist.\n\n"
+            + "\n".join(src_lines)
+        )
+
     # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
     _handbook_path = Path("/etc/hydrahive/system_handbook.md")
     if _handbook_path.exists():

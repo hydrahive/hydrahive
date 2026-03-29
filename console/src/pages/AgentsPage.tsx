@@ -34,6 +34,7 @@ const EMPTY_FORM = {
   fallback_models: [] as string[],
   mcp_servers: [] as string[],
   allowed_agents: [] as string[],
+  sources: [] as { name: string; url: string; description: string }[],
   max_tool_rounds: null as number | null,
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
@@ -194,6 +195,7 @@ export function AgentsPage() {
       fallback_models: cfg?.llm?.fallback_models ?? [],
       mcp_servers: cfg?.mcp_servers ?? [],
       allowed_agents: cfg?.allowed_agents ?? [],
+      sources: cfg?.sources ?? [],
       max_tool_rounds: cfg?.max_tool_rounds ?? null,
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
@@ -539,6 +541,52 @@ export function AgentsPage() {
                 </div>
               </div>
             )}
+
+            <div>
+              <p className="metric-kicker mb-3">Quellen & Suchmaschinen</p>
+              <div className="space-y-2">
+                {(form.sources as { name: string; url: string; description: string }[]).map((src, i) => (
+                  <div key={i} className="flex gap-2 items-start rounded-xl border border-border/60 bg-muted/20 p-2">
+                    <div className="flex-1 grid grid-cols-1 gap-1.5 min-w-0">
+                      <input
+                        value={src.name}
+                        onChange={(e) => {
+                          const s = [...form.sources]; s[i] = { ...s[i], name: e.target.value }; set("sources", s);
+                        }}
+                        placeholder="Name (z.B. Unreal Docs)"
+                        className="rounded-lg border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <input
+                        value={src.url}
+                        onChange={(e) => {
+                          const s = [...form.sources]; s[i] = { ...s[i], url: e.target.value }; set("sources", s);
+                        }}
+                        placeholder="https://..."
+                        className="rounded-lg border bg-background px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <input
+                        value={src.description}
+                        onChange={(e) => {
+                          const s = [...form.sources]; s[i] = { ...s[i], description: e.target.value }; set("sources", s);
+                        }}
+                        placeholder="Beschreibung (optional)"
+                        className="rounded-lg border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => set("sources", (form.sources as any[]).filter((_: any, j: number) => j !== i))}
+                      className="mt-1 rounded-lg p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >✕</button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => set("sources", [...form.sources, { name: "", url: "", description: "" }])}
+                  className="w-full rounded-xl border border-dashed border-border/60 py-2 text-xs text-muted-foreground hover:bg-accent/30 transition-colors"
+                >+ Quelle hinzufügen</button>
+              </div>
+            </div>
 
             <Field label={t("agents.soul")} hint={t("agents.soulHint")}>
               <textarea
