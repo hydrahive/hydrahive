@@ -264,6 +264,18 @@ def register_user_routes(
             "created_at": _dt.now().isoformat(),
         }
         save_users(users)
+
+        # Alten Personal-Agent-Dir entfernen falls vorhanden (z.B. nach Neu-Anlage)
+        import shutil as _shutil
+        personal_dir = Path(agents_dir) / f"personal_{req.username}"
+        disabled_dir = Path(agents_dir) / f"_personal_{req.username}_disabled"
+        if personal_dir.exists():
+            _shutil.rmtree(personal_dir)
+            logger.info("Alter Personal-Agent-Dir entfernt: %s", personal_dir)
+        if disabled_dir.exists():
+            _shutil.rmtree(disabled_dir)
+            logger.info("Deaktivierter Personal-Agent-Dir entfernt: %s", disabled_dir)
+
         logger.info("User angelegt: %s (role=%s, matrix=%s)", req.username, req.role, matrix_ok)
         audit_log("user.create", target=req.username, details={"role": req.role})
         return {
