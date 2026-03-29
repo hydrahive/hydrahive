@@ -125,6 +125,7 @@ export function MyAgentPage() {
     { cmd: "/model",    desc: t("slashCommands.model") },
     { cmd: "/retry",    desc: t("slashCommands.retry") },
     { cmd: "/remember", desc: t("slashCommands.remember") },
+    { cmd: "/history",  desc: "Vergangene Sessions anzeigen" },
   ];
 
   const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat"|"butler">("chat");
@@ -252,6 +253,11 @@ export function MyAgentPage() {
           .then(() => sysMsg(`Gespeichert als \`${fn}.md\``))
           .catch((e:Error) => sysMsg(`Fehler: ${e.message}`));
       }
+      return true;
+    }
+    if (base === "/history") {
+      setViewSession(null);
+      setShowHistory(true);
       return true;
     }
     sysMsg(`Unbekannter Command: \`${base}\`. /help für Übersicht.`); return true;
@@ -610,7 +616,7 @@ export function MyAgentPage() {
                   </div>
                 )}
 
-                <div className="border-t border-border/60 px-4 py-4 sm:px-5">
+                <div className="sticky bottom-0 z-10 border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px]">
                   <div className="relative">
                     {showSuggest && suggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">

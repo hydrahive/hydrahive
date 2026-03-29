@@ -30,6 +30,7 @@ export function AgentChatPage() {
     { cmd: "/model",    desc: t("slashCommands.model") },
     { cmd: "/retry",    desc: t("slashCommands.retry") },
     { cmd: "/remember", desc: t("slashCommands.remember") },
+    { cmd: "/history",  desc: "Vergangene Sessions anzeigen" },
   ];
 
   const [messages,    setMessages]    = useState<Message[]>([]);
@@ -165,6 +166,11 @@ export function AgentChatPage() {
       api.post(`/agents/${id}/memory`, { filename, content })
         .then(() => sysMsg(`Gespeichert als \`${filename}.md\` im Gedächtnis.`))
         .catch((e: Error) => sysMsg(`Fehler: ${e.message}`));
+      return true;
+    }
+    if (base === "/history") {
+      setViewSession(null);
+      setShowHistory(true);
       return true;
     }
     sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\`.`);
