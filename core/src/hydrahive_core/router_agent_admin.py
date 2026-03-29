@@ -170,6 +170,24 @@ def register_agent_admin_routes(
         logger.info("Agent aktualisiert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
 
+    @admin_router.patch("/agents/{agent_id}/tools")
+    async def patch_agent_tools(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
+        import yaml as _yaml
+
+        agent_dir = Path(agents_dir) / agent_id
+        yaml_path = agent_dir / "agent.yaml"
+        if not yaml_path.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        tools = body.get("tools")
+        if not isinstance(tools, list):
+            raise HTTPException(400, "tools muss eine Liste sein")
+        raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        raw["tools"] = tools
+        yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+        discovery._register(agent_dir)
+        logger.info("Agent tools aktualisiert: %s -> %s", agent_id, tools)
+        return {"updated": True, "agent_id": agent_id, "tools": tools}
+
     @admin_router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
         agent_dir = Path(agents_dir) / agent_id

@@ -31,12 +31,21 @@ function BossNode({ data, selected }: { data: { label: string }; selected: boole
 }
 
 // ── Worker node ────────────────────────────────────────────────────────────
-function WorkerNode({ data, selected }: { data: { label: string }; selected: boolean }) {
+function WorkerNode({ data, selected }: { data: { label: string; onDelete?: () => void }; selected: boolean }) {
   return (
     <div className={cn("min-w-[160px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-blue-950/60 border-blue-500/60", selected && "ring-2 ring-white/25")}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <Bot className="h-3 w-3 text-blue-400" />
-        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-blue-400">Worker</span>
+      <div className="flex items-center justify-between gap-1.5 mb-1">
+        <div className="flex items-center gap-1.5">
+          <Bot className="h-3 w-3 text-blue-400" />
+          <span className="text-[0.55rem] font-bold uppercase tracking-widest text-blue-400">Worker</span>
+        </div>
+        {selected && data.onDelete && (
+          <button onClick={e => { e.stopPropagation(); data.onDelete!(); }}
+            className="rounded p-0.5 text-red-400 hover:bg-red-500/20 transition-colors"
+            title="Worker entfernen">
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
       <p className="text-sm font-medium text-white leading-tight">{data.label}</p>
       <Handle type="source" position={Position.Right} id="output"
@@ -75,13 +84,24 @@ function ArchitectInner({ projects, agents }: { projects: Project[]; agents: Age
 
   const project = projects.find(p => p.id === selectedProjectId);
 
+  const removeWorker = useCallback((nodeId: string) => {
+    setNodes(ns => ns.filter(n => n.id !== nodeId));
+    setEdges(es => es.filter(e => e.source !== nodeId && e.target !== nodeId));
+  }, [setNodes, setEdges]);
+
   useEffect(() => {
     if (!project) return;
     const { nodes: n, edges: e } = buildGraph(project, agents);
-    setNodes(n);
+    // inject onDelete callbacks into worker nodes
+    const nodesWithDelete = n.map(node =>
+      node.type === "workerNode"
+        ? { ...node, data: { ...node.data, onDelete: () => removeWorker(node.id) } }
+        : node
+    );
+    setNodes(nodesWithDelete);
     setEdges(e);
     setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
-  }, [selectedProjectId, project, agents, setNodes, setEdges, rf]);
+  }, [selectedProjectId, project, agents, setNodes, setEdges, rf, removeWorker]);
 
   const onConnect = useCallback((c: Connection) => setEdges(es => addEdge(
     { ...c, animated: true } as Edge, es
@@ -96,7 +116,7 @@ function ArchitectInner({ projects, agents }: { projects: Project[]; agents: Age
     if (nodes.find(n => n.id === nodeId)) return;
     const bossNode = nodes.find(n => n.type === "bossNode");
     const y = nodes.filter(n => n.type === "workerNode").length * 90 + 80;
-    const newNode: Node = { id: nodeId, type: "workerNode", position: { x: 30, y }, data: { label: name } };
+    const newNode: Node = { id: nodeId, type: "workerNode", position: { x: 30, y }, data: { label: name, onDelete: () => removeWorker(nodeId) } };
     const newEdge: Edge = { id: `e-${agentId}`, source: nodeId, target: bossNode?.id ?? "", sourceHandle: "output", targetHandle: "input", animated: true, style: { stroke: "#6366f1", strokeWidth: 2 } };
     setNodes(ns => [...ns, newNode]);
     setEdges(es => [...es, newEdge]);

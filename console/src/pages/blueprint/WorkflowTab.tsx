@@ -44,21 +44,26 @@ export function WorkflowTab() {
   );
 
   useEffect(() => {
-    api.get<Record<string, any>>("/agents")
-      .then(ad => {
-        const entries = Object.entries(ad)
-          .filter(([id]) => !id.startsWith("personal_"))
-          .map(([id, v]: [string, any]) => ({
+    // First get the list, then fetch each agent individually for full config (incl. tools)
+    api.get<Record<string, any>>("/agents").then(async (ad) => {
+      const ids = Object.keys(ad).filter(id => !id.startsWith("personal_"));
+      const details = await Promise.all(
+        ids.map(id => api.get<{ config: any }>(`/agents/${id}`).catch(() => null))
+      );
+      const entries: AgentEntry[] = ids
+        .map((id, i) => {
+          const cfg = details[i]?.config ?? {};
+          return {
             id,
-            identity: v.config?.identity || id,
-            tools: v.config?.tools || [],
-          }));
-        setAgents(entries);
-        const init: Record<string, string[]> = {};
-        entries.forEach(a => { init[a.id] = [...a.tools]; });
-        setLocal(init);
-      })
-      .finally(() => setLoading(false));
+            identity: cfg.identity || ad[id]?.config?.identity || id,
+            tools: cfg.tools || [],
+          };
+        });
+      setAgents(entries);
+      const init: Record<string, string[]> = {};
+      entries.forEach(a => { init[a.id] = [...a.tools]; });
+      setLocal(init);
+    }).finally(() => setLoading(false));
   }, []);
 
   function toggleTool(agentId: string, toolId: string) {
@@ -74,7 +79,7 @@ export function WorkflowTab() {
   async function saveAgent(agentId: string) {
     setSaving(s => ({ ...s, [agentId]: true }));
     try {
-      await api.updateAgent(agentId, { tools: local[agentId] });
+      await api.patch(`/agents/${agentId}/tools`, { tools: local[agentId] });
       setToast(`${agentId} gespeichert`);
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
@@ -122,6 +127,37 @@ export function WorkflowTab() {
 
               {isOpen && (
                 <div className="p-3 space-y-3">
+                  {/* Extra-Tools die dieser Agent hat aber nicht in ALL_TOOLS sind */}
+                  {(() => {
+                    const knownIds = new Set(ALL_TOOLS.map(t => t.id));
+                    const extra = agentTools.filter(t => !knownIds.has(t));
+                    if (extra.length === 0) return null;
+                    const isCatOpen = catOpen["__extra__"] !== false;
+                    return (
+                      <div>
+                        <button onClick={() => setCatOpen(c => ({ ...c, "__extra__": !isCatOpen }))}
+                          className="flex items-center gap-1.5 mb-1.5 text-[0.65rem] font-bold uppercase tracking-widest text-white/30 hover:text-white/50 transition-colors">
+                          {isCatOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          Agent-spezifisch
+                        </button>
+                        {isCatOpen && (
+                          <div className="grid grid-cols-2 gap-1 pl-4">
+                            {extra.map(toolId => (
+                              <label key={toolId} className="flex items-start gap-2 cursor-pointer group rounded-lg px-2 py-1.5 hover:bg-white/5 transition-colors">
+                                <input type="checkbox" checked={true}
+                                  onChange={() => toggleTool(agent.id, toolId)}
+                                  className="mt-0.5 rounded border-white/20 bg-zinc-800 accent-indigo-500 shrink-0" />
+                                <div>
+                                  <p className="text-xs font-mono text-white">{toolId}</p>
+                                  <p className="text-[0.6rem] text-white/25">Agenten-Tool</p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {CATEGORIES.map(cat => {
                     const catTools = ALL_TOOLS.filter(t => t.category === cat);
                     const isCatOpen = catOpen[cat] !== false;
