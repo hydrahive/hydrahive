@@ -113,10 +113,13 @@ async function createSession(agentId) {
     let from = msg.from
     try {
       const contact = await msg.getContact()
+      console.log(`[${agentId}] LID-Debug: from=${msg.from} contact.number=${contact?.number} contact.id=${JSON.stringify(contact?.id)}`)
       if (contact?.number) {
         from = `${contact.number}@c.us`
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn(`[${agentId}] getContact fehlgeschlagen: ${e.message}`)
+    }
     const fromName = msg._data?.notifyName || msg._data?.pushName || ''
     const isAudio  = msg.type === 'ptt' || msg.type === 'audio'
     const text     = msg.body?.trim()
