@@ -279,6 +279,24 @@ export function AgentsPage() {
   }
 
   const agentList = Object.entries(agents).filter(([id]) => !id.startsWith("personal_"));
+  const TYPE_ORDER = ["boss", "worker", "specialist"];
+  const agentGroups = useMemo(() => {
+    const q = agentSearch.toLowerCase();
+    const filtered = agentList.filter(([id, agent]) => {
+      if (!q) return true;
+      return id.toLowerCase().includes(q) || agent.config.identity.toLowerCase().includes(q) || agent.config.type.toLowerCase().includes(q);
+    });
+    const groups: Record<string, [string, AgentEntry][]> = {};
+    for (const entry of filtered) {
+      const type = entry[1].config.type || "specialist";
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(entry);
+    }
+    for (const type of Object.keys(groups)) {
+      groups[type].sort((a, b) => a[1].config.identity.localeCompare(b[1].config.identity, "de"));
+    }
+    return TYPE_ORDER.filter((t) => groups[t]?.length).map((t) => ({ type: t, entries: groups[t] }));
+  }, [agentList, agentSearch]);
   const stats = useMemo(() => {
     const running = agentList.filter(([, agent]) => agent.runtime?.status === "running").length;
     const errors = agentList.filter(([, agent]) => agent.runtime?.status === "error").length;
@@ -578,11 +596,12 @@ export function AgentsPage() {
             )}
           </div>
           <div className="divide-y">
-            {agentList.filter(([id, agent]) => {
-              if (!agentSearch) return true;
-              const q = agentSearch.toLowerCase();
-              return id.toLowerCase().includes(q) || agent.config.identity.toLowerCase().includes(q) || agent.config.type.toLowerCase().includes(q);
-            }).map(([id, agent]) => {
+            {agentGroups.flatMap(({ type, entries }) => [
+              <div key={`group-${type}`} className="px-4 py-1.5 bg-muted/30 border-b border-border/30">
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{type}</span>
+                <span className="ml-2 text-xs text-muted-foreground opacity-60">{entries.length}</span>
+              </div>,
+              ...entries.map(([id, agent]) => {
               const rt = agent.runtime;
               const status = rt?.status ?? "unbekannt";
               const color = STATUS_COLORS[status] ?? "text-muted-foreground";
@@ -712,7 +731,8 @@ export function AgentsPage() {
                   )}
                 </div>
               );
-            })}
+            })
+            ])}
           </div>
         </section>
       )}
