@@ -54,6 +54,9 @@ def _history_token_budget(model: str) -> int:
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
+    handbook = Path("/etc/hydrahive/system_handbook.md")
+    if handbook.exists():
+        parts.append(f"handbook:{handbook.stat().st_mtime:.0f}")
     soul = agent_dir / "soul.md"
     if soul.exists():
         parts.append(f"soul:{soul.stat().st_mtime:.0f}")
@@ -172,6 +175,13 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
 
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
+
+    # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
+    _handbook_path = Path("/etc/hydrahive/system_handbook.md")
+    if _handbook_path.exists():
+        _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
+        if _handbook_text:
+            parts.append(_handbook_text)
 
     # QMD-Skills laden (scope=always immer, on-demand bei Keyword-Match)
     if boss_cfg.agent_dir:
