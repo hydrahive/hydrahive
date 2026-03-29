@@ -60,9 +60,9 @@ class ButlerEvent:
     #   github/gitea:  event (str), repo, branch, author, action, payload (dict)
 
 
-def has_active_flows(channel: str, event_type: str = "message") -> bool:
+def has_active_flows(channel: str, event_type: str = "message", owner: str | None = None) -> bool:
     """Gibt True zurück wenn mindestens ein aktiver Flow für diesen Kanal/Event-Typ existiert."""
-    for flow in load_flows():
+    for flow in load_flows(owner=owner):
         if not flow.enabled:
             continue
         for node in flow.nodes:
@@ -77,10 +77,13 @@ def has_active_flows(channel: str, event_type: str = "message") -> bool:
     return False
 
 
-async def check_flows(event: ButlerEvent) -> list[dict[str, Any]]:
-    """Prüft alle aktiven Flows gegen ein Event. Gibt Aktionsliste zurück."""
+async def check_flows(event: ButlerEvent, owner: str | None = None) -> list[dict[str, Any]]:
+    """Prüft aktive Flows gegen ein Event. Gibt Aktionsliste zurück.
+    owner=None → alle User-Flows (system events wie Webhooks/Heartbeats).
+    owner=str  → nur Flows dieses Users (user-spezifische Kanäle wie WhatsApp/Telegram).
+    """
     result: list[dict[str, Any]] = []
-    for flow in load_flows():
+    for flow in load_flows(owner=owner):
         if not flow.enabled:
             continue
         try:

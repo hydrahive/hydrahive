@@ -538,7 +538,8 @@ class AgentDiscordClient(DiscordAgentClient):
         _agent_id = self.agent_id
         try:
             from .butler_executor import ButlerEvent as _BE, check_flows as _butler
-            _bactions = await _butler(_BE(channel="discord", contact_id=author_id, contact_name=author, message_text=content))
+            _owner = self.agent_id.removeprefix("personal_")
+            _bactions = await _butler(_BE(channel="discord", contact_id=author_id, contact_name=author, message_text=content), owner=_owner)
             for _act in _bactions:
                 _sub = _act.get("subtype")
                 _p   = _act.get("params", {})

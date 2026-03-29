@@ -914,7 +914,7 @@ def register_user_integration_routes(
                 message_text=message,
             )
             from .butler_executor import has_active_flows as _has_flows
-            _butler_actions = await _butler(_event)
+            _butler_actions = await _butler(_event, owner=username)
             _is_owner_contact = bool(owners) and any(sender.endswith(o) for o in owners)
             if not _butler_actions and not _is_owner_contact:
                 return {"ok": True, "filtered": "butler_no_match"}
