@@ -406,7 +406,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <label className="block text-xs text-white/50 mb-1">Dienst</label>
             <select value={(p.channel as string) || "both"}
               onChange={e => onChange({ ...p, channel: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
               <option value="both">GitHub + Gitea</option>
               <option value="github">GitHub</option>
               <option value="gitea">Gitea</option>
@@ -416,7 +416,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <label className="block text-xs text-white/50 mb-1">Event-Typ</label>
             <select value={(p.git_event as string) || "push"}
               onChange={e => onChange({ ...p, git_event: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
               <option value="push">Push</option>
               <option value="pull_request">Pull Request</option>
               <option value="issues">Issue</option>
@@ -429,7 +429,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="z.B. mein-org/mein-repo"
               value={(p.repo as string) || ""}
               onChange={e => onChange({ ...p, repo: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
             <p className="text-[10px] text-white/25 mt-1">Leer = alle Repos.</p>
           </div>
@@ -450,7 +450,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <label className="block text-xs text-white/50 mb-1">Agent</label>
             <select value={(p.agent_id as string) || "all"}
               onChange={e => onChange({ ...p, agent_id: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
               <option value="all">Alle Agenten</option>
               {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -460,7 +460,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="z.B. daily-report"
               value={(p.task_id as string) || ""}
               onChange={e => onChange({ ...p, task_id: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
             <p className="text-[10px] text-white/25 mt-1">Leer = alle Heartbeat-Tasks des Agenten.</p>
           </div>
@@ -474,7 +474,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <select
             value={(p.channel as string) || "all"}
             onChange={e => onChange({ ...p, channel: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
           >
             <option value="all">Alle Kanäle</option>
             <option value="whatsapp">WhatsApp</option>
@@ -492,14 +492,14 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <label className="block text-xs text-white/50 mb-1">Von</label>
             <input type="time" value={(p.from as string) || "23:00"}
               onChange={e => onChange({ ...p, from: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
             <label className="block text-xs text-white/50 mb-1">Bis</label>
             <input type="time" value={(p.to as string) || "08:00"}
               onChange={e => onChange({ ...p, to: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
             />
           </div>
           <p className="text-[10px] text-white/25">Übernacht (23:00–08:00) wird unterstützt.</p>
@@ -522,7 +522,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
                   }}
                   className={cn(
                     "w-8 py-1 rounded text-xs font-medium transition-colors",
-                    active ? "bg-blue-600 text-white" : "bg-white/5 text-white/35 hover:bg-white/10"
+                    active ? "bg-blue-600 text-white" : "bg-zinc-900 text-white/35 hover:bg-white/10"
                   )}
                 >
                   {DAY_LABEL[day]}
@@ -540,7 +540,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <input type="text" placeholder="z.B. dringend"
             value={(p.keyword as string) || ""}
             onChange={e => onChange({ ...p, keyword: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
           />
         </div>
       )}
@@ -553,7 +553,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="z.B. action oder pull_request.state"
               value={(p.field as string) || ""}
               onChange={e => onChange({ ...p, field: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -561,7 +561,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="z.B. opened"
               value={(p.value as string) || ""}
               onChange={e => onChange({ ...p, value: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <p className="text-[10px] text-white/25">Groß-/Kleinschreibung wird ignoriert.</p>
@@ -574,7 +574,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <label className="block text-xs text-white/50 mb-1">Agent</label>
           <select value={(p.agent_id as string) || ""}
             onChange={e => onChange({ ...p, agent_id: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30"
           >
             <option value="">— wählen —</option>
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -591,7 +591,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             placeholder="z.B. Antworte kurz und formell auf Deutsch"
             value={(p.instruction as string) || ""}
             onChange={e => onChange({ ...p, instruction: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
           />
           <p className="text-[10px] text-white/25 mt-1">Wird dem Agent als Vorgabe vor der Nachricht übergeben.</p>
         </div>
@@ -606,7 +606,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             placeholder="z.B. Ich bin gerade nicht erreichbar. Melde mich morgen."
             value={(p.text as string) || ""}
             onChange={e => onChange({ ...p, text: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
           />
           <p className="text-[10px] text-white/25 mt-1">Wird direkt gesendet — kein LLM, sofort.</p>
         </div>
@@ -619,7 +619,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <input type="text" placeholder="z.B. main"
             value={(p.branch as string) || ""}
             onChange={e => onChange({ ...p, branch: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
           />
         </div>
       )}
@@ -631,7 +631,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <input type="text" placeholder="z.B. tilleulenspiegel"
             value={(p.author as string) || ""}
             onChange={e => onChange({ ...p, author: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
           />
           <p className="text-[10px] text-white/25 mt-1">Groß-/Kleinschreibung wird ignoriert.</p>
         </div>
@@ -643,7 +643,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
           <label className="block text-xs text-white/50 mb-1">Action</label>
           <select value={(p.action as string) || "opened"}
             onChange={e => onChange({ ...p, action: e.target.value })}
-            className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
             <option value="opened">opened</option>
             <option value="closed">closed</option>
             <option value="merged">merged (PR)</option>
@@ -680,7 +680,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="https://example.com/webhook"
               value={(p.url as string) || ""}
               onChange={e => onChange({ ...p, url: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -688,7 +688,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <textarea rows={4} placeholder={`{\n  "text": "{{event.message_text}}"\n}`}
               value={(p.body_template as string) || "{}"}
               onChange={e => onChange({ ...p, body_template: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-xs font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-xs font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
           <p className="text-[10px] text-white/25">Platzhalter: <code className="text-cyan-400">{"{{event.message_text}}"}</code>, <code className="text-cyan-400">{"{{event.extra.repo}}"}</code> etc.</p>
@@ -703,7 +703,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="empfaenger@example.com oder {{event.extra.from}}"
               value={(p.to as string) || ""}
               onChange={e => onChange({ ...p, to: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -711,7 +711,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="Neue Nachricht von {{event.contact_name}}"
               value={(p.subject as string) || ""}
               onChange={e => onChange({ ...p, subject: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -719,7 +719,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <textarea rows={3} placeholder="{{event.message_text}}"
               value={(p.body as string) || ""}
               onChange={e => onChange({ ...p, body: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
           <p className="text-[10px] text-white/25">Nutzt SMTP aus /etc/hydrahive/kas.json</p>
@@ -734,7 +734,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="hydrahive/hydrahive oder {{event.extra.repo}}"
               value={(p.repo as string) || ""}
               onChange={e => onChange({ ...p, repo: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -742,7 +742,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="Bug: {{event.extra.commit_message}}"
               value={(p.title as string) || ""}
               onChange={e => onChange({ ...p, title: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -750,7 +750,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <textarea rows={3} placeholder="Ausgelöst durch: {{event.extra.author}}"
               value={(p.body as string) || ""}
               onChange={e => onChange({ ...p, body: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
         </div>
@@ -764,7 +764,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="hydrahive/hydrahive"
               value={(p.repo as string) || ""}
               onChange={e => onChange({ ...p, repo: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -772,7 +772,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="42 oder {{event.extra.pr_number}}"
               value={(p.issue_number as string) || ""}
               onChange={e => onChange({ ...p, issue_number: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
           </div>
           <div>
@@ -780,7 +780,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <textarea rows={3} placeholder="Automatisch von Butler via {{event.channel}}"
               value={(p.body as string) || ""}
               onChange={e => onChange({ ...p, body: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
         </div>
@@ -794,7 +794,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <input type="text" placeholder="1234567890123456789"
               value={(p.channel_id as string) || ""}
               onChange={e => onChange({ ...p, channel_id: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30"
             />
             <p className="text-[10px] text-white/25 mt-1">Discord Channel-ID (Rechtsklick → ID kopieren)</p>
           </div>
@@ -803,7 +803,7 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
             <textarea rows={3} placeholder="{{event.message_text}}"
               value={(p.message as string) || ""}
               onChange={e => onChange({ ...p, message: e.target.value })}
-              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
         </div>
@@ -851,7 +851,7 @@ function WebhookTriggerPanel({
           placeholder="z.B. github-push"
           value={hookId}
           onChange={e => onChange({ ...params, hook_id: e.target.value.replace(/[^a-z0-9_-]/gi, "-").toLowerCase() })}
-          className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+          className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
         />
         <p className="text-[10px] text-white/25 mt-1">Nur Buchstaben, Zahlen, Bindestriche.</p>
       </div>
@@ -860,13 +860,13 @@ function WebhookTriggerPanel({
         <div>
           <label className="block text-xs text-white/50 mb-1">Webhook-URL</label>
           <div className="flex items-center gap-1">
-            <code className="flex-1 truncate rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-[11px] text-cyan-300">
+            <code className="flex-1 truncate rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-[11px] text-cyan-300">
               {webhookUrl}
             </code>
             <button
               type="button"
               onClick={copyUrl}
-              className="shrink-0 p-1.5 rounded-lg bg-white/5 border border-white/15 hover:bg-white/10 transition-colors"
+              className="shrink-0 p-1.5 rounded-lg bg-zinc-900 border border-white/15 hover:bg-white/10 transition-colors"
               title="URL kopieren"
             >
               {copied
@@ -1067,7 +1067,7 @@ function ButlerPageInner() {
             const flow = flows.find(f => f.id === e.target.value);
             if (flow) loadFlow(flow); else newFlow();
           }}
-          className="rounded-lg bg-white/5 border border-white/15 px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+          className="rounded-lg bg-zinc-900 border border-white/15 px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
         >
           <option value="">— Neuer Flow —</option>
           {flows.map(f => (
@@ -1081,7 +1081,7 @@ function ButlerPageInner() {
           value={flowName}
           onChange={e => setFlowName(e.target.value)}
           placeholder="Flow-Name"
-          className="rounded-lg bg-white/5 border border-white/15 px-2.5 py-1.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-indigo-500/50 w-40"
+          className="rounded-lg bg-zinc-900 border border-white/15 px-2.5 py-1.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-indigo-500/50 w-40"
         />
 
         {/* Toggle */}
@@ -1090,7 +1090,7 @@ function ButlerPageInner() {
             "flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg border transition-colors",
             flowEnabled
               ? "border-green-500/40 bg-green-950/30 text-green-400 hover:bg-green-950/50"
-              : "border-white/15 bg-white/5 text-white/35 hover:bg-white/10"
+              : "border-white/15 bg-zinc-900 text-white/35 hover:bg-white/10"
           )}
         >
           {flowEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
@@ -1100,7 +1100,7 @@ function ButlerPageInner() {
         <div className="flex-1" />
 
         <button type="button" onClick={newFlow}
-          className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm text-white hover:bg-white/10 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white hover:bg-white/10 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
           Neu
