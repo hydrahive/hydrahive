@@ -12,7 +12,7 @@ const TABS = [
   { id: "architect",     label: "Projekt-Architekt", icon: Network,      hint: "Boss + Worker verdrahten" },
   { id: "permissions",   label: "Berechtigungen",    icon: ShieldCheck,  hint: "User-Rechte visuell" },
   { id: "notifications", label: "Notifications",     icon: Bell,         hint: "Alert-Routing" },
-  { id: "workflow",      label: "Workflow-Kontext",  icon: Cpu,          hint: "Agent-Tools konfigurieren" },
+  { id: "workflow",      label: "Projekt-Workflow",  icon: Cpu,          hint: "Arbeitsablauf für Agenten definieren" },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];

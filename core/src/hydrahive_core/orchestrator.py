@@ -62,6 +62,109 @@ from .orchestrator_tools import (
 logger = logging.getLogger(__name__)
 
 
+def _load_workflow_prompt(project_dir) -> str:
+    """
+    Liest workflow.json aus dem Projektverzeichnis und serialisiert es in
+    einen strukturierten Arbeitsanweisungs-Block für den System-Prompt.
+    Gibt leeren String zurück wenn kein Workflow vorhanden oder leer.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    wf_path = _Path(project_dir) / "workflow.json"
+    if not wf_path.exists():
+        return ""
+    try:
+        wf = _json.loads(wf_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+
+    nodes: list[dict] = wf.get("nodes", [])
+    edges: list[dict] = wf.get("edges", [])
+    if not nodes:
+        return ""
+
+    # Topologische Reihenfolge via BFS ab Start-Node
+    # Start-Node = Node ohne eingehende Edges
+    targets = {e["target"] for e in edges}
+    start_ids = [n["id"] for n in nodes if n["id"] not in targets]
+    if not start_ids:
+        start_ids = [nodes[0]["id"]]
+
+    ordered: list[dict] = []
+    visited: set[str] = set()
+    queue = list(start_ids)
+    node_map = {n["id"]: n for n in nodes}
+    edge_map: dict[str, list[dict]] = {}
+    for e in edges:
+        edge_map.setdefault(e["source"], []).append(e)
+
+    while queue:
+        nid = queue.pop(0)
+        if nid in visited or nid not in node_map:
+            continue
+        visited.add(nid)
+        ordered.append(node_map[nid])
+        for e in edge_map.get(nid, []):
+            if e["target"] not in visited:
+                queue.append(e["target"])
+
+    # Serialisieren
+    NODE_TYPE_LABELS = {
+        "step":       "Schritt",
+        "datasource": "Datenquelle",
+        "branch":     "Entscheidung",
+        "end":        "Ende",
+    }
+    lines = [
+        "## Arbeitsanweisung — Pflicht-Workflow",
+        "Bearbeite diese Aufgabe IMMER nach folgendem Workflow. Arbeite jeden Schritt der Reihe nach ab:",
+        "",
+    ]
+    step_num = 1
+    for node in ordered:
+        ntype = node.get("type", "step")
+        data  = node.get("data", {})
+        label = data.get("label", "")
+        desc  = data.get("description", "")
+        config = data.get("config", {})
+
+        if ntype == "end":
+            lines.append(f"{step_num}. **[Ende]** {label or 'Workflow abgeschlossen — gib deine Antwort aus.'}")
+        elif ntype == "datasource":
+            src_type = config.get("type", "")
+            src_url  = config.get("url", "") or config.get("path", "")
+            lines.append(f"{step_num}. **[Datenquelle: {src_type or 'extern'}]** {label}")
+            if src_url:
+                lines.append(f"   → URL/Pfad: `{src_url}`")
+            if desc:
+                lines.append(f"   → {desc}")
+        elif ntype == "branch":
+            condition = config.get("condition", label or "Bedingung prüfen")
+            yes_label = config.get("yes_label", "Ja")
+            no_label  = config.get("no_label", "Nein")
+            lines.append(f"{step_num}. **[Entscheidung]** {condition}")
+            # Finde ausgehende Edges mit Label
+            out_edges = edge_map.get(node["id"], [])
+            for oe in out_edges:
+                el = oe.get("data", {}).get("label", "")
+                target_node = node_map.get(oe["target"])
+                target_label = target_node.get("data", {}).get("label", oe["target"]) if target_node else oe["target"]
+                lines.append(f"   → {el or yes_label}: {target_label}")
+        else:  # step
+            lines.append(f"{step_num}. **[Schritt]** {label}")
+            if desc:
+                lines.append(f"   → {desc}")
+
+        step_num += 1
+
+    lines += [
+        "",
+        "Beginne NICHT mit der eigentlichen Antwort bevor du alle relevanten Schritte abgearbeitet hast.",
+    ]
+    return "\n".join(lines)
+
+
 class Orchestrator:
     """
     Einer pro Core-Instanz.
@@ -387,6 +490,12 @@ class Orchestrator:
         if _refresh:
             content = content.strip()[8:].strip()
         system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+
+        # 3b. Projekt-Workflow injizieren falls vorhanden
+        if project_cfg.project_dir:
+            wf_text = _load_workflow_prompt(project_cfg.project_dir)
+            if wf_text:
+                system_prompt = system_prompt + "\n\n" + wf_text
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)

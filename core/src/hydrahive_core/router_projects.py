@@ -366,3 +366,28 @@ def register_project_routes(
             "session_id": session.id if session else None,
             "message_count": len(session.messages) if session else 0,
         }
+
+    # ── Projekt-Workflow ──────────────────────────────────────────────────────
+
+    @auth_router.get("/projects/{project_id}/workflow")
+    def get_workflow(project_id: str, _a: tuple = Depends(require_auth)):
+        import json as _json
+        project_dir = Path(projects_dir) / project_id
+        wf_path = project_dir / "workflow.json"
+        if not wf_path.exists():
+            return {"nodes": [], "edges": []}
+        try:
+            return _json.loads(wf_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"nodes": [], "edges": []}
+
+    @auth_router.put("/projects/{project_id}/workflow")
+    def save_workflow(project_id: str, body: dict, _a: tuple = Depends(require_auth)):
+        import json as _json
+        project_dir = Path(projects_dir) / project_id
+        if not project_dir.exists():
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        wf_path = project_dir / "workflow.json"
+        wf_path.write_text(_json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info("workflow.json gespeichert: %s", wf_path)
+        return {"saved": True}
