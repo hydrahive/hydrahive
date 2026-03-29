@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -218,6 +218,19 @@ export function MyAgentPage() {
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
       setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
+      setShowHistory(false);
+    } catch {}
+  }
+
+  async function resumePastSession(sid: string) {
+    if (!agentInfo?.agent_id) return;
+    try {
+      const d = await api.resumeSession(agentInfo.agent_id, sid);
+      const msgs = d.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+      setMessages(msgs);
+      setViewSession(null);
       setShowHistory(false);
     } catch {}
   }
@@ -441,16 +454,23 @@ export function MyAgentPage() {
                     ) : (
                       <div className="divide-y max-h-64 overflow-y-auto">
                         {pastSessions.map(s => (
-                          <button key={s.id} onClick={() => openPastSession(s.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
-                              <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
-                            </div>
-                            {s.preview && (
-                              <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
-                            )}
-                          </button>
+                          <div key={s.id} className="flex items-stretch hover:bg-accent/50 transition-colors">
+                            <button onClick={() => openPastSession(s.id)}
+                              className="flex-1 text-left px-4 py-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
+                                <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
+                              </div>
+                              {s.preview && (
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
+                              )}
+                            </button>
+                            <button onClick={() => resumePastSession(s.id)}
+                              title="Chat fortsetzen"
+                              className="flex items-center px-3 text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -459,17 +479,21 @@ export function MyAgentPage() {
 
                 {/* View past session banner */}
                 {viewSession && (
-                  <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-border/60 text-xs">
-                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                  <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-border/60 text-xs flex-shrink-0 gap-2">
+                    <span className="text-amber-600 dark:text-amber-400 font-medium truncate min-w-0">
                       Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-shrink-0">
                       <button onClick={() => { setViewSession(null); setShowHistory(true); }}
                         className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
                         <ArrowLeft className="h-3 w-3" /> Zurück
                       </button>
-                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(() => {}); }}
+                      <button onClick={() => resumePastSession(viewSession.id)}
                         className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                        <RotateCcw className="h-3 w-3" /> Fortsetzen
+                      </button>
+                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(() => {}); setMessages([]); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
                         <Plus className="h-3 w-3" /> Neuer Chat
                       </button>
                     </div>
