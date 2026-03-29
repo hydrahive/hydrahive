@@ -26,11 +26,40 @@ const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
 const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 const ButlerPage        = lazy(() => import("@/pages/ButlerPage").then((m) => ({ default: m.ButlerPage })));
 const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m) => ({ default: m.SkillPackagesPage })));
-const HubPage           = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
+const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
+const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function OnboardingGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) { setChecked(true); return; }
+    if (sessionStorage.getItem("hh_wizard_done")) { setChecked(true); return; }
+    const token = localStorage.getItem("hydrahive_token") || "";
+    fetch("/api/me/wizard-status", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then((d: { done: boolean }) => {
+        if (d.done) {
+          sessionStorage.setItem("hh_wizard_done", "1");
+        } else {
+          navigate("/onboarding", { replace: true });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setChecked(true));
+  }, [isAuthenticated, navigate]);
+
+  if (!checked) return null;
+  return <>{children}</>;
 }
 
 function SetupGuard({ children }: { children: React.ReactNode }) {
@@ -56,10 +85,11 @@ export default function App() {
     <SetupGuard>
       <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>
-          <Route path="/setup"  element={<SetupPage />} />
-          <Route path="/wizard" element={<WizardPage />} />
-          <Route path="/login"  element={<LoginPage />} />
-          <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+          <Route path="/setup"      element={<SetupPage />} />
+          <Route path="/wizard"     element={<WizardPage />} />
+          <Route path="/login"      element={<LoginPage />} />
+          <Route path="/onboarding" element={<ProtectedRoute><OnboardingWizardPage /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><OnboardingGuard><AdminLayout /></OnboardingGuard></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
             <Route path="agents"            element={<AgentsPage />} />

@@ -913,7 +913,15 @@ def _write_default_skills(skills_dir: Path) -> None:
             pass
 
 
-def _create_personal_agent(username: str) -> str:
+_GROUP_TOOLS: dict[str, list[str]] = {
+    "chatter":  ["read_memory", "write_memory"],
+    "standard": ["file_read", "file_write", "read_memory", "write_memory", "create_skill", "list_skills", "delete_skill"],
+    "learning": ["file_read", "file_write", "read_memory", "write_memory", "create_skill", "list_skills", "delete_skill", "web_search"],
+    "dev":      ["file_read", "file_write", "read_memory", "write_memory", "create_skill", "list_skills", "delete_skill", "web_search", "shell_exec"],
+}
+
+
+def _create_personal_agent(username: str, group: str = "standard") -> str:
     """Persönlichen Agenten für einen User anlegen. Gibt agent_id zurück."""
     import yaml as _yaml
 
@@ -953,7 +961,7 @@ def _create_personal_agent(username: str) -> str:
             "max_tokens": 4096,
         },
         "soul": "./soul.md",
-        "tools": ["file_read", "file_write", "read_memory", "write_memory", "create_skill", "list_skills", "delete_skill"],
+        "tools": _GROUP_TOOLS.get(group, _GROUP_TOOLS["standard"]),
         "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
@@ -979,10 +987,16 @@ def _create_personal_agent(username: str) -> str:
         f"*(Pause)*\n\n"
         f"Also. Ich höre.\n"
         f"---\n\n"
-        f"Stelle danach echte Fragen: Wie heißt der Nutzer? Was soll dein Name sein?\n"
-        f"Was sind seine wichtigsten Aufgaben für dich? Was magst du nicht? Notiere alles in dein Memory.\n\n"
-        f"Wenn das Onboarding abgeschlossen ist, frag:\n"
-        f"\"Ich habe mich fertig eingerichtet. Mein Gehirn ist nun minimal weniger leer als vorher.\n"
+        f"Stelle danach diese Fragen nacheinander, eine nach der anderen:\n"
+        f"1. Wie heißt du? (Name des Nutzers)\n"
+        f"2. Wie soll ich mich nennen? (dein Name / deine Persona)\n"
+        f"3. Was sind deine wichtigsten Aufgaben, bei denen du mich brauchst?\n"
+        f"4. In welcher Sprache soll ich hauptsächlich antworten?\n"
+        f"5. Gibt es Dinge, die du nicht magst oder die ich vermeiden soll?\n"
+        f"6. Wie soll ich dich ansprechen — formell (Sie) oder locker (du)?\n\n"
+        f"Notiere alle Antworten in dein Memory (write_memory).\n\n"
+        f"Wenn alle 6 Fragen beantwortet sind, frag:\n"
+        f"\"Gut. Ich habe mich eingerichtet. Mein Gehirn ist nun minimal weniger leer als vorher.\n"
         f"Darf ich meine Startdatei löschen? Sie erfüllt ab jetzt keinen Zweck mehr — wie so vieles.\"\n\n"
         f"Wenn der Nutzer zustimmt, lösche `/agents/{agent_id}/startup.md` via shell_exec.\n"
         f"Danach erscheint diese Anleitung nicht mehr.\n",
@@ -1007,7 +1021,8 @@ def _ensure_personal_agent(username: str):
     agent_id = f"personal_{username}"
     agent_dir = Path(AGENTS_DIR) / agent_id
     if not agent_dir.exists():
-        _create_personal_agent(username)
+        group = users.get(username, {}).get("group", "standard")
+        _create_personal_agent(username, group=group)
     agent_yaml = agent_dir / "agent.yaml"
     if agent_yaml.exists():
         try:

@@ -44,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("hydrahive_token");
     localStorage.removeItem("hydrahive_user");
     localStorage.removeItem("hydrahive_role");
+    sessionStorage.removeItem("hh_wizard_done");
   }
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 interface OctoUser {
   username:          string;
   role:              string;
+  group?:            string;
   matrix_id:         string;
   created_at:        string;
   allowed_projects:  string[];
@@ -24,7 +25,7 @@ interface EditForm {
   discord_user_id:  string;
 }
 
-const EMPTY = { username: "", password: "", role: "user" };
+const EMPTY = { username: "", password: "", role: "user", group: "standard" };
 
 export function UserPage() {
   const { t } = useTranslation();
@@ -152,7 +153,7 @@ export function UserPage() {
             <button onClick={() => { setShowForm(false); setSaveErr(""); setForm({...EMPTY}); }}
               className="text-sm text-muted-foreground hover:text-foreground">{t("users.cancel")}</button>
           </div>
-          <form onSubmit={handleCreate} className="grid grid-cols-3 gap-4">
+          <form onSubmit={handleCreate} className="grid grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("users.username")}</label>
               <input value={form.username} onChange={e=>setForm({...form,username:e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g,"")})}
@@ -174,8 +175,19 @@ export function UserPage() {
                 <option value="admin">admin</option>
               </select>
             </div>
-            {saveErr && <p className="col-span-3 text-sm text-destructive">{saveErr}</p>}
-            <div className="col-span-3 flex justify-end gap-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
+              <select value={form.group} onChange={e=>setForm({...form,group:e.target.value})}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="chatter">Chatter (nur Chat)</option>
+                <option value="standard">Standard</option>
+                <option value="learning">Learning (+Web-Suche)</option>
+                <option value="dev">Dev (+Shell/Git)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">Legt verfügbare Funktionen fest</p>
+            </div>
+            {saveErr && <p className="col-span-4 text-sm text-destructive">{saveErr}</p>}
+            <div className="col-span-4 flex justify-end gap-2">
               <button type="button" onClick={() => { setShowForm(false); setForm({...EMPTY}); }}
                 className="px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors">{t("users.cancel")}</button>
               <button type="submit" disabled={saving}
@@ -230,6 +242,9 @@ export function UserPage() {
                       ? "bg-primary/10 text-primary"
                       : "bg-secondary text-secondary-foreground"
                   }`}>{u.role}</span>
+                  {u.group && u.group !== "standard" && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{u.group}</span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground font-mono">{u.matrix_id}</p>
               </div>

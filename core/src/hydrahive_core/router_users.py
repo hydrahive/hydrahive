@@ -129,6 +129,7 @@ class CreateUserRequest(BaseModel):
     username: str
     password: str
     role: str = "user"
+    group: str = "standard"
 
 
 class UpdateUserRequest(BaseModel):
@@ -229,6 +230,7 @@ def register_user_routes(
             username: {
                 "username": username,
                 "role": data.get("role", "user"),
+                "group": data.get("group", "standard"),
                 "matrix_id": f"@{username}:{read_server_name()}",
                 "created_at": data.get("created_at", ""),
                 "allowed_projects": data.get("allowed_projects", []),
@@ -259,6 +261,7 @@ def register_user_routes(
         users[req.username] = {
             "password_hash": hash_password(req.password),
             "role": req.role,
+            "group": req.group,
             "matrix_id": f"@{req.username}:{server_name}",
             "matrix_ok": matrix_ok,
             "created_at": _dt.now().isoformat(),
@@ -463,6 +466,51 @@ def register_user_routes(
 
         logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
+
+    @auth_router.get("/me/wizard-status")
+    def get_wizard_status(auth: tuple[str, str] = Depends(require_auth)):
+        username, _role = auth
+        users = load_users()
+        user_data = users.get(username, {})
+        return {
+            "done": user_data.get("wizard_done", False),
+            "group": user_data.get("group", "standard"),
+        }
+
+    @auth_router.post("/me/wizard")
+    async def complete_wizard(
+        body: dict = Body(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        import yaml as _yaml
+
+        username, _role = auth
+        users = load_users()
+        if username not in users:
+            raise HTTPException(404, "User nicht gefunden")
+        users[username]["wizard_done"] = True
+        save_users(users)
+
+        # Ausgewählte Tools in agent.yaml übernehmen
+        selected_tools: list[str] | None = body.get("tools")
+        if selected_tools is not None:
+            agent_id = f"personal_{username}"
+            agent_dir = Path(agents_dir) / agent_id
+            yaml_path = agent_dir / "agent.yaml"
+            if yaml_path.exists():
+                try:
+                    raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+                    raw["tools"] = selected_tools
+                    yaml_path.write_text(
+                        _yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8"
+                    )
+                    if load_agent_config_direct is not None:
+                        load_agent_config_direct(agent_dir)
+                except Exception as e:
+                    logger.warning("Wizard: Fehler beim Speichern der Tools: %s", e)
+
+        audit_log("user.wizard_done", target=username)
+        return {"done": True}
 
     @auth_router.patch("/me/agent/heartbeat")
     async def patch_my_agent_heartbeat(
