@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from .notification_service import notification_service
@@ -34,15 +34,19 @@ def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt,
         username, _ = auth
         return {"count": notification_service.unread_count(username)}
 
-    # SSE-Stream auf public_router — EventSource kann keine Auth-Header senden,
-    # Authentifizierung erfolgt über ?token= Query-Parameter
+    # SSE-Stream — primär fetch+Authorization-Header, Fallback ?token= für alte Clients
     @public_router.get("/notifications/stream")
-    async def notification_stream(token: str | None = None):
-        # EventSource kann keine Custom-Headers → Token via ?token= Query-Param
+    async def notification_stream(request: Request, token: str | None = None):
         from fastapi import HTTPException as _HTTPException
-        if not token:
+        # Bevorzuge Authorization-Header (kein Token in URL/Logs)
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            resolved_token = auth_header[7:]
+        elif token:
+            resolved_token = token
+        else:
             raise _HTTPException(401, "Kein Token")
-        username, _ = verify_jwt(token)
+        username, _ = verify_jwt(resolved_token)
 
         async def event_stream():
             async for notif in notification_service.subscribe(username):

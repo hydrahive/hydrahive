@@ -115,8 +115,13 @@ def register_backup_restore_routes(
             raise HTTPException(404, "Backup nicht gefunden")
 
         with _tmp.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
+            tmp_path = Path(tmp).resolve()
             with _tar.open(path, "r:gz") as tf:
+                # Sicherheitsprüfung: kein Path-Traversal aus dem Archiv heraus
+                for member in tf.getmembers():
+                    member_path = (tmp_path / member.name).resolve()
+                    if not str(member_path).startswith(str(tmp_path)):
+                        raise HTTPException(400, f"Unsicheres Archiv: verdächtiger Pfad '{member.name}'")
                 tf.extractall(tmp_path)
 
             src_etc = tmp_path / "etc-hydrahive"

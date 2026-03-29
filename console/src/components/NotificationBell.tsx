@@ -33,22 +33,44 @@ export function NotificationBell() {
   useEffect(() => {
     loadAll();
 
-    // SSE-Stream für Live-Updates
+    // SSE-Stream für Live-Updates (fetch statt EventSource → Authorization-Header, kein Token in URL)
     const token = localStorage.getItem("hydrahive_token") || "";
-    const es = new EventSource(`/api/notifications/stream?token=${token}`);
-    es.onmessage = (e) => {
+    let active = true;
+    const ctrl = new AbortController();
+    (async () => {
       try {
-        const n: AppNotification = JSON.parse(e.data);
-        if (n.type === "heartbeat") return;
-        setItems(prev => [n, ...prev].slice(0, 50));
-        setUnread(prev => prev + 1);
-      } catch { /* ignore parse errors */ }
-    };
+        const res = await fetch("/api/notifications/stream", {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: ctrl.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (active) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split("\n\n");
+          buf = parts.pop() ?? "";
+          for (const part of parts) {
+            const line = part.split("\n").find(l => l.startsWith("data: "));
+            if (!line) continue;
+            try {
+              const n: AppNotification = JSON.parse(line.slice(6));
+              if (n.type === "heartbeat") continue;
+              setItems(prev => [n, ...prev].slice(0, 50));
+              setUnread(prev => prev + 1);
+            } catch { /* ignore */ }
+          }
+        }
+      } catch { /* aborted or network error */ }
+    })();
 
     // Polling als Fallback falls SSE-Chunk verpasst wurde
     const poll = setInterval(loadAll, 30_000);
 
-    return () => { es.close(); clearInterval(poll); };
+    return () => { active = false; ctrl.abort(); clearInterval(poll); };
   }, []);
 
   // Klick außerhalb schließt Dropdown
