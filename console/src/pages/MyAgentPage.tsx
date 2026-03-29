@@ -394,7 +394,7 @@ export function MyAgentPage() {
 
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
-        <div className="flex-1 overflow-hidden flex flex-col p-4 sm:p-6 min-h-0">
+        <div className="flex-1 overflow-hidden flex flex-col pt-4 pb-4 pl-4 sm:pt-6 sm:pb-6 sm:pl-6 pr-0 min-h-0">
           <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
             <section className="flex flex-col min-h-0 gap-4">
               {loadError && (
@@ -658,7 +658,7 @@ export function MyAgentPage() {
               </div>
             </section>
 
-            <aside className="xl:sticky xl:top-24 xl:self-start">
+            <aside className="xl:sticky xl:top-24 xl:self-start pr-4 sm:pr-6">
               <div className="rounded-[28px] border border-border/60 bg-card/80 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur space-y-3">
                 {/* Agent-Name + Status */}
                 <div className="flex items-center justify-between gap-2">
