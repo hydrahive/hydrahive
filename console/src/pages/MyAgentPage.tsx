@@ -404,37 +404,6 @@ export function MyAgentPage() {
                     : loadError}
                 </div>
               )}
-              <div className="rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                      <Bot className="h-3.5 w-3.5" />
-                      {t("myAgent.myChatLabel")}
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold tracking-tight">{identity}</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {t("myAgent.chatSubtitle")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 font-medium text-foreground">
-                      {agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}
-                    </span>
-                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      {t("myAgent.mode")}: {exec.defaultMode}
-                    </span>
-                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      {sending ? t("myAgent.streamingActive") : t("myAgent.ready")}
-                    </span>
-                    <span className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-muted-foreground">
-                      {messages.filter((m) => m.role !== "system").length} {t("myAgent.messages")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               <div className="flex flex-col flex-1 min-h-0 rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
                 <div className="border-b border-border/60 px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -690,94 +659,56 @@ export function MyAgentPage() {
             </section>
 
             <aside className="xl:sticky xl:top-24 xl:self-start">
-              <div className="space-y-4 rounded-[28px] border border-border/60 bg-card/80 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-semibold">{t("myAgent.contextTitle")}</h3>
-                  <p className="text-xs text-muted-foreground">{t("myAgent.contextSubtitle")}</p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {t("myAgent.modelLabel")}
-                    </div>
-                    <div className="mt-3 text-sm font-medium">{agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{t("myAgent.fallbacks", { count: agentInfo?.config?.llm?.fallback_models?.length ?? 0 })}</div>
+              <div className="rounded-[28px] border border-border/60 bg-card/80 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur space-y-3">
+                {/* Agent-Name + Status */}
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">{identity}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}</div>
                   </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      <Settings className="h-3.5 w-3.5" />
-                      {t("myAgent.statusLabel")}
-                    </div>
-                    <div className="mt-3 flex items-center gap-2 text-sm">
-                      {sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
-                      <span>{sending ? t("myAgent.streamingNow") : t("myAgent.agentReady")}</span>
-                    </div>
-                    {activeTool && <div className="mt-2 text-xs text-muted-foreground">{t("myAgent.activeTool")}: <code className="font-mono text-foreground">{activeTool.name}</code></div>}
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      <Shield className="h-3.5 w-3.5" />
-                      {t("myAgent.executionModes")}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium">{t("myAgent.defaultMode", { mode: exec.defaultMode })}</span>
-                    </div>
-                    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between gap-3">
-                        <span>safe</span>
-                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.safe })}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>elevated</span>
-                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.elevated })}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>root</span>
-                        <span className="font-medium text-foreground">{t("myAgent.permissions", { count: exec.counts.root })}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
-                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      {t("myAgent.commandsLabel")}
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      {SLASH_COMMANDS.map((cmd) => (
-                        <div key={cmd.cmd} className="flex items-start justify-between gap-3 text-xs">
-                          <code className="rounded bg-muted px-1.5 py-0.5 text-primary">{cmd.cmd}</code>
-                          <span className="text-right text-muted-foreground">{cmd.desc}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 sm:col-span-2 xl:col-span-1">
-                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      <Terminal className="h-3.5 w-3.5" />
-                      {t("myAgent.sessionLabel")}
-                    </div>
-                    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between gap-3">
-                        <span>{t("myAgent.historyCount")}</span>
-                        <span className="font-medium text-foreground">{messages.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>{t("myAgent.activeTools")}</span>
-                        <span className="font-medium text-foreground">{activeTool ? 1 : 0}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>{t("myAgent.errorStatus")}</span>
-                        <span className={`font-medium ${chatError ? "text-destructive" : "text-foreground"}`}>{chatError ? t("myAgent.errorState") : t("myAgent.cleanState")}</span>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    {sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
                   </div>
                 </div>
+
+                {/* Kompakt-Stats */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                    <div className="text-muted-foreground">{t("myAgent.mode")}</div>
+                    <div className="font-medium mt-0.5">{exec.defaultMode}</div>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                    <div className="text-muted-foreground">{t("myAgent.historyCount")}</div>
+                    <div className="font-medium mt-0.5">{messages.filter(m => m.role !== "system").length}</div>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                    <div className="text-muted-foreground">safe</div>
+                    <div className="font-medium mt-0.5">{exec.counts.safe} Tools</div>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
+                    <div className="text-muted-foreground">elevated</div>
+                    <div className="font-medium mt-0.5">{exec.counts.elevated} Tools</div>
+                  </div>
+                </div>
+
+                {/* Slash-Commands */}
+                <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2 space-y-1.5">
+                  {SLASH_COMMANDS.map((cmd) => (
+                    <div key={cmd.cmd} className="flex items-center justify-between gap-2 text-xs">
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-primary flex-shrink-0">{cmd.cmd}</code>
+                      <span className="text-right text-muted-foreground truncate">{cmd.desc}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {activeTool && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <code className="font-mono truncate">{activeTool.name}</code>
+                    </div>
+                  </div>
+                )}
               </div>
             </aside>
           </div>
