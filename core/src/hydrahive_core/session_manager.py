@@ -348,6 +348,35 @@ class SessionManager:
         total_chars = sum(len(m.content) for m in session.messages)
         return total_chars // 4
 
+    async def resume_session(self, project_id: str, session_id: str) -> "Session | None":
+        """Lädt eine historische Session und setzt sie als aktive Session."""
+        async with self._get_lock(project_id):
+            # Aktive Session beenden (außer es ist dieselbe)
+            if project_id in self._active:
+                old = self._active.pop(project_id)
+                if old.id != session_id:
+                    old.end()
+                    self._persist(old)
+
+            # Session von Disk laden
+            path = self._session_dir(project_id) / f"{session_id}.json"
+            if not path.exists():
+                return None
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                session = Session.from_dict(data)
+            except Exception as e:
+                logger.warning("resume_session: Fehler beim Laden von %s: %s", session_id, e)
+                return None
+
+            # Als aktiv setzen — ended_at zurücksetzen
+            session.ended_at = None
+            self._active[project_id] = session
+            self._persist(session)
+            logger.info("Session %s als aktive Session für %s wiederhergestellt (%d Nachrichten)",
+                        session_id[:8], project_id, len(session.messages))
+            return session
+
     def list_sessions(self, project_id: str, limit: int = 20) -> list[dict]:
         """Alle gespeicherten Sessions eines Projekts (neueste zuerst) mit Preview."""
         sessions_dir = self._projects_dir / project_id / self.SESSIONS_SUBDIR

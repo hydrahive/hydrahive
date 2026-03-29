@@ -146,6 +146,8 @@ export const api = {
     api.get<{sessions: SessionPreview[]}>(`/agents/${agentId}/sessions?limit=${limit}`),
   getSessionById: (agentId: string, sessionId: string) =>
     api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
+  resumeSession: (agentId: string, sessionId: string) =>
+    api.post<{ resumed: boolean; id: string; messages: SessionFull["messages"] }>(`/agents/${agentId}/sessions/${sessionId}/resume`, {}),
   // Doctor
   doctor:    () => api.get<DoctorReport>("/admin/doctor"),
   doctorFix: (fixId: string) => api.post<{ok:boolean;output?:string;error?:string}>(`/admin/doctor/fix/${fixId}`, {}),

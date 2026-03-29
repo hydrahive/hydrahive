@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
@@ -99,6 +99,19 @@ export function AgentChatPage() {
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
       setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
+      setShowHistory(false);
+    } catch {}
+  }
+
+  async function resumeSession(sid: string) {
+    if (!id) return;
+    try {
+      const d = await api.resumeSession(id, sid);
+      const msgs = d.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+      setMessages(msgs);
+      setViewSession(null);
       setShowHistory(false);
     } catch {}
   }
@@ -320,16 +333,23 @@ export function AgentChatPage() {
           ) : (
             <div className="divide-y">
               {sessions.map(s => (
-                <button key={s.id} onClick={() => openSession(s.id)}
-                  className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
-                    <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
-                  </div>
-                  {s.preview && (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
-                  )}
-                </button>
+                <div key={s.id} className="flex items-stretch hover:bg-accent/50 transition-colors">
+                  <button onClick={() => openSession(s.id)}
+                    className="flex-1 text-left px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
+                      <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
+                    </div>
+                    {s.preview && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
+                    )}
+                  </button>
+                  <button onClick={() => resumeSession(s.id)}
+                    title="Chat fortsetzen"
+                    className="flex items-center gap-1 px-3 text-xs text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -347,8 +367,12 @@ export function AgentChatPage() {
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
               <ArrowLeft className="h-3 w-3" /> Zurück
             </button>
-            <button onClick={() => { setViewSession(null); api.post(`/agents/${id}/session/start`, {}).catch(() => {}); }}
+            <button onClick={() => viewSession && resumeSession(viewSession.id)}
               className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+              <RotateCcw className="h-3 w-3" /> Fortsetzen
+            </button>
+            <button onClick={() => { setViewSession(null); api.delete(`/agents/${id}/session`).catch(() => {}); setMessages([]); }}
+              className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
               <Plus className="h-3 w-3" /> Neuer Chat
             </button>
           </div>

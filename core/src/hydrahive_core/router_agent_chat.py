@@ -125,6 +125,24 @@ def register_agent_chat_routes(
         p.chmod(0o600)
         return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
 
+    @auth_router.post("/agents/{agent_id}/sessions/{session_id}/resume")
+    async def agent_resume_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        session = await agent_sessions.resume_session(agent_id, session_id)
+        if not session:
+            raise HTTPException(404, "Session nicht gefunden")
+        def _msg(m):
+            return {
+                "role": m.role.value if hasattr(m.role, "value") else m.role,
+                "content": m.content,
+                "timestamp": m.timestamp,
+                "agent_id": m.agent_id,
+            }
+        return {
+            "resumed": True,
+            "id": session.id,
+            "messages": [_msg(m) for m in session.messages],
+        }
+
     @auth_router.delete("/agents/{agent_id}/session")
     async def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
         context = agent_sessions.get_context(agent_id, max_messages=200)
