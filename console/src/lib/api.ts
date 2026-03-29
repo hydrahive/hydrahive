@@ -204,6 +204,11 @@ export const api = {
   a2aUpsertPeer:  (d: A2APeer) => api.put<{ok:boolean;action:string}>("/admin/a2a/peers", d),
   a2aDeletePeer:  (name: string) => api.delete<{ok:boolean}>(`/admin/a2a/peers/${name}`),
   a2aTestPeer:    (name: string) => api.post<A2ATestResult>(`/admin/a2a/test/${name}`, {}),
+  // HydraHub
+  hubIndex:     () => api.get<HubIndex>("/hub/index"),
+  hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
+  hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
+  hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
 };
 
 export interface A2APeer {
@@ -600,4 +605,45 @@ export interface AppNotification {
   link:       string | null;
   read:       boolean;
   created_at: string;
+}
+
+export interface HubPackage {
+  id:          string;
+  type:        string;
+  name:        string;
+  description: string;
+  author:      string;
+  author_url?: string;
+  category:    string;
+  tags:        string[];
+  icon:        string;
+  version:     string;
+  source?:     string;
+  source_url?: string;
+  license?:    string;
+  _path:       string;
+}
+
+export interface HubIndex {
+  version:  string;
+  updated:  string;
+  count:    number;
+  packages: HubPackage[];
+}
+
+export interface HubInstalledEntry extends HubPackage {
+  installed_agent_id: string;
+}
+
+export interface HubInstallRequest {
+  id:                  string;
+  agent_id_override?:  string;
+  model_override?:     string;
+}
+
+export interface HubInstallResult {
+  installed: boolean;
+  agent_id:  string;
+  name:      string;
+  category:  string;
 }

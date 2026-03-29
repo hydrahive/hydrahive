@@ -27,6 +27,7 @@ import {
   Puzzle,
   Workflow,
   Package,
+  Store,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -167,6 +168,7 @@ export function AdminLayout() {
       { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },
       { to: "/butler",              icon: Workflow, label: t("nav.butler"),        hint: t("navHint.butler") },
       { to: "/tools/skill-packages", icon: Package,  label: t("nav.skillPackages"), hint: t("navHint.skillPackages") },
+      { to: "/hub",                  icon: Store,    label: "HydraHub",             hint: "Agenten & Tools installieren" },
     ],
   };
 
