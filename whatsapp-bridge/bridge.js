@@ -108,7 +108,15 @@ async function createSession(agentId) {
     if (msg._data?.broadcast === true) return
     if (msg.type === 'e2e_notification' || msg.type === 'notification_template') return
 
-    const from     = msg.from
+    // LID-Auflösung: msg.from kann in neueren WA-Versionen eine interne
+    // Geräte-ID (LID) statt der Telefonnummer enthalten → Kontakt auflösen
+    let from = msg.from
+    try {
+      const contact = await msg.getContact()
+      if (contact?.number) {
+        from = `${contact.number}@c.us`
+      }
+    } catch (_) {}
     const fromName = msg._data?.notifyName || msg._data?.pushName || ''
     const isAudio  = msg.type === 'ptt' || msg.type === 'audio'
     const text     = msg.body?.trim()
