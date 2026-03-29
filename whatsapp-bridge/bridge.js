@@ -103,6 +103,11 @@ async function createSession(agentId) {
     // Nur eingehende Nachrichten (nicht eigene)
     if (msg.fromMe) return
 
+    // Status-Broadcasts und Status-Antworten komplett ignorieren
+    if (msg.from === 'status@broadcast' || msg.from?.endsWith('@broadcast')) return
+    if (msg._data?.broadcast === true) return
+    if (msg.type === 'e2e_notification' || msg.type === 'notification_template') return
+
     const from     = msg.from
     const fromName = msg._data?.notifyName || msg._data?.pushName || ''
     const isAudio  = msg.type === 'ptt' || msg.type === 'audio'
