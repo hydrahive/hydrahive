@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
-import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
@@ -134,9 +134,12 @@ export function MyAgentPage() {
   const [chatError,  setChatError]  = useState("");
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
-  const [showSuggest,setShowSuggest]= useState(false);
-  const [showEmoji,  setShowEmoji]  = useState(false);
-  const [suggestIdx, setSuggestIdx] = useState(0);
+  const [showSuggest,  setShowSuggest]  = useState(false);
+  const [showEmoji,    setShowEmoji]    = useState(false);
+  const [suggestIdx,   setSuggestIdx]   = useState(0);
+  const [showHistory,  setShowHistory]  = useState(false);
+  const [pastSessions, setPastSessions] = useState<SessionPreview[]>([]);
+  const [viewSession,  setViewSession]  = useState<{ id: string; messages: Message[]; startedAt: string } | null>(null);
   const [agents,     setAgents]     = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [activeTool,     setActiveTool]     = useState<{name:string;detail:string} | null>(null);
@@ -201,6 +204,23 @@ export function MyAgentPage() {
   useEffect(() => { setShowSuggest(suggestions.length > 0 && input.length > 0); setSuggestIdx(0); }, [input]);
 
   // ── Chat-Logik ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!showHistory || !agentInfo?.agent_id) return;
+    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(() => {});
+  }, [showHistory, agentInfo?.agent_id]);
+
+  async function openPastSession(sid: string) {
+    if (!agentInfo?.agent_id) return;
+    try {
+      const d = await api.getSessionById(agentInfo.agent_id, sid);
+      const msgs = d.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+      setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
+      setShowHistory(false);
+    } catch {}
+  }
+
   function sysMsg(c: string) { setMessages(ms => [...ms, mkMsg("system", c)]); }
 
   function handleSlash(cmd: string): boolean {
@@ -416,17 +436,73 @@ export function MyAgentPage() {
                       <h3 className="text-sm font-semibold">{t("myAgent.historyTitle")}</h3>
                       <p className="text-xs text-muted-foreground">{t("myAgent.historySubtitle")}</p>
                     </div>
-                    {activeTool && (
-                      <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                        <code className="max-w-[10rem] truncate font-mono">{activeTool.name}</code>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {activeTool && (
+                        <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          <code className="max-w-[10rem] truncate font-mono">{activeTool.name}</code>
+                        </div>
+                      )}
+                      <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
+                        className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
+                        title="Vergangene Sessions">
+                        <Clock className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
+                {/* History Panel */}
+                {showHistory && (
+                  <div className="border-b border-border/60">
+                    <div className="flex items-center justify-between px-4 py-2 bg-muted/30">
+                      <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
+                      <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {pastSessions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6">Keine vergangenen Sessions</p>
+                    ) : (
+                      <div className="divide-y max-h-64 overflow-y-auto">
+                        {pastSessions.map(s => (
+                          <button key={s.id} onClick={() => openPastSession(s.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
+                              <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
+                            </div>
+                            {s.preview && (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* View past session banner */}
+                {viewSession && (
+                  <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-border/60 text-xs">
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setViewSession(null); setShowHistory(true); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
+                        <ArrowLeft className="h-3 w-3" /> Zurück
+                      </button>
+                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(() => {}); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                        <Plus className="h-3 w-3" /> Neuer Chat
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4 px-4 py-5 sm:px-5">
-                  {messages.length === 0 && (
+                  {!viewSession && messages.length === 0 && (
                     <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-muted/20 px-6 text-center text-muted-foreground">
                       <Bot className="h-10 w-10 opacity-70" />
                       <p className="mt-4 text-sm font-medium text-foreground">{t("myAgent.greetingTitle", { name: identity })}</p>
@@ -434,7 +510,7 @@ export function MyAgentPage() {
                     </div>
                   )}
 
-                  {messages.map((msg) => {
+                  {(viewSession ? viewSession.messages : messages).map((msg) => {
                     if (msg.role === "system") return (
                       <div key={msg.id} className="flex justify-center">
                         <div className="flex max-w-[90%] items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -580,8 +656,9 @@ export function MyAgentPage() {
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                          placeholder={t("myAgent.messagePlaceholder")} rows={1}
-                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          placeholder={viewSession ? "Vergangene Session — schreibgeschützt" : t("myAgent.messagePlaceholder")} rows={1}
+                          disabled={!!viewSession}
+                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
                           className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
