@@ -70,15 +70,17 @@ class Orchestrator:
 
     def __init__(
         self,
-        discovery:  AgentDiscovery,
-        runtime:    AgentRuntime,
-        sessions:   SessionManager,
-        tool_reg:   ToolRegistry | None = None,
+        discovery:        AgentDiscovery,
+        runtime:          AgentRuntime,
+        sessions:         SessionManager,
+        tool_reg:         ToolRegistry | None = None,
+        mcp_servers_file: str = "/etc/hydrahive/mcp_servers.json",
     ) -> None:
-        self._discovery      = discovery
-        self._runtime        = runtime
-        self._sessions       = sessions
-        self._reg            = tool_reg or default_registry
+        self._discovery         = discovery
+        self._runtime           = runtime
+        self._sessions          = sessions
+        self._reg               = tool_reg or default_registry
+        self._mcp_servers_file  = mcp_servers_file
         self._project_queues: dict[str, asyncio.Queue]  = {}
         self._queue_tasks:    dict[str, asyncio.Task]   = {}
         self._queue_last_used: dict[str, float]         = {}
@@ -184,6 +186,71 @@ class Orchestrator:
     @staticmethod
     def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
         return _tool_call_signature_fn(tool_calls)
+
+    # ---------------------------------------------------------------- MCP
+
+    def _load_mcp_server_map(self) -> dict[str, dict]:
+        """Lädt mcp_servers.json als {id: cfg} Dict."""
+        import json as _json
+        from pathlib import Path
+        try:
+            data = _json.loads(Path(self._mcp_servers_file).read_text())
+            return {s["id"]: s for s in data.get("servers", [])}
+        except Exception:
+            return {}
+
+    async def _mcp_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
+        """
+        Holt litellm-kompatible Tool-Schemas von allen MCP-Servern des Agenten.
+        Tool-Namen werden mit mcp_{server_id}_ präfixiert.
+        """
+        if not agent_cfg.mcp_servers:
+            return []
+        from .mcp_client import list_mcp_tools
+        server_map = self._load_mcp_server_map()
+        schemas: list[dict] = []
+        for server_id in agent_cfg.mcp_servers:
+            srv = server_map.get(server_id)
+            if not srv:
+                logger.warning("MCP-Server '%s' nicht in mcp_servers.json gefunden", server_id)
+                continue
+            tools = await list_mcp_tools(server_id, srv)
+            for t in tools:
+                schemas.append({
+                    "type": "function",
+                    "function": {
+                        "name":        f"mcp_{server_id}_{t['name']}",
+                        "description": f"[{server_id}] {t.get('description', '')}",
+                        "parameters":  t.get("inputSchema") or {"type": "object", "properties": {}},
+                    },
+                })
+        return schemas
+
+    async def _execute_mcp_tool(
+        self,
+        boss_cfg:      AgentConfig,
+        prefixed_name: str,
+        args:          dict,
+    ) -> str:
+        """
+        Dispatcht einen MCP-Tool-Call an den richtigen Server.
+        Erwartet prefixed_name im Format mcp_{server_id}_{tool_name}.
+        """
+        from .mcp_client import call_mcp_tool
+        server_map = self._load_mcp_server_map()
+        for server_id in boss_cfg.mcp_servers:
+            prefix = f"mcp_{server_id}_"
+            if prefixed_name.startswith(prefix):
+                srv = server_map.get(server_id)
+                if not srv:
+                    raise ValueError(f"MCP-Server '{server_id}' nicht konfiguriert")
+                tool_name = prefixed_name[len(prefix):]
+                self._runtime.set_activity(boss_cfg.id, f"MCP: {server_id}/{tool_name}")
+                try:
+                    return await call_mcp_tool(server_id, srv, tool_name, args)
+                finally:
+                    self._runtime.set_activity(boss_cfg.id, "Denkt…")
+        raise ValueError(f"Kein MCP-Server für Tool '{prefixed_name}' gefunden")
 
     async def _finalize_tool_loop_response(
         self,
@@ -332,7 +399,11 @@ class Orchestrator:
         # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
         use_meta_only = "request_tools" in (boss_cfg.tools or [])
         boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=use_meta_only)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
+        mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
+        if mcp_schemas:
+            litellm_tools = (litellm_tools or []) + mcp_schemas
+        litellm_tools = litellm_tools or None
 
         import json as _json
         sys_tokens   = len(system_prompt) // 4
@@ -1018,6 +1089,9 @@ class Orchestrator:
         # Im _tool_loop immer alle Tools (Kategorien wurden ggf. schon per request_tools nachgeladen)
         boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
         litellm_tools: list[dict] = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
+        _mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
+        if _mcp_schemas:
+            litellm_tools = litellm_tools + _mcp_schemas
         _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
         current_messages = list(messages)
         workers_used: list[str] = []
@@ -1136,12 +1210,25 @@ class Orchestrator:
                         workers_used.append(res.worker_id)
 
             for tc in other_tcs:
+                args = json.loads(tc.function.arguments)
+
+                # MCP-Tool? (Prefix mcp_{server_id}_)
+                if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
+                    try:
+                        result = await self._execute_mcp_tool(boss_cfg, tc.function.name, args)
+                        tool_results[tc.id] = _truncate_tool_result(
+                            result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+                        )
+                    except Exception as e:
+                        logger.error("MCP-Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
+                        tool_results[tc.id] = f"[Fehler] {e}"
+                    continue
+
                 tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
                 if tool is None:
                     tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
                     continue
                 try:
-                    args = json.loads(tc.function.arguments)
                     result = await self._execute_tool(
                         tool,
                         boss_cfg=boss_cfg,
