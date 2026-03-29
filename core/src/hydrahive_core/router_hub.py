@@ -95,23 +95,35 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         except Exception as e:
             raise HTTPException(502, f"Hub-Dateien konnten nicht geladen werden: {e}")
 
-        # agent.yaml parsen und ggf. überschreiben
+        # agent.yaml parsen — Hub-Format → AgentConfig-Format konvertieren
         try:
-            agent_cfg = yaml.safe_load(agent_yaml_raw) or {}
+            hub_cfg = yaml.safe_load(agent_yaml_raw) or {}
         except Exception as e:
             raise HTTPException(500, f"agent.yaml ungültig: {e}")
 
-        agent_id = req.agent_id_override or agent_cfg.get("agent_id") or req.id
-        # Sicherstellen dass agent_id nur erlaubte Zeichen enthält
+        agent_id = req.agent_id_override or hub_cfg.get("agent_id") or req.id
         import re
         if not re.match(r'^[a-z0-9_-]{1,64}$', agent_id):
             raise HTTPException(400, "agent_id enthält unerlaubte Zeichen")
 
-        agent_cfg["agent_id"] = agent_id
-        if "type" not in agent_cfg:
-            agent_cfg["type"] = "specialist"
-        if req.model_override:
-            agent_cfg["model"] = req.model_override
+        model = req.model_override or hub_cfg.get("model", "claude-sonnet-4-6")
+        identity = hub_cfg.get("display_name") or hub_cfg.get("identity") or agent_id
+
+        # Kanonisches AgentConfig-Format aufbauen
+        agent_cfg: dict = {
+            "id":       agent_id,
+            "type":     hub_cfg.get("type", "specialist"),
+            "identity": identity,
+            "llm": {
+                "model":       model,
+                "max_tokens":  4096,
+                "temperature": 0.7,
+            },
+            "execution_mode": hub_cfg.get("execution_mode", "safe"),
+            "tools": hub_cfg.get("tools", []),
+        }
+        if hub_cfg.get("mcp_servers"):
+            agent_cfg["mcp_servers"] = hub_cfg["mcp_servers"]
 
         # Zielverzeichnis anlegen
         target = Path(agents_dir) / agent_id
