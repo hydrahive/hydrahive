@@ -108,6 +108,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             raise HTTPException(400, "agent_id enthält unerlaubte Zeichen")
 
         agent_cfg["agent_id"] = agent_id
+        if "type" not in agent_cfg:
+            agent_cfg["type"] = "specialist"
         if req.model_override:
             agent_cfg["model"] = req.model_override
 
