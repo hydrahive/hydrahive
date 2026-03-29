@@ -395,7 +395,7 @@ export function MyAgentPage() {
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
         <div className="flex-1 overflow-hidden flex flex-col p-4 sm:p-6 min-h-0">
-          <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[minmax(0,1.8fr)_22rem]">
+          <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
             <section className="flex flex-col min-h-0 gap-4">
               {loadError && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
