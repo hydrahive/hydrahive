@@ -1707,3 +1707,77 @@ sudo systemctl status vaultwarden
 sudo journalctl -u vaultwarden -n 50
 sudo systemctl restart vaultwarden
 ```
+
+---
+
+## 36. Migration — Installation übertragen
+
+Überträgt eine vollständige HydraHive-Installation auf einen neuen Server (Agenten, Memory, Konfiguration, API-Tokens).
+
+### Was wird übertragen
+
+| Inhalt | Pfad |
+|---|---|
+| Agenten (Config, Memory, Skills, Soul) | `/agents/` |
+| Benutzerkonten & Secrets | `/etc/hydrahive/users.json`, `jwt_secret`, `internal_secret` |
+| LLM-Konfiguration | `/etc/hydrahive/llm_config.json`, `llm_env` |
+| API-Tokens | `claude_oauth_token`, `openai_codex_token.json`, `github_token` |
+| Platform-Tokens | `/etc/hydrahive/agent_tokens/` (Discord, WhatsApp) |
+| MCP-Server-Config | `/etc/hydrahive/mcp_servers.json` |
+| Schedules | `/etc/hydrahive/schedules.json` |
+| System-Handbuch | `/etc/hydrahive/system_handbook.md` |
+| Notification-History | `/var/log/hydrahive/notifications.db` |
+| A-MEM ChromaDB *(optional)* | `/var/lib/hydrahive/amem/chromadb_data/` |
+
+Nicht übertragen: TLS-Zertifikate (server-spezifisch, werden auf dem Ziel neu generiert).
+
+### Option 1: Lokales Archiv (Export + Import)
+
+```bash
+# Auf Quell-Server: verschlüsseltes Archiv erstellen
+sudo bash scripts/hydrahive-export.sh --output /tmp/migration.tar.gz.enc
+
+# Optional: A-MEM-Daten mit einschließen (~300 MB)
+sudo bash scripts/hydrahive-export.sh --output /tmp/migration.tar.gz.enc --include-amem
+
+# Archiv auf Ziel-Server kopieren
+scp /tmp/migration.tar.gz.enc user@newserver:/tmp/
+
+# Auf Ziel-Server einspielen (HydraHive muss bereits installiert sein)
+sudo bash scripts/hydrahive-import.sh --input /tmp/migration.tar.gz.enc
+```
+
+### Option 2: Direkter Transfer (kein lokales Archiv)
+
+```bash
+# Auf Quell-Server: direkt zu Ziel-Server streamen
+sudo bash scripts/hydrahive-transfer.sh \
+  --target user@192.168.1.100 \
+  --key ~/.ssh/id_ed25519
+
+# Mit A-MEM
+sudo bash scripts/hydrahive-transfer.sh \
+  --target root@newserver \
+  --include-amem
+```
+
+Das Archiv wird AES-256-CBC-verschlüsselt und direkt über SSH gestreamt — es liegt zu keinem Zeitpunkt unverschlüsselt auf der Festplatte.
+
+### Voraussetzungen Ziel-Server
+
+1. Frische HydraHive-Installation (`install.sh` ausgeführt)
+2. SSH-Zugang mit sudo/root-Rechten
+3. `openssl` verfügbar (Standard auf Ubuntu)
+
+### Nach der Migration prüfen
+
+```bash
+systemctl status hydrahive-core
+journalctl -u hydrahive-core -n 30
+
+# Agenten vorhanden?
+ls /agents/
+
+# Config übernommen?
+cat /etc/hydrahive/users.json
+```
