@@ -47,12 +47,12 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
                 result.append({
                     "role": "system",
                     "content": [{"type": "text", "text": content,
-                                 "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
+                                 "cache_control": {"type": "ephemeral"}}],
                 })
             elif isinstance(content, list) and content:
                 new_c = list(content)
                 if not new_c[-1].get("cache_control"):
-                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
                 result.append({**m, "content": new_c})
             else:
                 result.append(m)
@@ -61,7 +61,7 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
             result.append({
                 **m,
                 "content": [{"type": "text", "text": content,
-                             "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
+                             "cache_control": {"type": "ephemeral"}}],
             })
             non_sys_i += 1
 
@@ -359,7 +359,7 @@ async def _anthropic_oauth_call(
     oauth_system = [{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}]
     if system_msg:
         oauth_system.append({"type": "text", "text": system_msg,
-                              "cache_control": {"type": "ephemeral", "ttl": "1h"}})
+                              "cache_control": {"type": "ephemeral"}})
 
     # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
     # Max 3 History-Blöcke (+ 1 System-Block = 4 total, Anthropic-Limit)
@@ -372,12 +372,12 @@ async def _anthropic_oauth_call(
             content = fm.get("content", "")
             if isinstance(content, str) and content:
                 filtered[idx] = {**fm, "content": [
-                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+                    {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
                 ]}
                 history_cache_count += 1
             elif isinstance(content, list) and content and not content[-1].get("cache_control"):
                 new_c = list(content)
-                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
                 filtered[idx] = {**fm, "content": new_c}
                 history_cache_count += 1
 
@@ -406,12 +406,11 @@ async def _anthropic_oauth_call(
         cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
         cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
         input_tok   = getattr(u, "input_tokens", 0) or 0
-        if cache_write or cache_read:
-            logger.info(
-                "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
-                model, input_tok, cache_write, cache_read,
-                100 * cache_read / max(input_tok, 1),
-            )
+        logger.info(
+            "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
+            model, input_tok, cache_write, cache_read,
+            100 * cache_read / max(input_tok, 1),
+        )
 
     # Anthropic Response → litellm-kompatibles SimpleNamespace
     text = ""
