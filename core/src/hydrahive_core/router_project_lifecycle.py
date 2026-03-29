@@ -62,18 +62,11 @@ def register_project_lifecycle_routes(
             await runtime.stop_agent(boss_id)
             stopped_agents.append(boss_id)
 
-        smb_conf = Path('/etc/samba/smb.conf')
-        if smb_conf.exists():
-            try:
-                import re as _re
-                import subprocess as _sub
-
-                smb_content = smb_conf.read_text(encoding='utf-8')
-                smb_content = _re.sub(rf"\[{_re.escape(project_id)}\][^\[]*", "", smb_content, flags=_re.DOTALL)
-                smb_conf.write_text(smb_content, encoding='utf-8')
-                _sub.run(['systemctl', 'reload', 'smbd'], check=False, timeout=5)
-            except Exception as e:
-                logger.warning('Samba-Share Entfernung fehlgeschlagen: %s', e)
+        _provisioner = get_provisioner()
+        if _provisioner:
+            deprov_warnings = await _provisioner.deprovision(cfg)
+            for w in deprov_warnings:
+                logger.warning("deprovision warning: %s", w)
 
         timestamp = int(_time.time())
         deleted_dir = Path(projects_dir) / f'_deleted_{project_id}_{timestamp}'

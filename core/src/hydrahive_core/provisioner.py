@@ -107,6 +107,13 @@ class Provisioner:
         if w:
             warnings.append(w)
 
+        # Matrix-Room entfernen
+        room_id = cfg.matrix.room if cfg.matrix else None
+        if room_id:
+            w = await self._delete_matrix_room(room_id)
+            if w:
+                warnings.append(w)
+
         return warnings
 
     # ----------------------------------------------------------------- Schritt 1: Linux-User (#9)
@@ -421,6 +428,38 @@ class Provisioner:
                 return data.get("room_id")
         except Exception:
             return None
+
+    async def _delete_matrix_room(self, room_id: str) -> str | None:
+        """Matrix-Room verlassen und via Admin-API löschen. Gibt Warning-String oder None zurück."""
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type":  "application/json",
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Erst verlassen (falls der Bot-User Mitglied ist)
+                async with session.post(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/leave",
+                    headers=headers,
+                    json={},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    await resp.read()
+
+                # Conduwuit/Synapse Admin-API: Room löschen
+                async with session.delete(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/admin/rooms/{room_id}",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    data = await resp.json(content_type=None)
+                    if resp.status not in (200, 404):
+                        return f"Matrix-Room {room_id} konnte nicht gelöscht werden: {data.get('error', resp.status)}"
+
+            logger.info("Matrix-Room gelöscht: %s", room_id)
+            return None
+        except Exception as e:
+            return f"Matrix-Room {room_id} Fehler beim Löschen: {e}"
 
 
 def load_admin_token(cred_file: str = "/etc/hydrahive/admin_credentials") -> str:
