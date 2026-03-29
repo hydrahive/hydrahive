@@ -55,7 +55,7 @@ class InstallRequest(BaseModel):
     model_override: str | None = None
 
 
-def register_hub_routes(router: APIRouter, require_admin, agents_dir: str) -> None:
+def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, discovery=None) -> None:
 
     @router.get("/hub/index")
     async def hub_index(_auth=Depends(require_admin)):
@@ -142,6 +142,13 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str) -> No
         except Exception:
             pass
 
+        # Agent sofort in discovery registrieren (kein Neustart nötig)
+        if discovery is not None:
+            try:
+                discovery._register(target)
+            except Exception as e:
+                logger.warning("discovery._register fehlgeschlagen: %s", e)
+
         logger.info("Hub-Agent '%s' installiert (Paket: %s)", agent_id, req.id)
         return {
             "installed": True,
@@ -165,5 +172,10 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str) -> No
 
         import shutil
         shutil.rmtree(target)
+        if discovery is not None:
+            try:
+                discovery._unregister_dir(target)
+            except Exception as e:
+                logger.warning("discovery._unregister_dir fehlgeschlagen: %s", e)
         logger.info("Hub-Agent '%s' deinstalliert", agent_id)
         return {"uninstalled": True, "agent_id": agent_id}

@@ -1238,7 +1238,7 @@ register_webhook_butler_routes(
     load_project_cfg=projects.get,
 )
 register_skill_package_routes(admin_router, require_admin=require_admin)
-register_hub_routes(admin_router, require_admin=require_admin, agents_dir=AGENTS_DIR)
+register_hub_routes(admin_router, require_admin=require_admin, agents_dir=AGENTS_DIR, discovery=discovery)
 register_a2a_routes(
     public_router,
     admin_router,
