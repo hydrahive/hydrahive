@@ -94,7 +94,14 @@ def register_agent_chat_routes(
         session = agent_sessions.get_session_by_id(agent_id, session_id)
         if not session:
             raise HTTPException(404, "Session nicht gefunden")
-        return {"id": session.id, "messages": [m.to_dict() for m in session.messages],
+        def _msg(m):
+            return {
+                "role": m.role.value if hasattr(m.role, "value") else m.role,
+                "content": m.content,
+                "timestamp": m.timestamp,
+                "agent_id": m.agent_id,
+            }
+        return {"id": session.id, "messages": [_msg(m) for m in session.messages],
                 "started_at": session.started_at, "ended_at": session.ended_at}
 
     @auth_router.post("/agents/{agent_id}/memory", status_code=201)
