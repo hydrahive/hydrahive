@@ -324,10 +324,16 @@ async def _compact_if_needed(
     from .session_manager import MessageRole
 
     model = boss_cfg.llm.model.lower()
-    if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large")):
+    if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5")):
         token_threshold = 4_000
     else:
         token_threshold = 1_000
+
+    # openai-codex/ ist ein Custom-Provider — litellm kennt ihn nicht.
+    # Für Kompaktierung auf Claude Haiku fallbacken.
+    compact_model = boss_cfg.llm.model
+    if compact_model.startswith("openai-codex/"):
+        compact_model = "claude-haiku-4-5-20251001"
 
     if sessions.estimated_tokens(project_id) < token_threshold:
         return
@@ -379,7 +385,7 @@ async def _compact_if_needed(
 
     try:
         resp = await _llm_with_retry(lambda: litellm.acompletion(
-            model=boss_cfg.llm.model,
+            model=compact_model,
             messages=summary_prompt,
             max_tokens=700,
             drop_params=True,
@@ -404,7 +410,7 @@ async def _compact_if_needed(
                 {"role": "user", "content": summary},
             ]
             resp2 = await _llm_with_retry(lambda: litellm.acompletion(
-                model=boss_cfg.llm.model,
+                model=compact_model,
                 messages=meta_prompt,
                 max_tokens=350,
                 drop_params=True,
