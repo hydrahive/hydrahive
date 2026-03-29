@@ -64,64 +64,98 @@ async def _sse_call_tool(url: str, headers: dict, tool_name: str, arguments: dic
 # ---------------------------------------------------------------- streamableHttp Transport
 
 async def _http_jsonrpc(url: str, headers: dict, method: str, params: dict) -> dict:
+    """Deprecated — nur noch intern von _http_list_tools/_http_call_tool verwendet."""
     import httpx
-    payload = {
-        "jsonrpc": "2.0",
-        "id":      1,
-        "method":  method,
-        "params":  params,
-    }
-    merged_headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", **headers}
+    payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    merged = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", **headers}
     async with httpx.AsyncClient(timeout=20.0) as client:
-        r = await client.post(url, json=payload, headers=merged_headers)
+        r = await client.post(url, json=payload, headers=merged)
         r.raise_for_status()
-        # streamableHttp kann SSE-Response zurückgeben → ersten JSON-Block parsen
-        ct = r.headers.get("content-type", "")
-        if "text/event-stream" in ct:
-            import json as _json
-            for line in r.text.splitlines():
-                if line.startswith("data:"):
-                    data = line[5:].strip()
-                    if data and data != "[DONE]":
-                        obj = _json.loads(data)
-                        if "error" in obj:
-                            raise RuntimeError(f"JSON-RPC Error: {obj['error']}")
-                        return obj.get("result", {})
-            return {}
-        data = r.json()
-        if "error" in data:
-            raise RuntimeError(f"JSON-RPC Error: {data['error']}")
-        return data.get("result", {})
+        return _parse_jsonrpc_response(r)
+
+
+def _parse_jsonrpc_response(r) -> dict:
+    """Parst JSON-RPC Response (application/json oder text/event-stream)."""
+    import json as _json
+    ct = r.headers.get("content-type", "")
+    if "text/event-stream" in ct:
+        for line in r.text.splitlines():
+            if line.startswith("data:"):
+                data = line[5:].strip()
+                if data and data != "[DONE]":
+                    obj = _json.loads(data)
+                    if "error" in obj:
+                        raise RuntimeError(f"JSON-RPC Error: {obj['error']}")
+                    return obj.get("result", {})
+        return {}
+    data = r.json()
+    if "error" in data:
+        raise RuntimeError(f"JSON-RPC Error: {data['error']}")
+    return data.get("result", {})
 
 
 async def _http_list_tools(url: str, headers: dict) -> list[dict]:
-    await _http_jsonrpc(url, headers, "initialize", {
-        "protocolVersion": "2024-11-05",
-        "capabilities":    {},
-        "clientInfo":      {"name": "hydrahive", "version": "1.0"},
-    })
-    result = await _http_jsonrpc(url, headers, "tools/list", {})
+    import httpx
+    base_headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", **headers}
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # Initialize — Server gibt mcp-session-id zurück
+        r = await client.post(url, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                       "clientInfo": {"name": "hydrahive", "version": "1.0"}},
+        }, headers=base_headers)
+        r.raise_for_status()
+        _parse_jsonrpc_response(r)
+
+        # Session-ID für Folge-Requests übernehmen
+        session_headers = dict(base_headers)
+        session_id = r.headers.get("mcp-session-id")
+        if session_id:
+            session_headers["mcp-session-id"] = session_id
+
+        # tools/list mit Session-ID
+        r2 = await client.post(url, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {},
+        }, headers=session_headers)
+        r2.raise_for_status()
+        result = _parse_jsonrpc_response(r2)
+
     raw_tools = result.get("tools", [])
-    tools = []
-    for t in raw_tools:
-        tools.append({
-            "name":        t.get("name", ""),
-            "description": t.get("description", ""),
-            "inputSchema": t.get("inputSchema") or t.get("input_schema") or {},
-        })
-    return tools
+    return [{
+        "name":        t.get("name", ""),
+        "description": t.get("description", ""),
+        "inputSchema": t.get("inputSchema") or t.get("input_schema") or {},
+    } for t in raw_tools]
 
 
 async def _http_call_tool(url: str, headers: dict, tool_name: str, arguments: dict) -> str:
-    await _http_jsonrpc(url, headers, "initialize", {
-        "protocolVersion": "2024-11-05",
-        "capabilities":    {},
-        "clientInfo":      {"name": "hydrahive", "version": "1.0"},
-    })
-    result = await _http_jsonrpc(url, headers, "tools/call", {
-        "name":      tool_name,
-        "arguments": arguments,
-    })
+    import httpx
+    base_headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", **headers}
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # Initialize
+        r = await client.post(url, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                       "clientInfo": {"name": "hydrahive", "version": "1.0"}},
+        }, headers=base_headers)
+        r.raise_for_status()
+        _parse_jsonrpc_response(r)
+
+        session_headers = dict(base_headers)
+        session_id = r.headers.get("mcp-session-id")
+        if session_id:
+            session_headers["mcp-session-id"] = session_id
+
+        # tools/call mit Session-ID
+        r2 = await client.post(url, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments},
+        }, headers=session_headers)
+        r2.raise_for_status()
+        result = _parse_jsonrpc_response(r2)
+
     content = result.get("content", [])
     if isinstance(content, list):
         texts = [c.get("text", "") for c in content if c.get("type") == "text"]

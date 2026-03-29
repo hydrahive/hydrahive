@@ -7,18 +7,37 @@ GET  /notifications/stream       — SSE-Stream für neue Notifications
 PATCH /notifications/{id}/read   — als gelesen markieren
 POST  /notifications/read-all    — alle als gelesen markieren
 DELETE /notifications/{id}       — löschen
+GET  /admin/notification-routes  — Notification-Routing laden
+PUT  /admin/notification-routes  — Notification-Routing speichern
 """
 from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from .notification_service import notification_service
 
 logger = logging.getLogger(__name__)
+
+_NOTIF_ROUTES_FILE = Path("/etc/hydrahive/notification_routes.json")
+
+
+def _load_notif_routes() -> dict:
+    if _NOTIF_ROUTES_FILE.exists():
+        try:
+            return json.loads(_NOTIF_ROUTES_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_notif_routes(data: dict) -> None:
+    _NOTIF_ROUTES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _NOTIF_ROUTES_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt, public_router: APIRouter) -> None:
@@ -38,7 +57,6 @@ def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt,
     @public_router.get("/notifications/stream")
     async def notification_stream(request: Request, token: str | None = None):
         from fastapi import HTTPException as _HTTPException
-        # Bevorzuge Authorization-Header (kein Token in URL/Logs)
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             resolved_token = auth_header[7:]
@@ -82,6 +100,28 @@ def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt,
         username, _ = auth
         ok = notification_service.delete(notification_id, username)
         return {"ok": ok}
+
+    # ── Notification-Routing (Blueprint) ─────────────────────────────────────
+
+    @public_router.get("/admin/notification-routes")
+    async def get_notification_routes(auth: tuple[str, str] = Depends(require_auth)):
+        _, role = auth
+        if role != "admin":
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(403, "Nur Admins")
+        return _load_notif_routes()
+
+    @public_router.put("/admin/notification-routes")
+    async def save_notification_routes(
+        body: dict = Body(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        _, role = auth
+        if role != "admin":
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(403, "Nur Admins")
+        _save_notif_routes(body)
+        return {"saved": True}
 
 
 def _serialize(n) -> dict:

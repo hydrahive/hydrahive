@@ -25,6 +25,7 @@ const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) =
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
 const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 const ButlerPage        = lazy(() => import("@/pages/ButlerPage").then((m) => ({ default: m.ButlerPage })));
+const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
 const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m) => ({ default: m.SkillPackagesPage })));
 const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
@@ -104,7 +105,8 @@ export default function App() {
             <Route path="extensions"        element={<ExtensionsPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
             <Route path="federation"        element={<A2APage />} />
-            <Route path="butler"           element={<ButlerPage />} />
+            <Route path="blueprint"         element={<BlueprintPage />} />
+            <Route path="butler"           element={<Navigate to="/blueprint" replace />} />
             <Route path="tools/skill-packages" element={<SkillPackagesPage />} />
             <Route path="hub"                  element={<HubPage />} />
             <Route path="system"            element={<SystemPage />} />

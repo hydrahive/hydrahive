@@ -18,6 +18,7 @@
     "schedules": "Schedules",
     "federation": "Federation",
     "butler": "Butler",
+    "blueprint": "Blueprint",
     "skillPackages": "Skill Packages",
     "groupOperations": "Operations",
     "groupSystem": "System"
@@ -41,6 +42,7 @@
     "schedules": "Automated agent tasks",
     "federation": "Peer-to-peer agent federation",
     "butler": "Visual automation rules",
+    "blueprint": "Automation, architecture, permissions",
     "skillPackages": "Bundle QMD Skills"
   },
   "layout": {
