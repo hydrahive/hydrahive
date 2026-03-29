@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
-import { api } from "@/lib/api";
+import { api, type SessionPreview } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 
@@ -38,9 +38,12 @@ export function AgentChatPage() {
   const [error,       setError]       = useState("");
   const [agentName,   setAgentName]   = useState(id ?? "");
   const [agentModel,  setAgentModel]  = useState<{ model?: string; temperature?: number }>({});
-  const [showSuggest, setShowSuggest] = useState(false);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [suggestIdx,  setSuggestIdx]  = useState(0);
+  const [showSuggest,  setShowSuggest]  = useState(false);
+  const [showEmoji,    setShowEmoji]    = useState(false);
+  const [suggestIdx,   setSuggestIdx]   = useState(0);
+  const [showHistory,  setShowHistory]  = useState(false);
+  const [sessions,     setSessions]     = useState<SessionPreview[]>([]);
+  const [viewSession,  setViewSession]  = useState<{ id: string; messages: Message[]; startedAt: string } | null>(null);
 
   const bottomRef       = useRef<HTMLDivElement>(null);
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
@@ -81,6 +84,23 @@ export function AgentChatPage() {
     setShowSuggest(suggestions.length > 0 && input.length > 0);
     setSuggestIdx(0);
   }, [input]);
+
+  useEffect(() => {
+    if (!showHistory || !id) return;
+    api.listSessions(id, 30).then(d => setSessions(d.sessions)).catch(() => {});
+  }, [showHistory, id]);
+
+  async function openSession(sid: string) {
+    if (!id) return;
+    try {
+      const d = await api.getSessionById(id, sid);
+      const msgs = d.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+      setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
+      setShowHistory(false);
+    } catch {}
+  }
 
   function sysMsg(content: string) {
     setMessages(ms => [...ms, mkMsg("system", content)]);
@@ -260,6 +280,7 @@ export function AgentChatPage() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
         <button onClick={() => navigate("/agents")}
           className="p-1.5 rounded-md hover:bg-accent transition-colors">
@@ -272,17 +293,71 @@ export function AgentChatPage() {
           <h1 className="text-sm font-semibold truncate">{agentName}</h1>
           <p className="text-xs text-muted-foreground font-mono">{agentModel.model ?? id}</p>
         </div>
+        <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
+          className={`p-1.5 rounded-md transition-colors ${showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
+          title="Chat-Verlauf">
+          <Clock className="h-4 w-4" />
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
+      {/* History Panel */}
+      {showHistory && (
+        <div className="flex-1 overflow-y-auto border-b bg-muted/20">
+          <div className="flex items-center justify-between px-4 py-2 border-b">
+            <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
+            <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {sessions.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-8">Keine vergangenen Sessions</p>
+          ) : (
+            <div className="divide-y">
+              {sessions.map(s => (
+                <button key={s.id} onClick={() => openSession(s.id)}
+                  className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
+                    <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
+                  </div>
+                  {s.preview && (
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* View past session banner */}
+      {viewSession && (
+        <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b text-xs flex-shrink-0">
+          <span className="text-amber-600 dark:text-amber-400 font-medium">
+            Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={() => { setViewSession(null); setShowHistory(true); }}
+              className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
+              <ArrowLeft className="h-3 w-3" /> Zurück
+            </button>
+            <button onClick={() => { setViewSession(null); api.post(`/agents/${id}/session/start`, {}).catch(() => {}); }}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+              <Plus className="h-3 w-3" /> Neuer Chat
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${showHistory ? "hidden" : ""}`}>
+        {(viewSession ? viewSession.messages : messages).length === 0 && !viewSession && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-3 text-muted-foreground">
             <Bot className="h-10 w-10" />
             <p className="text-sm">{t("agentChat.emptyChat", { name: agentName })}</p>
             <p className="text-xs opacity-60">{t("agentChat.slashTip")} <code className="bg-muted px-1 rounded">/help</code> {t("agentChat.slashTip2")}</p>
           </div>
         )}
-        {messages.map((msg) => {
+        {(viewSession ? viewSession.messages : messages).map((msg) => {
           if (msg.role === "system") {
             return (
               <div key={msg.id} className="flex justify-center">
@@ -349,13 +424,13 @@ export function AgentChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {error && (
+      {error && !viewSession && (
         <div className="px-4 py-2 text-xs text-destructive bg-destructive/10 border-t flex-shrink-0">
           {error}
         </div>
       )}
 
-      <div className="px-4 py-3 border-t flex-shrink-0 relative">
+      {!viewSession && !showHistory && <div className="px-4 py-3 border-t flex-shrink-0 relative">
         {showSuggest && suggestions.length > 0 && (
           <div className="absolute bottom-full left-4 right-4 mb-1 bg-card border rounded-md shadow-lg overflow-hidden z-10">
             {suggestions.map((s, i) => (
@@ -412,7 +487,7 @@ export function AgentChatPage() {
             </button>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
