@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -97,6 +97,7 @@ export function AgentsPage() {
   const [logErr, setLogErr] = useState("");
   const [hbTasks, setHbTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [agentSearch, setAgentSearch] = useState("");
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -345,15 +346,18 @@ export function AgentsPage() {
       {error && <div className="app-panel border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
 
       {showForm && (
-        <section className="section-card space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closeForm} />
+          <div className="w-full max-w-2xl bg-background border-l border-border/50 flex flex-col overflow-hidden shadow-2xl">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 flex-shrink-0">
             <div>
-              <p className="metric-kicker">{t("agents.configuration")}</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">{editId ? t("agents.editAgent", { id: editId }) : t("agents.newAgentTitle")}</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{t("agents.configuration")}</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">{editId ? t("agents.editAgent", { id: editId }) : t("agents.newAgentTitle")}</h2>
             </div>
             <button onClick={closeForm} className="rounded-2xl border p-2 transition hover:bg-accent"><X className="h-4 w-4" /></button>
           </div>
-          <form onSubmit={handleSave} className="space-y-5">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <form id="agent-form" onSubmit={handleSave} className="space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
               <Field label={t("agents.agentId")} hint={t("agents.agentIdHint")}>
                 <Input value={form.id} onChange={(e) => set("id", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} placeholder={t("agents.agentPlaceholder")} required disabled={!!editId} />
@@ -529,15 +533,17 @@ export function AgentsPage() {
             </Field>
 
             {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">{t("agents.cancel")}</button>
-              <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
-                <Save className="h-3.5 w-3.5" />
-                {saving ? t("agents.saving") : editId ? t("common.save") : t("agents.newAgent")}
-              </button>
-            </div>
           </form>
-        </section>
+          </div>
+          <div className="flex-shrink-0 border-t border-border/40 px-6 py-4 flex gap-2 justify-end">
+            <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">{t("agents.cancel")}</button>
+            <button form="agent-form" type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" />
+              {saving ? t("agents.saving") : editId ? t("common.save") : t("agents.newAgent")}
+            </button>
+          </div>
+          </div>
+        </div>
       )}
 
       {loading && (
@@ -556,8 +562,27 @@ export function AgentsPage() {
 
       {!loading && agentList.length > 0 && (
         <section className="section-card overflow-hidden p-0">
+          {/* Suchleiste */}
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/40">
+            <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <input
+              value={agentSearch}
+              onChange={(e) => setAgentSearch(e.target.value)}
+              placeholder={`${agentList.length} Agenten durchsuchen…`}
+              className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
+            />
+            {agentSearch && (
+              <button onClick={() => setAgentSearch("")} className="text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <div className="divide-y">
-            {agentList.map(([id, agent]) => {
+            {agentList.filter(([id, agent]) => {
+              if (!agentSearch) return true;
+              const q = agentSearch.toLowerCase();
+              return id.toLowerCase().includes(q) || agent.config.identity.toLowerCase().includes(q) || agent.config.type.toLowerCase().includes(q);
+            }).map(([id, agent]) => {
               const rt = agent.runtime;
               const status = rt?.status ?? "unbekannt";
               const color = STATUS_COLORS[status] ?? "text-muted-foreground";
