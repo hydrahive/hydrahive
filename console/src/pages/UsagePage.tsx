@@ -57,38 +57,33 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
   const [open, setOpen] = useState(false);
   const hasModels = Object.keys(proj.model_breakdown).length > 0;
 
+  const c = AGENT_COLORS[agentCategory(proj.project_id)];
   return (
-    <div className={cn("rounded-2xl border shadow-sm overflow-hidden", AGENT_COLORS[agentCategory(proj.project_id)].bg, AGENT_COLORS[agentCategory(proj.project_id)].border)}>
+    <div className={cn("rounded-2xl border shadow-sm overflow-hidden", c.bg, c.border)}>
       <button
         type="button"
-        className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-accent/30 transition-colors"
+        className="w-full px-4 py-3 text-left hover:bg-accent/30 transition-colors"
         onClick={() => setOpen(o => !o)}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <Database className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          <span className="font-medium truncate">{proj.project_id}</span>
-          {(() => { const c = AGENT_COLORS[agentCategory(proj.project_id)]; return <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium shrink-0 ${c.badge}`}>{c.label}</span>; })()}
-          <span className="text-xs text-muted-foreground shrink-0">{proj.sessions_with_usage} Sessions</span>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="font-medium text-sm truncate">{proj.project_id}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium shrink-0 ${c.badge}`}>{c.label}</span>
         </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="text-right">
-            <p className="text-sm tabular-nums">{fmtK(proj.total_input + proj.total_output)} tok</p>
-            <p className="text-xs text-muted-foreground">in+out</p>
-          </div>
-          {(proj.total_cache_read > 0) && (
-            <div className="text-right">
-              <p className="text-sm tabular-nums text-blue-500">{fmtK(proj.total_cache_read)} tok</p>
-              <p className="text-xs text-muted-foreground">cached</p>
-            </div>
-          )}
-          <div className="text-right min-w-[5rem]">
-            <p className={cn("text-sm font-semibold tabular-nums", proj.total_cost > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
-              {fmtCost(proj.total_cost)}
-            </p>
-            <p className="text-xs text-muted-foreground">API-Kosten</p>
-          </div>
-          <span className="text-muted-foreground text-sm">{open ? "▲" : "▼"}</span>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+          <span className="text-muted-foreground">Tokens</span>
+          <span className="tabular-nums text-right">{fmtK(proj.total_input + proj.total_output)}</span>
+          {proj.total_cache_read > 0 && <>
+            <span className="text-muted-foreground">Cache</span>
+            <span className="tabular-nums text-right text-blue-500">{fmtK(proj.total_cache_read)}</span>
+          </>}
+          <span className="text-muted-foreground">Kosten</span>
+          <span className={cn("tabular-nums font-semibold text-right", proj.total_cost > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
+            {fmtCost(proj.total_cost)}
+          </span>
+          <span className="text-muted-foreground">Sessions</span>
+          <span className="tabular-nums text-right">{proj.sessions_with_usage}</span>
         </div>
+        <div className="text-right text-muted-foreground text-xs mt-1">{open ? "▲" : "▼"}</div>
       </button>
 
       {open && hasModels && (
@@ -217,9 +212,11 @@ export function UsagePage() {
                 Noch keine Token-Daten vorhanden. Token-Counts werden ab dem nächsten Agent-Gespräch gespeichert.
               </div>
             ) : (
-              data.projects
-                .sort((a, b) => b.total_cost - a.total_cost)
-                .map(proj => <ProjectCard key={proj.project_id} proj={proj} />)
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {data.projects
+                  .sort((a, b) => b.total_cost - a.total_cost)
+                  .map(proj => <ProjectCard key={proj.project_id} proj={proj} />)}
+              </div>
             )}
           </div>
 
