@@ -860,6 +860,10 @@ def register_user_integration_routes(
         if not message:
             return {"ok": False, "error": "Fehlende Felder"}
 
+        # Status-Broadcasts ignorieren (würde sonst als Status gepostet)
+        if from_jid == "status@broadcast" or from_jid.endswith("@broadcast"):
+            return {"ok": True, "filtered": "status_broadcast"}
+
         # Rufnummer aus JID extrahieren (123456789@s.whatsapp.net → 123456789)
         sender = from_jid.split("@")[0] if "@" in from_jid else from_jid
         is_group = from_jid.endswith("@g.us")
