@@ -358,11 +358,11 @@ export function AgentChatPage() {
 
       {/* View past session banner */}
       {viewSession && (
-        <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b text-xs flex-shrink-0">
-          <span className="text-amber-600 dark:text-amber-400 font-medium">
+        <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b text-xs flex-shrink-0 gap-2">
+          <span className="text-amber-600 dark:text-amber-400 font-medium truncate min-w-0">
             Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <button onClick={() => { setViewSession(null); setShowHistory(true); }}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
               <ArrowLeft className="h-3 w-3" /> Zurück
