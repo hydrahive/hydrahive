@@ -472,8 +472,14 @@ def register_user_routes(
         username, _role = auth
         users = load_users()
         user_data = users.get(username, {})
+        wizard_done = user_data.get("wizard_done", False)
+        # Bestehende User (Agent-Dir schon vorhanden) gelten als fertig
+        if not wizard_done:
+            personal_dir = Path(agents_dir) / f"personal_{username}"
+            if personal_dir.exists() and not (personal_dir / "startup.md").exists():
+                wizard_done = True
         return {
-            "done": user_data.get("wizard_done", False),
+            "done": wizard_done,
             "group": user_data.get("group", "standard"),
         }
 
