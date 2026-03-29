@@ -1,6 +1,6 @@
 # HydraHive — Deployment-Anleitung
 
-> Version 0.1.0 · Stand 2026-03-25
+> Version 0.1.0 · Stand 2026-03-30
 
 ---
 
@@ -25,9 +25,9 @@
 | CPU       | 2 vCPU  | 4 vCPU    |
 | RAM       | 4 GB    | 8 GB      |
 | Disk      | 20 GB   | 50 GB SSD |
-| OS        | Ubuntu 22.04 LTS x86_64 | Ubuntu 22.04 LTS x86_64 |
-| Python    | 3.11    | 3.11      |
-| Node.js   | 18 LTS  | 20 LTS    |
+| OS        | Ubuntu 22.04 / 24.04 LTS x86_64 | Ubuntu 24.04 LTS x86_64 |
+| Python    | 3.11+   | 3.12      |
+| Node.js   | 18 LTS  | 22 LTS    |
 
 ### Netzwerk-Ports (intern)
 
@@ -204,7 +204,7 @@ Wird über die Console-UI (Einstellungen → LLM) geschrieben. Manuelle Beispiel
 
 ```json
 {
-  "default_model": "claude-opus-4-5",
+  "default_model": "claude-sonnet-4-6",
   "providers": {
     "anthropic": { "enabled": true },
     "openai":    { "enabled": false },
