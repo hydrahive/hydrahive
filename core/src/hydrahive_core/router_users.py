@@ -304,6 +304,9 @@ def register_user_routes(
                 _shutil.rmtree(d)
                 logger.info("Personal-Agent-Dir gelöscht: %s", d)
 
+        # Session aus dem In-Memory-State des SessionManagers entfernen
+        await agent_sessions.end_session(personal_id)
+
         logger.info("User gelöscht: %s", username)
         audit_log("user.delete", target=username)
         return {"deleted": True, "username": username}
