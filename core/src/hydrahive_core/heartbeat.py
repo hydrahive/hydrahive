@@ -171,7 +171,7 @@ class AgentHeartbeatScheduler:
         Gibt False zurück wenn kein Flow matcht (Standard-Ausführung fortsetzen).
         """
         try:
-            from .butler_executor import ButlerEvent, check_flows
+            from .butler_executor import ButlerEvent, check_flows, execute_generic_actions
         except Exception:
             return False
 
@@ -195,7 +195,9 @@ class AgentHeartbeatScheduler:
         if not actions:
             return False
 
-        # Butler übernimmt: Aktionen ausführen
+        # Butler übernimmt: generische Aktionen (HTTP, E-Mail, Gitea, Discord) + spezifische
+        import asyncio as _asyncio
+        _asyncio.create_task(execute_generic_actions(actions, event))
         for act in actions:
             sub    = act.get("subtype")
             params = act.get("params", {})

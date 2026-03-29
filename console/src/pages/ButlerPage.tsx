@@ -40,6 +40,10 @@ import {
   Copy,
   Check,
   GitBranch,
+  Globe,
+  Mail,
+  GitPullRequest,
+  MessageSquare,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -83,6 +87,11 @@ function defaultParams(subtype: string): Record<string, unknown> {
     case "queue":                  return {};
     case "ignore":                 return {};
     case "forward":                return { agent_id: "" };
+    case "http_post":              return { url: "", headers: {}, body_template: "{}" };
+    case "send_email":             return { to: "", subject: "", body: "" };
+    case "git_create_issue":       return { repo: "", title: "", body: "" };
+    case "git_add_comment":        return { repo: "", issue_number: "", body: "" };
+    case "discord_post":           return { channel_id: "", message: "" };
     default:                       return {};
   }
 }
@@ -123,6 +132,11 @@ const PALETTE = [
       { type: "actionNode", subtype: "queue",               label: "In Warteschlange",   icon: Inbox },
       { type: "actionNode", subtype: "ignore",              label: "Ignorieren",         icon: EyeOff },
       { type: "actionNode", subtype: "forward",             label: "Weiterleiten",       icon: ArrowRight },
+      { type: "actionNode", subtype: "http_post",           label: "HTTP POST",          icon: Globe },
+      { type: "actionNode", subtype: "send_email",          label: "E-Mail senden",      icon: Mail },
+      { type: "actionNode", subtype: "git_create_issue",    label: "Gitea: Issue",       icon: GitPullRequest },
+      { type: "actionNode", subtype: "git_add_comment",     label: "Gitea: Kommentar",   icon: GitBranch },
+      { type: "actionNode", subtype: "discord_post",        label: "Discord: Post",      icon: MessageSquare },
     ],
   },
 ];
@@ -170,6 +184,16 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
       return (params.instruction as string)?.slice(0, 30) || "—";
     case "reply_fixed":
       return (params.text as string)?.slice(0, 30) || "—";
+    case "http_post":
+      return (params.url as string)?.slice(0, 35) || "— url fehlt —";
+    case "send_email":
+      return (params.to as string) || "— to fehlt —";
+    case "git_create_issue":
+      return (params.repo as string) ? `${params.repo}: ${(params.title as string)?.slice(0, 20) || ""}` : "— repo fehlt —";
+    case "git_add_comment":
+      return (params.repo as string) ? `${params.repo} #${params.issue_number || "?"}` : "— repo fehlt —";
+    case "discord_post":
+      return (params.channel_id as string) ? `#${params.channel_id}` : "— channel fehlt —";
     default:
       return "";
   }
@@ -624,6 +648,143 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         <p className="text-xs text-white/35 leading-relaxed">
           Nachricht wird in der Warteschlange für spätere Bearbeitung gespeichert.
         </p>
+      )}
+
+      {/* Action: HTTP POST */}
+      {d.subtype === "http_post" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Ziel-URL</label>
+            <input type="text" placeholder="https://example.com/webhook"
+              value={(p.url as string) || ""}
+              onChange={e => onChange({ ...p, url: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Body (JSON-Template)</label>
+            <textarea rows={4} placeholder={`{\n  "text": "{{event.message_text}}"\n}`}
+              value={(p.body_template as string) || "{}"}
+              onChange={e => onChange({ ...p, body_template: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-xs font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            />
+          </div>
+          <p className="text-[10px] text-white/25">Platzhalter: <code className="text-cyan-400">{"{{event.message_text}}"}</code>, <code className="text-cyan-400">{"{{event.extra.repo}}"}</code> etc.</p>
+        </div>
+      )}
+
+      {/* Action: E-Mail senden */}
+      {d.subtype === "send_email" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">An (Empfänger)</label>
+            <input type="text" placeholder="empfaenger@example.com oder {{event.extra.from}}"
+              value={(p.to as string) || ""}
+              onChange={e => onChange({ ...p, to: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Betreff</label>
+            <input type="text" placeholder="Neue Nachricht von {{event.contact_name}}"
+              value={(p.subject as string) || ""}
+              onChange={e => onChange({ ...p, subject: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Text</label>
+            <textarea rows={3} placeholder="{{event.message_text}}"
+              value={(p.body as string) || ""}
+              onChange={e => onChange({ ...p, body: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            />
+          </div>
+          <p className="text-[10px] text-white/25">Nutzt SMTP aus /etc/hydrahive/kas.json</p>
+        </div>
+      )}
+
+      {/* Action: Gitea Issue erstellen */}
+      {d.subtype === "git_create_issue" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Repository (owner/repo)</label>
+            <input type="text" placeholder="hydrahive/hydrahive oder {{event.extra.repo}}"
+              value={(p.repo as string) || ""}
+              onChange={e => onChange({ ...p, repo: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Titel</label>
+            <input type="text" placeholder="Bug: {{event.extra.commit_message}}"
+              value={(p.title as string) || ""}
+              onChange={e => onChange({ ...p, title: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Beschreibung (optional)</label>
+            <textarea rows={3} placeholder="Ausgelöst durch: {{event.extra.author}}"
+              value={(p.body as string) || ""}
+              onChange={e => onChange({ ...p, body: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Action: Gitea Kommentar */}
+      {d.subtype === "git_add_comment" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Repository (owner/repo)</label>
+            <input type="text" placeholder="hydrahive/hydrahive"
+              value={(p.repo as string) || ""}
+              onChange={e => onChange({ ...p, repo: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Issue-Nummer</label>
+            <input type="text" placeholder="42 oder {{event.extra.pr_number}}"
+              value={(p.issue_number as string) || ""}
+              onChange={e => onChange({ ...p, issue_number: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Kommentar</label>
+            <textarea rows={3} placeholder="Automatisch von Butler via {{event.channel}}"
+              value={(p.body as string) || ""}
+              onChange={e => onChange({ ...p, body: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Action: Discord Post */}
+      {d.subtype === "discord_post" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Channel ID</label>
+            <input type="text" placeholder="1234567890123456789"
+              value={(p.channel_id as string) || ""}
+              onChange={e => onChange({ ...p, channel_id: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+            <p className="text-[10px] text-white/25 mt-1">Discord Channel-ID (Rechtsklick → ID kopieren)</p>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Nachricht</label>
+            <textarea rows={3} placeholder="{{event.message_text}}"
+              value={(p.message as string) || ""}
+              onChange={e => onChange({ ...p, message: e.target.value })}
+              className="w-full rounded-lg bg-white/5 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30 resize-none"
+            />
+          </div>
+        </div>
       )}
 
       <div className="mt-auto pt-3 border-t border-white/10">

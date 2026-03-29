@@ -150,8 +150,11 @@ async def start_telegram_bot(
 
         # Butler: Flows gegen eingehende Nachricht prüfen
         try:
-            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
-            _bactions = await _butler(_BE(channel="telegram", contact_id=user_id, contact_name=from_name, message_text=text), owner=username)
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler, execute_generic_actions as _butler_generic
+            _bevent = _BE(channel="telegram", contact_id=user_id, contact_name=from_name, message_text=text)
+            _bactions = await _butler(_bevent, owner=username)
+            import asyncio as _aio
+            _aio.create_task(_butler_generic(_bactions, _bevent))
             for _act in _bactions:
                 _sub = _act.get("subtype")
                 _p   = _act.get("params", {})

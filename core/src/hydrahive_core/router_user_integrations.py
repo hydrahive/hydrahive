@@ -910,7 +910,7 @@ def register_user_integration_routes(
 
         # Butler-Check
         try:
-            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler, execute_generic_actions as _butler_generic
             _event = _BE(
                 channel="whatsapp",
                 contact_id=sender,
@@ -919,6 +919,8 @@ def register_user_integration_routes(
                 message_text=message,
             )
             _butler_actions = await _butler(_event, owner=username)
+            import asyncio as _aio
+            _aio.create_task(_butler_generic(_butler_actions, _event))
             for _act in _butler_actions:
                 _sub = _act.get("subtype")
                 _p   = _act.get("params", {})

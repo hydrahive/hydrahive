@@ -537,9 +537,12 @@ class AgentDiscordClient(DiscordAgentClient):
         # Butler: Flows gegen eingehende Nachricht prüfen
         _agent_id = self.agent_id
         try:
-            from .butler_executor import ButlerEvent as _BE, check_flows as _butler
+            from .butler_executor import ButlerEvent as _BE, check_flows as _butler, execute_generic_actions as _butler_generic
             _owner = self.agent_id.removeprefix("personal_")
-            _bactions = await _butler(_BE(channel="discord", contact_id=author_id, contact_name=author, message_text=content), owner=_owner)
+            _bevent = _BE(channel="discord", contact_id=author_id, contact_name=author, message_text=content)
+            _bactions = await _butler(_bevent, owner=_owner)
+            import asyncio as _aio
+            _aio.create_task(_butler_generic(_bactions, _bevent))
             for _act in _bactions:
                 _sub = _act.get("subtype")
                 _p   = _act.get("params", {})

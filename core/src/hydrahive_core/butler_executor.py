@@ -8,6 +8,7 @@ Gibt eine Liste von Aktionen zurück die ausgeführt werden sollen:
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -284,3 +285,189 @@ def _pt(s: str) -> dtime:
         return dtime(h, m)
     except Exception:
         return dtime(0, 0)
+
+
+# ── Template-Engine ────────────────────────────────────────────────────────────
+
+def _render(text: str, event: ButlerEvent) -> str:
+    """Ersetzt {{event.field}} und {{event.extra.subfield}} Platzhalter."""
+    def _replace(m: re.Match) -> str:
+        path = m.group(1).strip()
+        parts = path.split(".")
+        if parts and parts[0] == "event":
+            parts = parts[1:]
+        obj: Any = event
+        for part in parts:
+            if isinstance(obj, dict):
+                obj = obj.get(part, "")
+            elif hasattr(obj, part):
+                obj = getattr(obj, part)
+            else:
+                obj = ""
+                break
+        return str(obj) if obj is not None else ""
+    return re.sub(r"\{\{([^}]+)\}\}", _replace, text)
+
+
+# ── Generische Action-Ausführung ───────────────────────────────────────────────
+
+async def execute_generic_actions(actions: list[dict[str, Any]], event: ButlerEvent) -> None:
+    """Führt generische Butler-Aktionen aus (HTTP, E-Mail, Gitea, Discord)."""
+    for act in actions:
+        sub    = act.get("subtype")
+        params = act.get("params", {})
+        try:
+            if sub == "http_post":
+                await _act_http_post(params, event)
+            elif sub == "send_email":
+                await _act_send_email(params, event)
+            elif sub == "git_create_issue":
+                await _act_git_create_issue(params, event)
+            elif sub == "git_add_comment":
+                await _act_git_add_comment(params, event)
+            elif sub == "discord_post":
+                await _act_discord_post(params, event)
+        except Exception as exc:
+            logger.warning("Butler action '%s' fehlgeschlagen: %s", sub, exc)
+
+
+async def _act_http_post(params: dict, event: ButlerEvent) -> None:
+    import aiohttp
+
+    url = _render(str(params.get("url", "")), event).strip()
+    if not url:
+        logger.warning("Butler http_post: url fehlt")
+        return
+
+    raw_headers = params.get("headers") or {}
+    headers = {k: _render(str(v), event) for k, v in raw_headers.items()}
+    headers.setdefault("Content-Type", "application/json")
+
+    body_tpl = str(params.get("body_template", "{}"))
+    body_str = _render(body_tpl, event)
+    try:
+        body = json.loads(body_str)
+    except Exception:
+        body = {"text": body_str}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=body, headers=headers,
+                                timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            logger.info("Butler http_post → %s: HTTP %s", url, resp.status)
+
+
+async def _act_send_email(params: dict, event: ButlerEvent) -> None:
+    import asyncio as _asyncio
+    import smtplib
+    from email.mime.text import MIMEText
+
+    kas_path = Path("/etc/hydrahive/kas.json")
+    if not kas_path.exists():
+        logger.warning("Butler send_email: /etc/hydrahive/kas.json fehlt")
+        return
+    try:
+        cfg = json.loads(kas_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("Butler send_email: KAS-Config Lesefehler: %s", e)
+        return
+
+    to      = _render(str(params.get("to", "")), event).strip()
+    subject = _render(str(params.get("subject", "(kein Betreff)")), event)
+    body    = _render(str(params.get("body", "")), event)
+
+    if not to:
+        logger.warning("Butler send_email: Empfänger fehlt")
+        return
+
+    from_addr = cfg.get("mail_address", cfg.get("smtp_user", ""))
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"]    = from_addr
+    msg["To"]      = to
+    msg["Subject"] = subject
+
+    def _send_sync():
+        with smtplib.SMTP(cfg["smtp_host"], cfg.get("smtp_port", 587), timeout=15) as s:
+            s.starttls()
+            s.login(cfg["smtp_user"], cfg["smtp_password"])
+            s.sendmail(from_addr, [to], msg.as_string())
+
+    await _asyncio.get_event_loop().run_in_executor(None, _send_sync)
+    logger.info("Butler send_email → %s: OK", to)
+
+
+async def _act_git_create_issue(params: dict, event: ButlerEvent) -> None:
+    import aiohttp
+    from .gitea import _load_config as _gitea_cfg
+
+    repo  = _render(str(params.get("repo", "")), event).strip()
+    title = _render(str(params.get("title", "")), event).strip()
+    body  = _render(str(params.get("body", "")), event)
+
+    if not repo or not title:
+        logger.warning("Butler git_create_issue: repo oder title fehlt")
+        return
+
+    cfg   = _gitea_cfg()
+    token = cfg.get("token", "")
+    base  = cfg.get("url", "http://127.0.0.1:3001").rstrip("/")
+    parts = repo.split("/", 1)
+    owner = parts[0] if len(parts) == 2 else cfg.get("org", "hydrahive")
+    repo_name = parts[1] if len(parts) == 2 else repo
+
+    async with aiohttp.ClientSession() as session:
+        resp = await session.post(
+            f"{base}/api/v1/repos/{owner}/{repo_name}/issues",
+            json={"title": title, "body": body},
+            headers={"Authorization": f"token {token}", "Content-Type": "application/json"},
+            timeout=aiohttp.ClientTimeout(total=15),
+        )
+        data = await resp.json()
+        logger.info("Butler git_create_issue → %s/%s #%s", owner, repo_name, data.get("number", "?"))
+
+
+async def _act_git_add_comment(params: dict, event: ButlerEvent) -> None:
+    import aiohttp
+    from .gitea import _load_config as _gitea_cfg
+
+    repo         = _render(str(params.get("repo", "")), event).strip()
+    issue_number = _render(str(params.get("issue_number", "")), event).strip()
+    body         = _render(str(params.get("body", "")), event)
+
+    if not repo or not issue_number or not body:
+        logger.warning("Butler git_add_comment: repo, issue_number oder body fehlt")
+        return
+
+    cfg   = _gitea_cfg()
+    token = cfg.get("token", "")
+    base  = cfg.get("url", "http://127.0.0.1:3001").rstrip("/")
+    parts = repo.split("/", 1)
+    owner = parts[0] if len(parts) == 2 else cfg.get("org", "hydrahive")
+    repo_name = parts[1] if len(parts) == 2 else repo
+
+    async with aiohttp.ClientSession() as session:
+        resp = await session.post(
+            f"{base}/api/v1/repos/{owner}/{repo_name}/issues/{issue_number}/comments",
+            json={"body": body},
+            headers={"Authorization": f"token {token}", "Content-Type": "application/json"},
+            timeout=aiohttp.ClientTimeout(total=15),
+        )
+        logger.info("Butler git_add_comment → %s/%s #%s: HTTP %s", owner, repo_name, issue_number, resp.status)
+
+
+async def _act_discord_post(params: dict, event: ButlerEvent) -> None:
+    from .tool_registry import _discord_clients
+
+    channel_id = _render(str(params.get("channel_id", "")), event).strip()
+    message    = _render(str(params.get("message", "")), event)
+
+    if not channel_id or not message:
+        logger.warning("Butler discord_post: channel_id oder message fehlt")
+        return
+
+    client = next(iter(_discord_clients.values()), None)
+    if client is None:
+        logger.warning("Butler discord_post: kein Discord-Client aktiv")
+        return
+
+    await client.send_message(channel_id, message)
+    logger.info("Butler discord_post → channel %s: OK", channel_id)

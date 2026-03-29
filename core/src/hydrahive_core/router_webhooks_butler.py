@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from .butler_executor import ButlerEvent, check_flows
+from .butler_executor import ButlerEvent, check_flows, execute_generic_actions
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ async def execute_webhook_actions(
     load_project_cfg: Any,
 ) -> None:
     """Führt Butler-Aktionen für einen Webhook-Trigger aus."""
+    asyncio.create_task(execute_generic_actions(actions, event))
     for act in actions:
         sub    = act.get("subtype")
         params = act.get("params", {})
