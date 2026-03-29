@@ -279,6 +279,26 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, sessions: sessions.size })
 })
 
+// ── Graceful Shutdown ────────────────────────────────────────────────────────
+
+async function shutdown() {
+  console.log('Bridge wird beendet...')
+  const destroyPromises = []
+  for (const [id, s] of sessions.entries()) {
+    destroyPromises.push(
+      Promise.race([
+        (async () => { try { await s.client.destroy() } catch {} })(),
+        new Promise(r => setTimeout(r, 3000)),  // max 3s pro Client
+      ])
+    )
+  }
+  await Promise.all(destroyPromises)
+  process.exit(0)
+}
+
+process.on('SIGTERM', shutdown)
+process.on('SIGINT',  shutdown)
+
 // ── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, '127.0.0.1', () => {
