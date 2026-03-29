@@ -337,6 +337,7 @@ def register_user_integration_routes(
     orchestrator,
     audit_log,
     logger,
+    projects=None,
     internal_router: APIRouter | None = None,
 ) -> None:
     @auth_router.get("/me/wks")
@@ -940,7 +941,9 @@ def register_user_integration_routes(
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
-        virtual_cfg = _PC(
+        # Echte Projekt-Config laden (inkl. Identity/Soul), Fallback auf Minimal-Config
+        real_cfg = projects.get(agent_id) if projects else None
+        virtual_cfg = real_cfg or _PC(
             id=agent_id,
             identity=_PI(name=agent_id),
             agents=_PA(boss=agent_id, workers=[]),

@@ -1045,6 +1045,7 @@ register_user_integration_routes(
     orchestrator=orchestrator,
     audit_log=audit_log,
     logger=logger,
+    projects=projects,
     internal_router=internal_router,
 )
 
