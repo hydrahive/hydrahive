@@ -113,7 +113,6 @@ async function createSession(agentId) {
     let from = msg.from
     try {
       const contact = await msg.getContact()
-      console.log(`[${agentId}] LID-Debug: from=${msg.from} contact.number=${contact?.number} contact.id=${JSON.stringify(contact?.id)}`)
       if (contact?.number) {
         from = `${contact.number}@c.us`
       }

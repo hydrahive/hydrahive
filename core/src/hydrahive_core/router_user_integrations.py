@@ -891,7 +891,6 @@ def register_user_integration_routes(
         allowed    = [n.strip() for n in wa_cfg.get("allowed_numbers", []) if n.strip()]
         blocked    = [n.strip() for n in wa_cfg.get("blocked_numbers", []) if n.strip()]
         owners     = [re.sub(r'\s+', '', n).lstrip("+") for n in wa_cfg.get("owner_numbers", []) if n.strip()]
-        logger.info("WhatsApp incoming: agent=%s sender=%s owners=%s is_group=%s", agent_id, sender, owners, is_group)
 
         # Typ-Filter
         if is_group and not group_ok:
@@ -954,8 +953,6 @@ def register_user_integration_routes(
         sender_label = from_name if from_name else f"+{sender}"
         chat_type    = "Gruppen-Chat" if is_group else "Einzel-Chat"
         is_owner     = bool(owners) and any(sender.endswith(o) for o in owners)
-        logger.info("WhatsApp owner-check: sender=%s owners=%s is_owner=%s execution_mode=%s",
-                    sender, owners, is_owner, "elevated" if is_owner else "safe")
 
         if is_owner:
             execution_mode = "elevated"
