@@ -295,12 +295,14 @@ def register_user_routes(
         del users[username]
         save_users(users)
 
+        import shutil as _shutil
         personal_id = f"personal_{username}"
         personal_dir = Path(agents_dir) / personal_id
-        if personal_dir.exists():
-            disabled = Path(agents_dir) / f"_{personal_id}_disabled"
-            personal_dir.rename(disabled)
-            logger.info("Persönlicher Agent deaktiviert: %s", personal_id)
+        disabled_dir = Path(agents_dir) / f"_{personal_id}_disabled"
+        for d in (personal_dir, disabled_dir):
+            if d.exists():
+                _shutil.rmtree(d)
+                logger.info("Personal-Agent-Dir gelöscht: %s", d)
 
         logger.info("User gelöscht: %s", username)
         audit_log("user.delete", target=username)
