@@ -303,6 +303,8 @@ const NODE_TYPES: NodeTypes = {
 
 // ── Node Palette (left sidebar) ────────────────────────────────────────────
 function NodePalette() {
+  const [open, setOpen] = React.useState<Record<string, boolean>>({ Trigger: true, Bedingung: false, Aktion: false });
+
   const onDragStart = (event: React.DragEvent, item: { type: string; subtype: string; label: string }) => {
     event.dataTransfer.setData("application/butler-node", JSON.stringify(item));
     event.dataTransfer.effectAllowed = "move";
@@ -313,35 +315,55 @@ function NodePalette() {
     blue:   "border-blue-500/40 bg-blue-950/30 hover:bg-blue-950/60 text-blue-300",
     orange: "border-orange-500/40 bg-orange-950/30 hover:bg-orange-950/60 text-orange-300",
   };
+  const headerColor = {
+    green:  "text-green-400/70 hover:text-green-300",
+    blue:   "text-blue-400/70 hover:text-blue-300",
+    orange: "text-orange-400/70 hover:text-orange-300",
+  };
 
   return (
-    <div className="w-44 shrink-0 overflow-y-auto border-r border-white/10 bg-[hsl(var(--sidebar-bg,220_15%_8%))] p-3 flex flex-col gap-4">
-      <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-white/30 px-1">Knoten-Palette</p>
-      {PALETTE.map(group => (
-        <div key={group.group}>
-          <p className="text-[0.55rem] uppercase tracking-widest text-white/35 mb-1.5 px-1">{group.group}</p>
-          <div className="flex flex-col gap-1.5">
-            {group.items.map(item => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.subtype}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs",
-                    "cursor-grab active:cursor-grabbing transition-colors",
-                    colorMap[group.color]
-                  )}
-                  draggable
-                  onDragStart={e => onDragStart(e, item)}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate leading-tight">{item.label}</span>
-                </div>
-              );
-            })}
+    <div className="w-44 shrink-0 overflow-y-auto border-r border-white/10 bg-[hsl(var(--sidebar-bg,220_15%_8%))] p-3 flex flex-col gap-2">
+      <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-white/30 px-1 mb-1">Knoten-Palette</p>
+      {PALETTE.map(group => {
+        const isOpen = open[group.group] ?? true;
+        return (
+          <div key={group.group}>
+            <button
+              type="button"
+              onClick={() => setOpen(prev => ({ ...prev, [group.group]: !isOpen }))}
+              className={cn(
+                "w-full flex items-center justify-between px-1 py-1 text-[0.55rem] font-bold uppercase tracking-widest transition-colors",
+                headerColor[group.color]
+              )}
+            >
+              <span>{group.group}</span>
+              <span className="text-white/20">{isOpen ? "▲" : "▼"}</span>
+            </button>
+            {isOpen && (
+              <div className="flex flex-col gap-1.5 mt-1">
+                {group.items.map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.subtype}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs",
+                        "cursor-grab active:cursor-grabbing transition-colors",
+                        colorMap[group.color]
+                      )}
+                      draggable
+                      onDragStart={e => onDragStart(e, item)}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate leading-tight">{item.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
       <div className="mt-auto pt-3 border-t border-white/10">
         <p className="text-[0.55rem] text-white/20 leading-relaxed px-1">
           Knoten auf die Canvas ziehen, dann verbinden und speichern.
