@@ -223,7 +223,12 @@ tools:
   - write_memory
 
 mcp_servers:
-  - qmd                  # MCP-Server-IDs aus /etc/hydrahive/mcp_servers.json
+  - amem                 # MCP-Server-IDs aus /etc/hydrahive/mcp_servers.json
+
+sources:
+  - name: "Dokumentation"
+    url: "https://docs.example.com"
+    description: "Offizielle Projektdokumentation"
 
 heartbeat:
   interval: 30s
@@ -304,6 +309,48 @@ Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werd
 | Fork-Bomben | `:() { …` |
 
 Geblockte Befehle werden mit einer Fehlermeldung abgelehnt und im Log protokolliert.
+
+### Agent Sources — Quellen & Suchmaschinen
+
+Agenten können eine Liste von URLs oder Suchmaschinen zugewiesen bekommen. Diese werden beim Start automatisch in den System-Prompt injiziert. Der Agent nutzt `http_request`, um die Quellen vor dem Antworten abzurufen und so aktuelle oder domänenspezifische Informationen einzubeziehen.
+
+**Konfiguration in `agent.yaml`:**
+```yaml
+sources:
+  - name: "Unreal Engine Docs"
+    url: "https://dev.epicgames.com/documentation/en-us/unreal-engine"
+    description: "Offizielle Unreal Engine Dokumentation"
+  - name: "Context7"
+    url: "https://context7.com/unreal-engine"
+    description: "Semantische Suche für Unreal-Kontext"
+```
+
+**Konfiguration in der Konsole:** **Agenten** → Agent bearbeiten → Abschnitt **„Quellen & Suchmaschinen"**
+
+Jede Quelle hat drei Felder:
+
+| Feld | Beschreibung |
+|---|---|
+| `name` | Anzeigename der Quelle |
+| `url` | URL die der Agent abruft |
+| `description` | Kurze Beschreibung — hilft dem Agenten die Quelle richtig einzusetzen |
+
+### System-Handbuch (system_handbook.md)
+
+Jeder Agent erhält beim Start automatisch den Inhalt von `/etc/hydrahive/system_handbook.md` in seinen System-Prompt injiziert. Das System-Handbuch ist das gemeinsame Regelwerk für alle Agenten auf dieser HydraHive-Instanz.
+
+**Standardmäßig enthält es:**
+- Research-first-Prinzip: erst lesen → planen → handeln
+- Anleitungen zur Nutzung der A-MEM-Tools
+- AgentLink Handoff-Anweisungen
+- Repository-Referenzen und Projekt-Konventionen
+
+**Anpassen:**
+```bash
+sudo nano /etc/hydrahive/system_handbook.md
+```
+
+Änderungen werden beim nächsten Agenten-Start wirksam. Das System-Handbuch ist für alle Agenten identisch — agentenspezifische Anweisungen gehören in die `soul.md` des jeweiligen Agenten.
 
 ---
 
@@ -744,23 +791,31 @@ Alle Git-Tools akzeptieren einen optionalen `project_id`-Parameter. Standardmä�
 
 ## 13. MCP-Server
 
-MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. HydraHive unterstützt streamableHttp-Transport.
+MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. HydraHive unterstützt `streamableHttp`- und `sse`-Transport.
+
+### MCP-Integration ist vollautomatisch
+
+Sobald ein Agent einen MCP-Server in seiner Konfiguration hat, werden die Tools des Servers **automatisch** verfügbar. Es ist keine manuelle Tool-Registrierung notwendig.
+
+**Tool-Namenskonvention:** `mcp_{server_id}_{tool_name}`
+
+Beispiel: Server-ID `amem` → Tools heißen `mcp_amem_add_note`, `mcp_amem_search_memory` usw.
 
 ### MCP-Server konfigurieren (Admin)
 
-1. **MCP-Server** in der Sidebar (Admin only)
+1. **Einstellungen** → Tab **MCP**
 2. **Neuer MCP-Server**
-3. Felder ausfüllen: ID, Name, Transport (`streamableHttp`), URL
+3. Felder ausfüllen: ID, Name, Transport (`streamableHttp` oder `sse`), URL
 
 Oder direkt in `/etc/hydrahive/mcp_servers.json`:
 
 ```json
 [
   {
-    "id": "qmd",
-    "name": "QMD Memory Search",
-    "transport": "streamableHttp",
-    "url": "http://127.0.0.1:8181/mcp"
+    "id": "amem",
+    "name": "A-MEM Shared Memory",
+    "transport": "sse",
+    "url": "http://192.168.178.5:8080/sse"
   }
 ]
 ```
@@ -770,10 +825,28 @@ Oder direkt in `/etc/hydrahive/mcp_servers.json`:
 In `agent.yaml`:
 ```yaml
 mcp_servers:
-  - qmd
+  - amem
 ```
 
 Oder in **Mein Agent → MCP-Tab** → Server aktivieren.
+
+### A-MEM — Shared Memory MCP
+
+A-MEM ist die gemeinsame Langzeit-Wissensdatenbank für alle Agenten. Jeder neue Agent hat `mcp_servers: [amem]` bereits vorbelegt. A-MEM läuft als eigenständiger Service und ist über das LAN erreichbar.
+
+Agenten mit `amem` in `mcp_servers` erhalten automatisch folgende Tools:
+
+| Tool | Beschreibung |
+|---|---|
+| `mcp_amem_add_note` | Neue Wissensnotiz speichern |
+| `mcp_amem_search_memory` | Volltextsuche in allen Notizen |
+| `mcp_amem_vector_search` | Semantische Vektorsuche |
+| `mcp_amem_update_note` | Bestehende Notiz aktualisieren |
+| `mcp_amem_delete_note` | Notiz löschen |
+| `mcp_amem_get_note` | Einzelne Notiz abrufen |
+| `mcp_amem_amem_stats` | Statistiken der Wissensdatenbank |
+
+A-MEM eignet sich für agentenübergreifendes Wissen: Recherche-Ergebnisse, Projekt-Erkenntnisse, geteilte Faktensammlungen.
 
 ### QMD Memory Search MCP
 
