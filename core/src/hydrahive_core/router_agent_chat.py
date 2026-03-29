@@ -85,6 +85,18 @@ def register_agent_chat_routes(
             "count": len(context),
         }
 
+    @auth_router.get("/agents/{agent_id}/sessions")
+    def agent_list_sessions(agent_id: str, limit: int = 30, _a: tuple[str, str] = Depends(require_auth)):
+        return {"sessions": agent_sessions.list_sessions(agent_id, limit)}
+
+    @auth_router.get("/agents/{agent_id}/sessions/{session_id}")
+    def agent_get_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        session = agent_sessions.get_session_by_id(agent_id, session_id)
+        if not session:
+            raise HTTPException(404, "Session nicht gefunden")
+        return {"id": session.id, "messages": [m.to_dict() for m in session.messages],
+                "started_at": session.started_at, "ended_at": session.ended_at}
+
     @auth_router.post("/agents/{agent_id}/memory", status_code=201)
     def write_agent_memory(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
         import re as _re

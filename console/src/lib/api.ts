@@ -142,10 +142,10 @@ export const api = {
   putKas:  (d: KasConfigPayload) => api.put<{saved: boolean}>("/admin/kas", d),
   wizardComplete: () => api.post<{done: boolean}>("/admin/wizard/complete", {}),
   // Session History
-  listSessions:  (projectId: string, limit = 20) =>
-    api.get<{sessions: SessionPreview[]}>(`/projects/${projectId}/sessions?limit=${limit}`),
-  getSessionById: (projectId: string, sessionId: string) =>
-    api.get<SessionFull>(`/projects/${projectId}/sessions/${sessionId}`),
+  listSessions:  (agentId: string, limit = 20) =>
+    api.get<{sessions: SessionPreview[]}>(`/agents/${agentId}/sessions?limit=${limit}`),
+  getSessionById: (agentId: string, sessionId: string) =>
+    api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
   // Doctor
   doctor:    () => api.get<DoctorReport>("/admin/doctor"),
   doctorFix: (fixId: string) => api.post<{ok:boolean;output?:string;error?:string}>(`/admin/doctor/fix/${fixId}`, {}),
