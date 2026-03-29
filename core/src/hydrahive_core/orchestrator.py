@@ -572,7 +572,11 @@ class Orchestrator:
         # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
         _use_meta = "request_tools" in (boss_cfg.tools or [])
         boss_tools    = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=_use_meta)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else None
+        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
+        _mcp_s = await self._mcp_schemas_for_agent(boss_cfg)
+        if _mcp_s:
+            litellm_tools = (litellm_tools or []) + _mcp_s
+        litellm_tools = litellm_tools or None
 
         import json as _json
         sys_tokens_s  = len(system_prompt) // 4
@@ -645,19 +649,25 @@ class Orchestrator:
                                 cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
                                 for tc in msg.tool_calls:
                                     yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
-                                    tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
-                                    try:
-                                        args = _json.loads(tc.function.arguments or "{}")
-                                        result = await self._execute_tool(
-                                            tool,
-                                            boss_cfg=boss_cfg,
-                                            project_id=project_id,
-                                            tool_name=tc.function.name,
-                                            tool_input=args,
-                                        )
-                                    except Exception as te:
-                                        result = {"error": str(te)}
-                                    result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
+                                    args = _json.loads(tc.function.arguments or "{}")
+                                    if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
+                                        try:
+                                            result = await self._execute_mcp_tool(boss_cfg, tc.function.name, args)
+                                        except Exception as te:
+                                            result = {"error": str(te)}
+                                    else:
+                                        tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
+                                        try:
+                                            result = await self._execute_tool(
+                                                tool,
+                                                boss_cfg=boss_cfg,
+                                                project_id=project_id,
+                                                tool_name=tc.function.name,
+                                                tool_input=args,
+                                            )
+                                        except Exception as te:
+                                            result = {"error": str(te)}
+                                    result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result)
                                     tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
                                 cur_messages.extend(tool_results)
                                 next_resp = await self._openai_codex_call(
@@ -803,20 +813,26 @@ class Orchestrator:
                             any_tool_error = False
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
-                                tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
-                                if tool:
+                                if block.name.startswith("mcp_") and boss_cfg.mcp_servers:
                                     try:
-                                        result = await self._execute_tool(
-                                            tool,
-                                            boss_cfg=boss_cfg,
-                                            project_id=project_id,
-                                            tool_name=block.name,
-                                            tool_input=block.input,
-                                        )
+                                        result = await self._execute_mcp_tool(boss_cfg, block.name, block.input or {})
                                     except Exception as te:
                                         result = {"error": str(te)}
                                 else:
-                                    result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
+                                    tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
+                                    if tool:
+                                        try:
+                                            result = await self._execute_tool(
+                                                tool,
+                                                boss_cfg=boss_cfg,
+                                                project_id=project_id,
+                                                tool_name=block.name,
+                                                tool_input=block.input,
+                                            )
+                                        except Exception as te:
+                                            result = {"error": str(te)}
+                                    else:
+                                        result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
                                 if isinstance(result, dict) and "error" in result:
                                     any_tool_error = True
                                 result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
