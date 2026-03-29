@@ -45,17 +45,25 @@ def register_backup_restore_routes(
         backup_dir.mkdir(parents=True, exist_ok=True)
         name = f"hydrahive-backup-{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.tar.gz"
         dest = backup_dir / name
+        _SKIP_PARTS = {"tls", "files", ".sessions", "whatsapp-sessions"}
+
+        def _backup_filter(ti: _tar.TarInfo) -> _tar.TarInfo | None:
+            parts = set(Path(ti.name).parts)
+            if parts & _SKIP_PARTS:
+                return None
+            if any(p.startswith("proj_") for p in parts):
+                return None
+            return ti
+
         with _tar.open(dest, "w:gz") as tf:
             for src, arcname in backup_sources:
                 src_path = Path(src)
-                if src_path.exists():
-                    tf.add(
-                        src_path,
-                        arcname=arcname,
-                        filter=lambda ti: None
-                        if any(part.startswith("proj_") or part == "files" for part in Path(ti.name).parts)
-                        else ti,
-                    )
+                if not src_path.exists():
+                    continue
+                try:
+                    tf.add(src_path, arcname=arcname, filter=_backup_filter)
+                except PermissionError as e:
+                    logger.warning("Backup: Datei übersprungen (keine Berechtigung): %s", e)
         size = dest.stat().st_size
         audit_log("backup.create", target=name, details={"size": size})
         logger.info("Backup erstellt: %s (%d bytes)", name, size)
