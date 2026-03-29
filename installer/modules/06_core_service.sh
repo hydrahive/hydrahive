@@ -20,6 +20,14 @@ else
     success "System-User '${HYDRAHIVE_USER}' bereits vorhanden"
 fi
 
+# --- Home-Verzeichnis für Model-Cache (A-MEM / sentence-transformers) ---
+if [ ! -d "/home/${HYDRAHIVE_USER}" ]; then
+    mkdir -p "/home/${HYDRAHIVE_USER}"
+    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "/home/${HYDRAHIVE_USER}"
+    chmod 755 "/home/${HYDRAHIVE_USER}"
+    success "Home-Verzeichnis /home/${HYDRAHIVE_USER} angelegt"
+fi
+
 # --- Passwordless sudo für Extension-Manager (sudo -n braucht NOPASSWD) ---
 cat > /etc/sudoers.d/hydrahive << SUDOEOF
 hydrahive ALL=(ALL) NOPASSWD:ALL
