@@ -149,7 +149,7 @@ export function UsagePage() {
     : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-muted-foreground">Token-Statistik</p>
