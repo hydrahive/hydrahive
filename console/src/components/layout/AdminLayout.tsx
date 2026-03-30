@@ -28,6 +28,8 @@ import {
   Workflow,
   Package,
   Store,
+  KeyRound,
+  Brain,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -169,6 +171,7 @@ export function AdminLayout() {
       { to: "/blueprint",            icon: Workflow, label: t("nav.blueprint"),     hint: t("navHint.blueprint") },
       { to: "/tools/skill-packages", icon: Package,  label: t("nav.skillPackages"), hint: t("navHint.skillPackages") },
       { to: "/hub",                  icon: Store,    label: "HydraHub",             hint: "Agenten & Tools installieren" },
+      { to: "/brain",                icon: Brain,    label: "HydraBrain",           hint: "3D-Graph: Agenten, Tools & Memory" },
     ],
   };
 
@@ -177,6 +180,7 @@ export function AdminLayout() {
     items: [
       { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
       { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
+      { to: "/secrets",  icon: KeyRound,   label: "Secrets",          hint: "API-Keys & Tokens für Agenten" },
       { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
     ],
   };
@@ -211,6 +215,10 @@ export function AdminLayout() {
             <div>
               <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">{t("layout.controlFabric")}</p>
               <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">HydraHive</h1>
+              <a href="https://hydrahive.org" target="_blank" rel="noopener noreferrer"
+                className="text-[0.65rem] text-cyan-400/70 hover:text-cyan-300 transition-colors tracking-wide">
+                hydrahive.org
+              </a>
             </div>
           </div>
           <button
