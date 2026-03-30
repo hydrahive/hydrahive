@@ -223,6 +223,7 @@ def register_user_routes(
     incoming_message_model,
     load_agent_config_direct=None,
     discovery=None,
+    projects_dir: str = "/projects",
 ) -> None:
     @admin_router.get("/users")
     def list_users():
@@ -301,12 +302,18 @@ def register_user_routes(
 
         import shutil as _shutil
         personal_id = f"personal_{username}"
+        # Agent-Verzeichnis + deaktivierte Kopie löschen
         personal_dir = Path(agents_dir) / personal_id
         disabled_dir = Path(agents_dir) / f"_{personal_id}_disabled"
         for d in (personal_dir, disabled_dir):
             if d.exists():
                 _shutil.rmtree(d)
                 logger.info("Personal-Agent-Dir gelöscht: %s", d)
+        # Projekt-Verzeichnis löschen
+        project_dir = Path(projects_dir) / personal_id
+        if project_dir.exists():
+            _shutil.rmtree(project_dir)
+            logger.info("Personal-Projekt-Dir gelöscht: %s", project_dir)
 
         # Session aus dem In-Memory-State des SessionManagers entfernen
         await agent_sessions.end_session(personal_id)

@@ -1113,6 +1113,7 @@ register_user_routes(
     matrix_register=_matrix_register,
     hash_password=_hash_password,
     agents_dir=AGENTS_DIR,
+    projects_dir=PROJECTS_DIR,
     ensure_personal_agent=_ensure_personal_agent,
     runtime=runtime,
     agent_sessions=agent_sessions,
