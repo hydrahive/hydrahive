@@ -159,14 +159,15 @@ def register_invite_routes(
             raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
 
         try:
-            result = await create_user_fn(
+            from .router_users import CreateUserRequest as _CUR
+            result = await create_user_fn(_CUR(
                 username=req.username,
                 password=req.password,
                 role=inv["role"],
                 group=inv["group"],
                 allowed_projects=inv["allowed_projects"],
                 allowed_agents=inv["allowed_agents"],
-            )
+            ))
         except HTTPException:
             raise
         except Exception as e:
