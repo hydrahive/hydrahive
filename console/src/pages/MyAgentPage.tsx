@@ -366,9 +366,9 @@ export function MyAgentPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0 overflow-x-hidden">
       {/* Header + Tabs */}
-      <div className="border-b flex-shrink-0">
+      <div className="border-b flex-shrink-0 min-w-0">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <Bot className="h-4 w-4 text-primary" />
@@ -378,7 +378,7 @@ export function MyAgentPage() {
             {model && <p className="text-xs text-muted-foreground font-mono">{model}</p>}
           </div>
         </div>
-        <div className="flex gap-0 px-4">
+        <div className="flex gap-0 px-4 overflow-x-auto scrollbar-none min-w-0">
           {[
             { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
             { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
@@ -394,7 +394,7 @@ export function MyAgentPage() {
             { id: "butler",    label: "Butler",                   icon: Workflow },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs border-b-2 transition-colors ${
                 tab === id
                   ? "border-primary text-primary font-medium"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -407,9 +407,9 @@ export function MyAgentPage() {
 
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
-        <div className="flex-1 overflow-hidden flex flex-col pt-4 pb-4 pl-4 sm:pt-6 sm:pb-6 sm:pl-6 pr-0 min-h-0">
-          <div className="grid flex-1 min-h-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
-            <section className="flex flex-col min-h-0 gap-4">
+        <div className="flex-1 overflow-hidden flex flex-col pt-4 pb-4 pl-4 sm:pt-6 sm:pb-6 sm:pl-6 pr-0 min-h-0 min-w-0">
+          <div className="grid flex-1 min-h-0 min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
+            <section className="flex flex-col min-h-0 min-w-0 gap-4">
               {loadError && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                   {loadError.includes("Token")
@@ -657,21 +657,21 @@ export function MyAgentPage() {
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
                           placeholder={viewSession ? "Vergangene Session — schreibgeschützt" : t("myAgent.messagePlaceholder")} rows={1}
                           disabled={!!viewSession}
-                          className="min-h-[3rem] flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="min-h-[3rem] min-w-0 flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
-                          className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
+                          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
                           <Smile className="h-5 w-5 text-muted-foreground" />
                         </button>
                         {sending ? (
                           <button onClick={stop}
-                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
+                            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
                             title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
                             <Square className="h-4 w-4" />
                           </button>
                         ) : (
                           <button onClick={send} disabled={!input.trim()}
-                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                             <Send className="h-4 w-4" />
                           </button>
                         )}
