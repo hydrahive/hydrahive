@@ -84,7 +84,7 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
 
         t = _threading.Thread(target=_call, daemon=True)
         t.start()
-        t.join(timeout=10)  # max 10s — danach Fallback
+        t.join(timeout=30)  # max 30s — Ollama braucht beim cold start länger
         if t.is_alive():
             logger.warning("Embedding timeout (%s) — FAISS deaktiviert für diesen Request", model)
             return None
