@@ -31,6 +31,7 @@ const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => 
 const SecretsPage            = lazy(() => import("@/pages/SecretsPage").then((m) => ({ default: m.SecretsPage })));
 const HydraBrainPage         = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
+const InvitePage             = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/setup"      element={<SetupPage />} />
           <Route path="/wizard"     element={<WizardPage />} />
           <Route path="/login"      element={<LoginPage />} />
+          <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/onboarding" element={<ProtectedRoute><OnboardingWizardPage /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><OnboardingGuard><AdminLayout /></OnboardingGuard></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />

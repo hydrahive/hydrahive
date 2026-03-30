@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
-import { Users, Plus, RefreshCw, Trash2, KeyRound, ShieldCheck, User, Pencil, X, Save } from "lucide-react";
+import { Users, Plus, RefreshCw, Trash2, KeyRound, ShieldCheck, User, Pencil, X, Save, Link, Copy, Check, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+
+interface Invite {
+  token:            string;
+  role:             string;
+  group:            string;
+  allowed_projects: string[];
+  note:             string;
+  expires_at:       number;
+  expired:          boolean;
+  used:             boolean;
+}
+
+const INVITE_EMPTY = { role: "user", group: "standard", allowed_projects: [] as string[], note: "", ttl_days: 7 };
 
 interface OctoUser {
   username:          string;
@@ -48,6 +61,41 @@ export function UserPage() {
   const [dsInput,    setDsInput]    = useState("");
   const [allProjects, setAllProjects] = useState<{id:string;name:string}[]>([]);
   const [allAgents,   setAllAgents]   = useState<{id:string;identity:string}[]>([]);
+  const [invites,     setInvites]     = useState<Invite[]>([]);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteForm,  setInviteForm]  = useState({ ...INVITE_EMPTY });
+  const [inviteSaving, setInviteSaving] = useState(false);
+  const [newInviteLink, setNewInviteLink] = useState<string|null>(null);
+  const [copied,      setCopied]      = useState(false);
+
+  async function loadInvites() {
+    try { setInvites(await api.get<Invite[]>("/invites")); } catch { /* ignore */ }
+  }
+
+  async function handleCreateInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteSaving(true);
+    try {
+      const res = await api.post<{token:string;link:string}>("/invites", inviteForm);
+      setNewInviteLink(res.link);
+      setShowInviteForm(false);
+      setInviteForm({ ...INVITE_EMPTY });
+      loadInvites();
+    } catch(err) { alert(err instanceof Error ? err.message : "Fehler"); }
+    finally { setInviteSaving(false); }
+  }
+
+  async function handleRevokeInvite(token: string) {
+    if (!confirm("Einladung widerrufen?")) return;
+    try { await api.delete(`/invites/${token}`); loadInvites(); }
+    catch(err) { alert(err instanceof Error ? err.message : "Fehler"); }
+  }
+
+  function copyLink(link: string) {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function load() {
     try {
@@ -57,8 +105,8 @@ export function UserPage() {
     finally { setLoading(false); setRefreshing(false); }
   }
 
-  useEffect(() => { load(); }, []);
-  function refresh() { setRefreshing(true); load(); }
+  useEffect(() => { load(); loadInvites(); }, []);
+  function refresh() { setRefreshing(true); load(); loadInvites(); }
 
   async function openEdit(u: OctoUser) {
     setEditErr("");
@@ -416,6 +464,109 @@ export function UserPage() {
           </div>
         </div>
       )}
+
+      {/* ── Einladungslinks ────────────────────────────────────────────── */}
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            <h2 className="font-medium text-sm">Einladungslinks</h2>
+            <span className="text-xs text-muted-foreground">({invites.filter(i => !i.used && !i.expired).length} aktiv)</span>
+          </div>
+          <button onClick={() => { setShowInviteForm(v => !v); setNewInviteLink(null); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors">
+            <Plus className="h-3.5 w-3.5" />Neuer Link
+          </button>
+        </div>
+
+        {/* Neu erstellter Link */}
+        {newInviteLink && (
+          <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-4 py-3">
+            <Link className="h-4 w-4 text-green-600 shrink-0" />
+            <span className="text-sm font-mono flex-1 truncate text-green-700 dark:text-green-400">{newInviteLink}</span>
+            <button onClick={() => copyLink(newInviteLink)}
+              className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-accent transition-colors shrink-0">
+              {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Kopiert" : "Kopieren"}
+            </button>
+            <button onClick={() => setNewInviteLink(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+
+        {/* Formular */}
+        {showInviteForm && (
+          <form onSubmit={handleCreateInvite} className="grid grid-cols-4 gap-4 border-t pt-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notiz</label>
+              <input value={inviteForm.note} onChange={e => setInviteForm({...inviteForm, note: e.target.value})}
+                placeholder="z.B. für Max Mustermann"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rolle</label>
+              <select value={inviteForm.role} onChange={e => setInviteForm({...inviteForm, role: e.target.value})}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
+              <select value={inviteForm.group} onChange={e => setInviteForm({...inviteForm, group: e.target.value})}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="chatter">chatter</option>
+                <option value="standard">standard</option>
+                <option value="learning">learning</option>
+                <option value="dev">dev</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gültig (Tage)</label>
+              <input type="number" min={1} max={30} value={inviteForm.ttl_days}
+                onChange={e => setInviteForm({...inviteForm, ttl_days: parseInt(e.target.value)||7})}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="col-span-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowInviteForm(false)}
+                className="px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors">Abbrechen</button>
+              <button type="submit" disabled={inviteSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                <Link className="h-3.5 w-3.5" />{inviteSaving ? "Erstelle..." : "Link erstellen"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Liste aktiver Einladungen */}
+        {invites.filter(i => !i.used && !i.expired).length > 0 && (
+          <div className="space-y-2 border-t pt-3">
+            {invites.filter(i => !i.used && !i.expired).map(inv => (
+              <div key={inv.token} className="flex items-center gap-3 py-2 px-3 bg-muted/40 rounded-lg">
+                <Link className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-mono text-muted-foreground">{inv.token.slice(0,16)}…</span>
+                  {inv.note && <span className="ml-2 text-sm">{inv.note}</span>}
+                  <span className="ml-2 text-xs text-muted-foreground">{inv.role} · {inv.group}</span>
+                  {inv.allowed_projects.length > 0 && (
+                    <span className="ml-2 text-xs text-muted-foreground">Projekte: {inv.allowed_projects.join(", ")}</span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  läuft ab {new Date(inv.expires_at * 1000).toLocaleDateString("de")}
+                </span>
+                <button onClick={() => copyLink(`${window.location.origin}/invite/${inv.token}`)}
+                  className="p-1 hover:bg-accent rounded transition-colors" title="Link kopieren">
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => handleRevokeInvite(inv.token)}
+                  className="p-1 hover:bg-destructive/10 rounded transition-colors text-destructive" title="Widerrufen">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
