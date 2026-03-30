@@ -70,13 +70,14 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
         def _call():
             try:
                 kwargs: dict = {"model": model, "input": texts}
-                # Ollama: api_base explizit setzen damit litellm den richtigen
-                # Endpoint nutzt (ältere Versionen brauchen /api/embeddings)
+                # Ollama: OpenAI-kompatibler Endpoint /v1/embeddings verwenden —
+                # litellm kennt das Format, kein 400-Fehler auf /api/embed
                 if model.startswith("ollama/"):
                     import os as _os
-                    kwargs["api_base"] = _os.environ.get(
-                        "OLLAMA_API_BASE", "http://localhost:11434"
-                    )
+                    base = _os.environ.get("OLLAMA_API_BASE", "http://localhost:11434")
+                    # model-Name ohne "ollama/" prefix für openai-Pfad
+                    kwargs["model"] = f"openai/{model[len('ollama/'):]}"
+                    kwargs["api_base"] = f"{base.rstrip('/')}/v1"
                 resp = litellm.embedding(**kwargs)
                 result.append(resp)
             except Exception as e:
