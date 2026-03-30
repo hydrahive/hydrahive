@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ShieldCheck, User, KeyRound, AlertCircle, CheckCircle2 } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL ?? "";
-
 export function InvitePage() {
+  const API = "";
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
 
