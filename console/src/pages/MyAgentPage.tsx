@@ -378,7 +378,7 @@ export function MyAgentPage() {
             {model && <p className="text-xs text-muted-foreground font-mono">{model}</p>}
           </div>
         </div>
-        <div className="flex gap-0 px-4">
+        <div className="flex gap-0 px-4 overflow-x-auto scrollbar-none">
           {[
             { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
             { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
@@ -528,7 +528,7 @@ export function MyAgentPage() {
                             <Bot className="h-4 w-4 text-primary" />
                           </div>
                         )}
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0 max-w-full">
                           <div className={`rounded-[22px] px-4 py-3 text-sm break-words shadow-sm ${
                             msg.role === "user"
                               ? "bg-primary text-primary-foreground"
@@ -660,18 +660,18 @@ export function MyAgentPage() {
                           className="min-h-[3rem] flex-1 min-w-0 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
-                          className="hidden sm:inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
+                          className="hidden sm:inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
                           <Smile className="h-5 w-5 text-muted-foreground" />
                         </button>
                         {sending ? (
                           <button onClick={stop}
-                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
+                            className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
                             title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
                             <Square className="h-4 w-4" />
                           </button>
                         ) : (
                           <button onClick={send} disabled={!input.trim()}
-                            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                            className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                             <Send className="h-4 w-4" />
                           </button>
                         )}
