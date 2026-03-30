@@ -207,7 +207,7 @@ def register_project_routes(
         if result.matrix_room and not cfg.matrix.room:
             update_project_matrix_room(req.id, result.matrix_room)
         if result.matrix_space and not cfg.matrix.space:
-            update_project_matrix_space(projects_dir, req.id, result.matrix_space, logger=logger)
+            update_project_matrix_space(req.id, result.matrix_space)
 
         gitea_repo_url = ""
         gitea_error = ""
