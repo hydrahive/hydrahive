@@ -7,6 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from .matrix_agent import BossMatrixAgent
 
 
+def update_project_matrix_space(projects_dir: str, project_id: str, space_id: str, *, logger) -> None:
+    import yaml as _yaml
+    project_yaml = Path(projects_dir) / project_id / "project.yaml"
+    if not project_yaml.exists():
+        return
+    try:
+        data = _yaml.safe_load(project_yaml.read_text(encoding="utf-8"))
+        data.setdefault("matrix", {})["space"] = space_id
+        project_yaml.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+    except OSError as e:
+        logger.warning("project.yaml (space) konnte nicht aktualisiert werden: %s", e)
+
+
 def update_project_matrix_room(projects_dir: str, project_id: str, room_id: str, *, logger) -> None:
     import re
 
@@ -94,6 +107,8 @@ def register_project_lifecycle_routes(
         result = await provisioner.provision(cfg)
         if result.matrix_room and not cfg.matrix.room:
             update_project_matrix_room(projects_dir, project_id, result.matrix_room, logger=logger)
+        if result.matrix_space and not cfg.matrix.space:
+            update_project_matrix_space(projects_dir, project_id, result.matrix_space, logger=logger)
 
         room_id = result.matrix_room or cfg.matrix.room
         if room_id:
@@ -115,6 +130,7 @@ def register_project_lifecycle_routes(
             'files_dir': result.files_dir,
             'samba_share': result.samba_share,
             'matrix_room': result.matrix_room,
+            'matrix_space': result.matrix_space,
             'warnings': result.warnings,
             'ok': result.ok,
         }
@@ -133,7 +149,7 @@ def register_project_lifecycle_routes(
 
     @admin_router.post("/projects/{project_id}/matrix-invite")
     async def matrix_invite_members(project_id: str, _a: tuple = Depends(require_admin)):
-        """Lädt alle konfigurierten members in den bestehenden Matrix-Room ein."""
+        """Lädt alle konfigurierten members in den Matrix-Room und Space ein."""
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -145,6 +161,7 @@ def register_project_lifecycle_routes(
             raise HTTPException(503, 'Provisioner nicht initialisiert')
 
         server_name = read_server_name()
+        space_id = cfg.matrix.space if cfg.matrix else None
         invited, warnings = [], []
         import aiohttp as _aio
         headers = {
@@ -155,23 +172,24 @@ def register_project_lifecycle_routes(
         async with _aio.ClientSession() as session:
             for username in members:
                 mxid = f"@{username}:{server_name}"
-                try:
-                    async with session.post(
-                        f"http://localhost:8008/_matrix/client/v3/rooms/{room_id}/invite",
-                        headers=headers,
-                        json={"user_id": mxid},
-                        timeout=_aio.ClientTimeout(total=10),
-                    ) as resp:
-                        data = await resp.json(content_type=None)
-                        if resp.status in (200, 403) or data.get("errcode") in ("M_FORBIDDEN", "M_LIMIT_EXCEEDED"):
-                            # 403 = schon Mitglied oder blockiert
-                            invited.append(mxid)
-                        else:
-                            warnings.append(f"{mxid}: {data.get('error', resp.status)}")
-                except Exception as e:
-                    warnings.append(f"{mxid}: {e}")
+                for target_room in filter(None, [room_id, space_id]):
+                    try:
+                        async with session.post(
+                            f"http://localhost:8008/_matrix/client/v3/rooms/{target_room}/invite",
+                            headers=headers,
+                            json={"user_id": mxid},
+                            timeout=_aio.ClientTimeout(total=10),
+                        ) as resp:
+                            data = await resp.json(content_type=None)
+                            if resp.status in (200, 403) or data.get("errcode") in ("M_FORBIDDEN", "M_LIMIT_EXCEEDED"):
+                                if target_room == room_id:
+                                    invited.append(mxid)
+                            else:
+                                warnings.append(f"{mxid}@{target_room}: {data.get('error', resp.status)}")
+                    except Exception as e:
+                        warnings.append(f"{mxid}@{target_room}: {e}")
 
-        return {'project_id': project_id, 'room_id': room_id, 'invited': invited, 'warnings': warnings}
+        return {'project_id': project_id, 'room_id': room_id, 'space_id': space_id, 'invited': invited, 'warnings': warnings}
 
     @admin_router.get("/projects/{project_id}/samba-credentials")
     async def get_samba_credentials(project_id: str, _a: tuple = Depends(require_admin)):

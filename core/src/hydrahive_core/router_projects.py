@@ -56,12 +56,23 @@ def register_project_routes(
     projects_dir: str,
     get_provisioner,
     update_project_matrix_room,
+    update_project_matrix_space,
+    get_user_allowed_projects,
     audit_log,
     check_message_rate,
     logger,
 ) -> None:
+    def _check_project_access(auth: tuple[str, str], project_id: str) -> None:
+        """Wirft 403 wenn der User keinen Zugriff auf das Projekt hat."""
+        username, role = auth
+        allowed = get_user_allowed_projects(username, role)
+        if allowed is not None and project_id not in allowed:
+            raise HTTPException(403, f"Kein Zugriff auf Projekt '{project_id}'")
+
     @auth_router.get("/projects")
-    def list_projects():
+    def list_projects(auth: tuple[str, str] = Depends(require_auth)):
+        username, role = auth
+        allowed = get_user_allowed_projects(username, role)
         return {
             pid: {
                 "name": cfg.identity.name,
@@ -75,10 +86,12 @@ def register_project_routes(
                 "members": list(getattr(cfg, "members", [])),
             }
             for pid, cfg in projects.projects.items()
+            if allowed is None or pid in allowed
         }
 
     @auth_router.get("/projects/{project_id}")
-    def get_project(project_id: str):
+    def get_project(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -92,7 +105,8 @@ def register_project_routes(
         }
 
     @auth_router.get("/projects/{project_id}/agents")
-    def project_agents(project_id: str):
+    def project_agents(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -189,6 +203,8 @@ def register_project_routes(
         audit_log("project.provision", target=req.id, project_id=req.id)
         if result.matrix_room and not cfg.matrix.room:
             update_project_matrix_room(req.id, result.matrix_room)
+        if result.matrix_space and not cfg.matrix.space:
+            update_project_matrix_space(projects_dir, req.id, result.matrix_space, logger=logger)
 
         gitea_repo_url = ""
         gitea_error = ""
@@ -211,6 +227,7 @@ def register_project_routes(
             "files_dir": result.files_dir,
             "samba_share": result.samba_share,
             "matrix_room": result.matrix_room,
+            "matrix_space": result.matrix_space,
             "warnings": result.warnings,
             "ok": result.ok,
             "gitea_repo": gitea_repo_url,
@@ -299,6 +316,7 @@ def register_project_routes(
     ):
         from fastapi.responses import StreamingResponse as _SR
 
+        _check_project_access(auth, project_id)
         check_message_rate(req.sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
@@ -331,6 +349,7 @@ def register_project_routes(
         project_id: str,
         _auth: tuple[str, str] = Depends(require_auth),
     ):
+        _check_project_access(_auth, project_id)
         """Bricht einen laufenden ask_agent-Request ab (#34)."""
         from .tool_registry import set_interrupt as _set_interrupt
         _set_interrupt(project_id)
@@ -342,6 +361,7 @@ def register_project_routes(
         req: ProjectIncomingMessage,
         auth: tuple[str, str] = Depends(require_auth),
     ):
+        _check_project_access(auth, project_id)
         check_message_rate(req.sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:

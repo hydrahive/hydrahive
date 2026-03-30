@@ -131,6 +131,8 @@ class CreateUserRequest(BaseModel):
     password: str
     role: str = "user"
     group: str = "standard"
+    allowed_projects: list[str] = []
+    allowed_agents: list[str] = []
 
 
 class UpdateUserRequest(BaseModel):
@@ -212,7 +214,6 @@ def register_user_routes(
     load_users,
     save_users,
     read_server_name,
-    matrix_register,
     hash_password,
     agents_dir: str,
     ensure_personal_agent,
@@ -227,7 +228,7 @@ def register_user_routes(
     projects_dir: str = "/projects",
     get_provisioner=None,
     projects=None,
-) -> None:
+) -> dict:
     @admin_router.get("/users")
     def list_users():
         users = load_users()
@@ -262,7 +263,15 @@ def register_user_routes(
             raise HTTPException(409, f"User '{req.username}' existiert bereits")
 
         server_name = read_server_name()
-        matrix_ok = await matrix_register(req.username, req.password, server_name)
+        matrix_ok = False
+        try:
+            provisioner = get_provisioner() if get_provisioner else None
+            if provisioner:
+                matrix_ok = await provisioner.register_matrix_user(req.username, req.password)
+            else:
+                logger.warning("Matrix-Registrierung für '%s' übersprungen: kein Provisioner", req.username)
+        except Exception as _me:
+            logger.warning("Matrix-Registrierung '%s' Exception: %s", req.username, _me)
         users[req.username] = {
             "password_hash": hash_password(req.password),
             "role": req.role,
@@ -270,6 +279,8 @@ def register_user_routes(
             "matrix_id": f"@{req.username}:{server_name}",
             "matrix_ok": matrix_ok,
             "created_at": _dt.now().isoformat(),
+            "allowed_projects": req.allowed_projects,
+            "allowed_agents": req.allowed_agents,
         }
         save_users(users)
 
@@ -299,9 +310,12 @@ def register_user_routes(
                     try:
                         result = await provisioner.provision(cfg)
                         if result.matrix_room:
-                            from .router_project_lifecycle import update_project_matrix_room
+                            from .router_project_lifecycle import update_project_matrix_room, update_project_matrix_space
                             update_project_matrix_room(projects_dir, personal_id, result.matrix_room, logger=logger)
                             logger.info("Persönlicher Matrix-Room für %s: %s", req.username, result.matrix_room)
+                        if result.matrix_space:
+                            update_project_matrix_space(projects_dir, personal_id, result.matrix_space, logger=logger)
+                            logger.info("Persönlicher Matrix-Space für %s: %s", req.username, result.matrix_space)
                         if result.warnings:
                             room_warn = "; ".join(result.warnings)
                     except Exception as _e:
@@ -330,6 +344,21 @@ def register_user_routes(
 
         import shutil as _shutil
         personal_id = f"personal_{username}"
+
+        # Persönlichen Matrix-Room deprovisionieren BEVOR Dirs gelöscht werden
+        deprov_warnings = []
+        if get_provisioner and projects:
+            cfg = projects.get(personal_id)
+            if cfg:
+                try:
+                    _prov = get_provisioner()
+                    if _prov:
+                        deprov_warnings = await _prov.deprovision(cfg)
+                        if deprov_warnings:
+                            logger.warning("Deprovision-Warnungen für %s: %s", personal_id, deprov_warnings)
+                except Exception as _e:
+                    logger.warning("Deprovision für %s fehlgeschlagen: %s", personal_id, _e)
+
         # Agent-Verzeichnis + deaktivierte Kopie löschen
         personal_dir = Path(agents_dir) / personal_id
         disabled_dir = Path(agents_dir) / f"_{personal_id}_disabled"
@@ -699,3 +728,5 @@ def register_user_routes(
 
         logger.info("Agent importiert: %s (%d Dateien)", agent_id, extracted)
         return {"ok": True, "agent_id": agent_id, "files": extracted}
+
+    return {"create_user": create_user}

@@ -30,7 +30,8 @@ class ProjectAgents(BaseModel):
 
 class ProjectMatrix(BaseModel):
     model_config = {"extra": "ignore"}
-    room: str = ""   # wird beim Erstellen angelegt, kann leer sein
+    room:  str = ""   # Room-ID, wird beim Provisioning angelegt
+    space: str = ""   # Space-ID (#82), wird beim Provisioning angelegt
 
 
 class ProjectFilesystem(BaseModel):

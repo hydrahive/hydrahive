@@ -254,36 +254,71 @@ class MatrixAgent(ABC):
         logger.info("%s: Login erfolgreich", self._mxid)
 
     async def _register_and_login(self) -> LoginResponse:
-        """Bot-Account auf dem Homeserver registrieren."""
+        """Bot-Account auf dem Homeserver registrieren (UIAA two-step)."""
         import aiohttp
         reg_token = self._read_registration_token()
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        password  = self._generate_password()
+
+        async with aiohttp.ClientSession() as http:
+            # Schritt 1: Session-ID holen (ohne auth)
+            async with http.post(
+                f"{CONDUWUIT_URL}/_matrix/client/v3/register",
+                json={"username": self.config.id, "password": password, "inhibit_login": False},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r1:
+                d1 = await r1.json(content_type=None)
+
+            if "access_token" in d1:
+                # Direktregistrierung hat geklappt (kein UIAA nötig)
+                class _H:
+                    def __init__(self, d):
+                        self.access_token = d["access_token"]
+                        self.user_id      = d["user_id"]
+                        self.device_id    = d["device_id"]
+                return _H(d1)
+
+            if d1.get("errcode") == "M_USER_IN_USE":
+                # Account existiert bereits → direkt einloggen
+                resp2 = await self._client.login(
+                    password=password,
+                    device_name=f"hydrahive-{self.config.id}",
+                )
+                if isinstance(resp2, LoginResponse):
+                    return resp2
+                raise RuntimeError(f"Login von {self._mxid} fehlgeschlagen: {resp2}")
+
+            # UIAA: Session-ID aus Schritt 1 nehmen
+            uiaa_session = d1.get("session")
+            if not uiaa_session:
+                raise RuntimeError(f"Registrierung von {self._mxid} fehlgeschlagen (kein UIAA session): {d1}")
+
+            # Schritt 2: Mit auth + session registrieren
+            auth_block = {"type": "m.login.registration_token", "token": reg_token}
+            if uiaa_session:
+                auth_block["session"] = uiaa_session
+
+            async with http.post(
                 f"{CONDUWUIT_URL}/_matrix/client/v3/register",
                 json={
                     "username":      self.config.id,
-                    "password":      self._generate_password(),
-                    "auth": {
-                        "type":  "m.login.registration_token",
-                        "token": reg_token,
-                    },
+                    "password":      password,
+                    "auth":          auth_block,
                     "inhibit_login": False,
                 },
                 timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                data = await resp.json()
+            ) as r2:
+                d2 = await r2.json(content_type=None)
 
-        if "access_token" not in data:
-            raise RuntimeError(f"Registrierung von {self._mxid} fehlgeschlagen: {data}")
+        if "access_token" not in d2:
+            raise RuntimeError(f"Registrierung von {self._mxid} fehlgeschlagen: {d2}")
 
-        # LoginResponse-kompatibles Objekt (Felder die _save_token braucht)
         class _TokenHolder:
             def __init__(self, d):
                 self.access_token = d["access_token"]
                 self.user_id      = d["user_id"]
                 self.device_id    = d["device_id"]
 
-        return _TokenHolder(data)
+        return _TokenHolder(d2)
 
     async def _join_rooms(self) -> None:
         """Alle zugewiesenen Rooms joinen (#27)."""
@@ -337,10 +372,12 @@ class MatrixAgent(ABC):
                      room.room_id, event.state_key, event.membership)
 
     def _generate_password(self) -> str:
-        """Deterministisches Passwort aus Agent-ID (kein State nötig)."""
+        """Deterministisches Passwort aus Agent-ID + internem Secret (identisch zu provisioner.py)."""
         import hashlib
-        # Kein Geheimnis — der Account ist ein interner Bot ohne echte Daten
-        return hashlib.sha256(f"hydrahive-bot-{self.config.id}".encode()).hexdigest()[:32]
+        from pathlib import Path as _Path
+        secret_file = _Path("/etc/hydrahive/internal_secret")
+        secret = secret_file.read_text().strip() if secret_file.exists() else "hydrahive"
+        return hashlib.sha256(f"{self.config.id}:{secret}".encode()).hexdigest()[:32]
 
     def _load_token(self) -> dict | None:
         path = TOKEN_DIR / f"{self.config.id}.json"
@@ -358,15 +395,18 @@ class MatrixAgent(ABC):
         path.chmod(0o600)
 
     @staticmethod
-    def _read_registration_token(
-        toml_path: str = "/etc/conduwuit/conduwuit.toml",
-    ) -> str:
-        try:
-            for line in Path(toml_path).read_text().splitlines():
-                if line.strip().startswith("registration_token"):
-                    return line.split("=", 1)[1].strip().strip('"')
-        except OSError:
-            pass
+    def _read_registration_token() -> str:
+        for path in [
+            "/etc/hydrahive/matrix_registration_token",
+            "/etc/conduwuit/conduwuit.toml",
+        ]:
+            try:
+                for line in Path(path).read_text().splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith("registration_token"):
+                        return stripped.split("=", 1)[1].strip().strip('"').strip("'")
+            except OSError:
+                continue
         return ""
 
 

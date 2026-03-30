@@ -54,13 +54,14 @@ from .router_core_misc import register_core_misc_routes
 from .router_llm import register_llm_routes
 from .router_mcp import register_mcp_routes
 from .router_project_integrations import register_project_integration_routes
-from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room
+from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room, update_project_matrix_space
 from .router_projects import register_project_routes
 from .router_system import register_system_routes
 from .router_usage import register_usage_routes
 from .router_hub import register_hub_routes
 from .router_user_integrations import register_user_integration_routes, setup_discord_clients
 from .whatsapp_agent import setup_whatsapp_sessions
+from .router_invites import register_invite_routes
 from .router_users import (
     default_personal_agent_execution_modes,
     register_user_routes,
@@ -134,7 +135,7 @@ def _ensure_personal_project_manifest(username: str):
             "id": project_id,
             "version": "1.0.0",
             "identity": {
-                "name": "Personal Agent",
+                "name": f"{username}",
                 "description": f"Persönlicher Assistent von {username}",
             },
             "agents": {
@@ -152,6 +153,7 @@ def _ensure_personal_project_manifest(username: str):
                 "group": f"proj_{project_id}",
             },
             "chat": {"show_swarm": False},
+            "members": [username],   # Mensch wird in Matrix-Room eingeladen
         }
         tmp_yaml = project_yaml.with_suffix(".yaml.tmp")
         tmp_yaml.write_text(
@@ -494,6 +496,24 @@ def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) 
     if username not in _load_users():
         raise HTTPException(401, "User nicht mehr vorhanden")
     return username, role
+
+
+def _get_user_allowed_projects(username: str, role: str) -> set[str] | None:
+    """
+    Gibt die erlaubten Projekt-IDs zurück.
+    None = unbegrenzt (admin oder leere Liste als Wildcard).
+    Eigenes personal_<username> Projekt ist immer erlaubt.
+    """
+    if role == "admin":
+        return None  # unbegrenzt
+    users = _load_users()
+    user = users.get(username, {})
+    allowed = user.get("allowed_projects") or []
+    if not allowed:
+        return None  # leere Liste = kein Projekt-Filtering (Altverhalten)
+    result = set(allowed)
+    result.add(f"personal_{username}")  # eigenes Personal-Projekt immer erlaubt
+    return result
 
 
 def require_admin(auth: tuple[str, str] = Depends(require_auth)) -> tuple[str, str]:
@@ -1102,7 +1122,7 @@ def load_agent_config_direct(agent_dir: Path):
     return cfg
 
 
-register_user_routes(
+_user_route_exports = register_user_routes(
     auth_router,
     admin_router,
     require_auth=require_auth,
@@ -1110,7 +1130,6 @@ register_user_routes(
     load_users=_load_users,
     save_users=_save_users,
     read_server_name=_read_server_name,
-    matrix_register=_matrix_register,
     hash_password=_hash_password,
     agents_dir=AGENTS_DIR,
     projects_dir=PROJECTS_DIR,
@@ -1125,6 +1144,16 @@ register_user_routes(
     incoming_message_model=IncomingMessage,
     load_agent_config_direct=load_agent_config_direct,
     discovery=discovery,
+)
+
+_CONSOLE_BASE_URL = os.environ.get("HYDRAHIVE_CONSOLE_URL", "http://192.168.178.181")
+
+register_invite_routes(
+    admin_router,
+    public_router,
+    require_admin=require_admin,
+    create_user_fn=_user_route_exports["create_user"],
+    base_url=_CONSOLE_BASE_URL,
 )
 
 
@@ -1280,6 +1309,10 @@ register_project_routes(
     update_project_matrix_room=lambda project_id, room_id: update_project_matrix_room(
         PROJECTS_DIR, project_id, room_id, logger=logger
     ),
+    update_project_matrix_space=lambda project_id, space_id: update_project_matrix_space(
+        PROJECTS_DIR, project_id, space_id, logger=logger
+    ),
+    get_user_allowed_projects=_get_user_allowed_projects,
     audit_log=audit_log,
     check_message_rate=_check_message_rate,
     logger=logger,

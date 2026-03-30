@@ -28,6 +28,25 @@ CONDUWUIT_URL    = "http://127.0.0.1:6167"
 SAMBA_CONF       = "/etc/samba/smb.conf"
 SAMBA_INCLUDES   = "/etc/samba/hydrahive-shares.conf"
 SAMBA_CREDS_FILE = "/etc/hydrahive/samba_credentials"
+
+# Registration-Token Pfade (in Reihenfolge: hydrahive-eigene Datei zuerst)
+_REG_TOKEN_PATHS = [
+    "/etc/hydrahive/matrix_registration_token",  # hydrahive-lesbar
+    "/etc/conduwuit/conduwuit.toml",             # Fallback (octopos-Gruppe)
+]
+
+
+def _read_matrix_reg_token() -> str:
+    """Liest den Matrix-Registration-Token aus der ersten lesbaren Quelle."""
+    for path in _REG_TOKEN_PATHS:
+        try:
+            for line in Path(path).read_text().splitlines():
+                stripped = line.strip()
+                if stripped.startswith("registration_token"):
+                    return stripped.split("=", 1)[1].strip().strip('"').strip("'")
+        except OSError:
+            continue
+    return ""
 PROJECTS_DIR     = "/projects"
 
 
@@ -37,8 +56,9 @@ class ProvisionResult:
     linux_user:  str
     files_dir:   str
     samba_share: str
-    matrix_room: str | None
-    warnings:    list[str]
+    matrix_room:  str | None
+    matrix_space: str | None
+    warnings:     list[str]
 
     @property
     def ok(self) -> bool:
@@ -50,6 +70,54 @@ class Provisioner:
     def __init__(self, admin_token: str, server_name: str) -> None:
         self._token       = admin_token
         self._server_name = server_name
+
+    async def register_matrix_user(self, username: str, password: str) -> bool:
+        """Registriert einen menschlichen User-Account in conduwuit."""
+        reg_token = _read_matrix_reg_token()
+        if not reg_token:
+            logger.warning("Matrix-Registrierung: Kein registration_token gefunden")
+            return False
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                # UIAA Schritt 1: Session-ID holen
+                async with session.post(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/register",
+                    json={"username": username, "password": password, "inhibit_login": True},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r1:
+                    d1 = await r1.json(content_type=None)
+
+                if d1.get("errcode") == "M_USER_IN_USE":
+                    logger.debug("Matrix-User '%s' bereits vorhanden", username)
+                    return True
+                if r1.status in (200, 201) and "errcode" not in d1:
+                    logger.info("Matrix-User '%s' registriert (direkt)", username)
+                    return True
+
+                # UIAA Schritt 2: Mit auth + session
+                uiaa_session = d1.get("session", "")
+                auth_block = {"type": "m.login.registration_token", "token": reg_token}
+                if uiaa_session:
+                    auth_block["session"] = uiaa_session
+
+                async with session.post(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/register",
+                    json={"username": username, "password": password, "auth": auth_block, "inhibit_login": True},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r2:
+                    data = await r2.json(content_type=None)
+                    if r2.status in (200, 201):
+                        logger.info("Matrix-User '%s' registriert", username)
+                        return True
+                    if data.get("errcode") == "M_USER_IN_USE":
+                        logger.debug("Matrix-User '%s' bereits vorhanden", username)
+                        return True
+                    logger.warning("Matrix-User-Registrierung '%s' fehlgeschlagen: %s %s", username, r2.status, data)
+                    return False
+            except Exception as e:
+                logger.warning("Matrix-User-Registrierung '%s' Exception: %s", username, e)
+                return False
 
     # ------------------------------------------------------------------ public
 
@@ -67,15 +135,27 @@ class Provisioner:
         if user_warn:
             warnings.append(user_warn)
 
-        # Schritt 2: Samba
-        samba_warn = self._setup_samba(project_id, linux_user, files_dir)
-        if samba_warn:
-            warnings.append(samba_warn)
+        # Schritt 2: Samba (nur wenn User existiert)
+        from subprocess import run as _run
+        user_exists = _run(["id", linux_user], capture_output=True).returncode == 0
+        if user_exists:
+            samba_warn = self._setup_samba(project_id, linux_user, files_dir)
+            if samba_warn:
+                warnings.append(samba_warn)
+        else:
+            warnings.append(f"Samba-Setup übersprungen: Linux-User '{linux_user}' nicht vorhanden")
 
         # Schritt 3: Matrix-Room
         matrix_room, room_warn = await self._create_matrix_room(cfg)
         if room_warn:
             warnings.append(room_warn)
+
+        # Schritt 4: Matrix-Space (#82)
+        matrix_space = None
+        if matrix_room:
+            matrix_space, space_warn = await self._create_matrix_space(cfg, matrix_room)
+            if space_warn:
+                warnings.append(space_warn)
 
         if warnings:
             logger.warning("Provisioning '%s' mit Warnungen: %s", project_id, warnings)
@@ -83,12 +163,13 @@ class Provisioner:
             logger.info("Provisioning '%s' abgeschlossen", project_id)
 
         return ProvisionResult(
-            project_id  = project_id,
-            linux_user  = linux_user,
-            files_dir   = files_dir,
-            samba_share = project_id,
-            matrix_room = matrix_room,
-            warnings    = warnings,
+            project_id   = project_id,
+            linux_user   = linux_user,
+            files_dir    = files_dir,
+            samba_share  = project_id,
+            matrix_room  = matrix_room,
+            matrix_space = matrix_space,
+            warnings     = warnings,
         )
 
     async def deprovision(self, cfg: ProjectConfig) -> list[str]:
@@ -106,6 +187,13 @@ class Provisioner:
         w = self._delete_linux_user(linux_user)
         if w:
             warnings.append(w)
+
+        # Matrix-Space entfernen (vor dem Room)
+        space_id = cfg.matrix.space if cfg.matrix else None
+        if space_id:
+            w = await self._delete_matrix_room(space_id)
+            if w:
+                warnings.append(w)
 
         # Matrix-Room entfernen
         room_id = cfg.matrix.room if cfg.matrix else None
@@ -237,12 +325,15 @@ class Provisioner:
             updated = existing + "\n" + new_block
 
         tmp = Path(f"/tmp/hydrahive-samba-{project_id}.conf")
-        tmp.write_text(updated, encoding="utf-8")
-        subprocess.run(
-            ["sudo", "cp", str(tmp), SAMBA_INCLUDES],
-            check=True, capture_output=True
-        )
-        subprocess.run(["sudo", "chmod", "644", SAMBA_INCLUDES], capture_output=True)
+        try:
+            tmp.write_text(updated, encoding="utf-8")
+            subprocess.run(
+                ["sudo", "cp", str(tmp), SAMBA_INCLUDES],
+                check=True, capture_output=True
+            )
+            subprocess.run(["sudo", "chmod", "644", SAMBA_INCLUDES], capture_output=True)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def reset_samba_password(self, username: str) -> tuple[str | None, str | None]:
         """
@@ -296,27 +387,26 @@ class Provisioner:
         if proc.returncode != 0:
             return f"smbpasswd für '{username}' fehlgeschlagen: {proc.stderr.strip()}"
 
-        # Passwort in Credentials-Datei speichern
+        # Passwort in Credentials-Datei speichern (injection-safe: kein bash -c)
+        tmp_creds = Path(f"/tmp/hh-sambacreds-{os.getpid()}.tmp")
         try:
-            creds_path = Path(SAMBA_CREDS_FILE)
-            # Datei anlegen falls nicht vorhanden (sudo, da /etc/hydrahive root-owned)
-            subprocess.run(
-                ["sudo", "bash", "-c",
-                 f"touch {SAMBA_CREDS_FILE} && chmod 600 {SAMBA_CREDS_FILE}"],
-                capture_output=True
+            # Bestehenden Inhalt lesen (sudo cat), User-Zeile herausfiltern, neu schreiben
+            r_read = subprocess.run(
+                ["sudo", "cat", SAMBA_CREDS_FILE],
+                capture_output=True, text=True
             )
-            # Bestehenden Eintrag für diesen User entfernen, neuen anhängen
-            # grep -v gibt exit 1 wenn kein Output → || true verhindert Chain-Break
-            subprocess.run(
-                ["sudo", "bash", "-c",
-                 f"grep -v '^{username}:' {SAMBA_CREDS_FILE} > /tmp/hh-sambacreds.tmp || true"
-                 f" && echo '{username}:{password}' >> /tmp/hh-sambacreds.tmp"
-                 f" && cp /tmp/hh-sambacreds.tmp {SAMBA_CREDS_FILE}"
-                 f" && chmod 600 {SAMBA_CREDS_FILE}"],
-                capture_output=True
-            )
+            existing_lines = [
+                line for line in r_read.stdout.splitlines()
+                if line and not line.startswith(f"{username}:")
+            ]
+            existing_lines.append(f"{username}:{password}")
+            tmp_creds.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
+            subprocess.run(["sudo", "cp", str(tmp_creds), SAMBA_CREDS_FILE], capture_output=True, check=True)
+            subprocess.run(["sudo", "chmod", "600", SAMBA_CREDS_FILE], capture_output=True)
         except Exception as e:
             return f"Samba-Passwort gesetzt, aber Credentials-Datei konnte nicht geschrieben werden: {e}"
+        finally:
+            tmp_creds.unlink(missing_ok=True)
 
         logger.info("Samba-Passwort für '%s' gesetzt", username)
         return None
@@ -332,8 +422,11 @@ class Provisioner:
         pattern = rf"{re.escape(marker_start)}.*?{re.escape(marker_end)}\n"
         updated = re.sub(pattern, "", existing, flags=re.DOTALL)
         tmp = Path(f"/tmp/hydrahive-samba-rm-{project_id}.conf")
-        tmp.write_text(updated, encoding="utf-8")
-        subprocess.run(["sudo", "cp", str(tmp), SAMBA_INCLUDES], capture_output=True)
+        try:
+            tmp.write_text(updated, encoding="utf-8")
+            subprocess.run(["sudo", "cp", str(tmp), SAMBA_INCLUDES], capture_output=True)
+        finally:
+            tmp.unlink(missing_ok=True)
         subprocess.run(["sudo", "smbcontrol", "smbd", "reload-config"], capture_output=True)
         return None
 
@@ -362,15 +455,7 @@ class Provisioner:
         Fehler werden ignoriert — der Account existiert evtl. bereits.
         """
         from pathlib import Path as _Path
-        # Registration-Token aus conduwuit.toml lesen
-        reg_token = ""
-        try:
-            for line in _Path("/etc/conduwuit/conduwuit.toml").read_text().splitlines():
-                if line.strip().startswith("registration_token"):
-                    reg_token = line.split("=", 1)[1].strip().strip('"')
-                    break
-        except OSError:
-            pass
+        reg_token = _read_matrix_reg_token()
         if not reg_token:
             return
 
@@ -381,18 +466,34 @@ class Provisioner:
         password = _hashlib.sha256(f"{agent_id}:{secret}".encode()).hexdigest()[:32]
 
         try:
+            # UIAA Schritt 1: Session-ID holen
             async with session.post(
                 f"{CONDUWUIT_URL}/_matrix/client/v3/register",
-                json={
-                    "username": agent_id,
-                    "password": password,
-                    "auth": {"type": "m.login.registration_token", "token": reg_token},
-                    "inhibit_login": True,
-                },
+                json={"username": agent_id, "password": password, "inhibit_login": True},
                 timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                data = await resp.json(content_type=None)
-                if resp.status == 200:
+            ) as r1:
+                d1 = await r1.json(content_type=None)
+
+            if d1.get("errcode") == "M_USER_IN_USE":
+                logger.debug("Matrix-Account '%s' bereits vorhanden", agent_id)
+                return
+            if r1.status in (200, 201) and "errcode" not in d1:
+                logger.info("Matrix-Account für Agent '%s' registriert (direkt)", agent_id)
+                return
+
+            # UIAA Schritt 2: Mit auth + session
+            uiaa_session = d1.get("session", "")
+            auth_block = {"type": "m.login.registration_token", "token": reg_token}
+            if uiaa_session:
+                auth_block["session"] = uiaa_session
+
+            async with session.post(
+                f"{CONDUWUIT_URL}/_matrix/client/v3/register",
+                json={"username": agent_id, "password": password, "auth": auth_block, "inhibit_login": True},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r2:
+                data = await r2.json(content_type=None)
+                if r2.status in (200, 201):
                     logger.info("Matrix-Account für Agent '%s' registriert", agent_id)
                 elif data.get("errcode") == "M_USER_IN_USE":
                     logger.debug("Matrix-Account '%s' bereits vorhanden", agent_id)
@@ -486,6 +587,129 @@ class Provisioner:
                 return data.get("room_id")
         except Exception:
             return None
+
+    async def _create_matrix_space(
+        self, cfg: ProjectConfig, room_id: str
+    ) -> tuple[str | None, str | None]:
+        """
+        Erstellt einen Matrix-Space für das Projekt und fügt den Room als Child ein.
+        Gibt (space_id, warning_oder_None) zurück.
+        """
+        # Bereits vorhanden?
+        if cfg.matrix and cfg.matrix.space:
+            logger.debug("Matrix-Space für '%s' bereits vorhanden: %s", cfg.id, cfg.matrix.space)
+            return cfg.matrix.space, None
+
+        project_id = cfg.id
+        space_alias = f"{project_id}_space"
+
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type":  "application/json",
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Space erstellen
+                async with session.post(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/createRoom",
+                    headers=headers,
+                    json={
+                        "name":             cfg.identity.name,
+                        "room_alias_name":  space_alias,
+                        "preset":           "private_chat",
+                        "visibility":       "private",
+                        "creation_content": {"type": "m.space"},
+                        "topic":            f"HydraHive Projekt: {cfg.identity.name}",
+                        "initial_state": [
+                            {
+                                "type":      "m.room.history_visibility",
+                                "state_key": "",
+                                "content":   {"history_visibility": "shared"},
+                            }
+                        ],
+                    },
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    data = await resp.json(content_type=None)
+
+                if "room_id" not in data:
+                    # Alias bereits vergeben → Space existiert schon
+                    if data.get("errcode") == "M_ROOM_IN_USE":
+                        # Alias auflösen
+                        async with session.get(
+                            f"{CONDUWUIT_URL}/_matrix/client/v3/directory/room/%23{space_alias}%3A{self._server_name}",
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as r2:
+                            d2 = await r2.json(content_type=None)
+                            space_id = d2.get("room_id")
+                        if space_id:
+                            logger.debug("Matrix-Space '%s' bereits vorhanden: %s", space_alias, space_id)
+                            return space_id, None
+                    return None, f"Space-Erstellung fehlgeschlagen: {data}"
+
+                space_id = data["room_id"]
+                logger.info("Matrix-Space für Projekt '%s' angelegt: %s", project_id, space_id)
+
+                server_name = self._server_name
+                from urllib.parse import quote as _quote
+
+                room_id_enc  = _quote(room_id,  safe="")
+                space_id_enc = _quote(space_id, safe="")
+
+                # Child-Link: Space → Room  (m.space.child)
+                async with session.put(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{space_id}/state/m.space.child/{room_id_enc}",
+                    headers=headers,
+                    json={"via": [server_name], "suggested": True},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as _r:
+                    _rd = await _r.json(content_type=None)
+                    if "errcode" in _rd:
+                        logger.warning("m.space.child fehlgeschlagen: %s", _rd)
+
+                # Parent-Link: Room → Space  (m.room.parent)
+                async with session.put(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/state/m.room.parent/{space_id_enc}",
+                    headers=headers,
+                    json={"via": [server_name], "canonical": True},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as _r:
+                    _rd = await _r.json(content_type=None)
+                    if "errcode" in _rd:
+                        logger.warning("m.room.parent fehlgeschlagen: %s", _rd)
+
+                # Mitglieder in den Space einladen:
+                # (1) bereits im Room joined, (2) cfg.members die noch nicht drin sind
+                async with session.get(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/joined_members",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r_mem:
+                    members_data = await r_mem.json(content_type=None)
+
+                space_invite_mxids: set[str] = set(members_data.get("joined", {}).keys())
+                for uname in getattr(cfg, "members", []):
+                    space_invite_mxids.add(f"@{uname}:{server_name}")
+                space_invite_mxids.discard(f"@admin:{server_name}")
+
+                for mxid in space_invite_mxids:
+                    try:
+                        async with session.post(
+                            f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{space_id}/invite",
+                            headers=headers,
+                            json={"user_id": mxid},
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as _r:
+                            pass
+                    except Exception:
+                        pass
+
+                return space_id, None
+
+        except Exception as e:
+            return None, f"Space-Erstellung fehlgeschlagen: {e}"
 
     async def _delete_matrix_room(self, room_id: str) -> str | None:
         """

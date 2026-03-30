@@ -67,7 +67,7 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
         faiss.normalize_L2(vecs)
         return vecs
     except Exception as e:
-        logger.debug("Embedding fehlgeschlagen (%s): %s", model, e)
+        logger.warning("Embedding fehlgeschlagen (%s): %s", model, e)
         return None
 
 
@@ -175,7 +175,7 @@ def search_index(
             if i >= 0
         ]
     except Exception as e:
-        logger.debug("search_index Fehler: %s", e)
+        logger.warning("search_index Fehler (evtl. Modell-Wechsel?): %s", e)
         return []
 
 

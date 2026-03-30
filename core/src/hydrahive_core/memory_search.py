@@ -64,11 +64,12 @@ def _split_chunks(text: str) -> list[str]:
 
 def _fts_query(text: str) -> str:
     """User-Message → FTS5 OR-Query. Extrahiert Wörter ≥ 3 Zeichen."""
+    # Nur alphanumerische + Umlaute — FTS5-Sonderzeichen wie * : " werden nicht extrahiert
     words = re.findall(r"[a-zA-ZäöüÄÖÜß\d]{3,}", text)
     if not words:
         return ""
-    # FTS5: doppelte Anführungszeichen escapen, max 12 Begriffe
-    escaped = [f'"{w.replace(chr(34), "")}"' for w in words[:12]]
+    # Doppelte Anführungszeichen aus Wörtern entfernen, dann als Phrase quoten
+    escaped = [f'"{w.replace(chr(34), chr(39))}"' for w in words[:12]]
     return " OR ".join(escaped)
 
 
@@ -233,17 +234,42 @@ def search_memory(agent_dir: Path, query: str, k: int = 6) -> list[str]:
     sem_results = _search_semantic(agent_dir, query, k=half, name="memory")
     semantic_snippets = [text[:SNIPPET_CHARS] for text, _score in sem_results]
 
-    # ── Merge + Dedup ─────────────────────────────────────────────────────────
-    seen:    set[str] = set()
-    merged:  list[str] = []
-    # BM25 zuerst (exakte Keyword-Treffer bevorzugen), dann Semantik
-    for snippet in bm25_snippets + semantic_snippets:
-        key = snippet[:120]   # Dedup-Key: erste 120 Zeichen
-        if key not in seen:
-            seen.add(key)
-            merged.append(snippet)
-        if len(merged) >= k:
-            break
+    # ── Score-Normalisierung + gewichteter Merge ──────────────────────────────
+    # BM25-rank ist negativ (niedriger = besser), Vektor-Score ist Cosine (höher = besser).
+    # Beide min-max normalisieren → [0, 1], dann kombinieren.
+    def _minmax_norm(values: list[float], invert: bool = False) -> list[float]:
+        if not values:
+            return []
+        lo, hi = min(values), max(values)
+        if hi == lo:
+            return [1.0] * len(values)
+        normed = [(v - lo) / (hi - lo) for v in values]
+        return [1.0 - n for n in normed] if invert else normed
+
+    # BM25: SQLite rank ist negativ → invertieren damit höher = besser
+    bm25_raw   = list(range(len(bm25_snippets)))          # Positions-Proxy (0=beste)
+    bm25_norm  = _minmax_norm([float(i) for i in bm25_raw], invert=True)
+    sem_scores = [s for _, s in sem_results]
+    sem_norm   = _minmax_norm(sem_scores)
+
+    alpha = 0.5   # Gewichtung BM25 vs. Semantik
+    combined: dict[str, float] = {}
+    for snippet, score in zip(bm25_snippets, bm25_norm):
+        key = snippet[:120]
+        combined[key] = combined.get(key, 0.0) + alpha * score
+    for (text, _), score in zip(sem_results, sem_norm):
+        snippet = text[:SNIPPET_CHARS]
+        key = snippet[:120]
+        combined[key] = combined.get(key, 0.0) + (1 - alpha) * score
+
+    # Nach kombiniertem Score sortieren
+    snippet_map = {s[:120]: s for s in bm25_snippets}
+    for text, _ in sem_results:
+        s = text[:SNIPPET_CHARS]
+        snippet_map.setdefault(s[:120], s)
+
+    ranked = sorted(combined.items(), key=lambda x: -x[1])
+    merged = [snippet_map[key] for key, _ in ranked if key in snippet_map][:k]
 
     logger.debug(
         "memory_search: %d Treffer (BM25=%d, sem=%d) für agent=%s",
