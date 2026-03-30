@@ -314,6 +314,15 @@ export function AdminLayout() {
     </aside>
   );
 
+  // Bottom-Nav für Mobile — die 5 wichtigsten Punkte
+  const bottomNavItems = [
+    { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard") },
+    { to: "/projects",  icon: FolderKanban,    label: t("nav.projects") },
+    { to: "/my-agent",  icon: Sparkles,        label: t("nav.myAgent") },
+    { to: "/agents",    icon: Bot,             label: t("nav.agents") },
+    { to: "/settings",  icon: Settings,        label: t("nav.settings") },
+  ];
+
   return (
     <div className="app-shell lg:grid lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
       {!coreOnline && (
@@ -341,24 +350,29 @@ export function AdminLayout() {
       )}
 
       <main className="relative min-w-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden">
-        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-4 backdrop-blur md:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+        {/* Header */}
+        <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-3 backdrop-blur md:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {/* Hamburger: auf Mobile versteckt (Bottom-Nav übernimmt), auf Tablet sichtbar, auf Desktop unsichtbar */}
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
-                className="rounded-2xl border bg-card/70 p-2.5 text-foreground shadow-sm lg:hidden"
+                className="rounded-2xl border bg-card/70 p-2 text-foreground shadow-sm lg:hidden"
+                aria-label="Menü öffnen"
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div>
-                <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">{t("layout.operationsConsole")}</p>
-                <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "HydraHive"}</h2>
+              <div className="min-w-0">
+                <p className="hidden text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground sm:block">{t("layout.operationsConsole")}</p>
+                <h2 className="truncate text-lg font-semibold tracking-tight sm:text-xl">{activeItem?.label ?? "HydraHive"}</h2>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="status-pill">{activeItem?.hint ?? t("layout.systemView")}</span>
-              <span className={cn("status-pill", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Hint-Pill nur ab md */}
+              <span className="status-pill hidden md:inline-flex">{activeItem?.hint ?? t("layout.systemView")}</span>
+              {/* Status-Pill nur ab sm */}
+              <span className={cn("status-pill hidden sm:inline-flex", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
                 {updating ? t("layout.updateActive") : t("layout.systemReady")}
               </span>
               <NotificationBell />
@@ -366,10 +380,46 @@ export function AdminLayout() {
           </div>
         </div>
 
-        <div className="px-4 py-4 md:px-6 md:py-6 lg:flex-1 lg:overflow-y-auto lg:px-8 lg:py-8">
+        {/* Content — Extra Padding unten auf Mobile für Bottom-Nav */}
+        <div className="px-3 py-3 pb-20 sm:px-4 sm:py-4 md:px-6 md:py-6 lg:flex-1 lg:overflow-y-auto lg:px-8 lg:py-8 lg:pb-8">
           <Outlet />
         </div>
       </main>
+
+      {/* Bottom-Navigation — auf Mobile und Tablet (< lg), Desktop hat die Sidebar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur-sm lg:hidden">
+        <div className="flex items-center justify-around px-1 py-1 safe-area-inset-bottom">
+          {bottomNavItems.map(({ to, icon: Icon, label }) => {
+            const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`);
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-colors min-w-0",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
+                <span className={cn("text-[0.6rem] font-medium truncate max-w-[52px] text-center", isActive ? "text-primary" : "text-muted-foreground")}>
+                  {label}
+                </span>
+              </NavLink>
+            );
+          })}
+          {/* Mehr-Button öffnet Drawer */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Menu className="h-5 w-5 shrink-0" />
+            <span className="text-[0.6rem] font-medium">Mehr</span>
+          </button>
+        </div>
+      </nav>
+
       <SupportWidget />
     </div>
   );

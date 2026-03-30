@@ -40,7 +40,7 @@ export function SettingsPage() {
           <Settings size={20} className="text-zinc-400" />
           <h1 className="text-lg font-semibold text-zinc-100">{t("settings.title")}</h1>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TABS.map(tab => (
             <button
               key={tab.id}
