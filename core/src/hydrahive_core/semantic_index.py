@@ -69,7 +69,15 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
 
         def _call():
             try:
-                resp = litellm.embedding(model=model, input=texts)
+                kwargs: dict = {"model": model, "input": texts}
+                # Ollama: api_base explizit setzen damit litellm den richtigen
+                # Endpoint nutzt (ältere Versionen brauchen /api/embeddings)
+                if model.startswith("ollama/"):
+                    import os as _os
+                    kwargs["api_base"] = _os.environ.get(
+                        "OLLAMA_API_BASE", "http://localhost:11434"
+                    )
+                resp = litellm.embedding(**kwargs)
                 result.append(resp)
             except Exception as e:
                 exc.append(e)
