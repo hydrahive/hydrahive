@@ -13,6 +13,7 @@ Core läuft als 'hydrahive'-User — Root-Operationen via sudo (NOPASSWD konfigu
 import asyncio
 import json
 import logging
+import os
 import secrets
 import subprocess
 from dataclasses import dataclass
