@@ -16,6 +16,7 @@ class UpdateProjectRequest(BaseModel):
     boss: str | None = None
     workers: list[str] | None = None
     show_swarm: bool | None = None
+    members: list[str] | None = None   # HydraHive-Usernames mit Zugang zum Projekt-Room
 
 
 class CreateProjectRequest(BaseModel):
@@ -27,6 +28,7 @@ class CreateProjectRequest(BaseModel):
     samba: bool = True
     nfs: bool = False
     show_swarm: bool = False
+    members: list[str] = []   # HydraHive-Usernames die sofort eingeladen werden
 
 
 class MessageRequest(BaseModel):
@@ -70,6 +72,7 @@ def register_project_routes(
                 "filesystem": cfg.effective_filesystem_path(),
                 "system_user": cfg.effective_system_user(),
                 "show_swarm": cfg.chat.show_swarm,
+                "members": list(getattr(cfg, "members", [])),
             }
             for pid, cfg in projects.projects.items()
         }
@@ -132,6 +135,8 @@ def register_project_routes(
             data["agents"]["workers"] = req.workers
         if req.show_swarm is not None:
             data.setdefault("chat", {})["show_swarm"] = req.show_swarm
+        if req.members is not None:
+            data["members"] = req.members
 
         yaml_path.write_text(_yaml.dump(data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         projects.register(project_dir)  # neu einlesen
@@ -163,6 +168,7 @@ def register_project_routes(
             "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
             "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
             "chat": {"show_swarm": req.show_swarm},
+            "members": req.members,
         }
         yaml_path = project_dir / "project.yaml"
         yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")

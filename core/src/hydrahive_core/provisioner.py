@@ -416,6 +416,12 @@ class Provisioner:
         agent_ids = [cfg.agents.boss] + list(cfg.agents.workers)
         invite_mxids = [f"@{aid}:{self._server_name}" for aid in agent_ids]
 
+        # Projekt-Member (HydraHive-User) ebenfalls einladen
+        for username in getattr(cfg, "members", []):
+            mxid = f"@{username}:{self._server_name}"
+            if mxid not in invite_mxids:
+                invite_mxids.append(mxid)
+
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Content-Type":  "application/json",

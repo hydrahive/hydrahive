@@ -70,6 +70,7 @@ class ProjectConfig(BaseModel):
     filesystem: ProjectFilesystem = Field(default_factory=ProjectFilesystem)
     system:     ProjectSystem     = Field(default_factory=ProjectSystem)
     chat:       ProjectChat       = Field(default_factory=ProjectChat)
+    members:    list[str]         = Field(default_factory=list)  # HydraHive-Usernames die Zugang haben
 
     # Wird nach dem Laden gesetzt
     project_dir: Path | None = Field(default=None, exclude=True)

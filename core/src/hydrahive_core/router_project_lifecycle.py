@@ -131,6 +131,48 @@ def register_project_lifecycle_routes(
         warnings = await provisioner.deprovision(cfg)
         return {'project_id': project_id, 'deprovisioned': True, 'warnings': warnings}
 
+    @admin_router.post("/projects/{project_id}/matrix-invite")
+    async def matrix_invite_members(project_id: str, _a: tuple = Depends(require_admin)):
+        """Lädt alle konfigurierten members in den bestehenden Matrix-Room ein."""
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        room_id = cfg.matrix.room if cfg.matrix else None
+        if not room_id:
+            raise HTTPException(409, "Kein Matrix-Room konfiguriert — erst provisionieren")
+        provisioner = get_provisioner()
+        if provisioner is None:
+            raise HTTPException(503, 'Provisioner nicht initialisiert')
+
+        server_name = read_server_name()
+        invited, warnings = [], []
+        import aiohttp as _aio
+        headers = {
+            "Authorization": f"Bearer {provisioner._token}",
+            "Content-Type": "application/json",
+        }
+        members = list(getattr(cfg, "members", []))
+        async with _aio.ClientSession() as session:
+            for username in members:
+                mxid = f"@{username}:{server_name}"
+                try:
+                    async with session.post(
+                        f"http://localhost:8008/_matrix/client/v3/rooms/{room_id}/invite",
+                        headers=headers,
+                        json={"user_id": mxid},
+                        timeout=_aio.ClientTimeout(total=10),
+                    ) as resp:
+                        data = await resp.json(content_type=None)
+                        if resp.status in (200, 403) or data.get("errcode") in ("M_FORBIDDEN", "M_LIMIT_EXCEEDED"):
+                            # 403 = schon Mitglied oder blockiert
+                            invited.append(mxid)
+                        else:
+                            warnings.append(f"{mxid}: {data.get('error', resp.status)}")
+                except Exception as e:
+                    warnings.append(f"{mxid}: {e}")
+
+        return {'project_id': project_id, 'room_id': room_id, 'invited': invited, 'warnings': warnings}
+
     @admin_router.get("/projects/{project_id}/samba-credentials")
     async def get_samba_credentials(project_id: str, _a: tuple = Depends(require_admin)):
         cfg = projects.get(project_id)
