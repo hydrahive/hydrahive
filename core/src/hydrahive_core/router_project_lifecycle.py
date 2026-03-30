@@ -15,7 +15,8 @@ def update_project_matrix_room(projects_dir: str, project_id: str, room_id: str,
         return
     try:
         content = project_yaml.read_text(encoding="utf-8")
-        updated = re.sub(r'(room:\s*)""', f'\\1"{room_id}"', content)
+        # Beide Quote-Varianten matchen: room: "" und room: ''
+        updated = re.sub(r"""(room:\s*)(''|"")""", f'\\1"{room_id}"', content)
         if updated != content:
             project_yaml.write_text(updated, encoding="utf-8")
             return

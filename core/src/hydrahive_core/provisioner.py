@@ -353,6 +353,54 @@ class Provisioner:
 
     # ----------------------------------------------------------------- Schritt 3: Matrix-Room (#11)
 
+    async def _ensure_matrix_account(
+        self, session: "aiohttp.ClientSession", agent_id: str
+    ) -> None:
+        """
+        Stellt sicher dass ein Matrix-Account für den Agenten existiert.
+        Falls nicht: registriert ihn mit dem Registration-Token aus conduwuit.toml.
+        Fehler werden ignoriert — der Account existiert evtl. bereits.
+        """
+        from pathlib import Path as _Path
+        # Registration-Token aus conduwuit.toml lesen
+        reg_token = ""
+        try:
+            for line in _Path("/etc/conduwuit/conduwuit.toml").read_text().splitlines():
+                if line.strip().startswith("registration_token"):
+                    reg_token = line.split("=", 1)[1].strip().strip('"')
+                    break
+        except OSError:
+            pass
+        if not reg_token:
+            return
+
+        # Deterministic Password (wie in matrix_agent.py)
+        import hashlib as _hashlib
+        secret_file = _Path("/etc/hydrahive/internal_secret")
+        secret = secret_file.read_text().strip() if secret_file.exists() else "hydrahive"
+        password = _hashlib.sha256(f"{agent_id}:{secret}".encode()).hexdigest()[:32]
+
+        try:
+            async with session.post(
+                f"{CONDUWUIT_URL}/_matrix/client/v3/register",
+                json={
+                    "username": agent_id,
+                    "password": password,
+                    "auth": {"type": "m.login.registration_token", "token": reg_token},
+                    "inhibit_login": True,
+                },
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                data = await resp.json(content_type=None)
+                if resp.status == 200:
+                    logger.info("Matrix-Account für Agent '%s' registriert", agent_id)
+                elif data.get("errcode") == "M_USER_IN_USE":
+                    logger.debug("Matrix-Account '%s' bereits vorhanden", agent_id)
+                else:
+                    logger.warning("Matrix-Account '%s' Registration: %s", agent_id, data)
+        except Exception as e:
+            logger.warning("Matrix-Account '%s' konnte nicht registriert werden: %s", agent_id, e)
+
     async def _create_matrix_room(
         self, cfg: ProjectConfig
     ) -> tuple[str | None, str | None]:
@@ -374,6 +422,10 @@ class Provisioner:
         }
 
         async with aiohttp.ClientSession() as session:
+            # Agent-Accounts vorab registrieren damit Einladungen ankommen
+            for aid in agent_ids:
+                await self._ensure_matrix_account(session, aid)
+
             # Room anlegen
             payload = {
                 "name":             room_name,
@@ -430,14 +482,42 @@ class Provisioner:
             return None
 
     async def _delete_matrix_room(self, room_id: str) -> str | None:
-        """Matrix-Room verlassen und via Admin-API löschen. Gibt Warning-String oder None zurück."""
+        """
+        Matrix-Room schließen: alle Member kicken, dann leave + forget.
+        Conduit 0.4.x hat keine Admin-API für Room-Deletion — daher dieser Weg.
+        """
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Content-Type":  "application/json",
         }
+        admin_mxid = f"@admin:{self._server_name}"
         try:
             async with aiohttp.ClientSession() as session:
-                # Erst verlassen (falls der Bot-User Mitglied ist)
+                # Alle aktuellen Member holen
+                async with session.get(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/joined_members",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    data = await resp.json(content_type=None)
+                    members = list(data.get("joined", {}).keys())
+
+                # Alle außer Admin kicken
+                for member in members:
+                    if member == admin_mxid:
+                        continue
+                    try:
+                        async with session.post(
+                            f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/kick",
+                            headers=headers,
+                            json={"user_id": member, "reason": "Projekt gelöscht"},
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as kick_resp:
+                            await kick_resp.read()
+                    except Exception:
+                        pass
+
+                # Admin verlässt den Room
                 async with session.post(
                     f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/leave",
                     headers=headers,
@@ -446,20 +526,19 @@ class Provisioner:
                 ) as resp:
                     await resp.read()
 
-                # Conduwuit/Synapse Admin-API: Room löschen
-                async with session.delete(
-                    f"{CONDUWUIT_URL}/_matrix/client/v3/admin/rooms/{room_id}",
+                # Admin vergisst den Room (aus der lokalen History entfernen)
+                async with session.post(
+                    f"{CONDUWUIT_URL}/_matrix/client/v3/rooms/{room_id}/forget",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=15),
+                    json={},
+                    timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
-                    data = await resp.json(content_type=None)
-                    if resp.status not in (200, 404):
-                        return f"Matrix-Room {room_id} konnte nicht gelöscht werden: {data.get('error', resp.status)}"
+                    await resp.read()
 
-            logger.info("Matrix-Room gelöscht: %s", room_id)
+            logger.info("Matrix-Room geschlossen: %s", room_id)
             return None
         except Exception as e:
-            return f"Matrix-Room {room_id} Fehler beim Löschen: {e}"
+            return f"Matrix-Room {room_id} Fehler beim Schließen: {e}"
 
 
 def load_admin_token(cred_file: str = "/etc/hydrahive/admin_credentials") -> str:
