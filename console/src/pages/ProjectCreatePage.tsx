@@ -20,6 +20,7 @@ export function ProjectCreatePage() {
   const [workerInput, setWorkerInput] = useState("");
   const [samba,       setSamba]       = useState(true);
   const [showSwarm,   setShowSwarm]   = useState(false);
+  const [githubRepo,  setGithubRepo]  = useState("");
 
   const [agents,      setAgents]      = useState<Record<string, AgentEntry>>({});
   const [submitting,  setSubmitting]  = useState(false);
@@ -43,7 +44,7 @@ export function ProjectCreatePage() {
     if (!id || !name || !boss) { setError(t("projectCreate.requiredFields")); return; }
     setSubmitting(true);
     try {
-      await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm });
+      await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm, github_repo: githubRepo.trim() });
       navigate("/projects");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
@@ -105,6 +106,17 @@ export function ProjectCreatePage() {
             placeholder={t("projectCreate.descriptionPlaceholder")}
             className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">GitHub-Repo <span className="text-muted-foreground font-normal">(optional)</span></label>
+          <input
+            value={githubRepo}
+            onChange={e => setGithubRepo(e.target.value)}
+            placeholder="org/repo oder https://github.com/org/repo"
+            className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+          />
+          <p className="text-xs text-muted-foreground">Verknüpftes GitHub-Repository für dieses Projekt</p>
         </div>
 
         <div className="space-y-1.5">

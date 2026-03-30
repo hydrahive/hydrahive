@@ -72,6 +72,7 @@ class ProjectConfig(BaseModel):
     system:     ProjectSystem     = Field(default_factory=ProjectSystem)
     chat:       ProjectChat       = Field(default_factory=ProjectChat)
     members:    list[str]         = Field(default_factory=list)  # HydraHive-Usernames die Zugang haben
+    github_repo: str              = ""  # z.B. "org/repo" oder "https://github.com/org/repo"
 
     # Wird nach dem Laden gesetzt
     project_dir: Path | None = Field(default=None, exclude=True)

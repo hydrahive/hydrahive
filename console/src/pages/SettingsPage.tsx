@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Cpu, Plug, GitBranch, Network, Settings, Mail, Users, Archive, ArrowRightLeft } from "lucide-react";
+import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
+import { GitHubConfigPage } from "@/pages/GitHubConfigPage";
 import { VpnPage } from "@/pages/VpnPage";
 import { KasConfigPage } from "@/pages/KasConfigPage";
 import { UserPage } from "@/pages/UserPage";
@@ -15,6 +16,7 @@ const TABS = [
   { id: "llm",       label: "LLM",        icon: Cpu,              component: LlmConfigPage },
   { id: "mcp",       label: "MCP",        icon: Plug,             component: McpConfigPage },
   { id: "gitea",     label: "Gitea",      icon: GitBranch,        component: GiteaConfigPage },
+  { id: "github",    label: "GitHub",     icon: Github,           component: GitHubConfigPage },
   { id: "vpn",       label: "VPN",        icon: Network,          component: VpnPage },
   { id: "kas",       label: "Mail / KAS", icon: Mail,             component: KasConfigPage },
   { id: "users",     label: "Users",      icon: Users,            component: UserPage },

@@ -29,6 +29,7 @@ class CreateProjectRequest(BaseModel):
     nfs: bool = False
     show_swarm: bool = False
     members: list[str] = []   # HydraHive-Usernames die sofort eingeladen werden
+    github_repo: str = ""    # z.B. "org/repo" oder vollständige GitHub-URL
 
 
 class MessageRequest(BaseModel):
@@ -183,6 +184,7 @@ def register_project_routes(
             "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
             "chat": {"show_swarm": req.show_swarm},
             "members": req.members,
+            "github_repo": req.github_repo,
         }
         yaml_path = project_dir / "project.yaml"
         yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
