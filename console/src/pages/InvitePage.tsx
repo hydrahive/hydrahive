@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ShieldCheck, User, KeyRound, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export function InvitePage() {
-  const API = "";
+  const API = "/api";
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
 
