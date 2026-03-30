@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft } from "lucide-react";
+import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft, Puzzle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
 import { GitHubConfigPage } from "@/pages/GitHubConfigPage";
+import { PluginsPage } from "@/pages/PluginsPage";
 import { VpnPage } from "@/pages/VpnPage";
 import { KasConfigPage } from "@/pages/KasConfigPage";
 import { UserPage } from "@/pages/UserPage";
@@ -22,6 +23,7 @@ const TABS = [
   { id: "users",     label: "Users",      icon: Users,            component: UserPage },
   { id: "backup",    label: "Backup",     icon: Archive,          component: BackupPage },
   { id: "migration", label: "Migration",  icon: ArrowRightLeft,   component: MigrationPage },
+  { id: "plugins",   label: "Plugins",    icon: Puzzle,           component: PluginsPage },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];

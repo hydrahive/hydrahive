@@ -63,6 +63,8 @@ from .router_user_integrations import register_user_integration_routes, setup_di
 from .whatsapp_agent import setup_whatsapp_sessions
 from .router_invites import register_invite_routes
 from .router_github import register_github_routes
+from .router_plugins import register_plugin_routes
+from .plugin_manager import plugin_manager
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
 from .pipeline_executor import execute_pipeline, get_watch_folders
 from .folder_watcher import run_folder_watcher
@@ -340,6 +342,14 @@ async def lifespan(app: FastAPI):
         logger.info("Gitea verbunden: version=%s", gitea_ver.get("version", "?"))
     except Exception as _ge:
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
+
+    # Plugins aus /agents/*/plugins/ laden (#49)
+    try:
+        _plugin_count = plugin_manager.load_all_agent_plugins(AGENTS_DIR)
+        if _plugin_count:
+            logger.info("Plugin-System: %d Plugin(s) geladen", _plugin_count)
+    except Exception as _pe:
+        logger.warning("Plugin-Laden fehlgeschlagen: %s", _pe)
 
     notification_service.start()
     scheduler_service.start(
@@ -1399,6 +1409,7 @@ register_agent_secret_routes(admin_router, get_current_admin=require_admin)
 register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
+register_plugin_routes(admin_router, require_admin=require_admin, agents_dir=AGENTS_DIR)
 register_pipeline_routes(
     admin_router,
     require_admin=require_admin,

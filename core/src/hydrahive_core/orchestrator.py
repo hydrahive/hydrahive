@@ -277,12 +277,16 @@ class Orchestrator:
         return allowed.get(tool_name)
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None):
+        from .plugin_manager import plugin_manager as _pm
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
+        await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
         try:
-            return await _execute_tool_fn(
+            result = await _execute_tool_fn(
                 tool, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tool_name, tool_input=tool_input,
             )
+            await _pm.emit("tool.after", project_id=project_id, tool_name=tool_name, result=result)
+            return result
         finally:
             self._runtime.set_activity(boss_cfg.id, "Denkt…")
 
