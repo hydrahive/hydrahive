@@ -130,6 +130,14 @@ server {
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
+
+    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar
+    location /projects/ {
+        alias /projects/;
+        autoindex on;
+        autoindex_exact_size off;
+        add_header Cache-Control "no-store";
+    }
 }
 NGINXCONF
 
@@ -138,6 +146,12 @@ NGINXCONF
 
 # Site aktivieren
 ln -sf "${NGINX_CONF}" "${NGINX_ENABLED}"
+
+# www-data (nginx) braucht Lesezugriff auf /projects/ (hydrahive-Gruppe)
+if id www-data &>/dev/null; then
+    usermod -aG hydrahive www-data
+fi
+
 success "nginx-Konfiguration geschrieben"
 
 # Konfiguration testen
