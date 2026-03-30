@@ -63,6 +63,9 @@ from .router_user_integrations import register_user_integration_routes, setup_di
 from .whatsapp_agent import setup_whatsapp_sessions
 from .router_invites import register_invite_routes
 from .router_github import register_github_routes
+from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
+from .pipeline_executor import execute_pipeline, get_watch_folders
+from .folder_watcher import run_folder_watcher
 from .router_users import (
     default_personal_agent_execution_modes,
     register_user_routes,
@@ -366,8 +369,20 @@ async def lifespan(app: FastAPI):
         notify_fn=_disk_notify,
     )
 
+    # Folder-Watcher für Datei-Pipelines starten (#60)
+    _folder_watcher_task = asyncio.create_task(
+        run_folder_watcher(
+            get_watches_fn=lambda: get_watch_folders(load_all_pipelines()),
+            execute_pipeline_fn=execute_pipeline,
+            get_pipeline_fn=load_pipeline,
+            notify_fn=None,
+        ),
+        name="folder-watcher",
+    )
+
     logger.info("HydraHive Core bereit")
     yield
+    _folder_watcher_task.cancel()
     _cs.stop()
     scheduler_service.stop()
     notification_service.stop()
@@ -1384,6 +1399,11 @@ register_agent_secret_routes(admin_router, get_current_admin=require_admin)
 register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
+register_pipeline_routes(
+    admin_router,
+    require_admin=require_admin,
+    notify_fn=None,  # notification_service.notify falls verfügbar
+)
 
 
 # ================================================================== Status

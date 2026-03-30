@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Workflow, Network, ShieldCheck, Bell, Cpu, Bot } from "lucide-react";
+import { Workflow, Network, ShieldCheck, Bell, Cpu, Bot, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { ButlerPage } from "@/pages/ButlerPage";
@@ -8,14 +8,16 @@ import { PermissionsTab }      from "@/pages/blueprint/PermissionsTab";
 import { NotificationRouterTab } from "@/pages/blueprint/NotificationRouterTab";
 import { WorkflowTab }          from "@/pages/blueprint/WorkflowTab";
 import { AgentBlueprintTab }    from "@/pages/blueprint/AgentBlueprintTab";
+import { FilePipelineTab }      from "@/pages/blueprint/FilePipelineTab";
 
 const ALL_TABS = [
-  { id: "automation",      label: "Automation",        icon: Workflow,     hint: "Butler Event-Flows",                   minGroup: "chatter" },
-  { id: "architect",       label: "Projekt-Architekt", icon: Network,      hint: "Boss + Worker verdrahten",             minGroup: "standard" },
-  { id: "workflow",        label: "Projekt-Workflow",  icon: Cpu,          hint: "Arbeitsablauf für Agenten definieren", minGroup: "standard" },
-  { id: "agentblueprint",  label: "Agent-Blueprint",   icon: Bot,          hint: "Repos, Skills, Memory verdrahten",     minGroup: "dev" },
-  { id: "notifications",   label: "Notifications",     icon: Bell,         hint: "Alert-Routing",                        minGroup: "admin" },
-  { id: "permissions",     label: "Berechtigungen",    icon: ShieldCheck,  hint: "User-Rechte visuell",                  minGroup: "admin" },
+  { id: "automation",      label: "Automation",        icon: Workflow,    hint: "Butler Event-Flows",                   minGroup: "chatter" },
+  { id: "pipelines",       label: "Datei-Pipelines",   icon: FolderOpen,  hint: "Dateien sortieren und verarbeiten",    minGroup: "admin" },
+  { id: "architect",       label: "Projekt-Architekt", icon: Network,     hint: "Boss + Worker verdrahten",             minGroup: "standard" },
+  { id: "workflow",        label: "Projekt-Workflow",  icon: Cpu,         hint: "Arbeitsablauf für Agenten definieren", minGroup: "standard" },
+  { id: "agentblueprint",  label: "Agent-Blueprint",   icon: Bot,         hint: "Repos, Skills, Memory verdrahten",     minGroup: "dev" },
+  { id: "notifications",   label: "Notifications",     icon: Bell,        hint: "Alert-Routing",                        minGroup: "admin" },
+  { id: "permissions",     label: "Berechtigungen",    icon: ShieldCheck, hint: "User-Rechte visuell",                  minGroup: "admin" },
 ] as const;
 
 const GROUP_RANK: Record<string, number> = {
@@ -60,6 +62,7 @@ export function BlueprintPage() {
       {/* Tab content — full height */}
       <div className="flex-1 overflow-hidden bg-zinc-950">
         {tab === "automation"    && <ButlerPage />}
+        {tab === "pipelines"     && <FilePipelineTab />}
         {tab === "architect"     && <ProjectArchitectTab />}
         {tab === "permissions"   && <PermissionsTab />}
         {tab === "notifications"  && <NotificationRouterTab />}
