@@ -57,41 +57,20 @@ def _get_embedding_model() -> str:
 # ── Embedding ──────────────────────────────────────────────────────────────────
 
 def _embed(texts: list[str]) -> "Optional[np.ndarray]":
-    """Texte → L2-normalisierte Embedding-Matrix (N × D). None bei Fehler."""
+    """Texte → L2-normalisierte Embedding-Matrix (N × D). None bei Fehler.
+
+    Sync — muss von Callers im async Context per run_in_executor aufgerufen werden.
+    """
     if not FAISS_AVAILABLE or not LITELLM_AVAILABLE or not texts:
         return None
     model = _get_embedding_model()
     try:
-        import concurrent.futures as _cf
-        import threading as _threading
-        result: list = []
-        exc: list = []
-
-        def _call():
-            try:
-                kwargs: dict = {"model": model, "input": texts}
-                # Ollama: OpenAI-kompatibler Endpoint /v1/embeddings verwenden —
-                # litellm kennt das Format, kein 400-Fehler auf /api/embed
-                if model.startswith("ollama/"):
-                    import os as _os
-                    base = _os.environ.get("OLLAMA_API_BASE", "http://localhost:11434")
-                    # model-Name ohne "ollama/" prefix für openai-Pfad
-                    kwargs["model"] = f"openai/{model[len('ollama/'):]}"
-                    kwargs["api_base"] = f"{base.rstrip('/')}/v1"
-                resp = litellm.embedding(**kwargs)
-                result.append(resp)
-            except Exception as e:
-                exc.append(e)
-
-        t = _threading.Thread(target=_call, daemon=True)
-        t.start()
-        t.join(timeout=30)  # max 30s — Ollama braucht beim cold start länger
-        if t.is_alive():
-            logger.warning("Embedding timeout (%s) — FAISS deaktiviert für diesen Request", model)
-            return None
-        if exc:
-            raise exc[0]
-        resp = result[0]
+        kwargs: dict = {"model": model, "input": texts}
+        if model.startswith("ollama/"):
+            base = os.environ.get("OLLAMA_API_BASE", "http://localhost:11434")
+            kwargs["model"] = f"openai/{model[len('ollama/'):]}"
+            kwargs["api_base"] = f"{base.rstrip('/')}/v1"
+        resp = litellm.embedding(**kwargs)
         vecs = np.array([e["embedding"] for e in resp.data], dtype=np.float32)
         faiss.normalize_L2(vecs)
         return vecs

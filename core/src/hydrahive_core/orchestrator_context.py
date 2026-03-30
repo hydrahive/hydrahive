@@ -9,6 +9,7 @@ Standalone-Funktionen für System-Prompt-Aufbau und Context-Kompaktierung:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -170,11 +171,15 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
                 mem_parts.append(learning_snippet)
 
         # Index aktualisieren (lazy — nur geänderte Dateien, <5ms wenn nichts geändert)
-        update_memory_index(boss_cfg.agent_dir)
+        # run_in_executor: SQLite + FAISS/Embedding sind blocking I/O, darf Event-Loop nicht blockieren
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
 
         # BM25-Suche: normal=4, full=8 Treffer × max 700 chars ≈ 2.8-5.6k chars
         k = 8 if mode == "full" else 4
-        snippets = search_memory(boss_cfg.agent_dir, user_text, k=k)
+        snippets = await loop.run_in_executor(
+            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
+        )
 
         if snippets:
             mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
@@ -212,7 +217,7 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         semantic_scores: dict[str, float] = {}
         if all_skills:
             skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
-            raw_scores  = score_texts(skill_texts, user_text)
+            raw_scores  = await loop.run_in_executor(None, score_texts, skill_texts, user_text)
             if raw_scores:
                 semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)}
         # Token-Budget: max 8000 Zeichen für Skills (~2k Tokens)

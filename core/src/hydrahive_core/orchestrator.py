@@ -1287,6 +1287,8 @@ class Orchestrator:
             request_tool_tcs = [tc for tc in tool_calls if tc.function.name == "request_tools"]
             other_tcs        = [tc for tc in tool_calls if tc.function.name not in ("dispatch_task", "request_tools")]
 
+            tool_results: dict[str, str] = {}  # call_id → content
+
             # On-Demand Tool-Kategorien nachladen
             for tc in request_tool_tcs:
                 try:
@@ -1311,8 +1313,6 @@ class Orchestrator:
                     }, ensure_ascii=False)
                 except Exception as e:
                     tool_results[tc.id] = f"[Fehler] request_tools: {e}"
-
-            tool_results: dict[str, str] = {}  # call_id → content
 
             if dispatch_tcs:
                 dispatches = self._parse_dispatch_calls(dispatch_tcs)

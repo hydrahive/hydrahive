@@ -1630,10 +1630,15 @@ class WriteMemoryTool(BaseTool):
                 pass
 
         # Semantische Dedup: ähnlichen Chunk im FAISS-Index suchen
+        # run_in_executor: _find_similar → litellm Embedding ist blocking I/O
         dedup_action = "new"
         similar_text = ""
         try:
-            similar = _find_similar(agent_dir, content, threshold=0.65)
+            import asyncio as _asyncio
+            _loop = _asyncio.get_event_loop()
+            similar = await _loop.run_in_executor(
+                None, lambda: _find_similar(agent_dir, content, threshold=0.65)
+            )
             if similar is not None:
                 similar_text, sim_score = similar
                 is_contra = _detect_contradiction(similar_text, content)
