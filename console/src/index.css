@@ -217,4 +217,14 @@
   .dot {
     @apply inline-block h-2.5 w-2.5 rounded-full;
   }
+
+  /* Verhindert horizontalen Overflow in Markdown/Prose-Blöcken (Code, Tabellen) */
+  .prose pre,
+  .prose table,
+  .prose img {
+    @apply max-w-full overflow-x-auto;
+  }
+  .prose code {
+    word-break: break-all;
+  }
 }

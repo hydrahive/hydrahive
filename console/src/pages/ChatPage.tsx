@@ -335,7 +335,7 @@ export function ChatPage() {
         </div>
       </section>
 
-      <section className="section-card min-h-[65vh] overflow-visible p-0">
+      <section className="section-card min-h-[65vh] overflow-hidden lg:overflow-visible p-0">
         <div className="grid min-h-[65vh] gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
           <div className="relative flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
             <div className="border-b bg-muted/20 px-5 py-4">
