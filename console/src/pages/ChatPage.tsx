@@ -518,9 +518,9 @@ export function ChatPage() {
 
             {error && <div className="border-t bg-destructive/10 px-5 py-3 text-xs text-destructive">{error}</div>}
 
-            <div className="border-t px-5 py-4 relative">
+            <div className="border-t px-3 py-3 sm:px-5 sm:py-4 relative">
               {showSuggest && suggestions.length > 0 && (
-                <div className="absolute bottom-full left-5 right-5 z-10 mb-2 overflow-hidden rounded-2xl border bg-card shadow-lg">
+                <div className="absolute bottom-full left-3 right-3 sm:left-5 sm:right-5 z-10 mb-2 overflow-hidden rounded-2xl border bg-card shadow-lg">
                   {suggestions.map((s, i) => (
                     <button
                       key={s.cmd}
@@ -533,8 +533,9 @@ export function ChatPage() {
                   ))}
                 </div>
               )}
-              <div className="relative rounded-3xl border bg-muted/20 p-3">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-1">
+              <div className="relative rounded-2xl border bg-muted/20 p-2 sm:rounded-3xl sm:p-3">
+                {/* Keyboard-Hints nur auf Desktop */}
+                <div className="mb-2 hidden sm:flex flex-wrap items-center justify-between gap-2 px-1">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span className="status-pill">{t("chat.enterSend")}</span>
                     <span className="status-pill">{t("chat.shiftEnterBreak")}</span>
@@ -542,6 +543,12 @@ export function ChatPage() {
                   </div>
                   {sending && <span className="status-pill status-pill-ok">{t("chat.streamingActive")}{elapsed > 0 ? ` (${elapsed}s)` : ""}</span>}
                 </div>
+                {/* Streaming-Status auf Mobile */}
+                {sending && (
+                  <div className="mb-1 flex sm:hidden">
+                    <span className="status-pill status-pill-ok text-xs">{t("chat.streamingActive")}{elapsed > 0 ? ` (${elapsed}s)` : ""}</span>
+                  </div>
+                )}
                 {showEmoji && (
                   <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowEmoji(false)} />
@@ -558,7 +565,7 @@ export function ChatPage() {
                   </div>
                   </>
                 )}
-                <div className="flex items-end gap-3">
+                <div className="flex items-end gap-2">
                   <textarea
                     ref={textareaRef}
                     value={input}
@@ -567,18 +574,19 @@ export function ChatPage() {
                     onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
                     placeholder={t("chat.messagePlaceholder")}
                     rows={1}
-                    className="min-h-[52px] flex-1 resize-none rounded-2xl border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="min-h-[44px] flex-1 min-w-0 resize-none rounded-xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary sm:min-h-[52px] sm:rounded-2xl sm:px-4 sm:py-3"
                     style={{ maxHeight: "140px", overflowY: "auto" }}
                   />
-                  <button onClick={() => setShowEmoji(v => !v)} type="button" className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted">
+                  {/* Emoji-Button auf Mobile ausblenden um Platz zu sparen */}
+                  <button onClick={() => setShowEmoji(v => !v)} type="button" className="hidden sm:flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted">
                     <Smile className="h-5 w-5 text-muted-foreground" />
                   </button>
                   {sending ? (
-                    <button onClick={stop} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90">
+                    <button onClick={stop} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
                       <Square className="h-4 w-4" />
                     </button>
                   ) : (
-                    <button onClick={send} disabled={!input.trim()} className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
+                    <button onClick={send} disabled={!input.trim()} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
                       <Send className="h-4 w-4" />
                     </button>
                   )}
