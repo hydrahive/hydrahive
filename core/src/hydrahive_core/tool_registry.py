@@ -9,6 +9,7 @@ Tool nicht in Registry = existiert nicht (egal was in agent.yaml steht).
 Path-Traversal und Zugriff ausserhalb des Projekt-Verzeichnisses werden verweigert.
 """
 
+import json
 import logging
 import shlex as _shlex_shell
 from abc import ABC, abstractmethod
@@ -3835,6 +3836,70 @@ registry.register(DiscordPinMessageTool())
 registry.register(RemoteAgentTool())
 
 
+# ============================================================= VaultwardenTool (#54)
+
+class GetSecretTool(BaseTool):
+    """
+    Liest ein Secret (Passwort, API-Key, Token) aus dem HydraHive Agent Secret-Store.
+    Secrets werden von Admins über die Console unter /secrets verwaltet und in
+    /etc/hydrahive/agent_secrets.json gespeichert (chmod 600).
+    """
+
+    _SECRETS_PATH = Path("/etc/hydrahive/agent_secrets.json")
+
+    @property
+    def id(self) -> str:   return "get_secret"
+    @property
+    def name(self) -> str: return "Secret lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest ein Secret (Passwort, API-Key, Token) aus dem sicheren Agent Secret-Store. "
+            "Verwende dies um gespeicherte Zugangsdaten abzurufen ohne sie hardcoded zu hinterlegen. "
+            "Secrets werden vom Admin über die Console unter /secrets verwaltet."
+        )
+    @property
+    def permissions_required(self) -> list[str]: return ["vault"]
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type":        "string",
+                    "description": "Genauer Name des Secrets (z.B. 'github_token', 'openai_key')",
+                },
+            },
+            "required": ["name"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, name: str, **kwargs) -> dict:
+        if not self._SECRETS_PATH.exists():
+            return {"error": "Kein Secret-Store vorhanden — Admin muss Secrets unter /secrets anlegen"}
+        try:
+            data = json.loads(self._SECRETS_PATH.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"error": f"Secret-Store nicht lesbar: {e}"}
+
+        if name in data:
+            return {"found": True, "name": name, "value": data[name]}
+
+        # Teilübereinstimmung als Fallback
+        name_lower = name.lower()
+        matches = [k for k in data if name_lower in k.lower()]
+        if matches:
+            best = matches[0]
+            return {"found": True, "name": best, "value": data[best],
+                    "note": f"Exakter Name '{name}' nicht gefunden, nächste Übereinstimmung: '{best}'"}
+
+        available = list(data.keys())
+        return {"found": False, "message": f"Secret '{name}' nicht gefunden",
+                "available": available}
+
+
+registry.register(GetSecretTool())
+
+
 # ============================================================= Admin Tools (Danger)
 
 def _verify_admin_permission(calling_agent_id: str) -> None:
@@ -3906,6 +3971,10 @@ class CreateAgentTool(BaseTool):
                     "items": {"type": "string"},
                     "description": "Liste der Tool-IDs für diesen Agenten",
                 },
+                "ephemeral": {
+                    "type": "boolean",
+                    "description": "Wenn true: Agent wird beim nächsten Core-Neustart automatisch gelöscht (für temporäre Task-Agenten)",
+                },
             },
             "required": ["id", "type", "identity", "model"],
         }
@@ -3916,12 +3985,13 @@ class CreateAgentTool(BaseTool):
 
         _verify_admin_permission(agent_id)
 
-        new_id = kwargs.get("id", "").strip()
+        new_id    = kwargs.get("id", "").strip()
         agent_type = kwargs.get("type", "worker")
-        identity = kwargs.get("identity", new_id)
-        model = kwargs.get("model", "claude-haiku-4-5-20251001")
+        identity  = kwargs.get("identity", new_id)
+        model     = kwargs.get("model", "claude-haiku-4-5-20251001")
         soul_text = kwargs.get("soul", "")
-        tools = list(kwargs.get("tools") or [])
+        tools     = list(kwargs.get("tools") or [])
+        ephemeral = bool(kwargs.get("ephemeral", False))
 
         if not _re.match(r"^[a-z0-9_-]+$", new_id):
             return {"error": "Agent-ID darf nur a-z, 0-9, _ und - enthalten"}
@@ -3945,6 +4015,8 @@ class CreateAgentTool(BaseTool):
             "mcp_servers": [],
             "heartbeat": {"interval": "30s", "timeout": "90s", "on_failure": "restart"},
         }
+        if ephemeral:
+            agent_data["ephemeral"] = True
         if soul_text:
             agent_data["soul"] = "./soul.md"
 

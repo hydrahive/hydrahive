@@ -7,6 +7,8 @@ entfernter Ordner = sofort deregistriert. Kein Neustart nötig.
 """
 
 import logging
+import re
+import shutil
 import threading
 from pathlib import Path
 
@@ -16,6 +18,9 @@ from watchdog.observers import Observer
 from .agent_config import AgentConfig, load_agent_config
 
 logger = logging.getLogger(__name__)
+
+# Erkennt UUID-Suffix: agent_name_a1b2c3d4
+_UUID_SUFFIX_RE = re.compile(r"^(.+)_[0-9a-f]{8}$")
 
 
 class AgentDiscovery:
@@ -36,6 +41,7 @@ class AgentDiscovery:
         """Initialen Scan + watchdog starten."""
         self._dir.mkdir(parents=True, exist_ok=True)
         self._scan_all()
+        self._cleanup_orphans()
         self._start_watcher()
         logger.info("AgentDiscovery gestartet — überwache %s", self._dir)
 
@@ -63,6 +69,31 @@ class AgentDiscovery:
                 self._register(entry)
                 found += 1
         logger.info("Initialer Scan: %d Agenten-Verzeichnisse gefunden", found)
+
+    def _cleanup_orphans(self) -> None:
+        """
+        Löscht beim Start verwaiste Agent-Verzeichnisse:
+        - Ephemere Agenten (ephemeral: true in agent.yaml)
+        - UUID-Suffix-Duplikate: {base}_{8hex} wenn {base} bereits als Agent existiert
+          (entstehen wenn Agenten temporäre Worker per create_agent-Tool anlegen)
+        """
+        with self._lock:
+            base_agents = {aid for aid in self._agents if not _UUID_SUFFIX_RE.match(aid)}
+            to_delete: list[tuple[str, Path]] = []
+            for aid, cfg in list(self._agents.items()):
+                if cfg.ephemeral:
+                    to_delete.append((aid, cfg.agent_dir))
+                    continue
+                m = _UUID_SUFFIX_RE.match(aid)
+                if m and m.group(1) in base_agents:
+                    to_delete.append((aid, cfg.agent_dir))
+            for aid in [t[0] for t in to_delete]:
+                self._agents.pop(aid, None)
+
+        for aid, agent_dir in to_delete:
+            logger.info("Cleanup: Verwaister Agent '%s' wird entfernt", aid)
+            if agent_dir and agent_dir.exists():
+                shutil.rmtree(agent_dir, ignore_errors=True)
 
     def _register(self, agent_dir: Path) -> None:
         config = load_agent_config(agent_dir)

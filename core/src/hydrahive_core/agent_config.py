@@ -101,6 +101,7 @@ class AgentConfig(BaseModel):
     heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
     heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)
     execution_modes: ExecutionModesConfig | None = None
+    ephemeral: bool = False   # Wenn True: Agent wird beim nächsten Core-Start gelöscht
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
