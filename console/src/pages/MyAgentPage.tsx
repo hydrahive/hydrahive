@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -1284,6 +1284,9 @@ function SettingsPanel({
           </section>
         )}
 
+        {/* Backup & Import */}
+        <AgentBackupSection />
+
         {/* Save */}
         <div className="flex items-center gap-3">
           <button type="submit" disabled={saving}
@@ -1303,6 +1306,99 @@ function SettingsPanel({
         </div>
       </form>
     </div>
+  );
+}
+
+// ── Agent Backup / Import ─────────────────────────────────────────────────────
+
+function AgentBackupSection() {
+  const [importing,  setImporting]  = useState(false);
+  const [importMsg,  setImportMsg]  = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleExport() {
+    const token = localStorage.getItem("hydrahive_token") ?? "";
+    const res = await fetch("/api/me/agent/export", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { alert("Export fehlgeschlagen"); return; }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") ?? "";
+    const match = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : "agent_backup.tar.gz";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportMsg("");
+    try {
+      const token = localStorage.getItem("hydrahive_token") ?? "";
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/me/agent/import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Fehler");
+      setImportMsg(`✓ ${data.files} Dateien importiert`);
+      setTimeout(() => setImportMsg(""), 4000);
+    } catch(err) {
+      setImportMsg(err instanceof Error ? err.message : "Import fehlgeschlagen");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <section className="space-y-3 border-t pt-6">
+      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+        <Download className="h-4 w-4" />
+        Agent sichern &amp; übertragen
+      </h2>
+      <p className="text-xs text-muted-foreground">
+        Backup als .tar.gz herunterladen oder auf einem anderen HydraHive-Server importieren.
+        Enthält Konfiguration, Memory und Skills.
+      </p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Agent sichern
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={importing}
+          className="flex items-center gap-2 px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {importing ? "Importiere…" : "Agent importieren"}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".tar.gz,.tgz"
+          className="hidden"
+          onChange={handleImport}
+        />
+        {importMsg && (
+          <span className={`text-xs ${importMsg.startsWith("✓") ? "text-green-600" : "text-destructive"}`}>
+            {importMsg}
+          </span>
+        )}
+      </div>
+    </section>
   );
 }
 

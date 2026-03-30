@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
 from .execution_mode_policy import resolve_request_execution_mode
@@ -222,6 +222,7 @@ def register_user_routes(
     logger,
     incoming_message_model,
     load_agent_config_direct=None,
+    discovery=None,
 ) -> None:
     @admin_router.get("/users")
     def list_users():
@@ -543,3 +544,123 @@ def register_user_routes(
         load_agent_config_direct(agent_dir)
         logger.info("Heartbeat konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
+
+    # ── Agent Export ───────────────────────────────────────────────────────────
+
+    @auth_router.get("/me/agent/export")
+    async def export_my_agent(auth: tuple[str, str] = Depends(require_auth)):
+        """Packt das persönliche Agent-Verzeichnis als tar.gz und streamt es."""
+        import io
+        import tarfile as _tar
+        from fastapi.responses import StreamingResponse as _SR
+
+        username, _role = auth
+        agent_id = f"personal_{username}"
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, "Kein Agent-Verzeichnis gefunden")
+
+        buf = io.BytesIO()
+        with _tar.open(fileobj=buf, mode="w:gz") as tf:
+            # Nur sichere Dateitypen einpacken
+            for f in agent_dir.rglob("*"):
+                if f.is_file() and f.suffix in {
+                    ".yaml", ".md", ".json", ".txt", ".py", ".toml"
+                }:
+                    # Pfad im Archiv: agent_id/relativer/pfad (kein absoluter Pfad)
+                    arcname = str(f.relative_to(agent_dir.parent))
+                    tf.add(f, arcname=arcname)
+        buf.seek(0)
+
+        filename = f"{agent_id}.tar.gz"
+        return _SR(
+            iter([buf.read()]),
+            media_type="application/gzip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # ── Agent Import ───────────────────────────────────────────────────────────
+
+    @auth_router.post("/me/agent/import")
+    async def import_my_agent(
+        file: UploadFile = File(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """
+        Importiert ein Agent-tar.gz. Entpackt sicher in das persönliche Agent-Verzeichnis.
+        Path-Traversal-Schutz: nur erlaubte Dateitypen, keine absoluten Pfade oder '..'.
+        Bestehende Konfiguration wird überschrieben, Memory/Skills bleiben erhalten.
+        """
+        import io
+        import shutil as _shutil
+        import tarfile as _tar
+
+        ALLOWED_SUFFIXES = {".yaml", ".md", ".json", ".txt", ".py", ".toml"}
+        MAX_SIZE = 50 * 1024 * 1024  # 50 MB
+
+        username, _role = auth
+        agent_id = f"personal_{username}"
+        agent_dir = Path(agents_dir) / agent_id
+
+        raw = await file.read()
+        if len(raw) > MAX_SIZE:
+            raise HTTPException(400, "Datei zu groß (max 50 MB)")
+
+        try:
+            buf = io.BytesIO(raw)
+            with _tar.open(fileobj=buf, mode="r:gz") as tf:
+                members = tf.getmembers()
+
+                # Sicherheitsprüfung: alle Einträge validieren
+                for m in members:
+                    # Keine absoluten Pfade, kein Path Traversal
+                    if m.name.startswith("/") or ".." in m.name.split("/"):
+                        raise HTTPException(400, f"Ungültiger Pfad im Archiv: {m.name}")
+                    if m.isfile():
+                        suffix = Path(m.name).suffix.lower()
+                        if suffix not in ALLOWED_SUFFIXES:
+                            raise HTTPException(400, f"Nicht erlaubter Dateityp: {m.name}")
+                    # Keine Symlinks oder Device-Files
+                    if not (m.isfile() or m.isdir()):
+                        raise HTTPException(400, f"Nur Dateien und Verzeichnisse erlaubt: {m.name}")
+
+                # Archiv enthält typischerweise personal_<name>/... oder flache Struktur
+                # Normalisieren: ersten Pfadkomponente (agent_id im Archiv) entfernen
+                agent_dir.mkdir(parents=True, exist_ok=True)
+                extracted = 0
+                for m in members:
+                    parts = Path(m.name).parts
+                    # Ersten Teil (Archiv-Root) überspringen → direkt in agent_dir
+                    rel_parts = parts[1:] if len(parts) > 1 else parts
+                    if not rel_parts:
+                        continue
+                    target = agent_dir.joinpath(*rel_parts)
+                    # Nochmal sicherstellen dass target wirklich unter agent_dir liegt
+                    try:
+                        target.relative_to(agent_dir)
+                    except ValueError:
+                        raise HTTPException(400, "Path Traversal erkannt")
+                    if m.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                    elif m.isfile():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        fobj = tf.extractfile(m)
+                        if fobj:
+                            target.write_bytes(fobj.read())
+                            extracted += 1
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(400, f"Ungültiges Archiv: {e}")
+
+        # Agent neu registrieren
+        try:
+            load_agent_config_direct(agent_dir)
+            if discovery:
+                discovery._register(agent_dir)
+        except Exception:
+            pass
+
+        logger.info("Agent importiert: %s (%d Dateien)", agent_id, extracted)
+        return {"ok": True, "agent_id": agent_id, "files": extracted}

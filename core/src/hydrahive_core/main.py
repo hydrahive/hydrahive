@@ -44,6 +44,8 @@ from .router_butler import register_butler_routes
 from .router_webhooks_butler import register_webhook_butler_routes
 from .router_skill_packages import register_skill_package_routes
 from .router_a2a import register_a2a_routes
+from .router_agent_secrets import register_agent_secret_routes
+from .router_brain import register_brain_routes
 from .router_notifications import register_notification_routes
 from .notification_service import notification_service
 from .router_schedules import register_schedule_routes
@@ -279,6 +281,10 @@ async def lifespan(app: FastAPI):
                 logger.warning("AgentLink cleanup Fehler: %s", e)
 
     cleanup_task = asyncio.create_task(_agentlink_cleanup_loop(), name="agentlink-cleanup")
+
+    # Mail-Watcher (IMAP-Polling für Butler E-Mail Trigger)
+    from .mail_watcher import start_mail_watcher as _start_mail_watcher
+    _mail_watcher_task = _start_mail_watcher(interval=60)
 
     # AgentLink WebSocket-Listener für persönliche Agenten
     from .agentlink_listener import start_agentlink_listener as _start_al_listener
@@ -1073,6 +1079,7 @@ register_user_routes(
     logger=logger,
     incoming_message_model=IncomingMessage,
     load_agent_config_direct=load_agent_config_direct,
+    discovery=discovery,
 )
 
 
@@ -1294,6 +1301,8 @@ register_a2a_routes(
 )
 register_notification_routes(auth_router, require_auth=require_auth, verify_jwt=_verify_jwt, public_router=public_router)
 register_schedule_routes(auth_router, require_auth=require_auth)
+register_agent_secret_routes(admin_router, get_current_admin=require_admin)
+register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 
 
@@ -1511,6 +1520,51 @@ register_system_routes(
     app_version=APP_VERSION,
     logger=logger,
 )
+
+@admin_router.get("/admin/resources")
+def get_resources():
+    """System-Ressourcen: CPU, RAM, Disk, Prozess + Token-Verbrauch pro Agent."""
+    import psutil, os
+    cpu     = psutil.cpu_percent(interval=0.2)
+    vm      = psutil.virtual_memory()
+    disk    = psutil.disk_usage("/")
+    proc    = psutil.Process(os.getpid())
+    with proc.oneshot():
+        proc_cpu = proc.cpu_percent(interval=None)
+        proc_mem = proc.memory_info().rss
+
+    agent_tokens: dict[str, int] = {}
+    for agent_id in list(rate_limiter._agent_token_usage.keys()):
+        usage = rate_limiter.get_token_usage_hour(agent_id)
+        if usage > 0:
+            agent_tokens[agent_id] = usage
+
+    runtime_status = runtime.status_all()
+
+    return {
+        "system": {
+            "cpu_percent":       cpu,
+            "ram_total_mb":      vm.total // (1024 * 1024),
+            "ram_used_mb":       vm.used  // (1024 * 1024),
+            "ram_percent":       vm.percent,
+            "disk_total_gb":     round(disk.total / (1024**3), 1),
+            "disk_used_gb":      round(disk.used  / (1024**3), 1),
+            "disk_percent":      disk.percent,
+        },
+        "process": {
+            "cpu_percent": proc_cpu,
+            "ram_mb":      round(proc_mem / (1024 * 1024), 1),
+        },
+        "agents": {
+            agent_id: {
+                "tokens_last_hour": agent_tokens.get(agent_id, 0),
+                "running":          (runtime_status.get(agent_id) or {}).get("status") == "running",
+            }
+            for agent_id in discovery.agents
+        },
+        "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+    }
+
 
 @admin_router.get("/admin/metrics")
 def get_metrics():
