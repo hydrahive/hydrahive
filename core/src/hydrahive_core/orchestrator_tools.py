@@ -47,22 +47,20 @@ def _truncate_tool_result(result_str: str) -> str:
 def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     """Fingerprint eines Tool-Call-Sets für Endlosschleifen-Erkennung.
 
-    file_write: content wird aus der Signatur ausgeschlossen — unterschiedlicher
-    Inhalt beim selben Pfad ist kein Loop, großer Content kann identisch aussehen.
+    file_write wird komplett ausgeschlossen: chunked-writes (overwrite + mehrfach append)
+    zum selben Pfad sind legitim und kein Loop. max_rounds fängt echte Endlosschleifen ab.
+    shell_exec: nur name, keine args (Output-abhängige Folgebefehle sind kein Loop).
     """
     import json as _j
+    # Tools die vom Loop-Fingerprint ausgeschlossen werden (max_rounds schützt trotzdem)
+    _LOOP_EXCLUDE = {"file_write"}
     signature: list[str] = []
     for tc in tool_calls:
         fn      = getattr(tc, "function", None)
         name    = getattr(fn, "name", "") or ""
+        if name in _LOOP_EXCLUDE:
+            continue
         args_raw = getattr(fn, "arguments", "") or ""
-        if name == "file_write":
-            try:
-                args = _j.loads(args_raw)
-                args.pop("content", None)
-                args_raw = _j.dumps(args, sort_keys=True)
-            except Exception:
-                pass
         signature.append(f"{name}:{args_raw}")
     return tuple(signature)
 

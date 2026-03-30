@@ -877,13 +877,11 @@ class Orchestrator:
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
                                 break
-                            def _oauth_sig_args(name: str, inp: dict) -> str:
-                                if name == "file_write":
-                                    inp = {k: v for k, v in inp.items() if k != "content"}
-                                return _json.dumps(inp, ensure_ascii=False, sort_keys=True)
+                            _LOOP_EXCLUDE_OAUTH = {"file_write"}
                             signature = tuple(
-                                f"{block.name}:{_oauth_sig_args(block.name, block.input)}"
+                                f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
                                 for block in tool_use_blocks
+                                if block.name not in _LOOP_EXCLUDE_OAUTH
                             )
                             if signature and signature == last_tool_signature:
                                 repeated_tool_signature_count += 1
@@ -1057,19 +1055,11 @@ class Orchestrator:
 
                             # Assistant-Nachricht mit tool_calls in History
                             tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
-                            def _litellm_sig_args(name: str, raw: str) -> str:
-                                if name == "file_write":
-                                    try:
-                                        import json as _jj
-                                        d = _jj.loads(raw)
-                                        d.pop("content", None)
-                                        return _jj.dumps(d, sort_keys=True)
-                                    except Exception:
-                                        pass
-                                return raw
+                            _LOOP_EXCLUDE_LITELLM = {"file_write"}
                             signature = tuple(
-                                f"{tc['name']}:{_litellm_sig_args(tc['name'], tc['arguments'])}"
+                                f"{tc['name']}:{tc['arguments']}"
                                 for tc in tc_list
+                                if tc['name'] not in _LOOP_EXCLUDE_LITELLM
                             )
                             if signature and signature == last_tool_signature:
                                 repeated_tool_signature_count += 1
