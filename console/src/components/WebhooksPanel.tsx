@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Webhook as WebhookIcon, Plus, Trash2, X, Save, Eye, EyeOff, Zap, Radar } from "lucide-react";
 import { api, Webhook } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const ALL_EVENTS = ["message", "agent_error", "provision", "agent_start", "agent_stop"] as const;
 const EVENT_LABELS: Record<string, string> = {
@@ -16,6 +17,7 @@ const EMPTY_FORM = { name: "", url: "", secret: "", events: ["message"] as strin
 interface Props { projectId: string; }
 
 export function WebhooksPanel({ projectId }: Props) {
+  const { t } = useTranslation();
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -34,7 +36,7 @@ export function WebhooksPanel({ projectId }: Props) {
       setWebhooks(d.webhooks);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -71,7 +73,7 @@ export function WebhooksPanel({ projectId }: Props) {
       closeForm();
       await load();
     } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : "Fehler");
+      setSaveErr(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -83,7 +85,7 @@ export function WebhooksPanel({ projectId }: Props) {
       await api.testWebhook(projectId, { webhook_id: wid });
       setTestResult((r) => ({ ...r, [wid]: "OK" }));
     } catch (e) {
-      setTestResult((r) => ({ ...r, [wid]: e instanceof Error ? e.message : "Fehler" }));
+      setTestResult((r) => ({ ...r, [wid]: e instanceof Error ? e.message : t("common.error") }));
     } finally {
       setTesting(null);
       setTimeout(() => setTestResult((r) => {
@@ -95,13 +97,13 @@ export function WebhooksPanel({ projectId }: Props) {
   }
 
   async function handleDelete(wid: string, name: string) {
-    if (!confirm(`Webhook "${name}" loeschen?`)) return;
+    if (!confirm(t("common.confirmDelete", { name }))) return;
     setDeleting(wid);
     try {
       await api.deleteWebhook(projectId, wid);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setDeleting(null);
     }
@@ -120,7 +122,7 @@ export function WebhooksPanel({ projectId }: Props) {
         </div>
         <button onClick={() => { setShowForm((s) => !s); setSaveErr(""); }} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
           <Plus className="h-4 w-4" />
-          Neuer Webhook
+          {t("common.new")} Webhook
         </button>
       </div>
 
@@ -170,10 +172,10 @@ export function WebhooksPanel({ projectId }: Props) {
 
             {saveErr && <p className="text-sm text-destructive">{saveErr}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Abbrechen</button>
+              <button type="button" onClick={closeForm} className="rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">{t("common.cancel")}</button>
               <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                 <Save className="h-4 w-4" />
-                {saving ? "Speichern..." : "Webhook anlegen"}
+                {saving ? t("common.saving") : "Webhook anlegen"}
               </button>
             </div>
           </form>
@@ -210,7 +212,7 @@ export function WebhooksPanel({ projectId }: Props) {
                   </button>
                   <button onClick={() => handleDelete(w.id, w.name)} disabled={deleting === w.id} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm text-muted-foreground transition hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50">
                     <Trash2 className="h-4 w-4" />
-                    Loeschen
+                    {t("common.delete")}
                   </button>
                 </div>
               </div>

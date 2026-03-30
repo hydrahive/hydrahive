@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { api, GiteaConfig, GiteaRepo } from "../lib/api";
 import { GitBranch, RefreshCw, Save, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function GiteaConfigPage() {
+  const { t } = useTranslation();
   const [config, setConfig]   = useState<GiteaConfig>({ url: "http://127.0.0.1:3001", token: "", org: "hydrahive", webhook_secret: "" });
   const [repos, setRepos]     = useState<GiteaRepo[]>([]);
   const [saving, setSaving]   = useState(false);
@@ -108,7 +110,7 @@ export default function GiteaConfigPage() {
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
             >
               <Save className="w-4 h-4" />
-              {saving ? "Speichern…" : "Speichern"}
+              {saving ? t("common.saving") : t("common.save")}
             </button>
           </div>
         )}
@@ -121,7 +123,7 @@ export default function GiteaConfigPage() {
               onClick={load}
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
             >
-              <RefreshCw className="w-3 h-3" /> Aktualisieren
+              <RefreshCw className="w-3 h-3" /> {t("common.refresh")}
             </button>
           </div>
           {repos.length === 0 ? (

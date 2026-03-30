@@ -46,7 +46,7 @@ export function ProjectCreatePage() {
       await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm });
       navigate("/projects");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Anlegen");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSubmitting(false);
     }

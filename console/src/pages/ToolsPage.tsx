@@ -28,7 +28,7 @@ export function ToolsPage() {
       setTools(data);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setLoading(false); setRefreshing(false); }
   }
 

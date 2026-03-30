@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Edit2, Save, X, RefreshCw, Server, Brain, ExternalLink } from "lucide-react";
 import { api, McpServer } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const TRANSPORTS = ["streamableHttp", "sse", "stdio"];
 const AMEM_BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
@@ -23,6 +24,7 @@ const AMEM_PRESET: McpServer = {
 };
 
 export function McpConfigPage() {
+  const { t } = useTranslation();
   const [servers,  setServers]  = useState<McpServer[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [editing,  setEditing]  = useState<string | null>(null); // id or "new"
@@ -35,7 +37,7 @@ export function McpConfigPage() {
     try {
       const res = await api.mcpServers();
       setServers(res.servers);
-    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setError(e instanceof Error ? e.message : t("common.error")); }
     finally { setLoading(false); }
   }
 
@@ -96,16 +98,16 @@ export function McpConfigPage() {
       }
       setEditing(null);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setError(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
   async function del(id: string) {
-    if (!confirm(`MCP-Server "${id}" wirklich löschen?`)) return;
+    if (!confirm(t("common.confirmDelete", { name: id }))) return;
     try {
       await api.deleteMcpServer(id);
       await load();
-    } catch (e) { alert(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { alert(e instanceof Error ? e.message : t("common.error")); }
   }
 
   if (loading) return <div className="p-6"><div className="animate-pulse space-y-3">{[1,2].map(i=><div key={i} className="h-20 bg-muted rounded-lg"/>)}</div></div>;
@@ -119,7 +121,7 @@ export function McpConfigPage() {
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors">
-            <RefreshCw className="h-3.5 w-3.5"/>Aktualisieren
+            <RefreshCw className="h-3.5 w-3.5"/>{t("common.refresh")}
           </button>
           <button onClick={startAmemPreset} disabled={hasAmem}
             className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
@@ -207,11 +209,11 @@ export function McpConfigPage() {
             <button onClick={save} disabled={saving || !form.id || !form.name || !form.url}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
               <Save className="h-3.5 w-3.5"/>
-              {saving ? "Speichern..." : "Speichern"}
+              {saving ? t("common.saving") : t("common.save")}
             </button>
             <button onClick={() => { setEditing(null); setError(null); }}
               className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-accent transition-colors">
-              <X className="h-3.5 w-3.5"/>Abbrechen
+              <X className="h-3.5 w-3.5"/>{t("common.cancel")}
             </button>
           </div>
         </div>

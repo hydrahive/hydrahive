@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, CheckCircle, XCircle, ExternalLink, Save, Cpu, Download } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface OllamaModel { name: string; size_gb: number; modified: string; }
 interface ClaudeStatus {
@@ -85,6 +86,7 @@ function OAuthFlowPanel({
   onInputChange: (val: string) => void;
   onExchange: () => void;
 }) {
+  const { t } = useTranslation();
   const isAnthropic = flow.provider === "anthropic";
 
   const step2Hint = isAnthropic
@@ -101,7 +103,7 @@ function OAuthFlowPanel({
     <div className="bg-card border rounded-lg p-5 space-y-4 ring-2 ring-primary/30">
       <div className="flex items-center justify-between">
         <h3 className="font-medium text-sm">OAuth verbinden — Schritt {flow.step} von 2</h3>
-        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Abbrechen</button>
+        <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">{t("common.cancel")}</button>
       </div>
 
       {flow.step === 1 && (
@@ -142,7 +144,7 @@ function OAuthFlowPanel({
             disabled={flow.loading || !flow.input.trim()}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5"/>
-            {flow.loading ? "Verbinde..." : "Verbinden"}
+            {flow.loading ? t("common.connecting") : t("common.connect")}
           </button>
         </div>
       )}
@@ -151,6 +153,7 @@ function OAuthFlowPanel({
 }
 
 export function LlmConfigPage() {
+  const { t } = useTranslation();
   const [providerStatus, setProviderStatus] = useState<Record<string,{has_key:boolean}>>({});
   const [ollamaModels,   setOllamaModels]   = useState<OllamaModel[]>([]);
   const [ollamaOk,       setOllamaOk]       = useState<boolean|null>(null);
@@ -203,7 +206,7 @@ export function LlmConfigPage() {
     try {
       const { auth_url, state } = await api.startOAuth(provider);
       setOauthFlow({ provider, state, authUrl: auth_url, step: 1, input: "", error: "", loading: false });
-    } catch(e) { alert(e instanceof Error ? e.message : "Fehler beim Starten"); }
+    } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
   }
 
   async function handleExchange() {
@@ -225,7 +228,7 @@ export function LlmConfigPage() {
       setOauthFlow(null);
       await load();
     } catch(err) {
-      setOauthFlow(f => f ? { ...f, loading: false, error: err instanceof Error ? err.message : "Fehler" } : f);
+      setOauthFlow(f => f ? { ...f, loading: false, error: err instanceof Error ? err.message : t("common.error") } : f);
     }
   }
 
@@ -238,7 +241,7 @@ export function LlmConfigPage() {
       setKeys(k => ({ ...k, [providerId]: "" }));
       setTimeout(() => setSaved(null), 3000);
       await load();
-    } catch(e) { alert(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(null); }
   }
 
@@ -250,7 +253,7 @@ export function LlmConfigPage() {
       setPullMsg(`Modell "${pullModel}" erfolgreich geladen`);
       setPullModel("");
       await load();
-    } catch(e) { setPullMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setPullMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setPulling(false); }
   }
 
@@ -267,7 +270,7 @@ export function LlmConfigPage() {
         </div>
         <button onClick={refresh} disabled={refreshing}
           className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshing?"animate-spin":""}`}/>Aktualisieren
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing?"animate-spin":""}`}/>{t("common.refresh")}
         </button>
       </div>
 
@@ -333,7 +336,7 @@ export function LlmConfigPage() {
                 ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>Aktiv</span>
                 : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>Nicht konfiguriert</span>
               }
-              {saved === "openai" && <span className="text-xs text-green-600">Gespeichert ✓</span>}
+              {saved === "openai" && <span className="text-xs text-green-600">{t("common.saved")}</span>}
             </div>
             <p className="text-xs text-muted-foreground">API-Key von platform.openai.com — für gpt-4o etc.</p>
           </div>
@@ -350,7 +353,7 @@ export function LlmConfigPage() {
             disabled={saving === "openai" || !keys["openai"]?.trim()}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5"/>
-            {saving === "openai" ? "Speichern..." : "Speichern"}
+            {saving === "openai" ? t("common.saving") : t("common.save")}
           </button>
         </div>
         <p className="text-xs text-muted-foreground">Von https://platform.openai.com/api-keys</p>
@@ -396,7 +399,7 @@ export function LlmConfigPage() {
               <button onClick={pullOllamaModel} disabled={pulling || !pullModel.trim()}
                 className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 <Download className="h-3.5 w-3.5"/>
-                {pulling ? "Lädt..." : "Laden"}
+                {pulling ? t("common.loading") : t("common.download")}
               </button>
             </div>
             {pullMsg && <p className="text-xs text-muted-foreground">{pullMsg}</p>}
@@ -445,12 +448,12 @@ export function LlmConfigPage() {
             disabled={savingSystem}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Save className="h-3.5 w-3.5"/>
-            {savingSystem ? "Speichere…" : "Speichern"}
+            {savingSystem ? t("common.saving") : t("common.save")}
           </button>
         </div>
         {savedSystem && (
           <p className="flex items-center gap-1.5 text-xs text-green-600">
-            <CheckCircle className="h-3.5 w-3.5"/> Gespeichert — System-Agenten aktualisiert
+            <CheckCircle className="h-3.5 w-3.5"/> {t("common.saved")} — System-Agenten aktualisiert
           </p>
         )}
       </div>

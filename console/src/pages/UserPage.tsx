@@ -53,7 +53,7 @@ export function UserPage() {
     try {
       setUsers(await api.get<Record<string,OctoUser>>("/users"));
       setError("");
-    } catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setError(e instanceof Error ? e.message : t("common.error")); }
     finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -90,7 +90,7 @@ export function UserPage() {
     try {
       await api.updateUser(editUser!, editForm);
       setEditUser(null); await load();
-    } catch(e) { setEditErr(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setEditErr(e instanceof Error ? e.message : t("common.error")); }
     finally { setEditSaving(false); }
   }
 
@@ -99,7 +99,7 @@ export function UserPage() {
     try {
       await api.post("/users", form);
       setShowForm(false); setForm({ ...EMPTY }); await load();
-    } catch(e) { setSaveErr(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setSaveErr(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -107,7 +107,7 @@ export function UserPage() {
     if (!confirm(t("users.deleteConfirm", { user: username }))) return;
     setDeleting(username);
     try { await api.delete(`/users/${username}`); await load(); }
-    catch(e) { setError(e instanceof Error ? e.message : "Fehler"); }
+    catch(e) { setError(e instanceof Error ? e.message : t("common.error")); }
     finally { setDeleting(null); }
   }
 
@@ -117,7 +117,7 @@ export function UserPage() {
     try {
       await api.put(`/users/${pwUser}/password`, { password: newPw });
       setPwUser(null); setNewPw("");
-    } catch(e) { alert(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
     finally { setPwSaving(false); }
   }
 
@@ -406,10 +406,10 @@ export function UserPage() {
               {editErr && <p className="text-sm text-destructive">{editErr}</p>}
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setEditUser(null)}
-                  className="px-4 py-2 text-sm border rounded-lg hover:bg-accent transition-colors">Abbrechen</button>
+                  className="px-4 py-2 text-sm border rounded-lg hover:bg-accent transition-colors">{t("common.cancel")}</button>
                 <button type="submit" disabled={editSaving}
                   className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                  <Save className="h-3.5 w-3.5" />{editSaving ? "Speichere..." : "Speichern"}
+                  <Save className="h-3.5 w-3.5" />{editSaving ? t("common.saving") : t("common.save")}
                 </button>
               </div>
             </form>

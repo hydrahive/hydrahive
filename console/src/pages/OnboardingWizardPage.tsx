@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Circle, ArrowRight, Bot, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface Feature {
   id: string;
@@ -41,6 +42,7 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 export function OnboardingWizardPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const token = localStorage.getItem("hydrahive_token") || "";
 
@@ -91,7 +93,7 @@ export function OnboardingWizardPage() {
       sessionStorage.setItem("hh_wizard_done", "1");
       navigate("/my-agent", { replace: true });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setError(e instanceof Error ? e.message : t("common.saveError"));
     } finally {
       setSaving(false);
     }

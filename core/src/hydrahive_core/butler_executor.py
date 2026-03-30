@@ -128,7 +128,10 @@ def _matches_trigger(data: dict, event: ButlerEvent) -> bool:
         return not hook_id or hook_id == event.channel
 
     if subtype == "email_received":
-        return event.event_type == "email"
+        if event.event_type != "email":
+            return False
+        from_filter = params.get("from_filter", "").lower()
+        return not from_filter or from_filter in event.extra.get("from", "").lower()
 
     if subtype == "discord_event_received":
         if event.event_type != "discord_event":
@@ -268,6 +271,10 @@ def _eval_condition(data: dict, event: ButlerEvent) -> bool:
         return bool(action) and action == event.extra.get("action", "")
 
     # ── Discord-Event-Bedingungen ─────────────────────────────────────────────
+    if subtype == "discord_event_is":
+        evt = params.get("discord_event", "")
+        return not evt or evt == event.extra.get("event", "")
+
     if subtype == "discord_emoji_is":
         emoji = params.get("emoji", "")
         return bool(emoji) and emoji == event.extra.get("emoji", "")

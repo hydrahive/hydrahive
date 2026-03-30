@@ -9,6 +9,7 @@ import {
 import { Crown, Bot, Plus, Save, Loader2, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface Project { id: string; name: string; boss: string; workers: string[] }
 interface Agent   { id: string; identity: string }
@@ -75,6 +76,7 @@ function buildGraph(project: Project, agents: Agent[]) {
 }
 
 function ArchitectInner({ projects, agents }: { projects: Project[]; agents: Agent[] }) {
+  const { t } = useTranslation();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id ?? "");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -129,9 +131,9 @@ function ArchitectInner({ projects, agents }: { projects: Project[]; agents: Age
       const workerIds = nodes.filter(n => n.type === "workerNode").map(n => n.id.replace("worker-", ""));
       const bossId    = nodes.find(n => n.type === "bossNode")?.id.replace("boss-", "") ?? project.boss;
       await api.updateProject(project.id, { boss: bossId, workers: workerIds });
-      setToast("Gespeichert"); setTimeout(() => setToast(null), 2500);
+      setToast(t("common.saved")); setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Fehler");
+      setToast(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -163,7 +165,7 @@ function ArchitectInner({ projects, agents }: { projects: Project[]; agents: Age
         <button onClick={save} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {saving ? "Speichere…" : "Speichern"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
 

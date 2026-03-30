@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Save, Loader2, ShieldCheck, FolderKanban, Bot } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface UserEntry {
   username: string;
@@ -14,6 +15,7 @@ interface ProjectEntry { id: string; name: string }
 interface AgentEntry   { id: string; identity: string }
 
 export function PermissionsTab() {
+  const { t } = useTranslation();
   const [users,    setUsers]    = useState<UserEntry[]>([]);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [agents,   setAgents]   = useState<AgentEntry[]>([]);
@@ -66,7 +68,7 @@ export function PermissionsTab() {
       setToast(`${username} gespeichert`);
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Fehler");
+      setToast(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(s => ({ ...s, [username]: false }));
     }
@@ -97,7 +99,7 @@ export function PermissionsTab() {
                 <button onClick={() => saveUser(user.username)} disabled={isSaving}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-xs text-white transition-colors">
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  {isSaving ? "Speichere…" : "Speichern"}
+                  {isSaving ? t("common.saving") : t("common.save")}
                 </button>
               </div>
 

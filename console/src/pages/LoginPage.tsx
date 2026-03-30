@@ -13,7 +13,7 @@ export function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
     try { await login(username, password); navigate("/dashboard"); }
-    catch (err) { setError(err instanceof Error ? err.message : "Fehler"); }
+    catch (err) { setError(err instanceof Error ? err.message : t("common.error")); }
     finally { setLoading(false); }
   }
   return (

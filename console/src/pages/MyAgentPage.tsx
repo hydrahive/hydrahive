@@ -181,7 +181,7 @@ export function MyAgentPage() {
       setAgentInfo({ ...d, config: { ...d.config, soul: soul.soul } });
     } catch (e) {
       setAgentInfo(null);
-      setLoadError(e instanceof Error ? e.message : "Fehler beim Laden des Agenten");
+      setLoadError(e instanceof Error ? e.message : t("common.error"));
     }
   }
 
@@ -334,7 +334,7 @@ export function MyAgentPage() {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error
       } else {
-        setChatError(e instanceof Error ? e.message : "Fehler");
+        setChatError(e instanceof Error ? e.message : t("common.error"));
         setMessages(ms => ms.filter(m => m.id!==userMsg.id && m.id!==asstMsg.id));
         setInput(content);
       }
@@ -874,7 +874,7 @@ function McpTab({
       setMsg(t("myAgent.mcpSaved"));
       onSaved();
       setTimeout(() => setMsg(""), 3000);
-    } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -981,7 +981,7 @@ function PlatformsTab() {
       })
       .catch(e => {
         if (!mounted) return;
-        setError(e instanceof Error ? e.message : "Fehler");
+        setError(e instanceof Error ? e.message : t("common.error"));
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -1165,7 +1165,7 @@ function SettingsPanel({
       setSaveMsg(t("myAgent.settingsSaved"));
       onSaved();
       setTimeout(() => setSaveMsg(""), 3000);
-    } catch(e) { setSaveMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setSaveMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -1312,6 +1312,7 @@ function SettingsPanel({
 // ── Agent Backup / Import ─────────────────────────────────────────────────────
 
 function AgentBackupSection() {
+  const { t } = useTranslation();
   const [importing,  setImporting]  = useState(false);
   const [importMsg,  setImportMsg]  = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1321,7 +1322,7 @@ function AgentBackupSection() {
     const res = await fetch("/api/me/agent/export", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) { alert("Export fehlgeschlagen"); return; }
+    if (!res.ok) { alert(t("common.error")); return; }
     const blob = await res.blob();
     const cd = res.headers.get("Content-Disposition") ?? "";
     const match = cd.match(/filename="([^"]+)"/);
@@ -1346,11 +1347,11 @@ function AgentBackupSection() {
         body: fd,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Fehler");
+      if (!res.ok) throw new Error(data.detail ?? t("common.error"));
       setImportMsg(`✓ ${data.files} Dateien importiert`);
       setTimeout(() => setImportMsg(""), 4000);
     } catch(err) {
-      setImportMsg(err instanceof Error ? err.message : "Import fehlgeschlagen");
+      setImportMsg(err instanceof Error ? err.message : t("common.error"));
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -1443,7 +1444,7 @@ function WksTab() {
       const updated = await api.getWks();
       setWks(updated);
       setTimeout(() => setMsg(""), 3000);
-    } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -1456,7 +1457,7 @@ function WksTab() {
       setWks(updated);
       setMsg(t("myAgent.wksSshKeyGenerated"));
       setTimeout(() => setMsg(""), 3000);
-    } catch(e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setGenerating(false); }
   }
 
@@ -1466,7 +1467,7 @@ function WksTab() {
       const r = await api.testWksSsh();
       if (r.ok) setSshTestMsg(`✓ Verbunden — ${r.hostname} (${r.user})`);
       else setSshTestMsg(`✗ ${r.error}`);
-    } catch(e) { setSshTestMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch(e) { setSshTestMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSshTesting(false); }
   }
 
@@ -1482,7 +1483,7 @@ function WksTab() {
       } else {
         setTestMsg("Verbunden, aber keine Ollama-Modelle gefunden");
       }
-    } catch(e) { setTestMsg(e instanceof Error ? e.message : "Verbindung fehlgeschlagen"); }
+    } catch(e) { setTestMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setTesting(false); }
   }
 
@@ -1670,7 +1671,7 @@ function DiscordTab() {
       setChannelNames(prev => ({...prev, ...nameMap}));
       if ((res.channels ?? []).length === 0) setMsg("Keine Text-Channels gefunden");
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setLoadingCh(false); }
   }
 
@@ -1681,7 +1682,7 @@ function DiscordTab() {
       setRoles(res.roles ?? []);
       if ((res.roles ?? []).length === 0) setMsg("Keine Rollen gefunden");
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setLoadingRoles(false); }
   }
 
@@ -1726,7 +1727,7 @@ function DiscordTab() {
       setUserWhitelist(updated.user_whitelist ?? []);
       setUserBlacklist(updated.user_blacklist ?? []);
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setSaving(false); }
   }
 
@@ -1747,7 +1748,7 @@ function DiscordTab() {
       const res = await api.testDiscord();
       setMsg(res.ok ? `✓ Bot "${res.bot_name}" erreichbar` : `Fehler: ${res.error}`);
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setTesting(false); }
   }
 
@@ -2073,9 +2074,9 @@ function WhatsAppTab() {
       if (blockInput.trim()) { setCfg(finalCfg); setBlockInput(""); }
       if (ownerInput.trim()) { setCfg(finalCfg); setOwnerInput(""); }
       await api.updateWhatsAppConfig(finalCfg);
-      setMsg("Gespeichert ✓");
+      setMsg(t("common.saved"));
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setCfgSaving(false); }
   }
 
@@ -2094,7 +2095,7 @@ function WhatsAppTab() {
         pollRef.current = setInterval(fetchStatus, 2500);
       }
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setLoading(false); }
   }
 
@@ -2106,7 +2107,7 @@ function WhatsAppTab() {
       setMsg(t("myAgent.whatsappDisconnected2"));
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     }
   }
 
@@ -2340,7 +2341,7 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
       setMsg(t("myAgent.hbSaved"));
       onSaved();
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -2596,7 +2597,7 @@ function MailTab() {
       setMailAddress(updated.mail_address ?? "");
       setDomain(""); setSmtpPassword("");
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     } finally { setSaving(false); }
   }
 
@@ -2608,7 +2609,7 @@ function MailTab() {
       setMailAddress(""); setDomain(""); setSmtpHost(""); setSmtpPassword("");
       setMsg(t("myAgent.mailRemoved"));
     } catch (err: unknown) {
-      setMsg("Fehler: " + (err instanceof Error ? err.message : String(err)));
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
     }
   }
 
@@ -2781,7 +2782,7 @@ function TelegramTab() {
       setStatus(s);
       setToken("");
     } catch (e: any) {
-      alert(e?.message ?? "Verbindung fehlgeschlagen");
+      alert(e?.message ?? t("common.error"));
     } finally {
       setLoading(false);
     }

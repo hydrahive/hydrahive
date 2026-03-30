@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Save, Loader2, Bell } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // Severity levels × channels matrix
 const SEVERITIES = ["critical", "error", "warning", "info", "debug"] as const;
@@ -31,6 +32,7 @@ const CHANNEL_LABELS: Record<Channel, string> = {
 };
 
 export function NotificationRouterTab() {
+  const { t } = useTranslation();
   const [config,  setConfig]  = useState<RoutingConfig>({});
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -63,10 +65,10 @@ export function NotificationRouterTab() {
     setSaving(true);
     try {
       await api.put("/admin/notification-routes", config);
-      setToast("Gespeichert");
+      setToast(t("common.saved"));
       setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Fehler");
+      setToast(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -87,7 +89,7 @@ export function NotificationRouterTab() {
           <button onClick={save} disabled={saving}
             className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors">
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            {saving ? "Speichere…" : "Speichern"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </div>

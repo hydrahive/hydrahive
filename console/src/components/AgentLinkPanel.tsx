@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, RefreshCw, ArrowRight, Clock, Radar } from "lucide-react";
 import { api, Handoff } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface Props { projectId: string; }
 
@@ -24,6 +25,7 @@ function isExpired(iso: string): boolean {
 }
 
 export function AgentLinkPanel({ projectId }: Props) {
+  const { t } = useTranslation();
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +39,7 @@ export function AgentLinkPanel({ projectId }: Props) {
       setHandoffs(res.handoffs);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -57,7 +59,7 @@ export function AgentLinkPanel({ projectId }: Props) {
       setHandoffs((h) => h.filter((x) => x.id !== handoffId));
       if (expanded === handoffId) setExpanded(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Loeschen");
+      setError(e instanceof Error ? e.message : t("common.deleteError"));
     } finally {
       setDeleting(null);
     }
@@ -81,7 +83,7 @@ export function AgentLinkPanel({ projectId }: Props) {
         </div>
         <button onClick={refresh} disabled={refreshing} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Aktualisieren
+          {t("common.refresh")}
         </button>
       </div>
 
@@ -113,7 +115,7 @@ export function AgentLinkPanel({ projectId }: Props) {
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); handleDelete(h.id); }} disabled={deleting === h.id} className="inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm text-muted-foreground transition hover:border-destructive/20 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50">
                     <Trash2 className="h-4 w-4" />
-                    Loeschen
+                    {t("common.delete")}
                   </button>
                 </div>
               </div>

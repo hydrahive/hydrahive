@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SkillNodeData {
@@ -369,6 +370,7 @@ let _nSeq = 0;
 function genId(type: string) { return `${type}-${++_nSeq}-${Date.now()}`; }
 
 function SkillPackagesPageInner() {
+  const { t } = useTranslation();
   const [packages, setPackages]       = useState<SkillPackage[]>([]);
   const [activePkgId, setActiveId]    = useState<string | null>(null);
   const [pkgName, setPkgName]         = useState("Neues Paket");
@@ -437,23 +439,23 @@ function SkillPackagesPageInner() {
         setPackages(ps => [...ps, created]);
         setActiveId(created.id);
       }
-      showToast("Gespeichert ✓");
+      showToast(t("common.saved"));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Fehler beim Speichern");
+      showToast(e instanceof Error ? e.message : t("common.saveError"));
     } finally {
       setSaving(false);
     }
   };
 
   const deletePackage = async () => {
-    if (!activePkgId || !confirm(`Paket "${pkgName}" wirklich löschen?`)) return;
+    if (!activePkgId || !confirm(t("common.confirmDelete", { name: pkgName }))) return;
     try {
       await api.delete(`/admin/skill-packages/${activePkgId}`);
       setPackages(ps => ps.filter(p => p.id !== activePkgId));
       newPackage();
-      showToast("Gelöscht");
+      showToast(t("common.deleted"));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Fehler");
+      showToast(e instanceof Error ? e.message : t("common.error"));
     }
   };
 
@@ -571,14 +573,14 @@ function SkillPackagesPageInner() {
           className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-sm text-white hover:bg-white/10 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
-          Neu
+          {t("common.new")}
         </button>
 
         <button type="button" onClick={savePackage} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors"
         >
           <Save className="h-3.5 w-3.5" />
-          {saving ? "Speichere…" : "Speichern"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
 
         {activePkgId && (

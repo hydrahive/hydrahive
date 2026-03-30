@@ -9,6 +9,7 @@ import {
 import { GitBranch, KeyRound, BookOpen, Brain, Shield, Bot, Save, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // ── Node-Typen ────────────────────────────────────────────────────────────────
 
@@ -248,6 +249,7 @@ function PropertiesPanel({ node, onChange, onDelete }: {
 interface AgentEntry { id: string; identity: string }
 
 function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
+  const { t } = useTranslation();
   const [selectedAgentId, setSelectedAgentId] = useState<string>(agents[0]?.id ?? "");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -307,10 +309,10 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     setSaving(true);
     try {
       await api.put(`/agents/${selectedAgentId}/workflow-blueprint`, { nodes, edges });
-      setToast("Gespeichert — Cache invalidiert");
+      setToast(t("common.saved") + " — Cache invalidiert");
       setTimeout(() => setToast(null), 3000);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Fehler");
+      setToast(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -337,7 +339,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
         <button onClick={save} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {saving ? "Speichere…" : "Speichern"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
 

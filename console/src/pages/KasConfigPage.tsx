@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Save, Mail, CheckCircle } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 export function KasConfigPage() {
+  const { t } = useTranslation();
   const [login,   setLogin]   = useState("");
   const [pw,      setPw]      = useState("");
   const [domain,  setDomain]  = useState("");
@@ -33,7 +35,7 @@ export function KasConfigPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setError(e instanceof Error ? e.message : t("common.saveError"));
     } finally { setSaving(false); }
   }
 
@@ -94,11 +96,11 @@ export function KasConfigPage() {
           <button type="submit" disabled={saving || !login || !pw}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors">
             <Save size={14} />
-            {saving ? "Speichere..." : "Speichern"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
           {saved && (
             <span className="flex items-center gap-1.5 text-sm text-green-400">
-              <CheckCircle size={14} /> Gespeichert
+              <CheckCircle size={14} /> {t("common.saved")}
             </span>
           )}
         </div>

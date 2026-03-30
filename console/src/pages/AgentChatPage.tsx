@@ -30,7 +30,7 @@ export function AgentChatPage() {
     { cmd: "/model",    desc: t("slashCommands.model") },
     { cmd: "/retry",    desc: t("slashCommands.retry") },
     { cmd: "/remember", desc: t("slashCommands.remember") },
-    { cmd: "/history",  desc: "Vergangene Sessions anzeigen" },
+    { cmd: "/history",  desc: t("slashCommands.history") },
   ];
 
   const [messages,    setMessages]    = useState<Message[]>([]);
@@ -269,7 +269,7 @@ export function AgentChatPage() {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error
       } else {
-        setError(e instanceof Error ? e.message : "Fehler beim Senden");
+        setError(e instanceof Error ? e.message : t("common.error"));
         setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
         setInput(content);
       }
@@ -323,13 +323,13 @@ export function AgentChatPage() {
       {showHistory && (
         <div className="flex-1 overflow-y-auto border-b bg-muted/20">
           <div className="flex items-center justify-between px-4 py-2 border-b">
-            <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
+            <span className="text-xs font-medium text-muted-foreground">{t("chat.pastSessions")}</span>
             <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
           {sessions.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-8">Keine vergangenen Sessions</p>
+            <p className="text-xs text-muted-foreground text-center py-8">{t("chat.noPastSessions")}</p>
           ) : (
             <div className="divide-y">
               {sessions.map(s => (
@@ -360,20 +360,20 @@ export function AgentChatPage() {
       {viewSession && (
         <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b text-xs flex-shrink-0 gap-2">
           <span className="text-amber-600 dark:text-amber-400 font-medium truncate min-w-0">
-            Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
+            {t("chat.pastSession")} — {new Date(viewSession.startedAt).toLocaleString("de")}
           </span>
           <div className="flex gap-2 flex-shrink-0">
             <button onClick={() => { setViewSession(null); setShowHistory(true); }}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
-              <ArrowLeft className="h-3 w-3" /> Zurück
+              <ArrowLeft className="h-3 w-3" /> {t("chat.back")}
             </button>
             <button onClick={() => viewSession && resumeSession(viewSession.id)}
               className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-              <RotateCcw className="h-3 w-3" /> Fortsetzen
+              <RotateCcw className="h-3 w-3" /> {t("chat.resume")}
             </button>
             <button onClick={() => { setViewSession(null); api.delete(`/agents/${id}/session`).catch(() => {}); setMessages([]); }}
               className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
-              <Plus className="h-3 w-3" /> Neuer Chat
+              <Plus className="h-3 w-3" /> {t("chat.newChat")}
             </button>
           </div>
         </div>

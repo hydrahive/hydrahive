@@ -95,7 +95,7 @@ export function ProjectsPage() {
       setAgents(Object.keys(a as Record<string, unknown>));
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -152,7 +152,7 @@ export function ProjectsPage() {
       setForm(EMPTY);
       await load();
     } catch (e) {
-      setCreateErr(e instanceof Error ? e.message : "Fehler");
+      setCreateErr(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setCreating(false);
     }
@@ -169,7 +169,7 @@ export function ProjectsPage() {
         return n;
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Loeschen");
+      setError(e instanceof Error ? e.message : t("common.deleteError"));
     } finally {
       setDeleting(null);
     }
@@ -198,7 +198,7 @@ export function ProjectsPage() {
       setEditProject(null);
       await load();
     } catch (e) {
-      setEditErr(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setEditErr(e instanceof Error ? e.message : t("common.saveError"));
     } finally { setEditSaving(false); }
   }
 
@@ -683,11 +683,11 @@ export function ProjectsPage() {
               <button type="submit" disabled={editSaving || !editForm.boss}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 <Save className="h-4 w-4" />
-                {editSaving ? "Speichere…" : "Speichern"}
+                {editSaving ? t("common.saving") : t("common.save")}
               </button>
               <button type="button" onClick={() => setEditProject(null)}
                 className="rounded-xl border px-4 py-2.5 text-sm hover:bg-accent transition-colors">
-                Abbrechen
+                {t("common.cancel")}
               </button>
             </div>
           </form>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, ChevronRight, Cpu, Key, Mail, Rocket, SkipForward } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 type Step = "welcome" | "apikey" | "llm" | "kas" | "done";
 
@@ -67,6 +68,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 }
 
 function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const { t } = useTranslation();
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey,    setOpenaiKey]    = useState("");
   const [saving,       setSaving]       = useState(false);
@@ -83,7 +85,7 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
       }
       onNext();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setError(e instanceof Error ? e.message : t("common.saveError"));
     } finally { setSaving(false); }
   }
 
@@ -139,7 +141,7 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
           disabled={saving || !hasInput}
           className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none transition-colors"
         >
-          {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
+          {saving ? t("common.saving") : t("common.save") + " & weiter"} <ChevronRight className="h-4 w-4" />
         </button>
         <button onClick={onSkip} className="flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted transition-colors">
           <SkipForward className="h-4 w-4" /> Überspringen
@@ -150,6 +152,7 @@ function ApiKeyStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void
 }
 
 function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const { t } = useTranslation();
   const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string}[]>([]);
   const [systemModel,     setSystemModel]     = useState("");
   const [saving,          setSaving]          = useState(false);
@@ -174,7 +177,7 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       }
       onNext();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setError(e instanceof Error ? e.message : t("common.saveError"));
     } finally { setSaving(false); }
   }
 
@@ -217,7 +220,7 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       <div className="flex gap-2">
         <button onClick={save} disabled={saving}
           className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-          {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
+          {saving ? t("common.saving") : t("common.save") + " & weiter"} <ChevronRight className="h-4 w-4" />
         </button>
         <button onClick={onSkip} className="flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted transition-colors">
           <SkipForward className="h-4 w-4" /> Überspringen
@@ -228,6 +231,7 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
 }
 
 function KasStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const { t } = useTranslation();
   const [login,   setLogin]   = useState("");
   const [pw,      setPw]      = useState("");
   const [domain,  setDomain]  = useState("");
@@ -242,7 +246,7 @@ function KasStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       await api.putKas({ login, password: pw, default_domain: domain, smtp_host: smtp, smtp_port: Number(port) || 587 });
       onNext();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+      setError(e instanceof Error ? e.message : t("common.saveError"));
     } finally { setSaving(false); }
   }
 
@@ -295,7 +299,7 @@ function KasStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       <div className="flex gap-2">
         <button onClick={save} disabled={saving || !login || !pw}
           className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-          {saving ? "Speichere..." : "Speichern & weiter"} <ChevronRight className="h-4 w-4" />
+          {saving ? t("common.saving") : t("common.save") + " & weiter"} <ChevronRight className="h-4 w-4" />
         </button>
         <button onClick={onSkip} className="flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted transition-colors">
           <SkipForward className="h-4 w-4" /> Überspringen

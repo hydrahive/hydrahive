@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type UsageStats, type UsageProject } from "@/lib/api";
 import { RefreshCw, Database, TrendingUp, Zap, DollarSign } from "lucide-react";
 import { cn, agentCategory, AGENT_COLORS } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 function fmtK(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -119,6 +120,7 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
 }
 
 export function UsagePage() {
+  const { t } = useTranslation();
   const [data, setData] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +131,7 @@ export function UsagePage() {
     try {
       setData(await api.usageStats());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -157,7 +159,7 @@ export function UsagePage() {
           className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm hover:bg-accent/30 transition-colors disabled:opacity-50"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          Aktualisieren
+          {t("common.refresh")}
         </button>
       </div>
 

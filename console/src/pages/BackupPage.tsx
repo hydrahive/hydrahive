@@ -31,7 +31,7 @@ export function BackupPage() {
       setBackups(d.backups);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -44,7 +44,7 @@ export function BackupPage() {
       await api.createBackup();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Backup fehlgeschlagen");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setCreating(false); }
   }
 
@@ -54,7 +54,7 @@ export function BackupPage() {
       await api.deleteBackup(name);
       setBackups(b => b.filter(x => x.name !== name));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Löschen fehlgeschlagen");
+      setError(e instanceof Error ? e.message : t("common.deleteError"));
     } finally { setDeleting(null); }
   }
 
@@ -65,7 +65,7 @@ export function BackupPage() {
       setError("");
       alert(t("backup.restoreStarted", { name }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Restore fehlgeschlagen");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setRestoring(null); }
   }
 

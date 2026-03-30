@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Send, Bot, User, HelpCircle, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const AGENT_ID = "hydrahive_support";
 
@@ -15,6 +16,7 @@ let counter = 0;
 function mkId() { return `sw-${++counter}`; }
 
 export function SupportWidget() {
+  const { t } = useTranslation();
   const [open, setOpen]       = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput]     = useState("");
@@ -86,7 +88,7 @@ export function SupportWidget() {
       }
     } catch (e) {
       setMessages(ms => ms.map(m =>
-        m.id === asstMsg.id ? { ...m, content: "Fehler: " + (e instanceof Error ? e.message : "Unbekannter Fehler") } : m
+        m.id === asstMsg.id ? { ...m, content: t("common.error") + ": " + (e instanceof Error ? e.message : t("common.unknown")) } : m
       ));
     } finally {
       setSending(false);

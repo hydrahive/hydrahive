@@ -23,7 +23,7 @@ export function SetupPage() {
       localStorage.setItem("hydrahive_token", tokenRes.access_token);
       navigate("/wizard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Setup");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
     }

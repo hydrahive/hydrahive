@@ -132,7 +132,7 @@ export function AgentsPage() {
       if (mcpData.status === "fulfilled") setMcpServers(mcpData.value.servers);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -153,7 +153,7 @@ export function AgentsPage() {
       setLogLines(d.lines);
       setLogErr("");
     } catch (e) {
-      setLogErr(e instanceof Error ? e.message : "Fehler beim Laden");
+      setLogErr(e instanceof Error ? e.message : t("common.error"));
     }
   }
 
@@ -253,7 +253,7 @@ export function AgentsPage() {
       closeForm();
       await load();
     } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : "Fehler");
+      setSaveErr(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -266,7 +266,7 @@ export function AgentsPage() {
       await api.deleteAgent(id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Loeschen");
+      setError(e instanceof Error ? e.message : t("common.deleteError"));
     } finally {
       setDeleting(null);
     }
@@ -292,7 +292,7 @@ export function AgentsPage() {
       setHbEditAgent(null);
       await load();
     } catch (e) {
-      setHbErr(e instanceof Error ? e.message : "Fehler");
+      setHbErr(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setHbSaving(false);
     }

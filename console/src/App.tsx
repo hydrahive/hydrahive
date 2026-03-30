@@ -28,6 +28,8 @@ const ButlerPage        = lazy(() => import("@/pages/ButlerPage").then((m) => ({
 const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
 const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m) => ({ default: m.SkillPackagesPage })));
 const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
+const SecretsPage            = lazy(() => import("@/pages/SecretsPage").then((m) => ({ default: m.SecretsPage })));
+const HydraBrainPage         = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -109,6 +111,8 @@ export default function App() {
             <Route path="butler"           element={<Navigate to="/blueprint" replace />} />
             <Route path="tools/skill-packages" element={<SkillPackagesPage />} />
             <Route path="hub"                  element={<HubPage />} />
+            <Route path="secrets"           element={<SecretsPage />} />
+            <Route path="brain"             element={<HydraBrainPage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="audit"             element={<AuditPage />} />

@@ -255,6 +255,71 @@ class DiscordAgentClient(ABC):
                 logger.error("Discord on_message Fehler für Agent %s: %s",
                              self.agent_id, e)
 
+        # ── Butler: Discord-Event-Trigger ────────────────────────────────────
+
+        async def _fire_discord_event(extra: dict) -> None:
+            try:
+                from .butler_executor import ButlerEvent as _BE, check_flows as _butler, execute_generic_actions as _butler_generic
+                import asyncio as _aio
+                _owner  = self.agent_id.removeprefix("personal_")
+                _bevent = _BE(event_type="discord_event", channel="discord", extra=extra)
+                _bacts  = await _butler(_bevent, owner=_owner)
+                _aio.create_task(_butler_generic(_bacts, _bevent))
+            except Exception as _e:
+                logger.debug("Butler discord_event: %s", _e)
+
+        @self._client.event
+        async def on_reaction_add(reaction, user):
+            if user == self._client.user:
+                return
+            await _fire_discord_event({
+                "event": "reaction_add", "emoji": str(reaction.emoji),
+                "message_id": str(reaction.message.id),
+                "channel_id": str(reaction.message.channel.id),
+                "user_id": str(user.id), "username": str(user),
+            })
+
+        @self._client.event
+        async def on_reaction_remove(reaction, user):
+            if user == self._client.user:
+                return
+            await _fire_discord_event({
+                "event": "reaction_remove", "emoji": str(reaction.emoji),
+                "message_id": str(reaction.message.id),
+                "channel_id": str(reaction.message.channel.id),
+                "user_id": str(user.id), "username": str(user),
+            })
+
+        @self._client.event
+        async def on_member_join(member):
+            await _fire_discord_event({
+                "event": "member_join",
+                "user_id": str(member.id), "username": str(member),
+                "guild_id": str(member.guild.id),
+            })
+
+        @self._client.event
+        async def on_member_remove(member):
+            await _fire_discord_event({
+                "event": "member_leave",
+                "user_id": str(member.id), "username": str(member),
+                "guild_id": str(member.guild.id),
+            })
+
+        @self._client.event
+        async def on_guild_channel_create(channel):
+            await _fire_discord_event({
+                "event": "channel_create",
+                "channel_id": str(channel.id), "channel_name": str(channel.name),
+            })
+
+        @self._client.event
+        async def on_guild_channel_delete(channel):
+            await _fire_discord_event({
+                "event": "channel_delete",
+                "channel_id": str(channel.id), "channel_name": str(channel.name),
+            })
+
         logger.info("Discord-Client für Agent '%s' gestartet", self.agent_id)
         # Blockiert bis close() aufgerufen wird
         try:

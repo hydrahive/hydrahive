@@ -35,7 +35,7 @@ export function SkillsPanel({ agentId }: Props) {
       setSkills(d.skills);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export function SkillsPanel({ agentId }: Props) {
       closeForm();
       await load();
     } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : "Fehler");
+      setSaveErr(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -114,7 +114,7 @@ export function SkillsPanel({ agentId }: Props) {
       await api.deleteSkill(agentId, filename);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setDeleting(null);
     }

@@ -125,6 +125,7 @@ function GpuCard({ gpu }: { gpu: GpuEntry }) {
 }
 
 function CleanupPanel() {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [status,   setStatus]   = useState<CleanupStatus | null>(null);
   const [running,  setRunning]  = useState(false);
@@ -150,7 +151,7 @@ function CleanupPanel() {
       const s = await api.cleanupStatus();
       setStatus(s);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Fehler");
+      setMsg(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setRunning(false);
     }
@@ -163,7 +164,7 @@ function CleanupPanel() {
       setCfgEdit(false);
       setMsg("Konfiguration gespeichert.");
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Fehler");
+      setMsg(e instanceof Error ? e.message : t("common.error"));
     }
   }
 
@@ -225,8 +226,8 @@ function CleanupPanel() {
             </label>
           </div>
           <div className="flex gap-2">
-            <button onClick={saveConfig} className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground">Speichern</button>
-            <button onClick={() => setCfgEdit(false)} className="rounded border px-3 py-1.5 text-xs">Abbrechen</button>
+            <button onClick={saveConfig} className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground">{t("common.save")}</button>
+            <button onClick={() => setCfgEdit(false)} className="rounded border px-3 py-1.5 text-xs">{t("common.cancel")}</button>
           </div>
         </div>
       )}

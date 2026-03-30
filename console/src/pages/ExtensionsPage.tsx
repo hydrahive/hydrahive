@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Search, Code2, GitBranch, Cpu, MessageCircle, Network,
+  Search, Code2, GitBranch, Cpu, MessageCircle, Network, KeyRound,
   CheckCircle, XCircle, AlertCircle, Download, Trash2,
   ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -20,7 +20,7 @@ interface Extension {
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Search, Code2, GitBranch, Cpu, MessageCircle, Network,
+  Search, Code2, GitBranch, Cpu, MessageCircle, Network, KeyRound,
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -28,6 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   ai:            "KI & Modelle",
   communication: "Kommunikation",
   network:       "Netzwerk",
+  security:      "Sicherheit",
 };
 
 function ExtCard({

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // ── Node-Typen ────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,7 @@ function PropertiesPanel({ node, onChange, onDelete }: {
 interface Project { id: string; name: string }
 
 function WorkflowInner({ projects }: { projects: Project[] }) {
+  const { t } = useTranslation();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id ?? "");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -261,9 +263,9 @@ function WorkflowInner({ projects }: { projects: Project[] }) {
     setSaving(true);
     try {
       await api.put(`/projects/${selectedProjectId}/workflow`, { nodes, edges });
-      setToast("Gespeichert"); setTimeout(() => setToast(null), 2500);
+      setToast(t("common.saved")); setTimeout(() => setToast(null), 2500);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Fehler");
+      setToast(e instanceof Error ? e.message : t("common.error"));
     } finally {
       setSaving(false);
     }
@@ -293,7 +295,7 @@ function WorkflowInner({ projects }: { projects: Project[] }) {
         <button onClick={save} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {saving ? "Speichere…" : "Speichern"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
 

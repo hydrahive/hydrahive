@@ -253,7 +253,7 @@ export function ChatPage() {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error
       } else {
-        setError(e instanceof Error ? e.message : "Fehler beim Senden");
+        setError(e instanceof Error ? e.message : t("common.error"));
         setMessages((ms) => ms.filter((m) => m.id !== userMsg.id && m.id !== assistantMsg.id));
         setInput(content);
       }

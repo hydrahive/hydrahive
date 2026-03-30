@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Network, Wifi, WifiOff, RefreshCw, Key, Power, PowerOff, Copy, Check } from "lucide-react";
 import { api, VpnStatus, VpnPeer } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 function StatusBadge({ connected, state }: { connected: boolean; state?: string }) {
   if (connected) return (
@@ -33,6 +34,7 @@ function PeerRow({ peer }: { peer: VpnPeer }) {
 }
 
 export function VpnPage() {
+  const { t } = useTranslation();
   const [status,      setStatus]      = useState<VpnStatus | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState("");
@@ -56,7 +58,7 @@ export function VpnPage() {
       if (d.hostname) setHostname(d.hostname);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -74,7 +76,7 @@ export function VpnPage() {
       setAuthKey("");
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Verbindungsfehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setConnecting(false); }
   }
 
@@ -84,7 +86,7 @@ export function VpnPage() {
       await api.vpnDown();
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Trennen");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setDisconnecting(false); }
   }
 
@@ -94,7 +96,7 @@ export function VpnPage() {
       const d = await api.vpnHeadscaleAuthkey();
       setHsKey(d.auth_key);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Auth-Key Fehler");
+      setError(e instanceof Error ? e.message : t("common.error"));
     } finally { setGenKey(false); }
   }
 
@@ -222,13 +224,13 @@ export function VpnPage() {
             <button onClick={handleConnect} disabled={connecting}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
               <Power size={14} />
-              {connecting ? "Verbinde..." : "Verbinden"}
+              {connecting ? t("common.connecting") : t("common.connect")}
             </button>
             {status?.connected && (
               <button onClick={handleDisconnect} disabled={disconnecting}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-200 text-sm font-medium transition-colors">
                 <PowerOff size={14} />
-                {disconnecting ? "Trenne..." : "Trennen"}
+                {disconnecting ? t("common.deleting") : t("common.disconnect")}
               </button>
             )}
           </div>

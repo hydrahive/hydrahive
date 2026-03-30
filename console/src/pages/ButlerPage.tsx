@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ButlerNodeData {
@@ -92,6 +93,13 @@ function defaultParams(subtype: string): Record<string, unknown> {
     case "git_create_issue":       return { repo: "", title: "", body: "" };
     case "git_add_comment":        return { repo: "", issue_number: "", body: "" };
     case "discord_post":           return { channel_id: "", message: "" };
+    case "discord_event_received": return { discord_event: "reaction_add", channel_id: "" };
+    case "email_received":         return { folder: "INBOX", from_filter: "" };
+    case "email_from_contains":    return { keyword: "" };
+    case "email_subject_contains": return { keyword: "" };
+    case "email_body_contains":    return { keyword: "" };
+    case "discord_event_is":       return { discord_event: "reaction_add" };
+    case "discord_emoji_is":       return { emoji: "" };
     default:                       return {};
   }
 }
@@ -102,10 +110,12 @@ const PALETTE = [
     group: "Trigger",
     color: "green" as const,
     items: [
-      { type: "triggerNode", subtype: "message_received", label: "Nachricht empfangen", icon: MessageCircle },
-      { type: "triggerNode", subtype: "webhook_received",   label: "Webhook empfangen",  icon: Webhook },
-      { type: "triggerNode", subtype: "heartbeat_fired",    label: "Heartbeat Task",      icon: Clock },
-      { type: "triggerNode", subtype: "git_event_received", label: "GitHub/Gitea Event",  icon: GitBranch },
+      { type: "triggerNode", subtype: "message_received",       label: "Nachricht empfangen", icon: MessageCircle },
+      { type: "triggerNode", subtype: "webhook_received",       label: "Webhook empfangen",   icon: Webhook },
+      { type: "triggerNode", subtype: "heartbeat_fired",        label: "Heartbeat Task",       icon: Clock },
+      { type: "triggerNode", subtype: "git_event_received",     label: "GitHub/Gitea Event",   icon: GitBranch },
+      { type: "triggerNode", subtype: "discord_event_received", label: "Discord Event",        icon: MessageSquare },
+      { type: "triggerNode", subtype: "email_received",         label: "E-Mail empfangen",     icon: Mail },
     ],
   },
   {
@@ -120,6 +130,11 @@ const PALETTE = [
       { type: "conditionNode", subtype: "git_branch_is",          label: "Branch ist",          icon: GitBranch },
       { type: "conditionNode", subtype: "git_author_is",          label: "Autor ist",           icon: Users },
       { type: "conditionNode", subtype: "git_action_is",          label: "Git-Action ist",      icon: Zap },
+      { type: "conditionNode", subtype: "email_from_contains",    label: "Mail-Absender enthält",icon: Mail },
+      { type: "conditionNode", subtype: "email_subject_contains", label: "Mail-Betreff enthält", icon: Mail },
+      { type: "conditionNode", subtype: "email_body_contains",    label: "Mail-Text enthält",    icon: Mail },
+      { type: "conditionNode", subtype: "discord_event_is",       label: "Discord-Event ist",    icon: MessageSquare },
+      { type: "conditionNode", subtype: "discord_emoji_is",       label: "Discord-Emoji ist",    icon: MessageSquare },
     ],
   },
   {
@@ -194,6 +209,24 @@ function paramSummary(subtype: string, params: Record<string, unknown>): string 
       return (params.repo as string) ? `${params.repo} #${params.issue_number || "?"}` : "— repo fehlt —";
     case "discord_post":
       return (params.channel_id as string) ? `#${params.channel_id}` : "— channel fehlt —";
+    case "discord_event_received": {
+      const evt = (params.discord_event as string) || "reaction_add";
+      const ch  = (params.channel_id as string) || "";
+      return ch ? `${evt} · #${ch}` : evt;
+    }
+    case "email_received": {
+      const folder = (params.folder as string) || "INBOX";
+      const from   = (params.from_filter as string) || "";
+      return from ? `${folder} · von: ${from}` : folder;
+    }
+    case "email_from_contains":
+    case "email_subject_contains":
+    case "email_body_contains":
+      return (params.keyword as string) ? `"${params.keyword}"` : "—";
+    case "discord_event_is":
+      return (params.discord_event as string) || "—";
+    case "discord_emoji_is":
+      return (params.emoji as string) || "—";
     default:
       return "";
   }
@@ -655,6 +688,103 @@ function PropertiesPanel({ node, agents, onChange, onDelete }: PropsPanelProps) 
         </div>
       )}
 
+      {/* Trigger: Discord Event */}
+      {d.subtype === "discord_event_received" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Event-Typ</label>
+            <select value={(p.discord_event as string) || "reaction_add"}
+              onChange={e => onChange({ ...p, discord_event: e.target.value })}
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+              <option value="reaction_add">Reaktion hinzugefügt</option>
+              <option value="reaction_remove">Reaktion entfernt</option>
+              <option value="member_join">Mitglied beigetreten</option>
+              <option value="member_remove">Mitglied entfernt</option>
+              <option value="channel_create">Channel erstellt</option>
+              <option value="channel_delete">Channel gelöscht</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Channel-ID (optional)</label>
+            <input type="text" placeholder="Leer = alle Channels"
+              value={(p.channel_id as string) || ""}
+              onChange={e => onChange({ ...p, channel_id: e.target.value })}
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm font-mono text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+            <p className="text-[10px] text-white/25 mt-1">Discord Channel-ID (Rechtsklick → ID kopieren)</p>
+          </div>
+        </div>
+      )}
+
+      {/* Trigger: E-Mail empfangen */}
+      {d.subtype === "email_received" && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="block text-xs text-white/50 mb-1">IMAP-Ordner</label>
+            <input type="text" placeholder="INBOX"
+              value={(p.folder as string) || "INBOX"}
+              onChange={e => onChange({ ...p, folder: e.target.value })}
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1">Absender-Filter (optional)</label>
+            <input type="text" placeholder="z.B. @example.com"
+              value={(p.from_filter as string) || ""}
+              onChange={e => onChange({ ...p, from_filter: e.target.value })}
+              className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+            />
+            <p className="text-[10px] text-white/25 mt-1">Leer = alle Absender. Konfiguration in /etc/hydrahive/kas.json</p>
+          </div>
+        </div>
+      )}
+
+      {/* Condition: E-Mail Felder */}
+      {(d.subtype === "email_from_contains" || d.subtype === "email_subject_contains" || d.subtype === "email_body_contains") && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">
+            {d.subtype === "email_from_contains" ? "Absender enthält" :
+             d.subtype === "email_subject_contains" ? "Betreff enthält" : "Text enthält"}
+          </label>
+          <input type="text" placeholder="Stichwort oder Domain"
+            value={(p.keyword as string) || ""}
+            onChange={e => onChange({ ...p, keyword: e.target.value })}
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+          />
+          <p className="text-[10px] text-white/25 mt-1">Groß-/Kleinschreibung wird ignoriert.</p>
+        </div>
+      )}
+
+      {/* Condition: Discord Event ist */}
+      {d.subtype === "discord_event_is" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Event-Typ</label>
+          <select value={(p.discord_event as string) || "reaction_add"}
+            onChange={e => onChange({ ...p, discord_event: e.target.value })}
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-white/30">
+            <option value="reaction_add">Reaktion hinzugefügt</option>
+            <option value="reaction_remove">Reaktion entfernt</option>
+            <option value="member_join">Mitglied beigetreten</option>
+            <option value="member_remove">Mitglied entfernt</option>
+            <option value="channel_create">Channel erstellt</option>
+            <option value="channel_delete">Channel gelöscht</option>
+          </select>
+        </div>
+      )}
+
+      {/* Condition: Discord Emoji ist */}
+      {d.subtype === "discord_emoji_is" && (
+        <div>
+          <label className="block text-xs text-white/50 mb-1">Emoji</label>
+          <input type="text" placeholder="👍 oder custom_emoji_name"
+            value={(p.emoji as string) || ""}
+            onChange={e => onChange({ ...p, emoji: e.target.value })}
+            className="w-full rounded-lg bg-zinc-900 border border-white/15 px-2 py-1.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-white/30"
+          />
+          <p className="text-[10px] text-white/25 mt-1">Unicode-Emoji oder Name eines Custom-Emojis.</p>
+        </div>
+      )}
+
       {/* Info-only nodes */}
       {d.subtype === "contact_known" && (
         <p className="text-xs text-white/35 leading-relaxed">
@@ -896,6 +1026,7 @@ let _nSeq = 0;
 function genId(type: string) { return `${type}-${++_nSeq}-${Date.now()}`; }
 
 function ButlerPageInner() {
+  const { t } = useTranslation();
   const [flows, setFlows]           = useState<ButlerFlow[]>([]);
   const [activeFlowId, setActiveId] = useState<string | null>(null);
   const [flowName, setFlowName]     = useState("Neuer Flow");
@@ -971,23 +1102,23 @@ function ButlerPageInner() {
         setFlows(fs => [...fs, created]);
         setActiveId(created.id);
       }
-      showToast("Gespeichert ✓");
+      showToast(t("common.saved"));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Fehler beim Speichern");
+      showToast(e instanceof Error ? e.message : t("common.saveError"));
     } finally {
       setSaving(false);
     }
   };
 
   const deleteFlow = async () => {
-    if (!activeFlowId || !confirm(`Flow "${flowName}" wirklich löschen?`)) return;
+    if (!activeFlowId || !confirm(t("common.confirmDelete", { name: flowName }))) return;
     try {
       await api.delete(`/butler/flows/${activeFlowId}`);
       setFlows(fs => fs.filter(f => f.id !== activeFlowId));
       newFlow();
-      showToast("Gelöscht");
+      showToast(t("common.deleted"));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Fehler");
+      showToast(e instanceof Error ? e.message : t("common.error"));
     }
   };
 
@@ -998,7 +1129,7 @@ function ButlerPageInner() {
       setEnabled(res.enabled);
       setFlows(fs => fs.map(f => f.id === activeFlowId ? { ...f, enabled: res.enabled } : f));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Fehler");
+      showToast(e instanceof Error ? e.message : t("common.error"));
     }
   };
 
@@ -1103,14 +1234,14 @@ function ButlerPageInner() {
           className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-zinc-900 px-2.5 py-1.5 text-sm text-white hover:bg-white/10 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
-          Neu
+          {t("common.new")}
         </button>
 
         <button type="button" onClick={saveFlow} disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white transition-colors"
         >
           <Save className="h-3.5 w-3.5" />
-          {saving ? "Speichere…" : "Speichern"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
 
         {activeFlowId && (
