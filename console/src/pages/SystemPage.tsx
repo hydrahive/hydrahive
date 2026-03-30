@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle, FlaskConical, RotateCcw } from "lucide-react";
-import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck, TestReport } from "@/lib/api";
+import { RefreshCw, CheckCircle, XCircle, Clock, Cpu, HardDrive, Activity, Zap, Stethoscope, AlertTriangle, FlaskConical, RotateCcw, Trash2 } from "lucide-react";
+import { api, GpuInfo, GpuEntry, DoctorReport, DoctorCheck, TestReport, CleanupStatus, CleanupConfig } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -18,6 +18,35 @@ interface SystemStatus {
   projects?:  { projects_dir: string; count: number };
   sessions?:  { active_projects: string[] };
   runtime?:   Record<string, RuntimeAgent>;
+}
+
+interface ResourceData {
+  system: {
+    cpu_percent: number;
+    ram_total_mb: number;
+    ram_used_mb: number;
+    ram_percent: number;
+    disk_total_gb: number;
+    disk_used_gb: number;
+    disk_percent: number;
+  };
+  process: { cpu_percent: number; ram_mb: number };
+  agents: Record<string, { tokens_last_hour: number; running: boolean }>;
+  token_warn_threshold: number;
+}
+
+function ResourceBar({ pct, label }: { pct: number; label: string }) {
+  const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : "bg-green-500";
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>{label}</span><span>{pct.toFixed(0)}%</span>
+      </div>
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }
 
 const STATUS_ICON: Record<string, JSX.Element> = {
@@ -91,6 +120,127 @@ function GpuCard({ gpu }: { gpu: GpuEntry }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CleanupPanel() {
+  const { isAdmin } = useAuth();
+  const [status,   setStatus]   = useState<CleanupStatus | null>(null);
+  const [running,  setRunning]  = useState(false);
+  const [msg,      setMsg]      = useState<string | null>(null);
+  const [cfgEdit,  setCfgEdit]  = useState(false);
+  const [cfg,      setCfg]      = useState<CleanupConfig>({ transcript_days: 30, backup_keep: 10, warn_pct_yellow: 80, warn_pct_red: 90 });
+
+  if (!isAdmin) return null;
+
+  useEffect(() => {
+    api.cleanupStatus().then(s => {
+      setStatus(s);
+      setCfg(s.config);
+    }).catch(() => {});
+  }, []);
+
+  async function runCleanup() {
+    setRunning(true);
+    setMsg(null);
+    try {
+      const r = await api.cleanupRun();
+      setMsg(`Cleanup abgeschlossen: ${r.deleted_transcripts} Transcripts, ${r.deleted_backups} Backups, ${r.deleted_orphan_projects} Projekte gelöscht.`);
+      const s = await api.cleanupStatus();
+      setStatus(s);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Fehler");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function saveConfig() {
+    try {
+      const r = await api.cleanupConfig(cfg);
+      setCfg(r.config);
+      setCfgEdit(false);
+      setMsg("Konfiguration gespeichert.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Fehler");
+    }
+  }
+
+  const disk = status?.disk;
+  const diskColor = disk ? (disk.percent >= 90 ? "text-red-500" : disk.percent >= 80 ? "text-orange-500" : "text-green-500") : "";
+
+  return (
+    <div className="bg-card border rounded-lg p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-medium">Disk-Cleanup</h2>
+        {disk && <span className={`ml-auto text-xs font-mono ${diskColor}`}>{disk.percent.toFixed(1)}% belegt ({disk.free_gb} GB frei)</span>}
+      </div>
+
+      {disk && (
+        <ResourceBar pct={disk.percent} label={`Disk: ${disk.used_gb} GB / ${disk.total_gb} GB`} />
+      )}
+
+      {status?.last_result && (
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          <p>Letzter Lauf: {new Date(status.last_result.ran_at).toLocaleString("de-DE")}</p>
+          <p>Transcripts gelöscht: {status.last_result.deleted_transcripts} · Backups: {status.last_result.deleted_backups} · Projekte: {status.last_result.deleted_orphan_projects}</p>
+        </div>
+      )}
+
+      {!cfgEdit ? (
+        <div className="text-xs text-muted-foreground flex flex-wrap gap-4">
+          <span>Transcripts: {cfg.transcript_days} Tage</span>
+          <span>Backups: letzte {cfg.backup_keep} behalten</span>
+          <span>Warnung: {cfg.warn_pct_yellow}% / {cfg.warn_pct_red}%</span>
+          <button onClick={() => setCfgEdit(true)} className="ml-auto text-primary hover:underline">Konfigurieren</button>
+        </div>
+      ) : (
+        <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Transcript-Alter (Tage)</span>
+              <input type="number" min={1} value={cfg.transcript_days}
+                onChange={e => setCfg(c => ({ ...c, transcript_days: +e.target.value }))}
+                className="w-full rounded border bg-background px-2 py-1" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Backups behalten</span>
+              <input type="number" min={1} value={cfg.backup_keep}
+                onChange={e => setCfg(c => ({ ...c, backup_keep: +e.target.value }))}
+                className="w-full rounded border bg-background px-2 py-1" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Warnung bei % (gelb)</span>
+              <input type="number" min={50} max={99} value={cfg.warn_pct_yellow}
+                onChange={e => setCfg(c => ({ ...c, warn_pct_yellow: +e.target.value }))}
+                className="w-full rounded border bg-background px-2 py-1" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Warnung bei % (rot)</span>
+              <input type="number" min={50} max={99} value={cfg.warn_pct_red}
+                onChange={e => setCfg(c => ({ ...c, warn_pct_red: +e.target.value }))}
+                className="w-full rounded border bg-background px-2 py-1" />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveConfig} className="rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground">Speichern</button>
+            <button onClick={() => setCfgEdit(false)} className="rounded border px-3 py-1.5 text-xs">Abbrechen</button>
+          </div>
+        </div>
+      )}
+
+      {msg && <p className="text-xs text-muted-foreground">{msg}</p>}
+
+      <button
+        onClick={runCleanup}
+        disabled={running}
+        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+      >
+        <RefreshCw className={`h-4 w-4 ${running ? "animate-spin" : ""}`} />
+        {running ? "Läuft..." : "Cleanup jetzt ausführen"}
+      </button>
     </div>
   );
 }
@@ -299,16 +449,21 @@ export function SystemPage() {
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
   const [healthy,   setHealthy]   = useState<boolean | null>(null);
   const [gpu,       setGpu]       = useState<GpuInfo | null>(null);
+  const [resources, setResources] = useState<ResourceData | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [restartConfirm, setRestartConfirm] = useState(false);
   const [restarting,     setRestarting]     = useState(false);
 
   async function load() {
-    const [h, s, g] = await Promise.allSettled([api.health(), api.status(), api.gpuInfo()]);
+    const [h, s, g, r] = await Promise.allSettled([
+      api.health(), api.status(), api.gpuInfo(),
+      api.get("/admin/resources"),
+    ]);
     setHealthy(h.status === "fulfilled");
     if (s.status === "fulfilled") setStatus(s.value as SystemStatus);
     if (g.status === "fulfilled") setGpu(g.value);
+    if (r.status === "fulfilled") setResources(r.value as ResourceData);
     setLoading(false);
     setRefreshing(false);
   }
@@ -383,6 +538,59 @@ export function SystemPage() {
         </div>
       </div>
 
+      {/* ── Resource Monitoring ─────────────────────────────────────── */}
+      {resources && (
+        <div className="grid grid-cols-3 gap-4">
+          {/* System-Ressourcen */}
+          <div className="bg-card border rounded-lg p-4 space-y-3 col-span-1">
+            <h2 className="text-sm font-medium flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-muted-foreground" /> System
+            </h2>
+            <ResourceBar pct={resources.system.cpu_percent}  label="CPU" />
+            <ResourceBar pct={resources.system.ram_percent}  label={`RAM  ${resources.system.ram_used_mb} / ${resources.system.ram_total_mb} MB`} />
+            <ResourceBar pct={resources.system.disk_percent} label={`Disk  ${resources.system.disk_used_gb} / ${resources.system.disk_total_gb} GB`} />
+            <div className="pt-1 border-t text-xs text-muted-foreground space-y-1">
+              <div className="flex justify-between"><span>Core CPU</span><span>{resources.process.cpu_percent.toFixed(1)}%</span></div>
+              <div className="flex justify-between"><span>Core RAM</span><span>{resources.process.ram_mb} MB</span></div>
+            </div>
+          </div>
+
+          {/* Token-Verbrauch pro Agent */}
+          <div className="bg-card border rounded-lg p-4 col-span-2">
+            <h2 className="text-sm font-medium flex items-center gap-2 mb-3">
+              <Zap className="h-4 w-4 text-muted-foreground" /> Token-Verbrauch (letzte Stunde)
+            </h2>
+            {Object.keys(resources.agents).length === 0 ? (
+              <p className="text-xs text-muted-foreground">Noch keine Aktivität in der letzten Stunde.</p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(resources.agents)
+                  .filter(([, a]) => a.tokens_last_hour > 0)
+                  .sort(([, a], [, b]) => b.tokens_last_hour - a.tokens_last_hour)
+                  .map(([id, a]) => {
+                    const pct = Math.min(100, (a.tokens_last_hour / (resources.token_warn_threshold || 100000)) * 100);
+                    const color = pct >= 90 ? "bg-red-500" : pct >= 60 ? "bg-orange-500" : "bg-blue-500";
+                    return (
+                      <div key={id} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${a.running ? "bg-green-500" : "bg-muted-foreground"}`} />
+                            <span className="font-mono text-muted-foreground">{id}</span>
+                          </span>
+                          <span className="text-muted-foreground">{a.tokens_last_hour.toLocaleString()} Tokens</span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-card border rounded-lg p-4 space-y-1">
           <h2 className="text-sm font-medium mb-3">{t("system.services")}</h2>
@@ -453,6 +661,7 @@ export function SystemPage() {
         </div>
       )}
 
+      <CleanupPanel />
       <DoctorPanel />
       <TestsPanel />
     </div>

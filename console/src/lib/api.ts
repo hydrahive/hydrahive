@@ -174,6 +174,10 @@ export const api = {
   updateStatus:  () => api.get<UpdateStatus>("/admin/update/status"),
   updateTrigger: () => api.post<{status: string; message: string}>("/admin/update/trigger", {}),
   coreRestart:   () => api.post<{status: string; message: string}>("/admin/core/restart", {}),
+  // Disk-Cleanup (#81)
+  cleanupStatus: () => api.get<CleanupStatus>("/admin/cleanup/status"),
+  cleanupRun:    () => api.post<CleanupResult>("/admin/cleanup/run", {}),
+  cleanupConfig: (cfg: Partial<CleanupConfig>) => api.put<{updated:boolean;config:CleanupConfig}>("/admin/cleanup/config", cfg),
   // WKS (Workstation)
   getWks:             () => api.get<WksConfig>("/me/wks"),
   updateWks:          (d: WksConfigPayload) => api.put("/me/wks", d),
@@ -534,6 +538,29 @@ export interface UsageStats {
   projects:    UsageProject[];
   grand_total: { input: number; output: number; cache_read: number; cache_write: number; cost: number };
   pricing_ref: Record<string, { input: number; output: number; cache_write: number; cache_read: number }>;
+}
+
+export interface CleanupConfig {
+  transcript_days:  number;
+  backup_keep:      number;
+  warn_pct_yellow:  number;
+  warn_pct_red:     number;
+}
+
+export interface CleanupResult {
+  ran_at:                    string;
+  elapsed_ms:                number;
+  deleted_transcripts:       number;
+  deleted_backups:           number;
+  deleted_orphan_projects:   number;
+  deleted_stale_indices:     number;
+  disk: { total_gb: number; used_gb: number; free_gb: number; percent: number };
+}
+
+export interface CleanupStatus {
+  last_result: CleanupResult | null;
+  disk:        { total_gb: number; used_gb: number; free_gb: number; percent: number };
+  config:      CleanupConfig;
 }
 
 export interface UpdateStatus {

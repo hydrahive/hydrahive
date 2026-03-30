@@ -331,3 +331,33 @@ def register_system_routes(
             return {"prs": prs, "count": len(prs if isinstance(prs, list) else [])}
         except Exception as e:
             raise HTTPException(503, f"Gitea-Fehler: {e}")
+
+    # ------------------------------------------------------------------ #
+    # Disk-Cleanup (#81)                                                   #
+    # ------------------------------------------------------------------ #
+
+    @admin_router.get("/admin/cleanup/status")
+    def get_cleanup_status():
+        from .cleanup_service import cleanup_service as _cs, get_disk_usage, _load_config
+        return {
+            "last_result": _cs.last_result(),
+            "disk": get_disk_usage("/"),
+            "config": _load_config(),
+        }
+
+    @admin_router.post("/admin/cleanup/run")
+    async def trigger_cleanup():
+        from .cleanup_service import cleanup_service as _cs
+        result = await _cs.run_now()
+        return result
+
+    @admin_router.put("/admin/cleanup/config")
+    def update_cleanup_config(body: dict):
+        from .cleanup_service import _load_config, save_config
+        allowed = {"transcript_days", "backup_keep", "warn_pct_yellow", "warn_pct_red"}
+        cfg = _load_config()
+        for k, v in body.items():
+            if k in allowed:
+                cfg[k] = v
+        save_config(cfg)
+        return {"updated": True, "config": cfg}

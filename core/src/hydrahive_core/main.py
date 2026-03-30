@@ -323,8 +323,31 @@ async def lifespan(app: FastAPI):
         load_project_cfg_fn=projects.get,
         load_users_fn=_load_users,
     )
+
+    # Disk-Cleanup Service starten (#81)
+    from .cleanup_service import cleanup_service as _cs
+
+    async def _disk_notify(title: str, body: str, level: str = "yellow") -> None:
+        ntype = "warning" if level == "yellow" else "error"
+        try:
+            users_map = _load_users()
+            admins = [u for u, d in users_map.items() if d.get("role") == "admin"] or ["admin"]
+        except Exception:
+            admins = ["admin"]
+        for u in admins:
+            await notification_service.push(user=u, type=ntype, title=title, body=body, link="/system")
+
+    _cs.start(
+        agents_dir=AGENTS_DIR,
+        projects_dir=PROJECTS_DIR,
+        backups_dir="/opt/hydrahive/backups",
+        load_users_fn=_load_users,
+        notify_fn=_disk_notify,
+    )
+
     logger.info("HydraHive Core bereit")
     yield
+    _cs.stop()
     scheduler_service.stop()
     notification_service.stop()
     hb_task.cancel()
