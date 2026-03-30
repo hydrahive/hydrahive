@@ -188,6 +188,34 @@ def register_agent_admin_routes(
         logger.info("Agent tools aktualisiert: %s -> %s", agent_id, tools)
         return {"updated": True, "agent_id": agent_id, "tools": tools}
 
+    @auth_router.get("/agents/{agent_id}/workflow-blueprint")
+    def get_workflow_blueprint(agent_id: str, _a: tuple = Depends(require_auth)):
+        import json as _json
+        wf_path = Path(agents_dir) / agent_id / "workflow_blueprint.json"
+        if not wf_path.exists():
+            return {"nodes": [], "edges": []}
+        try:
+            return _json.loads(wf_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"nodes": [], "edges": []}
+
+    @admin_router.put("/agents/{agent_id}/workflow-blueprint")
+    def save_workflow_blueprint(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
+        import json as _json
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        wf_path = agent_dir / "workflow_blueprint.json"
+        wf_path.write_text(_json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+        # Prompt-Cache invalidieren damit Blueprint sofort wirkt
+        try:
+            from .orchestrator_context import invalidate_prompt_cache
+            invalidate_prompt_cache(agent_id)
+        except Exception:
+            pass
+        logger.info("workflow_blueprint.json gespeichert: %s", wf_path)
+        return {"saved": True}
+
     @admin_router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
         agent_dir = Path(agents_dir) / agent_id

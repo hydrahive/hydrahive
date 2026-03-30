@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 _PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 _PROMPT_CACHE_TTL = 300  # 5 Min — gleich wie Anthropic ephemeral cache
 
+
+def invalidate_prompt_cache(agent_id: str) -> None:
+    """Löscht den gecachten System-Prompt für einen Agenten (z.B. nach Blueprint-Änderung)."""
+    _PROMPT_CACHE.pop(agent_id, None)
+
 # Kontextfenster je Modell-Familie (Tokens)
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "claude":   200_000,
@@ -206,6 +211,12 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if active_skills:
             parts.append(skills_to_system_prompt(active_skills))
 
+    # Agent-Blueprint Kontext (workflow_blueprint.json)
+    if boss_cfg.agent_dir:
+        blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
+        if blueprint_ctx:
+            parts.append(blueprint_ctx)
+
     repo_guidance = _repo_review_guidance(boss_cfg, user_text)
     if repo_guidance:
         parts.append(repo_guidance)
@@ -219,6 +230,72 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         _PROMPT_CACHE[boss_cfg.id] = (prompt, time.time(), h)
 
     return prompt
+
+
+def _load_agent_blueprint_context(agent_dir) -> str:
+    """
+    Liest workflow_blueprint.json aus dem Agent-Verzeichnis und serialisiert
+    Repos, Credentials, Skills, Memory und ToolPolicies als Kontext-Block.
+    """
+    import json as _json
+
+    wf_path = Path(agent_dir) / "workflow_blueprint.json"
+    if not wf_path.exists():
+        return ""
+    try:
+        wf = _json.loads(wf_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+
+    nodes: list[dict] = wf.get("nodes", [])
+    if not nodes:
+        return ""
+
+    repos, creds, skills_bp, memory_bp, policies = [], [], [], [], []
+    for node in nodes:
+        ntype = node.get("type", "")
+        d     = node.get("data", {})
+        cfg   = d.get("config", {})
+        label = d.get("label", "")
+        if ntype == "repository":
+            url    = cfg.get("url", "")
+            branch = cfg.get("branch", "main")
+            path   = cfg.get("path", "/")
+            repos.append(f"- **{label}**: `{url}` (Branch: {branch}, Pfad: {path})")
+        elif ntype == "credential":
+            key    = cfg.get("key", label)
+            source = cfg.get("source", "config")
+            creds.append(f"- **{label}**: Key `{key}` (Quelle: {source})")
+        elif ntype == "skill":
+            file_ = cfg.get("file", label)
+            skills_bp.append(f"- {label} (`{file_}`)")
+        elif ntype == "memory":
+            file_ = cfg.get("file", label)
+            always = cfg.get("always", False)
+            memory_bp.append(f"- {label} (`{file_}`)" + (" — immer geladen" if always else ""))
+        elif ntype == "toolpolicy":
+            tool    = cfg.get("tool", label)
+            allowed = cfg.get("allowed", True)
+            note    = cfg.get("note", "")
+            status  = "✓ erlaubt" if allowed else "✗ gesperrt"
+            policies.append(f"- `{tool}`: {status}" + (f" — {note}" if note else ""))
+
+    parts = ["## Agent-Konfiguration (Blueprint)"]
+    if repos:
+        parts.append("### Repositories\n" + "\n".join(repos))
+        parts.append("→ Nutze `gitea_repo_inspect`, `gitea_repo_tree`, `gitea_repo_file` oder `http_request` um auf diese Repositories zuzugreifen.")
+    if creds:
+        parts.append("### Verfügbare Credentials\n" + "\n".join(creds))
+    if skills_bp:
+        parts.append("### Zugewiesene Skills\n" + "\n".join(skills_bp))
+    if memory_bp:
+        parts.append("### Pinned Memory\n" + "\n".join(memory_bp))
+    if policies:
+        parts.append("### Tool-Policy\n" + "\n".join(policies))
+
+    if len(parts) == 1:
+        return ""  # Nur Überschrift, keine Inhalte
+    return "\n\n".join(parts)
 
 
 def _repo_review_guidance(agent_cfg, user_text: str) -> str:
