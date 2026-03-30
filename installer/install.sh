@@ -133,6 +133,13 @@ install -m 755 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh" "${HYDRAHIV
 "$(dirname "${BASH_SOURCE[0]}")/amem/install_amem.sh"
 success "A-MEM installiert"
 
+# www-data (nginx) braucht Lesezugriff auf /projects/ (hydrahive-Gruppe)
+if id www-data &>/dev/null; then
+    usermod -aG hydrahive www-data
+    systemctl reload nginx 2>/dev/null || true
+    success "nginx (www-data) zur hydrahive-Gruppe hinzugefügt — /projects/ erreichbar"
+fi
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Installation abgeschlossen       ║${NC}"

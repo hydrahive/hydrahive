@@ -71,9 +71,7 @@ def register_project_lifecycle_routes(
 
         stopped_agents = []
         boss_id = cfg.agents.boss
-        handle = runtime.get_handle(boss_id)
-        if handle:
-            await runtime.stop_agent(boss_id)
+        if await runtime.stop_agent_task(boss_id):
             stopped_agents.append(boss_id)
 
         _provisioner = get_provisioner()
@@ -85,6 +83,9 @@ def register_project_lifecycle_routes(
         timestamp = int(_time.time())
         deleted_dir = Path(projects_dir) / f'_deleted_{project_id}_{timestamp}'
         project_dir.rename(deleted_dir)
+
+        # Aus In-Memory-Registry entfernen damit create_project danach wieder funktioniert
+        projects._unregister_dir(project_dir)
 
         audit_log('project.delete', target=project_id, project_id=project_id, details={'moved_to': str(deleted_dir), 'stopped_agents': stopped_agents})
         logger.info('Projekt geloescht: %s -> %s', project_id, deleted_dir)

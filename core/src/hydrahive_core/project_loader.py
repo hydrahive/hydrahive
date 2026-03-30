@@ -63,7 +63,7 @@ class ProjectLoader:
     def _scan_all(self) -> None:
         found = 0
         for entry in self._dir.iterdir():
-            if entry.is_dir():
+            if entry.is_dir() and not entry.name.startswith("_deleted_"):
                 self._register(entry)
                 found += 1
         logger.info("Initialer Scan: %d Projekt-Verzeichnisse gefunden", found)
@@ -118,6 +118,12 @@ class _ProjectEventHandler(FileSystemEventHandler):
             self._l._unregister_dir(path)
         elif path.name == "project.yaml":
             self._l._unregister_dir(path.parent)
+
+    def on_moved(self, event: FileSystemEvent) -> None:
+        # rename() feuert on_moved, nicht on_deleted — Projekt aus Registry entfernen
+        path = Path(event.src_path)
+        if event.is_directory:
+            self._l._unregister_dir(path)
 
     def on_modified(self, event: FileSystemEvent) -> None:
         path = Path(event.src_path)

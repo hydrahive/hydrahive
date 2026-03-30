@@ -169,7 +169,17 @@ export function ProjectsPage() {
         return n;
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.deleteError"));
+      // 404 = bereits gelöscht → trotzdem aus der Liste entfernen
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("404")) {
+        setProjects((p) => {
+          const n = { ...p };
+          delete n[id];
+          return n;
+        });
+      } else {
+        setError(e instanceof Error ? e.message : t("common.deleteError"));
+      }
     } finally {
       setDeleting(null);
     }

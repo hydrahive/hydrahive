@@ -2841,9 +2841,11 @@ class GitCommitTool(BaseTool):
     def description(self) -> str:
         return (
             "Schreibt Dateien in den Git-Workspace und erstellt einen Commit. "
+            "Pusht danach automatisch auf Gitea (auto_push=True). "
             "files: Liste von {path, content} Objekten. "
             "message: Commit-Nachricht. "
-            "branch: Branch-Name (Standard: feature/agent-<agent_id>)."
+            "branch: Branch-Name (Standard: feature/agent-<agent_id>). "
+            "auto_push: False um Push zu überspringen (Standard: True)."
         )
 
     @property
@@ -2877,17 +2879,18 @@ class GitCommitTool(BaseTool):
                 },
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
                 "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
+                "auto_push": {"type": "boolean", "description": "Nach Commit automatisch auf Gitea pushen (Standard: True)"},
             },
             "required": ["files", "message"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        files: list, message: str, branch: str = "", **kwargs,
+        files: list, message: str, branch: str = "", auto_push: bool = True, **kwargs,
     ) -> dict:
         pid = kwargs.get("project_id") or project_id
         repo_ref = kwargs.get("repo", "")
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target, _load_config
 
         if not branch:
             safe_id = agent_id.replace("_", "-").replace(" ", "-")[:30]
@@ -2934,7 +2937,7 @@ class GitCommitTool(BaseTool):
         # letzte Commit-Hash
         hash_out, _, _ = await GiteaClient._git(["rev-parse", "--short", "HEAD"], ws)
 
-        return {
+        result: dict = {
             "committed": True,
             "project_id": pid,
             "repo":      target["repo"],
@@ -2945,6 +2948,23 @@ class GitCommitTool(BaseTool):
             "commit":    hash_out.strip(),
             "message":   message,
         }
+
+        # Auto-Push auf Remote (Standard: True)
+        if auto_push:
+            cfg = _load_config()
+            remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
+            await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
+            _, push_err, push_rc = await GiteaClient._git(
+                ["push", "-u", "origin", branch], ws, token=cfg.get("token", "")
+            )
+            if push_rc == 0:
+                result["pushed"] = True
+            else:
+                result["pushed"] = False
+                result["push_error"] = push_err[:300]
+                logger.warning("git_commit auto-push fehlgeschlagen [%s]: %s", agent_id, push_err[:200])
+
+        return result
 
 
 class GitPushTool(BaseTool):
