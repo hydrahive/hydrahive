@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-interface AuthUser { username: string; token: string; role: string; }
+interface AuthUser { username: string; token: string; role: string; group: string; }
 interface AuthCtx  {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -16,7 +16,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const t = localStorage.getItem("hydrahive_token");
     const u = localStorage.getItem("hydrahive_user");
     const r = localStorage.getItem("hydrahive_role") ?? "user";
-    return t && u ? { token: t, username: u, role: r } : null;
+    const g = localStorage.getItem("hydrahive_group") ?? "standard";
+    return t && u ? { token: t, username: u, role: r, group: g } : null;
   });
 
   async function login(username: string, password: string) {
@@ -29,14 +30,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.detail || "Login fehlgeschlagen");
     }
-    const data = await res.json();
+    const data  = await res.json();
     const token = data.access_token;
-    const role  = data.role ?? "user";
+    const role  = data.role  ?? "user";
+    const group = data.group ?? "standard";
 
-    setUser({ username: data.username ?? username, token, role });
+    setUser({ username: data.username ?? username, token, role, group });
     localStorage.setItem("hydrahive_token", token);
-    localStorage.setItem("hydrahive_user", username);
-    localStorage.setItem("hydrahive_role", role);
+    localStorage.setItem("hydrahive_user",  username);
+    localStorage.setItem("hydrahive_role",  role);
+    localStorage.setItem("hydrahive_group", group);
   }
 
   function logout() {
@@ -44,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("hydrahive_token");
     localStorage.removeItem("hydrahive_user");
     localStorage.removeItem("hydrahive_role");
+    localStorage.removeItem("hydrahive_group");
     sessionStorage.removeItem("hh_wizard_done");
   }
 

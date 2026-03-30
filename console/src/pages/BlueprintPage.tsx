@@ -1,24 +1,37 @@
 import { useState } from "react";
 import { Workflow, Network, ShieldCheck, Bell, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 import { ButlerPage } from "@/pages/ButlerPage";
 import { ProjectArchitectTab } from "@/pages/blueprint/ProjectArchitectTab";
 import { PermissionsTab }      from "@/pages/blueprint/PermissionsTab";
 import { NotificationRouterTab } from "@/pages/blueprint/NotificationRouterTab";
 import { WorkflowTab }          from "@/pages/blueprint/WorkflowTab";
 
-const TABS = [
-  { id: "automation",    label: "Automation",        icon: Workflow,     hint: "Butler Event-Flows" },
-  { id: "architect",     label: "Projekt-Architekt", icon: Network,      hint: "Boss + Worker verdrahten" },
-  { id: "permissions",   label: "Berechtigungen",    icon: ShieldCheck,  hint: "User-Rechte visuell" },
-  { id: "notifications", label: "Notifications",     icon: Bell,         hint: "Alert-Routing" },
-  { id: "workflow",      label: "Projekt-Workflow",  icon: Cpu,          hint: "Arbeitsablauf für Agenten definieren" },
+const ALL_TABS = [
+  { id: "automation",    label: "Automation",        icon: Workflow,     hint: "Butler Event-Flows",                 minGroup: "chatter" },
+  { id: "architect",     label: "Projekt-Architekt", icon: Network,      hint: "Boss + Worker verdrahten",           minGroup: "standard" },
+  { id: "workflow",      label: "Projekt-Workflow",  icon: Cpu,          hint: "Arbeitsablauf für Agenten definieren", minGroup: "standard" },
+  { id: "notifications", label: "Notifications",     icon: Bell,         hint: "Alert-Routing",                      minGroup: "admin" },
+  { id: "permissions",   label: "Berechtigungen",    icon: ShieldCheck,  hint: "User-Rechte visuell",                minGroup: "admin" },
 ] as const;
 
-type TabId = typeof TABS[number]["id"];
+const GROUP_RANK: Record<string, number> = {
+  chatter: 1, standard: 2, learning: 3, dev: 4, admin: 99,
+};
+
+type TabId = typeof ALL_TABS[number]["id"];
 
 export function BlueprintPage() {
-  const [tab, setTab] = useState<TabId>("automation");
+  const { user, isAdmin } = useAuth();
+  const group = isAdmin ? "admin" : (user?.group ?? "standard");
+  const rank  = GROUP_RANK[group] ?? 2;
+
+  const TABS = ALL_TABS.filter(t =>
+    t.minGroup === "admin" ? isAdmin : (GROUP_RANK[t.minGroup] ?? 0) <= rank
+  );
+
+  const [tab, setTab] = useState<TabId>(() => TABS[0]?.id ?? "automation");
 
   return (
     <div className="flex flex-col h-full -mx-4 -my-4 md:-mx-6 md:-my-6 lg:-mx-8 lg:-my-8">

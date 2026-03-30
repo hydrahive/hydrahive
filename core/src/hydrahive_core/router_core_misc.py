@@ -278,10 +278,11 @@ def register_core_misc_routes(
         if users:
             user = users.get(req.username)
             if user and verify_password(req.password, user.get("password_hash", "")):
-                role = user.get("role", "user")
+                role  = user.get("role", "user")
+                group = user.get("group", "standard")
                 token = make_jwt(req.username, role)
                 logger.info("Login erfolgreich (users.json): %s", req.username)
-                return {"access_token": token, "token_type": "bearer", "role": role, "username": req.username}
+                return {"access_token": token, "token_type": "bearer", "role": role, "group": group, "username": req.username}
             raise HTTPException(401, "Ungültige Zugangsdaten")
 
         admin_pass = read_admin_password()
