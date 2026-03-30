@@ -366,9 +366,9 @@ export function MyAgentPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full min-w-0 overflow-x-hidden">
       {/* Header + Tabs */}
-      <div className="border-b flex-shrink-0">
+      <div className="border-b flex-shrink-0 min-w-0">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <Bot className="h-4 w-4 text-primary" />
