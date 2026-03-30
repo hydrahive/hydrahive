@@ -516,3 +516,63 @@ def register_llm_routes(
             raise HTTPException(503, "ollama nicht installiert")
         except _sub.TimeoutExpired:
             raise HTTPException(504, "Timeout beim Laden des Modells")
+
+    @admin_router.get("/llm/embedding/config")
+    def get_embedding_config():
+        """Gibt aktuelle Embedding-Konfiguration zurück."""
+        import os as _os
+        config = _load_llm_config()
+        model  = config.get("embedding_model", "")
+
+        # Voyage AI Key aus llm_env lesen
+        voyage_key_set = False
+        llm_env = Path("/etc/hydrahive/llm_env")
+        if llm_env.exists():
+            try:
+                for line in llm_env.read_text().splitlines():
+                    if line.startswith("VOYAGE_API_KEY=") and line.split("=", 1)[1].strip():
+                        voyage_key_set = True
+            except Exception:
+                pass
+
+        return {
+            "model":          model,
+            "voyage_key_set": voyage_key_set,
+            "ollama_available": _os.path.exists("/usr/local/bin/ollama") or _os.path.exists("/usr/bin/ollama"),
+        }
+
+    @admin_router.put("/llm/embedding/config")
+    async def set_embedding_config(body: dict):
+        """Speichert Embedding-Modell und optionalen Voyage AI API-Key."""
+        model     = body.get("model", "").strip()
+        voyage_key = body.get("voyage_api_key", "").strip()
+
+        if not model:
+            raise HTTPException(400, "model fehlt")
+
+        # Embedding-Modell in llm_config.json speichern
+        config = _load_llm_config()
+        config["embedding_model"] = model
+        _save_llm_config(config)
+
+        # Voyage API Key in llm_env speichern/aktualisieren
+        if voyage_key:
+            llm_env_path = Path("/etc/hydrahive/llm_env")
+            lines: list[str] = []
+            if llm_env_path.exists():
+                try:
+                    lines = llm_env_path.read_text().splitlines()
+                except Exception:
+                    pass
+            # Bestehende VOYAGE_API_KEY-Zeile entfernen
+            lines = [l for l in lines if not l.startswith("VOYAGE_API_KEY=")]
+            lines.append(f"VOYAGE_API_KEY={voyage_key}")
+            try:
+                llm_env_path.write_text("\n".join(lines) + "\n")
+                llm_env_path.chmod(0o600)
+            except Exception as e:
+                raise HTTPException(500, f"llm_env schreiben fehlgeschlagen: {e}")
+
+        audit_log("llm.embedding_config", target=model)
+        logger.info("Embedding-Modell gesetzt: %s", model)
+        return {"saved": True, "model": model, "voyage_key_updated": bool(voyage_key)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, CheckCircle, XCircle, ExternalLink, Save, Cpu, Download } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, ExternalLink, Save, Cpu, Download, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -173,19 +173,27 @@ export function LlmConfigPage() {
   const [savingSystem,   setSavingSystem]   = useState(false);
   const [savedSystem,    setSavedSystem]    = useState(false);
 
+  // Embedding
+  const [embedModel,     setEmbedModel]     = useState("");
+  const [voyageKey,      setVoyageKey]      = useState("");
+  const [voyageKeySet,   setVoyageKeySet]   = useState(false);
+  const [savingEmbed,    setSavingEmbed]    = useState(false);
+  const [savedEmbed,     setSavedEmbed]     = useState(false);
+
   // Ref so exchange handler always sees current flow state
   const oauthFlowRef = useRef<OAuthFlow | null>(null);
   oauthFlowRef.current = oauthFlow;
 
   async function load() {
     try {
-      const [cfg, ollama, claudeSt, codexSt, sysModel, avail] = await Promise.allSettled([
+      const [cfg, ollama, claudeSt, codexSt, sysModel, avail, embedCfg] = await Promise.allSettled([
         api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
         api.claudeTokenStatus(),
         api.openaiCodexStatus(),
         api.getSystemDefaultModel(),
         api.availableModels(),
+        api.get<{model:string;voyage_key_set:boolean;ollama_available:boolean}>("/llm/embedding/config"),
       ]);
       if (claudeSt.status  === "fulfilled") setClaudeStatus(claudeSt.value);
       if (codexSt.status   === "fulfilled") setCodexStatus(codexSt.value);
@@ -196,6 +204,10 @@ export function LlmConfigPage() {
       }
       if (sysModel.status  === "fulfilled") setSystemModel(sysModel.value.model ?? "");
       if (avail.status     === "fulfilled") setAvailModels(avail.value.models ?? []);
+      if (embedCfg.status  === "fulfilled") {
+        setEmbedModel(embedCfg.value.model || "voyage/voyage-3-lite");
+        setVoyageKeySet(embedCfg.value.voyage_key_set ?? false);
+      }
     } finally { setLoading(false); setRefreshing(false); }
   }
 
@@ -406,6 +418,92 @@ export function LlmConfigPage() {
           </div>
         )}
         <p className="text-xs text-muted-foreground">Läuft auf http://127.0.0.1:11434</p>
+      </div>
+
+      {/* Embeddings */}
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              <h2 className="font-medium text-sm">Embeddings (Memory-Suche)</h2>
+              {voyageKeySet || embedModel.startsWith("ollama/")
+                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>Aktiv</span>
+                : <span className="flex items-center gap-1 text-xs text-amber-600"><XCircle className="h-3.5 w-3.5"/>Kein Key</span>
+              }
+              {savedEmbed && <span className="text-xs text-green-600">{t("common.saved")}</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Für semantische Memory-Suche und Ebbinghaus-Dedup. Voyage AI empfohlen (kostenlos bis 50M Tokens/Monat).
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Modell</label>
+            <select
+              value={embedModel}
+              onChange={e => setEmbedModel(e.target.value)}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <optgroup label="Voyage AI (empfohlen)">
+                <option value="voyage/voyage-3-lite">voyage-3-lite — 512d, schnell, kostenlos</option>
+                <option value="voyage/voyage-3">voyage-3 — 1024d, höhere Qualität</option>
+              </optgroup>
+              <optgroup label="Ollama (lokal, kein Key nötig)">
+                <option value="ollama/nomic-embed-text">nomic-embed-text — 768d, lokal</option>
+                <option value="ollama/mxbai-embed-large">mxbai-embed-large — 1024d, lokal</option>
+              </optgroup>
+              <optgroup label="OpenAI">
+                <option value="text-embedding-3-small">text-embedding-3-small — 1536d</option>
+                <option value="text-embedding-3-large">text-embedding-3-large — 3072d</option>
+              </optgroup>
+            </select>
+          </div>
+
+          {embedModel.startsWith("voyage/") && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Voyage AI API-Key
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={voyageKey}
+                  onChange={e => setVoyageKey(e.target.value)}
+                  placeholder={voyageKeySet ? "••••••••••••••• (gesetzt)" : "pa-..."}
+                  className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Von <a href="https://dash.voyageai.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">dash.voyageai.com</a> — 50M Tokens/Monat kostenlos
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={async () => {
+              setSavingEmbed(true);
+              try {
+                await api.put("/llm/embedding/config", {
+                  model: embedModel,
+                  ...(voyageKey.trim() ? { voyage_api_key: voyageKey.trim() } : {}),
+                });
+                setSavedEmbed(true);
+                setVoyageKey("");
+                if (embedModel.startsWith("voyage/")) setVoyageKeySet(true);
+                setTimeout(() => setSavedEmbed(false), 3000);
+              } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
+              finally { setSavingEmbed(false); }
+            }}
+            disabled={savingEmbed}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            <Save className="h-3.5 w-3.5"/>
+            {savingEmbed ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
       </div>
 
       {/* System-Standard-LLM */}
