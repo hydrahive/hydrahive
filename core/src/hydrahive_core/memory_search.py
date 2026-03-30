@@ -1,15 +1,15 @@
 """
-memory_search.py — In-Process Memory Search (OpenClaw-Stil)
+memory_search.py — Hybrid Memory Search für HydraHive (#44)
 
-SQLite FTS5 (BM25) basierte Memory-Suche für HydraHive Agenten.
+SQLite FTS5 (BM25) + optionale FAISS-Semantic-Suche.
 Kein GPU, kein externer Service — alles in-process.
 
 Architektur:
-- Pro Agent eine SQLite DB: /agents/{id}/memory_index.db
-- FTS5 virtual table für BM25 keyword search
+- Pro Agent eine SQLite DB: /agents/{id}/memory_index.db (BM25)
+- Pro Agent ein FAISS-Index: /agents/{id}/memory_index.faiss (Semantic)
 - Lazy re-indexing: Dateien werden nur bei mtime/size-Änderung neu indexiert
 - Chunks: Split by markdown headers, max 1500 chars/Chunk
-- Hybrid optional: falls litellm Embeddings konfiguriert → 0.7 vec + 0.3 bm25
+- Hybrid: BM25 top-k/2 + Semantic top-k/2, dedup, max k Ergebnisse
 
 Verwendung:
     from .memory_search import search_memory, update_index
@@ -23,6 +23,8 @@ import logging
 import re
 import sqlite3
 from pathlib import Path
+
+from .semantic_index import update_index as _update_semantic, search_index as _search_semantic
 
 logger = logging.getLogger(__name__)
 
@@ -150,16 +152,19 @@ def _index_file(conn: sqlite3.Connection, path: Path) -> None:
 
 
 def update_index(agent_dir: Path) -> None:
-    """Memory-Index aktualisieren (lazy, nur geänderte Dateien)."""
+    """Memory-Index aktualisieren (lazy, nur geänderte Dateien).
+    Baut BM25 (SQLite FTS5) und FAISS Semantic Index parallel.
+    """
     memory_dir = agent_dir / "memory"
     if not memory_dir.exists():
         return
 
     db_path = agent_dir / "memory_index.db"
     conn = _open_db(db_path)
+    all_chunks: list[str] = []
     try:
         changed = False
-        for md in memory_dir.glob("*.md"):
+        for md in sorted(memory_dir.glob("*.md")):
             if md.name in SKIP_FILES:
                 continue
             if _needs_reindex(conn, md):
@@ -171,9 +176,17 @@ def update_index(agent_dir: Path) -> None:
                     logger.warning("memory_index: %s übersprungen (%s)", md.name, e)
         if changed:
             conn.commit()
-            logger.debug("memory_index: Update abgeschlossen für %s", agent_dir.name)
+            logger.debug("memory_index: BM25 Update abgeschlossen für %s", agent_dir.name)
+
+        # Alle aktuellen Chunks für FAISS-Index sammeln
+        rows = conn.execute("SELECT text FROM chunks").fetchall()
+        all_chunks = [r[0] for r in rows if r[0].strip()]
     finally:
         conn.close()
+
+    # FAISS Semantic Index aktualisieren (lazy, nur wenn Chunks geändert)
+    if all_chunks:
+        _update_semantic(agent_dir, all_chunks, "memory")
 
 
 # ---------------------------------------------------------------------------
@@ -181,20 +194,22 @@ def update_index(agent_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def search_memory(agent_dir: Path, query: str, k: int = 6) -> list[str]:
-    """BM25-Suche im Memory-Index. Gibt Liste von Snippets zurück.
+    """Hybrid Memory-Suche: BM25 + Semantik (FAISS).
 
-    Fallback auf neueste Dateien wenn Index leer oder Query zu kurz.
+    Strategie: top-(k//2 + 1) BM25 + top-(k//2 + 1) Semantik, dedup, max k.
+    Fallback auf BM25-only wenn FAISS/Embeddings nicht verfügbar.
     """
     db_path = agent_dir / "memory_index.db"
     if not db_path.exists():
         return []
 
-    fts_q = _fts_query(query)
-    if not fts_q:
-        return []
+    half = max(k // 2 + 1, 3)
 
-    conn = sqlite3.connect(str(db_path))
-    try:
+    # ── BM25 ──────────────────────────────────────────────────────────────────
+    bm25_snippets: list[str] = []
+    fts_q = _fts_query(query)
+    if fts_q:
+        conn = sqlite3.connect(str(db_path))
         try:
             rows = conn.execute(
                 """
@@ -205,14 +220,33 @@ def search_memory(agent_dir: Path, query: str, k: int = 6) -> list[str]:
                 ORDER BY rank
                 LIMIT ?
                 """,
-                (fts_q, k),
+                (fts_q, half),
             ).fetchall()
+            bm25_snippets = [row[0][:SNIPPET_CHARS] for row in rows if row[0].strip()]
         except sqlite3.OperationalError as e:
             logger.debug("memory_search FTS Fehler: %s", e)
-            return []
+        finally:
+            conn.close()
 
-        snippets = [row[0][:SNIPPET_CHARS] for row in rows if row[0].strip()]
-        logger.debug("memory_search: %d Treffer für agent=%s", len(snippets), agent_dir.name)
-        return snippets
-    finally:
-        conn.close()
+    # ── Semantik ──────────────────────────────────────────────────────────────
+    semantic_snippets: list[str] = []
+    sem_results = _search_semantic(agent_dir, query, k=half, name="memory")
+    semantic_snippets = [text[:SNIPPET_CHARS] for text, _score in sem_results]
+
+    # ── Merge + Dedup ─────────────────────────────────────────────────────────
+    seen:    set[str] = set()
+    merged:  list[str] = []
+    # BM25 zuerst (exakte Keyword-Treffer bevorzugen), dann Semantik
+    for snippet in bm25_snippets + semantic_snippets:
+        key = snippet[:120]   # Dedup-Key: erste 120 Zeichen
+        if key not in seen:
+            seen.add(key)
+            merged.append(snippet)
+        if len(merged) >= k:
+            break
+
+    logger.debug(
+        "memory_search: %d Treffer (BM25=%d, sem=%d) für agent=%s",
+        len(merged), len(bm25_snippets), len(semantic_snippets), agent_dir.name,
+    )
+    return merged

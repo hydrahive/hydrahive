@@ -1,10 +1,12 @@
 """
-skill_loader.py — QMD Skill-Loading (#8, QM1-QM4)
+skill_loader.py — QMD Skill-Loading (#8, QM1-QM4, #41, #44)
 
 Liest .md-Dateien aus /agents/<name>/skills/ mit YAML-Frontmatter.
 scope: always  → immer in den System-Prompt geladen
-scope: on-demand → nur wenn ein Keyword aus triggers im User-Text vorkommt
+scope: on-demand → Keyword-Match ODER semantischer Score ≥ threshold
 priority: Ladereihenfolge bei mehreren Matches (niedrigere Zahl = höher)
+max_tokens: Skill-Inhalt auf diese Anzahl Zeichen kürzen (0 = kein Limit)
+token_budget: Gesamt-Zeichenbudget für alle Skills im System-Prompt
 """
 
 import logging
@@ -26,6 +28,7 @@ class Skill:
     scope:         str = "on-demand"   # always | on-demand
     triggers:      list[str] = field(default_factory=list)
     priority:      int = 50
+    max_tokens:    int = 0       # max Zeichen für Content-Kürzung (0 = kein Limit)
     content:       str = ""      # Markdown-Body (ohne Frontmatter)
     source:        Path | None = None
     allowed_tools: list[str] = field(default_factory=list)  # Allowlist (leer = keine Einschränkung)
@@ -37,6 +40,12 @@ class Skill:
             return True
         lower = text.lower()
         return any(kw.lower() in lower for kw in self.triggers)
+
+    def truncated_content(self) -> str:
+        """Content auf max_tokens Zeichen kürzen (0 = kein Limit)."""
+        if self.max_tokens and len(self.content) > self.max_tokens:
+            return self.content[: self.max_tokens].rstrip() + "\n…"
+        return self.content
 
     def apply_tool_constraints(self, tool_ids: list[str]) -> list[str]:
         """
@@ -103,6 +112,7 @@ def _parse_skill_file(path: Path) -> Skill | None:
         scope=meta.get("scope", "on-demand"),
         triggers=meta.get("triggers", []) or [],
         priority=int(meta.get("priority", 50)),
+        max_tokens=int(meta.get("max_tokens", 0)),
         content=body.strip(),
         source=path,
         allowed_tools=meta.get("allowed_tools", []) or [],
@@ -110,20 +120,56 @@ def _parse_skill_file(path: Path) -> Skill | None:
     )
 
 
-def select_skills(skills: list[Skill], user_text: str) -> list[Skill]:
+def select_skills(
+    skills: list[Skill],
+    user_text: str,
+    semantic_scores: dict[str, float] | None = None,
+    threshold: float = 0.35,
+) -> list[Skill]:
     """
     Gibt relevante Skills zurück:
     - scope=always: immer
-    - scope=on-demand: nur wenn Trigger matcht (QM3: Keyword-Matching, kein ML)
+    - scope=on-demand: Keyword-Match ODER semantischer Score ≥ threshold (#44)
+
+    semantic_scores: {skill.skill → score 0.0–1.0} aus score_texts()
+    threshold: Mindest-Score für semantische Inklusion (Default 0.35)
     """
-    return [s for s in skills if s.matches(user_text)]
+    result = []
+    for s in skills:
+        if s.scope == "always":
+            result.append(s)
+            continue
+        if s.matches(user_text):
+            result.append(s)
+            continue
+        if semantic_scores and semantic_scores.get(s.skill, 0.0) >= threshold:
+            result.append(s)
+    return result
 
 
-def skills_to_system_prompt(skills: list[Skill]) -> str:
-    """Skills als lesbaren System-Prompt-Block zusammenfassen."""
+def skills_to_system_prompt(skills: list[Skill], token_budget: int = 0) -> str:
+    """
+    Skills als System-Prompt-Block zusammenfassen.
+
+    token_budget: maximale Zeichenanzahl gesamt (0 = kein Limit).
+                  Skills mit niedrigerer Priority werden zuerst weggelassen.
+    Respektiert skill.max_tokens für individuelle Kürzung.
+    """
     if not skills:
         return ""
+
     parts = []
+    used  = 0
     for skill in skills:
-        parts.append(f"## Skill: {skill.skill}\n\n{skill.content}")
+        body  = skill.truncated_content()
+        block = f"## Skill: {skill.skill}\n\n{body}"
+        if token_budget and used + len(block) > token_budget:
+            logger.debug(
+                "skill_loader: '%s' weggelassen (Token-Budget %d erschöpft)",
+                skill.skill, token_budget,
+            )
+            continue
+        parts.append(block)
+        used += len(block)
+
     return "\n\n---\n\n".join(parts)

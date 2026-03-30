@@ -25,6 +25,9 @@ dependencies = [
     "redis~=5.0",
     "websockets~=12.0",
     "mcp>=1.0.0",
+    "psutil~=5.9",
+    "faiss-cpu~=1.8",
+    "numpy~=1.26",
 ]
 
 [project.optional-dependencies]

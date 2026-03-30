@@ -18,6 +18,7 @@ import litellm
 
 from .learning_memory import build_learning_prompt_snippet
 from .memory_search import search_memory, update_index as update_memory_index
+from .semantic_index import score_texts
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt, Skill
 
 logger = logging.getLogger(__name__)
@@ -204,12 +205,20 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if _handbook_text:
             parts.append(_handbook_text)
 
-    # QMD-Skills laden (scope=always immer, on-demand bei Keyword-Match)
+    # QMD-Skills laden (scope=always immer, on-demand: Keyword-Match + Semantik #44)
     if boss_cfg.agent_dir:
-        all_skills    = load_skills(boss_cfg.agent_dir)
-        active_skills = select_skills(all_skills, user_text)
+        all_skills = load_skills(boss_cfg.agent_dir)
+        # Semantische Scores berechnen (fällt auf {} zurück wenn FAISS nicht verfügbar)
+        semantic_scores: dict[str, float] = {}
+        if all_skills:
+            skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
+            raw_scores  = score_texts(skill_texts, user_text)
+            if raw_scores:
+                semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)}
+        # Token-Budget: max 8000 Zeichen für Skills (~2k Tokens)
+        active_skills = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
         if active_skills:
-            parts.append(skills_to_system_prompt(active_skills))
+            parts.append(skills_to_system_prompt(active_skills, token_budget=8000))
 
     # Agent-Blueprint Kontext (workflow_blueprint.json)
     if boss_cfg.agent_dir:
@@ -359,7 +368,13 @@ def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], lis
     if not boss_cfg.agent_dir:
         return [], []
     all_skills = load_skills(boss_cfg.agent_dir)
-    active = select_skills(all_skills, user_text)
+    semantic_scores: dict[str, float] = {}
+    if all_skills:
+        skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
+        raw = score_texts(skill_texts, user_text)
+        if raw:
+            semantic_scores = {s.skill: raw[i] for i, s in enumerate(all_skills)}
+    active = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
     combined_allowed: set[str] = set()
     combined_blocked: set[str] = set()
     has_allowed_constraint = False
