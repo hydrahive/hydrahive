@@ -625,7 +625,7 @@ export function MyAgentPage() {
                     )}
 
                     <div className="rounded-[24px] border border-border/70 bg-background/90 p-3 shadow-sm">
-                      <div className="mb-3 flex gap-2 overflow-x-auto scrollbar-none pb-1">
+                      <div className="mb-3 hidden sm:flex gap-2 flex-wrap">
                         {SLASH_COMMANDS.map((cmd) => (
                           <button key={cmd.cmd}
                             type="button"
