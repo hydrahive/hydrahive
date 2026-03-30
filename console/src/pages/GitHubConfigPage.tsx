@@ -21,7 +21,7 @@ export function GitHubConfigPage() {
 
   async function loadStatus() {
     try {
-      const d = await api.githubTokenStatus() as TokenStatus;
+      const d = await api.githubTokenStatus() as unknown as TokenStatus;
       setStatus(d);
     } catch {
       setStatus({ configured: false });
@@ -37,7 +37,7 @@ export function GitHubConfigPage() {
     if (!token.trim()) return;
     setSaving(true); setError(""); setSuccess("");
     try {
-      const d = await api.saveGithubToken(token.trim()) as TokenStatus & { login?: string };
+      const d = await api.saveGithubToken(token.trim()) as unknown as TokenStatus & { login?: string };
       setToken("");
       setSuccess(`Token gespeichert — verbunden als @${d.login}`);
       await loadStatus();
