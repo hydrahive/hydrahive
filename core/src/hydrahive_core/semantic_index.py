@@ -83,44 +83,83 @@ def _index_path(agent_dir: Path, name: str) -> tuple[Path, Path]:
 
 # ── Persistierter FAISS-Index ──────────────────────────────────────────────────
 
+def _cache_path(agent_dir: Path, name: str) -> Path:
+    return agent_dir / f"{name}_embed_cache.json"
+
+
+def _load_embed_cache(cache_path: Path, model: str) -> dict[str, list[float]]:
+    """Lädt per-Chunk-Embedding-Cache {hash: vector}. Leer bei Modell-Wechsel."""
+    if not cache_path.exists():
+        return {}
+    try:
+        raw = json.loads(cache_path.read_text(encoding="utf-8"))
+        if raw.get("model") != model:
+            return {}  # Modell gewechselt → Cache ungültig
+        return raw.get("vectors", {})
+    except Exception:
+        return {}
+
+
+def _save_embed_cache(cache_path: Path, model: str, vectors: dict[str, list[float]]) -> None:
+    try:
+        cache_path.write_text(
+            json.dumps({"model": model, "vectors": vectors}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning("Embed-Cache speichern fehlgeschlagen: %s", e)
+
+
 def update_index(agent_dir: Path, texts: list[str], name: str) -> bool:
     """
     Erstellt / aktualisiert FAISS-Index für eine Textliste.
-    Nur re-embedded wenn sich Inhalte geändert haben (Hash-Vergleich).
+    Nur geänderte Chunks werden neu embedded (per-Chunk-Hash-Cache).
     Gibt True zurück wenn Index danach nutzbar ist.
     """
     if not FAISS_AVAILABLE or not texts:
         return False
 
     faiss_path, meta_path = _index_path(agent_dir, name)
+    current_model = _get_embedding_model()
+    new_hashes = [_hash(t) for t in texts]
 
-    # Bestehende Metadaten laden
-    existing_hashes: list[str] = []
-    existing_model  = ""
-    if meta_path.exists():
+    # Update überspringen wenn alles identisch
+    if meta_path.exists() and faiss_path.exists():
         try:
             m = json.loads(meta_path.read_text(encoding="utf-8"))
-            existing_hashes = m.get("hashes", [])
-            existing_model  = m.get("model", "")
+            if (m.get("hashes") == new_hashes and m.get("model") == current_model):
+                return True
         except Exception:
             pass
 
-    new_hashes = [_hash(t) for t in texts]
-    current_model = _get_embedding_model()
+    # Per-Chunk-Embedding-Cache laden — nur neue/geänderte Chunks embedden
+    cache_path = _cache_path(agent_dir, name)
+    embed_cache = _load_embed_cache(cache_path, current_model)
 
-    # Update überspringen wenn identisch
-    if (existing_hashes == new_hashes and
-            existing_model == current_model and
-            faiss_path.exists()):
-        return True
+    missing_indices = [i for i, h in enumerate(new_hashes) if h not in embed_cache]
+    if missing_indices:
+        missing_texts = [texts[i] for i in missing_indices]
+        new_vecs = _embed(missing_texts)
+        if new_vecs is None:
+            return False
+        for idx, vec in zip(missing_indices, new_vecs):
+            embed_cache[new_hashes[idx]] = vec.tolist()
+        _save_embed_cache(cache_path, current_model, embed_cache)
+        logger.debug(
+            "semantic_index '%s': %d neue Chunks embedded, %d aus Cache",
+            name, len(missing_indices), len(texts) - len(missing_indices),
+        )
 
-    vecs = _embed(texts)
-    if vecs is None:
-        return False
+    # FAISS-Index aus Cache aufbauen
+    import numpy as np  # noqa: PLC0415
+    try:
+        all_vecs = np.array([embed_cache[h] for h in new_hashes], dtype=np.float32)
+    except KeyError:
+        return False  # Sollte nicht vorkommen
 
-    dim   = vecs.shape[1]
+    dim   = all_vecs.shape[1]
     index = faiss.IndexFlatIP(dim)
-    index.add(vecs)
+    index.add(all_vecs)
     faiss.write_index(index, str(faiss_path))
 
     meta_path.write_text(

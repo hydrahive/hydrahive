@@ -20,6 +20,7 @@ Verwendung:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 SKIP_FILES: frozenset[str] = frozenset({"learned-facts.md", "MEMORY.md", "INDEX.md"})
 MAX_CHUNK_CHARS = 1500   # max chars pro Chunk beim Indexieren
 SNIPPET_CHARS   = 700    # max chars pro Treffer im System-Prompt
+# BM25 vs. Semantik-Gewichtung: 0.0 = nur Semantik, 1.0 = nur BM25
+# Env-Var HYDRAHIVE_SEARCH_ALPHA überschreibt den Default
+SEARCH_ALPHA: float = float(os.environ.get("HYDRAHIVE_SEARCH_ALPHA", "0.5"))
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +256,7 @@ def search_memory(agent_dir: Path, query: str, k: int = 6) -> list[str]:
     sem_scores = [s for _, s in sem_results]
     sem_norm   = _minmax_norm(sem_scores)
 
-    alpha = 0.5   # Gewichtung BM25 vs. Semantik
+    alpha = SEARCH_ALPHA
     combined: dict[str, float] = {}
     for snippet, score in zip(bm25_snippets, bm25_norm):
         key = snippet[:120]
