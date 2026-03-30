@@ -1,126 +1,79 @@
 # Contributing to HydraHive
 
-Thanks for your interest in contributing!
+Thank you for your interest in contributing! HydraHive is an open-source AI agent platform — contributions of all kinds are welcome.
 
-## Getting Started
+## Ways to contribute
 
-1. Fork the repository and clone locally
-2. Set up a local VM or test environment (see `installer/install.sh`)
-3. Copy `scripts/hydrahive.conf.example` → `scripts/hydrahive.conf` and fill in your VM details
-4. Use `./scripts/hydrahive-update.sh` to deploy changes to your test VM
+- **Bug reports** — open an issue with steps to reproduce
+- **Feature ideas** — open an issue describing the use case
+- **Code** — fix a bug, implement a feature, improve performance
+- **Documentation** — improve setup guides, add examples
 
-## Development Setup
+## Getting started
 
-**Core (Python / FastAPI)**
+### Prerequisites
+
+- Python 3.12+
+- Node.js 20+
+- A running HydraHive instance for testing (see [install guide](installer/install.sh))
+
+### Local setup
+
 ```bash
-cd core
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+# Clone the repo
+git clone https://github.com/hydrahive/hydrahive.git
+cd hydrahive
+
+# Install core dependencies
+pip install -e "core/[dev]"
+
+# Install console dependencies
+npm install --prefix console
+
+# Run the console in dev mode
+npm run dev --prefix console
 ```
 
-**Console (React / Vite)**
-```bash
-cd console
-npm install
-npm run dev   # dev server with HMR on :5173
-```
-
-The console dev server proxies API calls to `http://localhost:8765` — point that to your test VM via SSH tunnel or edit `vite.config.ts`.
-
-## Project Structure
+### Project structure
 
 ```
-core/       FastAPI backend + all agent logic
-console/    React frontend (Vite + Tailwind)
-installer/  install.sh / update.sh for VM setup
-scripts/    Dev helper scripts (deploy, backup)
-docs/       Handbook (handbook.md → handbuch.html)
-website/    Static landing page (hydrahive.luckydevs.net)
+core/          Python backend (FastAPI)
+  src/hydrahive_core/
+    main.py              Entry point, router registration
+    router_*.py          API route handlers
+    orchestrator.py      Agent loop + tool execution
+    memory_search.py     Hybrid BM25 + FAISS memory search
+    semantic_index.py    FAISS embedding index
+    plugin_manager.py    Plugin system
+
+console/       React frontend (Vite + Tailwind)
+  src/pages/   One file per page/view
+  src/components/
+
+agents/        Agent configurations (YAML + soul.md)
+installer/     Setup scripts
+scripts/       Deployment helpers
 ```
 
-## Conventions
+## Making a pull request
 
-- **Python**: follow existing style (no strict linter enforced yet); type hints where practical
-- **TypeScript**: strict mode, no `any` without comment
-- **Docs**: if your change affects user-facing behavior, update `docs/handbook.md` in the same commit
+1. **Fork** the repository and create a branch from `main`
+2. **Make your changes** — keep them focused on one thing
+3. **Test** that the core starts (`python -m hydrahive_core`) and the console builds (`npm run build --prefix console`)
+4. **Open a PR** with a clear description of what and why
 
-## Commit Message Format
+No need for a CLA or formal process — just open the PR and we'll review it.
 
-We follow a conventional commit style. Every commit message must have the form:
+## Good first issues
 
-```
-<type>(<scope>): <short description>
+Look for issues tagged [`good first issue`](https://github.com/hydrahive/hydrahive/issues?q=label%3A%22good+first+issue%22) — these are self-contained tasks with clear scope.
 
-[optional body — what and why, not how]
-[optional footer — BREAKING CHANGE: ...]
-```
+## Code style
 
-**Allowed types:**
+- Python: follow existing patterns, no external formatter required
+- TypeScript/React: Tailwind for styling, no CSS modules
+- Keep changes minimal — don't refactor unrelated code in the same PR
 
-| Type | When to use |
-|------|-------------|
-| `feat` | New feature or capability |
-| `fix` | Bug fix |
-| `refactor` | Code restructuring without behavior change |
-| `test` | Adding or fixing tests |
-| `docs` | Documentation only |
-| `security` | Security hardening or vulnerability fix |
-| `perf` | Performance improvement |
-| `ci` | CI/CD pipeline changes |
-| `chore` | Build tooling, dependency updates, maintenance |
+## Questions?
 
-**Scope** (optional but encouraged): the module or area affected, e.g. `orchestrator`, `session`, `console`, `installer`, `rate-limiter`.
-
-**Examples:**
-
-```
-feat(orchestrator): add streaming failover for OAuth models
-
-fix(session): get_or_create returned coroutine instead of Session
-
-security: block rm -rf and mkfs in shell_exec tool
-
-docs: add A-MEM architecture section to DEPLOYMENT.md
-
-refactor(#19): split orchestrator.py into 4 focused modules
-```
-
-**Breaking changes** must be marked in the footer:
-```
-feat(api): rename /admin/agents → /admin/agent-configs
-
-BREAKING CHANGE: all clients using /admin/agents must update their URLs
-```
-
-## Atomic Commits
-
-Each commit should represent a single logical change. The goal is that every commit on `main` is deployable and passes CI.
-
-**Do:**
-- One commit per feature / bug fix
-- Include related test and doc changes in the same commit as the code change
-- `feat: add X` + `tests/test_x.py` + `docs/handbook.md` update — all in one commit
-
-**Don't:**
-- Mix unrelated changes ("fix login + refactor session manager + update README")
-- Commit broken/half-done code to `main` — use a feature branch
-- Commit generated files (`dist/`, `__pycache__/`, `*.lock` changes without actual dependency changes)
-
-**Why:**
-- `git bisect` works reliably — each commit can be tested independently
-- Code review is easier when commits are focused
-- Rollbacks are clean: `git revert <commit>` reverts exactly one logical change
-
-## What to contribute
-
-Good first areas:
-- Bug fixes and edge-case handling
-- New LLM provider integrations (OpenAI-compatible APIs)
-- MCP server examples / skill packs
-- Documentation improvements
-
-Please open an issue before starting large features so we can discuss the design first.
-
-## Security
-
-Do not include credentials, private IPs, or API keys in your PR. See [SECURITY.md](SECURITY.md) for the secrets architecture. Use the `hydrahive.conf` pattern for local config that should never be committed.
+Open an issue or leave a comment on an existing one — we're happy to help.
