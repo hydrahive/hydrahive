@@ -609,8 +609,8 @@ export function MyAgentPage() {
                   </div>
                 )}
 
-                <div className="border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px] flex-shrink-0">
-                  <div className="relative">
+                <div className="border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px] flex-shrink-0 min-w-0">
+                  <div className="relative min-w-0">
                     {showSuggest && suggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">
                         {suggestions.map((s, i) => (
@@ -624,7 +624,7 @@ export function MyAgentPage() {
                       </div>
                     )}
 
-                    <div className="rounded-[24px] border border-border/70 bg-background/90 p-3 shadow-sm">
+                    <div className="rounded-[24px] border border-border/70 bg-background/90 p-3 shadow-sm min-w-0">
                       <div className="mb-3 flex flex-wrap gap-2">
                         {SLASH_COMMANDS.map((cmd) => (
                           <button key={cmd.cmd}
@@ -651,7 +651,7 @@ export function MyAgentPage() {
                         </div>
                         </>
                       )}
-                      <div className="flex items-end gap-3">
+                      <div className="flex items-end gap-2 min-w-0">
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
