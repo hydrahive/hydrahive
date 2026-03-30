@@ -379,7 +379,7 @@ export function AgentChatPage() {
         </div>
       )}
 
-      <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${showHistory ? "hidden" : ""}`}>
+      <div className={`flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 ${showHistory ? "hidden" : ""}`}>
         {(viewSession ? viewSession.messages : messages).length === 0 && !viewSession && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-3 text-muted-foreground">
             <Bot className="h-10 w-10" />
@@ -460,9 +460,9 @@ export function AgentChatPage() {
         </div>
       )}
 
-      {!viewSession && !showHistory && <div className="px-4 py-3 border-t flex-shrink-0 relative">
+      {!viewSession && !showHistory && <div className="px-3 py-3 sm:px-4 border-t flex-shrink-0 relative">
         {showSuggest && suggestions.length > 0 && (
-          <div className="absolute bottom-full left-4 right-4 mb-1 bg-card border rounded-md shadow-lg overflow-hidden z-10">
+          <div className="absolute bottom-full left-3 right-3 sm:left-4 sm:right-4 mb-1 bg-card border rounded-md shadow-lg overflow-hidden z-10">
             {suggestions.map((s, i) => (
               <button key={s.cmd}
                 onMouseDown={e => { e.preventDefault(); setInput(s.cmd + " "); setShowSuggest(false); textareaRef.current?.focus(); }}
@@ -498,10 +498,10 @@ export function AgentChatPage() {
             onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
             placeholder={t("agentChat.messagePlaceholder")}
             rows={1}
-            className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+            className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
           <button onClick={() => setShowEmoji(v => !v)} type="button"
-            className="p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0">
+            className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0">
             <Smile className="h-4 w-4 text-muted-foreground" />
           </button>
           {sending ? (
