@@ -30,6 +30,7 @@ import {
   Store,
   KeyRound,
   Brain,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,32 @@ function useDarkMode() {
   return [dark, () => setDark((d) => !d)] as const;
 }
 
+const NAV_COLLAPSE_KEY = "hh_nav_collapsed";
+
+function useNavCollapse(groupId: string, defaultCollapsed: boolean) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(NAV_COLLAPSE_KEY) || "{}");
+      return groupId in stored ? stored[groupId] : defaultCollapsed;
+    } catch {
+      return defaultCollapsed;
+    }
+  });
+
+  const toggle = useCallback(() => {
+    setCollapsed((prev: boolean) => {
+      const next = !prev;
+      try {
+        const stored = JSON.parse(localStorage.getItem(NAV_COLLAPSE_KEY) || "{}");
+        localStorage.setItem(NAV_COLLAPSE_KEY, JSON.stringify({ ...stored, [groupId]: next }));
+      } catch {}
+      return next;
+    });
+  }, [groupId]);
+
+  return [collapsed, toggle] as const;
+}
+
 export function AdminLayout() {
   const { t } = useTranslation();
   const { user, isAdmin, logout } = useAuth();
@@ -146,52 +173,90 @@ export function AdminLayout() {
   const location = useLocation();
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
-  type NavGroup = { label?: string; items: NavItem[] };
+  type NavGroup = { id: string; label?: string; collapsible?: boolean; defaultCollapsed?: boolean; items: NavItem[] };
 
-  const groupWorkspace: NavGroup = {
+  const groupTop: NavGroup = {
+    id: "top",
     items: [
       { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
-      { to: "/my-agent",  icon: Sparkles,        label: t("nav.myAgent"),   hint: t("navHint.myAgent") },
-      { to: "/projects",  icon: FolderKanban,    label: t("nav.projects"),  hint: t("navHint.projects") },
-      { to: "/tools",     icon: Wrench,          label: t("nav.tools"),     hint: t("navHint.tools") },
+    ],
+  };
+
+  const groupMyAgent: NavGroup = {
+    id: "myAgent",
+    label: t("nav.myAgent"),
+    collapsible: true,
+    defaultCollapsed: false,
+    items: [
+      { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
+    ],
+  };
+
+  const groupWorkspace: NavGroup = {
+    id: "workspace",
+    label: t("nav.groupWorkspace") || "Workspace",
+    collapsible: true,
+    defaultCollapsed: false,
+    items: [
+      { to: "/projects",             icon: FolderKanban, label: t("nav.projects"),      hint: t("navHint.projects") },
+      { to: "/blueprint",            icon: Workflow,     label: t("nav.blueprint"),     hint: t("navHint.blueprint") },
+      { to: "/tools",                icon: Wrench,       label: t("nav.tools"),         hint: t("navHint.tools") },
+      { to: "/tools/skill-packages", icon: Package,      label: t("nav.skillPackages"), hint: t("navHint.skillPackages") },
+      { to: "/code-editor",          icon: Code2,        label: t("nav.codeEditor"),    hint: t("navHint.codeEditor") },
     ],
   };
 
   const groupOperations: NavGroup = {
+    id: "operations",
     label: t("nav.groupOperations"),
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
-      { to: "/agents",   icon: Bot,      label: t("nav.agents"),   hint: t("navHint.agents") },
-      { to: "/activity", icon: Activity, label: t("nav.activity"), hint: t("navHint.activity") },
-      { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
-      { to: "/search",     icon: Search,    label: t("nav.search"),     hint: t("navHint.search") },
-      { to: "/extensions", icon: Puzzle,    label: t("nav.extensions"), hint: t("navHint.extensions") },
-      { to: "/code-editor",icon: Code2,     label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
-      { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
-      { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },
-      { to: "/blueprint",            icon: Workflow, label: t("nav.blueprint"),     hint: t("navHint.blueprint") },
-      { to: "/tools/skill-packages", icon: Package,  label: t("nav.skillPackages"), hint: t("navHint.skillPackages") },
-      { to: "/hub",                  icon: Store,    label: "HydraHub",             hint: "Agenten & Tools installieren" },
-      { to: "/brain",                icon: Brain,    label: "HydraBrain",           hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/agents",    icon: Bot,      label: t("nav.agents"),     hint: t("navHint.agents") },
+      { to: "/activity",  icon: Activity, label: t("nav.activity"),   hint: t("navHint.activity") },
+      { to: "/usage",     icon: BarChart2,label: t("nav.usage"),      hint: t("navHint.usage") },
+      { to: "/schedules", icon: Calendar, label: t("nav.schedules"),  hint: t("navHint.schedules") },
+      { to: "/search",    icon: Search,   label: t("nav.search"),     hint: t("navHint.search") },
+      { to: "/extensions",icon: Puzzle,   label: t("nav.extensions"), hint: t("navHint.extensions") },
+      { to: "/hub",       icon: Store,    label: "HydraHub",          hint: "Agenten & Tools installieren" },
+      { to: "/brain",     icon: Brain,    label: "HydraBrain",        hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/federation",icon: Globe,    label: t("nav.federation"), hint: t("navHint.federation") },
     ],
   };
 
   const groupSystem: NavGroup = {
+    id: "system",
     label: t("nav.groupSystem"),
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
       { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
-      { to: "/secrets",  icon: KeyRound,   label: "Secrets",          hint: "API-Keys & Tokens für Agenten" },
+      { to: "/secrets",  icon: KeyRound,   label: "Secrets",         hint: "API-Keys & Tokens für Agenten" },
       { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
     ],
   };
 
   const groups: NavGroup[] = isAdmin
-    ? [groupWorkspace, groupOperations, groupSystem]
-    : [groupWorkspace];
+    ? [groupTop, groupMyAgent, groupWorkspace, groupOperations, groupSystem]
+    : [groupTop, groupMyAgent, groupWorkspace];
 
   const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Collapse-State pro Gruppe (hook muss auf top-level bleiben)
+  const [myAgentCollapsed,   toggleMyAgent]   = useNavCollapse("myAgent",    false);
+  const [workspaceCollapsed, toggleWorkspace] = useNavCollapse("workspace",  false);
+  const [opsCollapsed,       toggleOps]       = useNavCollapse("operations", true);
+  const [systemCollapsed,    toggleSystem]    = useNavCollapse("system",     true);
+
+  const collapseState: Record<string, [boolean, () => void]> = {
+    myAgent:    [myAgentCollapsed,   toggleMyAgent],
+    workspace:  [workspaceCollapsed, toggleWorkspace],
+    operations: [opsCollapsed,       toggleOps],
+    system:     [systemCollapsed,    toggleSystem],
+  };
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
 
@@ -238,29 +303,47 @@ export function AdminLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
-        {groups.map((group, gi) => (
-          <div key={gi}>
-            {group.label && (
-              <p className="px-2 mb-1 text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] select-none">
-                {group.label}
-              </p>
-            )}
-            <div className="space-y-1">
-              {group.items.map(({ to, icon: Icon, label, hint }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  title={hint}
-                  className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {groups.map((group) => {
+          const colEntry = collapseState[group.id];
+          const collapsed = colEntry ? colEntry[0] : false;
+          const toggle    = colEntry ? colEntry[1] : undefined;
+
+          return (
+            <div key={group.id}>
+              {group.label && group.collapsible ? (
+                <button
+                  type="button"
+                  onClick={toggle}
+                  className="flex w-full items-center justify-between px-2 py-1.5 mb-0.5 rounded-lg text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-white/5 transition-colors select-none"
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{label}</span>
-                </NavLink>
-              ))}
+                  <span>{group.label}</span>
+                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", collapsed && "-rotate-90")} />
+                </button>
+              ) : group.label ? (
+                <p className="px-2 mb-1 text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] select-none">
+                  {group.label}
+                </p>
+              ) : null}
+
+              {!collapsed && (
+                <div className="space-y-0.5 mb-2">
+                  {group.items.map(({ to, icon: Icon, label, hint }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      title={hint}
+                      className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">

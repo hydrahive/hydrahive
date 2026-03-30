@@ -20,6 +20,7 @@
     "butler": "Butler",
     "blueprint": "Blueprint",
     "skillPackages": "Skill Packages",
+    "groupWorkspace": "Workspace",
     "groupOperations": "Operations",
     "groupSystem": "System"
   },
