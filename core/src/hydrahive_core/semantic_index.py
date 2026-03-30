@@ -62,7 +62,27 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
         return None
     model = _get_embedding_model()
     try:
-        resp = litellm.embedding(model=model, input=texts)
+        import concurrent.futures as _cf
+        import threading as _threading
+        result: list = []
+        exc: list = []
+
+        def _call():
+            try:
+                resp = litellm.embedding(model=model, input=texts)
+                result.append(resp)
+            except Exception as e:
+                exc.append(e)
+
+        t = _threading.Thread(target=_call, daemon=True)
+        t.start()
+        t.join(timeout=10)  # max 10s — danach Fallback
+        if t.is_alive():
+            logger.warning("Embedding timeout (%s) — FAISS deaktiviert für diesen Request", model)
+            return None
+        if exc:
+            raise exc[0]
+        resp = result[0]
         vecs = np.array([e["embedding"] for e in resp.data], dtype=np.float32)
         faiss.normalize_L2(vecs)
         return vecs
