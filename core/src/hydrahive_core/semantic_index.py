@@ -68,8 +68,9 @@ def _embed(texts: list[str]) -> "Optional[np.ndarray]":
         kwargs: dict = {"model": model, "input": texts}
         if model.startswith("ollama/"):
             base = os.environ.get("OLLAMA_API_BASE", "http://localhost:11434")
-            kwargs["model"] = f"openai/{model[len('ollama/'):]}"
+            kwargs["model"]    = f"openai/{model[len('ollama/'):]}"
             kwargs["api_base"] = f"{base.rstrip('/')}/v1"
+            kwargs["api_key"]  = "ollama"  # litellm braucht non-empty key auch für lokale Endpoints
         resp = litellm.embedding(**kwargs)
         vecs = np.array([e["embedding"] for e in resp.data], dtype=np.float32)
         faiss.normalize_L2(vecs)
