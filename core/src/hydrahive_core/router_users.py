@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio as _asyncio
 from pathlib import Path
 from typing import Callable
 
@@ -224,6 +225,8 @@ def register_user_routes(
     load_agent_config_direct=None,
     discovery=None,
     projects_dir: str = "/projects",
+    get_provisioner=None,
+    projects=None,
 ) -> None:
     @admin_router.get("/users")
     def list_users():
@@ -281,6 +284,30 @@ def register_user_routes(
             _shutil.rmtree(disabled_dir)
             logger.info("Deaktivierter Personal-Agent-Dir entfernt: %s", disabled_dir)
 
+        # Persönlichen Agenten + Projekt anlegen
+        ensure_personal_agent(req.username)
+
+        # Persönliches Projekt mit Matrix-Room provisionieren
+        personal_id = f"personal_{req.username}"
+        room_warn = None
+        if get_provisioner and projects:
+            provisioner = get_provisioner()
+            if provisioner:
+                await _asyncio.sleep(0.3)  # kurz warten bis Discovery den neuen Agenten kennt
+                cfg = projects.get(personal_id)
+                if cfg and not cfg.matrix.room:
+                    try:
+                        result = await provisioner.provision(cfg)
+                        if result.matrix_room:
+                            from .router_project_lifecycle import update_project_matrix_room
+                            update_project_matrix_room(projects_dir, personal_id, result.matrix_room, logger=logger)
+                            logger.info("Persönlicher Matrix-Room für %s: %s", req.username, result.matrix_room)
+                        if result.warnings:
+                            room_warn = "; ".join(result.warnings)
+                    except Exception as _e:
+                        room_warn = str(_e)
+                        logger.warning("Matrix-Provisioning für %s fehlgeschlagen: %s", req.username, _e)
+
         logger.info("User angelegt: %s (role=%s, matrix=%s)", req.username, req.role, matrix_ok)
         audit_log("user.create", target=req.username, details={"role": req.role})
         return {
@@ -288,6 +315,7 @@ def register_user_routes(
             "username": req.username,
             "matrix_id": f"@{req.username}:{server_name}",
             "matrix_ok": matrix_ok,
+            "matrix_room_warn": room_warn,
         }
 
     @admin_router.delete("/users/{username}")

@@ -1115,6 +1115,8 @@ register_user_routes(
     agents_dir=AGENTS_DIR,
     projects_dir=PROJECTS_DIR,
     ensure_personal_agent=_ensure_personal_agent,
+    get_provisioner=lambda: provisioner,
+    projects=projects,
     runtime=runtime,
     agent_sessions=agent_sessions,
     agent_orchestrator=agent_orchestrator,
