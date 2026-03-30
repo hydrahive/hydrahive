@@ -267,6 +267,24 @@ async def lifespan(app: FastAPI):
     hb_scheduler = _HBS(discovery, projects, orchestrator, AGENTS_DIR)
     hb_task = asyncio.create_task(hb_scheduler.run(), name="heartbeat-scheduler")
 
+    # Browser-Session Cleanup — idle Sessions alle 5 Minuten entfernen (#43)
+    async def _browser_session_cleanup_loop():
+        while True:
+            try:
+                await asyncio.sleep(300)
+                from .browser_tools import cleanup_idle_sessions as _bcs
+                closed = await _bcs()
+                if closed:
+                    logger.info("Browser idle-cleanup: %d Sessions geschlossen", closed)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("Browser cleanup Fehler: %s", e)
+
+    browser_cleanup_task = asyncio.create_task(
+        _browser_session_cleanup_loop(), name="browser-session-cleanup"
+    )
+
     # AgentLink Cleanup-Task — abgelaufene Handoffs alle 5 Minuten entfernen
     async def _agentlink_cleanup_loop():
         from .agentlink import cleanup_expired as _ce
@@ -351,6 +369,7 @@ async def lifespan(app: FastAPI):
     scheduler_service.stop()
     notification_service.stop()
     hb_task.cancel()
+    browser_cleanup_task.cancel()
     cleanup_task.cancel()
     rate_limit_cleanup_task.cancel()
     if agentlink_ws_task:

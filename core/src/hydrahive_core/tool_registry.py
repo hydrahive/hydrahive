@@ -4409,3 +4409,23 @@ registry.register(DeleteAgentTool())
 registry.register(CreateProjectTool())
 registry.register(DeleteProjectTool())
 registry.register(RequestToolsTool())
+
+# Browser-Tools (#43)
+try:
+    from .browser_tools import (
+        BrowserNavigateTool,
+        BrowserScreenshotTool,
+        BrowserClickTool,
+        BrowserFillTool,
+        BrowserEvaluateTool,
+        BrowserCloseTool,
+    )
+    registry.register(BrowserNavigateTool())
+    registry.register(BrowserScreenshotTool())
+    registry.register(BrowserClickTool())
+    registry.register(BrowserFillTool())
+    registry.register(BrowserEvaluateTool())
+    registry.register(BrowserCloseTool())
+    logger.info("Browser-Tools (Playwright) registriert")
+except Exception as _bt_err:
+    logger.warning("Browser-Tools nicht verfügbar: %s", _bt_err)

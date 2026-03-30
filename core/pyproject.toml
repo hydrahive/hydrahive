@@ -28,6 +28,7 @@ dependencies = [
     "psutil~=5.9",
     "faiss-cpu~=1.8",
     "numpy~=1.26",
+    "playwright~=1.40",
 ]
 
 [project.optional-dependencies]

@@ -61,6 +61,10 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "a2a": [
         "remote_agent",
     ],
+    "browser": [
+        "browser_navigate", "browser_screenshot", "browser_click",
+        "browser_fill", "browser_evaluate", "browser_close",
+    ],
 }
 
 
