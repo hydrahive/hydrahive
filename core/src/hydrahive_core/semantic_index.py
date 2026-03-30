@@ -218,6 +218,26 @@ def search_index(
         return []
 
 
+# ── Ähnlichkeitssuche für Dedup ───────────────────────────────────────────────
+
+def find_similar_chunk(
+    agent_dir: Path,
+    new_text: str,
+    threshold: float = 0.65,
+    name: str = "memory",
+) -> tuple[str, float] | None:
+    """
+    Findet den ähnlichsten Chunk im FAISS-Index über dem Threshold.
+    Gibt (text, similarity_score) zurück oder None.
+    Genutzt für semantische Deduplizierung in WriteMemoryTool.
+    """
+    results = search_index(agent_dir, new_text, k=1, name=name)
+    if not results:
+        return None
+    text, score = results[0]
+    return (text, score) if score >= threshold else None
+
+
 # ── Echtzeit-Scoring (ohne Persistenz) ────────────────────────────────────────
 
 def score_texts(texts: list[str], query: str) -> list[float]:

@@ -115,6 +115,42 @@ def cleanup_orphaned_personal_projects(projects_dir: str, users: dict) -> int:
     return deleted
 
 
+def prune_weak_memory_chunks(agents_dir: str) -> int:
+    """
+    Ebbinghaus Decay Prune: läuft über alle Agenten-Verzeichnisse,
+    recomputed Stärken und löscht Chunks unter PRUNE_THRESHOLD.
+    Gibt Gesamtanzahl gelöschter Chunks zurück.
+    """
+    import sqlite3 as _sqlite3
+    from .memory_decay import recompute_all_strengths, prune_weak_chunks
+
+    total_pruned = 0
+    for agent_dir in Path(agents_dir).iterdir():
+        if not agent_dir.is_dir():
+            continue
+        db_path = agent_dir / "memory_index.db"
+        if not db_path.exists():
+            continue
+        try:
+            conn = _sqlite3.connect(str(db_path))
+            conn.execute("PRAGMA foreign_keys=ON")
+            try:
+                recompute_all_strengths(conn)
+                pruned = prune_weak_chunks(conn)
+                if pruned:
+                    conn.commit()
+                    total_pruned += len(pruned)
+                    logger.info(
+                        "memory_decay prune: %d Chunks für Agent %s entfernt",
+                        len(pruned), agent_dir.name,
+                    )
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning("memory_decay prune fehlgeschlagen für %s: %s", agent_dir.name, e)
+    return total_pruned
+
+
 def cleanup_stale_indices(agents_dir: str, known_agent_ids: set[str]) -> int:
     """Löscht FAISS/SQLite-Indizes von Agenten die nicht mehr existieren."""
     deleted = 0
@@ -216,12 +252,13 @@ class CleanupService:
         known_agents = {d.name for d in Path(self._agents_dir).iterdir() if d.is_dir()} if Path(self._agents_dir).is_dir() else set()
 
         t0 = time.time()
-        transcripts  = cleanup_old_transcripts(self._agents_dir, cfg["transcript_days"])
-        backups      = cleanup_old_backups(self._backups_dir, cfg["backup_keep"])
-        orphans      = cleanup_orphaned_personal_projects(self._projects_dir, users)
-        stale_idx    = cleanup_stale_indices(self._agents_dir, known_agents)
-        disk         = get_disk_usage("/")
-        elapsed_ms   = round((time.time() - t0) * 1000)
+        transcripts   = cleanup_old_transcripts(self._agents_dir, cfg["transcript_days"])
+        backups       = cleanup_old_backups(self._backups_dir, cfg["backup_keep"])
+        orphans       = cleanup_orphaned_personal_projects(self._projects_dir, users)
+        stale_idx     = cleanup_stale_indices(self._agents_dir, known_agents)
+        memory_pruned = prune_weak_memory_chunks(self._agents_dir)
+        disk          = get_disk_usage("/")
+        elapsed_ms    = round((time.time() - t0) * 1000)
 
         result = {
             "ran_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -230,6 +267,7 @@ class CleanupService:
             "deleted_backups": backups,
             "deleted_orphan_projects": orphans,
             "deleted_stale_indices": stale_idx,
+            "pruned_memory_chunks": memory_pruned,
             "disk": disk,
         }
         self._last_result = result

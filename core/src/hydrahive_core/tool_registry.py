@@ -1496,6 +1496,9 @@ class ReadMemoryTool(BaseTool):
         }
 
     async def execute(self, agent_id: str, project_id: str, filename: str = "") -> dict:
+        import sqlite3 as _sqlite3
+        from .memory_decay import touch_recall as _touch_recall
+
         memory_dir = AGENTS_ROOT / agent_id / "memory"
         if not filename:
             if not memory_dir.exists():
@@ -1509,7 +1512,29 @@ class ReadMemoryTool(BaseTool):
         p = memory_dir / safe
         if not p.exists():
             return {"error": f"Datei '{safe}' nicht gefunden."}
-        return {"filename": safe, "content": p.read_text(encoding="utf-8")}
+
+        content = p.read_text(encoding="utf-8")
+
+        # recall_count für alle Chunks dieser Datei erhöhen
+        db_path = AGENTS_ROOT / agent_id / "memory_index.db"
+        if db_path.exists():
+            try:
+                _conn = _sqlite3.connect(str(db_path))
+                _conn.execute("PRAGMA foreign_keys=ON")
+                try:
+                    ids = [r[0] for r in _conn.execute(
+                        "SELECT id FROM chunks WHERE source = ?",
+                        (safe.removesuffix(".md"),),
+                    ).fetchall()]
+                    if ids:
+                        _touch_recall(_conn, ids)
+                        _conn.commit()
+                finally:
+                    _conn.close()
+            except Exception:
+                pass  # recall-touch ist nicht kritisch
+
+        return {"filename": safe, "content": content}
 
 
 class WriteMemoryTool(BaseTool):
@@ -1521,7 +1546,10 @@ class WriteMemoryTool(BaseTool):
     def name(self) -> str: return "Gedächtnis schreiben"
     @property
     def description(self) -> str:
-        return "Speichert Text dauerhaft im Gedächtnis. mode=overwrite ersetzt, append hängt an."
+        return (
+            "Speichert Text dauerhaft im Gedächtnis. mode=overwrite ersetzt, append hängt an. "
+            "importance (0–1) und category steuern wie lange die Erinnerung erhalten bleibt."
+        )
 
     @property
     def permissions_required(self) -> list[str]:
@@ -1544,6 +1572,17 @@ class WriteMemoryTool(BaseTool):
                     "type":        "string",
                     "enum":        ["overwrite", "append"],
                 },
+                "importance": {
+                    "type":        "number",
+                    "minimum":     0.0,
+                    "maximum":     1.0,
+                    "description": "Wichtigkeit 0.0–1.0. 1.0 = vergisst nie, 0.0 = vergisst schnell. Standard: 0.5",
+                },
+                "category": {
+                    "type":        "string",
+                    "enum":        ["strategy", "fact", "assumption", "failure"],
+                    "description": "strategy=38 Tage, fact=24 Tage, assumption=19 Tage, failure=11 Tage. Standard: fact",
+                },
             },
             "required": ["filename", "content"],
         }
@@ -1551,19 +1590,96 @@ class WriteMemoryTool(BaseTool):
     async def execute(
         self, agent_id: str, project_id: str,
         filename: str, content: str, mode: str = "overwrite",
+        importance: float = 0.5, category: str = "fact",
     ) -> dict:
+        import sqlite3 as _sqlite3
+        from .memory_decay import (
+            set_file_meta as _set_file_meta,
+            dedup_decision as _dedup_decision,
+            detect_contradiction as _detect_contradiction,
+            VALID_CATEGORIES,
+        )
+        from .semantic_index import find_similar_chunk as _find_similar
+
+        # Eingabe validieren
+        importance = max(0.0, min(1.0, float(importance)))
+        if category not in VALID_CATEGORIES:
+            category = "fact"
+
         try:
             safe = _safe_memory_filename(filename)
         except ValueError as e:
             return {"error": str(e)}
-        memory_dir = AGENTS_ROOT / agent_id / "memory"
+
+        agent_dir  = AGENTS_ROOT / agent_id
+        memory_dir = agent_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
+
+        # file_meta in DB persistieren (für späteres Reindexieren)
+        db_path = agent_dir / "memory_index.db"
+        if db_path.exists():
+            try:
+                _conn = _sqlite3.connect(str(db_path))
+                _conn.execute("PRAGMA foreign_keys=ON")
+                try:
+                    _set_file_meta(_conn, safe.removesuffix(".md"), importance, category)
+                    _conn.commit()
+                finally:
+                    _conn.close()
+            except Exception:
+                pass
+
+        # Semantische Dedup: ähnlichen Chunk im FAISS-Index suchen
+        dedup_action = "new"
+        similar_text = ""
+        try:
+            similar = _find_similar(agent_dir, content, threshold=0.65)
+            if similar is not None:
+                similar_text, sim_score = similar
+                is_contra = _detect_contradiction(similar_text, content)
+                dedup_action = _dedup_decision(sim_score, is_contra)
+        except Exception:
+            pass  # Dedup-Fehler sind nicht kritisch
+
+        if dedup_action == "reinforce":
+            # Ähnlicher Chunk existiert — nicht neu speichern, nur recall erhöhen
+            logger.info(
+                "write_memory [%s]: %s reinforced (similarity hoch, kein Widerspruch)",
+                agent_id, safe,
+            )
+            return {
+                "saved": False,
+                "action": "reinforce",
+                "filename": safe,
+                "hint": "Ähnliche Erinnerung existiert bereits — recall_count erhöht.",
+            }
+
+        if dedup_action == "merge" and similar_text:
+            # Inhalte zusammenführen: existing + new
+            p = memory_dir / safe
+            existing = p.read_text(encoding="utf-8").strip() if p.exists() else ""
+            if existing and existing != content.strip():
+                content = existing + "\n\n---\n\n" + content
+            logger.info("write_memory [%s]: %s merged", agent_id, safe)
+
+        # Datei schreiben
         p = memory_dir / safe
         write_mode = "a" if mode == "append" else "w"
         with p.open(write_mode, encoding="utf-8") as handle:
             handle.write(content)
-        logger.info("write_memory [%s]: %s (%s, %d bytes)", agent_id, safe, mode, len(content))
-        return {"saved": True, "filename": safe, "bytes": len(content.encode())}
+
+        logger.info(
+            "write_memory [%s]: %s (%s, importance=%.1f, category=%s, action=%s, %d bytes)",
+            agent_id, safe, mode, importance, category, dedup_action, len(content),
+        )
+        return {
+            "saved":      True,
+            "filename":   safe,
+            "bytes":      len(content.encode()),
+            "importance": importance,
+            "category":   category,
+            "action":     dedup_action,
+        }
 
 
 # ============================================================= Self-Learning Skills (#7)
