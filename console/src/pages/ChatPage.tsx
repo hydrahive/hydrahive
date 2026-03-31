@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2 } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -469,7 +469,17 @@ export function ChatPage() {
                         ) : (
                           <>
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
-                            {streamingMsgId === msg.id ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" /> : doneMsgId === msg.id && <span className="ml-1 inline-block text-xs text-green-500 align-text-bottom">✓</span>}
+                            {streamingMsgId === msg.id && activeTool && (activeTool.name === "ask_agent" || activeTool.name === "dispatch_task") ? (
+                              <div className="mt-2 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
+                                <span className="font-medium">{activeTool.name === "dispatch_task" ? t("chat.waitingDispatch") : t("chat.waitingAgent")}: <span className="font-mono">{activeTool.detail}</span></span>
+                                {elapsed > 0 && <span className="ml-auto text-muted-foreground">{elapsed}s</span>}
+                              </div>
+                            ) : streamingMsgId === msg.id ? (
+                              <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" />
+                            ) : doneMsgId === msg.id ? (
+                              <span className="ml-1 inline-block text-xs text-green-500 align-text-bottom">✓</span>
+                            ) : null}
                           </>
                         )}
                       </div>
@@ -541,12 +551,24 @@ export function ChatPage() {
                     <span className="status-pill">{t("chat.shiftEnterBreak")}</span>
                     <span className="status-pill">{t("chat.slashCommands")}</span>
                   </div>
-                  {sending && <span className="status-pill status-pill-ok">{t("chat.streamingActive")}{elapsed > 0 ? ` (${elapsed}s)` : ""}</span>}
+                  {sending && (
+                    <span className="status-pill status-pill-ok flex items-center gap-1">
+                      {activeTool && (activeTool.name === "ask_agent" || activeTool.name === "dispatch_task") ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />{activeTool.name === "dispatch_task" ? t("chat.waitingDispatch") : t("chat.waitingAgent")}: {activeTool.detail}</>
+                      ) : t("chat.streamingActive")}
+                      {elapsed > 0 && ` (${elapsed}s)`}
+                    </span>
+                  )}
                 </div>
                 {/* Streaming-Status auf Mobile */}
                 {sending && (
                   <div className="mb-1 flex sm:hidden">
-                    <span className="status-pill status-pill-ok text-xs">{t("chat.streamingActive")}{elapsed > 0 ? ` (${elapsed}s)` : ""}</span>
+                    <span className="status-pill status-pill-ok text-xs flex items-center gap-1">
+                      {activeTool && (activeTool.name === "ask_agent" || activeTool.name === "dispatch_task") ? (
+                        <><Loader2 className="h-3 w-3 animate-spin" />{activeTool.detail}</>
+                      ) : t("chat.streamingActive")}
+                      {elapsed > 0 && ` (${elapsed}s)`}
+                    </span>
                   </div>
                 )}
                 {showEmoji && (

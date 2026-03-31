@@ -889,7 +889,9 @@
     "swarmCompactPill": "Kompakt",
     "shortcuts": "Tastenkürzel",
     "messageCount": "{{count}} Nachricht",
-    "messageCountPlural": "{{count}} Nachrichten"
+    "messageCountPlural": "{{count}} Nachrichten",
+    "waitingAgent": "Wartet auf Agent",
+    "waitingDispatch": "Wartet auf Worker"
   },
   "activity": {
     "title": "Agenten-Aktivität",

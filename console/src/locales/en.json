@@ -889,7 +889,9 @@
     "swarmCompactPill": "Compact",
     "shortcuts": "Shortcuts",
     "messageCount": "{{count}} message",
-    "messageCountPlural": "{{count}} messages"
+    "messageCountPlural": "{{count}} messages",
+    "waitingAgent": "Waiting for agent",
+    "waitingDispatch": "Waiting for worker"
   },
   "activity": {
     "title": "Agent Activity",
