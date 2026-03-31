@@ -62,6 +62,18 @@ from .orchestrator_tools import (
 logger = logging.getLogger(__name__)
 
 
+def _dedup_tools(tools: list[dict]) -> list[dict]:
+    """Entfernt doppelte Tool-Namen (letzter Eintrag gewinnt nicht — erster bleibt)."""
+    seen: set[str] = set()
+    result = []
+    for t in tools:
+        name = t.get("function", {}).get("name", "")
+        if name not in seen:
+            seen.add(name)
+            result.append(t)
+    return result
+
+
 def _load_workflow_prompt(project_dir) -> str:
     """
     Liest workflow.json aus dem Projektverzeichnis und serialisiert es in
@@ -545,7 +557,7 @@ class Orchestrator:
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:
-            litellm_tools = (litellm_tools or []) + mcp_schemas
+            litellm_tools = _dedup_tools((litellm_tools or []) + mcp_schemas)
         litellm_tools = litellm_tools or None
 
         import json as _json
@@ -721,7 +733,7 @@ class Orchestrator:
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
         _mcp_s = await self._mcp_schemas_for_agent(boss_cfg)
         if _mcp_s:
-            litellm_tools = (litellm_tools or []) + _mcp_s
+            litellm_tools = _dedup_tools((litellm_tools or []) + _mcp_s)
         litellm_tools = litellm_tools or None
 
         import json as _json
