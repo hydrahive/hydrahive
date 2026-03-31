@@ -31,6 +31,7 @@ server {
         proxy_next_upstream   error timeout;
         # API-Fehler nicht durch error_page umleiten — JS behandelt 502 selbst
         proxy_intercept_errors off;
+        client_max_body_size   50M;
     }
 
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)

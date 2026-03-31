@@ -101,6 +101,7 @@ server {
         proxy_connect_timeout 5s;
         proxy_next_upstream   error timeout;
         proxy_intercept_errors off;
+        client_max_body_size  50M;
     }
 
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
