@@ -399,7 +399,12 @@ def _check_llm_config() -> list[dict]:
                        "llm_config.json fehlt — noch kein LLM konfiguriert",
                        "Einstellungen → LLM-Provider")]
     try:
-        data = json.loads(config_path.read_text(encoding="utf-8"))
+        raw = config_path.read_text(encoding="utf-8").strip()
+        if not raw:
+            return [_check("LLM: Provider-Config", "warn",
+                           "Noch kein LLM-Provider konfiguriert",
+                           "Einstellungen → LLM-Provider")]
+        data = json.loads(raw)
         providers = data.get("providers", {})
         # Provider mit api_key
         with_key = [n for n, c in providers.items() if c.get("enabled") and c.get("api_key")]
