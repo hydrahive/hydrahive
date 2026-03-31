@@ -161,13 +161,27 @@ chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_SESSION_DIR}"
 chmod 750 "${BRIDGE_SESSION_DIR}"
 success "Session-Verzeichnis: ${BRIDGE_SESSION_DIR}"
 
-# --- Systemd-Unit schreiben ---
-_puppeteer_env=""
-if [ -n "${_chromium_bin}" ]; then
-    _puppeteer_env="Environment=PUPPETEER_EXECUTABLE_PATH=${_chromium_bin}"
+# --- WHATSAPP_BRIDGE_SECRET in Core-Umgebung schreiben ---
+_bridge_secret="$(cat "${BRIDGE_SECRET_FILE}" 2>/dev/null || echo '')"
+_LLM_ENV="/etc/hydrahive/llm_env"
+touch "${_LLM_ENV}" 2>/dev/null || true
+if grep -q "^WHATSAPP_BRIDGE_SECRET=" "${_LLM_ENV}" 2>/dev/null; then
+    sed -i "s|^WHATSAPP_BRIDGE_SECRET=.*|WHATSAPP_BRIDGE_SECRET=${_bridge_secret}|" "${_LLM_ENV}"
+else
+    echo "WHATSAPP_BRIDGE_SECRET=${_bridge_secret}" >> "${_LLM_ENV}"
+fi
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${_LLM_ENV}" 2>/dev/null || true
+chmod 640 "${_LLM_ENV}" 2>/dev/null || true
+success "WHATSAPP_BRIDGE_SECRET in ${_LLM_ENV} gesetzt"
+
+# Core neu starten damit er das neue Secret aufnimmt
+if systemctl is-active --quiet hydrahive-core 2>/dev/null; then
+    systemctl restart hydrahive-core \
+        && info "hydrahive-core neu gestartet (WHATSAPP_BRIDGE_SECRET)" \
+        || warn "Core-Neustart fehlgeschlagen"
 fi
 
-_bridge_secret="$(cat "${BRIDGE_SECRET_FILE}" 2>/dev/null || echo '')"
+# --- Systemd-Unit schreiben ---
 _puppeteer_env=""
 if [ -n "${_chromium_bin}" ]; then
     _puppeteer_env="Environment=PUPPETEER_EXECUTABLE_PATH=${_chromium_bin}"
