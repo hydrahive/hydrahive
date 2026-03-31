@@ -83,9 +83,13 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         checks += await _check_services()
         checks += _check_configs()
         checks += _check_nginx_a2a()
+        checks += _check_nginx_projects()
         checks += _check_ports()
+        checks += await _check_agentlink()
         checks += _check_disk()
         checks += await _check_api()
+        checks += _check_llm_config()
+        checks += _check_nginx_upload_limit()
         checks += _check_vpn()
 
         total = len(checks)
@@ -115,6 +119,9 @@ async def _check_services() -> list[dict]:
         (["gitea"],                  "Gitea"),
         (["hydrahive-conduwuit"],    "Matrix (conduwuit)"),
         (["hydrahive-amem"],         "A-MEM MCP"),
+        (["hydrahive-agentlink"],    "AgentLink Hub"),
+        (["redis-server", "redis"],  "Redis"),
+        (["postgresql"],             "PostgreSQL"),
     ]
     optional = [
         (["hydrahive-whatsapp-bridge"], "WhatsApp Bridge"),
@@ -304,6 +311,136 @@ async def _fix_nginx_a2a() -> dict:
     if r.returncode == 0:
         return {"ok": True, "output": (r.stdout or "").strip()}
     return {"ok": False, "error": (r.stderr or r.stdout or "unbekannter Fehler").strip()}
+
+
+async def _check_agentlink() -> list[dict]:
+    """Prüft AgentLink-Service, Redis und PostgreSQL."""
+    import socket
+    results = []
+
+    # AgentLink Service
+    try:
+        r = subprocess.run(["systemctl", "is-active", "hydrahive-agentlink"],
+                           capture_output=True, text=True, timeout=5)
+        if r.stdout.strip() == "active":
+            results.append(_check("Service: AgentLink", "ok", "aktiv (hydrahive-agentlink)"))
+        else:
+            results.append(_check("Service: AgentLink", "error", "nicht aktiv",
+                                  "sudo systemctl start hydrahive-agentlink"))
+    except Exception:
+        results.append(_check("Service: AgentLink", "warn", "systemctl nicht verfügbar"))
+
+    # AgentLink Port + Health
+    try:
+        with socket.create_connection(("127.0.0.1", 8010), timeout=2):
+            pass
+        import urllib.request
+        with urllib.request.urlopen("http://127.0.0.1:8010/health", timeout=5) as resp:
+            data = json.loads(resp.read())
+        redis_ok = data.get("redis") == "connected"
+        results.append(_check(
+            "AgentLink: Health",
+            "ok" if redis_ok else "warn",
+            f"status={data.get('status','?')} redis={data.get('redis','?')}",
+            "" if redis_ok else "Redis prüfen: systemctl status redis-server",
+        ))
+    except Exception as e:
+        results.append(_check("AgentLink: Health", "error", f"nicht erreichbar: {e}",
+                              "sudo bash /opt/hydrahive/installer/modules/11_agentlink.sh"))
+
+    # Redis
+    try:
+        r = subprocess.run(["systemctl", "is-active", "redis-server"],
+                           capture_output=True, text=True, timeout=5)
+        active = r.stdout.strip() == "active"
+        results.append(_check("Service: Redis", "ok" if active else "error",
+                              "aktiv" if active else "nicht aktiv",
+                              "" if active else "sudo systemctl start redis-server"))
+    except Exception:
+        results.append(_check("Service: Redis", "warn", "systemctl nicht verfügbar"))
+
+    # PostgreSQL
+    try:
+        r = subprocess.run(["systemctl", "is-active", "postgresql"],
+                           capture_output=True, text=True, timeout=5)
+        active = r.stdout.strip() == "active"
+        results.append(_check("Service: PostgreSQL", "ok" if active else "error",
+                              "aktiv" if active else "nicht aktiv",
+                              "" if active else "sudo systemctl start postgresql"))
+    except Exception:
+        results.append(_check("Service: PostgreSQL", "warn", "systemctl nicht verfügbar"))
+
+    return results
+
+
+def _check_nginx_projects() -> list[dict]:
+    """Prüft ob nginx /projects/ konfiguriert und www-data in hydrahive-Gruppe ist."""
+    results = []
+    nginx_site = Path("/etc/nginx/sites-enabled/hydrahive-console")
+    if nginx_site.exists():
+        content = nginx_site.read_text(encoding="utf-8")
+        if "location /projects/" in content:
+            results.append(_check("Nginx: /projects/", "ok", "Location-Block vorhanden"))
+        else:
+            results.append(_check("Nginx: /projects/", "error",
+                                  "Location-Block fehlt — Agenten-Dateien nicht erreichbar",
+                                  "Update ausführen (nginx-Config wird automatisch korrigiert)"))
+
+    # www-data in hydrahive-Gruppe?
+    try:
+        import grp, pwd
+        hive_gid = grp.getgrnam("hydrahive").gr_gid
+        www_groups = [g.gr_gid for g in grp.getgrall() if "www-data" in g.gr_mem]
+        in_group = hive_gid in www_groups
+        results.append(_check(
+            "Nginx: www-data in hydrahive-Gruppe",
+            "ok" if in_group else "error",
+            "ja" if in_group else "nein — /projects/ gibt 403",
+            "" if in_group else "sudo usermod -aG hydrahive www-data && sudo systemctl reload nginx",
+        ))
+    except KeyError:
+        results.append(_check("Nginx: www-data in hydrahive-Gruppe", "warn", "Gruppe hydrahive nicht gefunden"))
+    except Exception as e:
+        results.append(_check("Nginx: www-data in hydrahive-Gruppe", "warn", str(e)))
+
+    return results
+
+
+def _check_nginx_upload_limit() -> list[dict]:
+    """Prüft ob client_max_body_size in der nginx-Config gesetzt ist."""
+    nginx_site = Path("/etc/nginx/sites-enabled/hydrahive-console")
+    if not nginx_site.exists():
+        return []
+    try:
+        content = nginx_site.read_text(encoding="utf-8")
+        if "client_max_body_size" in content:
+            return [_check("Nginx: Upload-Limit", "ok", "client_max_body_size konfiguriert")]
+        return [_check(
+            "Nginx: Upload-Limit", "warn",
+            "client_max_body_size fehlt — Agent-Import > 1MB schlägt fehl",
+            "Update ausführen (nginx-Config wird automatisch korrigiert)",
+        )]
+    except Exception as e:
+        return [_check("Nginx: Upload-Limit", "warn", str(e))]
+
+
+def _check_llm_config() -> list[dict]:
+    """Prüft ob LLM-Config vorhanden und nicht leer ist."""
+    results = []
+    for path in [Path("/etc/hydrahive/llm_config.json"), Path("/etc/hydrahive/llm_env")]:
+        if path.exists():
+            try:
+                content = path.read_text(encoding="utf-8").strip()
+                if not content or content in ("{}", ""):
+                    results.append(_check(f"LLM: {path.name}", "warn", "Datei leer — kein LLM konfiguriert",
+                                          "LLM-Key über die Konsole einrichten"))
+                else:
+                    results.append(_check(f"LLM: {path.name}", "ok", "konfiguriert"))
+            except Exception as e:
+                results.append(_check(f"LLM: {path.name}", "warn", str(e)))
+        else:
+            results.append(_check(f"LLM: {path.name}", "warn", "nicht vorhanden"))
+    return results
 
 
 def _check_vpn() -> list[dict]:
