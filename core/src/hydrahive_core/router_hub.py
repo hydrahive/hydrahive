@@ -229,22 +229,28 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         raise FileNotFoundError("clawhub nicht gefunden")
 
     _CLAWHUB_ENV = {
-        "PATH": "/usr/bin:/usr/local/bin:/bin",
+        "PATH": "/usr/bin:/usr/local/bin:/bin:/sbin:/usr/sbin",
         "HOME": "/home/hydrahive",
+        "USER": "hydrahive",
+        "NODE_PATH": "/usr/lib/node_modules",
     }
 
     def _run_clawhub(*args: str, timeout: int = 30) -> tuple[int, str]:
-        """Führt 'clawhub <args>' aus und gibt (returncode, stdout) zurück."""
+        """Führt 'node clawhub <args>' aus — direkt via node um Shebang-Problem zu umgehen."""
         try:
             bin_path = _find_clawhub()
+        except FileNotFoundError:
+            raise HTTPException(503, "clawhub_not_installed")
+        try:
+            # Node direkt aufrufen statt Shebang (#!/usr/bin/env node)
             result = subprocess.run(
-                [bin_path, "--no-input", *args],
+                ["/usr/bin/node", bin_path, "--no-input", *args],
                 capture_output=True, text=True, timeout=timeout,
                 env=_CLAWHUB_ENV,
             )
             return result.returncode, result.stdout
         except FileNotFoundError:
-            raise HTTPException(503, "clawhub_not_installed")
+            raise HTTPException(503, "node nicht gefunden unter /usr/bin/node")
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "ClawhHub-Anfrage Timeout")
 
