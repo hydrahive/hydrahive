@@ -749,8 +749,12 @@ class Orchestrator:
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
         _mcp_s = await self._mcp_schemas_for_agent(boss_cfg)
         if _mcp_s:
-            litellm_tools = _dedup_tools((litellm_tools or []) + _mcp_s)
-        litellm_tools = litellm_tools or None
+            litellm_tools = (litellm_tools or []) + _mcp_s
+        # Plugin-Tools (#110)
+        _plg_s = self._plugin_schemas_for_agent(boss_cfg)
+        if _plg_s:
+            litellm_tools = (litellm_tools or []) + _plg_s
+        litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
 
         import json as _json
         sys_tokens_s  = len(system_prompt) // 4
