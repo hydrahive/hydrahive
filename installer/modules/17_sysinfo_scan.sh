@@ -117,8 +117,9 @@ except Exception as e:
     fi
 } > "${AGENT_MEMORY}/system_agents.md"
 
-# Eigentümer setzen
+# Eigentümer + Leserechte setzen
 HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENT_MEMORY}" 2>/dev/null || true
+chmod 644 "${AGENT_MEMORY}"/*.md 2>/dev/null || true
 
 echo "sysinfo-Memory aktualisiert (${AGENT_MEMORY})"
