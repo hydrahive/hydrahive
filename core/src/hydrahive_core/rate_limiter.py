@@ -209,6 +209,17 @@ class RateLimiter:
         """Rate-Limit für interne Agent-Calls (ask_agent, delegate_agent, spawn_agent).
         Verhindert unkontrollierte Agent-Kaskaden und Kostenexplosionen.
         """
+        redis_key = f"hydrahive:rate:agent_call:{agent_id}"
+        redis_allowed = self._redis_check(redis_key, self.settings.agent_call_max, self.settings.agent_call_window_s)
+        if redis_allowed is not None:
+            if not redis_allowed:
+                raise RuntimeError(
+                    f"Agent '{agent_id}' hat das Call-Limit überschritten "
+                    f"({self.settings.agent_call_max} interne Calls/Minute). "
+                    f"Möglicher Agent-Loop oder Kostenexplosion — wird blockiert."
+                )
+            return
+
         if not self._check_local(
             self._agent_call_attempts,
             agent_id,
