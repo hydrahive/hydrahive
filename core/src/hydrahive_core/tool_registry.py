@@ -207,6 +207,13 @@ class ToolRegistry:
     def all_ids(self) -> list[str]:
         return list(self._tools.keys())
 
+    # Aliases für Hub-Kompatibilität (hub verwendet andere Namen als interne IDs)
+    _ALIASES: dict[str, str] = {
+        "read_file":       "file_read",
+        "write_file":      "file_write",
+        "list_directory":  "list_directory",  # eigenes Tool, kein Alias
+    }
+
     def tools_for_agent(
         self,
         agent_tool_ids: list[str],
@@ -215,11 +222,13 @@ class ToolRegistry:
         """
         Schnittmenge: agent.yaml ∩ Registry ∩ permissions (TL4).
         Tools die nicht in der Registry sind werden stillschweigend ignoriert (TL5).
+        Hub-Aliases (read_file, write_file, list_directory) werden aufgelöst.
         """
         perms  = set(agent_permissions) if agent_permissions is not None else None
         result = []
         for tool_id in agent_tool_ids:
-            tool = self._tools.get(tool_id)
+            resolved = self._ALIASES.get(tool_id, tool_id)
+            tool = self._tools.get(resolved)
             if tool is None:
                 logger.debug("Tool '%s' nicht in Registry — ignoriert", tool_id)
                 continue
@@ -417,6 +426,67 @@ class FileWriteTool(BaseTool):
             return {"written": True, "path": str(safe_path), "bytes": len(content.encode())}
         except OSError as e:
             return {"error": f"Schreibfehler: {e}", "path": str(safe_path)}
+
+
+class ListDirectoryTool(BaseTool):
+    """Listet Dateien und Verzeichnisse im Projekt-Verzeichnis auf."""
+
+    @property
+    def id(self) -> str:   return "list_directory"
+    @property
+    def name(self) -> str: return "Verzeichnis auflisten"
+    @property
+    def description(self) -> str:
+        return (
+            "Listet alle Dateien und Unterverzeichnisse in einem Verzeichnis des Projekts auf. "
+            "Pfad relativ zum Projekt-Root (z.B. '.' für Root, 'src/' für Unterordner). "
+            "Gibt Namen, Typ (file/dir), Größe und Änderungsdatum zurück."
+        )
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["filesystem.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type":        "string",
+                    "description": "Verzeichnis-Pfad relativ zum Projekt-Root (Standard: '.' = Root)",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        path: str = ".", **kwargs,
+    ) -> dict:
+        try:
+            safe_path = assert_path_within_project(path or ".", project_id)
+        except PathSafetyError as e:
+            return {"error": str(e), "allowed": False}
+
+        if not safe_path.exists():
+            return {"error": f"Verzeichnis nicht gefunden: {path}"}
+        if not safe_path.is_dir():
+            return {"error": f"Kein Verzeichnis: {path} — für Dateien file_read verwenden"}
+
+        try:
+            import os
+            entries = []
+            for entry in sorted(safe_path.iterdir()):
+                stat = entry.stat()
+                entries.append({
+                    "name": entry.name,
+                    "type": "dir" if entry.is_dir() else "file",
+                    "size": stat.st_size if entry.is_file() else None,
+                    "path": str(entry.relative_to(Path(f"/projects/{project_id}"))),
+                })
+            return {"path": str(safe_path), "entries": entries, "count": len(entries)}
+        except OSError as e:
+            return {"error": f"Lesefehler: {e}"}
 
 
 class WebSearchTool(BaseTool):
@@ -4038,6 +4108,7 @@ class GetSecretTool(BaseTool):
                 "available": available}
 
 
+registry.register(ListDirectoryTool())
 registry.register(GetSecretTool())
 
 
