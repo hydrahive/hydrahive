@@ -1,5 +1,5 @@
-id: hydrahive_sysinfo
-identity: HydraHive System-Experte
+id: hydrahive_coder
+identity: HydraHive Entwickler
 type: specialist
 soul: ./soul.md
 
@@ -7,29 +7,37 @@ llm:
   model: claude-sonnet-4-6
   fallback_models:
   - claude-haiku-4-5-20251001
-  temperature: 0.1
-  max_tokens: 4096
+  temperature: 0.3
+  max_tokens: 8192
 
 execution_modes:
   default: safe
   safe:
     permissions:
     - filesystem.read
-    - system.read
+    - filesystem.write
+    - system.exec
     - memory.read
     - memory.write
+    - agents.ask
 
 heartbeat:
   interval: 60s
-  timeout: 180s
-  on_failure: ignore
+  timeout: 300s
+  on_failure: restart
 
 tools:
-- shell_exec
-- read_system_file
+- file_read
+- file_write
+- project_shell
 - read_memory
 - write_memory
+- web_search
 - ask_agent
+- git_status
+- git_diff
+- git_commit
+- git_push
 
 mcp_servers: []
 allowed_agents: []

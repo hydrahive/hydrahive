@@ -28,6 +28,9 @@ heartbeat:
 tools:
 - file_read
 - read_memory
+- write_memory
+- web_search
+- ask_agent
 
 mcp_servers: []
 allowed_agents: []
