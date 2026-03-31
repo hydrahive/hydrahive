@@ -110,6 +110,9 @@ async function createSession(agentId) {
       '--no-first-run',
       '--no-zygote',
       '--disable-gpu',
+      '--disable-crash-reporter',
+      '--disable-crashpad',
+      '--crash-dumps-dir=/tmp',
     ],
   }
   if (CHROMIUM_PATH) puppeteerOpts.executablePath = CHROMIUM_PATH
