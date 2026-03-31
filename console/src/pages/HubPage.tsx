@@ -32,6 +32,9 @@ function ClawhubTab() {
   const [error, setError]         = useState<string|null>(null);
   const [pkgFamily, setPkgFamily] = useState("code-plugin");
   const [agents, setAgents]       = useState<string[]>([]);
+  const [cliInstalled, setCliInstalled]   = useState<boolean|null>(null);
+  const [cliInstalling, setCliInstalling] = useState(false);
+  const [cliInstallLog, setCliInstallLog] = useState<string|null>(null);
 
   // Install drawer state
   const [installTarget, setInstallTarget] = useState<ClawhubSkillItem|null>(null);
@@ -41,12 +44,24 @@ function ClawhubTab() {
   const [installErr, setInstallErr]       = useState<string|null>(null);
   const [forceInstall, setForceInstall]   = useState(false);
 
-  // Load agents for dropdown
+  // Load agents + clawhub status
   useEffect(() => {
     api.get<{agents: {id:string}[]}>("/agents").then(d => {
       setAgents(d.agents.map((a: any) => a.id));
     }).catch(() => {});
+    api.clawhubStatus().then(d => setCliInstalled(d.installed)).catch(() => setCliInstalled(false));
   }, []);
+
+  async function installCli() {
+    setCliInstalling(true); setCliInstallLog(null);
+    try {
+      const r = await api.clawhubInstallCli();
+      setCliInstalled(true);
+      setCliInstallLog(r.output || "OK");
+    } catch (e: any) {
+      setCliInstallLog("Fehler: " + e.message);
+    } finally { setCliInstalling(false); }
+  }
 
   async function searchSkills(q: string) {
     setLoading(true); setError(null);
@@ -122,6 +137,28 @@ function ClawhubTab() {
           Plugins
         </button>
       </div>
+
+      {/* clawhub CLI nicht installiert Banner */}
+      {cliInstalled === false && (
+        <div className="mx-4 mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 flex items-center justify-between gap-4 flex-shrink-0">
+          <div>
+            <p className="text-sm font-medium text-orange-600">clawhub CLI nicht installiert</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Wird für Skills & Plugins benötigt</p>
+          </div>
+          <button
+            onClick={installCli}
+            disabled={cliInstalling}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 flex-shrink-0"
+          >
+            {cliInstalling ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Installiere…</> : <><Download className="h-3.5 w-3.5" />Jetzt installieren</>}
+          </button>
+        </div>
+      )}
+      {cliInstallLog && (
+        <div className={`mx-4 mt-2 rounded-lg p-3 text-xs font-mono flex-shrink-0 ${cliInstalled ? "bg-green-500/10 text-green-600 border border-green-500/30" : "bg-destructive/10 text-destructive border border-destructive/30"}`}>
+          {cliInstallLog}
+        </div>
+      )}
 
       {/* Skills Tab */}
       {tab === "skills" && (

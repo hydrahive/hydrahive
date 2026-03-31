@@ -9,6 +9,7 @@ POST /hub/clawhub/skill/install    → ClawhHub Skill in Agent-Skills importiere
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -20,6 +21,9 @@ import time
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+# ClawhHub Binary-Cache (Modulebene damit nonlocal in nested functions funktioniert)
+_CLAWHUB_BIN: str | None = None
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
@@ -208,16 +212,33 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     # ── ClawhHub ────────────────────────────────────────────────────────────────
 
+    def _find_clawhub() -> str:
+        global _CLAWHUB_BIN
+        if _CLAWHUB_BIN:
+            return _CLAWHUB_BIN
+        for candidate in ["/usr/bin/clawhub", "/usr/local/bin/clawhub"]:
+            if Path(candidate).exists():
+                _CLAWHUB_BIN = candidate
+                return candidate
+        # Fallback: shutil.which mit erweitertem PATH
+        import shutil
+        found = shutil.which("clawhub", path="/usr/bin:/usr/local/bin:/usr/sbin:/opt/node/bin")
+        if found:
+            _CLAWHUB_BIN = found
+            return found
+        raise FileNotFoundError("clawhub nicht gefunden")
+
     def _run_clawhub(*args: str, timeout: int = 30) -> tuple[int, str]:
         """Führt 'clawhub <args>' aus und gibt (returncode, stdout) zurück."""
         try:
+            bin_path = _find_clawhub()
             result = subprocess.run(
-                ["clawhub", "--no-input", *args],
+                [bin_path, "--no-input", *args],
                 capture_output=True, text=True, timeout=timeout,
             )
             return result.returncode, result.stdout
         except FileNotFoundError:
-            raise HTTPException(503, "clawhub nicht installiert (sudo npm install -g clawhub)")
+            raise HTTPException(503, "clawhub_not_installed")
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "ClawhHub-Anfrage Timeout")
 
@@ -237,6 +258,34 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
                     "score": float(m.group(3)) if m.group(3) else None,
                 })
         return items
+
+    @router.get("/hub/clawhub/status")
+    async def clawhub_status(_auth=Depends(require_admin)):
+        """Prüft ob clawhub installiert ist."""
+        try:
+            bin_path = _find_clawhub()
+            return {"installed": True, "path": bin_path}
+        except FileNotFoundError:
+            return {"installed": False, "path": None}
+
+    @router.post("/hub/clawhub/install-cli")
+    async def clawhub_install_cli(_auth=Depends(require_admin)):
+        """Installiert clawhub global via npm."""
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["npm", "install", "-g", "clawhub@latest"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                raise HTTPException(500, f"npm install fehlgeschlagen: {result.stderr[-300:]}")
+            global _CLAWHUB_BIN
+            _CLAWHUB_BIN = None  # Cache zurücksetzen
+            return {"ok": True, "output": result.stdout[-500:]}
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "npm install Timeout")
+        except FileNotFoundError:
+            raise HTTPException(503, "npm nicht gefunden")
 
     @router.get("/hub/clawhub/skills")
     async def clawhub_skills(q: str = "", _auth=Depends(require_admin)):

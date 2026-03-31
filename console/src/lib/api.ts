@@ -223,8 +223,10 @@ export const api = {
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
   // ClawhHub
-  clawhubSkills:   (q: string) => api.get<{items:ClawhubSkillItem[]}>(`/hub/clawhub/skills?q=${encodeURIComponent(q)}`),
-  clawhubPackages: (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
+  clawhubStatus:      () => api.get<{installed:boolean;path:string|null}>("/hub/clawhub/status"),
+  clawhubInstallCli:  () => api.post<{ok:boolean;output:string}>("/hub/clawhub/install-cli", {}),
+  clawhubSkills:      (q: string) => api.get<{items:ClawhubSkillItem[]}>(`/hub/clawhub/skills?q=${encodeURIComponent(q)}`),
+  clawhubPackages:    (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
   clawhubInstallSkill: (slug: string, agent_id: string, force?: boolean) =>
     api.post<{installed:boolean;skill_name:string;agent_id:string;file:string}>("/hub/clawhub/skill/install", { slug, agent_id, force: force ?? false }),
 };
