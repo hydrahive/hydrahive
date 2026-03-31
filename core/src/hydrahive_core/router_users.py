@@ -17,6 +17,7 @@ def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
     elevated_perms = [
         "filesystem.read",
         "filesystem.write",
+        "filesystem.read_all",
         "system.read",
         "system.write",
         "memory.read",
@@ -37,6 +38,7 @@ def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
     root_perms = [
         "filesystem.read",
         "filesystem.write",
+        "filesystem.read_all",
         "system.read",
         "system.write",
         "memory.read",

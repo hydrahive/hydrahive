@@ -300,7 +300,7 @@ class Orchestrator:
         allowed = self._allowed_tool_map(agent_cfg, execution_mode, user_text=user_text)
         return allowed.get(tool_name)
 
-    async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None):
+    async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):
         from .plugin_manager import plugin_manager as _pm
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
         await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
@@ -308,6 +308,7 @@ class Orchestrator:
             result = await _execute_tool_fn(
                 tool, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tool_name, tool_input=tool_input,
+                execution_mode=execution_mode,
             )
             await _pm.emit("tool.after", project_id=project_id, tool_name=tool_name, result=result)
             return result
@@ -809,6 +810,7 @@ class Orchestrator:
                                                 project_id=project_id,
                                                 tool_name=tc.function.name,
                                                 tool_input=args,
+                                                execution_mode=execution_mode,
                                             )
                                         except Exception as te:
                                             result = {"error": str(te)}
@@ -1007,6 +1009,7 @@ class Orchestrator:
                                                         project_id=project_id,
                                                         tool_name=block.name,
                                                         tool_input=block.input,
+                                                        execution_mode=execution_mode,
                                                     )
                                                     if _rpath:
                                                         _oauth_file_read_cache[_rpath] = result
@@ -1017,6 +1020,7 @@ class Orchestrator:
                                                     project_id=project_id,
                                                     tool_name=block.name,
                                                     tool_input=block.input,
+                                                    execution_mode=execution_mode,
                                                 )
                                         except Exception as te:
                                             result = {"error": str(te)}
@@ -1197,6 +1201,7 @@ class Orchestrator:
                                         project_id=project_id,
                                         tool_name=tc["name"],
                                         tool_input=tool_input,
+                                        execution_mode=execution_mode,
                                     )
                                 except Exception as te:
                                     result = f"Tool-Fehler: {te}"
@@ -1441,6 +1446,7 @@ class Orchestrator:
                         project_id=project_id,
                         tool_name=tc.function.name,
                         tool_input=args,
+                        execution_mode=execution_mode,
                     )
                     result_str = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
                     tool_results[tc.id] = result_str

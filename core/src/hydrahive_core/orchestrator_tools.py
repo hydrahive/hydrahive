@@ -72,14 +72,17 @@ async def _execute_tool(
     project_id: str,
     tool_name:  str,
     tool_input: dict | None = None,
+    execution_mode: str | None = None,
 ):
     """Führt ein einzelnes Tool aus. Gibt Fehler-Dict zurück wenn tool=None."""
     args = dict(tool_input or {})
     effective_pid = args.pop("project_id", None) or project_id
     if tool is None:
         return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}
+    agent_permissions = list(boss_cfg.effective_permissions(execution_mode) or [])
     return await tool.execute(
         agent_id=boss_cfg.id,
         project_id=effective_pid,
+        _agent_permissions=agent_permissions,
         **args,
     )

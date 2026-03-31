@@ -89,10 +89,17 @@ class PathSafetyError(PermissionError):
     """Wird geworfen wenn ein Tool ausserhalb des Projekt-Verzeichnisses zugreifen wuerde."""
 
 
-def assert_path_within_project(path: str | Path, project_id: str) -> Path:
+def assert_path_within_project(
+    path: str | Path,
+    project_id: str,
+    *,
+    agent_permissions: list[str] | None = None,
+) -> Path:
     """
     Prueft ob path innerhalb /projects/<project_id>/ liegt.
     Loest PathSafetyError aus wenn nicht — kein stilles Ignorieren.
+
+    Mit filesystem.read_all Permission: Zugriff auf beliebiges /projects/*-Verzeichnis erlaubt.
 
     Verhindert:
     - Path-Traversal: ../../etc/passwd  (durch resolve + normpath)
@@ -114,6 +121,17 @@ def assert_path_within_project(path: str | Path, project_id: str) -> Path:
         normalized = normalized.resolve()
     except OSError:
         pass  # Datei existiert noch nicht — normpath reicht
+
+    # filesystem.read_all: Zugriff auf beliebiges /projects/*-Verzeichnis erlaubt
+    if agent_permissions is not None and "filesystem.read_all" in agent_permissions:
+        try:
+            normalized.relative_to(PROJECTS_ROOT.resolve())
+        except ValueError:
+            raise PathSafetyError(
+                f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{PROJECTS_ROOT}'. "
+                f"Agenten duerfen nur auf /projects/ zugreifen."
+            )
+        return normalized
 
     # Sicherheitscheck: muss mit project_root beginnen
     try:
@@ -300,6 +318,7 @@ class FileReadTool(BaseTool):
         return (
             "Liest den Inhalt einer Datei aus dem Projekt-Verzeichnis. "
             "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
+            "Mit filesystem.read_all Permission: absoluter Pfad zu beliebiger Datei unter /projects/ erlaubt. "
             "Bei großen Dateien offset+limit nutzen um seitenweise zu lesen — "
             "has_more=true im Ergebnis zeigt an dass weitere Zeichen folgen."
         )
@@ -332,8 +351,9 @@ class FileReadTool(BaseTool):
         self, agent_id: str, project_id: str,
         path: str, offset: int = 0, limit: int = 8000, **kwargs,
     ) -> dict:
+        agent_permissions = kwargs.pop("_agent_permissions", None)
         try:
-            safe_path = assert_path_within_project(path, project_id)
+            safe_path = assert_path_within_project(path, project_id, agent_permissions=agent_permissions)
         except PathSafetyError as e:
             return {"error": str(e), "allowed": False}
 
@@ -466,8 +486,9 @@ class ListDirectoryTool(BaseTool):
         self, agent_id: str, project_id: str,
         path: str = ".", **kwargs,
     ) -> dict:
+        agent_permissions = kwargs.pop("_agent_permissions", None)
         try:
-            safe_path = assert_path_within_project(path or ".", project_id)
+            safe_path = assert_path_within_project(path or ".", project_id, agent_permissions=agent_permissions)
         except PathSafetyError as e:
             return {"error": str(e), "allowed": False}
 
