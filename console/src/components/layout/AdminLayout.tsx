@@ -218,6 +218,7 @@ export function AdminLayout() {
       { to: "/schedules", icon: Calendar, label: t("nav.schedules"),  hint: t("navHint.schedules") },
       { to: "/search",    icon: Search,   label: t("nav.search"),     hint: t("navHint.search") },
       { to: "/extensions",icon: Puzzle,   label: t("nav.extensions"), hint: t("navHint.extensions") },
+      { to: "/plugins",   icon: Puzzle,   label: "Plugins",           hint: "Plugin-System verwalten" },
       { to: "/hub",       icon: Store,    label: "HydraHub",          hint: "Agenten & Tools installieren" },
       { to: "/brain",     icon: Brain,    label: "HydraBrain",        hint: "3D-Graph: Agenten, Tools & Memory" },
       { to: "/federation",icon: Globe,    label: t("nav.federation"), hint: t("navHint.federation") },

@@ -343,13 +343,20 @@ async def lifespan(app: FastAPI):
     except Exception as _ge:
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
-    # Plugins aus /agents/*/plugins/ laden (#49)
+    # Manifest-Plugins aus /plugins/ laden (#110)
+    try:
+        from .tool_registry import registry as _tool_registry
+        plugin_manager.init(tool_registry=_tool_registry)
+    except Exception as _pe:
+        logger.warning("Manifest-Plugin-System fehlgeschlagen: %s", _pe)
+
+    # Legacy-Plugins aus /agents/*/plugins/ laden (#49)
     try:
         _plugin_count = plugin_manager.load_all_agent_plugins(AGENTS_DIR)
         if _plugin_count:
-            logger.info("Plugin-System: %d Plugin(s) geladen", _plugin_count)
+            logger.info("Legacy-Plugins: %d geladen", _plugin_count)
     except Exception as _pe:
-        logger.warning("Plugin-Laden fehlgeschlagen: %s", _pe)
+        logger.warning("Legacy-Plugin-Laden fehlgeschlagen: %s", _pe)
 
     notification_service.start()
     scheduler_service.start(

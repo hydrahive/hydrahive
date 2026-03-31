@@ -1,0 +1,9 @@
+id: system-info
+name: System Info
+version: 1.0.0
+description: Stellt System-Informationen als Tools bereit (CPU, RAM, Disk, Uptime)
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false

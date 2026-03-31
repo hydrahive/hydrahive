@@ -222,6 +222,15 @@ export const api = {
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
+  // Plugins (#110)
+  pluginsList:          () => api.get<{plugins:PluginInfo[];legacy_plugins:unknown[];hooks:Record<string,number>;total:number}>("/plugins"),
+  pluginGet:            (id: string) => api.get<PluginInfo & {agents:string[]}>(`/plugins/${id}`),
+  pluginEnable:         (id: string) => api.post<{ok:boolean;plugin:PluginInfo}>(`/plugins/${id}/enable`, {}),
+  pluginDisable:        (id: string) => api.post<{ok:boolean;plugin:PluginInfo}>(`/plugins/${id}/disable`, {}),
+  pluginReload:         (id: string) => api.post<{ok:boolean;plugin:PluginInfo}>(`/plugins/${id}/reload`, {}),
+  pluginsReloadAll:     () => api.post<{reloaded:number;plugins:PluginInfo[]}>("/plugins/reload", {}),
+  pluginAgentGet:       (agentId: string) => api.get<{agent_id:string;plugins:string[]}>(`/plugins/agents/${agentId}`),
+  pluginAgentSet:       (agentId: string, pluginIds: string[]) => api.put<{ok:boolean}>(`/plugins/agents/${agentId}`, { plugin_ids: pluginIds }),
   // ClawhHub
   clawhubStatus:      () => api.get<{installed:boolean;path:string|null}>("/hub/clawhub/status"),
   clawhubInstallCli:  () => api.post<{ok:boolean;output:string}>("/hub/clawhub/install-cli", {}),
@@ -690,6 +699,23 @@ export interface HubInstallResult {
   agent_id:  string;
   name:      string;
   category:  string;
+}
+
+// Plugins (#110)
+export interface PluginInfo {
+  id:          string;
+  name:        string;
+  version:     string;
+  description: string;
+  author:      string;
+  type:        string;
+  enabled:     boolean;
+  error:       string | null;
+  path:        string;
+  tools:       string[];
+  hook_count:  number;
+  permissions: string[];
+  agents?:     string[];
 }
 
 export interface ClawhubSkillItem {

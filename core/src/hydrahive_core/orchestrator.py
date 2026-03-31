@@ -292,6 +292,10 @@ class Orchestrator:
             tool.id: tool
             for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
         }
+        # Plugin-Tools hinzufügen (#110) — zugewiesene Plugins direkt in die Tool-Map
+        from .plugin_manager import plugin_manager as _pm
+        for pt in _pm.get_plugin_tools_for_agent(agent_cfg.id):
+            all_tools[pt.id] = pt
         # Skill-Tool-Constraints anwenden (#48)
         if user_text:
             skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
@@ -369,6 +373,14 @@ class Orchestrator:
                     },
                 })
         return schemas
+
+    def _plugin_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
+        """Holt litellm-Tool-Schemas von Plugins die dem Agent zugewiesen sind (#110)."""
+        from .plugin_manager import plugin_manager as _pm
+        tools = _pm.get_plugin_tools_for_agent(agent_cfg.id)
+        if not tools:
+            return []
+        return [t.as_litellm_tool() for t in tools]
 
     async def _execute_mcp_tool(
         self,
@@ -558,6 +570,10 @@ class Orchestrator:
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + mcp_schemas)
+        # Plugin-Tools (#110)
+        plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
+        if plugin_schemas:
+            litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
         litellm_tools = litellm_tools or None
 
         import json as _json
@@ -1306,6 +1322,10 @@ class Orchestrator:
         _mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if _mcp_schemas:
             litellm_tools = litellm_tools + _mcp_schemas
+        # Plugin-Tools (#110)
+        _plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
+        if _plugin_schemas:
+            litellm_tools = _dedup_tools(litellm_tools + _plugin_schemas)
         _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
         _file_read_cache: dict[str, str] = {}  # path → first result (dedup across rounds)
         current_messages = list(messages)
