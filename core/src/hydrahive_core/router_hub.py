@@ -354,9 +354,13 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             rc, out = _run_clawhub(*args, timeout=60)
 
             tmp_skill_dir = Path(tmpdir) / "clawhub_tmp"
-            skill_md_path = tmp_skill_dir / "SKILL.md"
-            if not skill_md_path.exists():
-                # Fehlermeldung aus clawhub weitergeben
+            # clawhub legt einen Unterordner mit dem Slug-Namen an:
+            #   clawhub_tmp/<slug>/SKILL.md  (bei scoped: clawhub_tmp/<name>/SKILL.md)
+            # → SKILL.md rekursiv suchen
+            skill_md_candidates = list(tmp_skill_dir.rglob("SKILL.md"))
+            skill_md_path = skill_md_candidates[0] if skill_md_candidates else None
+            if not skill_md_path or not skill_md_path.exists():
+                # stderr könnte Hinweise enthalten (clawhub schreibt auf stderr)
                 if "suspicious" in out.lower() or "flag" in out.lower():
                     raise HTTPException(422, f"Skill als verdächtig markiert. Mit force=true erneut versuchen.")
                 raise HTTPException(502, f"SKILL.md nicht gefunden. clawhub: {out.strip()[-300:]}")
