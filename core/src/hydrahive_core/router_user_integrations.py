@@ -774,6 +774,18 @@ def register_user_integration_routes(
         audit_log("whatsapp.connect", details={"user": username})
         return {"configured": True, "status": result.get("status"), "qr": result.get("qr"), "phone": result.get("phone")}
 
+    @auth_router.post("/me/whatsapp/install-chromium")
+    async def install_whatsapp_chromium(auth: tuple = Depends(require_auth)):
+        """Installiert Chromium (Puppeteer-Backend) falls noch nicht vorhanden."""
+        from .router_doctor import _fix_install_chromium
+        result = await _fix_install_chromium()
+        if result.get("ok"):
+            # Bridge neu starten damit sie Chromium erkennt
+            import subprocess as _sp
+            _sp.run(["sudo", "-n", "systemctl", "restart", "hydrahive-whatsapp-bridge"],
+                    capture_output=True, timeout=15)
+        return result
+
     @auth_router.delete("/me/whatsapp")
     async def delete_my_whatsapp(auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)

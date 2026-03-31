@@ -2111,6 +2111,21 @@ function WhatsAppTab() {
     }
   }
 
+  async function handleInstallChromium() {
+    setLoading(true); setMsg(t("myAgent.whatsappChromiumInstalling"));
+    try {
+      const r = await api.installWhatsAppChromium();
+      if (r.ok) {
+        setMsg(t("myAgent.whatsappChromiumInstalled"));
+        await fetchStatus();
+      } else {
+        setMsg(t("common.error") + ": " + (r.error ?? "unbekannt"));
+      }
+    } catch (err: unknown) {
+      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
+    } finally { setLoading(false); }
+  }
+
   const connected   = status?.status === "connected";
   const waitingQr   = status?.status === "waiting_qr";
   const reconnecting = status?.status === "reconnecting" || status?.status === "connecting";
@@ -2170,8 +2185,15 @@ function WhatsAppTab() {
 
       {/* Aktionen */}
       <div className="flex flex-wrap items-center gap-2">
+        {bridgeError && (
+          <button onClick={handleInstallChromium} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50 transition-colors">
+            <Download className="h-3.5 w-3.5" />
+            {loading ? t("myAgent.whatsappChromiumInstalling") : t("myAgent.whatsappInstallChromium")}
+          </button>
+        )}
         {!connected && !waitingQr && !reconnecting && (
-          <button onClick={handleConnect} disabled={loading}
+          <button onClick={handleConnect} disabled={loading || bridgeError}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
             <Phone className="h-3.5 w-3.5" />
             {loading ? t("myAgent.whatsappConnecting") : t("myAgent.whatsappConnect")}

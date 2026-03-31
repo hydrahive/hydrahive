@@ -192,6 +192,7 @@ export const api = {
   getWhatsApp:           () => api.get<WhatsAppStatus>("/me/whatsapp"),
   connectWhatsApp:       () => api.post<WhatsAppStatus>("/me/whatsapp/connect", {}),
   disconnectWhatsApp:    () => api.delete<{disconnected:boolean}>("/me/whatsapp"),
+  installWhatsAppChromium: () => api.post<{ok:boolean;output?:string;error?:string}>("/me/whatsapp/install-chromium", {}),
   updateWhatsAppConfig:  (d: WhatsAppConfig) => api.put<{updated:boolean}>("/me/whatsapp/config", d),
   getTelegram:           () => api.get<TelegramStatus>("/me/telegram"),
   connectTelegram:       (d: {bot_token: string} & Partial<TelegramConfig>) => api.post<TelegramStatus>("/me/telegram/connect", d),

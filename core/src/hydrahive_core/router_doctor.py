@@ -75,6 +75,8 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         from fastapi import HTTPException as _HTTP
         if fix_id in ("nginx_a2a", "nginx_projects", "nginx_upload"):
             return await _fix_nginx()
+        if fix_id == "install_chromium":
+            return await _fix_install_chromium()
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -311,6 +313,33 @@ async def _fix_nginx() -> dict:
     if r.returncode == 0:
         return {"ok": True, "output": (r.stdout or "").strip()}
     return {"ok": False, "error": (r.stderr or r.stdout or "unbekannter Fehler").strip()}
+
+
+async def _fix_install_chromium() -> dict:
+    """Installiert chromium-browser via apt wenn noch nicht vorhanden."""
+    import shutil
+    if shutil.which("chromium-browser") or shutil.which("chromium"):
+        return {"ok": True, "output": "Chromium bereits installiert"}
+
+    def _run():
+        return subprocess.run(
+            ["sudo", "-n", "apt-get", "install", "-y", "chromium-browser"],
+            capture_output=True, text=True, timeout=180,
+        )
+
+    r = await asyncio.to_thread(_run)
+    if r.returncode != 0:
+        # Fallback: chromium (Debian-Name)
+        def _run2():
+            return subprocess.run(
+                ["sudo", "-n", "apt-get", "install", "-y", "chromium"],
+                capture_output=True, text=True, timeout=180,
+            )
+        r = await asyncio.to_thread(_run2)
+
+    if r.returncode == 0:
+        return {"ok": True, "output": "Chromium erfolgreich installiert"}
+    return {"ok": False, "error": (r.stderr or r.stdout or "apt-get fehlgeschlagen").strip()[:500]}
 
 
 async def _check_agentlink() -> list[dict]:
