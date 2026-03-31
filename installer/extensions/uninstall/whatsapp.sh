@@ -11,6 +11,7 @@ systemctl disable hydrahive-whatsapp-bridge 2>/dev/null || true
 rm -f /etc/systemd/system/hydrahive-whatsapp-bridge.service
 systemctl daemon-reload
 
-rm -rf /opt/hydrahive/whatsapp-bridge
+# Nur node_modules entfernen — Quellcode bleibt damit Reinstall bridge.js findet
+rm -rf /opt/hydrahive/whatsapp-bridge/node_modules
 
 success "WhatsApp Bridge deinstalliert"
