@@ -86,6 +86,7 @@ export function ProjectsPage() {
   const [sambaCreds, setSambaCreds] = useState<Record<string, {username: string; password: string} | null>>({});
   const [sambaLoading, setSambaLoading] = useState<Record<string, boolean>>({});
   const [showSambaPw, setShowSambaPw] = useState<Record<string, boolean>>({});
+  const [showCodePw, setShowCodePw] = useState(false);
   const [sambaResetting, setSambaResetting] = useState<string | null>(null);
   const [codeserverPassword, setCodeserverPassword] = useState<string | null>(null);
 
@@ -514,11 +515,7 @@ export function ProjectsPage() {
                         </span>
                         <span>
                           <span className="block font-medium">{t("projects.codeEditor")}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {codeserverPassword
-                              ? `${t("projects.openInCode")} · ${t("codeEditor.password")}: ${codeserverPassword}`
-                              : t("projects.openInCode")}
-                          </span>
+                          <span className="text-xs text-muted-foreground">{t("projects.openInCode")}</span>
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -588,6 +585,30 @@ export function ProjectsPage() {
                               <button type="button" onClick={() => loadSambaCreds(id)} disabled={sambaLoading[id]}
                                 className="mt-0.5 text-xs text-primary hover:underline disabled:opacity-50">
                                 {sambaLoading[id] ? "Lade…" : "Zugangsdaten anzeigen"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {codeserverPassword && isAdmin && (
+                        <div className="flex items-start gap-3">
+                          <Code2 className="mt-0.5 h-4 w-4 text-primary" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">Code-Editor Zugangsdaten</p>
+                            {showCodePw ? (
+                              <div className="mt-1 flex items-center gap-2">
+                                <p className="text-xs font-mono text-muted-foreground tracking-wider select-all">
+                                  {codeserverPassword}
+                                </p>
+                                <button type="button" onClick={() => setShowCodePw(false)}
+                                  className="text-muted-foreground hover:text-foreground transition-colors">
+                                  <EyeOff className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => setShowCodePw(true)}
+                                className="mt-0.5 text-xs text-primary hover:underline">
+                                Zugangsdaten anzeigen
                               </button>
                             )}
                           </div>
