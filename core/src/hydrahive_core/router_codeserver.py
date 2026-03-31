@@ -63,12 +63,23 @@ def register_codeserver_routes(admin_router: APIRouter, *, require_admin) -> Non
 
         installed = _safe_exists(CS_BIN)
 
+        # Passwort aus admin_credentials lesen
+        password = ""
+        try:
+            for line in CREDENTIALS_FILE.read_text(encoding="utf-8").splitlines():
+                if line.startswith("codeserver_password="):
+                    password = line.split("=", 1)[1].strip()
+                    break
+        except Exception:
+            pass
+
         return {
             "installed":       installed,
             "service_active":  service_active,
             "version":         version,
             "port":            CODESERVER_PORT,
             "url":             "/code/",
+            "password":        password or None,
         }
 
     @admin_router.post("/admin/codeserver/install")
