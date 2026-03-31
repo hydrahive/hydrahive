@@ -111,7 +111,7 @@ async function createSession(agentId) {
       '--no-zygote',
       '--disable-gpu',
       '--disable-crash-reporter',
-      '--disable-crashpad',
+      '--disable-features=Crashpad',
       '--crash-dumps-dir=/tmp',
     ],
   }

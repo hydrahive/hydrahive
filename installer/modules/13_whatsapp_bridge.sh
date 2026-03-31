@@ -112,6 +112,12 @@ success "Node.js-Abhängigkeiten installiert"
 if [ -n "${_puppeteer_chrome}" ] && [ -f "${_puppeteer_chrome}" ]; then
     success "Puppeteer-Chrome verfügbar: ${_puppeteer_chrome}"
     _chromium_bin="${_puppeteer_chrome}"
+    # crashpad_handler deaktivieren — schlägt in Serverumgebungen fehl
+    _crashpad_handler="$(dirname "${_puppeteer_chrome}")/chrome_crashpad_handler"
+    if [ -f "${_crashpad_handler}" ]; then
+        chmod -x "${_crashpad_handler}" 2>/dev/null || true
+        info "chrome_crashpad_handler deaktiviert"
+    fi
 elif [ -n "${_chromium_bin}" ]; then
     warn "Puppeteer-Chrome nicht gefunden — nutze System-Chromium: ${_chromium_bin}"
 else
