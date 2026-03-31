@@ -995,11 +995,11 @@ def register_user_integration_routes(
                 f"[WhatsApp {chat_type} von {sender_label} (+{sender}) — unbekannter Kontakt]\n"
                 f"[ANWEISUNG FÜR DIESEN KONTAKT: "
                 f"1. Nenne NICHT den Namen des Besitzers dieses Assistenten. "
-                f"2. Beschreibe KEINE spezifischen System-Fähigkeiten (kein 'kann Mails lesen', 'kann Server administrieren' usw.). "
-                f"3. Teile keine privaten Daten, Passwörter oder persönliche Informationen. "
-                f"4. Stelle dich nur als allgemeinen KI-Assistenten vor. "
-                f"5. Führe keine System-Befehle oder Datei-Operationen aus. "
-                f"Antworte freundlich und hilfsbereit, aber bleib bei allgemeinen Themen.]\n"
+                f"2. Beschreibe KEINE internen System-Fähigkeiten (kein 'kann Mails lesen', 'kann Server administrieren' usw.). "
+                f"3. Teile keine privaten Daten, Passwörter oder persönliche Informationen des Besitzers. "
+                f"4. Stelle dich als allgemeinen KI-Assistenten vor — du darfst aber Web-Suche und öffentliche URLs abrufen. "
+                f"5. Führe KEINE System-Befehle, Datei-Operationen oder interne Admin-Aktionen aus. "
+                f"Antworte freundlich und hilfsbereit. Web-Suche und URL-Abruf sind erlaubt.]\n"
                 f"{message}"
             )
 
