@@ -127,15 +127,17 @@ async function createSession(agentId) {
   })
 
   client.on('disconnected', async (reason) => {
-    console.log(`[${agentId}] Verbindung getrennt: ${reason}`)
-    // error-Status nicht überschreiben (z.B. bei Chrome-Crash)
-    if (session.status !== 'error') {
+    console.error(`[${agentId}] Verbindung getrennt: ${reason}`)
+    session.phone = null
+    if (session.status === 'connecting' || session.status === 'waiting_qr') {
+      // Disconnect während Verbindungsaufbau = Fehler sichtbar machen
+      session.status = 'error'
+      session.error  = `WhatsApp trennte Verbindung während des Aufbaus (reason: ${reason}). Chromium: ${CHROMIUM_PATH || 'nicht gefunden'}`
+    } else if (session.status !== 'error') {
       session.status = 'disconnected'
     }
-    session.phone = null
-    if (reason === 'LOGOUT') {
-      sessions.delete(agentId)
-    }
+    // Session NICHT löschen — damit der Fehler im Status-Endpoint sichtbar bleibt
+    // (Connect-Button löscht die Session explizit beim nächsten Versuch)
   })
 
   client.on('message', async (msg) => {
