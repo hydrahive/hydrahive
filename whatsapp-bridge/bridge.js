@@ -208,15 +208,13 @@ async function createSession(agentId) {
     await client.initialize()
     console.log(`[${agentId}] Client initialisiert`)
   } catch (e) {
-    console.warn(`[${agentId}] Initialisierungsfehler, retry in 8s: ${e.message}`)
-    session.status = 'connecting'
+    const msg = e.message || String(e)
+    console.error(`[${agentId}] Initialisierungsfehler: ${msg}`)
+    // Fehler sichtbar machen — nicht still auf disconnected zurückfallen
+    session.status = 'error'
+    session.error  = msg
     try { await client.destroy() } catch {}
-    sessions.delete(agentId)
-    setTimeout(() => {
-      createSession(agentId).catch(err =>
-        console.error(`[${agentId}] Retry fehlgeschlagen: ${err.message}`)
-      )
-    }, 8000)
+    // Session im Map lassen damit Status-Endpoint den Fehler zurückgibt
   }
   return session
 }
