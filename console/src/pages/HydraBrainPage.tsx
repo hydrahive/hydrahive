@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react"
 import type ForceGraph3DType from "react-force-graph-3d";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph3D = lazy(() => import("react-force-graph-3d")) as any as typeof ForceGraph3DType;
-import { Loader2, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { Loader2, RefreshCw, Eye, EyeOff, Globe } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface GraphNode {
@@ -15,8 +15,11 @@ interface GraphNode {
   tools_count?: number;
   mem_count?: number;
   skill_count?: number;
-  // react-force-graph adds these at runtime:
+  peer?: string;          // für Remote-Nodes: Name des Peers
+  // react-force-graph: runtime-Position
   x?: number; y?: number; z?: number;
+  // react-force-graph: gepinnte Position (fixiert in 3D-Raum)
+  fx?: number; fy?: number; fz?: number;
   __threeObj?: unknown;
 }
 
@@ -33,17 +36,20 @@ interface GraphData {
 
 // ── Farben pro Gruppe ──────────────────────────────────────────────────────
 const GROUP_COLOR: Record<string, string> = {
-  agent_boss:    "#22d3ee",   // cyan
-  agent_worker:  "#60a5fa",   // blau
-  agent_personal:"#a78bfa",   // lila
-  tool:          "#fb923c",   // orange
-  memory:        "#4ade80",   // grün
-  project:       "#facc15",   // gelb
-  skill:         "#f472b6",   // pink
-  llm:           "#e2e8f0",   // weiß
+  // Lokal
+  agent_boss:    "#22d3ee",
+  agent_worker:  "#60a5fa",
+  agent_personal:"#a78bfa",
+  tool:          "#fb923c",
+  memory:        "#4ade80",
+  project:       "#facc15",
+  skill:         "#f472b6",
+  llm:           "#e2e8f0",
+  // Federation
+  peer_gateway:  "#ff4080",   // magenta — Brücke zwischen Universen
+  remote_agent:  "#fbbf24",   // gold — Remote-Agenten
 };
 
-// nodeVal = relative Größe (wird intern als Kugelgröße genutzt, klein halten!)
 const GROUP_SIZE: Record<string, number> = {
   agent_boss:    3,
   agent_worker:  2,
@@ -53,28 +59,34 @@ const GROUP_SIZE: Record<string, number> = {
   memory:        0.6,
   skill:         0.6,
   llm:           1.5,
+  peer_gateway:  5,   // groß, damit die Brücke auffällt
+  remote_agent:  2.5,
 };
 
 const LINK_COLOR: Record<string, string> = {
-  has_boss:    "#facc1588",
-  has_worker:  "#facc1544",
-  has_tool:    "#fb923c55",
-  has_memory:  "#4ade8044",
-  has_skill:   "#f472b644",
-  uses_llm:    "#e2e8f033",
+  has_boss:          "#facc1588",
+  has_worker:        "#facc1544",
+  has_tool:          "#fb923c55",
+  has_memory:        "#4ade8044",
+  has_skill:         "#f472b644",
+  uses_llm:          "#e2e8f033",
+  a2a_link:          "#ff408099",  // lokal → Gateway
+  has_remote_agent:  "#fbbf2455",  // Gateway → Remote
 };
 
 const LINK_PARTICLES: Record<string, number> = {
-  has_tool:    2,
-  has_memory:  1,
-  has_skill:   1,
-  uses_llm:    3,
-  has_boss:    0,
-  has_worker:  0,
+  has_tool:          2,
+  has_memory:        1,
+  has_skill:         1,
+  uses_llm:          3,
+  has_boss:          0,
+  has_worker:        0,
+  a2a_link:          5,
+  has_remote_agent:  2,
 };
 
 // ── Legende ────────────────────────────────────────────────────────────────
-const LEGEND = [
+const LEGEND_LOCAL = [
   { group: "agent_boss",    label: "Boss-Agent" },
   { group: "agent_worker",  label: "Worker-Agent" },
   { group: "agent_personal",label: "Personal-Agent" },
@@ -85,25 +97,122 @@ const LEGEND = [
   { group: "llm",           label: "LLM-Provider" },
 ];
 
+const LEGEND_FED = [
+  { group: "peer_gateway", label: "A2A Gateway" },
+  { group: "remote_agent", label: "Remote Agent" },
+];
+
 export function HydraBrainPage() {
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
-  const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState<GraphNode | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
+  const [baseGraph,   setBaseGraph]   = useState<GraphData>({ nodes: [], links: [] });
+  const [fedExtra,    setFedExtra]    = useState<GraphData>({ nodes: [], links: [] });
+  const [graphData,   setGraphData]   = useState<GraphData>({ nodes: [], links: [] });
+  const [loading,     setLoading]     = useState(true);
+  const [fedLoading,  setFedLoading]  = useState(false);
+  const [showFed,     setShowFed]     = useState(false);
+  const [selected, setSelected]       = useState<GraphNode | null>(null);
+  const [showLabels, setShowLabels]   = useState(true);
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 800, h: 600 });
 
+  // Zusammenführen wenn sich Basis- oder Federation-Daten ändern
+  useEffect(() => {
+    if (!showFed) {
+      setGraphData(baseGraph);
+    } else {
+      setGraphData({
+        nodes: [...baseGraph.nodes, ...fedExtra.nodes],
+        links: [...baseGraph.links, ...fedExtra.links],
+      });
+    }
+  }, [baseGraph, fedExtra, showFed]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.get("/brain-graph") as GraphData;
-      setGraphData(data);
+      setBaseGraph(data);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadFederation = useCallback(async () => {
+    setFedLoading(true);
+    try {
+      const peersResp = await api.a2aPeers();
+      const peers = peersResp.peers;
+
+      const nodes: GraphNode[] = [];
+      const links: GraphLink[] = [];
+
+      for (let i = 0; i < peers.length; i++) {
+        const peer = peers[i];
+        try {
+          const result = await api.a2aTestPeer(peer.name);
+          if (!result.ok) continue;
+
+          // Richtungsvektor für diesen Peer (verteile auf Kreis in XZ-Ebene)
+          const angle  = (i / Math.max(peers.length, 1)) * Math.PI * 2;
+          const dist   = 900;
+          const gx     = Math.round(Math.cos(angle) * dist);
+          const gz     = Math.round(Math.sin(angle) * dist);
+
+          // Gateway-Node — gepinnt auf halber Strecke
+          const gatewayId = `fed_gateway_${peer.name}`;
+          nodes.push({
+            id:    gatewayId,
+            label: `⟷ ${peer.name}`,
+            type:  "gateway",
+            group: "peer_gateway",
+            peer:  peer.name,
+            fx: Math.round(gx * 0.45),
+            fy: 0,
+            fz: Math.round(gz * 0.45),
+          });
+
+          // Erste lokale Boss-Node als Ankerpunkt für die Brücke
+          const localBoss = baseGraph.nodes.find(n => n.group === "agent_boss");
+          if (localBoss) {
+            links.push({ source: localBoss.id, target: gatewayId, type: "a2a_link" });
+          }
+
+          // Remote-Agenten um den Gateway herum gepinnt
+          result.agents.forEach((agent, j) => {
+            const nodeId    = `fed_${peer.name}_${agent.id}`;
+            const aAngle    = (j / Math.max(result.agents.length, 1)) * Math.PI * 2;
+            const aRadius   = 160;
+            nodes.push({
+              id:    nodeId,
+              label: agent.name || agent.id,
+              type:  "remote_agent",
+              group: "remote_agent",
+              peer:  peer.name,
+              fx: gx + Math.round(Math.cos(aAngle) * aRadius),
+              fy: Math.round(Math.sin(aAngle) * aRadius * 0.6),
+              fz: gz + Math.round(Math.sin(aAngle) * aRadius),
+            });
+            links.push({ source: gatewayId, target: nodeId, type: "has_remote_agent" });
+          });
+
+        } catch { /* Peer nicht erreichbar, überspringen */ }
+      }
+
+      setFedExtra({ nodes, links });
+    } finally {
+      setFedLoading(false);
+    }
+  }, [baseGraph.nodes]);
+
+  const toggleFederation = useCallback(async () => {
+    if (!showFed) {
+      setShowFed(true);
+      if (fedExtra.nodes.length === 0) await loadFederation();
+    } else {
+      setShowFed(false);
+    }
+  }, [showFed, fedExtra.nodes.length, loadFederation]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -219,16 +328,43 @@ export function HydraBrainPage() {
             ? <Eye className="h-4 w-4 text-white/50" />
             : <EyeOff className="h-4 w-4 text-white/50" />}
         </button>
+        {/* Federation Toggle */}
+        <button
+          onClick={toggleFederation}
+          disabled={fedLoading}
+          title={showFed ? "Federation ausblenden" : "Verbundene Peers einblenden"}
+          className={`rounded-xl border p-2 transition-colors backdrop-blur flex items-center gap-1.5 px-3 ${
+            showFed
+              ? "bg-[#ff4080]/20 border-[#ff4080]/50 text-[#ff4080]"
+              : "bg-black/60 border-white/10 hover:bg-white/10 text-white/50"
+          }`}
+        >
+          {fedLoading
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Globe className="h-4 w-4" />}
+          <span className="text-xs font-medium">Federation</span>
+        </button>
       </div>
 
       {/* Legende */}
       <div className="absolute top-4 right-4 z-20 rounded-xl bg-black/60 border border-white/10 px-3 py-2.5 backdrop-blur flex flex-col gap-1.5">
-        {LEGEND.map(l => (
+        {LEGEND_LOCAL.map(l => (
           <div key={l.group} className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: GROUP_COLOR[l.group] }} />
             <span className="text-[11px] text-white/50">{l.label}</span>
           </div>
         ))}
+        {showFed && (
+          <>
+            <div className="my-1 border-t border-white/10" />
+            {LEGEND_FED.map(l => (
+              <div key={l.group} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: GROUP_COLOR[l.group] }} />
+                <span className="text-[11px]" style={{ color: GROUP_COLOR[l.group] + "cc" }}>{l.label}</span>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       {/* Detail-Panel */}
@@ -249,6 +385,7 @@ export function HydraBrainPage() {
           agent_boss: "Boss-Agent", agent_worker: "Worker-Agent",
           agent_personal: "Personal-Agent", project: "Projekt",
           tool: "Tool", memory: "Memory", skill: "Skill", llm: "LLM-Provider",
+          peer_gateway: "A2A Gateway", remote_agent: "Remote Agent",
         };
 
         return (
@@ -277,6 +414,14 @@ export function HydraBrainPage() {
                   <span className={`text-xs ${selected.running ? "text-green-400" : "text-white/30"}`}>
                     {selected.running ? "Aktiv / läuft" : "Gestoppt"}
                   </span>
+                </div>
+              )}
+
+              {/* Peer-Herkunft bei Remote-Nodes */}
+              {selected.peer && (
+                <div>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Peer</p>
+                  <p className="text-xs font-mono" style={{ color: GROUP_COLOR.peer_gateway }}>{selected.peer}</p>
                 </div>
               )}
 
