@@ -100,6 +100,18 @@ $SSH "$VM" "if [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '
 $SSH "$VM" "sudo systemctl restart hydrahive-whatsapp-bridge 2>/dev/null && echo '   Bridge neu gestartet' || echo '   Bridge nicht aktiv (übersprungen)'"
 
 echo ""
+echo "==> [5e/5] Bundled Agents → VM (--ignore-existing, überschreibt KEINE user-eigenen Agents)"
+# Bundled agents werden nur angelegt wenn sie noch nicht existieren (--ignore-existing).
+# User-eigene Anpassungen bleiben erhalten.
+$SSH "$VM" "sudo mkdir -p /agents && sudo chown -R ${SSH_USER}:${SSH_USER} /agents/"
+rsync -av --no-owner --no-group --ignore-existing \
+  --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
+  -e "ssh -i $SSH_KEY" \
+  "$REPO/agents/" \
+  "$VM:/agents/"
+$SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} /agents/"
+
+echo ""
 echo "==> [6/5] Gitea-Status prüfen"
 $SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
 

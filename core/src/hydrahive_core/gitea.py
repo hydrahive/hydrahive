@@ -34,7 +34,7 @@ _DEFAULT_CONFIG = {
 }
 
 
-def _git_env_with_auth(token: str) -> dict:
+def _git_env_with_auth(token: str, username: str = "hydrahive") -> dict:
     """
     Gibt eine git-Umgebung zurück die den Token via GIT_ASKPASS übergibt
     statt ihn in die Remote-URL einzubetten.
@@ -42,7 +42,6 @@ def _git_env_with_auth(token: str) -> dict:
     GIT_ASKPASS ist ein Script das git aufruft wenn es nach Credentials fragt.
     Der Token landet NICHT in git-URLs, git-History oder Prozesslisten.
     """
-    import os
     import stat
     import tempfile
 
@@ -51,7 +50,7 @@ def _git_env_with_auth(token: str) -> dict:
     askpass.write_text(
         f"#!/bin/sh\n"
         f"case \"$1\" in\n"
-        f"  *Username*) echo hydrahive ;;\n"
+        f"  *Username*) echo '{username}' ;;\n"
         f"  *Password*) echo '{token}' ;;\n"
         f"  *) echo '' ;;\n"
         f"esac\n",
@@ -395,7 +394,7 @@ class GiteaClient:
                 "git", "clone", clone_url, str(workspace),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=_git_env_with_auth(cfg["token"]),
+                env=_git_env_with_auth(cfg["token"], username=cfg.get("org", "hydrahive")),
             )
             _, stderr = await proc.communicate()
             if proc.returncode != 0:
@@ -404,14 +403,14 @@ class GiteaClient:
 
     @staticmethod
     async def _git(
-        args: list[str], cwd: Path, token: str | None = None
+        args: list[str], cwd: Path, token: str | None = None, username: str = "hydrahive",
     ) -> tuple[str, str, int]:
         """Führt einen git-Befehl aus und gibt (stdout, stderr, returncode) zurück.
         Wenn token übergeben wird, wird GIT_ASKPASS für sichere Auth genutzt
         (Token landet NICHT in der Remote-URL oder Git-History).
         """
         import asyncio
-        env = _git_env_with_auth(token) if token else {
+        env = _git_env_with_auth(token, username=username) if token else {
             "GIT_AUTHOR_NAME":     "HydraHive Agent",
             "GIT_AUTHOR_EMAIL":    "agent@hydrahive.local",
             "GIT_COMMITTER_NAME":  "HydraHive Agent",

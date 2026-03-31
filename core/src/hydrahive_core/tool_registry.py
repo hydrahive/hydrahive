@@ -375,7 +375,10 @@ class FileWriteTool(BaseTool):
             "Schreibt Inhalt in eine Datei im Projekt-Verzeichnis. "
             "Erstellt die Datei (und fehlende Unterordner) wenn sie nicht existiert. "
             "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
-            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt."
+            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt. "
+            "WICHTIG für große Dateien (>100 Zeilen): Erst den Anfang mit mode='overwrite' schreiben, "
+            "dann weitere Abschnitte mit mode='append' anhängen. "
+            "Niemals versuchen mehr als ~200 Zeilen auf einmal zu schreiben."
         )
     @property
     def permissions_required(self) -> list[str]:
@@ -3024,15 +3027,21 @@ class GitCommitTool(BaseTool):
             cfg = _load_config()
             remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
             await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
+            git_username = cfg.get("org", "hydrahive")
             _, push_err, push_rc = await GiteaClient._git(
-                ["push", "-u", "origin", branch], ws, token=cfg.get("token", "")
+                ["push", "-u", "origin", branch], ws,
+                token=cfg.get("token", ""), username=git_username,
             )
             if push_rc == 0:
                 result["pushed"] = True
             else:
-                result["pushed"] = False
-                result["push_error"] = push_err[:300]
                 logger.warning("git_commit auto-push fehlgeschlagen [%s]: %s", agent_id, push_err[:200])
+                return {
+                    "error": f"Commit erfolgreich, aber Push fehlgeschlagen: {push_err[:300]}",
+                    "committed": True,
+                    "pushed": False,
+                    **{k: v for k, v in result.items() if k not in ("pushed",)},
+                }
 
         return result
 
