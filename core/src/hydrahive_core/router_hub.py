@@ -1,14 +1,21 @@
 """router_hub.py — HydraHub API
 
-GET  /hub/index           → Index vom GitHub-Repo (gecacht 5 Min)
-POST /hub/install         → Agent aus Hub installieren
-GET  /hub/installed       → Liste aller installierten Hub-Pakete
+GET  /hub/index                    → Index vom GitHub-Repo (gecacht 5 Min)
+POST /hub/install                  → Agent aus Hub installieren
+GET  /hub/installed                → Liste aller installierten Hub-Pakete
+GET  /hub/clawhub/skills?q=...     → ClawhHub Skills suchen / browsen
+GET  /hub/clawhub/packages?family= → ClawhHub Plugins browsen
+POST /hub/clawhub/skill/install    → ClawhHub Skill in Agent-Skills importieren
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import re
+import shutil
+import subprocess
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -184,7 +191,6 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         if not (target / ".hub_meta.json").exists():
             raise HTTPException(403, "Dieser Agent wurde nicht über den Hub installiert")
 
-        import shutil
         shutil.rmtree(target)
         if discovery is not None:
             try:
@@ -193,3 +199,150 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
                 logger.warning("discovery._unregister_dir fehlgeschlagen: %s", e)
         logger.info("Hub-Agent '%s' deinstalliert", agent_id)
         return {"uninstalled": True, "agent_id": agent_id}
+
+    # ── ClawhHub ────────────────────────────────────────────────────────────────
+
+    def _run_clawhub(*args: str, timeout: int = 30) -> tuple[int, str]:
+        """Führt 'clawhub <args>' aus und gibt (returncode, stdout) zurück."""
+        try:
+            result = subprocess.run(
+                ["clawhub", "--no-input", *args],
+                capture_output=True, text=True, timeout=timeout,
+            )
+            return result.returncode, result.stdout
+        except FileNotFoundError:
+            raise HTTPException(503, "clawhub nicht installiert (sudo npm install -g clawhub)")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "ClawhHub-Anfrage Timeout")
+
+    def _parse_search_output(raw: str) -> list[dict]:
+        """Parst 'clawhub search' Textausgabe → Liste von {slug, name, score}."""
+        items = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or line.startswith("-"):
+                continue
+            # Format: "slug  Display Name  (score)" oder "slug  Display Name"
+            m = re.match(r'^(\S+)\s{2,}(.+?)(?:\s+\(([0-9.]+)\))?\s*$', line)
+            if m:
+                items.append({
+                    "slug": m.group(1),
+                    "name": m.group(2).strip(),
+                    "score": float(m.group(3)) if m.group(3) else None,
+                })
+        return items
+
+    class ClawhubInstallRequest(BaseModel):
+        slug:     str
+        agent_id: str
+        force:    bool = False
+
+    @router.get("/hub/clawhub/skills")
+    async def clawhub_skills(q: str = "", _auth=Depends(require_admin)):
+        """Sucht oder listet ClawhHub Skills."""
+        if q.strip():
+            rc, out = _run_clawhub("search", q.strip(), "--limit", "30")
+            items = _parse_search_output(out)
+        else:
+            # explore liefert leere Liste ohne Auth-Kontext → Fallback auf Suche
+            rc, out = _run_clawhub("search", "agent", "--limit", "30")
+            items = _parse_search_output(out)
+        return {"items": items}
+
+    @router.get("/hub/clawhub/packages")
+    async def clawhub_packages(family: str = "", _auth=Depends(require_admin)):
+        """Listet ClawhHub Packages / Plugins."""
+        args = ["package", "explore", "--json", "--limit", "50"]
+        if family in ("code-plugin", "bundle-plugin", "skill"):
+            args += ["--family", family]
+        rc, out = _run_clawhub(*args)
+        try:
+            data = json.loads(out)
+            return {"items": data.get("items", [])}
+        except json.JSONDecodeError:
+            return {"items": []}
+
+    @router.post("/hub/clawhub/skill/install")
+    async def clawhub_skill_install(req: ClawhubInstallRequest, _auth=Depends(require_admin)):
+        """Installiert einen ClawhHub Skill in den Skills-Ordner eines Agenten."""
+        slug = req.slug.strip()
+        agent_id = req.agent_id.strip()
+        if not slug or not re.match(r'^[@a-z0-9_/-]{1,128}$', slug):
+            raise HTTPException(400, "Ungültiger slug")
+        if not re.match(r'^[a-z0-9_-]{1,64}$', agent_id):
+            raise HTTPException(400, "Ungültige agent_id")
+
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+        skills_dir = agent_dir / "skills"
+        skills_dir.mkdir(exist_ok=True)
+
+        # ClawhHub skill in temp-Verzeichnis herunterladen
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = ["install", slug, "--dir", "clawhub_tmp", "--workdir", tmpdir]
+            if req.force:
+                args.append("--force")
+            rc, out = _run_clawhub(*args, timeout=60)
+
+            tmp_skill_dir = Path(tmpdir) / "clawhub_tmp"
+            skill_md_path = tmp_skill_dir / "SKILL.md"
+            if not skill_md_path.exists():
+                # Fehlermeldung aus clawhub weitergeben
+                if "suspicious" in out.lower() or "flag" in out.lower():
+                    raise HTTPException(422, f"Skill als verdächtig markiert. Mit force=true erneut versuchen.")
+                raise HTTPException(502, f"SKILL.md nicht gefunden. clawhub: {out.strip()[-300:]}")
+
+            raw_md = skill_md_path.read_text(encoding="utf-8")
+
+        # ClawhHub-Frontmatter → HydraHive-Skill-Frontmatter konvertieren
+        fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', raw_md, re.DOTALL)
+        if fm_match:
+            try:
+                claw_fm = yaml.safe_load(fm_match.group(1)) or {}
+            except Exception:
+                claw_fm = {}
+            body = raw_md[fm_match.end():]
+        else:
+            claw_fm = {}
+            body = raw_md
+
+        skill_name = claw_fm.get("name") or slug.replace("/", "-").replace("@", "")
+        description = claw_fm.get("description", "")
+        # Trigger-Keywords aus Beschreibung ableiten (erste 8 Wörter, Kleinbuchstaben, stopwords raus)
+        _stop = {"and", "or", "the", "a", "an", "to", "of", "in", "for", "with", "when", "use", "is", "it"}
+        triggers = [w.lower().strip(".,;") for w in description.split()[:20]
+                    if len(w) > 3 and w.lower() not in _stop][:8]
+
+        hh_frontmatter = {
+            "skill":    skill_name,
+            "version":  claw_fm.get("version", "1.0"),
+            "scope":    "on-demand",
+            "triggers": triggers,
+            "priority": 50,
+            "source":   f"clawhub:{slug}",
+        }
+        converted_md = f"---\n{yaml.dump(hh_frontmatter, allow_unicode=True, default_flow_style=False)}---\n{body}"
+
+        # Dateiname: slug-slug.md (Schrägstriche/@ → Bindestrich)
+        safe_name = re.sub(r'[^a-z0-9_-]', '-', slug.lower().lstrip('@'))
+        out_path = skills_dir / f"{safe_name}.md"
+        out_path.write_text(converted_md, encoding="utf-8")
+
+        # Berechtigungen setzen
+        try:
+            subprocess.run(
+                ["chown", "hydrahive:hydrahive", str(out_path)],
+                check=False, capture_output=True
+            )
+        except Exception:
+            pass
+
+        logger.info("ClawhHub-Skill '%s' → Agent '%s' installiert", slug, agent_id)
+        return {
+            "installed": True,
+            "skill_name": skill_name,
+            "agent_id": agent_id,
+            "file": out_path.name,
+        }

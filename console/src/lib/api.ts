@@ -222,6 +222,11 @@ export const api = {
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
+  // ClawhHub
+  clawhubSkills:   (q: string) => api.get<{items:ClawhubSkillItem[]}>(`/hub/clawhub/skills?q=${encodeURIComponent(q)}`),
+  clawhubPackages: (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
+  clawhubInstallSkill: (slug: string, agent_id: string, force?: boolean) =>
+    api.post<{installed:boolean;skill_name:string;agent_id:string;file:string}>("/hub/clawhub/skill/install", { slug, agent_id, force: force ?? false }),
 };
 
 export interface A2APeer {
@@ -683,4 +688,21 @@ export interface HubInstallResult {
   agent_id:  string;
   name:      string;
   category:  string;
+}
+
+export interface ClawhubSkillItem {
+  slug:  string;
+  name:  string;
+  score: number | null;
+}
+
+export interface ClawhubPackageItem {
+  name:        string;
+  displayName: string;
+  summary:     string;
+  family:      string;
+  executesCode: boolean;
+  latestVersion: string;
+  ownerHandle: string;
+  updatedAt:   number;
 }
