@@ -148,7 +148,7 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
         _save_vpn_config(cfg)
 
         # tailscale up bauen — ohne Key = Reconnect mit bestehenden Credentials
-        cmd = ["tailscale", "up", "--accept-routes"]
+        cmd = ["sudo", "tailscale", "up", "--accept-routes"]
         if body.auth_key:
             cmd.append(f"--authkey={body.auth_key}")
         login_server = cfg.get("login_server", "")
@@ -170,7 +170,7 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
 
     @admin_router.post("/admin/vpn/down")
     async def vpn_down(_=require_admin):
-        rc, out, err = _run(["tailscale", "down"])
+        rc, out, err = _run(["sudo", "tailscale", "down"])
         if rc != 0:
             raise HTTPException(500, f"tailscale down fehlgeschlagen: {err or out}")
         cfg = _load_vpn_config()

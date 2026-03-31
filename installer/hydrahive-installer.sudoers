@@ -2,3 +2,7 @@ Defaults:hydrahive !requiretty
 hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/*.sh
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-whatsapp-bridge
 hydrahive ALL=(root) NOPASSWD: /usr/bin/systemctl restart hydrahive-whatsapp-bridge
+hydrahive ALL=(root) NOPASSWD: /usr/bin/tailscale up *
+hydrahive ALL=(root) NOPASSWD: /usr/bin/tailscale down
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/tailscale up *
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/tailscale down
