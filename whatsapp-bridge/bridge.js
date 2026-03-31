@@ -128,9 +128,11 @@ async function createSession(agentId) {
 
   client.on('disconnected', async (reason) => {
     console.log(`[${agentId}] Verbindung getrennt: ${reason}`)
-    session.status = 'disconnected'
+    // error-Status nicht überschreiben (z.B. bei Chrome-Crash)
+    if (session.status !== 'error') {
+      session.status = 'disconnected'
+    }
     session.phone = null
-    // Session-Daten löschen damit beim nächsten Start ein neuer QR kommt
     if (reason === 'LOGOUT') {
       sessions.delete(agentId)
     }
@@ -204,17 +206,31 @@ async function createSession(agentId) {
     }
   })
 
+  // QR-Timeout: wenn nach 45s kein QR-Code, Fehler setzen
+  const qrTimeout = setTimeout(() => {
+    if (session.status === 'connecting') {
+      const msg = 'Timeout: kein QR-Code nach 45s — Chrome konnte WhatsApp Web nicht laden (fehlende Bibliotheken?)'
+      console.error(`[${agentId}] ${msg}`)
+      session.status = 'error'
+      session.error  = msg
+      try { client.destroy() } catch {}
+    }
+  }, 45000)
+
+  client.on('qr', () => clearTimeout(qrTimeout))
+  client.on('ready', () => clearTimeout(qrTimeout))
+
   try {
     await client.initialize()
+    clearTimeout(qrTimeout)
     console.log(`[${agentId}] Client initialisiert`)
   } catch (e) {
+    clearTimeout(qrTimeout)
     const msg = e.message || String(e)
     console.error(`[${agentId}] Initialisierungsfehler: ${msg}`)
-    // Fehler sichtbar machen — nicht still auf disconnected zurückfallen
     session.status = 'error'
     session.error  = msg
     try { await client.destroy() } catch {}
-    // Session im Map lassen damit Status-Endpoint den Fehler zurückgibt
   }
   return session
 }
@@ -253,7 +269,7 @@ app.get('/sessions/:agentId/status', (req, res) => {
     const hasSession = fs.existsSync(sessionDir)
     return res.json({ status: hasSession ? 'saved' : 'disconnected', qr: null, phone: null })
   }
-  res.json({ status: s.status, qr: s.qrBase64, phone: s.phone })
+  res.json({ status: s.status, qr: s.qrBase64, phone: s.phone, error: s.error || null })
 })
 
 // Nachricht senden
