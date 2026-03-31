@@ -165,8 +165,6 @@ Documentation=https://github.com/hydrahive/hydrahive
 
 [Service]
 Type=simple
-User=${HYDRAHIVE_USER}
-Group=${HYDRAHIVE_USER}
 WorkingDirectory=${BRIDGE_INSTALL_DIR}
 ExecStart=/usr/bin/node bridge.js
 Restart=always
