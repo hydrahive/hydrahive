@@ -74,13 +74,39 @@ fi
 
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}"
 
-# --- npm install --omit=dev ---
-info "Installiere Node.js-Abhängigkeiten..."
-# PUPPETEER_SKIP_DOWNLOAD=1 weil wir system-Chromium verwenden
-PUPPETEER_SKIP_DOWNLOAD=1 npm install --omit=dev --prefix "${BRIDGE_INSTALL_DIR}" \
+# --- Chrome-Cache-Verzeichnis (gemeinsam, nicht im Home-Dir des Service-Users) ---
+BRIDGE_CHROME_CACHE="/opt/hydrahive/puppeteer-cache"
+mkdir -p "${BRIDGE_CHROME_CACHE}"
+
+# --- npm install --omit=dev + Puppeteer-Chrome herunterladen ---
+info "Installiere Node.js-Abhängigkeiten + lade Puppeteer-Chrome herunter..."
+PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
+    npm install --omit=dev --prefix "${BRIDGE_INSTALL_DIR}" \
     || error "npm install fehlgeschlagen — pruefe ${BRIDGE_INSTALL_DIR}/package.json"
+
+# Puppeteer-Chrome explizit herunterladen (falls nicht schon enthalten)
+PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
+    node "${BRIDGE_INSTALL_DIR}/node_modules/puppeteer/install.mjs" 2>/dev/null \
+    || PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
+       node -e "const p=require('${BRIDGE_INSTALL_DIR}/node_modules/puppeteer'); p.launch({headless:true,args:['--no-sandbox']}).then(b=>b.close()).catch(()=>{})" 2>/dev/null \
+    || true  # Fehler nicht fatal — System-Chromium als Fallback
+
+# Pfad zum heruntergeladenen Chrome ermitteln
+_puppeteer_chrome="$(PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
+    node -e "try{const p=require('${BRIDGE_INSTALL_DIR}/node_modules/puppeteer');console.log(p.executablePath())}catch(e){}" 2>/dev/null || echo '')"
+
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}/node_modules"
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_CHROME_CACHE}" 2>/dev/null || true
 success "Node.js-Abhängigkeiten installiert"
+
+if [ -n "${_puppeteer_chrome}" ] && [ -f "${_puppeteer_chrome}" ]; then
+    success "Puppeteer-Chrome verfügbar: ${_puppeteer_chrome}"
+    _chromium_bin="${_puppeteer_chrome}"
+elif [ -n "${_chromium_bin}" ]; then
+    warn "Puppeteer-Chrome nicht gefunden — nutze System-Chromium: ${_chromium_bin}"
+else
+    warn "Kein Chrome gefunden — WhatsApp-Bridge benötigt manuelle Chromium-Installation"
+fi
 
 # --- BRIDGE_SECRET generieren (idempotent) ---
 if [ ! -s "${BRIDGE_SECRET_FILE}" ]; then
@@ -99,6 +125,12 @@ chmod 750 "${BRIDGE_SESSION_DIR}"
 success "Session-Verzeichnis: ${BRIDGE_SESSION_DIR}"
 
 # --- Systemd-Unit schreiben ---
+_puppeteer_env=""
+if [ -n "${_chromium_bin}" ]; then
+    _puppeteer_env="Environment=PUPPETEER_EXECUTABLE_PATH=${_chromium_bin}"
+fi
+
+_bridge_secret="$(cat "${BRIDGE_SECRET_FILE}" 2>/dev/null || echo '')"
 _puppeteer_env=""
 if [ -n "${_chromium_bin}" ]; then
     _puppeteer_env="Environment=PUPPETEER_EXECUTABLE_PATH=${_chromium_bin}"
@@ -123,10 +155,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${BRIDGE_SERVICE_NAME}
 EnvironmentFile=-/etc/hydrahive/llm_env
-Environment=PORT=8767
-Environment=BRIDGE_SECRET_FILE=${BRIDGE_SECRET_FILE}
-Environment=SESSION_DIR=${BRIDGE_SESSION_DIR}
+Environment=BRIDGE_PORT=8767
+Environment=BRIDGE_SECRET=${_bridge_secret}
+Environment=SESSIONS_DIR=${BRIDGE_SESSION_DIR}
 Environment=CORE_URL=http://127.0.0.1:8765
+Environment=PUPPETEER_CACHE_DIR=${BRIDGE_CHROME_CACHE}
 ${_puppeteer_env}
 
 [Install]

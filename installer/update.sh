@@ -241,9 +241,13 @@ main() {
             "${TMPDIR_BASE}/whatsapp-bridge/" "${HYDRAHIVE_DIR}/whatsapp-bridge/"
         chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${HYDRAHIVE_DIR}/whatsapp-bridge/" 2>/dev/null || true
         info "WhatsApp-Bridge Quellcode aktualisiert"
-        # npm install falls package.json geändert (Fehler nicht fatal)
+        # npm install + Puppeteer-Chrome herunterladen (Fehler nicht fatal)
         if [ -f "${HYDRAHIVE_DIR}/whatsapp-bridge/package.json" ]; then
-            PUPPETEER_SKIP_DOWNLOAD=1 npm install --omit=dev --prefix "${HYDRAHIVE_DIR}/whatsapp-bridge" -q 2>/dev/null || true
+            _PCACHE="/opt/hydrahive/puppeteer-cache"
+            mkdir -p "${_PCACHE}"
+            PUPPETEER_CACHE_DIR="${_PCACHE}" \
+                npm install --omit=dev --prefix "${HYDRAHIVE_DIR}/whatsapp-bridge" -q 2>/dev/null || true
+            chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${_PCACHE}" 2>/dev/null || true
         fi
         # Bridge neu starten damit neue bridge.js-Version aktiv wird
         if systemctl is-active --quiet hydrahive-whatsapp-bridge 2>/dev/null; then

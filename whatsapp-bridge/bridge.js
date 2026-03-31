@@ -34,6 +34,16 @@ function detectChromium() {
     }
     console.warn(`[bridge] PUPPETEER_EXECUTABLE_PATH=${process.env.PUPPETEER_EXECUTABLE_PATH} existiert nicht — suche weiter`)
   }
+  // Puppeteer-Cache: heruntergeladenen Chrome suchen
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR || path.join(process.env.HOME || '/root', '.cache', 'puppeteer')
+  try {
+    const chromeDirs = fs.readdirSync(path.join(cacheDir, 'chrome')).sort().reverse()
+    for (const ver of chromeDirs) {
+      const bin = path.join(cacheDir, 'chrome', ver, 'chrome-linux64', 'chrome')
+      if (fs.existsSync(bin)) return bin
+    }
+  } catch {}
+
   // Direkte Binaries bevorzugen (nicht Snap-Wrapper-Scripts)
   const candidates = [
     '/usr/lib/chromium-browser/chromium-browser',  // echte Binary (nicht Snap-Wrapper)
