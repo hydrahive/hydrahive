@@ -133,9 +133,15 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         except Exception:
             pass
 
-        # Plugin sofort laden
-        from .plugin_manager import plugin_manager
+        # Plugin sofort laden — erst discover, dann enable
+        from .plugin_manager import plugin_manager, PluginManifest, LoadedPlugin
         try:
+            manifest = PluginManifest.from_yaml(target / "plugin.yaml")
+            lp = LoadedPlugin(manifest=manifest, path=target, enabled=False)
+            plugin_manager._plugins[manifest.id] = lp
+            if not plugin_manager._tool_registry:
+                from .tool_registry import registry
+                plugin_manager._tool_registry = registry
             plugin_manager.enable_plugin(plugin_id)
         except Exception as e:
             logger.warning("Plugin '%s' konnte nicht direkt geladen werden: %s", plugin_id, e)
