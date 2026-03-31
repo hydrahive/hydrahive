@@ -175,7 +175,14 @@ def register_a2a_routes(
             logger.error("a2a_receive: Orchestrator-Fehler: %s", e)
             raise HTTPException(500, f"Fehler beim Ausführen des Tasks: {e}")
 
-        return {"response": response, "agent_id": agent_id}
+        # handle_message gibt (text, workers) Tupel oder String zurück
+        if isinstance(response, (list, tuple)):
+            response_text = response[0] if response else ""
+        elif isinstance(response, dict):
+            response_text = response.get("response", str(response))
+        else:
+            response_text = str(response) if response else ""
+        return {"response": response_text, "agent_id": agent_id}
 
     # ── Admin: Peers auflisten ────────────────────────────────────────────────
     @admin_router.get("/admin/a2a/peers")
