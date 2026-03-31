@@ -392,36 +392,42 @@ def _check_nginx_upload_limit() -> list[dict]:
 
 
 def _check_llm_config() -> list[dict]:
-    """Prüft ob mindestens ein LLM-Provider aktiv konfiguriert ist."""
+    """Prüft ob mindestens ein LLM-Provider konfiguriert ist (OAuth-Token oder API-Key)."""
+    active = []
+
+    # Claude Max OAuth Token
+    claude_token = Path("/etc/hydrahive/claude_oauth_token")
+    if claude_token.exists() and claude_token.read_text(encoding="utf-8").strip():
+        active.append("Claude Max (OAuth)")
+
+    # OpenAI Codex OAuth Token
+    codex_token = Path("/etc/hydrahive/openai_codex_token.json")
+    if codex_token.exists():
+        try:
+            data = json.loads(codex_token.read_text(encoding="utf-8"))
+            if data.get("access_token") and data.get("account_id"):
+                active.append("OpenAI Codex (OAuth)")
+        except Exception:
+            pass
+
+    # llm_config.json: Provider mit API-Key
     config_path = Path("/etc/hydrahive/llm_config.json")
-    if not config_path.exists():
-        return [_check("LLM: Provider-Config", "warn",
-                       "llm_config.json fehlt — noch kein LLM konfiguriert",
-                       "Einstellungen → LLM-Provider")]
-    try:
-        raw = config_path.read_text(encoding="utf-8").strip()
-        if not raw:
-            return [_check("LLM: Provider-Config", "warn",
-                           "Noch kein LLM-Provider konfiguriert",
-                           "Einstellungen → LLM-Provider")]
-        data = json.loads(raw)
-        providers = data.get("providers", {})
-        # Provider mit api_key
-        with_key = [n for n, c in providers.items() if c.get("enabled") and c.get("api_key")]
-        # OAuth-Provider (claude_max) haben keinen api_key
-        oauth = [n for n, c in providers.items() if c.get("enabled") and not c.get("api_key")]
-        active = with_key + oauth
-        if active:
-            return [_check("LLM: Provider-Config", "ok", f"Aktiv: {', '.join(active)}")]
-        if providers:
-            return [_check("LLM: Provider-Config", "warn",
-                           "Provider vorhanden aber alle deaktiviert",
-                           "Einstellungen → LLM-Provider → aktivieren")]
-        return [_check("LLM: Provider-Config", "warn",
-                       "Kein Provider konfiguriert",
-                       "Einstellungen → LLM-Provider")]
-    except Exception as e:
-        return [_check("LLM: Provider-Config", "warn", f"Config nicht lesbar: {e}")]
+    if config_path.exists():
+        try:
+            raw = config_path.read_text(encoding="utf-8").strip()
+            if raw:
+                providers = json.loads(raw).get("providers", {})
+                for name, cfg in providers.items():
+                    if cfg.get("enabled") and cfg.get("api_key", "").strip():
+                        active.append(f"{name} (API-Key)")
+        except Exception:
+            pass
+
+    if active:
+        return [_check("LLM: Provider-Config", "ok", ", ".join(active))]
+    return [_check("LLM: Provider-Config", "warn",
+                   "Kein LLM-Provider konfiguriert",
+                   "Einstellungen → LLM-Provider")]
 
 
 def _check_vpn() -> list[dict]:
