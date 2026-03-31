@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import ForceGraph3D from "react-force-graph-3d";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
+import type ForceGraph3DType from "react-force-graph-3d";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ForceGraph3D = lazy(() => import("react-force-graph-3d")) as any as typeof ForceGraph3DType;
 import { Loader2, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -338,6 +340,7 @@ export function HydraBrainPage() {
 
       {/* Graph */}
       {!loading && (
+        <Suspense fallback={<div className="flex items-center justify-center w-full h-full"><Loader2 className="animate-spin text-muted-foreground" /></div>}>
         <ForceGraph3D
           ref={fgRef}
           width={dims.w}
@@ -373,6 +376,7 @@ export function HydraBrainPage() {
           cooldownTicks={150}
           onEngineStop={() => { fgRef.current?.zoomToFit(600, 60); }}
         />
+        </Suspense>
       )}
 
       {loading && (
