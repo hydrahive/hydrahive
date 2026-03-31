@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle } from "lucide-react";
+import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle, Trash2 } from "lucide-react";
 import { api, type HubPackage, type HubInstalledEntry, type ClawhubSkillItem, type ClawhubPackageItem } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -640,10 +640,23 @@ function HydraHubTab() {
             {/* Drawer Footer */}
             <div className="p-6 border-t border-border/40 flex-shrink-0">
               {installedIds.has(selected.id) ? (
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Bereits installiert
-                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Agent "${selected.id}" deinstallieren?`)) return;
+                    setInstalling(selected.id);
+                    try {
+                      await api.hubUninstall(selected.id);
+                      const inst = await api.hubInstalled();
+                      setInstalled(Array.isArray(inst) ? inst : []);
+                      setSelected(null);
+                    } catch (e: any) { setInstallErr(e.message); }
+                    finally { setInstalling(null); }
+                  }}
+                  disabled={installing === selected.id}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Deinstallieren
+                </button>
               ) : (
                 <button
                   onClick={() => install(selected)}
@@ -703,6 +716,17 @@ function HubPluginsTab() {
     finally { setInstalling(null); }
   }
 
+  async function uninstallPlugin(id: string) {
+    if (!confirm(`Plugin "${id}" wirklich deinstallieren?`)) return;
+    setInstalling(id); setError(null);
+    try {
+      await api.hubUninstallPlugin(id);
+      const inst = await api.hubInstalled();
+      setInstalled(new Set((Array.isArray(inst) ? inst : []).map((i: any) => i.id)));
+    } catch (e: any) { setError(e.message); }
+    finally { setInstalling(null); }
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden p-4 gap-4">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -741,9 +765,16 @@ function HubPluginsTab() {
                     ))}
                   </div>
                   {isInstalled ? (
-                    <div className="flex items-center gap-2 text-xs text-green-600">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Installiert
-                    </div>
+                    <button
+                      onClick={() => uninstallPlugin(pkg.id)}
+                      disabled={installing === pkg.id}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-destructive/50 text-destructive text-xs font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                    >
+                      {installing === pkg.id
+                        ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Entferne...</>
+                        : <><Trash2 className="h-3.5 w-3.5" />Deinstallieren</>
+                      }
+                    </button>
                   ) : (
                     <button
                       onClick={() => installPlugin(pkg)}

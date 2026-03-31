@@ -222,6 +222,7 @@ export const api = {
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
+  hubUninstallPlugin: (pluginId: string) => api.delete<{uninstalled:boolean;plugin_id:string}>(`/hub/installed/plugin/${pluginId}`),
   // Plugins (#110)
   pluginsList:          () => api.get<{plugins:PluginInfo[];legacy_plugins:unknown[];hooks:Record<string,number>;total:number}>("/plugins"),
   pluginGet:            (id: string) => api.get<PluginInfo & {agents:string[]}>(`/plugins/${id}`),

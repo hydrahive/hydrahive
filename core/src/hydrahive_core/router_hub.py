@@ -274,6 +274,26 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         logger.info("Hub-Agent '%s' deinstalliert", agent_id)
         return {"uninstalled": True, "agent_id": agent_id}
 
+    @router.delete("/hub/installed/plugin/{plugin_id}")
+    async def hub_uninstall_plugin(plugin_id: str, _auth=Depends(require_admin)):
+        """Entfernt ein Hub-Plugin."""
+        if not re.match(r'^[a-z0-9_-]{1,64}$', plugin_id):
+            raise HTTPException(400, "Ungültige plugin_id")
+        target = Path("/plugins") / plugin_id
+        if not target.exists():
+            raise HTTPException(404, "Plugin nicht gefunden")
+        # Plugin deaktivieren
+        from .plugin_manager import plugin_manager
+        try:
+            plugin_manager.disable_plugin(plugin_id)
+        except Exception:
+            pass
+        shutil.rmtree(target)
+        # Aus _plugins dict entfernen
+        plugin_manager._plugins.pop(plugin_id, None)
+        logger.info("Hub-Plugin '%s' deinstalliert", plugin_id)
+        return {"uninstalled": True, "plugin_id": plugin_id}
+
     # ── ClawhHub ────────────────────────────────────────────────────────────────
 
     def _find_clawhub() -> str:

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Puzzle, Power, PowerOff, RefreshCw, AlertTriangle,
-  Wrench, Zap, X, Shield, Users,
+  Wrench, Zap, X, Shield, Users, Trash2,
 } from "lucide-react";
 import { api, type PluginInfo } from "@/lib/api";
 
@@ -289,7 +289,7 @@ export function PluginsPage() {
                 disabled={!!actionBusy}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50
                   ${selected.enabled
-                    ? "border border-destructive/50 text-destructive hover:bg-destructive/10"
+                    ? "border border-border/50 text-muted-foreground hover:bg-muted/50"
                     : "bg-primary text-primary-foreground hover:bg-primary/90"
                   }`}
               >
@@ -301,6 +301,23 @@ export function PluginsPage() {
                 className="px-4 py-2.5 rounded-xl border border-border/50 text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${actionBusy === selected.id ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm(`Plugin "${selected.id}" deinstallieren?`)) return;
+                  setActionBusy(selected.id);
+                  try {
+                    await api.hubUninstallPlugin(selected.id);
+                    setSelected(null);
+                    await load();
+                  } catch (e: any) { setError(e.message); }
+                  finally { setActionBusy(null); }
+                }}
+                disabled={!!actionBusy}
+                className="px-4 py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                title="Deinstallieren"
+              >
+                <Trash2 className="h-4 w-4" />
               </button>
             </div>
           </div>
