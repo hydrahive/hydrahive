@@ -62,6 +62,12 @@ class InstallRequest(BaseModel):
     model_override: str | None = None
 
 
+class ClawhubInstallRequest(BaseModel):
+    slug:     str
+    agent_id: str
+    force:    bool = False
+
+
 def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, discovery=None) -> None:
 
     @router.get("/hub/index")
@@ -231,11 +237,6 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
                     "score": float(m.group(3)) if m.group(3) else None,
                 })
         return items
-
-    class ClawhubInstallRequest(BaseModel):
-        slug:     str
-        agent_id: str
-        force:    bool = False
 
     @router.get("/hub/clawhub/skills")
     async def clawhub_skills(q: str = "", _auth=Depends(require_admin)):
