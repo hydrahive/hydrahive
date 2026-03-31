@@ -1325,7 +1325,9 @@ class Orchestrator:
         # Plugin-Tools (#110)
         _plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
         if _plugin_schemas:
-            litellm_tools = _dedup_tools(litellm_tools + _plugin_schemas)
+            litellm_tools = litellm_tools + _plugin_schemas
+        # Dedup über alles (MCP + Plugins können Duplikate erzeugen)
+        litellm_tools = _dedup_tools(litellm_tools)
         _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
         _file_read_cache: dict[str, str] = {}  # path → first result (dedup across rounds)
         current_messages = list(messages)
