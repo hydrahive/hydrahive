@@ -40,16 +40,24 @@ if [ "${_node_ok}" -eq 0 ]; then
     success "Node.js $(node --version) installiert"
 fi
 
-# --- Chromium für Puppeteer (whatsapp-web.js) ---
-if ! command -v chromium-browser &>/dev/null && ! command -v chromium &>/dev/null; then
-    info "Installiere Chromium (Puppeteer-Backend für whatsapp-web.js)..."
-    apt-get install -y chromium-browser || apt-get install -y chromium
-    success "Chromium installiert"
-else
-    success "Chromium bereits vorhanden"
-fi
+# --- Chrome-Laufzeitbibliotheken (für Puppeteer-gebündelten Chrome) ---
+info "Installiere Chrome-Laufzeitbibliotheken..."
+apt-get install -y --no-install-recommends \
+    libnspr4 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
+    libdbus-1-3 libx11-6 libxcb1 libxext6 libxshmfence1 \
+    libasound2 2>/dev/null \
+    || apt-get install -y --no-install-recommends \
+       libnspr4 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+       libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+       libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
+       libdbus-1-3 libx11-6 libxcb1 libxext6 libxshmfence1 \
+       libasound2t64 2>/dev/null \
+    || warn "Einige Chrome-Bibliotheken konnten nicht installiert werden — Bridge könnte trotzdem laufen"
+success "Chrome-Laufzeitbibliotheken bereit"
 
-# Chromium-Pfad ermitteln
+# Chromium-Pfad (Fallback falls Puppeteer-Chrome nicht verfügbar)
 _chromium_bin="$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo '')"
 
 # --- Bridge-Verzeichnis anlegen ---

@@ -316,29 +316,27 @@ async def _fix_nginx() -> dict:
 
 
 async def _fix_install_chromium() -> dict:
-    """Installiert chromium-browser via apt wenn noch nicht vorhanden."""
-    import shutil
-    if shutil.which("chromium-browser") or shutil.which("chromium"):
-        return {"ok": True, "output": "Chromium bereits installiert"}
+    """Installiert Chrome-Laufzeitbibliotheken via apt (benötigt für Puppeteer-Chrome)."""
+    _chrome_libs = [
+        "libnspr4", "libnss3", "libatk1.0-0", "libatk-bridge2.0-0",
+        "libcups2", "libdrm2", "libxkbcommon0", "libxcomposite1", "libxdamage1",
+        "libxfixes3", "libxrandr2", "libgbm1", "libpango-1.0-0", "libcairo2",
+        "libdbus-1-3", "libx11-6", "libxcb1", "libxext6", "libxshmfence1",
+    ]
 
-    def _run():
+    def _run_apt(packages: list[str]) -> "subprocess.CompletedProcess[str]":
         return subprocess.run(
-            ["sudo", "-n", "apt-get", "install", "-y", "chromium-browser"],
+            ["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends"] + packages,
             capture_output=True, text=True, timeout=180,
         )
 
-    r = await asyncio.to_thread(_run)
+    # libasound2 heißt auf Debian 12+ libasound2t64
+    r = await asyncio.to_thread(_run_apt, _chrome_libs + ["libasound2"])
     if r.returncode != 0:
-        # Fallback: chromium (Debian-Name)
-        def _run2():
-            return subprocess.run(
-                ["sudo", "-n", "apt-get", "install", "-y", "chromium"],
-                capture_output=True, text=True, timeout=180,
-            )
-        r = await asyncio.to_thread(_run2)
+        r = await asyncio.to_thread(_run_apt, _chrome_libs + ["libasound2t64"])
 
     if r.returncode == 0:
-        return {"ok": True, "output": "Chromium erfolgreich installiert"}
+        return {"ok": True, "output": "Chrome-Bibliotheken installiert"}
     return {"ok": False, "error": (r.stderr or r.stdout or "apt-get fehlgeschlagen").strip()[:500]}
 
 
