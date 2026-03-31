@@ -170,10 +170,20 @@ def register_a2a_routes(
         import uuid as _uuid
         session_id = f"a2a_{_uuid.uuid4().hex[:8]}"
         content = f"[A2A-Nachricht von {req.sender_name}]\n{req.message}"
+
+        # Virtuelles ProjectConfig für den Agent erzeugen
+        from .project_config import ProjectConfig as _PC, ProjectIdentity as _PI, ProjectAgents as _PA
+        agent_cfg = discovery.agents.get(agent_id)
+        project_cfg = _PC(
+            id=session_id,
+            identity=_PI(name=agent_cfg.identity if agent_cfg else agent_id),
+            agents=_PA(boss=agent_id, workers=[]),
+        )
+
         try:
             response = await orchestrator.handle_message(
                 project_id=session_id,
-                agent_id=agent_id,
+                project_cfg=project_cfg,
                 content=content,
                 sender="a2a_remote",
             )
