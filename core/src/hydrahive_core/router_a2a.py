@@ -74,6 +74,12 @@ class A2APeerUpsert(BaseModel):
     description: str = ""
 
 
+class A2ASendRequest(BaseModel):
+    agent_id:    str
+    message:     str
+    sender_name: str = "HydraHive-Admin"
+
+
 # ── HTTP-Helper für ausgehende A2A-Calls (in Thread-Pool wegen uvloop) ───────
 
 def _ssl_ctx():
@@ -267,11 +273,6 @@ def register_a2a_routes(
             "agents":      data.get("agents", []),
             "error":       data.get("error", "") if not ok else "",
         }
-
-    class A2ASendRequest(BaseModel):
-        agent_id:    str
-        message:     str
-        sender_name: str = "HydraHive-Admin"
 
     @admin_router.post("/admin/a2a/send/{name}")
     async def send_task(name: str, body: A2ASendRequest, _a=Depends(require_admin)):
