@@ -4,12 +4,14 @@
 # schreibt einen eigenen Secret-File und startet den Dienst als hydrahive-whatsapp-bridge.
 # Idempotent: bereits laufender Service wird nach Update neugestartet.
 
+HYDRAHIVE_DIR="${HYDRAHIVE_DIR:-/opt/hydrahive}"
+HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
+
 BRIDGE_SERVICE_NAME="hydrahive-whatsapp-bridge"
 BRIDGE_SERVICE_FILE="/etc/systemd/system/${BRIDGE_SERVICE_NAME}.service"
 BRIDGE_INSTALL_DIR="${HYDRAHIVE_DIR}/whatsapp-bridge"
 BRIDGE_SECRET_FILE="/etc/hydrahive/whatsapp_bridge_secret"
 BRIDGE_SESSION_DIR="/etc/hydrahive/whatsapp-sessions"
-HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
 
 # Fallback-Funktionen falls Script standalone läuft (nicht via source aus install.sh)
 if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi

@@ -9,5 +9,5 @@
   "service": "hydrahive-whatsapp-bridge",
   "health_url": "http://127.0.0.1:8767/health",
   "open_url": null,
-  "installed_check": "/opt/hydrahive/whatsapp-bridge"
+  "installed_check": "/etc/systemd/system/hydrahive-whatsapp-bridge.service"
 }
