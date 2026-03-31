@@ -27,19 +27,31 @@ const BRIDGE_SECRET = process.env.BRIDGE_SECRET          || ''
 
 // Chromium auto-detektieren wenn PUPPETEER_EXECUTABLE_PATH nicht gesetzt
 function detectChromium() {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH
+  // Explizit gesetzter Pfad — nur verwenden wenn die Datei auch existiert
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    if (fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+      return process.env.PUPPETEER_EXECUTABLE_PATH
+    }
+    console.warn(`[bridge] PUPPETEER_EXECUTABLE_PATH=${process.env.PUPPETEER_EXECUTABLE_PATH} existiert nicht — suche weiter`)
+  }
+  // Direkte Binaries bevorzugen (nicht Snap-Wrapper-Scripts)
   const candidates = [
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
+    '/usr/lib/chromium-browser/chromium-browser',  // echte Binary (nicht Snap-Wrapper)
+    '/usr/lib/chromium/chromium',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
     '/snap/bin/chromium',
   ]
   for (const p of candidates) {
     if (fs.existsSync(p)) return p
   }
   // which als Fallback
-  try { return execSync('which chromium-browser 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim() } catch {}
+  try {
+    const p = execSync('which chromium-browser 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim()
+    if (p) return p
+  } catch {}
   return null
 }
 
@@ -244,7 +256,7 @@ app.post('/sessions/:agentId/start', async (req, res) => {
   const { agentId } = req.params
   const existing = sessions.get(agentId)
   if (existing && existing.status !== 'disconnected' && existing.status !== 'auth_failure') {
-    return res.json({ status: existing.status, qr: existing.qrBase64, phone: existing.phone })
+    return res.json({ status: existing.status, qr: existing.qrBase64, phone: existing.phone, error: existing.error || null })
   }
   try {
     // createSession ist async aber wir warten nur auf den Start, nicht auf QR/Ready

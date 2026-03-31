@@ -241,6 +241,16 @@ main() {
             "${TMPDIR_BASE}/whatsapp-bridge/" "${HYDRAHIVE_DIR}/whatsapp-bridge/"
         chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${HYDRAHIVE_DIR}/whatsapp-bridge/" 2>/dev/null || true
         info "WhatsApp-Bridge Quellcode aktualisiert"
+        # npm install falls package.json geändert (Fehler nicht fatal)
+        if [ -f "${HYDRAHIVE_DIR}/whatsapp-bridge/package.json" ]; then
+            PUPPETEER_SKIP_DOWNLOAD=1 npm install --omit=dev --prefix "${HYDRAHIVE_DIR}/whatsapp-bridge" -q 2>/dev/null || true
+        fi
+        # Bridge neu starten damit neue bridge.js-Version aktiv wird
+        if systemctl is-active --quiet hydrahive-whatsapp-bridge 2>/dev/null; then
+            systemctl restart hydrahive-whatsapp-bridge \
+                && success "hydrahive-whatsapp-bridge neu gestartet" \
+                || warn "Bridge-Neustart fehlgeschlagen"
+        fi
     fi
     # Installer-Assets (nginx-Template etc.) im installer/-Verzeichnis aktuell halten
     for _asset in hydrahive-console.nginx hydrahive-installer.sudoers; do
