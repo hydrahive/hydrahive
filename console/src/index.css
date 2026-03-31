@@ -93,12 +93,16 @@
 
   html {
     @apply antialiased;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   body {
     @apply bg-background text-foreground;
     margin: 0;
     min-height: 100vh;
+    max-width: 100%;
+    overflow-x: hidden;
     background-image:
       radial-gradient(circle at top left, hsl(var(--hero-start) / 0.75), transparent 34%),
       radial-gradient(circle at top right, hsl(var(--hero-end) / 0.55), transparent 28%),

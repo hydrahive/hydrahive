@@ -514,7 +514,7 @@ export function MyAgentPage() {
                       <div key={msg.id} className="flex justify-center">
                         <div className="flex max-w-[90%] items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                           <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary/60" />
-                          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5">
+                          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5 overflow-x-auto">
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
                           </div>
                         </div>
@@ -528,8 +528,8 @@ export function MyAgentPage() {
                             <Bot className="h-4 w-4 text-primary" />
                           </div>
                         )}
-                        <div className="max-w-[85%]">
-                          <div className={`rounded-[22px] px-4 py-3 text-sm break-words shadow-sm ${
+                        <div className="max-w-[85%] min-w-0">
+                          <div className={`rounded-[22px] px-4 py-3 text-sm break-words shadow-sm overflow-x-auto ${
                             msg.role === "user"
                               ? "bg-primary text-primary-foreground"
                               : "border border-border/60 bg-background/90 prose prose-sm max-w-none dark:prose-invert"
