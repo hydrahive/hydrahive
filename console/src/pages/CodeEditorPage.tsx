@@ -8,6 +8,7 @@ interface CodeserverStatus {
   version: string;
   port: number;
   url: string;
+  password?: string | null;
 }
 
 export function CodeEditorPage() {
@@ -170,6 +171,13 @@ export function CodeEditorPage() {
             {isRunning ? t("codeEditor.statusRunning") : t("codeEditor.statusStopped")}
           </span>
         </div>
+
+        {status.password && (
+          <div className="flex items-center gap-3 rounded-md bg-muted px-3 py-2">
+            <span className="text-xs text-muted-foreground shrink-0">{t("codeEditor.password")}</span>
+            <code className="text-sm font-mono select-all">{status.password}</code>
+          </div>
+        )}
 
         {isRunning && (
           <a

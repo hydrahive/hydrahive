@@ -998,7 +998,8 @@
     "statusRunning": "Active",
     "statusStopped": "Stopped",
     "openBtn": "Open Code Editor",
-    "notRunning": "Service is not running. Please check the system log."
+    "notRunning": "Service is not running. Please check the system log.",
+    "password": "Password"
   },
   "schedules": {
     "title": "Scheduled Tasks",
