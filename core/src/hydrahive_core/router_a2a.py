@@ -260,3 +260,29 @@ def register_a2a_routes(
             "agents":      data.get("agents", []),
             "error":       data.get("error", "") if not ok else "",
         }
+
+    class A2ASendRequest(BaseModel):
+        agent_id:    str
+        message:     str
+        sender_name: str = "HydraHive-Admin"
+
+    @admin_router.post("/admin/a2a/send/{name}")
+    async def send_task(name: str, body: A2ASendRequest, _a=Depends(require_admin)):
+        """Sendet einen Test-Task an einen Remote-Peer."""
+        cfg = _load_config()
+        peers = cfg.get("peers", [])
+        peer = next((p for p in peers if p.get("name") == name), None)
+        if not peer:
+            raise HTTPException(404, f"Peer '{name}' nicht gefunden")
+
+        url = peer["url"].rstrip("/") + "/a2a/tasks/send"
+        secret = peer.get("secret", "")
+        payload = {
+            "agent_id":    body.agent_id,
+            "message":     body.message,
+            "sender_name": body.sender_name,
+        }
+        status, data = await _post_a2a(url, secret, payload, timeout=60)
+        if status not in (200, 201):
+            raise HTTPException(status or 502, data.get("error", "Fehler beim Senden"))
+        return {"ok": True, "response": data.get("response", ""), "status": status}

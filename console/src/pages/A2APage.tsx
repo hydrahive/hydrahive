@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Globe, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { Globe, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronUp, Eye, EyeOff, Send } from "lucide-react";
 import { api, A2APeer, A2APeersResponse, A2ATestResult } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -22,6 +22,10 @@ export function A2APage() {
   const [testing,     setTesting]     = useState<string | null>(null);
 
   const [deletingPeer, setDeletingPeer] = useState<string | null>(null);
+
+  const [sendForm,    setSendForm]    = useState({ peer: "", agent_id: "", message: "" });
+  const [sending,     setSendingTask] = useState(false);
+  const [sendResult,  setSendResult]  = useState<{ ok: boolean; response: string; error?: string } | null>(null);
 
   async function load() {
     try {
@@ -69,6 +73,19 @@ export function A2APage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : t("a2a.deleteError"));
     } finally { setDeletingPeer(null); }
+  }
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sendForm.peer || !sendForm.agent_id.trim() || !sendForm.message.trim()) return;
+    setSendingTask(true);
+    setSendResult(null);
+    try {
+      const r = await api.a2aSendTask(sendForm.peer, sendForm.agent_id.trim(), sendForm.message.trim());
+      setSendResult({ ok: true, response: r.response });
+    } catch (e) {
+      setSendResult({ ok: false, response: "", error: e instanceof Error ? e.message : "Fehler" });
+    } finally { setSendingTask(false); }
   }
 
   async function handleTest(name: string) {
@@ -281,6 +298,75 @@ export function A2APage() {
           </div>
         )}
       </div>
+
+      {/* ── Test-Task senden ─────────────────────────────────────────── */}
+      {(data?.peers ?? []).length > 0 && (
+        <div className="section-card p-5 space-y-4">
+          <h2 className="text-sm font-semibold">Test-Task senden</h2>
+          <p className="text-xs text-muted-foreground">Sendet einen echten Task an einen Agenten auf dem Remote-Peer und zeigt die Antwort.</p>
+          <form onSubmit={handleSend} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Peer</label>
+                <select
+                  value={sendForm.peer}
+                  onChange={e => setSendForm(f => ({ ...f, peer: e.target.value }))}
+                  className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                >
+                  <option value="">— Peer wählen —</option>
+                  {data!.peers.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Agent-ID auf Remote</label>
+                <input
+                  value={sendForm.agent_id}
+                  onChange={e => setSendForm(f => ({ ...f, agent_id: e.target.value }))}
+                  placeholder="z.B. castiel"
+                  className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Nachricht</label>
+              <textarea
+                value={sendForm.message}
+                onChange={e => setSendForm(f => ({ ...f, message: e.target.value }))}
+                placeholder="Sag etwas kurzes, z.B. 'Antworte mit einem Satz über dich.'"
+                rows={2}
+                className="w-full rounded-xl border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={sending || !sendForm.peer || !sendForm.agent_id.trim() || !sendForm.message.trim()}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {sending ? "Sende…" : "Task senden"}
+            </button>
+          </form>
+          {sendResult && (
+            <div className={`rounded-xl px-4 py-3 text-sm ${sendResult.ok ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
+              {sendResult.ok ? (
+                <>
+                  <div className="flex items-center gap-1.5 mb-2 font-medium text-xs">
+                    <CheckCircle className="h-3.5 w-3.5" /> Antwort vom Remote-Agent:
+                  </div>
+                  <p className="whitespace-pre-wrap text-xs">{sendResult.response || "(leer)"}</p>
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <XCircle className="h-3.5 w-3.5" /> {sendResult.error}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="section-card p-5 space-y-3">
         <h2 className="text-sm font-semibold">{t("a2a.toolUsage")}</h2>

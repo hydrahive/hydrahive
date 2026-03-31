@@ -215,6 +215,8 @@ export const api = {
   a2aUpsertPeer:  (d: A2APeer) => api.put<{ok:boolean;action:string}>("/admin/a2a/peers", d),
   a2aDeletePeer:  (name: string) => api.delete<{ok:boolean}>(`/admin/a2a/peers/${name}`),
   a2aTestPeer:    (name: string) => api.post<A2ATestResult>(`/admin/a2a/test/${name}`, {}),
+  a2aSendTask:    (peer: string, agent_id: string, message: string) =>
+    api.post<{ok:boolean;response:string;status:number}>(`/admin/a2a/send/${peer}`, { agent_id, message }),
   // HydraHub
   hubIndex:     () => api.get<HubIndex>("/hub/index"),
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
