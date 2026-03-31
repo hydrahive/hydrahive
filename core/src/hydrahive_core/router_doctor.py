@@ -73,8 +73,8 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
     @admin_router.post("/admin/doctor/fix/{fix_id}")
     async def run_fix(fix_id: str, _a=Depends(require_admin)):
         from fastapi import HTTPException as _HTTP
-        if fix_id == "nginx_a2a":
-            return await _fix_nginx_a2a()
+        if fix_id in ("nginx_a2a", "nginx_projects", "nginx_upload"):
+            return await _fix_nginx()
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -295,8 +295,8 @@ def _check_nginx_a2a() -> list[dict]:
         return [_check("Nginx: A2A-Proxy", "warn", f"Konfig nicht lesbar: {e}")]
 
 
-async def _fix_nginx_a2a() -> dict:
-    """Kopiert hydrahive-console.nginx → sites-enabled und lädt nginx neu."""
+async def _fix_nginx() -> dict:
+    """Führt 16_nginx_update.sh aus — injiziert fehlende nginx-Regeln idempotent."""
     script = Path("/opt/hydrahive/installer/modules/16_nginx_update.sh")
     if not script.exists():
         return {"ok": False, "error": "Fix-Script nicht gefunden — bitte zuerst ein Update ausführen"}
@@ -314,23 +314,10 @@ async def _fix_nginx_a2a() -> dict:
 
 
 async def _check_agentlink() -> list[dict]:
-    """Prüft AgentLink-Service, Redis und PostgreSQL."""
+    """Prüft AgentLink Port + Health-Endpoint (Service-Status ist in _check_services)."""
     import socket
     results = []
 
-    # AgentLink Service
-    try:
-        r = subprocess.run(["systemctl", "is-active", "hydrahive-agentlink"],
-                           capture_output=True, text=True, timeout=5)
-        if r.stdout.strip() == "active":
-            results.append(_check("Service: AgentLink", "ok", "aktiv (hydrahive-agentlink)"))
-        else:
-            results.append(_check("Service: AgentLink", "error", "nicht aktiv",
-                                  "sudo systemctl start hydrahive-agentlink"))
-    except Exception:
-        results.append(_check("Service: AgentLink", "warn", "systemctl nicht verfügbar"))
-
-    # AgentLink Port + Health
     try:
         with socket.create_connection(("127.0.0.1", 8010), timeout=2):
             pass
@@ -348,28 +335,6 @@ async def _check_agentlink() -> list[dict]:
         results.append(_check("AgentLink: Health", "error", f"nicht erreichbar: {e}",
                               "sudo bash /opt/hydrahive/installer/modules/11_agentlink.sh"))
 
-    # Redis
-    try:
-        r = subprocess.run(["systemctl", "is-active", "redis-server"],
-                           capture_output=True, text=True, timeout=5)
-        active = r.stdout.strip() == "active"
-        results.append(_check("Service: Redis", "ok" if active else "error",
-                              "aktiv" if active else "nicht aktiv",
-                              "" if active else "sudo systemctl start redis-server"))
-    except Exception:
-        results.append(_check("Service: Redis", "warn", "systemctl nicht verfügbar"))
-
-    # PostgreSQL
-    try:
-        r = subprocess.run(["systemctl", "is-active", "postgresql"],
-                           capture_output=True, text=True, timeout=5)
-        active = r.stdout.strip() == "active"
-        results.append(_check("Service: PostgreSQL", "ok" if active else "error",
-                              "aktiv" if active else "nicht aktiv",
-                              "" if active else "sudo systemctl start postgresql"))
-    except Exception:
-        results.append(_check("Service: PostgreSQL", "warn", "systemctl nicht verfügbar"))
-
     return results
 
 
@@ -384,7 +349,8 @@ def _check_nginx_projects() -> list[dict]:
         else:
             results.append(_check("Nginx: /projects/", "error",
                                   "Location-Block fehlt — Agenten-Dateien nicht erreichbar",
-                                  "Update ausführen (nginx-Config wird automatisch korrigiert)"))
+                                  "Fix-Button klicken um nginx automatisch zu aktualisieren",
+                                  fix="nginx_projects"))
 
     # www-data in hydrahive-Gruppe?
     try:
@@ -418,29 +384,39 @@ def _check_nginx_upload_limit() -> list[dict]:
         return [_check(
             "Nginx: Upload-Limit", "warn",
             "client_max_body_size fehlt — Agent-Import > 1MB schlägt fehl",
-            "Update ausführen (nginx-Config wird automatisch korrigiert)",
+            "Fix-Button klicken um nginx automatisch zu aktualisieren",
+            fix="nginx_upload",
         )]
     except Exception as e:
         return [_check("Nginx: Upload-Limit", "warn", str(e))]
 
 
 def _check_llm_config() -> list[dict]:
-    """Prüft ob LLM-Config vorhanden und nicht leer ist."""
-    results = []
-    for path in [Path("/etc/hydrahive/llm_config.json"), Path("/etc/hydrahive/llm_env")]:
-        if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8").strip()
-                if not content or content in ("{}", ""):
-                    results.append(_check(f"LLM: {path.name}", "warn", "Datei leer — kein LLM konfiguriert",
-                                          "LLM-Key über die Konsole einrichten"))
-                else:
-                    results.append(_check(f"LLM: {path.name}", "ok", "konfiguriert"))
-            except Exception as e:
-                results.append(_check(f"LLM: {path.name}", "warn", str(e)))
-        else:
-            results.append(_check(f"LLM: {path.name}", "warn", "nicht vorhanden"))
-    return results
+    """Prüft ob mindestens ein LLM-Provider aktiv konfiguriert ist."""
+    config_path = Path("/etc/hydrahive/llm_config.json")
+    if not config_path.exists():
+        return [_check("LLM: Provider-Config", "warn",
+                       "llm_config.json fehlt — noch kein LLM konfiguriert",
+                       "Einstellungen → LLM-Provider")]
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        providers = data.get("providers", {})
+        # Provider mit api_key
+        with_key = [n for n, c in providers.items() if c.get("enabled") and c.get("api_key")]
+        # OAuth-Provider (claude_max) haben keinen api_key
+        oauth = [n for n, c in providers.items() if c.get("enabled") and not c.get("api_key")]
+        active = with_key + oauth
+        if active:
+            return [_check("LLM: Provider-Config", "ok", f"Aktiv: {', '.join(active)}")]
+        if providers:
+            return [_check("LLM: Provider-Config", "warn",
+                           "Provider vorhanden aber alle deaktiviert",
+                           "Einstellungen → LLM-Provider → aktivieren")]
+        return [_check("LLM: Provider-Config", "warn",
+                       "Kein Provider konfiguriert",
+                       "Einstellungen → LLM-Provider")]
+    except Exception as e:
+        return [_check("LLM: Provider-Config", "warn", f"Config nicht lesbar: {e}")]
 
 
 def _check_vpn() -> list[dict]:

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# 16_nginx_update.sh — fehlende A2A-Proxy-Regeln in bestehende nginx-Konfig einfügen
-# Wird vom Doctor-Fix-Endpoint aufgerufen.
-# Wichtig: ersetzt die Konfig NICHT — injiziert nur die fehlenden location-Blöcke.
+# 16_nginx_update.sh — fehlende nginx-Regeln in bestehende Konfig einfügen
+# Wird vom Doctor-Fix-Endpoint aufgerufen (idempotent).
 set -euo pipefail
 
 TARGET="/etc/nginx/sites-enabled/hydrahive-console"
@@ -9,21 +8,22 @@ BACKUP="${TARGET}.bak.$$"
 
 [ -f "${TARGET}" ] || { echo "FEHLER: nginx-Site nicht gefunden: ${TARGET}"; exit 1; }
 
-# Prüfen ob Regeln bereits vorhanden
-HAS_WELL_KNOWN=$(grep -c "\.well-known" "${TARGET}" 2>/dev/null || true)
-HAS_A2A=$(grep -c "/a2a/" "${TARGET}" 2>/dev/null || true)
-
-if [ "${HAS_WELL_KNOWN}" -gt 0 ] && [ "${HAS_A2A}" -gt 0 ]; then
-    echo "A2A-Regeln bereits vorhanden — nichts zu tun"
-    exit 0
-fi
-
-# Backup
+CHANGED=0
 cp "${TARGET}" "${BACKUP}"
-echo "Backup: ${BACKUP}"
 
-# A2A-Blöcke als Marker vor dem letzten } einfügen
-A2A_BLOCK='
+restore_and_exit() {
+    echo "FEHLER: nginx -t fehlgeschlagen — stelle Backup wieder her"
+    cp "${BACKUP}" "${TARGET}"
+    rm -f "${BACKUP}"
+    exit 1
+}
+
+# --- 1. A2A-Regeln ---
+HAS_WELL_KNOWN=$(grep -c "\.well-known" "${TARGET}" 2>/dev/null || true)
+HAS_A2A=$(grep -c "location /a2a/" "${TARGET}" 2>/dev/null || true)
+
+if [ "${HAS_WELL_KNOWN}" -eq 0 ] || [ "${HAS_A2A}" -eq 0 ]; then
+    A2A_BLOCK='
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
     location /.well-known/ {
         proxy_pass         http://127.0.0.1:8765/.well-known/;
@@ -46,42 +46,96 @@ A2A_BLOCK='
         proxy_connect_timeout 5s;
     }
 '
-
-# Letztes `}` (Ende des letzten server-Blocks) durch A2A-Blöcke + `}` ersetzen
-python3 - "${TARGET}" "${A2A_BLOCK}" << 'PYEOF'
+    python3 - "${TARGET}" "${A2A_BLOCK}" << 'PYEOF'
 import sys, pathlib
 target = pathlib.Path(sys.argv[1])
 block  = sys.argv[2]
 content = target.read_text()
-# Letztes } im File ersetzen
 idx = content.rfind("}")
 if idx == -1:
-    print("FEHLER: Kein schliessender } gefunden", file=sys.stderr)
-    sys.exit(1)
-new_content = content[:idx] + block + "\n}\n"
-target.write_text(new_content)
+    print("FEHLER: Kein schliessender } gefunden", file=sys.stderr); sys.exit(1)
+target.write_text(content[:idx] + block + "\n}\n")
 PYEOF
-
-echo "A2A-Blöcke eingefügt"
-
-# nginx-Konfig testen
-if ! nginx -t 2>&1; then
-    echo "FEHLER: nginx -t fehlgeschlagen — stelle Backup wieder her"
-    cp "${BACKUP}" "${TARGET}"
-    rm -f "${BACKUP}"
-    echo "Backup wiederhergestellt — nginx-Konfig unverändert"
-    exit 1
+    CHANGED=1
+    echo "A2A-Blöcke eingefügt"
+else
+    echo "A2A-Regeln bereits vorhanden"
 fi
 
-# nginx neu laden
+# --- 2. /projects/ Block ---
+HAS_PROJECTS=$(grep -c "location /projects/" "${TARGET}" 2>/dev/null || true)
+
+if [ "${HAS_PROJECTS}" -eq 0 ]; then
+    PROJECTS_BLOCK='
+    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar
+    location /projects/ {
+        alias /projects/;
+        autoindex on;
+        autoindex_exact_size off;
+        add_header Cache-Control "no-store";
+    }
+'
+    python3 - "${TARGET}" "${PROJECTS_BLOCK}" << 'PYEOF'
+import sys, pathlib
+target = pathlib.Path(sys.argv[1])
+block  = sys.argv[2]
+content = target.read_text()
+idx = content.rfind("}")
+if idx == -1:
+    print("FEHLER: Kein schliessender } gefunden", file=sys.stderr); sys.exit(1)
+target.write_text(content[:idx] + block + "\n}\n")
+PYEOF
+    CHANGED=1
+    echo "/projects/-Block eingefügt"
+else
+    echo "/projects/-Block bereits vorhanden"
+fi
+
+# --- 3. client_max_body_size ---
+HAS_MAX_BODY=$(grep -c "client_max_body_size" "${TARGET}" 2>/dev/null || true)
+
+if [ "${HAS_MAX_BODY}" -eq 0 ]; then
+    python3 - "${TARGET}" << 'PYEOF'
+import sys, pathlib
+target = pathlib.Path(sys.argv[1])
+content = target.read_text()
+lines = content.splitlines()
+for i, line in enumerate(lines):
+    if 'server {' in line:
+        lines.insert(i + 1, '    client_max_body_size   50M;')
+        break
+target.write_text('\n'.join(lines) + '\n')
+PYEOF
+    CHANGED=1
+    echo "client_max_body_size 50M eingefügt"
+else
+    echo "client_max_body_size bereits vorhanden"
+fi
+
+# --- 4. www-data in hydrahive-Gruppe ---
+if getent group hydrahive > /dev/null 2>&1; then
+    usermod -aG hydrahive www-data 2>/dev/null || true
+    echo "www-data zur hydrahive-Gruppe hinzugefügt/bestätigt"
+fi
+
+# --- nginx testen + neu laden ---
+if [ "${CHANGED}" -eq 0 ]; then
+    echo "Alle nginx-Regeln bereits vorhanden — nichts zu tun"
+    rm -f "${BACKUP}"
+    exit 0
+fi
+
+if ! nginx -t 2>&1; then
+    restore_and_exit
+fi
+
 if ! systemctl reload nginx; then
     echo "FEHLER: nginx reload fehlgeschlagen — stelle Backup wieder her"
     cp "${BACKUP}" "${TARGET}"
     rm -f "${BACKUP}"
     systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
-    echo "Backup wiederhergestellt"
     exit 1
 fi
 
 rm -f "${BACKUP}"
-echo "nginx neu geladen — A2A-Proxy-Regeln aktiv"
+echo "nginx neu geladen — alle Regeln aktiv"
