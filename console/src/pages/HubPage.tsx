@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap } from "lucide-react";
+import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle } from "lucide-react";
 import { api, type HubPackage, type HubInstalledEntry, type ClawhubSkillItem, type ClawhubPackageItem } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -671,42 +671,132 @@ function HydraHubTab() {
   );
 }
 
+// ── HydraHub Plugins Tab ──────────────────────────────────────────────────────
+
+function HubPluginsTab() {
+  const [plugins, setPlugins]       = useState<HubPackage[]>([]);
+  const [installed, setInstalled]   = useState<Set<string>>(new Set());
+  const [loading, setLoading]       = useState(true);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try {
+      const [idx, inst] = await Promise.all([api.hubIndex(), api.hubInstalled()]);
+      setPlugins(idx.packages.filter((p: any) => p.type === "plugin"));
+      const instArr = Array.isArray(inst) ? inst : [];
+      setInstalled(new Set(instArr.map((i: any) => i.id)));
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function installPlugin(pkg: HubPackage) {
+    setInstalling(pkg.id); setError(null);
+    try {
+      await api.hubInstall({ id: pkg.id });
+      const inst = await api.hubInstalled();
+      setInstalled(new Set((Array.isArray(inst) ? inst : []).map((i: any) => i.id)));
+    } catch (e: any) { setError(e.message); }
+    finally { setInstalling(null); }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden p-4 gap-4">
+      <div className="flex items-center justify-between flex-shrink-0">
+        <p className="text-sm text-muted-foreground">
+          {plugins.length > 0 ? `${plugins.length} Plugin(s) verfügbar` : "Keine Plugins im Hub"}
+        </p>
+        <button onClick={load} disabled={loading} className="p-2 rounded-xl border border-border/50 hover:bg-muted/50 disabled:opacity-40">
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {loading && plugins.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">Lade...</div>
+        ) : plugins.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">Noch keine Plugins im Hub</div>
+        ) : (
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {plugins.map(pkg => {
+              const isInstalled = installed.has(pkg.id);
+              return (
+                <div key={pkg.id} className="rounded-2xl border border-border/50 bg-card/80 p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-2xl leading-none">{pkg.icon}</span>
+                    {isInstalled && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
+                  </div>
+                  <div className="font-medium text-sm mb-1">{pkg.name}</div>
+                  <div className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2.5rem]">{pkg.description}</div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {pkg.tags.map(t => (
+                      <span key={t} className="text-xs px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">{t}</span>
+                    ))}
+                  </div>
+                  {isInstalled ? (
+                    <div className="flex items-center gap-2 text-xs text-green-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Installiert
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => installPlugin(pkg)}
+                      disabled={installing === pkg.id}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    >
+                      {installing === pkg.id
+                        ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Installiere...</>
+                        : <><Download className="h-3.5 w-3.5" />Installieren</>
+                      }
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
 export function HubPage() {
-  const [activeTab, setActiveTab] = useState<"hydrahub"|"clawhub">("hydrahub");
+  const [activeTab, setActiveTab] = useState<"hydrahub"|"plugins"|"clawhub">("hydrahub");
+
+  const tabCls = (t: string) => `px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+    ${activeTab === t
+      ? "bg-background border border-b-background border-border/50 -mb-px text-foreground"
+      : "text-muted-foreground hover:text-foreground"}`;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ── Header mit Tab-Navigation ── */}
       <div className="px-6 pt-6 pb-0 border-b border-border/40 flex-shrink-0">
         <h1 className="text-2xl font-bold tracking-tight mb-4">HydraHub</h1>
         <div className="flex gap-1">
-          <button
-            onClick={() => setActiveTab("hydrahub")}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-              ${activeTab === "hydrahub"
-                ? "bg-background border border-b-background border-border/50 -mb-px text-foreground"
-                : "text-muted-foreground hover:text-foreground"}`}
-          >
-            HydraHub Pakete
+          <button onClick={() => setActiveTab("hydrahub")} className={tabCls("hydrahub")}>
+            Agenten
           </button>
-          <button
-            onClick={() => setActiveTab("clawhub")}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-1.5
-              ${activeTab === "clawhub"
-                ? "bg-background border border-b-background border-border/50 -mb-px text-foreground"
-                : "text-muted-foreground hover:text-foreground"}`}
-          >
+          <button onClick={() => setActiveTab("plugins")} className={tabCls("plugins") + " flex items-center gap-1.5"}>
+            <Puzzle className="h-3.5 w-3.5 text-primary" />
+            Plugins
+          </button>
+          <button onClick={() => setActiveTab("clawhub")} className={tabCls("clawhub") + " flex items-center gap-1.5"}>
             <Zap className="h-3.5 w-3.5 text-amber-500" />
             ClawhHub
           </button>
         </div>
       </div>
 
-      {/* ── Tab Content ── */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === "hydrahub" ? <HydraHubTab /> : <ClawhubTab />}
+        {activeTab === "hydrahub" ? <HydraHubTab /> : activeTab === "plugins" ? <HubPluginsTab /> : <ClawhubTab />}
       </div>
     </div>
   );

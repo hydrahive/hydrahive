@@ -80,19 +80,73 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     @router.get("/hub/installed")
     async def hub_installed(_auth=Depends(require_admin)):
-        """Gibt zurück welche Hub-Pakete bereits installiert sind."""
+        """Gibt zurück welche Hub-Pakete bereits installiert sind (Agents + Plugins)."""
         installed = []
+        # Agents
         base = Path(agents_dir)
-        if not base.exists():
-            return installed
-        for agent_dir in base.iterdir():
-            meta_path = agent_dir / ".hub_meta.json"
-            if meta_path.exists():
-                try:
-                    installed.append(json.loads(meta_path.read_text()))
-                except Exception:
-                    pass
+        if base.exists():
+            for agent_dir in base.iterdir():
+                meta_path = agent_dir / ".hub_meta.json"
+                if meta_path.exists():
+                    try:
+                        installed.append(json.loads(meta_path.read_text()))
+                    except Exception:
+                        pass
+        # Plugins
+        plugins_base = Path("/plugins")
+        if plugins_base.exists():
+            for plugin_dir in plugins_base.iterdir():
+                meta_path = plugin_dir / ".hub_meta.json"
+                if meta_path.exists():
+                    try:
+                        installed.append(json.loads(meta_path.read_text()))
+                    except Exception:
+                        pass
         return installed
+
+    async def _hub_install_plugin(pkg: dict, pkg_path: str):
+        """Installiert ein Plugin vom Hub nach /plugins/<id>/."""
+        plugin_id = pkg["id"]
+        target = Path("/plugins") / plugin_id
+        if target.exists():
+            raise HTTPException(409, f"Plugin '{plugin_id}' existiert bereits")
+
+        # Dateien vom Hub laden
+        try:
+            plugin_yaml = _fetch_text(f"{HUB_RAW_BASE}/{pkg_path}/plugin.yaml")
+            plugin_py = _fetch_text(f"{HUB_RAW_BASE}/{pkg_path}/plugin.py")
+        except Exception as e:
+            raise HTTPException(502, f"Plugin-Dateien konnten nicht geladen werden: {e}")
+
+        # Verzeichnis anlegen + Dateien schreiben
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "plugin.yaml").write_text(plugin_yaml, encoding="utf-8")
+        (target / "plugin.py").write_text(plugin_py, encoding="utf-8")
+        (target / ".hub_meta.json").write_text(
+            json.dumps({**pkg, "installed_plugin_id": plugin_id}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # Berechtigungen
+        try:
+            subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True)
+        except Exception:
+            pass
+
+        # Plugin sofort laden
+        from .plugin_manager import plugin_manager
+        try:
+            plugin_manager.enable_plugin(plugin_id)
+        except Exception as e:
+            logger.warning("Plugin '%s' konnte nicht direkt geladen werden: %s", plugin_id, e)
+
+        logger.info("Hub-Plugin '%s' installiert", plugin_id)
+        return {
+            "installed": True,
+            "type": "plugin",
+            "plugin_id": plugin_id,
+            "name": pkg.get("name"),
+        }
 
     @router.post("/hub/install")
     async def hub_install(req: InstallRequest, _auth=Depends(require_admin)):
@@ -104,6 +158,10 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         pkg_path = pkg.get("_path", "")
         if not pkg_path:
             raise HTTPException(500, "Paket hat keinen _path — Index beschädigt?")
+
+        # ── Plugin-Install (#110) ────────────────────────────────────────
+        if pkg.get("type") == "plugin":
+            return await _hub_install_plugin(pkg, pkg_path)
 
         # Dateien vom Hub laden
         try:
