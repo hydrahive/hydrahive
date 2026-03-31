@@ -356,7 +356,7 @@ export function A2APage() {
                   <div className="flex items-center gap-1.5 mb-2 font-medium text-xs">
                     <CheckCircle className="h-3.5 w-3.5" /> Antwort vom Remote-Agent:
                   </div>
-                  <p className="whitespace-pre-wrap text-xs">{sendResult.response || "(leer)"}</p>
+                  <p className="whitespace-pre-wrap text-xs">{typeof sendResult.response === "string" ? sendResult.response : JSON.stringify(sendResult.response, null, 2) || "(leer)"}</p>
                 </>
               ) : (
                 <div className="flex items-center gap-1.5">
