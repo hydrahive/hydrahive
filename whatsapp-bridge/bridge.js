@@ -34,8 +34,15 @@ function detectChromium() {
     }
     console.warn(`[bridge] PUPPETEER_EXECUTABLE_PATH=${process.env.PUPPETEER_EXECUTABLE_PATH} existiert nicht — suche weiter`)
   }
-  // Puppeteer-Cache: heruntergeladenen Chrome suchen
+  // Puppeteer-Cache: chrome-headless-shell bevorzugen (kein crashpad, ideal für Server)
   const cacheDir = process.env.PUPPETEER_CACHE_DIR || path.join(process.env.HOME || '/root', '.cache', 'puppeteer')
+  try {
+    const shellDirs = fs.readdirSync(path.join(cacheDir, 'chrome-headless-shell')).sort().reverse()
+    for (const ver of shellDirs) {
+      const bin = path.join(cacheDir, 'chrome-headless-shell', ver, 'chrome-headless-shell-linux64', 'chrome-headless-shell')
+      if (fs.existsSync(bin)) return bin
+    }
+  } catch {}
   try {
     const chromeDirs = fs.readdirSync(path.join(cacheDir, 'chrome')).sort().reverse()
     for (const ver of chromeDirs) {

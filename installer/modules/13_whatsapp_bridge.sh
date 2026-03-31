@@ -101,9 +101,26 @@ PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
        node -e "const p=require('${BRIDGE_INSTALL_DIR}/node_modules/puppeteer'); p.launch({headless:true,args:['--no-sandbox']}).then(b=>b.close()).catch(()=>{})" 2>/dev/null \
     || true  # Fehler nicht fatal — System-Chromium als Fallback
 
-# Pfad zum heruntergeladenen Chrome ermitteln
+# Pfad ermitteln: chrome-headless-shell bevorzugen (kein crashpad, ideal für Server)
 _puppeteer_chrome="$(PUPPETEER_CACHE_DIR="${BRIDGE_CHROME_CACHE}" \
-    node -e "try{const p=require('${BRIDGE_INSTALL_DIR}/node_modules/puppeteer');console.log(p.executablePath())}catch(e){}" 2>/dev/null || echo '')"
+    node -e "
+try {
+  const fs = require('fs'), path = require('path');
+  const cache = '${BRIDGE_CHROME_CACHE}';
+  // chrome-headless-shell first (no crashpad)
+  const shellBase = path.join(cache, 'chrome-headless-shell');
+  if (fs.existsSync(shellBase)) {
+    const vers = fs.readdirSync(shellBase).sort().reverse();
+    for (const v of vers) {
+      const b = path.join(shellBase, v, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
+      if (fs.existsSync(b)) { console.log(b); process.exit(0); }
+    }
+  }
+  // fallback: full chrome
+  const p = require('${BRIDGE_INSTALL_DIR}/node_modules/puppeteer');
+  console.log(p.executablePath());
+} catch(e) {}
+" 2>/dev/null || echo '')"
 
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_INSTALL_DIR}/node_modules"
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${BRIDGE_CHROME_CACHE}" 2>/dev/null || true
