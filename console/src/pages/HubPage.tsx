@@ -46,8 +46,9 @@ function ClawhubTab() {
 
   // Load agents + clawhub status
   useEffect(() => {
-    api.get<{agents: {id:string}[]}>("/agents").then(d => {
-      setAgents(d.agents.map((a: any) => a.id));
+    // /agents gibt Dict {agentId: {...}} zurück
+    api.get<Record<string, unknown>>("/agents").then(d => {
+      setAgents(Object.keys(d).sort());
     }).catch(() => {});
     api.clawhubStatus().then(d => setCliInstalled(d.installed)).catch(() => setCliInstalled(false));
   }, []);
