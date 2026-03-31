@@ -112,6 +112,10 @@ rsync -av --no-owner --no-group --ignore-existing \
 $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} /agents/"
 
 echo ""
+echo "==> [5f/5] nginx-Config sicherstellen (/projects/, A2A, client_max_body_size)"
+$SSH "$VM" "sudo bash ${INSTALL_DIR}/installer/modules/16_nginx_update.sh 2>&1 | sed 's/^/   /'" || echo "   (nginx-Update übersprungen — kein Fehler)"
+
+echo ""
 echo "==> [6/5] Gitea-Status prüfen"
 $SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
 

@@ -892,6 +892,7 @@ class Orchestrator:
                         # Agentic Tool-Loop für OAuth-Streaming
                         last_tool_signature: tuple[str, ...] | None = None
                         repeated_tool_signature_count = 0
+                        _oauth_file_read_cache: dict[str, str] = {}  # path → first result (dedup)
                         for _round in range(boss_cfg.max_tool_rounds):
                             async with client.messages.stream(**kwargs) as stream:
                                 async for text in stream.text_stream:
@@ -993,13 +994,30 @@ class Orchestrator:
                                     tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
                                     if tool:
                                         try:
-                                            result = await self._execute_tool(
-                                                tool,
-                                                boss_cfg=boss_cfg,
-                                                project_id=project_id,
-                                                tool_name=block.name,
-                                                tool_input=block.input,
-                                            )
+                                            # file_read Deduplication
+                                            if block.name == "file_read":
+                                                _rpath = (block.input or {}).get("path", "")
+                                                if _rpath and _rpath in _oauth_file_read_cache:
+                                                    result = _oauth_file_read_cache[_rpath]
+                                                    logger.debug("file_read dedup (oauth): '%s'", _rpath)
+                                                else:
+                                                    result = await self._execute_tool(
+                                                        tool,
+                                                        boss_cfg=boss_cfg,
+                                                        project_id=project_id,
+                                                        tool_name=block.name,
+                                                        tool_input=block.input,
+                                                    )
+                                                    if _rpath:
+                                                        _oauth_file_read_cache[_rpath] = result
+                                            else:
+                                                result = await self._execute_tool(
+                                                    tool,
+                                                    boss_cfg=boss_cfg,
+                                                    project_id=project_id,
+                                                    tool_name=block.name,
+                                                    tool_input=block.input,
+                                                )
                                         except Exception as te:
                                             result = {"error": str(te)}
                                     else:
@@ -1272,6 +1290,7 @@ class Orchestrator:
         if _mcp_schemas:
             litellm_tools = litellm_tools + _mcp_schemas
         _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
+        _file_read_cache: dict[str, str] = {}  # path → first result (dedup across rounds)
         current_messages = list(messages)
         workers_used: list[str] = []
         last_signature: tuple[str, ...] | None = None
@@ -1408,6 +1427,14 @@ class Orchestrator:
                     tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
                     continue
                 try:
+                    # file_read Deduplication: gleiche Datei nicht mehrfach lesen
+                    if tc.function.name == "file_read":
+                        _read_path = args.get("path", "")
+                        if _read_path and _read_path in _file_read_cache:
+                            tool_results[tc.id] = _file_read_cache[_read_path]
+                            logger.debug("file_read dedup: '%s' bereits gelesen", _read_path)
+                            continue
+
                     result = await self._execute_tool(
                         tool,
                         boss_cfg=boss_cfg,
@@ -1415,7 +1442,13 @@ class Orchestrator:
                         tool_name=tc.function.name,
                         tool_input=args,
                     )
-                    tool_results[tc.id] = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
+                    result_str = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
+                    tool_results[tc.id] = result_str
+                    # Cache befüllen
+                    if tc.function.name == "file_read":
+                        _read_path = args.get("path", "")
+                        if _read_path:
+                            _file_read_cache[_read_path] = result_str
                 except Exception as e:
                     logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
                     tool_results[tc.id] = f"[Fehler] {e}"
