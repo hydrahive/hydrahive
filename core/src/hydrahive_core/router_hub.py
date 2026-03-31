@@ -228,6 +228,11 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             return found
         raise FileNotFoundError("clawhub nicht gefunden")
 
+    _CLAWHUB_ENV = {
+        "PATH": "/usr/bin:/usr/local/bin:/bin",
+        "HOME": "/home/hydrahive",
+    }
+
     def _run_clawhub(*args: str, timeout: int = 30) -> tuple[int, str]:
         """Führt 'clawhub <args>' aus und gibt (returncode, stdout) zurück."""
         try:
@@ -235,6 +240,7 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             result = subprocess.run(
                 [bin_path, "--no-input", *args],
                 capture_output=True, text=True, timeout=timeout,
+                env=_CLAWHUB_ENV,
             )
             return result.returncode, result.stdout
         except FileNotFoundError:
@@ -270,22 +276,27 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     @router.post("/hub/clawhub/install-cli")
     async def clawhub_install_cli(_auth=Depends(require_admin)):
-        """Installiert clawhub global via npm."""
+        """Installiert clawhub global via sudo npm."""
         try:
             result = await asyncio.to_thread(
                 subprocess.run,
-                ["npm", "install", "-g", "clawhub@latest"],
+                ["sudo", "/usr/bin/npm", "install", "-g", "clawhub@latest"],
                 capture_output=True, text=True, timeout=120,
+                env={**_CLAWHUB_ENV, "PATH": "/usr/bin:/usr/local/bin:/bin:/usr/sbin"},
             )
+            combined = (result.stdout + result.stderr)
             if result.returncode != 0:
-                raise HTTPException(500, f"npm install fehlgeschlagen: {result.stderr[-300:]}")
+                # npm schreibt Nutzinfos auf stderr → echten Fehler suchen
+                error_lines = [l for l in combined.splitlines() if "npm error" in l and "notice" not in l]
+                err_msg = " | ".join(error_lines[-3:]) or combined[-300:]
+                raise HTTPException(500, f"npm install fehlgeschlagen: {err_msg}")
             global _CLAWHUB_BIN
-            _CLAWHUB_BIN = None  # Cache zurücksetzen
-            return {"ok": True, "output": result.stdout[-500:]}
+            _CLAWHUB_BIN = None  # Cache zurücksetzen damit _find_clawhub neu sucht
+            return {"ok": True, "output": combined[-400:]}
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "npm install Timeout")
         except FileNotFoundError:
-            raise HTTPException(503, "npm nicht gefunden")
+            raise HTTPException(503, "npm/sudo nicht gefunden")
 
     @router.get("/hub/clawhub/skills")
     async def clawhub_skills(q: str = "", _auth=Depends(require_admin)):
