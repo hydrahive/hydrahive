@@ -664,6 +664,7 @@
     "whatsappWaitingQr": "QR-Code scannen …",
     "whatsappReconnecting": "Verbindung wird hergestellt …",
     "whatsappBridgeDown": "WhatsApp Bridge nicht erreichbar",
+    "whatsappBridgeError": "Fehler beim Start der WhatsApp-Session",
     "whatsappDisconnected": "Nicht verbunden",
     "whatsappQrHint": "WhatsApp öffnen → Verknüpfte Geräte → Gerät hinzufügen → QR-Code scannen",
     "whatsappWaitScan": "Warte auf Scan …",

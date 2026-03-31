@@ -373,9 +373,10 @@ export interface WhatsAppConfig {
 
 export interface WhatsAppStatus extends Partial<WhatsAppConfig> {
   configured: boolean;
-  status:     "disconnected" | "connecting" | "waiting_qr" | "connected" | "reconnecting" | "bridge_unavailable" | "saved";
+  status:     "disconnected" | "connecting" | "waiting_qr" | "connected" | "reconnecting" | "bridge_unavailable" | "saved" | "error";
   qr:         string | null;
   phone:      string | null;
+  bridge_error?: string | null;
 }
 
 export interface TelegramConfig {

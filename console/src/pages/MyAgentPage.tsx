@@ -2115,6 +2115,7 @@ function WhatsAppTab() {
   const waitingQr   = status?.status === "waiting_qr";
   const reconnecting = status?.status === "reconnecting" || status?.status === "connecting";
   const bridgeDown  = status?.status === "bridge_unavailable";
+  const bridgeError = status?.status === "error" || !!status?.bridge_error;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -2127,25 +2128,31 @@ function WhatsAppTab() {
 
       {/* Status-Badge */}
       {status && (
-        <div className={`flex items-center gap-2 p-3 rounded-md text-xs border ${
+        <div className={`flex flex-col gap-1 p-3 rounded-md text-xs border ${
           connected   ? "bg-green-50 border-green-200 text-green-700" :
           waitingQr   ? "bg-yellow-50 border-yellow-200 text-yellow-700" :
-          bridgeDown  ? "bg-red-50 border-red-200 text-red-700" :
+          bridgeDown || bridgeError ? "bg-red-50 border-red-200 text-red-700" :
                         "bg-muted border-border text-muted-foreground"
         }`}>
-          {connected   ? <CheckCircle className="h-3.5 w-3.5" /> :
-           waitingQr   ? <Sparkles className="h-3.5 w-3.5 animate-pulse" /> :
-           bridgeDown  ? <AlertCircle className="h-3.5 w-3.5" /> :
-                         <WifiOff className="h-3.5 w-3.5" />}
-          <span>
-            {connected    ? t("myAgent.whatsappConnected", { phone: status.phone ? ` · +${status.phone}` : "" }) :
-             waitingQr    ? t("myAgent.whatsappWaitingQr") :
-             reconnecting ? t("myAgent.whatsappReconnecting") :
-             bridgeDown   ? t("myAgent.whatsappBridgeDown") :
-                            t("myAgent.whatsappDisconnected")}
-          </span>
-          {(waitingQr || reconnecting) && (
-            <span className="ml-auto text-xs opacity-60 animate-pulse">●</span>
+          <div className="flex items-center gap-2">
+            {connected   ? <CheckCircle className="h-3.5 w-3.5" /> :
+             waitingQr   ? <Sparkles className="h-3.5 w-3.5 animate-pulse" /> :
+             bridgeDown || bridgeError ? <AlertCircle className="h-3.5 w-3.5" /> :
+                           <WifiOff className="h-3.5 w-3.5" />}
+            <span>
+              {connected    ? t("myAgent.whatsappConnected", { phone: status.phone ? ` · +${status.phone}` : "" }) :
+               waitingQr    ? t("myAgent.whatsappWaitingQr") :
+               reconnecting ? t("myAgent.whatsappReconnecting") :
+               bridgeDown   ? t("myAgent.whatsappBridgeDown") :
+               bridgeError  ? t("myAgent.whatsappBridgeError") :
+                              t("myAgent.whatsappDisconnected")}
+            </span>
+            {(waitingQr || reconnecting) && (
+              <span className="ml-auto text-xs opacity-60 animate-pulse">●</span>
+            )}
+          </div>
+          {bridgeError && status.bridge_error && (
+            <p className="mt-1 font-mono text-xs opacity-80 break-all">{status.bridge_error}</p>
           )}
         </div>
       )}

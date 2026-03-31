@@ -736,6 +736,7 @@ def register_user_integration_routes(
             "configured": True,
             "status": bridge.get("status", "disconnected"),
             "qr": bridge.get("qr"),
+            "bridge_error": bridge.get("error") or None,
             "phone": bridge_phone or cfg.get("phone", ""),
             "private_chats_enabled": cfg.get("private_chats_enabled", True),
             "group_chats_enabled":   cfg.get("group_chats_enabled", False),

@@ -17,12 +17,39 @@ const { Client, LocalAuth, MessageMedia } = pkg
 import QRCode from 'qrcode'
 import fs from 'fs'
 import path from 'path'
+import { execSync } from 'child_process'
 import fetch from 'node-fetch'
 
 const PORT          = parseInt(process.env.BRIDGE_PORT   || '8767')
-const SESSIONS_DIR  = process.env.SESSIONS_DIR            || '/etc/octopos/whatsapp-sessions'
+const SESSIONS_DIR  = process.env.SESSIONS_DIR || process.env.SESSION_DIR || '/etc/octopos/whatsapp-sessions'
 const CORE_URL      = process.env.CORE_URL                || 'http://127.0.0.1:8765'
 const BRIDGE_SECRET = process.env.BRIDGE_SECRET          || ''
+
+// Chromium auto-detektieren wenn PUPPETEER_EXECUTABLE_PATH nicht gesetzt
+function detectChromium() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH
+  const candidates = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/snap/bin/chromium',
+  ]
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p
+  }
+  // which als Fallback
+  try { return execSync('which chromium-browser 2>/dev/null || which chromium 2>/dev/null', { encoding: 'utf8' }).trim() } catch {}
+  return null
+}
+
+const CHROMIUM_PATH = detectChromium()
+if (CHROMIUM_PATH) {
+  console.log(`[bridge] Chromium gefunden: ${CHROMIUM_PATH}`)
+} else {
+  console.warn('[bridge] WARNUNG: Kein Chromium gefunden — WhatsApp-Sessions werden fehlschlagen!')
+  console.warn('[bridge] Bitte installieren: sudo apt-get install -y chromium-browser')
+}
 
 const app = express()
 app.use(express.json({ limit: '10mb' }))
@@ -33,6 +60,13 @@ const sessions = new Map()
 // ── Session-Verwaltung ───────────────────────────────────────────────────────
 
 async function createSession(agentId) {
+  if (!CHROMIUM_PATH) {
+    const err = 'Kein Chromium gefunden — bitte installieren: sudo apt-get install -y chromium-browser'
+    console.error(`[${agentId}] ${err}`)
+    sessions.set(agentId, { status: 'error', qrBase64: null, phone: null, client: null, error: err })
+    return sessions.get(agentId)
+  }
+
   // Alte Session aufräumen falls vorhanden
   const existing = sessions.get(agentId)
   if (existing?.client) {
@@ -44,23 +78,26 @@ async function createSession(agentId) {
   const session = { status: 'connecting', qrBase64: null, phone: null, client: null }
   sessions.set(agentId, session)
 
+  const puppeteerOpts = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+    ],
+  }
+  if (CHROMIUM_PATH) puppeteerOpts.executablePath = CHROMIUM_PATH
+
   const client = new Client({
     authStrategy: new LocalAuth({
       clientId: agentId,
       dataPath: SESSIONS_DIR,
     }),
-    puppeteer: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-      ],
-    },
+    puppeteer: puppeteerOpts,
   })
 
   session.client = client
@@ -201,7 +238,7 @@ app.post('/sessions/:agentId/start', async (req, res) => {
     // Kurz warten damit der erste Status gesetzt wird
     await new Promise(r => setTimeout(r, 500))
     const s = sessions.get(agentId)
-    res.json({ status: s?.status || 'connecting', qr: s?.qrBase64 || null, phone: s?.phone || null })
+    res.json({ status: s?.status || 'connecting', qr: s?.qrBase64 || null, phone: s?.phone || null, error: s?.error || null })
   } catch (e) {
     console.error(`[${agentId}] Session-Start fehlgeschlagen: ${e.message}`)
     res.status(500).json({ error: e.message })
