@@ -112,11 +112,15 @@ success "Node.js-Abhängigkeiten installiert"
 if [ -n "${_puppeteer_chrome}" ] && [ -f "${_puppeteer_chrome}" ]; then
     success "Puppeteer-Chrome verfügbar: ${_puppeteer_chrome}"
     _chromium_bin="${_puppeteer_chrome}"
-    # crashpad_handler deaktivieren — schlägt in Serverumgebungen fehl
+    # crashpad_handler durch No-Op ersetzen — schlägt in Serverumgebungen fehl
+    # (Chrome crasht mit SIGABRT wenn es den Handler nicht starten kann)
     _crashpad_handler="$(dirname "${_puppeteer_chrome}")/chrome_crashpad_handler"
-    if [ -f "${_crashpad_handler}" ]; then
-        chmod -x "${_crashpad_handler}" 2>/dev/null || true
-        info "chrome_crashpad_handler deaktiviert"
+    if [ -f "${_crashpad_handler}" ] && ! grep -q "No-Op" "${_crashpad_handler}" 2>/dev/null; then
+        mv "${_crashpad_handler}" "${_crashpad_handler}.orig" 2>/dev/null || true
+        printf '#!/bin/sh\n# No-Op: crashpad nicht benötigt in Headless-Serverumgebung\nexit 0\n' \
+            > "${_crashpad_handler}"
+        chmod +x "${_crashpad_handler}"
+        info "chrome_crashpad_handler durch No-Op ersetzt"
     fi
 elif [ -n "${_chromium_bin}" ]; then
     warn "Puppeteer-Chrome nicht gefunden — nutze System-Chromium: ${_chromium_bin}"
