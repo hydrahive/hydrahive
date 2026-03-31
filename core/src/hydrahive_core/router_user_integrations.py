@@ -963,7 +963,11 @@ def register_user_integration_routes(
                         _name = _gname(agent_id)
                         message = f"Dein Name ist {_name}.\n{_instr}\n\n" + message
                 if _sub in ("agent_reply", "agent_reply_guided", "forward"):
-                    agent_id = _p.get("agent_id", agent_id)
+                    _new_agent = _p.get("agent_id", "").strip()
+                    if _new_agent:
+                        logger.info("Butler leitet WhatsApp-Nachricht um: %s → %s", agent_id, _new_agent)
+                        agent_id = _new_agent
+                    # else: agent_id bleibt unverändert (leerer Wert in Flow-Config wird ignoriert)
         except Exception as _be:
             logger.warning("Butler-Check fehlgeschlagen: %s", _be)
 
