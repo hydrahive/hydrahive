@@ -4618,9 +4618,7 @@ class DeleteProjectTool(BaseTool):
         stopped_agents = []
         if _admin_runtime and cfg:
             boss_id = cfg.agents.boss
-            handle = _admin_runtime.get_handle(boss_id)
-            if handle:
-                await _admin_runtime.stop_agent(boss_id)
+            if await _admin_runtime.stop_agent_task(boss_id):
                 stopped_agents.append(boss_id)
 
         smb_conf = Path("/etc/samba/smb.conf")
@@ -4638,6 +4636,13 @@ class DeleteProjectTool(BaseTool):
         timestamp = int(_time.time())
         deleted_dir = Path(_admin_projects_dir) / f"_deleted_{target_id}_{timestamp}"
         proj_dir.rename(deleted_dir)
+
+        # Aus In-Memory-Registry entfernen (#106)
+        if _projects_registry:
+            try:
+                _projects_registry._unregister_dir(proj_dir)
+            except Exception as _e:
+                logger.warning("_unregister_dir fehlgeschlagen: %s", _e)
 
         if _audit_log_fn:
             _audit_log_fn("project.delete", target=target_id, project_id=target_id, details={"by_agent": agent_id})

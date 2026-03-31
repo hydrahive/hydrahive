@@ -168,6 +168,28 @@ def register_project_routes(
         if not re.match(r"^[a-z0-9_-]+$", req.id):
             raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
         if projects.get(req.id):
+            # Project already exists — but Gitea repo might be missing (e.g. first creation failed).
+            # Try to ensure the Gitea repo exists before returning 409.
+            try:
+                from .gitea import get_gitea_client
+                import aiohttp as _aiohttp
+                gitea = get_gitea_client()
+                repo_exists = True
+                try:
+                    await gitea.get_repo_info(req.id)
+                except _aiohttp.ClientResponseError as ce:
+                    if ce.status == 404:
+                        repo_exists = False
+                    else:
+                        raise
+                if not repo_exists:
+                    repo = await gitea.create_repo(req.id, description=req.description or "")
+                    webhook_url = f"http://127.0.0.1:8765/webhooks/gitea/{req.id}"
+                    await gitea.create_webhook(req.id, webhook_url)
+                    logger.info("Gitea-Repo nachträglich angelegt für '%s'", req.id)
+                    return {"created": False, "project_id": req.id, "gitea_repo": repo.get("html_url", ""), "gitea_retroactive": True}
+            except Exception as e:
+                logger.warning("Gitea-Retro-Check fehlgeschlagen für '%s': %s", req.id, e)
             raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
         if not discovery.get(req.boss):
             raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht in Discovery")

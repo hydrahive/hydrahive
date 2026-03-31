@@ -376,7 +376,13 @@ def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], lis
     semantic_scores: dict[str, float] = {}
     if all_skills:
         skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
-        raw = score_texts(skill_texts, user_text)
+        # Nicht blockierend aufrufen wenn ein Event-Loop läuft (#94)
+        try:
+            asyncio.get_running_loop()
+            # Async-Kontext: Semantic Scoring überspringen (score_texts würde Event-Loop blockieren)
+            raw: list[float] = []
+        except RuntimeError:
+            raw = score_texts(skill_texts, user_text)
         if raw:
             semantic_scores = {s.skill: raw[i] for i, s in enumerate(all_skills)}
     active = select_skills(all_skills, user_text, semantic_scores=semantic_scores)

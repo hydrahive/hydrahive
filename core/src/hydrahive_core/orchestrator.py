@@ -909,7 +909,7 @@ class Orchestrator:
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
                                 break
-                            _LOOP_EXCLUDE_OAUTH = {"file_write"}
+                            _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
                             signature = tuple(
                                 f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
                                 for block in tool_use_blocks
@@ -954,9 +954,37 @@ class Orchestrator:
 
                             tool_results = []
                             any_tool_error = False
+                            _oauth_loaded_cats: set[str] = locals().get("_oauth_loaded_cats", set())  # type: ignore[assignment]
                             for block in tool_use_blocks:
                                 yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
-                                if block.name.startswith("mcp_") and boss_cfg.mcp_servers:
+                                # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
+                                if block.name == "request_tools":
+                                    try:
+                                        categories = (block.input or {}).get("categories", [])
+                                        new_cats = [c for c in categories if c not in _oauth_loaded_cats]
+                                        added_count = 0
+                                        if new_cats:
+                                            new_schemas = self._category_tools_schema(boss_cfg, execution_mode, new_cats)
+                                            existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
+                                            new_tool_defs = [
+                                                {
+                                                    "name": s["function"]["name"],
+                                                    "description": s["function"].get("description", ""),
+                                                    "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
+                                                }
+                                                for s in new_schemas
+                                                if s["function"]["name"] not in existing_names
+                                            ]
+                                            if new_tool_defs:
+                                                kwargs.setdefault("tools", [])
+                                                kwargs["tools"].extend(new_tool_defs)
+                                                added_count = len(new_tool_defs)
+                                            _oauth_loaded_cats.update(new_cats)
+                                        result = {"ok": True, "categories": categories, "tools_added": added_count,
+                                                  "note": "Tools geladen — direkt verwendbar."}
+                                    except Exception as te:
+                                        result = {"error": f"request_tools: {te}"}
+                                elif block.name.startswith("mcp_") and boss_cfg.mcp_servers:
                                     try:
                                         result = await self._execute_mcp_tool(boss_cfg, block.name, block.input or {})
                                     except Exception as te:
@@ -1444,11 +1472,13 @@ class Orchestrator:
                 logger.warning(
                     "dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"]
                 )
-                tasks.append(asyncio.coroutine(lambda d=d: DispatchResult(
-                    worker_id=d["worker_id"], task=d["task"],
-                    result="", success=False,
-                    error="Agent nicht dem Projekt zugewiesen",
-                ))())
+                async def _rejected(d=d) -> DispatchResult:
+                    return DispatchResult(
+                        worker_id=d["worker_id"], task=d["task"],
+                        result="", success=False,
+                        error="Agent nicht dem Projekt zugewiesen",
+                    )
+                tasks.append(_rejected())
                 continue
             tasks.append(self._run_worker_task(d))
 
