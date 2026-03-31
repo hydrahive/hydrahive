@@ -165,6 +165,30 @@ def _load_workflow_prompt(project_dir) -> str:
     return "\n".join(lines)
 
 
+def _build_worker_context(project_cfg, discovery) -> str:
+    """
+    Baut einen kurzen System-Prompt-Block mit den verfügbaren Worker-IDs
+    und deren Beschreibungen. Verhindert, dass der Boss Worker-Namen halluziniert.
+    """
+    workers = getattr(getattr(project_cfg, "agents", None), "workers", []) or []
+    if not workers:
+        return ""
+    lines = ["## Verfügbare Worker-Agenten",
+             "",
+             "Delegiere Aufgaben mit `dispatch_task(worker_id=..., task=...)`. "
+             "Nur diese Worker-IDs sind gültig:"]
+    for wid in workers:
+        cfg = discovery.get(wid)
+        if cfg:
+            desc = getattr(cfg, "description", "") or getattr(cfg, "identity", wid)
+            lines.append(f"- `{wid}`: {desc}")
+        else:
+            lines.append(f"- `{wid}`")
+    lines.append("")
+    lines.append("Verwende KEINE anderen Worker-IDs — sie existieren nicht.")
+    return "\n".join(lines)
+
+
 class Orchestrator:
     """
     Einer pro Core-Instanz.
@@ -501,6 +525,11 @@ class Orchestrator:
             if wf_text:
                 system_prompt = system_prompt + "\n\n" + wf_text
 
+        # 3c. Worker-Kontext injizieren (verhindert Halluzination von Worker-IDs, #107)
+        worker_ctx = _build_worker_context(project_cfg, self._discovery)
+        if worker_ctx:
+            system_prompt = system_prompt + "\n\n" + worker_ctx
+
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
@@ -677,6 +706,9 @@ class Orchestrator:
         if _refresh:
             content = content.strip()[8:].strip()
         system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+        worker_ctx = _build_worker_context(project_cfg, self._discovery)
+        if worker_ctx:
+            system_prompt = system_prompt + "\n\n" + worker_ctx
         history       = self._sessions.get_context(
             project_id, max_messages=10,
             max_history_tokens=_history_token_budget(boss_cfg.llm.model),

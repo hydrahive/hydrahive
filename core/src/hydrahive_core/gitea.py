@@ -122,7 +122,16 @@ class GiteaClient:
                 json=data,
                 timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
-                resp.raise_for_status()
+                if not resp.ok:
+                    try:
+                        err_body = await resp.json()
+                        msg = err_body.get("message", str(err_body))
+                    except Exception:
+                        msg = await resp.text()
+                    raise aiohttp.ClientResponseError(
+                        resp.request_info, resp.history,
+                        status=resp.status, message=msg,
+                    )
                 if resp.status == 204:
                     return {}
                 return await resp.json()
@@ -244,8 +253,12 @@ class GiteaClient:
             "title": title,
             "body": body,
         }
+        # Gitea erwartet Label-IDs als Integer — String-Labels werden ignoriert
+        # um 422-Fehler zu vermeiden. Labels müssen vorab per /labels aufgelöst werden.
         if labels:
-            data["labels"] = labels
+            int_labels = [l for l in labels if isinstance(l, int)]
+            if int_labels:
+                data["labels"] = int_labels
         return await self._post(f"/repos/{owner}/{repo}/issues", data)
 
     async def comment_issue_for_repo(

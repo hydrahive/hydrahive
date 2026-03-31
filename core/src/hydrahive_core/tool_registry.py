@@ -3210,6 +3210,88 @@ class GitCreatePRTool(BaseTool):
             return {"error": str(e)}
 
 
+class GitMergeTool(BaseTool):
+    """Merged einen Branch in den aktuellen Branch (lokales Git-Merge)."""
+
+    @property
+    def id(self) -> str:   return "git_merge"
+    @property
+    def name(self) -> str: return "Git Merge"
+    @property
+    def description(self) -> str:
+        return (
+            "Merged einen anderen Branch in den aktuellen Branch im Projekt-Repository. "
+            "Nutze dies um Feature-Branches zusammenzuführen. "
+            "Bei Konflikten wird ein Fehler zurückgegeben."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.push"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "branch": {
+                    "type": "string",
+                    "description": "Branch-Name der gemergt werden soll (z.B. 'feature/xyz')",
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Optionale Merge-Commit-Nachricht",
+                },
+                "project_id": {"type": "string", "description": "Projekt-ID"},
+                "repo": {"type": "string", "description": "Optionales Ziel-Repo (URL, owner/repo oder Name)"},
+            },
+            "required": ["branch"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        branch: str, message: str = "", **kwargs,
+    ) -> dict:
+        pid = kwargs.get("project_id") or project_id
+        repo_ref = kwargs.get("repo", "")
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
+
+        try:
+            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(
+                target["workspace_key"],
+                owner=target["owner"],
+                repo=target["repo"],
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+        cmd = ["merge", branch]
+        if message:
+            cmd += ["-m", message]
+        else:
+            cmd += ["--no-edit"]
+
+        out, err, rc = await GiteaClient._git(cmd, ws)
+        if rc != 0:
+            return {
+                "error": f"git merge fehlgeschlagen: {(err or out)[:400]}",
+                "branch": branch,
+                "hint": "Möglicherweise gibt es Konflikte — bitte manuell auflösen.",
+            }
+
+        # Aktuellen Branch ermitteln
+        cur_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
+        return {
+            "merged": True,
+            "source_branch": branch,
+            "target_branch": cur_out.strip(),
+            "project_id": pid,
+            "repo": target["repo"],
+            "output": out.strip()[:200] if out.strip() else "Already up to date.",
+        }
+
+
 # ============================================================= WKS Tools (Workstation-Zugriff via SSH)
 
 def _get_wks_config(project_id: str) -> dict | None:
@@ -4025,6 +4107,7 @@ registry.register(GiteaUpdateIssueTool())
 registry.register(GitDiffTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
+registry.register(GitMergeTool())
 registry.register(GitCreatePRTool())
 registry.register(WksShellExecTool())
 registry.register(WksFileReadTool())
