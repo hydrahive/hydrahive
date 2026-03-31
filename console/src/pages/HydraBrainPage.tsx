@@ -111,7 +111,6 @@ export function HydraBrainPage() {
   const [showFed,     setShowFed]     = useState(false);
   const [selected, setSelected]       = useState<GraphNode | null>(null);
   const [showLabels, setShowLabels]   = useState(true);
-  const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 800, h: 600 });
@@ -231,38 +230,84 @@ export function HydraBrainPage() {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // SSE Activity-Stream — laufende Agenten blinken lassen
+  // ── Activity-Polling + Nova-Pulsing ────────────────────────────────────────
+
+  // Typ der Aktivität pro Agent-ID (ref = kein Re-render beim Poll)
+  const activityRef = useRef<Map<string, string>>(new Map());
+
+  // Puls-Phase (0..2π) — treibt die Farb-/Größenanimation
+  const [pulsePhase, setPulsePhase] = useState(0);
+
+  // Poll alle 2s den Live-Status
   useEffect(() => {
-    const token = localStorage.getItem("hydrahive_token") || "";
-    const es = new EventSource(`/api/admin/agents/live?token=${encodeURIComponent(token)}`);
-    es.onmessage = (e) => {
+    const poll = async () => {
       try {
-        const ev = JSON.parse(e.data);
-        const agentId = ev.agent_id || ev.agentId || ev.id;
-        if (!agentId) return;
-        setActiveNodes(prev => new Set([...prev, agentId]));
-        setTimeout(() => {
-          setActiveNodes(prev => {
-            const next = new Set(prev);
-            next.delete(agentId);
-            return next;
-          });
-        }, 2500);
+        const d = await api.get("/admin/agents/live") as { agents: Array<{ id: string; current_activity: string | null }> };
+        const map = new Map<string, string>();
+        for (const a of d.agents) if (a.current_activity) map.set(a.id, a.current_activity);
+        activityRef.current = map;
       } catch { /* ignore */ }
     };
-    es.onerror = () => es.close();
-    return () => es.close();
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => clearInterval(t);
   }, []);
 
+  // Pulsing-Timer — 8fps, reicht für flüssiges Blinken
+  useEffect(() => {
+    const t = setInterval(() => setPulsePhase(p => (p + 0.4) % (Math.PI * 2)), 125);
+    return () => clearInterval(t);
+  }, []);
+
+  // Aktivität → Farbklasse
+  function classifyActivity(act: string): "thinking" | "reading" | "writing" | "network" | "executing" | "mcp" {
+    if (act === "Denkt…")             return "thinking";
+    if (act.startsWith("MCP:"))       return "mcp";
+    const tool = act.replace("Tool: ", "").toLowerCase();
+    if (tool.includes("read") || tool.includes("list") || tool.includes("inspect") || tool.includes("commits") || tool.includes("tree") || tool.includes("diff")) return "reading";
+    if (tool.includes("write") || tool.includes("create") || tool.includes("delete") || tool.includes("shell") || tool.includes("exec"))  return "writing";
+    if (tool.includes("search") || tool.includes("http") || tool.includes("mail") || tool.includes("discord") || tool.includes("whatsapp") || tool.includes("send")) return "network";
+    return "executing";
+  }
+
+  // Farb-Lerp zwischen zwei Hex-Farben
+  function lerpHex(a: string, b: string, t: number): string {
+    const h = (s: string) => [parseInt(s.slice(1,3),16), parseInt(s.slice(3,5),16), parseInt(s.slice(5,7),16)];
+    const [r1,g1,b1] = h(a), [r2,g2,b2] = h(b);
+    const r = Math.round(r1+(r2-r1)*t), g = Math.round(g1+(g2-g1)*t), bl = Math.round(b1+(b2-b1)*t);
+    return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${bl.toString(16).padStart(2,"0")}`;
+  }
+
+  const ACTIVITY_COLORS: Record<string, [string, string]> = {
+    thinking:  ["#22d3ee", "#ffffff"],  // cyan  → weiß   (Denkt…)
+    reading:   ["#4ade80", "#86efac"],  // grün  → hellgrün (liest)
+    writing:   ["#fb923c", "#ff2040"],  // orange → rot    (schreibt/executes)
+    network:   ["#4ade80", "#ffffff"],  // grün  → weiß   (HTTP/Mail/…)
+    executing: ["#a78bfa", "#f0abfc"],  // lila  → magenta (sonstiges Tool)
+    mcp:       ["#f472b6", "#ffffff"],  // pink  → weiß   (MCP)
+  };
+
   const nodeColor = useCallback((node: GraphNode) => {
-    if (activeNodes.has(node.id)) return "#ffffff";
+    const activity = activityRef.current.get(node.id);
+    if (activity) {
+      const type = classifyActivity(activity);
+      const [c1, c2] = ACTIVITY_COLORS[type];
+      return lerpHex(c1, c2, (Math.sin(pulsePhase) + 1) / 2);
+    }
     return GROUP_COLOR[node.group] ?? "#888";
-  }, [activeNodes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulsePhase]);
 
   const nodeVal = useCallback((node: GraphNode) => {
     const base = GROUP_SIZE[node.group] ?? 3;
-    return activeNodes.has(node.id) ? base * 2 : base;
-  }, [activeNodes]);
+    if (activityRef.current.has(node.id)) {
+      // Nova-Puls: 2.5× bis 5× Grundgröße
+      const pulse = (Math.sin(pulsePhase * 1.4) + 1) / 2;
+      return base * (2.5 + pulse * 2.5);
+    }
+    return base;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulsePhase]);
 
   const linkColor = useCallback((link: GraphLink) => {
     return LINK_COLOR[link.type] ?? "#ffffff22";
@@ -354,6 +399,20 @@ export function HydraBrainPage() {
             <span className="text-[11px] text-white/50">{l.label}</span>
           </div>
         ))}
+        <div className="my-1 border-t border-white/10" />
+        {[
+          { color: "#22d3ee", label: "Denkt…" },
+          { color: "#4ade80", label: "Liest" },
+          { color: "#fb923c", label: "Schreibt / Exec" },
+          { color: "#4ade80", label: "Netzwerk" },
+          { color: "#a78bfa", label: "Tool aktiv" },
+          { color: "#f472b6", label: "MCP" },
+        ].map(l => (
+          <div key={l.label} className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full shrink-0 animate-pulse" style={{ background: l.color }} />
+            <span className="text-[10px] text-white/35">{l.label}</span>
+          </div>
+        ))}
         {showFed && (
           <>
             <div className="my-1 border-t border-white/10" />
@@ -414,6 +473,16 @@ export function HydraBrainPage() {
                   <span className={`text-xs ${selected.running ? "text-green-400" : "text-white/30"}`}>
                     {selected.running ? "Aktiv / läuft" : "Gestoppt"}
                   </span>
+                </div>
+              )}
+
+              {/* Laufende Aktivität */}
+              {activityRef.current.get(selected.id) && (
+                <div>
+                  <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Aktivität</p>
+                  <p className="text-xs font-mono" style={{ color: ACTIVITY_COLORS[classifyActivity(activityRef.current.get(selected.id)!)][0] }}>
+                    {activityRef.current.get(selected.id)}
+                  </p>
                 </div>
               )}
 
