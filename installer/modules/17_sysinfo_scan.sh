@@ -33,35 +33,43 @@ mkdir -p "${AGENT_MEMORY}"
 {
     echo "# HydraHive Konfiguration (Stand: ${TS})"
     echo ""
-    echo "## LLM-Provider"
+    echo "## Alle Dateien in /etc/hydrahive/ (vollständige Liste)"
+    echo '```'
+    ls -la /etc/hydrahive/ 2>/dev/null || echo "(nicht lesbar)"
+    echo '```'
+    echo ""
+    echo "## LLM-Provider (aus llm_config.json)"
     if [ -f /etc/hydrahive/llm_config.json ]; then
-        echo '```json'
+        echo '```'
         python3 -c "
 import json, sys
 try:
     d = json.load(open('/etc/hydrahive/llm_config.json'))
-    for name, cfg in d.get('providers', {}).items():
-        masked = dict(cfg)
-        if masked.get('api_key'):
-            masked['api_key'] = '***' + masked['api_key'][-4:]
-        print(f'{name}: enabled={masked.get(\"enabled\",False)}, key={masked.get(\"api_key\",\"—\")}')
+    providers = d.get('providers', {})
+    if not providers:
+        print('(keine Provider konfiguriert — leere Datei)')
+    for name, cfg in providers.items():
+        key = cfg.get('api_key','')
+        key_info = ('***' + key[-4:]) if key else '(kein Key)'
+        print(f'{name}: enabled={cfg.get(\"enabled\",False)}, key={key_info}')
 except Exception as e:
     print(f'Nicht lesbar: {e}')
 " 2>/dev/null || echo "Nicht lesbar"
         echo '```'
     else
-        echo "llm_config.json fehlt"
+        echo "llm_config.json **fehlt**"
     fi
     echo ""
-    echo "## OAuth-Token"
-    [ -f /etc/hydrahive/claude_oauth_token ] && echo "- Claude Max OAuth: **vorhanden**" || echo "- Claude Max OAuth: nicht konfiguriert"
-    [ -f /etc/hydrahive/openai_codex_token.json ] && echo "- OpenAI Codex OAuth: **vorhanden**" || echo "- OpenAI Codex OAuth: nicht konfiguriert"
+    echo "## OAuth-Token-Dateien"
+    echo "- claude_oauth_token: $([ -f /etc/hydrahive/claude_oauth_token ] && echo '**vorhanden**' || echo 'fehlt')"
+    echo "- openai_codex_token.json: $([ -f /etc/hydrahive/openai_codex_token.json ] && echo '**vorhanden**' || echo 'fehlt')"
+    echo "- llm_env: $([ -f /etc/hydrahive/llm_env ] && echo "vorhanden ($(wc -l < /etc/hydrahive/llm_env) Zeilen)" || echo 'fehlt')"
     echo ""
     echo "## VPN"
     if [ -f /etc/hydrahive/vpn.json ]; then
-        python3 -c "import json; d=json.load(open('/etc/hydrahive/vpn.json')); print(f'Modus: {d.get(\"mode\",\"?\")}  IP: {d.get(\"ip\",\"?\")}  Server: {d.get(\"server\",\"?\")}')" 2>/dev/null || cat /etc/hydrahive/vpn.json
+        python3 -c "import json; d=json.load(open('/etc/hydrahive/vpn.json')); print(f'Modus: {d.get(\"mode\",\"?\")}  IP: {d.get(\"ip\",\"?\")}  Server: {d.get(\"server\",\"?\")}')" 2>/dev/null || echo "(nicht parsebar)"
     else
-        echo "Keine VPN-Konfig"
+        echo "Keine vpn.json vorhanden"
     fi
     echo ""
     echo "## Deployment-Stand"
