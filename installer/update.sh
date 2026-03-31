@@ -236,24 +236,21 @@ main() {
         info "Extension-Manifeste aktualisiert"
     fi
     if [ -d "${TMPDIR_BASE}/whatsapp-bridge" ]; then
+        # Quellcode immer aktualisieren (auch wenn Bridge nicht installiert)
         mkdir -p "${HYDRAHIVE_DIR}/whatsapp-bridge"
         rsync -a --exclude='node_modules' --exclude='.git' \
             "${TMPDIR_BASE}/whatsapp-bridge/" "${HYDRAHIVE_DIR}/whatsapp-bridge/"
-        chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${HYDRAHIVE_DIR}/whatsapp-bridge/" 2>/dev/null || true
         info "WhatsApp-Bridge Quellcode aktualisiert"
-        # npm install + Puppeteer-Chrome herunterladen (Fehler nicht fatal)
-        if [ -f "${HYDRAHIVE_DIR}/whatsapp-bridge/package.json" ]; then
-            _PCACHE="/opt/hydrahive/puppeteer-cache"
-            mkdir -p "${_PCACHE}"
-            PUPPETEER_CACHE_DIR="${_PCACHE}" \
-                npm install --omit=dev --prefix "${HYDRAHIVE_DIR}/whatsapp-bridge" -q 2>/dev/null || true
-            chown -R "${HYDRAHIVE_USER:-hydrahive}:${HYDRAHIVE_USER:-hydrahive}" "${_PCACHE}" 2>/dev/null || true
-        fi
-        # Bridge neu starten damit neue bridge.js-Version aktiv wird
-        if systemctl is-active --quiet hydrahive-whatsapp-bridge 2>/dev/null; then
-            systemctl restart hydrahive-whatsapp-bridge \
-                && success "hydrahive-whatsapp-bridge neu gestartet" \
-                || warn "Bridge-Neustart fehlgeschlagen"
+
+        # Wenn Bridge installiert ist: vollen Installer laufen lassen
+        # (aktualisiert Service-File, Chrome-Libs, crashpad-Fix, etc.)
+        if systemctl list-unit-files hydrahive-whatsapp-bridge.service &>/dev/null \
+           && systemctl list-unit-files hydrahive-whatsapp-bridge.service | grep -q hydrahive-whatsapp-bridge; then
+            info "Aktualisiere WhatsApp Bridge (Installer)..."
+            HYDRAHIVE_DIR="${HYDRAHIVE_DIR}" \
+                bash "${HYDRAHIVE_DIR}/installer/modules/13_whatsapp_bridge.sh" \
+                && success "WhatsApp Bridge aktualisiert" \
+                || warn "WhatsApp Bridge Update fehlgeschlagen — Bridge läuft möglicherweise noch"
         fi
     fi
     # Installer-Assets (nginx-Template etc.) im installer/-Verzeichnis aktuell halten

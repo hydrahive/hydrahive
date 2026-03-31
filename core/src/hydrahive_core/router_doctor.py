@@ -77,6 +77,8 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
             return await _fix_nginx()
         if fix_id == "install_chromium":
             return await _fix_install_chromium()
+        if fix_id == "repair_whatsapp":
+            return await _fix_repair_whatsapp()
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -126,9 +128,9 @@ async def _check_services() -> list[dict]:
         (["postgresql"],             "PostgreSQL"),
     ]
     optional = [
-        (["hydrahive-whatsapp-bridge"], "WhatsApp Bridge"),
-        (["tailscaled"],               "Tailscale VPN"),
-        (["hydrahive-codeserver"],     "Code Editor (code-server)"),
+        (["hydrahive-whatsapp-bridge"], "WhatsApp Bridge", "repair_whatsapp"),
+        (["tailscaled"],               "Tailscale VPN",    ""),
+        (["hydrahive-codeserver"],     "Code Editor (code-server)", ""),
     ]
     for units, label in required:
         found_active = False
@@ -149,7 +151,7 @@ async def _check_services() -> list[dict]:
                 f"Service: {label}", "error", "nicht aktiv",
                 f"sudo systemctl start {units[0]}",
             ))
-    for units, label in optional:
+    for units, label, fix_id in optional:
         found_active = False
         for unit in units:
             try:
@@ -167,6 +169,7 @@ async def _check_services() -> list[dict]:
             results.append(_check(
                 f"Service: {label}", "warn", "nicht aktiv",
                 f"sudo systemctl start {units[0]}",
+                fix=fix_id,
             ))
     return results
 
@@ -338,6 +341,27 @@ async def _fix_install_chromium() -> dict:
     if r.returncode == 0:
         return {"ok": True, "output": "Chrome-Bibliotheken installiert"}
     return {"ok": False, "error": (r.stderr or r.stdout or "apt-get fehlgeschlagen").strip()[:500]}
+
+
+async def _fix_repair_whatsapp() -> dict:
+    """Reinstalliert WhatsApp Bridge ohne Datenverlust (Sessions + Config bleiben)."""
+    import shlex
+    script = Path("/opt/hydrahive/installer/modules/13_whatsapp_bridge.sh")
+    if not script.exists():
+        return {"ok": False, "error": "Installer-Modul nicht gefunden — bitte Update durchführen"}
+
+    def _run():
+        return subprocess.run(
+            ["sudo", "-n", "/bin/bash", str(script)],
+            capture_output=True, text=True, timeout=300,
+            env={**__import__("os").environ, "DEBIAN_FRONTEND": "noninteractive",
+                 "HYDRAHIVE_DIR": "/opt/hydrahive"},
+        )
+
+    r = await asyncio.to_thread(_run)
+    if r.returncode == 0:
+        return {"ok": True, "output": (r.stdout or "").strip()[-1000:]}
+    return {"ok": False, "error": (r.stderr or r.stdout or "Installer fehlgeschlagen").strip()[-500:]}
 
 
 async def _check_agentlink() -> list[dict]:
