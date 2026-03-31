@@ -87,6 +87,7 @@ export function ProjectsPage() {
   const [sambaLoading, setSambaLoading] = useState<Record<string, boolean>>({});
   const [showSambaPw, setShowSambaPw] = useState<Record<string, boolean>>({});
   const [sambaResetting, setSambaResetting] = useState<string | null>(null);
+  const [codeserverPassword, setCodeserverPassword] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -104,6 +105,11 @@ export function ProjectsPage() {
 
   useEffect(() => {
     load();
+    const token = localStorage.getItem("hydrahive_token") || "";
+    fetch("/api/admin/codeserver/status", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.password) setCodeserverPassword(d.password); })
+      .catch(() => {});
   }, []);
 
   function refresh() {
@@ -508,7 +514,11 @@ export function ProjectsPage() {
                         </span>
                         <span>
                           <span className="block font-medium">{t("projects.codeEditor")}</span>
-                          <span className="text-xs text-muted-foreground">{t("projects.openInCode")}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {codeserverPassword
+                              ? `${t("projects.openInCode")} · ${t("codeEditor.password")}: ${codeserverPassword}`
+                              : t("projects.openInCode")}
+                          </span>
                         </span>
                       </span>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
