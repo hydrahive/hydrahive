@@ -112,6 +112,7 @@ export function HydraBrainPage() {
   const [selected, setSelected]       = useState<GraphNode | null>(null);
   const [showLabels, setShowLabels]   = useState(true);
   const fgRef = useRef<any>(null);
+  const hasZoomedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 800, h: 600 });
 
@@ -129,6 +130,7 @@ export function HydraBrainPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    hasZoomedRef.current = false;
     try {
       const data = await api.get("/brain-graph") as GraphData;
       setBaseGraph(data);
@@ -569,7 +571,12 @@ export function HydraBrainPage() {
           d3VelocityDecay={0.5}
           warmupTicks={80}
           cooldownTicks={150}
-          onEngineStop={() => { fgRef.current?.zoomToFit(600, 60); }}
+          onEngineStop={() => {
+            if (!hasZoomedRef.current) {
+              hasZoomedRef.current = true;
+              fgRef.current?.zoomToFit(600, 60);
+            }
+          }}
         />
         </Suspense>
       )}
