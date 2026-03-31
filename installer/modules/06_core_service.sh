@@ -177,3 +177,11 @@ done
 if [ "${HEALTH_OK}" -eq 0 ]; then
     warn "hydrahive-core antwortet nicht — pruefe: journalctl -u ${SERVICE_NAME} -n 30"
 fi
+
+# --- sysinfo-Agent Memory initial befüllen ---
+SYSINFO_SCRIPT="${REPO_ROOT}/installer/modules/17_sysinfo_scan.sh"
+if [ -f "${SYSINFO_SCRIPT}" ]; then
+    bash "${SYSINFO_SCRIPT}" \
+        && success "sysinfo-Memory initial befüllt" \
+        || warn "sysinfo-Scan fehlgeschlagen — wird übersprungen"
+fi

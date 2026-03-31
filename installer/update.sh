@@ -139,6 +139,13 @@ main() {
         error "hydrahive-core konnte nicht starten — prüfe: journalctl -u hydrahive-core -n 30"
     fi
 
+    # --- 6b. sysinfo-Agent Memory aktualisieren ---
+    if [ -f "${HYDRAHIVE_DIR}/installer/modules/17_sysinfo_scan.sh" ]; then
+        bash "${HYDRAHIVE_DIR}/installer/modules/17_sysinfo_scan.sh" \
+            && info "sysinfo-Memory aktualisiert" \
+            || warn "sysinfo-Scan fehlgeschlagen — wird übersprungen"
+    fi
+
     # --- 7. QMD re-indexieren (optional) ---
     if command -v qmd &>/dev/null; then
         info "QMD: re-indexiere Memory..."
