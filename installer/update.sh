@@ -138,6 +138,14 @@ main() {
         info "sudoers: hydrahive-installer aktualisiert"
     fi
 
+    # --- 5c. Plugins deployen (#110) ---
+    if [ -d "${TMPDIR_BASE}/plugins" ]; then
+        mkdir -p /plugins
+        rsync -a "${TMPDIR_BASE}/plugins/" /plugins/
+        chown -R hydrahive:hydrahive /plugins/
+        info "Plugins deployed"
+    fi
+
     # --- 6. Service neustarten ---
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
