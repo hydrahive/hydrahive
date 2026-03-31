@@ -98,6 +98,19 @@ main() {
         "${TMPDIR_BASE}/core/" "${HYDRAHIVE_DIR}/core/"
     success "Core-Dateien aktualisiert"
 
+    # --- 2b. System-Agenten aktualisieren (agent.yaml + soul.md; Memory bleibt) ---
+    if [ -d "${TMPDIR_BASE}/agents" ]; then
+        for _src in "${TMPDIR_BASE}/agents"/*/; do
+            _id="$(basename "${_src}")"
+            _dst="/agents/${_id}"
+            mkdir -p "${_dst}/memory"
+            [ -f "${_src}/agent.yaml" ] && cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
+            [ -f "${_src}/soul.md"    ] && cp "${_src}/soul.md"    "${_dst}/soul.md"
+        done
+        chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
+        info "System-Agenten aktualisiert"
+    fi
+
     # --- 3. Python-Dependencies ---
     info "Installiere Python-Dependencies..."
     "${VENV}/bin/pip" install -e "${HYDRAHIVE_DIR}/core/" -q \
