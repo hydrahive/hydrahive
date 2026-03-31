@@ -69,6 +69,7 @@ class VpnConnectRequest(BaseModel):
     auth_key:     str | None = None  # Optional: leer = Reconnect mit bestehenden Credentials
     login_server: str | None = None
     hostname:     str | None = None
+    mode:         str | None = None  # "tailscale" oder "headscale"
 
 
 # ── Router ─────────────────────────────────────────────────────────────────────
@@ -132,11 +133,16 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
             raise HTTPException(400, "VPN nicht installiert — Installer erneut ausführen")
 
         # Config aktualisieren
+        if body.mode in ("tailscale", "headscale"):
+            cfg["mode"] = body.mode
+            mode = body.mode
+            if body.mode == "tailscale":
+                cfg.pop("login_server", None)  # kein Custom-Server bei Tailscale Cloud
         if body.auth_key:
             cfg["auth_key"]   = body.auth_key
             cfg["configured"] = True
-        if body.login_server:
-            cfg["login_server"] = body.login_server
+        if body.login_server is not None:
+            cfg["login_server"] = body.login_server if body.login_server.strip() else ""
         if body.hostname:
             cfg["hostname"] = body.hostname
         _save_vpn_config(cfg)

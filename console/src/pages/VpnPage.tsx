@@ -41,6 +41,7 @@ export function VpnPage() {
   const [authKey,     setAuthKey]     = useState("");
   const [loginServer, setLoginServer] = useState("");
   const [hostname,    setHostname]    = useState("");
+  const [selectedMode, setSelectedMode] = useState<"tailscale" | "headscale">("tailscale");
   const [connecting,  setConnecting]  = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [hsKey,       setHsKey]       = useState("");
@@ -52,9 +53,9 @@ export function VpnPage() {
     try {
       const d = await api.vpnStatus();
       setStatus(d);
-      if (d.login_server && d.login_server !== "https://controlplane.tailscale.com") {
-        setLoginServer(d.login_server);
-      }
+      const mode = (d.mode === "headscale" ? "headscale" : "tailscale") as "tailscale" | "headscale";
+      setSelectedMode(mode);
+      if (d.login_server) setLoginServer(d.login_server);
       if (d.hostname) setHostname(d.hostname);
       setError("");
     } catch (e) {
@@ -70,8 +71,9 @@ export function VpnPage() {
     try {
       await api.vpnConnect({
         auth_key: authKey.trim() || undefined,
-        login_server: loginServer.trim() || undefined,
+        login_server: selectedMode === "headscale" ? (loginServer.trim() || undefined) : "",
         hostname: hostname.trim() || undefined,
+        mode: selectedMode,
       });
       setAuthKey("");
       await load();
@@ -174,13 +176,27 @@ export function VpnPage() {
             <Key size={14} /> Auth-Key
           </h2>
 
-          {isHeadscale && (
+          {/* Mode-Selector */}
+          <div className="flex gap-2">
+            {(["tailscale", "headscale"] as const).map(m => (
+              <button key={m} onClick={() => { setSelectedMode(m); if (m === "tailscale") setLoginServer(""); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  selectedMode === m
+                    ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
+                    : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                }`}>
+                {m === "tailscale" ? "Tailscale Cloud" : "Headscale (self-hosted)"}
+              </button>
+            ))}
+          </div>
+
+          {selectedMode === "headscale" && (
             <p className="text-xs text-zinc-500">
               Headscale-Modus: Auth-Key über den Button unten generieren oder
               manuell mit <code className="bg-zinc-800 px-1 rounded">headscale preauthkeys create</code> erstellen.
             </p>
           )}
-          {!isHeadscale && (
+          {selectedMode === "tailscale" && (
             <p className="text-xs text-zinc-500">
               Auth-Key in den{" "}
               <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noreferrer"
@@ -202,7 +218,7 @@ export function VpnPage() {
             className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
           />
 
-          {isHeadscale && (
+          {selectedMode === "headscale" && (
             <input
               type="text"
               value={loginServer}
