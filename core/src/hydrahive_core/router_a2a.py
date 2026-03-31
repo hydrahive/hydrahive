@@ -76,13 +76,21 @@ class A2APeerUpsert(BaseModel):
 
 # ── HTTP-Helper für ausgehende A2A-Calls (in Thread-Pool wegen uvloop) ───────
 
+def _ssl_ctx():
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _post_sync(url: str, headers: dict, body: dict, timeout: int = 60) -> tuple[int, dict]:
     import urllib.request as _urllib
     import urllib.error
     data = json.dumps(body).encode()
     req = _urllib.Request(url, data=data, headers={**headers, "Content-Type": "application/json"}, method="POST")
     try:
-        with _urllib.urlopen(req, timeout=timeout) as resp:
+        with _urllib.urlopen(req, timeout=timeout, context=_ssl_ctx()) as resp:
             return resp.getcode(), json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         try:
@@ -235,7 +243,7 @@ def register_a2a_routes(
             import urllib.request as _req
             import urllib.error
             try:
-                with _req.urlopen(url, timeout=timeout) as resp:
+                with _req.urlopen(url, timeout=timeout, context=_ssl_ctx()) as resp:
                     return resp.getcode(), json.loads(resp.read().decode())
             except urllib.error.HTTPError as e:
                 return e.code, {}
