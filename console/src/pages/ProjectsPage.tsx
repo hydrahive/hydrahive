@@ -10,14 +10,12 @@ import {
   Webhook,
   GitMerge,
   Trash2,
-  ArrowRight,
+  ChevronDown,
   Radar,
   Workflow,
-  Server,
   MessageSquare,
   ShieldAlert,
   Boxes,
-  GitBranch,
   Pencil,
   X,
   Save,
@@ -87,6 +85,7 @@ export function ProjectsPage() {
   const [sambaLoading, setSambaLoading] = useState<Record<string, boolean>>({});
   const [showSambaPw, setShowSambaPw] = useState<Record<string, boolean>>({});
   const [showCodePw, setShowCodePw] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [sambaResetting, setSambaResetting] = useState<string | null>(null);
   const [codeserverPassword, setCodeserverPassword] = useState<string | null>(null);
 
@@ -419,266 +418,212 @@ export function ProjectsPage() {
       )}
 
       {!loading && projectList.length > 0 && (
-        <section className="space-y-4">
-          {projectList.map(([id, proj]) => (
+        <section className="space-y-2">
+          {projectList.map(([id, proj]) => {
+            const expanded = !!expandedProjects[id];
+            return (
             <div key={id} className="app-panel overflow-hidden">
-              <div className="p-5 space-y-5">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-                      <FolderKanban className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-lg font-semibold tracking-tight">{proj.name}</span>
-                        <span className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground">{id}</span>
-                        {proj.show_swarm && <span className="status-pill status-pill-ok">{t("projects.swarmVisible2")}</span>}
-                        {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
-                      </div>
-                      {proj.description && <p className="max-w-2xl text-sm text-muted-foreground">{proj.description}</p>}
-                      <div className="flex flex-wrap gap-2">
-                        <span className="status-pill">
-                          <Users className="h-3.5 w-3.5" />
-                          {t("projects.boss", { name: proj.boss })}
-                        </span>
-                        <span className="status-pill">
-                          <Boxes className="h-3.5 w-3.5" />
-                          {t("projects.workerCount", { count: proj.workers.length })}
-                        </span>
-                        <span className="status-pill">
-                          <HardDrive className="h-3.5 w-3.5" />
-                          {proj.system_user}
-                        </span>
-                        <span className="status-pill">
-                          <GitBranch className="h-3.5 w-3.5" />
-                          {t("projects.filespaceReady")}
-                        </span>
-                      </div>
-                    </div>
+              {/* Kompakte Hauptzeile */}
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                  <FolderKanban className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-semibold">{proj.name}</span>
+                    <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">{id}</span>
+                    {proj.show_swarm && <span className="status-pill status-pill-ok">{t("projects.swarmVisible2")}</span>}
+                    {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
                   </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[26rem]">
-                    <button
-                      onClick={() => navigate(`/chat/${id}`)}
-                      className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background"
-                    >
-                      <span className="flex items-center gap-3">
-                        <span className="rounded-2xl bg-primary/12 p-2 text-primary">
-                          <MessageSquare className="h-4 w-4" />
-                        </span>
-                        <span>
-                          <span className="block font-medium">{t("projects.chat")}</span>
-                          <span className="text-xs text-muted-foreground">{t("projects.chatSubtitle")}</span>
-                        </span>
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}
-                      className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${agentlinkProject === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}
-                    >
-                      <span className="flex items-center gap-3">
-                        <span className={`rounded-2xl p-2 ${agentlinkProject === id ? "bg-primary/15" : "bg-secondary"}`}>
-                          <GitMerge className="h-4 w-4" />
-                        </span>
-                        <span>
-                          <span className="block font-medium">{t("projects.agentLink")}</span>
-                          <span className="text-xs text-muted-foreground">{t("projects.agentLinkSubtitle")}</span>
-                        </span>
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    <button
-                      onClick={() => setWebhookProject((p) => (p === id ? null : id))}
-                      className={`flex items-center justify-between rounded-3xl border px-4 py-3 text-left text-sm transition ${webhookProject === id ? "border-primary/30 bg-primary/10 text-primary" : "bg-background/75 hover:bg-background"}`}
-                    >
-                      <span className="flex items-center gap-3">
-                        <span className={`rounded-2xl p-2 ${webhookProject === id ? "bg-primary/15" : "bg-secondary"}`}>
-                          <Webhook className="h-4 w-4" />
-                        </span>
-                        <span>
-                          <span className="block font-medium">{t("projects.webhooks")}</span>
-                          <span className="text-xs text-muted-foreground">{t("projects.webhooksSubtitle")}</span>
-                        </span>
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    <a
-                      href={`/code/?folder=/projects/${id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between rounded-3xl border bg-background/75 px-4 py-3 text-left text-sm transition hover:bg-background"
-                    >
-                      <span className="flex items-center gap-3">
-                        <span className="rounded-2xl bg-secondary p-2">
-                          <Code2 className="h-4 w-4" />
-                        </span>
-                        <span>
-                          <span className="block font-medium">{t("projects.codeEditor")}</span>
-                          <span className="text-xs text-muted-foreground">{t("projects.openInCode")}</span>
-                        </span>
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    </a>
-                    <div className="rounded-3xl border bg-secondary/50 px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="rounded-2xl bg-background p-2 text-foreground/75">
-                          <Server className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium">{t("projects.runtimeContext")}</p>
-                          <p className="text-xs text-muted-foreground">{t("projects.runtimeContextSubtitle")}</p>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{proj.boss}</span>
+                    <span className="flex items-center gap-1"><Boxes className="h-3 w-3" />{t("projects.workerCount", { count: proj.workers.length })}</span>
+                    <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" />{proj.system_user}</span>
+                    {proj.description && <span className="hidden sm:inline truncate max-w-xs">{proj.description}</span>}
                   </div>
                 </div>
+                {/* Aktions-Buttons */}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/chat/${id}`)}
+                    className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/20"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    {t("projects.chat")}
+                  </button>
+                  <a
+                    href={`/code/?folder=/projects/${id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                  >
+                    <Code2 className="h-3.5 w-3.5" />
+                    {t("projects.codeEditor")}
+                  </a>
+                  <button
+                    onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${agentlinkProject === id ? "border-primary/30 bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    AgentLink
+                  </button>
+                  <button
+                    onClick={() => setWebhookProject((p) => (p === id ? null : id))}
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${webhookProject === id ? "border-primary/30 bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                  >
+                    <Webhook className="h-3.5 w-3.5" />
+                    Webhooks
+                  </button>
+                  <button
+                    onClick={() => setExpandedProjects(e => ({...e, [id]: !e[id]}))}
+                    className="ml-1 rounded-xl border p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                    title={expanded ? "Details einklappen" : "Details anzeigen"}
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                  </button>
+                </div>
+              </div>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_0.9fr]">
-                  <div className="rounded-3xl border bg-background/55 p-4">
-                    <p className="metric-kicker">{t("projects.workspace")}</p>
-                    <div className="mt-3 space-y-3 text-sm">
-                      <div className="flex items-start gap-3">
-                        <HardDrive className="mt-0.5 h-4 w-4 text-primary" />
-                        <div>
-                          <p className="font-medium">{t("projects.filesystem")}</p>
-                          <p className="break-all text-muted-foreground">{proj.filesystem}</p>
+              {/* Aufklappbarer Detail-Bereich */}
+              {expanded && (
+                <div className="border-t px-4 pb-4 pt-3">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_0.9fr]">
+                    {/* Workspace */}
+                    <div className="rounded-2xl border bg-background/55 p-3">
+                      <p className="metric-kicker">{t("projects.workspace")}</p>
+                      <div className="mt-2 space-y-2 text-sm">
+                        <div className="flex items-start gap-2">
+                          <HardDrive className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium">{t("projects.filesystem")}</p>
+                            <p className="break-all text-xs text-muted-foreground">{proj.filesystem}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <Server className="mt-0.5 h-4 w-4 text-primary" />
-                        <div>
-                          <p className="font-medium">{t("projects.systemUser")}</p>
-                          <p className="text-muted-foreground">{proj.system_user}</p>
+                        <div className="flex items-start gap-2">
+                          <Hash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium">{t("projects.matrixRoom")}</p>
+                            <p className="break-all text-xs text-muted-foreground">{proj.matrix_room || t("projects.noMatrixRoom")}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <Hash className="mt-0.5 h-4 w-4 text-primary" />
-                        <div>
-                          <p className="font-medium">{t("projects.matrixRoom")}</p>
-                          <p className="break-all text-muted-foreground">{proj.matrix_room || t("projects.noMatrixRoom")}</p>
-                        </div>
-                      </div>
-                      {proj.system_user && isAdmin && (
-                        <div className="flex items-start gap-3">
-                          <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium">Samba-Zugangsdaten</p>
-                            {sambaCreds[id] ? (
-                              <div className="mt-1 space-y-1">
-                                <p className="text-xs text-muted-foreground font-mono">{sambaCreds[id]!.username}</p>
-                                <div className="flex items-center gap-2">
-                                  <p className="text-xs font-mono text-muted-foreground tracking-wider">
-                                    {showSambaPw[id] ? sambaCreds[id]!.password : "••••••••••••"}
-                                  </p>
-                                  <button type="button" onClick={() => setShowSambaPw(s => ({...s, [id]: !s[id]}))}
+                        {proj.system_user && isAdmin && (
+                          <div className="flex items-start gap-2">
+                            <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium">Samba-Zugangsdaten</p>
+                              {sambaCreds[id] ? (
+                                <div className="mt-0.5 space-y-0.5">
+                                  <p className="text-xs text-muted-foreground font-mono">{sambaCreds[id]!.username}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-xs font-mono text-muted-foreground tracking-wider">
+                                      {showSambaPw[id] ? sambaCreds[id]!.password : "••••••••••••"}
+                                    </p>
+                                    <button type="button" onClick={() => setShowSambaPw(s => ({...s, [id]: !s[id]}))}
+                                      className="text-muted-foreground hover:text-foreground transition-colors">
+                                      {showSambaPw[id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                    </button>
+                                    <button type="button" onClick={() => resetSambaPw(id)} disabled={sambaResetting === id}
+                                      className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                                      {sambaResetting === id ? "…" : "Reset"}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => loadSambaCreds(id)} disabled={sambaLoading[id]}
+                                  className="text-xs text-primary hover:underline disabled:opacity-50">
+                                  {sambaLoading[id] ? "Lade…" : "Zugangsdaten anzeigen"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {codeserverPassword && isAdmin && (
+                          <div className="flex items-start gap-2">
+                            <Code2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium">Code-Editor Zugangsdaten</p>
+                              {showCodePw ? (
+                                <div className="mt-0.5 flex items-center gap-1.5">
+                                  <p className="text-xs font-mono text-muted-foreground select-all">{codeserverPassword}</p>
+                                  <button type="button" onClick={() => setShowCodePw(false)}
                                     className="text-muted-foreground hover:text-foreground transition-colors">
-                                    {showSambaPw[id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                  </button>
-                                  <button type="button" onClick={() => resetSambaPw(id)} disabled={sambaResetting === id}
-                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
-                                    {sambaResetting === id ? "…" : "Reset"}
+                                    <EyeOff className="h-3 w-3" />
                                   </button>
                                 </div>
-                              </div>
-                            ) : (
-                              <button type="button" onClick={() => loadSambaCreds(id)} disabled={sambaLoading[id]}
-                                className="mt-0.5 text-xs text-primary hover:underline disabled:opacity-50">
-                                {sambaLoading[id] ? "Lade…" : "Zugangsdaten anzeigen"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {codeserverPassword && isAdmin && (
-                        <div className="flex items-start gap-3">
-                          <Code2 className="mt-0.5 h-4 w-4 text-primary" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium">Code-Editor Zugangsdaten</p>
-                            {showCodePw ? (
-                              <div className="mt-1 flex items-center gap-2">
-                                <p className="text-xs font-mono text-muted-foreground tracking-wider select-all">
-                                  {codeserverPassword}
-                                </p>
-                                <button type="button" onClick={() => setShowCodePw(false)}
-                                  className="text-muted-foreground hover:text-foreground transition-colors">
-                                  <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <button type="button" onClick={() => setShowCodePw(true)}
+                                  className="text-xs text-primary hover:underline">
+                                  Zugangsdaten anzeigen
                                 </button>
-                              </div>
-                            ) : (
-                              <button type="button" onClick={() => setShowCodePw(true)}
-                                className="mt-0.5 text-xs text-primary hover:underline">
-                                Zugangsdaten anzeigen
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl border bg-background/55 p-4 md:col-span-2 xl:col-span-1">
-                    <p className="metric-kicker">{t("projects.team")}</p>
-                    <div className="mt-3 space-y-3 text-sm">
-                      <div className="rounded-2xl bg-secondary/60 px-3 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("projects.bossLabel")}</p>
-                        <p className="mt-1 font-medium">{proj.boss}</p>
-                      </div>
-                      <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{t("projects.workerLabel")}</p>
-                        {proj.workers.length > 0 ? (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {proj.workers.map((worker) => (
-                              <span key={worker} className="rounded-full bg-background px-2.5 py-1 text-xs">
-                                {worker}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-1 text-muted-foreground">{t("projects.noWorkers")}</p>
                         )}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="rounded-3xl border border-destructive/15 bg-destructive/5 p-4">
-                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                      <ShieldAlert className="h-4 w-4" />
-                      {t("projects.dangerZone")}
-                    </div>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      {t("projects.dangerZoneDesc")}
-                    </p>
-                    <div className="mt-4 space-y-2">
-                      {isAdmin && (
-                        <button onClick={() => openEdit(id)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
-                          <Pencil className="h-4 w-4" />
-                          Projekt bearbeiten
-                        </button>
-                      )}
-                      {isAdmin && (confirmDel === id ? (
-                        <div className="space-y-2">
-                          <button onClick={() => handleDelete(id)} disabled={deleting === id} className="w-full rounded-2xl bg-destructive px-3 py-2 text-sm text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
-                            {t("projects.deleteConfirm")}
-                          </button>
-                          <button onClick={() => setConfirmDel(null)} className="w-full rounded-2xl border px-3 py-2 text-sm transition hover:bg-accent">
-                            {t("projects.cancel")}
-                          </button>
+                    {/* Team */}
+                    <div className="rounded-2xl border bg-background/55 p-3 md:col-span-1">
+                      <p className="metric-kicker">{t("projects.team")}</p>
+                      <div className="mt-2 space-y-2 text-sm">
+                        <div className="rounded-xl bg-secondary/60 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t("projects.bossLabel")}</p>
+                          <p className="mt-0.5 text-sm font-medium">{proj.boss}</p>
                         </div>
-                      ) : (
-                        <button onClick={() => setConfirmDel(id)} disabled={!!deleting} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-sm text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50">
-                          <Trash2 className="h-4 w-4" />
-                          {t("projects.deleteBtn")}
-                        </button>
-                      ))}
+                        <div className="rounded-xl bg-secondary/40 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t("projects.workerLabel")}</p>
+                          {proj.workers.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {proj.workers.map((worker) => (
+                                <span key={worker} className="rounded-full bg-background px-2 py-0.5 text-xs">{worker}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-0.5 text-xs text-muted-foreground">{t("projects.noWorkers")}</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Danger Zone */}
+                    {isAdmin && (
+                      <div className="rounded-2xl border border-destructive/15 bg-destructive/5 p-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                          <ShieldAlert className="h-3.5 w-3.5" />
+                          {t("projects.dangerZone")}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          <button onClick={() => openEdit(id)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-1.5 text-xs transition hover:bg-accent">
+                            <Pencil className="h-3.5 w-3.5" />
+                            Projekt bearbeiten
+                          </button>
+                          {confirmDel === id ? (
+                            <div className="space-y-1.5">
+                              <button onClick={() => handleDelete(id)} disabled={deleting === id} className="w-full rounded-xl bg-destructive px-3 py-1.5 text-xs text-destructive-foreground transition hover:bg-destructive/90 disabled:opacity-50">
+                                {t("projects.deleteConfirm")}
+                              </button>
+                              <button onClick={() => setConfirmDel(null)} className="w-full rounded-xl border px-3 py-1.5 text-xs transition hover:bg-accent">
+                                {t("projects.cancel")}
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setConfirmDel(id)} disabled={!!deleting} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-1.5 text-xs text-destructive transition hover:border-destructive/30 hover:bg-destructive/10 disabled:opacity-50">
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {t("projects.deleteBtn")}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              )}
+
               {agentlinkProject === id && <AgentLinkPanel projectId={id} />}
               {webhookProject === id && <WebhooksPanel projectId={id} />}
             </div>
-          ))}
+            );
+          })}
         </section>
       )}
     {/* Edit-Dialog */}
