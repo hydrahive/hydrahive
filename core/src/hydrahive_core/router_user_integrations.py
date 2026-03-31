@@ -852,6 +852,7 @@ def register_user_integration_routes(
         media_type = body.get("media_type", "")
         media_data = body.get("media_data", "")
 
+        logger.info("WhatsApp /incoming: agent=%s from=%s", agent_id or "(leer)", from_jid or "(leer)")
         if not agent_id:
             return {"ok": False, "error": "Fehlende Felder"}
 
@@ -905,20 +906,32 @@ def register_user_integration_routes(
         blocked    = [n.strip() for n in wa_cfg.get("blocked_numbers", []) if n.strip()]
         owners     = [re.sub(r'\s+', '', n).lstrip("+") for n in wa_cfg.get("owner_numbers", []) if n.strip()]
 
+        logger.info(
+            "WhatsApp filter: agent=%s sender=%s is_group=%s private_ok=%s group_ok=%s "
+            "keyword=%r allowed=%s blocked=%s",
+            agent_id, sender, is_group, private_ok, group_ok,
+            keyword, bool(allowed), bool(blocked),
+        )
+
         # Typ-Filter
         if is_group and not group_ok:
+            logger.info("WhatsApp filtered (group_chats_disabled): agent=%s sender=%s", agent_id, sender)
             return {"ok": True, "filtered": "group_chats_disabled"}
         if not is_group and not private_ok:
+            logger.info("WhatsApp filtered (private_chats_disabled): agent=%s sender=%s", agent_id, sender)
             return {"ok": True, "filtered": "private_chats_disabled"}
 
         # Nummer-Filter
         if blocked and any(sender.endswith(b.lstrip("+")) for b in blocked):
+            logger.info("WhatsApp filtered (blocked): agent=%s sender=%s", agent_id, sender)
             return {"ok": True, "filtered": "blocked"}
         if allowed and not any(sender.endswith(a.lstrip("+")) for a in allowed):
+            logger.info("WhatsApp filtered (not_in_allowlist): agent=%s sender=%s", agent_id, sender)
             return {"ok": True, "filtered": "not_in_allowlist"}
 
         # Keyword-Filter
         if keyword and keyword.lower() not in message.lower():
+            logger.info("WhatsApp filtered (keyword_missing): agent=%s sender=%s", agent_id, sender)
             return {"ok": True, "filtered": "keyword_missing"}
 
         # Butler-Check
@@ -986,6 +999,11 @@ def register_user_integration_routes(
                 f"{message}"
             )
 
+        logger.info(
+            "WhatsApp incoming: agent=%s sender=%s is_owner=%s is_group=%s msg_len=%d",
+            agent_id, sender, is_owner, is_group, len(message),
+        )
+
         response_parts: list[str] = []
         try:
             async for chunk in orchestrator.handle_message_stream(
@@ -1000,11 +1018,21 @@ def register_user_integration_routes(
                     data = _json.loads(chunk[6:]) if chunk.startswith("data: ") else {}
                     if "text" in data:
                         response_parts.append(data["text"])
+                    elif "error" in data and data["error"]:
+                        # Orchestrator-Fehler (z.B. Boss-Agent nicht gefunden) als Antwort behandeln
+                        err_txt = str(data["error"])
+                        logger.error("WhatsApp Orchestrator-Error für %s: %s", agent_id, err_txt)
+                        response_parts.append(f"[Fehler: {err_txt}]")
                 except Exception:
                     pass
         except Exception as e:
             logger.error("Orchestrator-Fehler für WhatsApp-Agent %s: %s", agent_id, e)
             return {"ok": False, "error": str(e)}
+
+        logger.info(
+            "WhatsApp orchestrator done: agent=%s response_len=%d",
+            agent_id, sum(len(p) for p in response_parts),
+        )
 
         response_text = "".join(response_parts).strip()
         if response_text:
@@ -1027,8 +1055,14 @@ def register_user_integration_routes(
             else:
                 # Text-Antwort (max 4096 Zeichen pro Nachricht)
                 from .whatsapp_agent import bridge_send
-                for i in range(0, len(response_text), 4096):
-                    await bridge_send(agent_id, from_jid, response_text[i:i+4096])
+                logger.info("WhatsApp bridge_send: agent=%s to=%s len=%d", agent_id, from_jid, len(response_text))
+                try:
+                    for i in range(0, len(response_text), 4096):
+                        await bridge_send(agent_id, from_jid, response_text[i:i+4096])
+                    logger.info("WhatsApp reply sent: agent=%s to=%s", agent_id, from_jid)
+                except Exception as e:
+                    logger.error("WhatsApp bridge_send Fehler: agent=%s to=%s error=%s", agent_id, from_jid, e)
+                    return {"ok": False, "error": f"bridge_send: {e}"}
 
         return {"ok": True}
 
