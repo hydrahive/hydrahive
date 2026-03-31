@@ -189,6 +189,18 @@ main() {
         info "SearXNG nicht installiert — überspringe Update"
     fi
 
+    # --- 9c. AgentLink sicherstellen (optional — Fehler nicht fatal) ---
+    if ! systemctl is-active --quiet hydrahive-agentlink 2>/dev/null; then
+        if [ -f "${HYDRAHIVE_DIR}/installer/modules/11_agentlink.sh" ]; then
+            info "AgentLink nicht aktiv — installiere/starte nach..."
+            bash "${HYDRAHIVE_DIR}/installer/modules/11_agentlink.sh" \
+                && success "AgentLink installiert/gestartet" \
+                || warn "AgentLink konnte nicht gestartet werden"
+        else
+            warn "AgentLink nicht aktiv und kein Installer-Modul gefunden"
+        fi
+    fi
+
     # --- 10. Installer-Module + Installer-Assets aktualisieren ---
     if [ -d "${TMPDIR_BASE}/installer/modules" ]; then
         mkdir -p "${HYDRAHIVE_DIR}/installer/modules"
