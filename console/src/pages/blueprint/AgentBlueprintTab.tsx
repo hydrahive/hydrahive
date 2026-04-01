@@ -131,12 +131,13 @@ function PluginNode({ data, selected }: { data: any; selected: boolean }) {
 
 function AgentProfileNode({ data, selected }: { data: any; selected: boolean }) {
   const isNew = data.config?.isNew;
+  const hBase = { width: 10, height: 10, border: "2px solid #52525b" };
   return (
-    <div className={cn("min-w-[220px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none",
+    <div className={cn("min-w-[240px] rounded-xl border-2 px-4 py-3 shadow-lg select-none relative",
       isNew ? "bg-indigo-950/70 border-indigo-400/60" : "bg-zinc-800/80 border-zinc-400/40",
       selected && "ring-2 ring-white/25")}>
       <div className="flex items-center gap-1.5 mb-1">
-        <Bot className={cn("h-3 w-3", isNew ? "text-indigo-300" : "text-zinc-300")} />
+        <Bot className={cn("h-3.5 w-3.5", isNew ? "text-indigo-300" : "text-zinc-300")} />
         <span className={cn("text-[0.55rem] font-bold uppercase tracking-widest", isNew ? "text-indigo-400" : "text-zinc-400")}>
           {isNew ? "Neuer Agent" : "Agent"}
         </span>
@@ -144,7 +145,24 @@ function AgentProfileNode({ data, selected }: { data: any; selected: boolean }) 
       <p className="text-sm font-medium text-white leading-tight">{data.label || "Agent"}</p>
       {data.config?.model && <p className="text-[0.6rem] text-indigo-400/50 mt-0.5 font-mono">{data.config.model}</p>}
       {data.config?.type && <p className="text-[0.55rem] text-white/30 mt-0.5">{data.config.type}</p>}
-      <Handle type="target" position={Position.Left} id="in" style={{ background: isNew ? "#818cf8" : "#a1a1aa", border: "2px solid #52525b", width: 10, height: 10 }} />
+
+      {/* Handle-Labels */}
+      <span className="absolute -left-1 top-[18%] -translate-x-full text-[0.5rem] text-cyan-400/60">Tools</span>
+      <span className="absolute -right-1 top-[18%] translate-x-full text-[0.5rem] text-pink-400/60">MCP</span>
+      <span className="absolute -left-1 top-[55%] -translate-x-full text-[0.5rem] text-purple-400/60">Skills</span>
+      <span className="absolute -right-1 top-[55%] translate-x-full text-[0.5rem] text-amber-400/60">Plugins</span>
+      <span className="absolute left-1/2 -translate-x-1/2 -top-1 -translate-y-full text-[0.5rem] text-teal-400/60">Memory</span>
+      <span className="absolute left-1/2 -translate-x-1/2 -bottom-1 translate-y-full text-[0.5rem] text-blue-400/60">Repos</span>
+
+      {/* Handles: Links oben=Tools, links unten=Skills */}
+      <Handle type="target" position={Position.Left} id="tools" style={{ ...hBase, background: "#22d3ee", top: "20%" }} />
+      <Handle type="target" position={Position.Left} id="skills" style={{ ...hBase, background: "#c084fc", top: "60%" }} />
+      {/* Handles: Rechts oben=MCP, rechts unten=Plugins */}
+      <Handle type="target" position={Position.Right} id="mcp" style={{ ...hBase, background: "#f472b6", top: "20%" }} />
+      <Handle type="target" position={Position.Right} id="plugins" style={{ ...hBase, background: "#fbbf24", top: "60%" }} />
+      {/* Handles: Oben=Memory, Unten=Repos */}
+      <Handle type="target" position={Position.Top} id="memory" style={{ ...hBase, background: "#2dd4bf" }} />
+      <Handle type="target" position={Position.Bottom} id="repos" style={{ ...hBase, background: "#60a5fa" }} />
     </div>
   );
 }
@@ -439,49 +457,51 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
             position: { x: 60, y: 80 + i * 50 },
             data: { label: t, config: { toolId: t } },
           });
-          genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+          genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "tools", animated: true, style: { ...edgeStyle, stroke: "#22d3ee" } });
         });
 
-        // MCP-Server oben rechts
+        // MCP-Server rechts oben
         const mcps: string[] = cfg.mcp_servers || [];
         mcps.forEach((s: string, i: number) => {
           const nodeId = `mcp-${s}`;
           genNodes.push({
             id: nodeId, type: "mcp",
-            position: { x: 700, y: 80 + i * 60 },
+            position: { x: 750, y: 80 + i * 60 },
             data: { label: s, config: { serverId: s } },
           });
-          genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+          genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "mcp", animated: true, style: { ...edgeStyle, stroke: "#f472b6" } });
         });
 
-        // Skills unten
+        // Skills links unten
         try {
           const skillsResp = await api.get<{skills:{filename:string;skill?:string}[]}>(`/agents/${selectedAgentId}/skills`);
           const skills = skillsResp.skills || [];
+          const toolCount = tools.length;
           skills.forEach((s, i) => {
             const nodeId = `skill-${s.filename}`;
             genNodes.push({
               id: nodeId, type: "skill",
-              position: { x: 60 + i * 200, y: 450 + Math.floor(i / 3) * 60 },
+              position: { x: 60, y: 80 + (toolCount + i) * 50 + 30 },
               data: { label: s.skill || s.filename, config: { file: s.filename } },
             });
-            genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+            genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "skills", animated: true, style: { ...edgeStyle, stroke: "#c084fc" } });
           });
           setAvailableSkills(skills.map(s => s.filename));
         } catch { /* keine Skills */ }
 
-        // Plugins unten rechts
+        // Plugins rechts unten
         try {
           const plgResp = await api.pluginAgentGet(selectedAgentId);
           const pluginIds = plgResp.plugins || [];
+          const mcpCount = mcps.length;
           pluginIds.forEach((p: string, i: number) => {
             const nodeId = `plugin-${p}`;
             genNodes.push({
               id: nodeId, type: "plugin",
-              position: { x: 700, y: 350 + i * 60 },
+              position: { x: 750, y: 80 + (mcpCount + i) * 60 + 30 },
               data: { label: p, config: { pluginId: p } },
             });
-            genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+            genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "plugins", animated: true, style: { ...edgeStyle, stroke: "#fbbf24" } });
           });
         } catch { /* keine Plugins */ }
 
