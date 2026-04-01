@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HydraHive Benutzerhandbuch</title>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111827;
+      --accent: #06b6d4;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card: #1e293b;
+      --border: #334155;
+      --sidebar-w: 260px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header a {
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .sidebar-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .sidebar-logo span { color: var(--text); }
+    .sidebar-back {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+    .sidebar-back:hover { color: var(--accent); }
+    nav.toc {
+      padding: 1rem 0;
+      flex: 1;
+    }
+    .toc-section {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 0.8rem 1.5rem 0.3rem;
+    }
+    .toc a {
+      display: block;
+      padding: 0.45rem 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      border-left: 2px solid transparent;
+    }
+    .toc a:hover {
+      color: var(--text);
+      background: rgba(6,182,212,0.05);
+      border-left-color: var(--accent);
+    }
+    .toc a.active {
+      color: var(--accent);
+      background: rgba(6,182,212,0.08);
+      border-left-color: var(--accent);
+    }
+
+    /* MAIN CONTENT */
+    .content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+    }
+
+    .page-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+    .page-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* CHAPTER */
+    .chapter {
+      margin-bottom: 4rem;
+      scroll-margin-top: 2rem;
+    }
+    .chapter h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .chapter h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.5rem;
+      color: var(--text);
+    }
+    .chapter p {
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      font-size: 0.95rem;
+    }
+    .chapter ul, .chapter ol {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+    .chapter li {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    .chapter strong { color: var(--text); }
+    .chapter em { color: var(--accent); font-style: normal; }
+
+    /* CODE */
+    .chapter pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .chapter code {
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+    .chapter pre code { color: #e2e8f0; }
+    .chapter p code, .chapter li code {
+      background: rgba(6,182,212,0.1);
+      border: 1px solid rgba(6,182,212,0.2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      color: var(--accent);
+    }
+
+    /* BLOCKQUOTE / NOTE */
+    .note {
+      background: rgba(6,182,212,0.06);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 0.8rem 1.2rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .note strong { color: var(--accent); }
+
+    /* TABLE */
+    .chapter table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .chapter th {
+      background: var(--card);
+      text-align: left;
+      padding: 0.6rem 1rem;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter td {
+      padding: 0.6rem 1rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chapter tr:last-child td { border-bottom: none; }
+    .chapter tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* STEP LIST */
+    .steps {
+      list-style: none;
+      margin: 0.5rem 0 1rem;
+    }
+    .steps li {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      margin-bottom: 0.6rem;
+    }
+    .step-num {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .content { margin-left: 0; padding: 2rem 1.5rem; }
+    }
+  </style>
+  <style>
+    .tip { background: rgba(6,182,212,0.08); border-left: 3px solid var(--accent); padding: 1rem 1.2rem; border-radius: 0 8px 8px 0; margin: 1rem 0; }
+    .tip p { margin: 0.3rem 0; color: var(--muted); font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    th { background: var(--card); padding: 0.6rem 1rem; text-align: left; border-bottom: 2px solid var(--border); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    td { padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); }
+    code { background: var(--card); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; color: var(--accent); }
+    pre { background: var(--card); padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; border: 1px solid var(--border); }
+    pre code { background: none; padding: 0; color: var(--text); }
+    blockquote { margin: 1rem 0; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <a href="index.html">
+        <div>
+          <div class="sidebar-logo">Hydra<span>Hive</span></div>
+          <div class="sidebar-back">&larr; Zurück zur Startseite</div>
+        </div>
+      </a>
+    </div>
+    <nav class="toc">
+      <div class="toc-section">Benutzerhandbuch</div>
+    <a href="#erster-login">1. Erster Login</a>
+    <a href="#die-webkonsole--uebersicht">2. Die Webkonsole — Übersicht</a>
+    <a href="#mein-agent--dein-persoenlicher-ki-assistent">3. Mein Agent — Dein persönlicher KI-Assistent</a>
+    <a href="#llm-modell-wechseln">4. LLM-Modell wechseln</a>
+    <a href="#agenten-verwalten">5. Agenten verwalten</a>
+    <a href="#einem-agenten-tools-zuweisen">6. Einem Agenten Tools zuweisen</a>
+    <a href="#projekte-anlegen-und-nutzen">7. Projekte anlegen und nutzen</a>
+    <a href="#hydrahub--agenten-und-plugins-installieren">8. HydraHub — Agenten und Plugins installieren</a>
+    <a href="#clawhhub--skills-aus-der-community">9. ClawhHub — Skills aus der Community</a>
+    <a href="#plugins-verwalten">10. Plugins verwalten</a>
+    <a href="#skills--agenten-wissen-erweitern">11. Skills — Agenten-Wissen erweitern</a>
+    <a href="#federation--mehrere-server-verbinden">12. Federation — Mehrere Server verbinden</a>
+    <a href="#tailscale-einrichten">13. Tailscale einrichten</a>
+    <a href="#hydrabrain--3d-ansicht">14. HydraBrain — 3D-Ansicht</a>
+    <a href="#blueprint--visueller-agent-builder">15. Blueprint — Visueller Agent-Builder</a>
+    <a href="#scratchpad--ideen-skizzieren">16. Scratchpad — Ideen skizzieren</a>
+    <a href="#einstellungen--llm-provider">17. Einstellungen — LLM Provider</a>
+    <a href="#einstellungen--mcp-server">18. Einstellungen — MCP Server</a>
+    <a href="#einstellungen--vpn">19. Einstellungen — VPN</a>
+    <a href="#einstellungen--mail">20. Einstellungen — Mail</a>
+    <a href="#einstellungen--benutzer--rollen">21. Einstellungen — Benutzer & Rollen</a>
+    <a href="#einstellungen--backup--restore">22. Einstellungen — Backup & Restore</a>
+    <a href="#einstellungen--erweiterungen">23. Einstellungen — Erweiterungen</a>
+    <a href="#einstellungen--system-update">24. Einstellungen — System-Update</a>
+    <a href="#aktivitaet--live-monitor">25. Aktivität — Live-Monitor</a>
+    <a href="#usage--token-verbrauch">26. Usage — Token-Verbrauch</a>
+    <a href="#haeufige-fragen">27. Häufige Fragen</a>
+    </nav>
+  </aside>
+  <main class="content">
+    <h1 class="page-title">Benutzerhandbuch</h1>
+    <p class="page-intro">Schritt-für-Schritt Anleitung für die HydraHive Webkonsole. Kein Terminal nötig — alles über den Browser.</p>
+<p>Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkonsole bedienst. Keine Kommandozeile nötig — alles läuft über den Browser.</p>
+<hr>
+<div class="chapter" id="inhaltsverzeichnis">
+<h2>Inhaltsverzeichnis</h2>
+<ol>
+<li><a href="#1-erster-login" target="_blank">Erster Login</a></li>
+<li><a href="#2-die-webkonsole--übersicht" target="_blank">Die Webkonsole — Übersicht</a></li>
+<li><a href="#3-mein-agent--dein-persönlicher-ki-assistent" target="_blank">Mein Agent — Dein persönlicher KI-Assistent</a></li>
+<li><a href="#4-llm-modell-wechseln" target="_blank">LLM-Modell wechseln</a></li>
+<li><a href="#5-agenten-verwalten" target="_blank">Agenten verwalten</a></li>
+<li><a href="#6-einem-agenten-tools-zuweisen" target="_blank">Einem Agenten Tools zuweisen</a></li>
+<li><a href="#7-projekte-anlegen-und-nutzen" target="_blank">Projekte anlegen und nutzen</a></li>
+<li><a href="#8-hydrahub--agenten-und-plugins-installieren" target="_blank">HydraHub — Agenten und Plugins installieren</a></li>
+<li><a href="#9-clawhub--skills-aus-der-community" target="_blank">ClawhHub — Skills aus der Community</a></li>
+<li><a href="#10-plugins-verwalten" target="_blank">Plugins verwalten</a></li>
+<li><a href="#11-skills--agenten-wissen-erweitern" target="_blank">Skills — Agenten-Wissen erweitern</a></li>
+<li><a href="#12-federation--mehrere-server-verbinden" target="_blank">Federation — Mehrere Server verbinden</a></li>
+<li><a href="#13-tailscale-einrichten" target="_blank">Tailscale einrichten</a></li>
+<li><a href="#14-hydrabrain--3d-ansicht" target="_blank">HydraBrain — 3D-Ansicht</a></li>
+<li><a href="#15-blueprint--visueller-agent-builder" target="_blank">Blueprint — Visueller Agent-Builder</a></li>
+<li><a href="#16-scratchpad--ideen-skizzieren" target="_blank">Scratchpad — Ideen skizzieren</a></li>
+<li><a href="#17-einstellungen--llm-provider" target="_blank">Einstellungen — LLM Provider</a></li>
+<li><a href="#18-einstellungen--mcp-server" target="_blank">Einstellungen — MCP Server</a></li>
+<li><a href="#19-einstellungen--vpn" target="_blank">Einstellungen — VPN</a></li>
+<li><a href="#20-einstellungen--mail" target="_blank">Einstellungen — Mail</a></li>
+<li><a href="#21-einstellungen--benutzer--rollen" target="_blank">Einstellungen — Benutzer & Rollen</a></li>
+<li><a href="#22-einstellungen--backup--restore" target="_blank">Einstellungen — Backup & Restore</a></li>
+<li><a href="#23-einstellungen--erweiterungen" target="_blank">Einstellungen — Erweiterungen</a></li>
+<li><a href="#24-einstellungen--system-update" target="_blank">Einstellungen — System-Update</a></li>
+<li><a href="#25-aktivität--live-monitor" target="_blank">Aktivität — Live-Monitor</a></li>
+<li><a href="#26-usage--token-verbrauch" target="_blank">Usage — Token-Verbrauch</a></li>
+<li><a href="#27-häufige-fragen" target="_blank">Häufige Fragen</a></li>
+</ul>
+<hr>
+<div class="chapter" id="1-erster-login">
+<h2>1. Erster Login</h2>
+<ol>
+<li>Öffne deinen Browser und gib die Adresse deines HydraHive-Servers ein (z.B. <code>https://192.168.178.181</code>)</li>
+<li>Du siehst die Login-Seite</li>
+<li>Gib deinen <strong>Benutzernamen</strong> und dein <strong>Passwort</strong> ein</li>
+<li>Klicke auf <strong>Anmelden</strong></li>
+<li>Beim allerersten Login startet der <strong>Einrichtungsassistent</strong> — folge den Schritten</li>
+</ul>
+<blockquote class="tip">
+<p><strong>Tipp:</strong> Der Standard-Admin-Account wird bei der Installation angelegt. Den Benutzernamen und das Passwort hast du bei der Installation festgelegt.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="2-die-webkonsole--uebersicht">
+<h2>2. Die Webkonsole — Übersicht</h2>
+<p>Nach dem Login siehst du die Webkonsole. Links ist die <strong>Sidebar</strong> mit allen Bereichen:</p>
+<table>
+<tr><th>Symbol</th><th>Bereich</th><th>Was du dort tust</th></tr>
+<tr><td>🏠</td><td><strong>Dashboard</strong></td><td>Übersicht: Agenten-Status, System-Auslastung</td></tr>
+<tr><td>🤖</td><td><strong>Mein Agent</strong></td><td>Chatten mit deinem persönlichen KI-Assistenten</td></tr>
+<tr><td>👥</td><td><strong>Agenten</strong></td><td>Alle Agenten anzeigen, erstellen, bearbeiten</td></tr>
+<tr><td>📁</td><td><strong>Projekte</strong></td><td>Projektbasiertes Arbeiten mit Agenten-Teams</td></tr>
+<tr><td>📊</td><td><strong>Aktivität</strong></td><td>Live-Ansicht: Welcher Agent arbeitet gerade?</td></tr>
+<tr><td>💰</td><td><strong>Usage</strong></td><td>Token-Verbrauch und Kosten pro Agent</td></tr>
+<tr><td>⏰</td><td><strong>Zeitpläne</strong></td><td>Automatische Aufgaben planen</td></tr>
+<tr><td>🔍</td><td><strong>Suche</strong></td><td>Globale Suche über alle Agenten und Projekte</td></tr>
+<tr><td>🧩</td><td><strong>Erweiterungen</strong></td><td>Optionale Dienste installieren</td></tr>
+<tr><td>🔌</td><td><strong>Plugins</strong></td><td>Plugin-System verwalten</td></tr>
+<tr><td>🏪</td><td><strong>HydraHub</strong></td><td>Agenten, Plugins und Skills installieren</td></tr>
+<tr><td>🧠</td><td><strong>HydraBrain</strong></td><td>3D-Visualisierung aller Agenten</td></tr>
+<tr><td>🌐</td><td><strong>Federation</strong></td><td>Server miteinander verbinden</td></tr>
+<tr><td>📐</td><td><strong>Blueprint</strong></td><td>Visueller Agent-Builder und Scratchpad</td></tr>
+<tr><td>⚙️</td><td><strong>Einstellungen</strong></td><td>LLM, VPN, Mail, Backup, Users</td></tr>
+</table>
+<hr>
+<div class="chapter" id="3-mein-agent--dein-persoenlicher-ki-assistent">
+<h2>3. Mein Agent — Dein persönlicher KI-Assistent</h2>
+<p>Jeder Benutzer hat einen eigenen KI-Agenten. So chattest du mit ihm:</p>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Mein Agent</strong></li>
+<li>Du siehst ein Chat-Fenster</li>
+<li>Tippe deine Nachricht unten ins Textfeld</li>
+<li>Drücke <strong>Enter</strong> oder klicke den <strong>Senden</strong>-Button</li>
+<li>Der Agent antwortet — du siehst die Antwort im Chat</li>
+</ul>
+<h3>Chat leeren</h3>
+<ol>
+<li>Klicke oben rechts auf das <strong>Papierkorb-Symbol</strong></li>
+<li>Der Chat-Verlauf wird gelöscht und der Agent startet frisch</li>
+</ul>
+<h3>Einstellungen deines Agents</h3>
+<ol>
+<li>Klicke oben rechts auf das <strong>Zahnrad-Symbol</strong></li>
+<li>Hier kannst du ändern:</li>
+<li><strong>Modell</strong> — welches KI-Modell der Agent nutzt (z.B. Claude, GPT, Ollama)</li>
+<li><strong>Temperatur</strong> — wie kreativ der Agent antwortet (0 = präzise, 1 = kreativ)</li>
+<li><strong>Name</strong> — wie dein Agent heißt</li>
+</ul>
+<hr>
+<div class="chapter" id="4-llm-modell-wechseln">
+<h2>4. LLM-Modell wechseln</h2>
+<p>Dein Agent braucht ein KI-Modell zum Arbeiten. So wechselst du es:</p>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Mein Agent</strong></li>
+<li>Klicke oben rechts auf das <strong>Zahnrad-Symbol</strong></li>
+<li>Unter <strong>Modell</strong> siehst du ein Dropdown</li>
+<li>Wähle ein Modell aus:</li>
+<li><strong>claude-sonnet-4-6</strong> — Schnell und gut (Anthropic)</li>
+<li><strong>claude-opus-4-6</strong> — Leistungsstärker, langsamer (Anthropic)</li>
+<li><strong>claude-haiku-4-5</strong> — Am schnellsten, güntigsten (Anthropic)</li>
+<li><strong>gpt-4o</strong> — OpenAI Modell</li>
+<li><strong>ollama/...</strong> — Lokale Modelle auf deinem Server</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<blockquote class="tip">
+<p><strong>Wichtig:</strong> Für Claude-Modelle muss unter Einstellungen → LLM ein Anthropic-Provider eingerichtet sein. Für Ollama muss Ollama auf dem Server laufen.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="5-agenten-verwalten">
+<h2>5. Agenten verwalten</h2>
+<p>Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.</p>
+<h3>Alle Agenten anzeigen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Agenten</strong></li>
+<li>Du siehst eine Liste aller Agenten mit Status (grün = läuft, grau = gestoppt)</li>
+</ul>
+<h3>Neuen Agenten erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong></li>
+<li>Klicke oben rechts auf <strong>+ Neuer Agent</strong></li>
+<li>Fülle das Formular aus:</li>
+<li><strong>Agent-ID</strong> — Eindeutiger Name, nur Kleinbuchstaben und Bindestriche (z.B. <code>mein-helfer</code>)</li>
+<li><strong>Anzeigename</strong> — Der Name der in der Oberfläche erscheint</li>
+<li><strong>Typ</strong> — Wähle eine Rolle:</li>
+<li><strong>Boss</strong> — Kann Aufgaben an andere Agenten delegieren</li>
+<li><strong>Worker</strong> — Arbeitet Aufgaben ab die er bekommt</li>
+<li><strong>Specialist</strong> — Eigenständiger Experte für ein Thema</li>
+<li><strong>Modell</strong> — Welches KI-Modell der Agent nutzt</li>
+<li>Klicke <strong>Erstellen</strong></li>
+</ul>
+<h3>Agenten bearbeiten</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong></li>
+<li>Klicke auf den Agenten den du bearbeiten willst</li>
+<li>Klicke auf <strong>Bearbeiten</strong></li>
+<li>Ändere die gewünschten Einstellungen</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<h3>Agenten löschen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong></li>
+<li>Klicke auf den Agenten</li>
+<li>Klicke auf <strong>Löschen</strong></li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<blockquote class="tip">
+<p><strong>Achtung:</strong> Persönliche Agenten (die mit `personal_` anfangen) können nicht gelöscht werden.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="6-einem-agenten-tools-zuweisen">
+<h2>6. Einem Agenten Tools zuweisen</h2>
+<p>Tools sind Fähigkeiten die ein Agent nutzen kann — Dateien lesen, im Web suchen, Shell-Befehle ausführen usw.</p>
+<h3>Tools über die Agenten-Seite zuweisen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong></li>
+<li>Klicke auf den gewünschten Agenten</li>
+<li>Klicke auf <strong>Bearbeiten</strong></li>
+<li>Scrolle runter zu <strong>Tools</strong></li>
+<li>Du siehst viele Buttons — jeder ist ein Tool</li>
+<li><strong>Klicke auf einen Button</strong> um das Tool zu aktivieren (farbig = aktiv, grau = inaktiv)</li>
+<li>Tools mit ⚠ Symbol sind sensibel (z.B. <code>shell_exec</code>, <code>delete_agent</code>)</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<h3>Häufig genutzte Tools</h3>
+<table>
+<tr><th>Tool</th><th>Was es tut</th></tr>
+<tr><td><code>file_read</code></td><td>Dateien lesen</td></tr>
+<tr><td><code>file_write</code></td><td>Dateien schreiben</td></tr>
+<tr><td><code>web_search</code></td><td>Im Internet suchen</td></tr>
+<tr><td><code>http_request</code></td><td>Websites und APIs aufrufen</td></tr>
+<tr><td><code>shell_exec</code></td><td>Terminal-Befehle ausführen</td></tr>
+<tr><td><code>read_memory</code></td><td>Agenten-Gedächtnis lesen</td></tr>
+<tr><td><code>write_memory</code></td><td>Ins Agenten-Gedächtnis schreiben</td></tr>
+<tr><td><code>ask_agent</code></td><td>Einen anderen Agenten fragen</td></tr>
+<tr><td><code>git_status</code></td><td>Git-Status prüfen</td></tr>
+<tr><td><code>git_clone</code></td><td>Git-Repository klonen (braucht <code>shell_exec</code>)</td></tr>
+</table>
+<h3>Plugin-Tools zuweisen</h3>
+<p>Plugin-Tools werden nicht einzeln zugewiesen sondern als ganzes Plugin:</p>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Plugins</strong></li>
+<li>Klicke auf das gewünschte Plugin</li>
+<li>Im Detail-Fenster rechts: Setze ein <strong>Häkchen</strong> beim gewünschten Agenten</li>
+<li>Alle Tools des Plugins sind jetzt für diesen Agenten verfügbar</li>
+</ul>
+<hr>
+<div class="chapter" id="7-projekte-anlegen-und-nutzen">
+<h2>7. Projekte anlegen und nutzen</h2>
+<p>Projekte sind Arbeitsräume in denen Agenten-Teams zusammenarbeiten.</p>
+<h3>Neues Projekt erstellen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Projekte</strong></li>
+<li>Klicke auf <strong>+ Neues Projekt</strong></li>
+<li>Gib dem Projekt einen <strong>Namen</strong> und eine <strong>Beschreibung</strong></li>
+<li>Wähle den <strong>Boss-Agenten</strong> (der die Arbeit koordiniert)</li>
+<li>Wähle <strong>Worker-Agenten</strong> (die die Arbeit erledigen)</li>
+<li>Klicke <strong>Erstellen</strong></li>
+</ul>
+<h3>Im Projekt chatten</h3>
+<ol>
+<li>Klicke auf <strong>Projekte</strong></li>
+<li>Klicke auf das gewünschte Projekt</li>
+<li>Du siehst das Chat-Fenster des Projekts</li>
+<li>Schreibe deine Nachricht und drücke <strong>Enter</strong></li>
+<li>Der Boss-Agent koordiniert die Arbeit und delegiert an Worker</li>
+</ul>
+<hr>
+<div class="chapter" id="8-hydrahub--agenten-und-plugins-installieren">
+<h2>8. HydraHub — Agenten und Plugins installieren</h2>
+<p>Der HydraHub ist der eingebaute App-Store von HydraHive.</p>
+<h3>Agenten aus dem Hub installieren</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>HydraHub</strong></li>
+<li>Du bist im Tab <strong>Agenten</strong> — hier siehst du vorgefertigte Agenten</li>
+<li>Nutze die <strong>Suche</strong> oben oder die <strong>Kategorien</strong> links zum Filtern</li>
+<li>Klicke auf einen Agenten der dich interessiert</li>
+<li>Ein Detail-Fenster öffnet sich rechts</li>
+<li>Optional: Ändere die <strong>Agent-ID</strong></li>
+<li>Klicke <strong>Installieren</strong></li>
+<li>Der Agent ist sofort verfügbar — kein Neustart nötig</li>
+</ul>
+<h3>Agenten deinstallieren</h3>
+<ol>
+<li>Klicke im HydraHub auf einen installierten Agenten</li>
+<li>Im Detail-Fenster klicke auf <strong>Deinstallieren</strong></li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<h3>Plugins aus dem Hub installieren</h3>
+<ol>
+<li>Klicke auf <strong>HydraHub</strong></li>
+<li>Wechsle zum Tab <strong>Plugins</strong></li>
+<li>Klicke bei einem Plugin auf <strong>Installieren</strong></li>
+<li>Das Plugin wird heruntergeladen und aktiviert</li>
+<li>Weise es danach unter <strong>Plugins</strong> einem Agenten zu (siehe Kapitel 10)</li>
+</ul>
+<hr>
+<div class="chapter" id="9-clawhhub--skills-aus-der-community">
+<h2>9. ClawhHub — Skills aus der Community</h2>
+<p>ClawhHub ist eine öffentliche Datenbank mit tausenden KI-Skills.</p>
+<h3>ClawhHub Token einrichten (einmalig)</h3>
+<ol>
+<li>Erstelle einen Account auf <a href="https://clawhub.ai" target="_blank">clawhub.ai</a></li>
+<li>Gehe auf clawhub.ai zu <strong>Settings</strong> → <strong>API Token</strong> erstellen</li>
+<li>Kopiere den Token</li>
+<li>In HydraHive: Klicke auf <strong>HydraHub</strong> → Tab <strong>ClawhHub</strong></li>
+<li>Ganz oben siehst du das Feld <strong>ClawhHub API Token</strong></li>
+<li>Füge deinen Token ein und klicke <strong>Speichern</strong></li>
+</ul>
+<h3>Skills suchen und installieren</h3>
+<ol>
+<li>Klicke auf <strong>HydraHub</strong> → Tab <strong>ClawhHub</strong> → Sub-Tab <strong>Skills</strong></li>
+<li>Gib einen Suchbegriff ein (z.B. "python", "security", "git")</li>
+<li>Klicke auf <strong>Suchen</strong></li>
+<li>Klicke auf einen Skill der dich interessiert</li>
+<li>Wähle den <strong>Ziel-Agent</strong> (zu welchem Agent der Skill gehören soll)</li>
+<li>Klicke <strong>In Agent installieren</strong></li>
+<li>Der Skill ist sofort aktiv</li>
+</ul>
+<h3>Plugins browsen</h3>
+<ol>
+<li>Klicke auf <strong>HydraHub</strong> → Tab <strong>ClawhHub</strong> → Sub-Tab <strong>Plugins</strong></li>
+<li>Wähle den Typ: <strong>Code Plugins</strong>, <strong>Bundle Plugins</strong> oder <strong>Skill Packages</strong></li>
+<li>Du siehst eine Übersicht — aktuell nur zum Anschauen (Import kommt in Zukunft)</li>
+</ul>
+<hr>
+<div class="chapter" id="10-plugins-verwalten">
+<h2>10. Plugins verwalten</h2>
+<p>Plugins erweitern deine Agenten um neue Fähigkeiten (Tools).</p>
+<h3>Plugins anzeigen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Plugins</strong></li>
+<li>Du siehst alle installierten Plugins als Karten</li>
+<li>Grünes Power-Symbol = aktiv, graues = deaktiviert</li>
+</ul>
+<h3>Plugin einem Agenten zuweisen</h3>
+<ol>
+<li>Klicke auf <strong>Plugins</strong></li>
+<li>Klicke auf das Plugin das du zuweisen willst</li>
+<li>Ein Detail-Fenster öffnet sich rechts</li>
+<li>Unter <strong>Agent-Zuweisung</strong> siehst du alle Agenten als Checkboxen</li>
+<li><strong>Setze ein Häkchen</strong> bei jedem Agenten der das Plugin nutzen soll</li>
+<li>Die Tools des Plugins sind sofort verfügbar — kein Neustart nötig</li>
+</ul>
+<h3>Plugin aktivieren / deaktivieren</h3>
+<ol>
+<li>Klicke auf <strong>Plugins</strong></li>
+<li>Klicke auf das <strong>Power-Symbol</strong> auf der Plugin-Karte</li>
+<li>Grün = aktiv, grau = deaktiviert</li>
+</ul>
+<h3>Plugin deinstallieren</h3>
+<ol>
+<li>Klicke auf <strong>Plugins</strong></li>
+<li>Klicke auf das Plugin</li>
+<li>Im Detail-Fenster unten: Klicke auf das <strong>Papierkorb-Symbol</strong></li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="11-skills--agenten-wissen-erweitern">
+<h2>11. Skills — Agenten-Wissen erweitern</h2>
+<p>Skills sind Wissens-Dateien die einem Agenten beibringen wie er bestimmte Aufgaben erledigt.</p>
+<h3>Skills eines Agenten anzeigen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong></li>
+<li>Klicke auf einen Agenten</li>
+<li>Klicke auf den Tab <strong>Skills</strong></li>
+<li>Du siehst alle Skills des Agenten</li>
+</ul>
+<h3>Skill aus ClawhHub installieren</h3>
+<p>Siehe Kapitel 9 — "Skills suchen und installieren"</p>
+<h3>Eigenen Skill erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong> → wähle einen Agenten → Tab <strong>Skills</strong></li>
+<li>Klicke auf <strong>+ Neuer Skill</strong></li>
+<li>Gib dem Skill einen <strong>Namen</strong></li>
+<li>Schreibe den Skill-Inhalt (Anweisungen für den Agenten)</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="12-federation--mehrere-server-verbinden">
+<h2>12. Federation — Mehrere Server verbinden</h2>
+<p>Federation verbindet mehrere HydraHive-Server miteinander. Agenten auf verschiedenen Servern können dann zusammenarbeiten.</p>
+<h3>Peers (verbundene Server) anzeigen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Federation</strong></li>
+<li>Oben siehst du alle verbundenen <strong>Peers</strong> (andere Server)</li>
+<li>Grüner Punkt = erreichbar, roter Punkt = nicht erreichbar</li>
+</ul>
+<h3>Peer manuell hinzufügen</h3>
+<ol>
+<li>Klicke auf <strong>Federation</strong></li>
+<li>Klicke auf <strong>+ Peer hinzufügen</strong></li>
+<li>Gib ein:</li>
+<li><strong>Name</strong> — Ein Name für den Server (z.B. "Produktiv-Server")</li>
+<li><strong>URL</strong> — Die Adresse des anderen Servers (z.B. <code>https://192.168.1.100</code>)</li>
+<li><strong>Secret</strong> — Ein gemeinsames Passwort (muss auf beiden Servern gleich sein)</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<h3>Test-Task an einen Peer senden</h3>
+<ol>
+<li>Klicke auf <strong>Federation</strong></li>
+<li>Scrolle runter zu <strong>Test-Task senden</strong></li>
+<li>Wähle einen <strong>Peer</strong> und einen <strong>Agenten</strong> auf dem Peer</li>
+<li>Schreibe eine <strong>Nachricht</strong></li>
+<li>Klicke <strong>Task senden</strong></li>
+<li>Du siehst die Antwort des Remote-Agenten</li>
+</ul>
+<hr>
+<div class="chapter" id="13-tailscale-einrichten">
+<h2>13. Tailscale einrichten</h2>
+<p>Tailscale verbindet deine Server sicher über das Internet — verschlüsselt, ohne Port-Forwarding.</p>
+<h3>Schritt 1: Tailscale Account erstellen</h3>
+<ol>
+<li>Gehe auf <a href="https://login.tailscale.com" target="_blank">login.tailscale.com</a></li>
+<li>Erstelle einen Account (geht mit Google, GitHub oder E-Mail)</li>
+<li>Gehe zu <strong>Settings</strong> → <strong>Keys</strong></li>
+<li>Klicke auf <strong>Generate access token</strong></li>
+<li>Kopiere den Token (beginnt mit <code>tskey-api-...</code>)</li>
+</ul>
+<h3>Schritt 2: API Key in HydraHive eintragen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Federation</strong></li>
+<li>Scrolle zur Sektion <strong>Tailscale</strong></li>
+<li>Du siehst <strong>Schritt 1: Tailscale API Key eintragen</strong></li>
+<li>Füge deinen API Key ein (den <code>tskey-api-...</code> Token)</li>
+<li>Klicke <strong>Speichern</strong></li>
+<li>Der Key wird geprüft — wenn gültig, erscheint Schritt 2</li>
+</ul>
+<h3>Schritt 3: Server verbinden</h3>
+<ol>
+<li>Klicke auf <strong>Einladen</strong> — ein Auth-Key wird generiert (beginnt mit <code>tskey-auth-...</code>)</li>
+<li>Kopiere den Auth-Key</li>
+<li>Füge ihn im Feld <strong>"Server mit Tailnet verbinden"</strong> ein</li>
+<li>Klicke <strong>Verbinden</strong></li>
+<li>Dein Server hat jetzt eine Tailscale-IP (z.B. <code>100.x.x.x</code>)</li>
+</ul>
+<h3>Schritt 4: Andere Server einladen</h3>
+<ol>
+<li>Klicke auf <strong>Einladen</strong> — ein neuer Auth-Key wird generiert</li>
+<li>Schicke diesen Key dem Admin des anderen Servers</li>
+<li>Der andere Admin geht auf seiner HydraHive-Instanz auf <strong>Federation</strong> → <strong>Tailscale</strong></li>
+<li>Dort trägt er den gleichen <strong>API Key</strong> ein (Schritt 1)</li>
+<li>Dann den <strong>Auth-Key</strong> ins Verbinden-Feld (Schritt 2) → <strong>Verbinden</strong></li>
+<li>Beide Server sind jetzt im selben Netzwerk</li>
+</ul>
+<h3>Schritt 5: HydraHive-Instanzen finden</h3>
+<ol>
+<li>Klicke auf <strong>HydraHive suchen</strong></li>
+<li>HydraHive scannt alle Server im Tailscale-Netzwerk</li>
+<li>Gefundene Instanzen erscheinen mit einem Button <strong>"Als Peer hinzufügen"</strong></li>
+<li>Klicke darauf — die Server sind jetzt verbunden und können zusammenarbeiten</li>
+</ul>
+<h3>API Key ändern</h3>
+<ol>
+<li>Klicke auf <strong>API Key ändern</strong> neben der Tailscale-IP</li>
+<li>Trage den neuen Key ein → <strong>Speichern</strong></li>
+</ul>
+<h3>Server trennen</h3>
+<ol>
+<li>Klicke auf <strong>Trennen</strong> — der Server wird vom Tailscale-Netzwerk getrennt</li>
+</ul>
+<h3>Gerät aus dem Netzwerk entfernen</h3>
+<ol>
+<li>Klicke auf <strong>Tailnet Devices</strong> um alle Geräte zu sehen</li>
+<li>Klicke auf das <strong>Papierkorb-Symbol</strong> neben dem Gerät das du entfernen willst</li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<blockquote class="tip">
+<p><strong>Wichtig:</strong></p>
+<p>- Der <strong>API Key</strong> (`tskey-api-...`) ist für die Verwaltung — auf jedem Server gleich</p>
+<p>- Der <strong>Auth Key</strong> (`tskey-auth-...`) ist eine Einladung — einmalig, zum Beitreten</p>
+<p>- Verwechsle die beiden nicht!</p>
+</blockquote>
+<hr>
+<div class="chapter" id="14-hydrabrain--3d-ansicht">
+<h2>14. HydraBrain — 3D-Ansicht</h2>
+<p>HydraBrain zeigt eine interaktive 3D-Karte aller Agenten, Tools und Verbindungen.</p>
+<h3>Öffnen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>HydraBrain</strong></li>
+<li>Du siehst einen 3D-Graphen mit farbigen Kugeln</li>
+</ul>
+<h3>Bedienung</h3>
+<ul>
+<li><strong>Mausrad</strong> — Rein- und rauszoomen</li>
+<li><strong>Linke Maustaste ziehen</strong> — Ansicht drehen</li>
+<li><strong>Rechte Maustaste ziehen</strong> — Ansicht verschieben</li>
+<li><strong>Auf eine Kugel klicken</strong> — Details zum Knoten anzeigen</li>
+</ul>
+<h3>Was die Farben bedeuten</h3>
+<table>
+<tr><th>Farbe</th><th>Bedeutung</th></tr>
+<tr><td>Blau</td><td>Boss-Agent</td></tr>
+<tr><td>Grün</td><td>Worker/Specialist-Agent</td></tr>
+<tr><td>Cyan (hell-blau)</td><td>Agent denkt gerade</td></tr>
+<tr><td>Grün (leuchtend)</td><td>Agent liest gerade Daten</td></tr>
+<tr><td>Orange</td><td>Agent schreibt gerade Daten</td></tr>
+<tr><td>Klein + grau</td><td>Tools, Memories, Skills</td></tr>
+</table>
+<h3>Federation einblenden</h3>
+<ol>
+<li>Klicke auf den <strong>Radar-Button</strong> in der Toolbar oben rechts</li>
+<li>Remote-Server und ihre Agenten werden als separate Cluster angezeigt</li>
+<li>Pink = Peer-Gateway, Gelb = Remote-Agenten</li>
+<li>Nochmal klicken um sie auszublenden</li>
+</ul>
+<h3>Labels ein-/ausblenden</h3>
+<ol>
+<li>Klicke auf den <strong>Label-Button</strong> in der Toolbar</li>
+<li>Beschriftungen an den Kugeln werden ein-/ausgeblendet</li>
+</ul>
+<h3>Ansicht neu laden</h3>
+<ol>
+<li>Klicke auf den <strong>Refresh-Button</strong> in der Toolbar</li>
+<li>Agenten und Verbindungen werden neu geladen</li>
+</ul>
+<blockquote class="tip">
+<p><strong>Hinweis:</strong> HydraBrain braucht WebGL (Hardware-Beschleunigung im Browser). Falls du eine leere Seite siehst, starte den Browser neu.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="15-blueprint--visueller-agent-builder">
+<h2>15. Blueprint — Visueller Agent-Builder</h2>
+<p>Im Blueprint-Bereich baust du Agenten visuell zusammen — als Graph mit Kästchen und Verbindungen.</p>
+<h3>Bestehenden Agenten anzeigen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Blueprint</strong></li>
+<li>Wechsle zum Tab <strong>Agent-Blueprint</strong></li>
+<li>Wähle oben links im Dropdown einen Agenten aus</li>
+<li>Du siehst seinen Aufbau: Agent-Kästchen in der Mitte, Tools links, MCP-Server rechts</li>
+</ul>
+<h3>Neuen Agenten visuell erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Blueprint</strong> → Tab <strong>Agent-Blueprint</strong></li>
+<li>Klicke auf <strong>Neuer Agent</strong></li>
+<li>Ein violettes Agent-Kästchen erscheint in der Mitte</li>
+<li><strong>Klicke auf das Kästchen</strong> — rechts erscheinen die Einstellungen:</li>
+<li><strong>Agent-ID</strong> — Eindeutiger Name (Pflichtfeld!)</li>
+<li><strong>Typ</strong> — Boss, Worker oder Specialist</li>
+<li><strong>LLM Model</strong> — Welches KI-Modell</li>
+<li><strong>Soul</strong> — Persönlichkeit und Anweisungen</li>
+<li>Klicke oben auf <strong>Palette</strong> um die Toolbox zu öffnen</li>
+<li>Klicke auf <strong>Tool</strong>, <strong>Skill</strong>, <strong>MCP Server</strong> oder <strong>Plugin</strong> um Kästchen hinzuzufügen</li>
+<li><strong>Ziehe eine Linie</strong> vom neuen Kästchen zum Agent-Kästchen (von einem Punkt zum anderen)</li>
+<li>Wähle bei jedem Kästchen rechts im Panel was es sein soll (z.B. welches Tool)</li>
+<li>Wenn alles konfiguriert ist: Klicke oben rechts auf <strong>Agent erstellen</strong></li>
+</ul>
+<h3>Agent löschen</h3>
+<ol>
+<li>Im <strong>Agent-Blueprint</strong> Tab den Agenten im Dropdown auswählen</li>
+<li>Klicke auf den roten <strong>Löschen</strong>-Button neben dem Dropdown</li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<h3>Andockpunkte am Agent-Kästchen</h3>
+<p>Das Agent-Kästchen hat 6 farbige Andockpunkte:</p>
+<ul>
+<li><strong>Links oben</strong> (cyan) → Tools</li>
+<li><strong>Links unten</strong> (lila) → Skills</li>
+<li><strong>Rechts oben</strong> (pink) → MCP Server</li>
+<li><strong>Rechts unten</strong> (gelb) → Plugins</li>
+<li><strong>Oben</strong> (türkis) → Memory</li>
+<li><strong>Unten</strong> (blau) → Repositories</li>
+</ul>
+<hr>
+<div class="chapter" id="16-scratchpad--ideen-skizzieren">
+<h2>16. Scratchpad — Ideen skizzieren</h2>
+<p>Das Scratchpad ist ein freies Whiteboard zum Brainstormen.</p>
+<h3>Öffnen</h3>
+<ol>
+<li>Klicke auf <strong>Blueprint</strong></li>
+<li>Wechsle zum Tab <strong>Scratchpad</strong></li>
+</ul>
+<h3>Notiz erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Notiz</strong> — ein graues Kästchen erscheint</li>
+<li>Oder klicke auf <strong>Farbe</strong> und wähle eine Farbe für das Kästchen</li>
+</ul>
+<h3>Notiz bearbeiten</h3>
+<ol>
+<li><strong>Klicke auf ein Kästchen</strong> — rechts erscheinen die Einstellungen</li>
+<li>Ändere den <strong>Text</strong> (wird im Kästchen angezeigt)</li>
+<li>Ändere die <strong>Notiz</strong> (kleine Zusatzinfo unter dem Text)</li>
+<li>Wähle eine andere <strong>Farbe</strong></li>
+</ul>
+<h3>Kästchen verbinden</h3>
+<ol>
+<li>Fahre mit der Maus über ein Kästchen — du siehst kleine Punkte an den Rändern</li>
+<li><strong>Klicke und ziehe</strong> von einem Punkt zu einem Punkt auf einem anderen Kästchen</li>
+<li>Eine Verbindungslinie entsteht</li>
+</ul>
+<h3>Kästchen verschieben</h3>
+<ol>
+<li><strong>Klicke und ziehe</strong> das Kästchen an eine neue Position</li>
+</ul>
+<h3>Alles löschen</h3>
+<ol>
+<li>Klicke auf <strong>Alles löschen</strong></li>
+<li>Bestätige mit <strong>OK</strong></li>
+</ul>
+<blockquote class="tip">
+<p><strong>Tipp:</strong> Das Scratchpad speichert automatisch alle 5 Sekunden. Deine Skizzen bleiben erhalten.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="17-einstellungen--llm-provider">
+<h2>17. Einstellungen — LLM Provider</h2>
+<p>Hier konfigurierst du welche KI-Modelle verfügbar sind.</p>
+<h3>Provider einrichten</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Einstellungen</strong></li>
+<li>Klicke auf <strong>LLM</strong></li>
+<li>Du siehst die verfügbaren Provider</li>
+</ul>
+<h3>Anthropic (Claude) einrichten</h3>
+<ol>
+<li>Unter <strong>Anthropic</strong> klicke auf <strong>Mit Anthropic verbinden</strong></li>
+<li>Du wirst zu Anthropic weitergeleitet</li>
+<li>Melde dich an und erlaube den Zugriff</li>
+<li>Du wirst zurückgeleitet — Claude-Modelle sind jetzt verfügbar</li>
+</ul>
+<h3>Ollama (lokale Modelle) einrichten</h3>
+<ol>
+<li>Ollama muss auf dem Server installiert sein</li>
+<li>Unter <strong>Ollama</strong> siehst du den Status und verfügbare Modelle</li>
+<li>Du kannst neue Modelle direkt herunterladen: Modellname eingeben → <strong>Pull</strong></li>
+</ul>
+<h3>Standard-Modell festlegen</h3>
+<ol>
+<li>Unter <strong>Standard-Modell</strong> wähle das Modell das als Default genutzt werden soll</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="18-einstellungen--mcp-server">
+<h2>18. Einstellungen — MCP Server</h2>
+<p>MCP Server erweitern HydraHive um externe Tools (z.B. Datenbanken, APIs).</p>
+<h3>MCP Server hinzufügen</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>MCP</strong></li>
+<li>Klicke auf <strong>+ Server hinzufügen</strong></li>
+<li>Gib ein:</li>
+<li><strong>ID</strong> — Eindeutiger Name (z.B. <code>mein-mcp</code>)</li>
+<li><strong>Name</strong> — Anzeigename</li>
+<li><strong>URL</strong> — Adresse des MCP Servers</li>
+<li><strong>Transport</strong> — streamableHttp oder SSE</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<h3>MCP Server einem Agenten zuweisen</h3>
+<ol>
+<li>Klicke auf <strong>Agenten</strong> → Wähle einen Agenten → <strong>Bearbeiten</strong></li>
+<li>Unter <strong>MCP Server</strong> wähle die Server die der Agent nutzen soll</li>
+<li>Klicke <strong>Speichern</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="19-einstellungen--vpn">
+<h2>19. Einstellungen — VPN</h2>
+<p>Unter VPN konfigurierst du Tailscale für sichere Server-Verbindungen.</p>
+<blockquote class="tip">
+<p><strong>Hinweis:</strong> Die Tailscale-Einrichtung erfolgt über die <strong>Federation</strong>-Seite (siehe Kapitel 13). Unter Einstellungen → VPN siehst du nur den Status.</p>
+</blockquote>
+<hr>
+<div class="chapter" id="20-einstellungen--mail">
+<h2>20. Einstellungen — Mail</h2>
+<p>Hier konfigurierst du E-Mail-Versand für Agenten.</p>
+<h3>Mail einrichten</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Mail / KAS</strong></li>
+<li>Gib deine SMTP-Daten ein:</li>
+<li><strong>Server</strong> — z.B. <code>smtp.gmail.com</code></li>
+<li><strong>Port</strong> — z.B. <code>587</code></li>
+<li><strong>Benutzername</strong> und <strong>Passwort</strong></li>
+<li>Klicke <strong>Speichern</strong></li>
+<li>Klicke <strong>Test senden</strong> um die Konfiguration zu prüfen</li>
+</ul>
+<hr>
+<div class="chapter" id="21-einstellungen--benutzer--rollen">
+<h2>21. Einstellungen — Benutzer & Rollen</h2>
+<h3>Neuen Benutzer erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Users</strong></li>
+<li>Klicke auf <strong>+ Neuer Benutzer</strong></li>
+<li>Gib <strong>Benutzername</strong> und <strong>Passwort</strong> ein</li>
+<li>Wähle die <strong>Rolle</strong>:</li>
+<li><strong>Admin</strong> — Voller Zugriff auf alles</li>
+<li><strong>Standard</strong> — Kann Agenten und Projekte nutzen</li>
+<li><strong>Chatter</strong> — Kann nur mit seinem persönlichen Agenten chatten</li>
+<li>Klicke <strong>Erstellen</strong></li>
+</ul>
+<h3>Benutzer einladen (mit Link)</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Users</strong></li>
+<li>Klicke auf <strong>Einladung erstellen</strong></li>
+<li>Ein Einladungs-Link wird generiert</li>
+<li>Schicke den Link an die Person</li>
+<li>Die Person kann sich damit selbst registrieren</li>
+</ul>
+<h3>Passwort ändern</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Users</strong></li>
+<li>Klicke auf den Benutzer</li>
+<li>Klicke auf <strong>Passwort ändern</strong></li>
+<li>Gib das neue Passwort ein → <strong>Speichern</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="22-einstellungen--backup--restore">
+<h2>22. Einstellungen — Backup & Restore</h2>
+<h3>Backup erstellen</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Backup</strong></li>
+<li>Klicke auf <strong>Backup erstellen</strong></li>
+<li>Das Backup wird erstellt (dauert je nach Datenmenge einige Sekunden)</li>
+<li>Du siehst es in der Liste mit Datum und Größe</li>
+</ul>
+<h3>Backup herunterladen</h3>
+<ol>
+<li>Klicke bei einem Backup auf den <strong>Download</strong>-Button</li>
+<li>Die Datei wird heruntergeladen</li>
+</ul>
+<h3>Backup wiederherstellen</h3>
+<ol>
+<li>Klicke bei einem Backup auf <strong>Wiederherstellen</strong></li>
+<li>Bestätige mit <strong>Ja</strong></li>
+<li>Alle Agenten, Projekte und Einstellungen werden aus dem Backup geladen</li>
+</ul>
+<blockquote class="tip">
+<p><strong>Achtung:</strong> Bei der Wiederherstellung werden die aktuellen Daten überschrieben!</p>
+</blockquote>
+<h3>Backup löschen</h3>
+<ol>
+<li>Klicke bei einem Backup auf das <strong>Papierkorb-Symbol</strong></li>
+<li>Bestätige mit <strong>Ja</strong></li>
+</ul>
+<hr>
+<div class="chapter" id="23-einstellungen--erweiterungen">
+<h2>23. Einstellungen — Erweiterungen</h2>
+<p>Erweiterungen sind optionale Dienste die du mit einem Klick installieren kannst.</p>
+<h3>Erweiterung installieren</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>Erweiterungen</strong></li>
+<li>Du siehst verfügbare Erweiterungen (z.B. SearXNG, Code-Server, Tailscale)</li>
+<li>Klicke bei der gewünschten Erweiterung auf <strong>Installieren</strong></li>
+<li>Die Installation läuft — du siehst den Fortschritt</li>
+<li>Nach der Installation ist die Erweiterung aktiv</li>
+</ul>
+<h3>Verfügbare Erweiterungen</h3>
+<table>
+<tr><th>Erweiterung</th><th>Was sie tut</th></tr>
+<tr><td><strong>SearXNG</strong></td><td>Private Suchmaschine — Agenten können das Web durchsuchen</td></tr>
+<tr><td><strong>Code-Server</strong></td><td>VS Code im Browser — Code direkt bearbeiten</td></tr>
+<tr><td><strong>Tailscale</strong></td><td>VPN für sichere Server-Verbindungen</td></tr>
+<tr><td><strong>Vaultwarden</strong></td><td>Passwort-Manager</td></tr>
+</table>
+<hr>
+<div class="chapter" id="24-einstellungen--system-update">
+<h2>24. Einstellungen — System-Update</h2>
+<h3>Update durchführen</h3>
+<ol>
+<li>Klicke auf <strong>Einstellungen</strong> → <strong>System</strong></li>
+<li>Oben siehst du die aktuelle Version</li>
+<li>Wenn ein Update verfügbar ist, klicke auf <strong>Update installieren</strong></li>
+<li>Das Update läuft automatisch — der Server startet danach neu</li>
+<li>Nach dem Neustart bist du auf der neuesten Version</li>
+</ul>
+<hr>
+<div class="chapter" id="25-aktivitaet--live-monitor">
+<h2>25. Aktivität — Live-Monitor</h2>
+<h3>Agenten-Aktivität beobachten</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Aktivität</strong></li>
+<li>Du siehst alle Agenten als Karten</li>
+<li>Jede Karte zeigt:</li>
+<li><strong>Status</strong> — Was der Agent gerade tut</li>
+<li><strong>Aktuelle Aufgabe</strong> — Die letzte Aktion</li>
+<li><strong>Laufzeit</strong> — Wie lange der Agent schon arbeitet</li>
+</ul>
+<hr>
+<div class="chapter" id="26-usage--token-verbrauch">
+<h2>26. Usage — Token-Verbrauch</h2>
+<h3>Kosten einsehen</h3>
+<ol>
+<li>Klicke in der Sidebar auf <strong>Usage</strong></li>
+<li>Du siehst den Token-Verbrauch pro Agent und Modell</li>
+<li>Aufgeschlüsselt nach:</li>
+<li><strong>Input-Tokens</strong> — Was du dem Agent schickst</li>
+<li><strong>Output-Tokens</strong> — Was der Agent antwortet</li>
+<li><strong>Cache-Hits</strong> — Wiederverwendete Daten (günstiger)</li>
+</ul>
+<hr>
+<div class="chapter" id="27-haeufige-fragen">
+<h2>27. Häufige Fragen</h2>
+<h3>"Mein Agent antwortet nicht"</h3>
+<ol>
+<li>Prüfe ob der Agent läuft: <strong>Agenten</strong> → ist der Status grün?</li>
+<li>Prüfe ob ein LLM-Provider konfiguriert ist: <strong>Einstellungen</strong> → <strong>LLM</strong></li>
+<li>Leere den Chat: <strong>Mein Agent</strong> → <strong>Papierkorb-Symbol</strong> oben rechts</li>
+</ul>
+<h3>"Ich sehe keine Modelle in der Auswahl"</h3>
+<ol>
+<li>Gehe auf <strong>Einstellungen</strong> → <strong>LLM</strong></li>
+<li>Prüfe ob mindestens ein Provider eingerichtet ist (Anthropic, OpenAI oder Ollama)</li>
+<li>Für Anthropic: Klicke auf <strong>Mit Anthropic verbinden</strong></li>
+</ul>
+<h3>"Plugin-Tools tauchen beim Agenten nicht auf"</h3>
+<ol>
+<li>Gehe auf <strong>Plugins</strong> in der Sidebar</li>
+<li>Klicke auf das Plugin</li>
+<li>Prüfe ob der Agent bei <strong>Agent-Zuweisung</strong> angehakt ist</li>
+</ul>
+<h3>"Tailscale verbindet nicht"</h3>
+<ol>
+<li>Prüfe ob du den richtigen Key nutzt:</li>
+<li><strong>API Key</strong> (<code>tskey-api-...</code>) → kommt in Schritt 1 (oben)</li>
+<li><strong>Auth Key</strong> (<code>tskey-auth-...</code>) → kommt in Schritt 2 (Verbinden)</li>
+<li>Die beiden Keys sind verschieden — nicht verwechseln!</li>
+<li>Der API Key ist dein Verwaltungsschlüssel (gleich auf allen Servern)</li>
+<li>Der Auth Key ist eine Einladung (einmalig, 24h gültig)</li>
+</ul>
+<h3>"HydraBrain zeigt eine leere Seite"</h3>
+<ol>
+<li>HydraBrain braucht WebGL (Hardware-Beschleunigung)</li>
+<li>Schließe den Browser komplett und starte ihn neu</li>
+<li>Falls es weiterhin nicht geht: Prüfe ob Hardware-Beschleunigung aktiviert ist</li>
+<li>Chrome: <code>chrome://settings</code> → suche "Hardware" → aktivieren</li>
+</ul>
+  </main>
+</body>
+</html>
