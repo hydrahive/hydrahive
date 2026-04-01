@@ -296,6 +296,32 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     # ── ClawhHub ────────────────────────────────────────────────────────────────
 
+    CLAWHUB_CONFIG_FILE = Path("/etc/hydrahive/clawhub.json")
+
+    def _load_clawhub_config() -> dict:
+        try:
+            return json.loads(CLAWHUB_CONFIG_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    def _save_clawhub_config(cfg: dict) -> None:
+        CLAWHUB_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CLAWHUB_CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+    def _sync_clawhub_token() -> None:
+        """Schreibt den Token aus der HydraHive-Config in die clawhub-CLI-Config."""
+        cfg = _load_clawhub_config()
+        token = cfg.get("token", "")
+        if not token:
+            return
+        cli_config_dir = Path("/home/hydrahive/.config/clawhub")
+        cli_config_dir.mkdir(parents=True, exist_ok=True)
+        cli_config = cli_config_dir / "config.json"
+        cli_config.write_text(json.dumps({
+            "registry": "https://clawhub.ai",
+            "token": token,
+        }))
+
     def _find_clawhub() -> str:
         global _CLAWHUB_BIN
         if _CLAWHUB_BIN:
@@ -304,8 +330,6 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             if Path(candidate).exists():
                 _CLAWHUB_BIN = candidate
                 return candidate
-        # Fallback: shutil.which mit erweitertem PATH
-        import shutil
         found = shutil.which("clawhub", path="/usr/bin:/usr/local/bin:/usr/sbin:/opt/node/bin")
         if found:
             _CLAWHUB_BIN = found
@@ -325,8 +349,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             bin_path = _find_clawhub()
         except FileNotFoundError:
             raise HTTPException(503, "clawhub_not_installed")
+        _sync_clawhub_token()  # Token vor jedem Aufruf synchronisieren
         try:
-            # Node direkt aufrufen statt Shebang (#!/usr/bin/env node)
             result = subprocess.run(
                 ["/usr/bin/node", bin_path, "--no-input", *args],
                 capture_output=True, text=True, timeout=timeout,
@@ -357,12 +381,31 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     @router.get("/hub/clawhub/status")
     async def clawhub_status(_auth=Depends(require_admin)):
-        """Prüft ob clawhub installiert ist."""
+        """Prüft ob clawhub installiert ist und Token konfiguriert."""
+        cli_installed = False
         try:
             bin_path = _find_clawhub()
-            return {"installed": True, "path": bin_path}
+            cli_installed = True
         except FileNotFoundError:
-            return {"installed": False, "path": None}
+            bin_path = None
+        cfg = _load_clawhub_config()
+        has_token = bool(cfg.get("token"))
+        return {
+            "installed": cli_installed,
+            "path": bin_path,
+            "token_configured": has_token,
+            "token_preview": cfg.get("token", "")[:8] + "..." if has_token else None,
+        }
+
+    @router.put("/hub/clawhub/config")
+    async def clawhub_config(body: dict, _auth=Depends(require_admin)):
+        """ClawhHub Token speichern."""
+        token = body.get("token", "").strip()
+        if not token:
+            raise HTTPException(400, "Token darf nicht leer sein")
+        _save_clawhub_config({"token": token})
+        _sync_clawhub_token()
+        return {"ok": True, "token_preview": token[:8] + "..."}
 
     @router.post("/hub/clawhub/install-cli")
     async def clawhub_install_cli(_auth=Depends(require_admin)):

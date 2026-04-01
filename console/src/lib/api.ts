@@ -241,7 +241,8 @@ export const api = {
   pluginAgentGet:       (agentId: string) => api.get<{agent_id:string;plugins:string[]}>(`/plugins/agents/${agentId}`),
   pluginAgentSet:       (agentId: string, pluginIds: string[]) => api.put<{ok:boolean}>(`/plugins/agents/${agentId}`, { plugin_ids: pluginIds }),
   // ClawhHub
-  clawhubStatus:      () => api.get<{installed:boolean;path:string|null}>("/hub/clawhub/status"),
+  clawhubStatus:      () => api.get<{installed:boolean;path:string|null;token_configured:boolean;token_preview:string|null}>("/hub/clawhub/status"),
+  clawhubSetToken:    (token: string) => api.put<{ok:boolean;token_preview:string}>("/hub/clawhub/config", { token }),
   clawhubInstallCli:  () => api.post<{ok:boolean;output:string}>("/hub/clawhub/install-cli", {}),
   clawhubSkills:      (q: string) => api.get<{items:ClawhubSkillItem[]}>(`/hub/clawhub/skills?q=${encodeURIComponent(q)}`),
   clawhubPackages:    (family: string) => api.get<{items:ClawhubPackageItem[]}>(`/hub/clawhub/packages?family=${encodeURIComponent(family)}`),
