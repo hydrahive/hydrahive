@@ -397,4 +397,171 @@ def register_core_misc_routes(
                 }
         return result
 
+    # ── Erweiterte Logs & System-Info (#129) ─────────────────────────────
+
+    @admin_router.get("/logs/core/live")
+    def get_core_logs_live(
+        lines: int = 100,
+        since: str = "",
+        grep: str = "",
+    ):
+        """Core-Logs mit optionalem Zeitfilter und Grep."""
+        import subprocess
+        cmd = ["journalctl", "-u", "hydrahive-core", "--no-pager", "-n", str(min(lines, 2000))]
+        if since:
+            cmd += ["--since", since]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            log_lines = r.stdout.strip().splitlines()
+            if grep:
+                grep_lower = grep.lower()
+                log_lines = [l for l in log_lines if grep_lower in l.lower()]
+            return {"lines": log_lines, "count": len(log_lines)}
+        except Exception as e:
+            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+
+    @admin_router.get("/logs/nginx")
+    def get_nginx_logs(lines: int = 100, error: bool = False):
+        """Nginx Access- oder Error-Logs."""
+        import subprocess
+        log_file = "/var/log/nginx/error.log" if error else "/var/log/nginx/access.log"
+        try:
+            r = subprocess.run(
+                ["tail", "-n", str(min(lines, 2000)), log_file],
+                capture_output=True, text=True, timeout=10,
+            )
+            log_lines = r.stdout.strip().splitlines()
+            return {"lines": log_lines, "count": len(log_lines), "file": log_file}
+        except Exception as e:
+            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+
+    @admin_router.get("/agents/{agent_id}/logs")
+    def get_agent_logs(agent_id: str, lines: int = 100):
+        """Agent-spezifische Logs (gefiltert aus Core-Journal)."""
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["journalctl", "-u", "hydrahive-core", "--no-pager", "-n", str(min(lines * 5, 5000))],
+                capture_output=True, text=True, timeout=10,
+            )
+            all_lines = r.stdout.strip().splitlines()
+            filtered = [l for l in all_lines if agent_id in l][-lines:]
+            return {"agent_id": agent_id, "lines": filtered, "count": len(filtered)}
+        except Exception as e:
+            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+
+    @admin_router.get("/admin/system/info")
+    def system_info():
+        """CPU, RAM, Disk, Uptime, Load in einem Call."""
+        import os
+        info: dict = {}
+
+        # Uptime
+        try:
+            with open("/proc/uptime") as f:
+                secs = float(f.read().split()[0])
+            days, rem = divmod(int(secs), 86400)
+            hours, rem = divmod(rem, 3600)
+            mins = rem // 60
+            info["uptime"] = f"{days}d {hours}h {mins}m"
+            info["uptime_seconds"] = int(secs)
+        except Exception:
+            pass
+
+        # Load
+        try:
+            load1, load5, load15 = os.getloadavg()
+            info["load"] = {"1m": round(load1, 2), "5m": round(load5, 2), "15m": round(load15, 2)}
+        except Exception:
+            pass
+
+        # CPU
+        try:
+            with open("/proc/stat") as f:
+                cpu = f.readline().split()
+            total = sum(int(x) for x in cpu[1:])
+            idle = int(cpu[4])
+            info["cpu_percent"] = round(100 * (1 - idle / max(total, 1)), 1)
+        except Exception:
+            pass
+
+        # RAM
+        try:
+            mem = {}
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        mem[parts[0].rstrip(":")] = int(parts[1])
+            total_mb = mem.get("MemTotal", 0) // 1024
+            avail_mb = mem.get("MemAvailable", 0) // 1024
+            used_mb = total_mb - avail_mb
+            info["ram"] = {
+                "total_mb": total_mb, "used_mb": used_mb, "available_mb": avail_mb,
+                "percent": round(100 * used_mb / max(total_mb, 1), 1),
+            }
+        except Exception:
+            pass
+
+        # Disk
+        try:
+            st = os.statvfs("/")
+            total_gb = round(st.f_blocks * st.f_frsize / (1024**3), 1)
+            free_gb = round(st.f_bavail * st.f_frsize / (1024**3), 1)
+            used_gb = round(total_gb - free_gb, 1)
+            info["disk"] = {
+                "total_gb": total_gb, "used_gb": used_gb, "free_gb": free_gb,
+                "percent": round(100 * used_gb / max(total_gb, 1), 1),
+            }
+        except Exception:
+            pass
+
+        # Hostname
+        try:
+            import socket
+            info["hostname"] = socket.gethostname()
+        except Exception:
+            pass
+
+        return info
+
+    @admin_router.get("/admin/system/services")
+    def system_services():
+        """Status der wichtigsten systemd Services."""
+        import subprocess
+        services = [
+            "hydrahive-core", "nginx", "ollama", "tailscaled",
+            "hydrahive-whatsapp-bridge", "code-server",
+        ]
+        result = []
+        for svc in services:
+            try:
+                r = subprocess.run(
+                    ["systemctl", "is-active", svc],
+                    capture_output=True, text=True, timeout=5,
+                )
+                status = r.stdout.strip()
+            except Exception:
+                status = "unknown"
+            result.append({"name": svc, "status": status})
+        return {"services": result}
+
+    @admin_router.post("/admin/system/service/{name}/restart")
+    def restart_service(name: str, _a: tuple = Depends(require_admin)):
+        """Einen Service neustarten (nur erlaubte Services)."""
+        import subprocess
+        allowed = {"hydrahive-core", "nginx", "ollama", "tailscaled", "hydrahive-whatsapp-bridge"}
+        if name not in allowed:
+            raise HTTPException(403, f"Service '{name}' darf nicht per API neugestartet werden")
+        try:
+            r = subprocess.run(
+                ["sudo", "systemctl", "restart", name],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode != 0:
+                raise HTTPException(500, f"Restart fehlgeschlagen: {r.stderr.strip()}")
+            return {"ok": True, "service": name}
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "Restart Timeout")
+
     return IncomingMessage
