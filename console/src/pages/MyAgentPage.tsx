@@ -1202,10 +1202,15 @@ function SettingsPanel({
                 {model && !availableModels.find(m => m.id === model) && (
                   <option value={model}>{model}</option>
                 )}
-                {availableModels.length === 0
-                  ? KNOWN_MODELS.map(m => <option key={m} value={m}>{m}</option>)
-                  : availableModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>)
-                }
+                {/* API-Modelle + Fallback-Modelle (dedupliziert) */}
+                {(() => {
+                  const apiIds = new Set(availableModels.map(m => m.id));
+                  const all = [
+                    ...availableModels.map(m => ({ id: m.id, label: m.label })),
+                    ...KNOWN_MODELS.filter(m => !apiIds.has(m)).map(m => ({ id: m, label: m })),
+                  ];
+                  return all.map(m => <option key={m.id} value={m.id}>{m.label}</option>);
+                })()}
               </select>
             </div>
             <div className="space-y-1">
