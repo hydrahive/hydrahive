@@ -12,6 +12,9 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [scanResult, setScanResult] = useState<{hostname:string;ip:string;port:number;os:string}[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
   useEffect(() => {
     api.tailscaleStatus().then(setStatus).catch(() => setStatus(null));
@@ -44,11 +47,6 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
     finally { setAdding(null); }
   }
 
-  if (status === null) return null;
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [savingKey, setSavingKey] = useState(false);
-  const [keyError, setKeyError] = useState<string|null>(null);
-
   async function saveApiKey() {
     if (!apiKeyInput.trim()) return;
     setSavingKey(true); setKeyError(null);
@@ -59,6 +57,18 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
       setApiKeyInput("");
     } catch (e: any) { setKeyError(e.message); }
     finally { setSavingKey(false); }
+  }
+
+  if (status === null) {
+    return (
+      <div className="section-card p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Radar className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">Tailscale-Status wird geladen...</p>
+      </div>
+    );
   }
 
   if (!status.api_configured) {
