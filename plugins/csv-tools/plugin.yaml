@@ -1,0 +1,10 @@
+id: csv-tools
+name: CSV Tools
+version: 1.0.0
+description: CSV und JSON Dateien laden, filtern, aggregieren, konvertieren — deterministisch ohne LLM-Tokens.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - filesystem.read
+auto_attach: false

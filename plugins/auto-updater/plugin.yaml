@@ -1,0 +1,10 @@
+id: auto-updater
+name: Auto Updater
+version: 1.0.0
+description: Prüft GitHub auf neue HydraHive-Versionen, zeigt Changelog und ermöglicht Update per Agent-Befehl.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+auto_attach: false

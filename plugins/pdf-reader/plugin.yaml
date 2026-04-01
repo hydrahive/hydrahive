@@ -1,0 +1,10 @@
+id: pdf-reader
+name: PDF Reader
+version: 1.0.0
+description: PDF-Dateien lesen und Text extrahieren — ohne LLM-Tokens für Parsing zu verbrennen.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - filesystem.read
+auto_attach: false
