@@ -264,11 +264,25 @@ def register_tailscale_routes(
 
     @admin_router.delete("/admin/tailscale/devices/{device_id}")
     async def ts_remove_device(device_id: str, _a=Depends(require_admin)):
-        """Entfernt ein Gerät aus dem Tailnet."""
+        """Entfernt ein Gerät aus dem Tailnet + zugehörigen A2A-Peer."""
         cfg = _load_ts_config()
         api_key = cfg.get("api_key")
         if not api_key:
             raise HTTPException(400, "Tailscale API Key nicht konfiguriert")
+
+        # Device-Info holen (Hostname + IP) für A2A-Cleanup
+        device_hostname = ""
+        device_ip = ""
+        try:
+            dev_data = await asyncio.to_thread(
+                _ts_api, f"/device/{device_id}", api_key
+            )
+            device_hostname = dev_data.get("hostname", "")
+            device_ip = (dev_data.get("addresses") or [None])[0] or ""
+        except Exception:
+            pass
+
+        # Device aus Tailnet löschen
         try:
             req = urllib.request.Request(
                 f"{TS_API_BASE}/device/{device_id}",
@@ -280,7 +294,27 @@ def register_tailscale_routes(
             raise HTTPException(e.code, f"Tailscale API: {e.reason}")
         except Exception as e:
             raise HTTPException(502, f"Fehler: {e}")
-        return {"ok": True, "deleted": device_id}
+
+        # Zugehörigen A2A-Peer entfernen
+        removed_peer = None
+        a2a_path = Path("/etc/hydrahive/a2a.json")
+        try:
+            if a2a_path.exists():
+                a2a_cfg = json.loads(a2a_path.read_text())
+                peers = a2a_cfg.get("peers", [])
+                before = len(peers)
+                peers = [p for p in peers
+                         if p.get("name") != device_hostname
+                         and device_ip not in p.get("url", "")]
+                if len(peers) < before:
+                    removed_peer = device_hostname or device_ip
+                    a2a_cfg["peers"] = peers
+                    a2a_path.write_text(json.dumps(a2a_cfg, indent=2, ensure_ascii=False))
+                    logger.info("A2A-Peer '%s' entfernt (Tailscale Device gelöscht)", removed_peer)
+        except Exception as e:
+            logger.warning("A2A-Peer-Cleanup fehlgeschlagen: %s", e)
+
+        return {"ok": True, "deleted": device_id, "removed_peer": removed_peer}
 
     @admin_router.put("/admin/tailscale/config")
     async def ts_config(req: TailscaleConfigRequest, _a=Depends(require_admin)):
