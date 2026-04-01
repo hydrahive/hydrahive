@@ -56,6 +56,11 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 33. [A2A Federation](#33-a2a-federation)
 34. [Benachrichtigungen](#34-benachrichtigungen)
 35. [Vaultwarden — Passwort-Manager](#35-vaultwarden--passwort-manager)
+36. [HydraHub — Agenten & Plugins installieren](#36-hydrahub--agenten--plugins-installieren)
+37. [Plugin-System](#37-plugin-system)
+38. [ClawhHub — Externe Skills & Plugins](#38-clawhub--externe-skills--plugins)
+39. [Tailscale Federation](#39-tailscale-federation)
+40. [HydraBrain — 3D-Agentengraph](#40-hydrabrain--3d-agentengraph)
 
 ---
 
@@ -1781,3 +1786,241 @@ ls /agents/
 # Config übernommen?
 cat /etc/hydrahive/users.json
 ```
+
+---
+
+## 36. HydraHub — Agenten & Plugins installieren
+
+**HydraHub** ist der integrierte Paketmanager von HydraHive. Erreichbar unter **HydraHub** in der Sidebar (nur Admin).
+
+Der HydraHub hat drei Tabs:
+
+### Agenten
+
+Kuratierte Agenten-Templates die mit einem Klick installiert werden können. Jeder Agent besteht aus einer `agent.yaml` (Konfiguration) und `soul.md` (Persönlichkeit/Anweisungen).
+
+1. **HydraHub** → Tab **Agenten**
+2. Agent auswählen → Detail-Drawer öffnet sich
+3. Optional: eigene Agent-ID vergeben
+4. **Installieren** klicken
+5. Agent ist sofort verfügbar — kein Neustart nötig
+
+Installierte Agenten können über den **Deinstallieren**-Button im Detail-Drawer wieder entfernt werden.
+
+### Plugins
+
+HydraHive-Plugins die neue Tools für Agenten bereitstellen. Jedes Plugin besteht aus `plugin.yaml` (Manifest) und `plugin.py` (Code).
+
+1. **HydraHub** → Tab **Plugins**
+2. Plugin auswählen → **Installieren**
+3. Plugin wird nach `/plugins/` installiert und sofort geladen
+4. Unter **Plugins** in der Sidebar dem gewünschten Agent zuweisen
+
+### ClawhHub
+
+Zugriff auf die [ClawhHub](https://clawhub.ai)-Registry — tausende Skills und Plugins aus der OpenClaw-Community.
+
+**Skills Tab:** Skills suchen, inspizieren und in den Skills-Ordner eines Agenten installieren. ClawhHub-Skills werden automatisch ins HydraHive-Format konvertiert.
+
+**Plugins Tab:** Browse-Ansicht für OpenClaw Code Plugins und Bundle Plugins (aktuell Read-Only — direkte Nutzung erfordert das HydraHive Plugin-System).
+
+**ClawhHub API Token:**
+Wird für die Suche und Installation benötigt. Erstelle einen Token unter [clawhub.ai/settings](https://clawhub.ai/settings) und trage ihn im ClawhHub-Tab ein.
+
+---
+
+## 37. Plugin-System
+
+Das Plugin-System erweitert HydraHive um eigene Tools, Hooks und Services — ohne den Core-Code zu ändern.
+
+### Plugin-Struktur
+
+```
+/plugins/mein-plugin/
+  plugin.yaml          # Manifest (Pflicht)
+  plugin.py            # Code (Pflicht)
+```
+
+**plugin.yaml:**
+```yaml
+id: mein-plugin
+name: Mein Plugin
+version: 1.0.0
+description: Was das Plugin tut
+author: Dein Name
+type: tool              # tool | hook | service
+permissions: []         # z.B. filesystem.read
+auto_attach: false      # true = bei allen Agenten aktiv
+```
+
+**plugin.py:**
+```python
+def register(api):
+    @api.tool(
+        description="Beschreibung für das LLM",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Suchanfrage"}
+            },
+            "required": ["query"],
+        },
+    )
+    async def mein_tool(query: str, **ctx) -> str:
+        return f"Ergebnis für: {query}"
+
+    @api.hook("message.after")
+    async def nach_nachricht(project_id, response, **_):
+        # Wird nach jeder Agent-Antwort aufgerufen
+        pass
+```
+
+### Plugin-Typen
+
+| Typ | Beschreibung |
+|-----|-------------|
+| **tool** | Registriert neue Tools die der Agent aufrufen kann |
+| **hook** | Reagiert auf Events (message.before/after, tool.before/after) |
+| **service** | Kombiniert Tools + Hooks + Background-Tasks |
+
+### Plugin-Verwaltung
+
+**Plugins** in der Sidebar → Übersicht aller installierten Plugins.
+
+- **Aktivieren/Deaktivieren** — per Power-Button auf der Plugin-Karte
+- **Agent-Zuweisung** — Plugin-Detail öffnen → Agenten per Checkbox zuweisen
+- **Neu laden** — nach Code-Änderungen das Plugin per Reload-Button neu laden
+
+### Eigene Plugins entwickeln
+
+1. Verzeichnis unter `/plugins/mein-plugin/` anlegen
+2. `plugin.yaml` + `plugin.py` erstellen (siehe Struktur oben)
+3. `register(api)` Funktion implementieren
+4. Core-Service neustarten oder unter Plugins → **Alle neu laden**
+5. Plugin einem Agent zuweisen
+
+### Verfügbare Hook-Events
+
+| Event | Argumente | Wann |
+|-------|-----------|------|
+| `message.before` | project_id, content, sender | Vor der Nachrichtenverarbeitung |
+| `message.after` | project_id, content, response | Nach der Agent-Antwort |
+| `tool.before` | project_id, tool_name, tool_input | Vor Tool-Ausführung |
+| `tool.after` | project_id, tool_name, result | Nach Tool-Ausführung |
+
+### Tool-IDs
+
+Plugin-Tools bekommen automatisch das Präfix `plg_{plugin_id}_{tool_name}`. Beispiel: Plugin `csv-tools` mit Tool `analyze` → Tool-ID: `plg_csv-tools_analyze`.
+
+---
+
+## 38. ClawhHub — Externe Skills & Plugins
+
+[ClawhHub](https://clawhub.ai) ist die öffentliche Registry für OpenClaw/Claude-Code Skills und Plugins.
+
+### ClawhHub-Token einrichten
+
+1. Account auf [clawhub.ai](https://clawhub.ai) erstellen
+2. Unter Settings → API Token erstellen
+3. **HydraHub** → **ClawhHub** Tab → Token eintragen
+
+### Skills installieren
+
+1. **ClawhHub** Tab → **Skills** → Suche eingeben (z.B. "python", "security")
+2. Skill auswählen → Detail-Drawer öffnet sich
+3. **Ziel-Agent** auswählen (in welchen Agent der Skill installiert wird)
+4. **In Agent installieren** klicken
+5. Skill wird als `.md` Datei im Skills-Ordner des Agents gespeichert
+
+ClawhHub-Skills werden automatisch vom ClawhHub-Format ins HydraHive-Format konvertiert (Frontmatter, Triggers, Scope).
+
+### Plugins browsen
+
+Unter dem **Plugins** Sub-Tab können OpenClaw Code Plugins und Bundle Plugins durchsucht werden. Diese sind aktuell Read-Only — für die direkte Nutzung in HydraHive ist das Plugin-System (Kapitel 37) vorgesehen.
+
+---
+
+## 39. Tailscale Federation
+
+Tailscale ermöglicht die sichere Vernetzung mehrerer HydraHive-Instanzen über das Internet — verschlüsselt, ohne Port-Forwarding, ohne SSL-Zertifikate.
+
+### Voraussetzungen
+
+- [Tailscale](https://tailscale.com) Account (kostenloser Plan reicht)
+- Tailscale auf jedem Server installiert (`curl -fsSL https://tailscale.com/install.sh | sh`)
+
+### Einrichtung (alles auf der Federation-Seite)
+
+#### Schritt 1: API Key
+
+1. [Tailscale Admin](https://login.tailscale.com/admin/settings/keys) → **Generate access token**
+2. **Federation** → Tailscale-Sektion → API Key eintragen → **Speichern**
+
+#### Schritt 2: Server verbinden
+
+1. **Einladen** klicken → Auth Key wird generiert (24h gültig)
+2. Auth Key kopieren
+3. Auf diesem oder einem anderen Server: Auth Key bei **"Server mit Tailnet verbinden"** eintragen → **Verbinden**
+
+#### Schritt 3: Andere Server einladen
+
+1. Auth Key an den Admin des anderen Servers schicken
+2. Der trägt den Key auf seiner Federation-Seite ein → **Verbinden**
+3. Fertig — beide Server sind im selben Tailnet
+
+#### Schritt 4: HydraHive-Instanzen finden und peeren
+
+1. **HydraHive suchen** klicken → scannt alle Tailscale-IPs nach HydraHive
+2. Gefundene Instanzen erscheinen mit **"Als Peer hinzufügen"** Button
+3. Klick → Instanz wird automatisch als A2A-Peer registriert
+
+### Tailnet verwalten
+
+- **Tailnet Devices** — alle Geräte im Tailnet anzeigen
+- **Löschen** (Trash-Icon) — Gerät aus dem Tailnet + zugehörigen A2A-Peer entfernen
+- **API Key ändern** — für Account-Wechsel
+- **Trennen** — diesen Server vom Tailnet trennen
+
+### Wichtig
+
+- Der **API Access Token** ist für die Verwaltung des Tailnets — nur für Admins
+- **Auth Keys** sind Einladungen — einmalig, zeitbegrenzt, zum Beitreten
+- Auf jedem Server muss der gleiche API Access Token eingetragen werden
+
+---
+
+## 40. HydraBrain — 3D-Agentengraph
+
+**HydraBrain** zeigt eine interaktive 3D-Visualisierung aller Agenten, Tools, Memories und ihrer Verbindungen.
+
+### Aufrufen
+
+**HydraBrain** in der Sidebar (nur Admin). Benötigt WebGL (Hardware-Beschleunigung im Browser).
+
+### Ansicht
+
+- **Blaue Knoten** — Boss-Agenten
+- **Grüne Knoten** — Worker/Specialist-Agenten
+- **Kleine Knoten** — Tools, Memories, Skills
+- **Verbindungslinien** — zeigen welcher Agent welche Tools/Memories nutzt
+
+### Aktivitäts-Anzeige
+
+Wenn ein Agent arbeitet, ändert sich die Knotenfarbe:
+- **Cyan** — Agent denkt
+- **Grün** — Agent liest Daten
+- **Orange** — Agent schreibt Daten
+
+### Federation
+
+Klick auf den **Federation-Button** (Radar-Icon) → Remote-Peers werden gescannt und als separate Cluster im Graph angezeigt:
+- **Pink** — Peer-Gateway
+- **Gelb** — Remote-Agenten
+
+### Steuerung
+
+- **Scrollen** — Zoom
+- **Ziehen** — Drehen
+- **Klick auf Knoten** — Details anzeigen
+- **Labels** — Ein/Aus-Button in der Toolbar
+- **Neu laden** — Refresh-Button aktualisiert die Daten
