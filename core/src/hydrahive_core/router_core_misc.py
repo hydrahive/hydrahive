@@ -670,6 +670,7 @@ def register_core_misc_routes(
 
     # ── Phase 4: Filesystem (eingeschränkt) (#129) ────────────────────
 
+    from pathlib import Path
     ALLOWED_FS_ROOTS = ["/agents", "/plugins", "/etc/hydrahive", "/projects"]
 
     @admin_router.get("/admin/files")
