@@ -273,13 +273,9 @@ def register_project_routes(
         if not project_dir.exists():
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
-        target = project_dir
-        # Wenn Verzeichnis nicht leer, in Unterordner klonen
-        existing = [f for f in target.iterdir() if f.name not in (".samba", "project.yaml", ".gitkeep")]
-        if existing:
-            # Repo-Name aus URL extrahieren
-            repo_name = req.url.rstrip("/").rstrip(".git").split("/")[-1]
-            target = project_dir / repo_name
+        # Repo-Name aus URL → Unterordner
+        repo_name = req.url.rstrip("/").rstrip(".git").split("/")[-1] or "repo"
+        target = project_dir / repo_name
 
         try:
             result = await _asyncio.to_thread(
