@@ -49,28 +49,38 @@ def _ts_api(path: str, api_key: str, timeout: int = 15) -> Any:
         return json.loads(r.read().decode())
 
 
-def _check_hydrahive(ip: str, port: int = 80, timeout: float = 5) -> dict | None:
-    """Prüft ob unter einer IP eine HydraHive-Instanz läuft."""
+def _check_hydrahive(ip: str, timeout: float = 5) -> dict | None:
+    """Prüft ob unter einer IP eine HydraHive-Instanz läuft.
+
+    Probiert die wahrscheinlichsten Kombinationen zuerst:
+    HTTPS:443/api/health ist Standard für nginx-Proxy-Setup.
+    """
     import ssl
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    for p in [port, 8765]:
-        for scheme in ["http", "https"]:
-            for path in ["/health", "/api/health"]:
-                try:
-                    url = f"{scheme}://{ip}:{p}{path}"
-                    req = urllib.request.Request(url, headers={"User-Agent": "HydraHive-Discovery/1.0"})
-                    kw = {"timeout": timeout}
-                    if scheme == "https":
-                        kw["context"] = ctx
-                    with urllib.request.urlopen(req, **kw) as r:
-                        data = json.loads(r.read().decode())
-                        if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
-                            return {"ip": ip, "port": p, "scheme": scheme, "health": data}
-                except Exception:
-                    continue
+    # Reihenfolge: wahrscheinlichste zuerst
+    probes = [
+        ("https", 443, "/api/health"),
+        ("https", 443, "/health"),
+        ("http", 80, "/api/health"),
+        ("http", 80, "/health"),
+        ("http", 8765, "/health"),
+    ]
+    for scheme, port, path in probes:
+        try:
+            url = f"{scheme}://{ip}:{port}{path}"
+            req = urllib.request.Request(url, headers={"User-Agent": "HydraHive-Discovery/1.0"})
+            kw: dict = {"timeout": timeout}
+            if scheme == "https":
+                kw["context"] = ctx
+            with urllib.request.urlopen(req, **kw) as r:
+                data = json.loads(r.read().decode())
+                if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
+                    return {"ip": ip, "port": port, "scheme": scheme, "health": data}
+        except Exception:
+            continue
     return None
 
 
