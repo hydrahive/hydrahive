@@ -547,7 +547,7 @@ def register_core_misc_routes(
         return {"services": result}
 
     @admin_router.post("/admin/system/service/{name}/restart")
-    def restart_service(name: str, _a: tuple = Depends(require_admin)):
+    def restart_service(name: str, _a: tuple = Depends(require_auth)):
         """Einen Service neustarten (nur erlaubte Services)."""
         import subprocess
         allowed = {"hydrahive-core", "nginx", "ollama", "tailscaled", "hydrahive-whatsapp-bridge"}
