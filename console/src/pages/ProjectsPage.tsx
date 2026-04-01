@@ -48,6 +48,10 @@ interface CreateForm {
   boss: string;
   workers: string;
   samba: boolean;
+  githubRepo: string;
+  gitClone: boolean;
+  gitBranch: string;
+  gitToken: string;
 }
 
 interface EditForm {
@@ -58,7 +62,7 @@ interface EditForm {
   show_swarm: boolean;
 }
 
-const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true };
+const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
 
 export function ProjectsPage() {
   const { t } = useTranslation();
@@ -153,7 +157,23 @@ export function ProjectsPage() {
         boss: form.boss,
         workers: form.workers.split(",").map((w) => w.trim()).filter(Boolean),
         samba: form.samba,
+        github_repo: form.githubRepo.trim(),
       });
+      // Git Clone nach Erstellung
+      if (form.gitClone && form.githubRepo.trim()) {
+        try {
+          let cloneUrl = form.githubRepo.trim();
+          if (!cloneUrl.startsWith("http")) cloneUrl = `https://github.com/${cloneUrl}`;
+          if (!cloneUrl.endsWith(".git")) cloneUrl += ".git";
+          if (form.gitToken.trim()) cloneUrl = cloneUrl.replace("https://", `https://${form.gitToken.trim()}@`);
+          await api.post(`/projects/${form.id}/git-clone`, { url: cloneUrl, branch: form.gitBranch || "main" });
+        } catch (cloneErr: any) {
+          setCreateErr(`Projekt erstellt, aber Git-Clone fehlgeschlagen: ${cloneErr.message}`);
+          setCreating(false);
+          await load();
+          return;
+        }
+      }
       setShowForm(false);
       setForm(EMPTY);
       await load();
@@ -373,14 +393,38 @@ export function ProjectsPage() {
                 className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+            <div className="md:col-span-2 space-y-3 rounded-2xl border bg-secondary/30 px-4 py-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Git-Repository <span className="text-muted-foreground font-normal">(optional)</span></label>
+                <input value={form.githubRepo} onChange={e => setForm({ ...form, githubRepo: e.target.value })}
+                  placeholder="owner/repo oder https://github.com/owner/repo"
+                  className="w-full rounded-xl border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              {form.githubRepo.trim() && (
+                <>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={form.gitClone} onChange={e => setForm({ ...form, gitClone: e.target.checked })} className="rounded border" />
+                    Repository automatisch klonen
+                  </label>
+                  {form.gitClone && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Branch</label>
+                        <input value={form.gitBranch} onChange={e => setForm({ ...form, gitBranch: e.target.value })}
+                          placeholder="main" className="w-full rounded-xl border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Token <span className="opacity-50">(private Repos)</span></label>
+                        <input type="password" value={form.gitToken} onChange={e => setForm({ ...form, gitToken: e.target.value })}
+                          placeholder="ghp_... oder leer" className="w-full rounded-xl border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             <div className="md:col-span-2 flex items-start gap-2 rounded-2xl bg-secondary/55 px-4 py-3 text-sm">
-              <input
-                type="checkbox"
-                id="samba"
-                checked={form.samba}
-                onChange={(e) => setForm({ ...form, samba: e.target.checked })}
-                className="h-4 w-4 rounded border"
-              />
+              <input type="checkbox" id="samba" checked={form.samba} onChange={(e) => setForm({ ...form, samba: e.target.checked })} className="h-4 w-4 rounded border" />
               <label htmlFor="samba">{t("projects.sambaShare")}</label>
             </div>
             {createErr && <p className="md:col-span-2 text-sm text-destructive">{createErr}</p>}
