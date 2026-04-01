@@ -76,7 +76,7 @@ Browser (React) → nginx (HTTPS) → FastAPI Core → Orchestrator
 
 ## Status
 
-🚧 Active development — production-ready core
+🚧 Active development — stable core, features may change
 
 ## License
 
