@@ -24,7 +24,7 @@ const CATEGORY_ORDER = [
 // ── ClawhHub Tab ─────────────────────────────────────────────────────────────
 
 function ClawhubTab() {
-  const [tab, setTab]             = useState<"skills"|"plugins">("skills");
+  const [tab, setTab]             = useState<"skills">("skills");
   const [query, setQuery]         = useState("");
   const [skills, setSkills]       = useState<ClawhubSkillItem[]>([]);
   const [packages, setPackages]   = useState<ClawhubPackageItem[]>([]);
@@ -132,22 +132,7 @@ function ClawhubTab() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tabs */}
-      <div className="flex gap-1 px-4 pt-4 border-b border-border/40 flex-shrink-0">
-        <button
-          onClick={() => setTab("skills")}
-          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-            ${tab === "skills" ? "bg-background border border-b-background border-border/50 -mb-px text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Skills
-        </button>
-        <button
-          onClick={() => setTab("plugins")}
-          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-            ${tab === "plugins" ? "bg-background border border-b-background border-border/50 -mb-px text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Plugins
-        </button>
-      </div>
+      {/* ClawhHub Skills */}
 
       {/* clawhub CLI nicht installiert Banner */}
       {cliInstalled === false && (
@@ -277,68 +262,6 @@ function ClawhubTab() {
                       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
                     </div>
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Plugins Tab */}
-      {tab === "plugins" && (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden p-4 gap-4">
-          <div className="flex gap-2 flex-shrink-0">
-            {[
-              { key: "code-plugin", label: "Code Plugins" },
-              { key: "bundle-plugin", label: "Bundle Plugins" },
-              { key: "skill", label: "Skill Packages" },
-            ].map(f => (
-              <button
-                key={f.key}
-                onClick={() => setPkgFamily(f.key)}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors
-                  ${pkgFamily === f.key ? "bg-primary text-primary-foreground" : "border border-border/50 hover:bg-muted/50 text-muted-foreground"}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {error && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
-          )}
-          {loading && (
-            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-              <RefreshCw className="h-4 w-4 animate-spin mr-2" /> Lade…
-            </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto">
-            {!loading && packages.length === 0 ? (
-              <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">Keine Packages gefunden</div>
-            ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {packages.map(pkg => (
-                  <div
-                    key={pkg.name}
-                    className="text-left rounded-2xl border border-border/50 bg-card/80 p-4"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <Package className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                      <span className="text-xs text-muted-foreground">v{pkg.latestVersion}</span>
-                    </div>
-                    <div className="font-medium text-sm leading-tight mb-1 line-clamp-1">{pkg.displayName}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2.5rem]">{pkg.summary}</div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">
-                        {pkg.family === "code-plugin" ? "Code Plugin" : pkg.family === "bundle-plugin" ? "Bundle Plugin" : "Skill"}
-                      </span>
-                      {pkg.executesCode && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600">Führt Code aus</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-2 opacity-60">by @{pkg.ownerHandle}</div>
-                  </div>
                 ))}
               </div>
             )}
