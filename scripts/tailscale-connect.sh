@@ -47,6 +47,13 @@ else
     success "Tailscale installiert"
 fi
 
+# Daemon starten falls nicht aktiv
+if ! systemctl is-active --quiet tailscaled 2>/dev/null; then
+    info "Starte tailscaled Daemon..."
+    sudo systemctl enable --now tailscaled
+    sleep 2
+fi
+
 # ── 2. Auth-Key generieren ───────────────────────────────────────────────────
 
 info "Generiere Auth-Key über Tailscale API..."
