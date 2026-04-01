@@ -1,7 +1,153 @@
 import { useEffect, useState } from "react";
-import { Globe, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronUp, Eye, EyeOff, Send } from "lucide-react";
+import { Globe, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronUp, Eye, EyeOff, Send, Radar, Wifi, WifiOff, Link } from "lucide-react";
 import { api, A2APeer, A2APeersResponse, A2ATestResult } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+
+// ── Tailscale Discovery ──────────────────────────────────────────────────────
+
+function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
+  const [status, setStatus] = useState<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null}} | null>(null);
+  const [devices, setDevices] = useState<{hostname:string;ip:string;os:string;online:boolean}[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<{hostname:string;ip:string;port:number;os:string}[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.tailscaleStatus().then(setStatus).catch(() => setStatus(null));
+  }, []);
+
+  async function loadDevices() {
+    setError(null);
+    try {
+      const d = await api.tailscaleDevices();
+      setDevices(d.devices);
+    } catch (e: any) { setError(e.message); }
+  }
+
+  async function scan() {
+    setScanning(true); setError(null); setScanResult(null);
+    try {
+      const r = await api.tailscaleScan();
+      setScanResult(r.instances);
+    } catch (e: any) { setError(e.message); }
+    finally { setScanning(false); }
+  }
+
+  async function addPeer(inst: {hostname:string;ip:string;port:number}) {
+    setAdding(inst.ip);
+    try {
+      await api.tailscaleAutoPeer(inst.hostname, inst.ip, inst.port);
+      onPeerAdded();
+      setScanResult(prev => prev?.filter(i => i.ip !== inst.ip) ?? null);
+    } catch (e: any) { setError(e.message); }
+    finally { setAdding(null); }
+  }
+
+  if (status === null) return null;
+  if (!status.api_configured) {
+    return (
+      <div className="section-card p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Radar className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">Tailscale API Key nicht konfiguriert. Unter Settings → Tailscale den API Key eintragen.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="section-card p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Radar className="h-4 w-4 text-blue-500" />
+          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {status.local.logged_in ? (
+            <span className="flex items-center gap-1.5 text-xs text-green-600">
+              <Wifi className="h-3.5 w-3.5" /> {status.local.ip}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <WifiOff className="h-3.5 w-3.5" /> Nicht verbunden
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={loadDevices}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors"
+        >
+          <Globe className="h-3.5 w-3.5" /> Tailnet Devices
+        </button>
+        <button
+          onClick={scan}
+          disabled={scanning}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+        >
+          {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
+          {scanning ? "Scanne..." : "HydraHive suchen"}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Devices Liste */}
+      {devices.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground font-medium">{devices.length} Devices im Tailnet:</p>
+          <div className="grid gap-1.5">
+            {devices.map(d => (
+              <div key={d.ip} className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${d.online ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+                  <span className="font-medium">{d.hostname}</span>
+                  <span className="text-muted-foreground font-mono">{d.ip}</span>
+                </div>
+                <span className="text-muted-foreground">{d.os}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scan-Ergebnisse */}
+      {scanResult !== null && (
+        <div className="space-y-2">
+          {scanResult.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Keine HydraHive-Instanzen im Tailnet gefunden (nur online Devices werden gescannt)</p>
+          ) : (
+            <>
+              <p className="text-xs font-medium text-green-600">{scanResult.length} HydraHive-Instanz(en) gefunden:</p>
+              <div className="grid gap-2">
+                {scanResult.map(inst => (
+                  <div key={inst.ip} className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-green-500/30 bg-green-500/5">
+                    <div>
+                      <div className="text-sm font-medium">{inst.hostname}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{inst.ip}:{inst.port} · {inst.os}</div>
+                    </div>
+                    <button
+                      onClick={() => addPeer(inst)}
+                      disabled={adding === inst.ip}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                    >
+                      {adding === inst.ip ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Link className="h-3 w-3" />}
+                      Als Peer hinzufügen
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function A2APage() {
   const { t } = useTranslation();
@@ -367,6 +513,9 @@ export function A2APage() {
           )}
         </div>
       )}
+
+      {/* ── Tailscale Discovery ─────────────────────────────────── */}
+      <TailscaleSection onPeerAdded={load} />
 
       <div className="section-card p-5 space-y-3">
         <h2 className="text-sm font-semibold">{t("a2a.toolUsage")}</h2>

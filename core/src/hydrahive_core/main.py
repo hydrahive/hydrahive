@@ -64,6 +64,7 @@ from .whatsapp_agent import setup_whatsapp_sessions
 from .router_invites import register_invite_routes
 from .router_github import register_github_routes
 from .router_plugins import register_plugin_routes
+from .router_tailscale import register_tailscale_routes
 from .plugin_manager import plugin_manager
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
 from .pipeline_executor import execute_pipeline, get_watch_folders
@@ -1417,6 +1418,7 @@ register_brain_routes(auth_router, discovery=discovery, runtime=runtime, project
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
 register_plugin_routes(admin_router, require_admin=require_admin, agents_dir=AGENTS_DIR)
+register_tailscale_routes(admin_router, require_admin=require_admin)
 register_pipeline_routes(
     admin_router,
     require_admin=require_admin,
