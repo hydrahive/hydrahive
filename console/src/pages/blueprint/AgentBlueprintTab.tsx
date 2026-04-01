@@ -382,19 +382,74 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     }).catch(() => {});
   }, []);
 
-  // Blueprint laden wenn Agent ausgewählt wird
+  // Blueprint laden — oder aus Agent-Config generieren
   useEffect(() => {
     if (!selectedAgentId || isNewMode) return;
     setLoading(true);
     setSelectedNode(null);
-    api.get<{ nodes: any[]; edges: any[] }>(`/agents/${selectedAgentId}/workflow-blueprint`)
-      .then(wf => {
-        setNodes(wf.nodes || []);
-        setEdges(wf.edges || []);
+
+    (async () => {
+      try {
+        // Erst gespeichertes Blueprint laden
+        const wf = await api.get<{ nodes: any[]; edges: any[] }>(`/agents/${selectedAgentId}/workflow-blueprint`);
+        if (wf.nodes && wf.nodes.length > 0) {
+          setNodes(wf.nodes);
+          setEdges(wf.edges || []);
+          setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
+          return;
+        }
+      } catch { /* kein Blueprint gespeichert */ }
+
+      // Kein Blueprint → aus Agent-Config generieren
+      try {
+        const agentData = await api.get<Record<string, any>>("/agents");
+        const agent = agentData[selectedAgentId];
+        if (!agent?.config) { setNodes([]); setEdges([]); return; }
+        const cfg = agent.config;
+        const identity = cfg.identity || selectedAgentId;
+        const genNodes: Node[] = [];
+        const genEdges: Edge[] = [];
+        const agentNodeId = "agent-center";
+        const edgeStyle = { stroke: "#6366f1", strokeWidth: 2 };
+
+        // Agent-Node in der Mitte
+        genNodes.push({
+          id: agentNodeId, type: "agentprofile",
+          position: { x: 400, y: 250 },
+          data: { label: identity, config: { agentId: selectedAgentId, type: cfg.type, model: cfg.llm?.model } },
+        });
+
+        // Tools links vom Agent
+        const tools: string[] = cfg.tools || [];
+        tools.forEach((t: string, i: number) => {
+          const nodeId = `tool-${t}`;
+          genNodes.push({
+            id: nodeId, type: "tool",
+            position: { x: 60, y: 80 + i * 50 },
+            data: { label: t, config: { toolId: t } },
+          });
+          genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+        });
+
+        // MCP-Server oben rechts
+        const mcps: string[] = cfg.mcp_servers || [];
+        mcps.forEach((s: string, i: number) => {
+          const nodeId = `mcp-${s}`;
+          genNodes.push({
+            id: nodeId, type: "mcp",
+            position: { x: 700, y: 80 + i * 60 },
+            data: { label: s, config: { serverId: s } },
+          });
+          genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+        });
+
+        setNodes(genNodes);
+        setEdges(genEdges);
         setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
-      })
-      .catch(() => { setNodes([]); setEdges([]); })
-      .finally(() => setLoading(false));
+      } catch {
+        setNodes([]); setEdges([]);
+      }
+    })().finally(() => setLoading(false));
   }, [selectedAgentId, setNodes, setEdges, rf, isNewMode]);
 
   const onConnect = useCallback((c: Connection) => {
