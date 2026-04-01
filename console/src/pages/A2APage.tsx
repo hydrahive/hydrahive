@@ -13,6 +13,8 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [inviteKey, setInviteKey] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
@@ -137,7 +139,41 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
           {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
           {scanning ? "Scanne..." : "HydraHive suchen"}
         </button>
+        <button
+          onClick={async () => {
+            setInviting(true); setInviteKey(null); setError(null);
+            try {
+              const r = await api.tailscaleInvite();
+              setInviteKey(r.auth_key);
+            } catch (e: any) { setError(e.message); }
+            finally { setInviting(false); }
+          }}
+          disabled={inviting}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-green-500/50 text-green-600 rounded-lg hover:bg-green-500/10 transition-colors disabled:opacity-50"
+        >
+          {inviting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          Einladen
+        </button>
       </div>
+
+      {/* Invite Key */}
+      {inviteKey && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-2">
+          <p className="text-xs font-medium text-green-600">Einladungs-Key generiert (24h gültig):</p>
+          <div className="flex gap-2">
+            <code className="flex-1 text-xs bg-background px-3 py-2 rounded-lg border font-mono break-all select-all">
+              {inviteKey}
+            </code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(inviteKey); }}
+              className="px-3 py-2 text-xs border rounded-lg hover:bg-muted/50 transition-colors flex-shrink-0"
+            >
+              Kopieren
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">Diesen Key an den anderen HydraHive-Admin schicken. Er kann ihn unter VPN → Tailscale eintragen.</p>
+        </div>
+      )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

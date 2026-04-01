@@ -316,6 +316,47 @@ def register_tailscale_routes(
 
         return {"ok": True, "deleted": device_id, "removed_peer": removed_peer}
 
+    @admin_router.post("/admin/tailscale/invite")
+    async def ts_invite(_a=Depends(require_admin)):
+        """Generiert einen einmaligen Pre-Auth Key zum Einladen eines externen Geräts."""
+        cfg = _load_ts_config()
+        api_key = cfg.get("api_key")
+        if not api_key:
+            raise HTTPException(400, "Tailscale API Key nicht konfiguriert")
+        tailnet = cfg.get("tailnet", "-")
+
+        try:
+            payload = json.dumps({
+                "capabilities": {
+                    "devices": {
+                        "create": {
+                            "reusable": False,
+                            "ephemeral": False,
+                            "preauthorized": True,
+                        }
+                    }
+                },
+                "expirySeconds": 86400,  # 24h gültig
+            }).encode()
+            req = urllib.request.Request(
+                f"{TS_API_BASE}/tailnet/{tailnet}/keys",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            data = await asyncio.to_thread(
+                lambda: json.loads(urllib.request.urlopen(req, timeout=15).read().decode())
+            )
+            return {
+                "ok": True,
+                "auth_key": data.get("key", ""),
+                "expires": data.get("expires", ""),
+            }
+        except Exception as e:
+            raise HTTPException(502, f"Auth Key konnte nicht generiert werden: {e}")
+
     @admin_router.put("/admin/tailscale/config")
     async def ts_config(req: TailscaleConfigRequest, _a=Depends(require_admin)):
         """Tailscale API-Key speichern."""
