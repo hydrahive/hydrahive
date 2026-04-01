@@ -209,11 +209,12 @@ export function HydraBrainPage() {
   const toggleFederation = useCallback(async () => {
     if (!showFed) {
       setShowFed(true);
-      if (fedExtra.nodes.length === 0) await loadFederation();
+      await loadFederation(); // Immer neu scannen — zeigt nur erreichbare Peers
     } else {
       setShowFed(false);
+      setFedExtra({ nodes: [], links: [] }); // Aufräumen beim Ausschalten
     }
-  }, [showFed, fedExtra.nodes.length, loadFederation]);
+  }, [showFed, loadFederation]);
 
   useEffect(() => { load(); }, [load]);
 
