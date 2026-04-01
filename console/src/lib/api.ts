@@ -226,8 +226,8 @@ export const api = {
   // Tailscale (#111)
   tailscaleStatus:    () => api.get<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null;dns_name?:string;online:boolean}}>("/admin/tailscale/status"),
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
-  tailscaleScan:      () => api.post<{total_devices:number;online_devices:number;hydrahive_found:number;instances:{hostname:string;name:string;ip:string;port:number;os:string}[]}>("/admin/tailscale/scan", {}),
-  tailscaleAutoPeer:  (hostname: string, ip: string, port: number, name?: string) => api.post<{ok:boolean;peer_name:string;url:string}>("/admin/tailscale/auto-peer", { hostname, ip, port, name }),
+  tailscaleScan:      () => api.post<{total_devices:number;online_devices:number;hydrahive_found:number;instances:{hostname:string;name:string;ip:string;port:number;scheme?:string;os:string}[]}>("/admin/tailscale/scan", {}),
+  tailscaleAutoPeer:  (hostname: string, ip: string, port: number, scheme?: string, name?: string) => api.post<{ok:boolean;peer_name:string;url:string}>("/admin/tailscale/auto-peer", { hostname, ip, port, scheme: scheme || "https", name }),
   tailscaleConfig:    (api_key: string, tailnet?: string) => api.put<{ok:boolean}>("/admin/tailscale/config", { api_key, tailnet: tailnet || "-" }),
   // Plugins (#110)
   pluginsList:          () => api.get<{plugins:PluginInfo[];legacy_plugins:unknown[];hooks:Record<string,number>;total:number}>("/plugins"),

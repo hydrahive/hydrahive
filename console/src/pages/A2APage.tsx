@@ -34,10 +34,10 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
     finally { setScanning(false); }
   }
 
-  async function addPeer(inst: {hostname:string;ip:string;port:number}) {
+  async function addPeer(inst: {hostname:string;ip:string;port:number;scheme?:string}) {
     setAdding(inst.ip);
     try {
-      await api.tailscaleAutoPeer(inst.hostname, inst.ip, inst.port);
+      await api.tailscaleAutoPeer(inst.hostname, inst.ip, inst.port, inst.scheme);
       onPeerAdded();
       setScanResult(prev => prev?.filter(i => i.ip !== inst.ip) ?? null);
     } catch (e: any) { setError(e.message); }

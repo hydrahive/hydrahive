@@ -48,19 +48,28 @@ def _ts_api(path: str, api_key: str, timeout: int = 15) -> Any:
         return json.loads(r.read().decode())
 
 
-def _check_hydrahive(ip: str, port: int = 80, timeout: float = 3) -> dict | None:
+def _check_hydrahive(ip: str, port: int = 80, timeout: float = 5) -> dict | None:
     """Prüft ob unter einer IP eine HydraHive-Instanz läuft."""
-    import socket
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
     for p in [port, 8765]:
-        try:
-            url = f"http://{ip}:{p}/health"
-            req = urllib.request.Request(url, headers={"User-Agent": "HydraHive-Discovery/1.0"})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                data = json.loads(r.read().decode())
-                if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
-                    return {"ip": ip, "port": p, "health": data}
-        except Exception:
-            continue
+        for scheme in ["http", "https"]:
+            for path in ["/health", "/api/health"]:
+                try:
+                    url = f"{scheme}://{ip}:{p}{path}"
+                    req = urllib.request.Request(url, headers={"User-Agent": "HydraHive-Discovery/1.0"})
+                    kw = {"timeout": timeout}
+                    if scheme == "https":
+                        kw["context"] = ctx
+                    with urllib.request.urlopen(req, **kw) as r:
+                        data = json.loads(r.read().decode())
+                        if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
+                            return {"ip": ip, "port": p, "scheme": scheme, "health": data}
+                except Exception:
+                    continue
     return None
 
 
@@ -73,6 +82,7 @@ class AutoPeerRequest(BaseModel):
     hostname: str
     ip: str
     port: int = 80
+    scheme: str = "https"
     name: str | None = None
 
 
@@ -191,6 +201,7 @@ def register_tailscale_routes(
                     "name": dev.get("name", ""),
                     "ip": ip,
                     "port": result["port"],
+                    "scheme": result.get("scheme", "http"),
                     "os": dev.get("os", ""),
                     "online": True,
                     "hydrahive": True,
@@ -212,7 +223,7 @@ def register_tailscale_routes(
     async def ts_auto_peer(req: AutoPeerRequest, _a=Depends(require_admin)):
         """Fügt eine gefundene HydraHive-Instanz als A2A-Peer hinzu."""
         peer_name = req.name or req.hostname
-        peer_url = f"http://{req.ip}:{req.port}"
+        peer_url = f"{req.scheme}://{req.ip}:{req.port}"
 
         # A2A-Config laden und Peer hinzufügen
         a2a_config_path = Path("/etc/hydrahive/a2a.json")
