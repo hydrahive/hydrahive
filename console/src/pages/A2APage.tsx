@@ -45,6 +45,22 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   }
 
   if (status === null) return null;
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string|null>(null);
+
+  async function saveApiKey() {
+    if (!apiKeyInput.trim()) return;
+    setSavingKey(true); setKeyError(null);
+    try {
+      await api.tailscaleConfig(apiKeyInput.trim());
+      const s = await api.tailscaleStatus();
+      setStatus(s);
+      setApiKeyInput("");
+    } catch (e: any) { setKeyError(e.message); }
+    finally { setSavingKey(false); }
+  }
+
   if (!status.api_configured) {
     return (
       <div className="section-card p-5 space-y-3">
@@ -52,7 +68,26 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
           <Radar className="h-4 w-4 text-blue-500" />
           <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
         </div>
-        <p className="text-xs text-muted-foreground">Tailscale API Key nicht konfiguriert. Unter Settings → Tailscale den API Key eintragen.</p>
+        <p className="text-xs text-muted-foreground">Tailscale API Key eingeben um Devices im Tailnet zu scannen und HydraHive-Instanzen automatisch zu verbinden.</p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKeyInput}
+            onChange={e => setApiKeyInput(e.target.value)}
+            placeholder="tskey-api-..."
+            className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+          <button
+            onClick={saveApiKey}
+            disabled={savingKey || !apiKeyInput.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+            Speichern
+          </button>
+        </div>
+        {keyError && <p className="text-xs text-destructive">{keyError}</p>}
+        <p className="text-xs text-muted-foreground opacity-60">API Key erstellen: <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener" className="underline">Tailscale Admin → Settings → Keys</a></p>
       </div>
     );
   }
