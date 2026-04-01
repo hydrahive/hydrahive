@@ -41,7 +41,8 @@ const EMPTY_FORM = {
   heartbeat_on_failure: "restart",
 };
 
-const KNOWN_TOOLS = ["file_read", "file_write", "project_shell", "shell_exec", "web_search", "http_request", "read_memory", "write_memory", "ask_agent", "delegate_agent", "write_handoff", "read_handoff", "wks_file_read", "wks_file_write", "wks_shell_exec", "dispatch_task", "spawn_agent", "git_status", "git_diff", "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits", "gitea_repo_diff", "gitea_create_issue", "gitea_comment_issue", "gitea_update_issue", "discord_send", "discord_read", "discord_list_channels", "discord_list_all_channels", "discord_create_category", "discord_create_channel", "discord_delete_channel", "discord_set_topic", "discord_rename_channel", "discord_list_members", "discord_list_roles", "discord_delete_message", "discord_pin_message", "create_agent", "delete_agent", "create_project", "delete_project"];
+// Fallback falls API-Call fehlschlägt
+const KNOWN_TOOLS_FALLBACK = ["file_read", "file_write", "shell_exec", "web_search", "http_request", "read_memory", "write_memory", "ask_agent", "delegate_agent"];
 const DANGER_TOOLS = new Set(["project_shell", "create_agent", "delete_agent", "create_project", "delete_project"]);
 const KNOWN_MODELS = [
   // Anthropic (OAuth)
@@ -111,6 +112,7 @@ export function AgentsPage() {
   const [hbForm, setHbForm] = useState({ enabled: true, interval: "30s", timeout: "90s", on_failure: "restart" });
   const [hbSaving, setHbSaving] = useState(false);
   const [hbErr, setHbErr] = useState("");
+  const [knownTools, setKnownTools] = useState<string[]>(KNOWN_TOOLS_FALLBACK);
   const [logAgent, setLogAgent] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logErr, setLogErr] = useState("");
@@ -141,6 +143,10 @@ export function AgentsPage() {
 
   useEffect(() => {
     load();
+    // Alle verfügbaren Tools aus der Registry laden
+    api.get<Record<string, any>>("/tools").then(tools => {
+      setKnownTools(Object.keys(tools).sort());
+    }).catch(() => {});
   }, []);
   function refresh() {
     setRefreshing(true);
@@ -497,7 +503,7 @@ export function AgentsPage() {
             <div>
               <p className="metric-kicker mb-3">{t("agents.tools")}</p>
               <div className="flex flex-wrap gap-2">
-                {KNOWN_TOOLS.map((t) => {
+                {knownTools.map((t) => {
                   const isDanger = DANGER_TOOLS.has(t);
                   const isActive = form.tools.includes(t);
                   const activeClass = isDanger
