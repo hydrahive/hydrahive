@@ -104,7 +104,7 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
             {devices.map(d => (
               <div key={d.ip} className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${d.online ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+                  <span className={`w-2 h-2 rounded-full ${d.online === true ? "bg-green-500" : d.online === false ? "bg-muted-foreground/30" : "bg-yellow-500"}`} />
                   <span className="font-medium">{d.hostname}</span>
                   <span className="text-muted-foreground font-mono">{d.ip}</span>
                 </div>

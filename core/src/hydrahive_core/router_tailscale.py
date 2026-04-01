@@ -138,7 +138,7 @@ def register_tailscale_routes(
                 "name": dev.get("name", ""),
                 "ip": dev.get("addresses", [None])[0],
                 "os": dev.get("os", ""),
-                "online": dev.get("online", False),
+                "online": dev.get("online"),  # kann null sein
                 "last_seen": dev.get("lastSeen"),
                 "tags": dev.get("tags", []),
             })
@@ -171,14 +171,15 @@ def register_tailscale_routes(
         except Exception:
             pass
 
-        # Parallel alle Devices proben
+        # Parallel alle Devices proben (online-Status kann null sein bei manchen Plänen)
         found = []
         tasks = []
         for dev in data.get("devices", []):
             ip = dev.get("addresses", [None])[0]
             if not ip or ip == my_ip:
                 continue
-            if not dev.get("online", False):
+            # online kann True, False oder null sein — bei null trotzdem proben
+            if dev.get("online") is False:
                 continue
             tasks.append((dev, ip))
 
