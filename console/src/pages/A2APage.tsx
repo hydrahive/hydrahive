@@ -15,6 +15,7 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [inviteKey, setInviteKey] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [showKeyEdit, setShowKeyEdit] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
@@ -121,8 +122,46 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
               <WifiOff className="h-3.5 w-3.5" /> Nicht verbunden
             </span>
           )}
+          <button
+            onClick={() => setShowKeyEdit(k => !k)}
+            className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+          >
+            API Key {showKeyEdit ? "ausblenden" : "ändern"}
+          </button>
         </div>
       </div>
+
+      {/* API Key ändern */}
+      {showKeyEdit && (
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKeyInput}
+            onChange={e => setApiKeyInput(e.target.value)}
+            placeholder="tskey-api-..."
+            className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+          />
+          <button
+            onClick={async () => {
+              setSavingKey(true); setKeyError(null);
+              try {
+                await api.tailscaleConfig(apiKeyInput.trim());
+                const s = await api.tailscaleStatus();
+                setStatus(s);
+                setApiKeyInput("");
+                setShowKeyEdit(false);
+              } catch (e: any) { setKeyError(e.message); }
+              finally { setSavingKey(false); }
+            }}
+            disabled={savingKey || !apiKeyInput.trim()}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+            Speichern
+          </button>
+        </div>
+      )}
+      {keyError && showKeyEdit && <p className="text-xs text-destructive">{keyError}</p>}
 
       <div className="flex gap-2">
         <button
