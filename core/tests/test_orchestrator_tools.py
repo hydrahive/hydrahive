@@ -137,7 +137,7 @@ class TestExecuteTool:
             tool_input={"key": "value"},
         )
         assert result == {"ok": True}
-        tool.execute.assert_called_once_with(agent_id="boss", project_id="proj", key="value")
+        tool.execute.assert_called_once_with(agent_id="boss", project_id="proj", _agent_permissions=[], key="value")
 
     async def test_project_id_im_input_wird_ueberschrieben(self):
         tool = MagicMock()
