@@ -1,0 +1,9 @@
+id: agent-analytics
+name: Agent Analytics
+version: 1.0.0
+description: Token-Verbrauch, Kosten-Schätzung und Tool-Nutzungsstatistiken pro Agent.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false

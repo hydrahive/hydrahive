@@ -1,0 +1,9 @@
+id: health-monitor
+name: Health Monitor
+version: 1.0.0
+description: System-Überwachung mit Schwellwerten — CPU, RAM, Disk, Load. Erkennt Probleme bevor sie kritisch werden.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false

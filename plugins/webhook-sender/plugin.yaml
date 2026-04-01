@@ -1,0 +1,9 @@
+id: webhook-sender
+name: Webhook Sender
+version: 1.0.0
+description: HTTP Webhooks senden — POST/GET an beliebige URLs mit konfigurierbarem Payload.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false

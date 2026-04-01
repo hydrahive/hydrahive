@@ -1,0 +1,10 @@
+id: log-analyzer
+name: Log Analyzer
+version: 1.0.0
+description: Journalctl-Logs parsen, Fehler-Patterns erkennen, gruppieren und zusammenfassen.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+auto_attach: false

@@ -1,0 +1,10 @@
+id: test-runner
+name: Test Runner
+version: 1.0.0
+description: Tests ausführen — pytest, npm test, unittest. Strukturierte Ergebnisse ohne shell_exec Gefummel.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+auto_attach: false

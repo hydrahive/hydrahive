@@ -1,0 +1,10 @@
+id: dependency-checker
+name: Dependency Checker
+version: 1.0.0
+description: Veraltete pip/npm Pakete finden und Security-Advisories prüfen.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+auto_attach: false

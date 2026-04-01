@@ -1,0 +1,11 @@
+id: code-linter
+name: Code Linter
+version: 1.0.0
+description: Deterministisches Code-Linting — Python (ruff/flake8), JavaScript (eslint). Schneller und günstiger als LLM.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+  - filesystem.read
+auto_attach: false

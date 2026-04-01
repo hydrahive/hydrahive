@@ -1,0 +1,10 @@
+id: backup-validator
+name: Backup Validator
+version: 1.0.0
+description: Prüft ob Backups vollständig und lesbar sind — Checksums, Alter, Größe.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - filesystem.read
+auto_attach: false

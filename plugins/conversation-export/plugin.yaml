@@ -1,0 +1,11 @@
+id: conversation-export
+name: Conversation Export
+version: 1.0.0
+description: Agent-Konversationen als Markdown exportieren.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - filesystem.read
+  - filesystem.write
+auto_attach: false

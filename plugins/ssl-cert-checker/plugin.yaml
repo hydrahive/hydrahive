@@ -1,0 +1,9 @@
+id: ssl-cert-checker
+name: SSL Cert Checker
+version: 1.0.0
+description: SSL-Zertifikate prüfen und vor Ablauf warnen. Lokal und extern.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
