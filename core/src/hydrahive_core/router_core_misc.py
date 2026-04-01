@@ -314,6 +314,9 @@ def register_core_misc_routes(
                     "identity": cfg.identity,
                     "model": cfg.llm.model,
                     "fallback_models": cfg.llm.fallback_models,
+                    "tools": cfg.tools,
+                    "mcp_servers": cfg.mcp_servers,
+                    "tool_selection": getattr(cfg, "tool_selection", "auto"),
                 },
                 "runtime": running.get(agent_id),
             }
