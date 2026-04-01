@@ -6,7 +6,7 @@ import {
   Handle, Position, BackgroundVariant, Panel,
   type Connection, type Edge, type Node,
 } from "@xyflow/react";
-import { PlusCircle, Save, Loader2, Trash2, Palette, X, Type, PenTool } from "lucide-react";
+import { PlusCircle, Save, Loader2, Trash2, Palette, X, PenTool, FolderOpen, FilePlus, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -22,10 +22,9 @@ const COLORS = [
   { id: "red",     bg: "bg-red-950/70",     border: "border-red-500/50",  text: "text-red-100",     handle: "#f87171" },
 ];
 
-function ScratchNode({ data, selected, id }: { data: any; selected: boolean; id: string }) {
+function ScratchNode({ data, selected }: { data: any; selected: boolean; id: string }) {
   const color = COLORS.find(c => c.id === (data.color || "zinc")) || COLORS[0];
   const hStyle = { background: color.handle, border: "2px solid rgba(0,0,0,0.3)", width: 8, height: 8 };
-
   return (
     <div className={cn(
       "min-w-[120px] max-w-[300px] rounded-xl border-2 px-3 py-2 shadow-lg select-none",
@@ -43,8 +42,7 @@ function ScratchNode({ data, selected, id }: { data: any; selected: boolean; id:
 }
 
 const NODE_TYPES = { scratch: ScratchNode as any };
-
-const SCRATCHPAD_KEY = "hydrahive_scratchpad";
+const SCRATCHPADS_DIR = "/etc/hydrahive/scratchpads";
 
 function ScratchpadInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -53,48 +51,79 @@ function ScratchpadInner() {
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState<string | null>(null);
   const [colorPicker, setColorPicker] = useState(false);
+  const [padName, setPadName]         = useState("default");
+  const [padList, setPadList]         = useState<string[]>([]);
+  const [showPadList, setShowPadList] = useState(false);
+  const [newPadName, setNewPadName]   = useState("");
   const rf = useReactFlow();
   const counter = useRef(0);
 
-  // Laden (Server zuerst, dann localStorage Fallback)
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await api.get<{content:string}>("/admin/files/read?path=/etc/hydrahive/scratchpad.json");
-        if (r.content) {
-          const d = JSON.parse(r.content);
-          setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
-          setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
-          return;
-        }
-      } catch { /* Server hat nichts */ }
-      try {
-        const raw = localStorage.getItem(SCRATCHPAD_KEY);
-        if (raw) {
-          const d = JSON.parse(raw);
-          setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
-          setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
-        }
-      } catch { /* fresh start */ }
-    })();
-  }, []);
+  // Pad-Liste laden
+  async function loadPadList() {
+    try {
+      const r = await api.get<{items:{name:string;type:string}[]}>(`/admin/files?path=${SCRATCHPADS_DIR}`);
+      setPadList(r.items.filter(i => i.name.endsWith(".json")).map(i => i.name.replace(".json", "")));
+    } catch {
+      setPadList([]);
+    }
+  }
 
-  // Auto-Save alle 5 Sekunden (localStorage + Server)
+  // Pad laden
+  async function loadPad(name: string) {
+    setPadName(name);
+    setSelectedNode(null);
+    try {
+      const r = await api.get<{content:string}>(`/admin/files/read?path=${SCRATCHPADS_DIR}/${name}.json`);
+      if (r.content) {
+        const d = JSON.parse(r.content);
+        setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
+        setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
+        return;
+      }
+    } catch { /* nicht vorhanden */ }
+    // Fallback localStorage für Migration
+    try {
+      const raw = localStorage.getItem("hydrahive_scratchpad");
+      if (raw && name === "default") {
+        const d = JSON.parse(raw);
+        setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
+        setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
+        return;
+      }
+    } catch {}
+    setNodes([]); setEdges([]); counter.current = 0;
+  }
+
+  // Initial laden
+  useEffect(() => { loadPadList(); loadPad("default"); }, []);
+
+  // Speichern
+  async function savePad() {
+    setSaving(true);
+    const data = JSON.stringify({ nodes, edges, counter: counter.current });
+    try {
+      await api.put("/admin/files/write", { path: `${SCRATCHPADS_DIR}/${padName}.json`, content: data });
+      // Auch localStorage für Offline-Fallback
+      try { localStorage.setItem("hydrahive_scratchpad", data); } catch {}
+      setToast("Gespeichert");
+      setTimeout(() => setToast(null), 2000);
+      loadPadList();
+    } catch (e: any) { setToast("Fehler: " + e.message); }
+    finally { setSaving(false); }
+  }
+
+  // Auto-Save alle 10s
   useEffect(() => {
     const t = setInterval(() => {
       const data = JSON.stringify({ nodes, edges, counter: counter.current });
-      try { localStorage.setItem(SCRATCHPAD_KEY, data); } catch {}
-      try { api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: data }).catch(() => {}); } catch {}
-    }, 5000);
+      api.put("/admin/files/write", { path: `${SCRATCHPADS_DIR}/${padName}.json`, content: data }).catch(() => {});
+      try { localStorage.setItem("hydrahive_scratchpad", data); } catch {}
+    }, 10000);
     return () => clearInterval(t);
-  }, [nodes, edges]);
+  }, [nodes, edges, padName]);
 
   const onConnect = useCallback((c: Connection) => {
-    setEdges(es => addEdge({
-      ...c, animated: false,
-      style: { stroke: "#6366f1", strokeWidth: 2 },
-      type: "smoothstep",
-    } as Edge, es));
+    setEdges(es => addEdge({ ...c, animated: false, style: { stroke: "#6366f1", strokeWidth: 2 }, type: "smoothstep" } as Edge, es));
   }, [setEdges]);
 
   function addScratchNode(color: string = "zinc") {
@@ -121,73 +150,102 @@ function ScratchpadInner() {
 
   function clearAll() {
     if (!confirm("Alles löschen?")) return;
-    setNodes([]); setEdges([]); setSelectedNode(null);
-    counter.current = 0;
-    localStorage.removeItem(SCRATCHPAD_KEY);
-    api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: "{}" }).catch(() => {});
+    setNodes([]); setEdges([]); setSelectedNode(null); counter.current = 0;
   }
 
-  function save() {
+  async function deletePad(name: string) {
+    if (!confirm(`Scratchpad "${name}" löschen?`)) return;
     try {
-      const data = JSON.stringify({ nodes, edges, counter: counter.current });
-      localStorage.setItem(SCRATCHPAD_KEY, data);
-      api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: data }).catch(() => {});
-      setToast("Gespeichert");
+      await api.post("/admin/shell", { command: `rm -f ${SCRATCHPADS_DIR}/${name}.json` });
+      if (padName === name) { setPadName("default"); loadPad("default"); }
+      loadPadList();
+      setToast(`"${name}" gelöscht`);
       setTimeout(() => setToast(null), 2000);
-    } catch { setToast("Fehler beim Speichern"); }
+    } catch {}
+  }
+
+  function createNewPad() {
+    const name = newPadName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+    if (!name) return;
+    setNodes([]); setEdges([]); counter.current = 0;
+    setPadName(name); setNewPadName(""); setShowPadList(false);
+    setToast(`Neues Scratchpad: ${name}`);
+    setTimeout(() => setToast(null), 2000);
   }
 
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 shrink-0 flex-wrap">
+        {/* Pad-Auswahl */}
+        <div className="relative">
+          <button onClick={() => { setShowPadList(p => !p); loadPadList(); }}
+            className="flex items-center gap-1.5 rounded-lg bg-zinc-900 border border-white/10 px-3 py-1.5 text-xs text-white hover:bg-zinc-800 transition-colors">
+            <FolderOpen className="h-3.5 w-3.5" /> {padName}
+          </button>
+          {showPadList && (
+            <div className="absolute top-full left-0 mt-1 w-56 bg-zinc-900 border border-white/10 rounded-lg shadow-xl z-50 p-2 space-y-1">
+              {padList.map(p => (
+                <div key={p} className="flex items-center justify-between">
+                  <button onClick={() => { loadPad(p); setShowPadList(false); }}
+                    className={cn("flex-1 text-left px-2 py-1.5 rounded text-xs transition-colors",
+                      p === padName ? "bg-indigo-600 text-white" : "text-white/60 hover:bg-white/5 hover:text-white")}>
+                    {p}
+                  </button>
+                  {p !== "default" && (
+                    <button onClick={() => deletePad(p)} className="p-1 text-red-400 hover:bg-red-500/15 rounded"><Trash2 className="h-3 w-3" /></button>
+                  )}
+                </div>
+              ))}
+              <div className="border-t border-white/10 pt-1 mt-1 flex gap-1">
+                <input value={newPadName} onChange={e => setNewPadName(e.target.value)}
+                  placeholder="Neuer Name..."
+                  onKeyDown={e => e.key === "Enter" && createNewPad()}
+                  className="flex-1 px-2 py-1 rounded bg-zinc-800 border border-white/10 text-xs text-white focus:outline-none" />
+                <button onClick={createNewPad} disabled={!newPadName.trim()}
+                  className="p-1.5 rounded bg-indigo-600 text-white disabled:opacity-30"><FilePlus className="h-3 w-3" /></button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="h-4 w-px bg-white/10" />
+
         <button onClick={() => addScratchNode("zinc")}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs text-white transition-colors">
           <PlusCircle className="h-3.5 w-3.5" /> Notiz
         </button>
-
         <button onClick={() => setColorPicker(p => !p)}
           className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-zinc-800 transition-colors">
           <Palette className="h-3.5 w-3.5" /> Farbe
         </button>
         {colorPicker && COLORS.map(c => (
           <button key={c.id} onClick={() => { addScratchNode(c.id); setColorPicker(false); }}
-            className={cn("w-6 h-6 rounded-lg border-2", c.bg, c.border, "hover:scale-110 transition-transform")}
-            title={c.id}
-          />
+            className={cn("w-6 h-6 rounded-lg border-2", c.bg, c.border, "hover:scale-110 transition-transform")} title={c.id} />
         ))}
-
         <div className="h-4 w-px bg-white/10" />
         <button onClick={clearAll}
           className="flex items-center gap-1.5 rounded-lg border border-red-500/30 px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors">
-          <Trash2 className="h-3 w-3" /> Alles löschen
+          <Trash2 className="h-3 w-3" /> Leeren
         </button>
         <div className="flex-1" />
         {toast && <span className="text-xs text-indigo-300">{toast}</span>}
         <span className="text-[0.6rem] text-white/20">{nodes.length} Notizen · Auto-Save</span>
-        <button onClick={save}
-          className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 px-3 py-1.5 text-xs text-white transition-colors">
-          <Save className="h-3.5 w-3.5" /> Speichern
+        <button onClick={savePad} disabled={saving}
+          className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 px-3 py-1.5 text-xs text-white transition-colors disabled:opacity-50">
+          {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Speichern
         </button>
       </div>
 
       {/* Canvas + Properties */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative">
-          <ReactFlow
-            nodes={nodes} edges={edges}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={onConnect} nodeTypes={NODE_TYPES}
-            colorMode="dark" fitView
-            onNodeClick={(_, n) => setSelectedNode(n)}
-            onPaneClick={() => setSelectedNode(null)}
-          >
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            onConnect={onConnect} nodeTypes={NODE_TYPES} colorMode="dark" fitView
+            onNodeClick={(_, n) => setSelectedNode(n)} onPaneClick={() => setSelectedNode(null)}>
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,0.04)" />
             <Controls />
-            <MiniMap nodeColor={n => {
-              const c = COLORS.find(x => x.id === ((n.data as any)?.color || "zinc"));
-              return c?.handle || "#a1a1aa";
-            }} />
+            <MiniMap nodeColor={n => { const c = COLORS.find(x => x.id === ((n.data as any)?.color || "zinc")); return c?.handle || "#a1a1aa"; }} />
             {nodes.length === 0 && (
               <Panel position="top-center" style={{ marginTop: 80 }}>
                 <div className="text-center space-y-2 pointer-events-none">
@@ -199,8 +257,6 @@ function ScratchpadInner() {
             )}
           </ReactFlow>
         </div>
-
-        {/* Properties */}
         <div className="w-56 shrink-0 border-l border-white/10 bg-zinc-900/50 flex flex-col">
           <div className="px-3 py-2 border-b border-white/10">
             <p className="text-[0.65rem] font-bold uppercase tracking-wider text-white/30">Eigenschaften</p>
@@ -216,31 +272,21 @@ function ScratchpadInner() {
                 </div>
                 <div>
                   <label className="block text-[0.65rem] text-white/40 mb-1">Text</label>
-                  <textarea
-                    value={(selectedNode.data as any).label || ""}
-                    onChange={e => updateNode(selectedNode.id, { label: e.target.value })}
-                    rows={3}
-                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 resize-none"
-                  />
+                  <textarea value={(selectedNode.data as any).label || ""} onChange={e => updateNode(selectedNode.id, { label: e.target.value })}
+                    rows={3} className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 resize-none" />
                 </div>
                 <div>
                   <label className="block text-[0.65rem] text-white/40 mb-1">Notiz (klein)</label>
-                  <input
-                    value={(selectedNode.data as any).note || ""}
-                    onChange={e => updateNode(selectedNode.id, { note: e.target.value })}
-                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none"
-                  />
+                  <input value={(selectedNode.data as any).note || ""} onChange={e => updateNode(selectedNode.id, { note: e.target.value })}
+                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-[0.65rem] text-white/40 mb-1">Farbe</label>
                   <div className="flex flex-wrap gap-1.5">
                     {COLORS.map(c => (
-                      <button key={c.id}
-                        onClick={() => updateNode(selectedNode.id, { color: c.id })}
+                      <button key={c.id} onClick={() => updateNode(selectedNode.id, { color: c.id })}
                         className={cn("w-6 h-6 rounded-lg border-2 transition-transform", c.bg, c.border,
-                          (selectedNode.data as any).color === c.id && "ring-2 ring-white/40 scale-110"
-                        )}
-                      />
+                          (selectedNode.data as any).color === c.id && "ring-2 ring-white/40 scale-110")} />
                     ))}
                   </div>
                 </div>
@@ -254,9 +300,5 @@ function ScratchpadInner() {
 }
 
 export function ScratchpadTab() {
-  return (
-    <ReactFlowProvider>
-      <ScratchpadInner />
-    </ReactFlowProvider>
-  );
+  return (<ReactFlowProvider><ScratchpadInner /></ReactFlowProvider>);
 }

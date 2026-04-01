@@ -1,0 +1,11 @@
+id: scratchpad-tools
+name: Scratchpad Tools
+version: 1.0.0
+description: Scratchpads lesen, schreiben und bearbeiten. Ermöglicht visuelle Zusammenarbeit zwischen User und Agent.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - filesystem.read
+  - filesystem.write
+auto_attach: false
