@@ -1,0 +1,62 @@
+id: dev-assistant
+identity: Dev Assistant
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  fallback_models:
+  - claude-haiku-4-5-20251001
+  temperature: 0.3
+  max_tokens: 8192
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - filesystem.write
+    - system.exec
+    - memory.read
+    - memory.write
+    - agents.ask
+
+heartbeat:
+  interval: 60s
+  timeout: 300s
+  on_failure: restart
+
+tools:
+# Dateien
+- file_read
+- file_write
+- list_directory
+# Shell & System
+- shell_exec
+- project_shell
+# Web
+- web_search
+- http_request
+# Git
+- git_status
+- git_diff
+- git_commit
+- git_push
+- git_create_pr
+# Gitea
+- gitea_repo_inspect
+- gitea_repo_tree
+- gitea_repo_file
+- gitea_repo_commits
+- gitea_create_issue
+# Memory & Agenten
+- read_memory
+- write_memory
+- ask_agent
+- delegate_agent
+# Skills
+- create_skill
+- list_skills
+
+mcp_servers: []
+allowed_agents: []

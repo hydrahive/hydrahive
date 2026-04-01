@@ -1,0 +1,50 @@
+id: code-reviewer
+identity: Code Reviewer
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  fallback_models:
+  - claude-haiku-4-5-20251001
+  temperature: 0.2
+  max_tokens: 8192
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - memory.read
+    - memory.write
+
+heartbeat:
+  interval: 60s
+  timeout: 300s
+  on_failure: restart
+
+tools:
+# Dateien (nur lesen)
+- file_read
+- list_directory
+# Web
+- web_search
+- http_request
+# Git (nur lesen)
+- git_status
+- git_diff
+- gitea_repo_inspect
+- gitea_repo_tree
+- gitea_repo_file
+- gitea_repo_commits
+- gitea_repo_diff
+- gitea_create_issue
+- gitea_comment_issue
+# Memory
+- read_memory
+- write_memory
+# Agenten
+- ask_agent
+
+mcp_servers: []
+allowed_agents: []
