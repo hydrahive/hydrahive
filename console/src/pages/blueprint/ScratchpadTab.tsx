@@ -56,26 +56,35 @@ function ScratchpadInner() {
   const rf = useReactFlow();
   const counter = useRef(0);
 
-  // Laden
+  // Laden (Server zuerst, dann localStorage Fallback)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SCRATCHPAD_KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
-        setNodes(d.nodes || []);
-        setEdges(d.edges || []);
-        counter.current = (d.counter || 0);
-        setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
-      }
-    } catch { /* fresh start */ }
+    (async () => {
+      try {
+        const r = await api.get<{content:string}>("/admin/files/read?path=/etc/hydrahive/scratchpad.json");
+        if (r.content) {
+          const d = JSON.parse(r.content);
+          setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
+          setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
+          return;
+        }
+      } catch { /* Server hat nichts */ }
+      try {
+        const raw = localStorage.getItem(SCRATCHPAD_KEY);
+        if (raw) {
+          const d = JSON.parse(raw);
+          setNodes(d.nodes || []); setEdges(d.edges || []); counter.current = d.counter || 0;
+          setTimeout(() => rf.fitView({ padding: 0.2 }), 100);
+        }
+      } catch { /* fresh start */ }
+    })();
   }, []);
 
-  // Auto-Save alle 5 Sekunden
+  // Auto-Save alle 5 Sekunden (localStorage + Server)
   useEffect(() => {
     const t = setInterval(() => {
-      try {
-        localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify({ nodes, edges, counter: counter.current }));
-      } catch {}
+      const data = JSON.stringify({ nodes, edges, counter: counter.current });
+      try { localStorage.setItem(SCRATCHPAD_KEY, data); } catch {}
+      try { api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: data }).catch(() => {}); } catch {}
     }, 5000);
     return () => clearInterval(t);
   }, [nodes, edges]);
@@ -115,11 +124,14 @@ function ScratchpadInner() {
     setNodes([]); setEdges([]); setSelectedNode(null);
     counter.current = 0;
     localStorage.removeItem(SCRATCHPAD_KEY);
+    api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: "{}" }).catch(() => {});
   }
 
   function save() {
     try {
-      localStorage.setItem(SCRATCHPAD_KEY, JSON.stringify({ nodes, edges, counter: counter.current }));
+      const data = JSON.stringify({ nodes, edges, counter: counter.current });
+      localStorage.setItem(SCRATCHPAD_KEY, data);
+      api.put("/admin/files/write", { path: "/etc/hydrahive/scratchpad.json", content: data }).catch(() => {});
       setToast("Gespeichert");
       setTimeout(() => setToast(null), 2000);
     } catch { setToast("Fehler beim Speichern"); }
