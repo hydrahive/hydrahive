@@ -242,7 +242,7 @@ def register_tailscale_routes(
         peer_url = f"{req.scheme}://{req.ip}:{req.port}"
 
         # A2A-Config laden und Peer hinzufügen
-        a2a_config_path = Path("/etc/hydrahive/a2a.json")
+        a2a_config_path = Path("/etc/hydrahive/a2a_peers.json")
         try:
             a2a_cfg = json.loads(a2a_config_path.read_text()) if a2a_config_path.exists() else {}
         except Exception:
@@ -302,7 +302,7 @@ def register_tailscale_routes(
 
         # Zugehörigen A2A-Peer entfernen
         removed_peer = None
-        a2a_path = Path("/etc/hydrahive/a2a.json")
+        a2a_path = Path("/etc/hydrahive/a2a_peers.json")
         try:
             if a2a_path.exists():
                 a2a_cfg = json.loads(a2a_path.read_text())
