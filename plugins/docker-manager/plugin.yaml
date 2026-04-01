@@ -1,0 +1,10 @@
+id: docker-manager
+name: Docker Manager
+version: 1.0.0
+description: Docker Container verwalten — listen, starten, stoppen, Logs lesen, Stats abrufen, Images anzeigen. Funktioniert mit Docker und Podman.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+auto_attach: false
