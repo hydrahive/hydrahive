@@ -228,6 +228,7 @@ export const api = {
   tailscaleDevices:   () => api.get<{devices:{id:string;hostname:string;name:string;ip:string;os:string;online:boolean;last_seen:string;tags:string[]}[];count:number}>("/admin/tailscale/devices"),
   tailscaleScan:      () => api.post<{total_devices:number;online_devices:number;hydrahive_found:number;instances:{hostname:string;name:string;ip:string;port:number;scheme?:string;os:string}[]}>("/admin/tailscale/scan", {}),
   tailscaleAutoPeer:  (hostname: string, ip: string, port: number, scheme?: string, name?: string) => api.post<{ok:boolean;peer_name:string;url:string}>("/admin/tailscale/auto-peer", { hostname, ip, port, scheme: scheme || "https", name }),
+  tailscaleRemoveDevice: (deviceId: string) => api.delete<{ok:boolean}>(`/admin/tailscale/devices/${deviceId}`),
   tailscaleConfig:    (api_key: string, tailnet?: string) => api.put<{ok:boolean}>("/admin/tailscale/config", { api_key, tailnet: tailnet || "-" }),
   // Plugins (#110)
   pluginsList:          () => api.get<{plugins:PluginInfo[];legacy_plugins:unknown[];hooks:Record<string,number>;total:number}>("/plugins"),

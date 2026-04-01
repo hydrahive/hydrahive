@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 
 function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [status, setStatus] = useState<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null}} | null>(null);
-  const [devices, setDevices] = useState<{hostname:string;ip:string;os:string;online:boolean}[]>([]);
+  const [devices, setDevices] = useState<{id:string;hostname:string;ip:string;os:string;online:boolean}[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<{hostname:string;ip:string;port:number;os:string}[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +108,22 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
                   <span className="font-medium">{d.hostname}</span>
                   <span className="text-muted-foreground font-mono">{d.ip}</span>
                 </div>
-                <span className="text-muted-foreground">{d.os}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{d.os}</span>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`"${d.hostname}" aus dem Tailnet entfernen?`)) return;
+                      try {
+                        await api.tailscaleRemoveDevice(d.id);
+                        setDevices(prev => prev.filter(x => x.id !== d.id));
+                      } catch (e: any) { setError(e.message); }
+                    }}
+                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    title="Aus Tailnet entfernen"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

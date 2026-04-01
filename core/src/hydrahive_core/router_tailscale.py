@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -250,6 +251,26 @@ def register_tailscale_routes(
 
         logger.info("Tailscale Auto-Peer: %s → %s", peer_name, peer_url)
         return {"ok": True, "peer_name": peer_name, "url": peer_url}
+
+    @admin_router.delete("/admin/tailscale/devices/{device_id}")
+    async def ts_remove_device(device_id: str, _a=Depends(require_admin)):
+        """Entfernt ein Gerät aus dem Tailnet."""
+        cfg = _load_ts_config()
+        api_key = cfg.get("api_key")
+        if not api_key:
+            raise HTTPException(400, "Tailscale API Key nicht konfiguriert")
+        try:
+            req = urllib.request.Request(
+                f"{TS_API_BASE}/device/{device_id}",
+                method="DELETE",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+        except urllib.error.HTTPError as e:
+            raise HTTPException(e.code, f"Tailscale API: {e.reason}")
+        except Exception as e:
+            raise HTTPException(502, f"Fehler: {e}")
+        return {"ok": True, "deleted": device_id}
 
     @admin_router.put("/admin/tailscale/config")
     async def ts_config(req: TailscaleConfigRequest, _a=Depends(require_admin)):
