@@ -45,6 +45,11 @@ class ProjectIncomingMessage(BaseModel):
     execution_mode: str | None = None
 
 
+class GitCloneRequest(BaseModel):
+    url: str
+    branch: str = "main"
+
+
 def register_project_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -258,6 +263,43 @@ def register_project_routes(
             "gitea_repo": gitea_repo_url,
             "gitea_error": gitea_error,
         }
+
+    @admin_router.post("/projects/{project_id}/git-clone")
+    async def git_clone_into_project(project_id: str, req: GitCloneRequest):
+        """Klont ein Git-Repo in das Projektverzeichnis."""
+        import asyncio as _asyncio
+        import subprocess as _sp
+        project_dir = Path(projects_dir) / project_id
+        if not project_dir.exists():
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        target = project_dir
+        # Wenn Verzeichnis nicht leer, in Unterordner klonen
+        existing = [f for f in target.iterdir() if f.name not in (".samba", "project.yaml", ".gitkeep")]
+        if existing:
+            # Repo-Name aus URL extrahieren
+            repo_name = req.url.rstrip("/").rstrip(".git").split("/")[-1]
+            target = project_dir / repo_name
+
+        try:
+            result = await _asyncio.to_thread(
+                _sp.run,
+                ["git", "clone", "--branch", req.branch, "--single-branch", req.url, str(target)],
+                capture_output=True, text=True, timeout=300,
+                cwd=str(project_dir),
+            )
+            if result.returncode != 0:
+                err = result.stderr.strip()[-500:]
+                raise HTTPException(500, f"Git clone fehlgeschlagen: {err}")
+            # Berechtigungen setzen
+            _sp.run(["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True)
+            return {"ok": True, "project_id": project_id, "cloned_to": str(target), "branch": req.branch}
+        except _sp.TimeoutExpired:
+            raise HTTPException(504, "Git clone Timeout (5 Minuten)")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"Fehler: {e}")
 
     @auth_router.get("/projects/{project_id}/session")
     def get_session(project_id: str):

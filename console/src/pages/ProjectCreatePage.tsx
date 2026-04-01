@@ -21,6 +21,9 @@ export function ProjectCreatePage() {
   const [samba,       setSamba]       = useState(true);
   const [showSwarm,   setShowSwarm]   = useState(false);
   const [githubRepo,  setGithubRepo]  = useState("");
+  const [gitClone,    setGitClone]    = useState(false);
+  const [gitBranch,   setGitBranch]   = useState("main");
+  const [gitToken,    setGitToken]    = useState("");
 
   const [agents,      setAgents]      = useState<Record<string, AgentEntry>>({});
   const [submitting,  setSubmitting]  = useState(false);
@@ -45,6 +48,23 @@ export function ProjectCreatePage() {
     setSubmitting(true);
     try {
       await api.createProject({ id, name, description, boss, workers, samba, nfs: false, show_swarm: showSwarm, github_repo: githubRepo.trim() });
+      // Git Clone nach Erstellung
+      if (gitClone && githubRepo.trim()) {
+        try {
+          let cloneUrl = githubRepo.trim();
+          if (!cloneUrl.startsWith("http")) cloneUrl = `https://github.com/${cloneUrl}`;
+          if (cloneUrl.endsWith("/")) cloneUrl = cloneUrl.slice(0, -1);
+          if (!cloneUrl.endsWith(".git")) cloneUrl += ".git";
+          if (gitToken.trim()) {
+            cloneUrl = cloneUrl.replace("https://", `https://${gitToken.trim()}@`);
+          }
+          await api.post(`/projects/${id}/git-clone`, { url: cloneUrl, branch: gitBranch || "main" });
+        } catch (cloneErr: any) {
+          setError(`Projekt erstellt, aber Git-Clone fehlgeschlagen: ${cloneErr.message}`);
+          setSubmitting(false);
+          return;
+        }
+      }
       navigate("/projects");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
@@ -108,15 +128,45 @@ export function ProjectCreatePage() {
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">GitHub-Repo <span className="text-muted-foreground font-normal">(optional)</span></label>
+        <div className="space-y-3 rounded-lg border p-4 bg-muted/20">
+          <label className="text-sm font-medium">Git-Repository <span className="text-muted-foreground font-normal">(optional)</span></label>
           <input
             value={githubRepo}
             onChange={e => setGithubRepo(e.target.value)}
             placeholder="org/repo oder https://github.com/org/repo"
             className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
           />
-          <p className="text-xs text-muted-foreground">Verknüpftes GitHub-Repository für dieses Projekt</p>
+          {githubRepo.trim() && (
+            <>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={gitClone} onChange={e => setGitClone(e.target.checked)} className="rounded" />
+                Repository automatisch in das Projekt klonen
+              </label>
+              {gitClone && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Branch</label>
+                    <input
+                      value={gitBranch}
+                      onChange={e => setGitBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Token <span className="opacity-50">(für private Repos)</span></label>
+                    <input
+                      type="password"
+                      value={gitToken}
+                      onChange={e => setGitToken(e.target.value)}
+                      placeholder="ghp_... oder leer für public"
+                      className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="space-y-1.5">
