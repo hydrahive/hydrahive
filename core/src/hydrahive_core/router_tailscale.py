@@ -97,6 +97,11 @@ class AutoPeerRequest(BaseModel):
     name: str | None = None
 
 
+class TailscaleConnectRequest(BaseModel):
+    auth_key: str
+    hostname: str | None = None
+
+
 def register_tailscale_routes(
     admin_router: APIRouter,
     *,
@@ -315,6 +320,49 @@ def register_tailscale_routes(
             logger.warning("A2A-Peer-Cleanup fehlgeschlagen: %s", e)
 
         return {"ok": True, "deleted": device_id, "removed_peer": removed_peer}
+
+    @admin_router.post("/admin/tailscale/connect")
+    async def ts_connect(req: TailscaleConnectRequest, _a=Depends(require_admin)):
+        """Verbindet diesen Server mit dem Tailnet via Auth Key."""
+        import subprocess
+        hostname = req.hostname
+        if not hostname:
+            try:
+                import socket
+                hostname = f"hydrahive-{socket.gethostname()}"
+            except Exception:
+                hostname = "hydrahive"
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["sudo", "tailscale", "up", f"--auth-key={req.auth_key}", f"--hostname={hostname}", "--reset"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                raise HTTPException(500, f"tailscale up fehlgeschlagen: {result.stderr.strip()[-300:]}")
+            # Status abfragen
+            await asyncio.sleep(2)
+            r2 = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
+            ip = r2.stdout.strip() if r2.returncode == 0 else None
+            return {"ok": True, "ip": ip, "hostname": hostname}
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "Timeout beim Verbinden")
+
+    @admin_router.post("/admin/tailscale/disconnect")
+    async def ts_disconnect(_a=Depends(require_admin)):
+        """Trennt diesen Server vom Tailnet."""
+        import subprocess
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["sudo", "tailscale", "down"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode != 0:
+                raise HTTPException(500, f"tailscale down fehlgeschlagen: {result.stderr.strip()}")
+            return {"ok": True}
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "Timeout beim Trennen")
 
     @admin_router.post("/admin/tailscale/invite")
     async def ts_invite(_a=Depends(require_admin)):

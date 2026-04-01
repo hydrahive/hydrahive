@@ -13,22 +13,52 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [authKeyInput, setAuthKeyInput] = useState("");
   const [inviteKey, setInviteKey] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [showKeyEdit, setShowKeyEdit] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.tailscaleStatus().then(setStatus).catch(() => setStatus(null));
-  }, []);
+  async function reload() {
+    const s = await api.tailscaleStatus().catch(() => null);
+    setStatus(s);
+  }
 
-  async function loadDevices() {
-    setError(null);
+  useEffect(() => { reload(); }, []);
+
+  async function saveApiKey() {
+    if (!apiKeyInput.trim()) return;
+    setSavingKey(true); setKeyError(null);
     try {
-      const d = await api.tailscaleDevices();
-      setDevices(d.devices);
+      await api.tailscaleConfig(apiKeyInput.trim());
+      await reload();
+      setApiKeyInput("");
+      setShowKeyEdit(false);
+    } catch (e: any) { setKeyError(e.message); }
+    finally { setSavingKey(false); }
+  }
+
+  async function connectWithAuthKey() {
+    if (!authKeyInput.trim()) return;
+    setConnecting(true); setError(null);
+    try {
+      await api.post("/admin/tailscale/connect", { auth_key: authKeyInput.trim() });
+      await reload();
+      setAuthKeyInput("");
     } catch (e: any) { setError(e.message); }
+    finally { setConnecting(false); }
+  }
+
+  async function disconnect() {
+    if (!confirm("Tailscale trennen?")) return;
+    setConnecting(true); setError(null);
+    try {
+      await api.post("/admin/tailscale/disconnect", {});
+      await reload();
+    } catch (e: any) { setError(e.message); }
+    finally { setConnecting(false); }
   }
 
   async function scan() {
@@ -50,75 +80,75 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
     finally { setAdding(null); }
   }
 
-  async function saveApiKey() {
-    if (!apiKeyInput.trim()) return;
-    setSavingKey(true); setKeyError(null);
-    try {
-      await api.tailscaleConfig(apiKeyInput.trim());
-      const s = await api.tailscaleStatus();
-      setStatus(s);
-      setApiKeyInput("");
-    } catch (e: any) { setKeyError(e.message); }
-    finally { setSavingKey(false); }
-  }
-
   if (status === null) {
     return (
       <div className="section-card p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Radar className="h-4 w-4 text-blue-500" />
-          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+          <h2 className="text-sm font-semibold">Tailscale</h2>
         </div>
         <p className="text-xs text-muted-foreground">Tailscale-Status wird geladen...</p>
       </div>
     );
   }
 
+  // ── Schritt 1: API Key ────────────────────────────────────────────
   if (!status.api_configured) {
     return (
-      <div className="section-card p-5 space-y-3">
+      <div className="section-card p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Radar className="h-4 w-4 text-blue-500" />
-          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+          <h2 className="text-sm font-semibold">Tailscale einrichten</h2>
         </div>
-        <p className="text-xs text-muted-foreground">Tailscale API Key eingeben um Devices im Tailnet zu scannen und HydraHive-Instanzen automatisch zu verbinden.</p>
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={e => setApiKeyInput(e.target.value)}
-            placeholder="tskey-api-..."
-            className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          />
-          <button
-            onClick={saveApiKey}
-            disabled={savingKey || !apiKeyInput.trim()}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-          >
-            {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
-            Speichern
-          </button>
+
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-blue-600">
+            <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold">1</span>
+            Tailscale API Key eintragen
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Erstelle einen API Access Token in deinem <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener" className="underline text-blue-500">Tailscale Admin-Panel</a> und trage ihn hier ein.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)}
+              placeholder="tskey-api-..."
+              className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            />
+            <button
+              onClick={saveApiKey}
+              disabled={savingKey || !apiKeyInput.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+            >
+              {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+              Speichern
+            </button>
+          </div>
+          {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
-        {keyError && <p className="text-xs text-destructive">{keyError}</p>}
-        <p className="text-xs text-muted-foreground opacity-60">API Key erstellen: <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener" className="underline">Tailscale Admin → Settings → Keys</a></p>
       </div>
     );
   }
+
+  // ── Schritt 2: Verbinden ──────────────────────────────────────────
+  const isConnected = status.local.logged_in;
 
   return (
     <div className="section-card p-5 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radar className="h-4 w-4 text-blue-500" />
-          <h2 className="text-sm font-semibold">Tailscale Discovery</h2>
+          <h2 className="text-sm font-semibold">Tailscale</h2>
         </div>
         <div className="flex items-center gap-2">
-          {status.local.logged_in ? (
+          {isConnected ? (
             <span className="flex items-center gap-1.5 text-xs text-green-600">
               <Wifi className="h-3.5 w-3.5" /> {status.local.ip}
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-xs text-orange-500">
               <WifiOff className="h-3.5 w-3.5" /> Nicht verbunden
             </span>
           )}
@@ -126,73 +156,88 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
             onClick={() => setShowKeyEdit(k => !k)}
             className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
           >
-            API Key {showKeyEdit ? "ausblenden" : "ändern"}
+            API Key ändern
           </button>
         </div>
       </div>
 
       {/* API Key ändern */}
       {showKeyEdit && (
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={e => setApiKeyInput(e.target.value)}
-            placeholder="tskey-api-..."
-            className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          />
-          <button
-            onClick={async () => {
-              setSavingKey(true); setKeyError(null);
-              try {
-                await api.tailscaleConfig(apiKeyInput.trim());
-                const s = await api.tailscaleStatus();
-                setStatus(s);
-                setApiKeyInput("");
-                setShowKeyEdit(false);
-              } catch (e: any) { setKeyError(e.message); }
-              finally { setSavingKey(false); }
-            }}
-            disabled={savingKey || !apiKeyInput.trim()}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-          >
-            {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
-            Speichern
-          </button>
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-2">
+          <div className="flex gap-2">
+            <input type="password" value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)}
+              placeholder="tskey-api-..."
+              className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+            <button onClick={saveApiKey} disabled={savingKey || !apiKeyInput.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
+              {savingKey ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
+              Speichern
+            </button>
+          </div>
+          {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
       )}
-      {keyError && showKeyEdit && <p className="text-xs text-destructive">{keyError}</p>}
 
-      <div className="flex gap-2">
-        <button
-          onClick={loadDevices}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors"
-        >
-          <Globe className="h-3.5 w-3.5" /> Tailnet Devices
-        </button>
-        <button
-          onClick={scan}
-          disabled={scanning}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
-          {scanning ? "Scanne..." : "HydraHive suchen"}
-        </button>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {/* Verbinden / Trennen */}
+      {!isConnected && (
+        <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-orange-600">
+            <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px] font-bold">2</span>
+            Server mit Tailnet verbinden
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Klicke "Einladen" um einen Auth-Key zu generieren, oder gib einen erhaltenen Auth-Key ein.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={authKeyInput}
+              onChange={e => setAuthKeyInput(e.target.value)}
+              placeholder="tskey-auth-..."
+              className="flex-1 px-3 py-2 rounded-lg border border-border/50 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/30" />
+            <button onClick={connectWithAuthKey} disabled={connecting || !authKeyInput.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50">
+              {connecting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+              Verbinden
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Aktionen */}
+      <div className="flex flex-wrap gap-2">
+        {isConnected && (
+          <>
+            <button onClick={async () => { const d = await api.tailscaleDevices().catch(() => ({devices:[]})); setDevices(d.devices); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors">
+              <Globe className="h-3.5 w-3.5" /> Tailnet Devices
+            </button>
+            <button onClick={scan} disabled={scanning}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
+              {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />}
+              {scanning ? "Scanne..." : "HydraHive suchen"}
+            </button>
+          </>
+        )}
         <button
           onClick={async () => {
             setInviting(true); setInviteKey(null); setError(null);
-            try {
-              const r = await api.tailscaleInvite();
-              setInviteKey(r.auth_key);
-            } catch (e: any) { setError(e.message); }
+            try { const r = await api.tailscaleInvite(); setInviteKey(r.auth_key); }
+            catch (e: any) { setError(e.message); }
             finally { setInviting(false); }
           }}
           disabled={inviting}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-green-500/50 text-green-600 rounded-lg hover:bg-green-500/10 transition-colors disabled:opacity-50"
-        >
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-green-500/50 text-green-600 rounded-lg hover:bg-green-500/10 transition-colors disabled:opacity-50">
           {inviting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
           Einladen
         </button>
+        {isConnected && (
+          <button onClick={disconnect} disabled={connecting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-destructive/50 text-destructive rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50">
+            <WifiOff className="h-3.5 w-3.5" /> Trennen
+          </button>
+        )}
       </div>
 
       {/* Invite Key */}
@@ -200,17 +245,11 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
         <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 space-y-2">
           <p className="text-xs font-medium text-green-600">Einladungs-Key generiert (24h gültig):</p>
           <div className="flex gap-2">
-            <code className="flex-1 text-xs bg-background px-3 py-2 rounded-lg border font-mono break-all select-all">
-              {inviteKey}
-            </code>
-            <button
-              onClick={() => { navigator.clipboard.writeText(inviteKey); }}
-              className="px-3 py-2 text-xs border rounded-lg hover:bg-muted/50 transition-colors flex-shrink-0"
-            >
-              Kopieren
-            </button>
+            <code className="flex-1 text-xs bg-background px-3 py-2 rounded-lg border font-mono break-all select-all">{inviteKey}</code>
+            <button onClick={() => navigator.clipboard.writeText(inviteKey)}
+              className="px-3 py-2 text-xs border rounded-lg hover:bg-muted/50 transition-colors flex-shrink-0">Kopieren</button>
           </div>
-          <p className="text-xs text-muted-foreground">Diesen Key an den anderen HydraHive-Admin schicken. Er kann ihn unter VPN → Tailscale eintragen.</p>
+          <p className="text-xs text-muted-foreground">Diesen Key dem anderen HydraHive-Admin schicken — er gibt ihn auf seiner Federation-Seite bei "Verbinden" ein.</p>
         </div>
       )}
 
