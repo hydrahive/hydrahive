@@ -1,0 +1,9 @@
+id: github-tools
+name: GitHub Tools
+version: 1.0.0
+description: GitHub API Tools — Repos lesen, Dateien anzeigen, Issues durchsuchen, Code suchen. Funktioniert ohne Token für Public Repos.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
