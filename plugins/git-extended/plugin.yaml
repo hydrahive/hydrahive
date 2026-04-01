@@ -1,0 +1,12 @@
+id: git-extended
+name: Git Extended
+version: 1.0.0
+description: Erweiterte Git-Tools — Clone, Branch, Log, Checkout, Pull, Stash, Stats. Ergänzt die eingebauten Git-Tools um fehlende Operationen.
+author: HydraHive
+type: tool
+runtime: python
+permissions:
+  - system.exec
+  - filesystem.read
+  - filesystem.write
+auto_attach: false
