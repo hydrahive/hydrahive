@@ -187,13 +187,14 @@ const MODELS = [
 
 // ── Properties Panel ──────────────────────────────────────────────────────────
 
-function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins }: {
+function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins, availableSkills }: {
   node: Node | null;
   onChange: (id: string, data: any) => void;
   onDelete: (id: string) => void;
   availableTools: string[];
   availableMcp: string[];
   availablePlugins: string[];
+  availableSkills: string[];
 }) {
   if (!node) return (
     <div className="flex items-center justify-center h-full text-white/20 text-xs p-4 text-center">
@@ -308,10 +309,18 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
 
       {n.type === "skill" && <>
         <div>
-          <label className="block text-[0.65rem] text-white/40 mb-1">Skill-Datei</label>
-          <input value={cfg.file || ""} onChange={e => updCfg({ file: e.target.value })}
-            placeholder="python_expert.md"
-            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-purple-500/60" />
+          <label className="block text-[0.65rem] text-white/40 mb-1">Skill</label>
+          {availableSkills.length > 0 ? (
+            <select value={cfg.file || ""} onChange={e => { updCfg({ file: e.target.value }); upd({ label: e.target.value }); }}
+              className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none">
+              <option value="">— wählen —</option>
+              {availableSkills.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          ) : (
+            <input value={cfg.file || ""} onChange={e => updCfg({ file: e.target.value })}
+              placeholder="skill_name.md"
+              className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-purple-500/60" />
+          )}
         </div>
       </>}
 
@@ -366,13 +375,15 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   const [availableTools, setAvailableTools]     = useState<string[]>([]);
   const [availableMcp, setAvailableMcp]         = useState<string[]>([]);
   const [availablePlugins, setAvailablePlugins] = useState<string[]>([]);
+  const [availableSkills, setAvailableSkills]   = useState<string[]>([]);
   const [showPalette, setShowPalette]           = useState(false);
   const rf = useReactFlow();
 
   // Verfügbare Tools, MCP-Server, Plugins laden
   useEffect(() => {
-    api.get<{name:string}[]>("/tools").then(tools => {
-      setAvailableTools(tools.map(t => (t as any).name || (t as any).id || "").filter(Boolean).sort());
+    // /tools gibt Dict {tool_id: {name, description, ...}} zurück
+    api.get<Record<string, any>>("/tools").then(tools => {
+      setAvailableTools(Object.keys(tools).sort());
     }).catch(() => {});
     api.get<{servers:{id:string}[]}>("/mcp/servers").then(d => {
       setAvailableMcp((d.servers || []).map(s => s.id));
@@ -442,6 +453,37 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
           });
           genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
         });
+
+        // Skills unten
+        try {
+          const skillsResp = await api.get<{skills:{filename:string;skill?:string}[]}>(`/agents/${selectedAgentId}/skills`);
+          const skills = skillsResp.skills || [];
+          skills.forEach((s, i) => {
+            const nodeId = `skill-${s.filename}`;
+            genNodes.push({
+              id: nodeId, type: "skill",
+              position: { x: 60 + i * 200, y: 450 + Math.floor(i / 3) * 60 },
+              data: { label: s.skill || s.filename, config: { file: s.filename } },
+            });
+            genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+          });
+          setAvailableSkills(skills.map(s => s.filename));
+        } catch { /* keine Skills */ }
+
+        // Plugins unten rechts
+        try {
+          const plgResp = await api.pluginAgentGet(selectedAgentId);
+          const pluginIds = plgResp.plugins || [];
+          pluginIds.forEach((p: string, i: number) => {
+            const nodeId = `plugin-${p}`;
+            genNodes.push({
+              id: nodeId, type: "plugin",
+              position: { x: 700, y: 350 + i * 60 },
+              data: { label: p, config: { pluginId: p } },
+            });
+            genEdges.push({ id: `e-${nodeId}`, source: nodeId, target: agentNodeId, animated: true, style: edgeStyle });
+          });
+        } catch { /* keine Plugins */ }
 
         setNodes(genNodes);
         setEdges(genEdges);
@@ -712,6 +754,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               availableTools={availableTools}
               availableMcp={availableMcp}
               availablePlugins={availablePlugins}
+              availableSkills={availableSkills}
             />
           </div>
         </div>
