@@ -82,12 +82,27 @@ Jeder Benutzer hat einen eigenen KI-Agenten. So chattest du mit ihm:
 4. Drücke **Enter** oder klicke den **Senden**-Button
 5. Der Agent antwortet — du siehst die Antwort im Chat
 
+### Nützliche Slash-Befehle
+Unter dem Chatfeld siehst du Buttons für Schnellbefehle:
+- `/clear` — Chat leeren und neu starten
+- `/model` — Aktuelles Modell anzeigen
+- `/retry` — Letzte Antwort nochmal generieren
+- `/help` — Hilfe anzeigen
+- `/history` — Vergangene Sessions anzeigen
+
+### Vergangene Sessions
+1. Klicke links oben auf das **Uhr-Symbol**
+2. Du siehst eine Liste vergangener Chats
+3. Klicke auf **Fortsetzen** um einen alten Chat weiterzuführen
+4. Klicke auf **Neuer Chat** um einen frischen Chat zu starten
+5. Klicke auf **Zurück** um zum aktuellen Chat zurückzukehren
+
 ### Chat leeren
-1. Klicke oben rechts auf das **Papierkorb-Symbol**
+1. Tippe `/clear` ins Chatfeld und drücke **Enter**
 2. Der Chat-Verlauf wird gelöscht und der Agent startet frisch
 
 ### Einstellungen deines Agents
-1. Klicke oben rechts auf das **Zahnrad-Symbol**
+1. Klicke oben auf den Tab **Settings**
 2. Hier kannst du ändern:
    - **Modell** — welches KI-Modell der Agent nutzt (z.B. Claude, GPT, Ollama)
    - **Temperatur** — wie kreativ der Agent antwortet (0 = präzise, 1 = kreativ)
@@ -100,7 +115,7 @@ Jeder Benutzer hat einen eigenen KI-Agenten. So chattest du mit ihm:
 Dein Agent braucht ein KI-Modell zum Arbeiten. So wechselst du es:
 
 1. Klicke in der Sidebar auf **Mein Agent**
-2. Klicke oben rechts auf das **Zahnrad-Symbol**
+2. Klicke oben auf den Tab **Settings**
 3. Unter **Modell** siehst du ein Dropdown
 4. Wähle ein Modell aus:
    - **claude-sonnet-4-6** — Schnell und gut (Anthropic)
@@ -138,15 +153,15 @@ Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.
 ### Agenten bearbeiten
 1. Klicke auf **Agenten**
 2. Klicke auf den Agenten den du bearbeiten willst
-3. Klicke auf **Bearbeiten**
+3. Klicke auf das **Stift-Symbol** (Pencil-Icon) neben dem Agenten
 4. Ändere die gewünschten Einstellungen
 5. Klicke **Speichern**
 
 ### Agenten löschen
 1. Klicke auf **Agenten**
 2. Klicke auf den Agenten
-3. Klicke auf **Löschen**
-4. Bestätige mit **Ja**
+3. Klicke auf das **Papierkorb-Symbol** (Trash-Icon) neben dem Agenten
+4. Bestätige die Sicherheitsabfrage
 
 > **Achtung:** Persönliche Agenten (die mit `personal_` anfangen) können nicht gelöscht werden.
 
@@ -286,14 +301,14 @@ Plugins erweitern deine Agenten um neue Fähigkeiten (Tools).
 
 ### Plugin aktivieren / deaktivieren
 1. Klicke auf **Plugins**
-2. Klicke auf das **Power-Symbol** auf der Plugin-Karte
-3. Grün = aktiv, grau = deaktiviert
+2. Klicke auf das **Power-Symbol** (Ein/Aus) oben rechts auf der Plugin-Karte
+3. Grünes Power-Icon = aktiv, graues PowerOff-Icon = deaktiviert
 
 ### Plugin deinstallieren
 1. Klicke auf **Plugins**
 2. Klicke auf das Plugin
-3. Im Detail-Fenster unten: Klicke auf das **Papierkorb-Symbol**
-4. Bestätige mit **Ja**
+3. Im Detail-Fenster unten rechts: Klicke auf das rote **Papierkorb-Symbol**
+4. Bestätige die Sicherheitsabfrage
 
 ---
 
@@ -640,8 +655,8 @@ Hier konfigurierst du E-Mail-Versand für Agenten.
 > **Achtung:** Bei der Wiederherstellung werden die aktuellen Daten überschrieben!
 
 ### Backup löschen
-1. Klicke bei einem Backup auf das **Papierkorb-Symbol**
-2. Bestätige mit **Ja**
+1. Klicke bei einem Backup auf das **Löschen**-Symbol
+2. Bestätige die Sicherheitsabfrage
 
 ---
 

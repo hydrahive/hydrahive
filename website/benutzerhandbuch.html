@@ -253,7 +253,6 @@
     code { background: var(--card); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85em; color: var(--accent); }
     pre { background: var(--card); padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; border: 1px solid var(--border); }
     pre code { background: none; padding: 0; color: var(--text); }
-    blockquote { margin: 1rem 0; }
     hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
   </style>
 </head>
@@ -303,8 +302,7 @@
     <p class="page-intro">Schritt-für-Schritt Anleitung für die HydraHive Webkonsole. Kein Terminal nötig — alles über den Browser.</p>
 <p>Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkonsole bedienst. Keine Kommandozeile nötig — alles läuft über den Browser.</p>
 <hr>
-<div class="chapter" id="inhaltsverzeichnis">
-<h2>Inhaltsverzeichnis</h2>
+<div class="chapter" id="inhaltsverzeichnis"><h2>Inhaltsverzeichnis</h2>
 <ol>
 <li><a href="#1-erster-login" target="_blank">Erster Login</a></li>
 <li><a href="#2-die-webkonsole--übersicht" target="_blank">Die Webkonsole — Übersicht</a></li>
@@ -335,8 +333,7 @@
 <li><a href="#27-häufige-fragen" target="_blank">Häufige Fragen</a></li>
 </ul>
 <hr>
-<div class="chapter" id="1-erster-login">
-<h2>1. Erster Login</h2>
+<div class="chapter" id="1-erster-login"><h2>1. Erster Login</h2>
 <ol>
 <li>Öffne deinen Browser und gib die Adresse deines HydraHive-Servers ein (z.B. <code>https://192.168.178.181</code>)</li>
 <li>Du siehst die Login-Seite</li>
@@ -348,8 +345,7 @@
 <p><strong>Tipp:</strong> Der Standard-Admin-Account wird bei der Installation angelegt. Den Benutzernamen und das Passwort hast du bei der Installation festgelegt.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="2-die-webkonsole--uebersicht">
-<h2>2. Die Webkonsole — Übersicht</h2>
+<div class="chapter" id="2-die-webkonsole--uebersicht"><h2>2. Die Webkonsole — Übersicht</h2>
 <p>Nach dem Login siehst du die Webkonsole. Links ist die <strong>Sidebar</strong> mit allen Bereichen:</p>
 <table>
 <tr><th>Symbol</th><th>Bereich</th><th>Was du dort tust</th></tr>
@@ -370,8 +366,7 @@
 <tr><td>⚙️</td><td><strong>Einstellungen</strong></td><td>LLM, VPN, Mail, Backup, Users</td></tr>
 </table>
 <hr>
-<div class="chapter" id="3-mein-agent--dein-persoenlicher-ki-assistent">
-<h2>3. Mein Agent — Dein persönlicher KI-Assistent</h2>
+<div class="chapter" id="3-mein-agent--dein-persoenlicher-ki-assistent"><h2>3. Mein Agent — Dein persönlicher KI-Assistent</h2>
 <p>Jeder Benutzer hat einen eigenen KI-Agenten. So chattest du mit ihm:</p>
 <ol>
 <li>Klicke in der Sidebar auf <strong>Mein Agent</strong></li>
@@ -380,26 +375,42 @@
 <li>Drücke <strong>Enter</strong> oder klicke den <strong>Senden</strong>-Button</li>
 <li>Der Agent antwortet — du siehst die Antwort im Chat</li>
 </ul>
+<h3>Nützliche Slash-Befehle</h3>
+<p>Unter dem Chatfeld siehst du Buttons für Schnellbefehle:</p>
+<ul>
+<li><code>/clear</code> — Chat leeren und neu starten</li>
+<li><code>/model</code> — Aktuelles Modell anzeigen</li>
+<li><code>/retry</code> — Letzte Antwort nochmal generieren</li>
+<li><code>/help</code> — Hilfe anzeigen</li>
+<li><code>/history</code> — Vergangene Sessions anzeigen</li>
+</ul>
+<h3>Vergangene Sessions</h3>
+<ol>
+<li>Klicke links oben auf das <strong>Uhr-Symbol</strong></li>
+<li>Du siehst eine Liste vergangener Chats</li>
+<li>Klicke auf <strong>Fortsetzen</strong> um einen alten Chat weiterzuführen</li>
+<li>Klicke auf <strong>Neuer Chat</strong> um einen frischen Chat zu starten</li>
+<li>Klicke auf <strong>Zurück</strong> um zum aktuellen Chat zurückzukehren</li>
+</ul>
 <h3>Chat leeren</h3>
 <ol>
-<li>Klicke oben rechts auf das <strong>Papierkorb-Symbol</strong></li>
+<li>Tippe <code>/clear</code> ins Chatfeld und drücke <strong>Enter</strong></li>
 <li>Der Chat-Verlauf wird gelöscht und der Agent startet frisch</li>
 </ul>
 <h3>Einstellungen deines Agents</h3>
 <ol>
-<li>Klicke oben rechts auf das <strong>Zahnrad-Symbol</strong></li>
+<li>Klicke oben auf den Tab <strong>Settings</strong></li>
 <li>Hier kannst du ändern:</li>
 <li><strong>Modell</strong> — welches KI-Modell der Agent nutzt (z.B. Claude, GPT, Ollama)</li>
 <li><strong>Temperatur</strong> — wie kreativ der Agent antwortet (0 = präzise, 1 = kreativ)</li>
 <li><strong>Name</strong> — wie dein Agent heißt</li>
 </ul>
 <hr>
-<div class="chapter" id="4-llm-modell-wechseln">
-<h2>4. LLM-Modell wechseln</h2>
+<div class="chapter" id="4-llm-modell-wechseln"><h2>4. LLM-Modell wechseln</h2>
 <p>Dein Agent braucht ein KI-Modell zum Arbeiten. So wechselst du es:</p>
 <ol>
 <li>Klicke in der Sidebar auf <strong>Mein Agent</strong></li>
-<li>Klicke oben rechts auf das <strong>Zahnrad-Symbol</strong></li>
+<li>Klicke oben auf den Tab <strong>Settings</strong></li>
 <li>Unter <strong>Modell</strong> siehst du ein Dropdown</li>
 <li>Wähle ein Modell aus:</li>
 <li><strong>claude-sonnet-4-6</strong> — Schnell und gut (Anthropic)</li>
@@ -413,8 +424,7 @@
 <p><strong>Wichtig:</strong> Für Claude-Modelle muss unter Einstellungen → LLM ein Anthropic-Provider eingerichtet sein. Für Ollama muss Ollama auf dem Server laufen.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="5-agenten-verwalten">
-<h2>5. Agenten verwalten</h2>
+<div class="chapter" id="5-agenten-verwalten"><h2>5. Agenten verwalten</h2>
 <p>Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.</p>
 <h3>Alle Agenten anzeigen</h3>
 <ol>
@@ -439,7 +449,7 @@
 <ol>
 <li>Klicke auf <strong>Agenten</strong></li>
 <li>Klicke auf den Agenten den du bearbeiten willst</li>
-<li>Klicke auf <strong>Bearbeiten</strong></li>
+<li>Klicke auf das <strong>Stift-Symbol</strong> (Pencil-Icon) neben dem Agenten</li>
 <li>Ändere die gewünschten Einstellungen</li>
 <li>Klicke <strong>Speichern</strong></li>
 </ul>
@@ -447,15 +457,14 @@
 <ol>
 <li>Klicke auf <strong>Agenten</strong></li>
 <li>Klicke auf den Agenten</li>
-<li>Klicke auf <strong>Löschen</strong></li>
-<li>Bestätige mit <strong>Ja</strong></li>
+<li>Klicke auf das <strong>Papierkorb-Symbol</strong> (Trash-Icon) neben dem Agenten</li>
+<li>Bestätige die Sicherheitsabfrage</li>
 </ul>
 <blockquote class="tip">
 <p><strong>Achtung:</strong> Persönliche Agenten (die mit `personal_` anfangen) können nicht gelöscht werden.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="6-einem-agenten-tools-zuweisen">
-<h2>6. Einem Agenten Tools zuweisen</h2>
+<div class="chapter" id="6-einem-agenten-tools-zuweisen"><h2>6. Einem Agenten Tools zuweisen</h2>
 <p>Tools sind Fähigkeiten die ein Agent nutzen kann — Dateien lesen, im Web suchen, Shell-Befehle ausführen usw.</p>
 <h3>Tools über die Agenten-Seite zuweisen</h3>
 <ol>
@@ -491,8 +500,7 @@
 <li>Alle Tools des Plugins sind jetzt für diesen Agenten verfügbar</li>
 </ul>
 <hr>
-<div class="chapter" id="7-projekte-anlegen-und-nutzen">
-<h2>7. Projekte anlegen und nutzen</h2>
+<div class="chapter" id="7-projekte-anlegen-und-nutzen"><h2>7. Projekte anlegen und nutzen</h2>
 <p>Projekte sind Arbeitsräume in denen Agenten-Teams zusammenarbeiten.</p>
 <h3>Neues Projekt erstellen</h3>
 <ol>
@@ -512,8 +520,7 @@
 <li>Der Boss-Agent koordiniert die Arbeit und delegiert an Worker</li>
 </ul>
 <hr>
-<div class="chapter" id="8-hydrahub--agenten-und-plugins-installieren">
-<h2>8. HydraHub — Agenten und Plugins installieren</h2>
+<div class="chapter" id="8-hydrahub--agenten-und-plugins-installieren"><h2>8. HydraHub — Agenten und Plugins installieren</h2>
 <p>Der HydraHub ist der eingebaute App-Store von HydraHive.</p>
 <h3>Agenten aus dem Hub installieren</h3>
 <ol>
@@ -541,8 +548,7 @@
 <li>Weise es danach unter <strong>Plugins</strong> einem Agenten zu (siehe Kapitel 10)</li>
 </ul>
 <hr>
-<div class="chapter" id="9-clawhhub--skills-aus-der-community">
-<h2>9. ClawhHub — Skills aus der Community</h2>
+<div class="chapter" id="9-clawhhub--skills-aus-der-community"><h2>9. ClawhHub — Skills aus der Community</h2>
 <p>ClawhHub ist eine öffentliche Datenbank mit tausenden KI-Skills.</p>
 <h3>ClawhHub Token einrichten (einmalig)</h3>
 <ol>
@@ -570,8 +576,7 @@
 <li>Du siehst eine Übersicht — aktuell nur zum Anschauen (Import kommt in Zukunft)</li>
 </ul>
 <hr>
-<div class="chapter" id="10-plugins-verwalten">
-<h2>10. Plugins verwalten</h2>
+<div class="chapter" id="10-plugins-verwalten"><h2>10. Plugins verwalten</h2>
 <p>Plugins erweitern deine Agenten um neue Fähigkeiten (Tools).</p>
 <h3>Plugins anzeigen</h3>
 <ol>
@@ -591,19 +596,18 @@
 <h3>Plugin aktivieren / deaktivieren</h3>
 <ol>
 <li>Klicke auf <strong>Plugins</strong></li>
-<li>Klicke auf das <strong>Power-Symbol</strong> auf der Plugin-Karte</li>
-<li>Grün = aktiv, grau = deaktiviert</li>
+<li>Klicke auf das <strong>Power-Symbol</strong> (Ein/Aus) oben rechts auf der Plugin-Karte</li>
+<li>Grünes Power-Icon = aktiv, graues PowerOff-Icon = deaktiviert</li>
 </ul>
 <h3>Plugin deinstallieren</h3>
 <ol>
 <li>Klicke auf <strong>Plugins</strong></li>
 <li>Klicke auf das Plugin</li>
-<li>Im Detail-Fenster unten: Klicke auf das <strong>Papierkorb-Symbol</strong></li>
-<li>Bestätige mit <strong>Ja</strong></li>
+<li>Im Detail-Fenster unten rechts: Klicke auf das rote <strong>Papierkorb-Symbol</strong></li>
+<li>Bestätige die Sicherheitsabfrage</li>
 </ul>
 <hr>
-<div class="chapter" id="11-skills--agenten-wissen-erweitern">
-<h2>11. Skills — Agenten-Wissen erweitern</h2>
+<div class="chapter" id="11-skills--agenten-wissen-erweitern"><h2>11. Skills — Agenten-Wissen erweitern</h2>
 <p>Skills sind Wissens-Dateien die einem Agenten beibringen wie er bestimmte Aufgaben erledigt.</p>
 <h3>Skills eines Agenten anzeigen</h3>
 <ol>
@@ -623,8 +627,7 @@
 <li>Klicke <strong>Speichern</strong></li>
 </ul>
 <hr>
-<div class="chapter" id="12-federation--mehrere-server-verbinden">
-<h2>12. Federation — Mehrere Server verbinden</h2>
+<div class="chapter" id="12-federation--mehrere-server-verbinden"><h2>12. Federation — Mehrere Server verbinden</h2>
 <p>Federation verbindet mehrere HydraHive-Server miteinander. Agenten auf verschiedenen Servern können dann zusammenarbeiten.</p>
 <h3>Peers (verbundene Server) anzeigen</h3>
 <ol>
@@ -652,8 +655,7 @@
 <li>Du siehst die Antwort des Remote-Agenten</li>
 </ul>
 <hr>
-<div class="chapter" id="13-tailscale-einrichten">
-<h2>13. Tailscale einrichten</h2>
+<div class="chapter" id="13-tailscale-einrichten"><h2>13. Tailscale einrichten</h2>
 <p>Tailscale verbindet deine Server sicher über das Internet — verschlüsselt, ohne Port-Forwarding.</p>
 <h3>Schritt 1: Tailscale Account erstellen</h3>
 <ol>
@@ -718,8 +720,7 @@
 <p>- Verwechsle die beiden nicht!</p>
 </blockquote>
 <hr>
-<div class="chapter" id="14-hydrabrain--3d-ansicht">
-<h2>14. HydraBrain — 3D-Ansicht</h2>
+<div class="chapter" id="14-hydrabrain--3d-ansicht"><h2>14. HydraBrain — 3D-Ansicht</h2>
 <p>HydraBrain zeigt eine interaktive 3D-Karte aller Agenten, Tools und Verbindungen.</p>
 <h3>Öffnen</h3>
 <ol>
@@ -764,8 +765,7 @@
 <p><strong>Hinweis:</strong> HydraBrain braucht WebGL (Hardware-Beschleunigung im Browser). Falls du eine leere Seite siehst, starte den Browser neu.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="15-blueprint--visueller-agent-builder">
-<h2>15. Blueprint — Visueller Agent-Builder</h2>
+<div class="chapter" id="15-blueprint--visueller-agent-builder"><h2>15. Blueprint — Visueller Agent-Builder</h2>
 <p>Im Blueprint-Bereich baust du Agenten visuell zusammen — als Graph mit Kästchen und Verbindungen.</p>
 <h3>Bestehenden Agenten anzeigen</h3>
 <ol>
@@ -807,8 +807,7 @@
 <li><strong>Unten</strong> (blau) → Repositories</li>
 </ul>
 <hr>
-<div class="chapter" id="16-scratchpad--ideen-skizzieren">
-<h2>16. Scratchpad — Ideen skizzieren</h2>
+<div class="chapter" id="16-scratchpad--ideen-skizzieren"><h2>16. Scratchpad — Ideen skizzieren</h2>
 <p>Das Scratchpad ist ein freies Whiteboard zum Brainstormen.</p>
 <h3>Öffnen</h3>
 <ol>
@@ -846,8 +845,7 @@
 <p><strong>Tipp:</strong> Das Scratchpad speichert automatisch alle 5 Sekunden. Deine Skizzen bleiben erhalten.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="17-einstellungen--llm-provider">
-<h2>17. Einstellungen — LLM Provider</h2>
+<div class="chapter" id="17-einstellungen--llm-provider"><h2>17. Einstellungen — LLM Provider</h2>
 <p>Hier konfigurierst du welche KI-Modelle verfügbar sind.</p>
 <h3>Provider einrichten</h3>
 <ol>
@@ -874,8 +872,7 @@
 <li>Klicke <strong>Speichern</strong></li>
 </ul>
 <hr>
-<div class="chapter" id="18-einstellungen--mcp-server">
-<h2>18. Einstellungen — MCP Server</h2>
+<div class="chapter" id="18-einstellungen--mcp-server"><h2>18. Einstellungen — MCP Server</h2>
 <p>MCP Server erweitern HydraHive um externe Tools (z.B. Datenbanken, APIs).</p>
 <h3>MCP Server hinzufügen</h3>
 <ol>
@@ -895,15 +892,13 @@
 <li>Klicke <strong>Speichern</strong></li>
 </ul>
 <hr>
-<div class="chapter" id="19-einstellungen--vpn">
-<h2>19. Einstellungen — VPN</h2>
+<div class="chapter" id="19-einstellungen--vpn"><h2>19. Einstellungen — VPN</h2>
 <p>Unter VPN konfigurierst du Tailscale für sichere Server-Verbindungen.</p>
 <blockquote class="tip">
 <p><strong>Hinweis:</strong> Die Tailscale-Einrichtung erfolgt über die <strong>Federation</strong>-Seite (siehe Kapitel 13). Unter Einstellungen → VPN siehst du nur den Status.</p>
 </blockquote>
 <hr>
-<div class="chapter" id="20-einstellungen--mail">
-<h2>20. Einstellungen — Mail</h2>
+<div class="chapter" id="20-einstellungen--mail"><h2>20. Einstellungen — Mail</h2>
 <p>Hier konfigurierst du E-Mail-Versand für Agenten.</p>
 <h3>Mail einrichten</h3>
 <ol>
@@ -916,8 +911,7 @@
 <li>Klicke <strong>Test senden</strong> um die Konfiguration zu prüfen</li>
 </ul>
 <hr>
-<div class="chapter" id="21-einstellungen--benutzer--rollen">
-<h2>21. Einstellungen — Benutzer & Rollen</h2>
+<div class="chapter" id="21-einstellungen--benutzer--rollen"><h2>21. Einstellungen — Benutzer & Rollen</h2>
 <h3>Neuen Benutzer erstellen</h3>
 <ol>
 <li>Klicke auf <strong>Einstellungen</strong> → <strong>Users</strong></li>
@@ -945,8 +939,7 @@
 <li>Gib das neue Passwort ein → <strong>Speichern</strong></li>
 </ul>
 <hr>
-<div class="chapter" id="22-einstellungen--backup--restore">
-<h2>22. Einstellungen — Backup & Restore</h2>
+<div class="chapter" id="22-einstellungen--backup--restore"><h2>22. Einstellungen — Backup & Restore</h2>
 <h3>Backup erstellen</h3>
 <ol>
 <li>Klicke auf <strong>Einstellungen</strong> → <strong>Backup</strong></li>
@@ -970,12 +963,11 @@
 </blockquote>
 <h3>Backup löschen</h3>
 <ol>
-<li>Klicke bei einem Backup auf das <strong>Papierkorb-Symbol</strong></li>
-<li>Bestätige mit <strong>Ja</strong></li>
+<li>Klicke bei einem Backup auf das <strong>Löschen</strong>-Symbol</li>
+<li>Bestätige die Sicherheitsabfrage</li>
 </ul>
 <hr>
-<div class="chapter" id="23-einstellungen--erweiterungen">
-<h2>23. Einstellungen — Erweiterungen</h2>
+<div class="chapter" id="23-einstellungen--erweiterungen"><h2>23. Einstellungen — Erweiterungen</h2>
 <p>Erweiterungen sind optionale Dienste die du mit einem Klick installieren kannst.</p>
 <h3>Erweiterung installieren</h3>
 <ol>
@@ -994,8 +986,7 @@
 <tr><td><strong>Vaultwarden</strong></td><td>Passwort-Manager</td></tr>
 </table>
 <hr>
-<div class="chapter" id="24-einstellungen--system-update">
-<h2>24. Einstellungen — System-Update</h2>
+<div class="chapter" id="24-einstellungen--system-update"><h2>24. Einstellungen — System-Update</h2>
 <h3>Update durchführen</h3>
 <ol>
 <li>Klicke auf <strong>Einstellungen</strong> → <strong>System</strong></li>
@@ -1005,8 +996,7 @@
 <li>Nach dem Neustart bist du auf der neuesten Version</li>
 </ul>
 <hr>
-<div class="chapter" id="25-aktivitaet--live-monitor">
-<h2>25. Aktivität — Live-Monitor</h2>
+<div class="chapter" id="25-aktivitaet--live-monitor"><h2>25. Aktivität — Live-Monitor</h2>
 <h3>Agenten-Aktivität beobachten</h3>
 <ol>
 <li>Klicke in der Sidebar auf <strong>Aktivität</strong></li>
@@ -1017,8 +1007,7 @@
 <li><strong>Laufzeit</strong> — Wie lange der Agent schon arbeitet</li>
 </ul>
 <hr>
-<div class="chapter" id="26-usage--token-verbrauch">
-<h2>26. Usage — Token-Verbrauch</h2>
+<div class="chapter" id="26-usage--token-verbrauch"><h2>26. Usage — Token-Verbrauch</h2>
 <h3>Kosten einsehen</h3>
 <ol>
 <li>Klicke in der Sidebar auf <strong>Usage</strong></li>
@@ -1029,8 +1018,7 @@
 <li><strong>Cache-Hits</strong> — Wiederverwendete Daten (günstiger)</li>
 </ul>
 <hr>
-<div class="chapter" id="27-haeufige-fragen">
-<h2>27. Häufige Fragen</h2>
+<div class="chapter" id="27-haeufige-fragen"><h2>27. Häufige Fragen</h2>
 <h3>"Mein Agent antwortet nicht"</h3>
 <ol>
 <li>Prüfe ob der Agent läuft: <strong>Agenten</strong> → ist der Status grün?</li>
