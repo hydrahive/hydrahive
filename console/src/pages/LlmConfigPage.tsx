@@ -90,13 +90,13 @@ function OAuthFlowPanel({
   const isAnthropic = flow.provider === "anthropic";
 
   const step2Hint = isAnthropic
-    ? "Die Seite zeigt einen Code — kopiere den gesamten Text (Format: code#state) und füge ihn unten ein."
+    ? "Die Seite zeigt einen Code — kopiere den gesamten Text (Format: code#state) und füge ihn unten ein. Alternativ: Token aus 'claude setup-token' (sk-ant-oat01-...) direkt einfügen."
     : flow.provider === "openai_codex"
     ? "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (http://localhost:1455/auth/callback?code=...&state=...) und füge sie unten ein."
     : "Der Browser zeigt einen Verbindungsfehler — das ist normal! Kopiere die gesamte URL aus der Adresszeile (http://localhost:51121/oauth-callback?code=...&state=...) und füge sie unten ein.";
 
   const inputPlaceholder = isAnthropic
-    ? "4/0AX4XfWi...#verifier..."
+    ? "code#state oder sk-ant-oat01-..."
     : "http://localhost:.../callback?code=...&state=...";
 
   return (
@@ -226,8 +226,17 @@ export function LlmConfigPage() {
     if (!flow) return;
     setOauthFlow(f => f ? { ...f, loading: true, error: "" } : f);
     try {
-      const body: Record<string, string> = {};
       const val = flow.input.trim();
+
+      // Direkter Terminal-Token (claude setup-token) → manuell speichern
+      if (flow.provider === "anthropic" && val.startsWith("sk-ant-oat01-") && !val.includes("#")) {
+        await api.put("/llm/config/claude_max", { api_key: val });
+        setOauthFlow(null);
+        await load();
+        return;
+      }
+
+      const body: Record<string, string> = {};
       if (flow.provider === "anthropic") {
         body.code_and_state = val;
       } else if (val.startsWith("http")) {
@@ -312,9 +321,13 @@ export function LlmConfigPage() {
           }`}>
             {claudeWarning === "expired"
               ? "⚠ Token abgelaufen — bitte erneuern"
-              : claudeWarning
-                ? `⚠ Token läuft in ${claudeStatus?.remaining_days?.toFixed(0)} Tagen ab`
-                : `✓ Token aktiv — noch ${claudeStatus?.remaining_days?.toFixed(0)} Tage gültig`}
+              : claudeWarning === "refresh_pending"
+                ? "⟳ Token wird automatisch erneuert"
+                : claudeWarning
+                  ? `⚠ Token läuft in ${claudeStatus?.remaining_days?.toFixed(0)} Tagen ab`
+                  : (claudeStatus as any)?.source === "terminal"
+                    ? "✓ Terminal-Token aktiv (1 Jahr gültig)"
+                    : `✓ Token aktiv${claudeStatus?.remaining_days != null ? ` — noch ${claudeStatus.remaining_days.toFixed(0)} Tage gültig` : ""}`}
           </div>
         ) : undefined}
         models={claudeStatus?.configured ? ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] : undefined}
