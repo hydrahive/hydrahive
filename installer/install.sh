@@ -50,6 +50,32 @@ for _sl in /etc/nginx/sites-enabled/*; do
     [ -L "$_sl" ] && [ ! -e "$_sl" ] && rm -f "$_sl" && warn "Veralteten nginx-Symlink entfernt: $_sl"
 done
 
+# --- Tailscale-Modus: Auth-Key vor Phase 1 abfragen ---
+# TAILSCALE_AUTHKEY kann per Umgebungsvariable übergeben werden:
+#   TAILSCALE_AUTHKEY=tskey-auth-xxx bash install.sh
+# Oder der Installer fragt interaktiv (bei RZ-Servern empfohlen).
+export TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
+export TAILSCALE_SERVE="${TAILSCALE_SERVE:-0}"
+
+if [ -z "${TAILSCALE_AUTHKEY}" ] && [ -t 0 ]; then
+    echo ""
+    echo -e "${BLUE}--- Netzwerk-Zugang ---${NC}"
+    echo "  Für Rechenzentrum-Server empfohlen: Tailscale-only Modus."
+    echo "  Die Console ist dann NUR über das Tailnet erreichbar — Ports 80/443 bleiben geschlossen."
+    echo "  Auth-Key: https://login.tailscale.com/admin/settings/keys  (ephemeral, einmalig)"
+    echo ""
+    read -rp "  Tailscale Auth-Key (leer lassen für klassischen Port 80/443): " _ts_key_input
+    if [ -n "${_ts_key_input}" ]; then
+        TAILSCALE_AUTHKEY="${_ts_key_input}"
+    fi
+fi
+
+if [ -n "${TAILSCALE_AUTHKEY}" ]; then
+    TAILSCALE_SERVE=1
+    info "Tailscale-Modus aktiv — Console wird nur über Tailnet erreichbar sein"
+fi
+export TAILSCALE_AUTHKEY TAILSCALE_SERVE
+
 # --- Phase 1: Fundament ---
 echo -e "${BLUE}--- Phase 1: Fundament ---${NC}"
 source "${MODULES_DIR}/01_os_check.sh"
@@ -148,8 +174,18 @@ echo ""
 info "Profil:        $PROFILE"
 info "Matrix:        http://127.0.0.1:6167"
 info "Core API:      http://127.0.0.1:8765"
-info "Console:       https://$(hostname -I | awk '{print $1}')  (self-signed Cert, Browser-Warnung ignorieren)"
-info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
+if [ "${TAILSCALE_SERVE:-0}" = "1" ]; then
+  _ts_hostname="$(tailscale status --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Self',{}).get('DNSName','').rstrip('.'))" 2>/dev/null || echo "")"
+  if [ -n "${_ts_hostname}" ]; then
+    info "Console:       https://${_ts_hostname}  (via Tailscale, kein öffentlicher Port nötig)"
+  else
+    info "Console:       https://<hostname>.tailnet.ts.net  (Tailscale-URL — tailscale status prüfen)"
+  fi
+  info "               Ports 80/443 sind NICHT geöffnet — nur über Tailnet erreichbar"
+else
+  info "Console:       https://$(hostname -I | awk '{print $1}')  (self-signed Cert, Browser-Warnung ignorieren)"
+  info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
+fi
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
 info "Login:         admin / ${CONSOLE_PASS}"
 info "Credentials:   /etc/hydrahive/admin_credentials"

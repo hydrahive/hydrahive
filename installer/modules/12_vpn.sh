@@ -75,6 +75,74 @@ fi
 # sicherstellen dass tailscaled läuft
 systemctl enable --now tailscaled 2>/dev/null || true
 
+# --- Tailscale-Serve Modus: sofort verbinden + serve konfigurieren ---
+if [ "${TAILSCALE_SERVE:-0}" = "1" ] && [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
+    info "Verbinde Tailscale mit Auth-Key..."
+    _ts_hostname="hydrahive-$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-' | cut -c1-20)"
+    tailscale up \
+        --authkey="${TAILSCALE_AUTHKEY}" \
+        --hostname="${_ts_hostname}" \
+        --accept-routes \
+        --shields-up=false \
+        2>/dev/null || true
+
+    # Warten bis Tailscale-IP verfügbar
+    _ts_ip=""
+    for _i in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 2
+        _ts_ip="$(tailscale ip -4 2>/dev/null || echo "")"
+        [ -n "${_ts_ip}" ] && break
+        info "Warte auf Tailscale-IP... (${_i}/10)"
+    done
+
+    if [ -n "${_ts_ip}" ]; then
+        success "Tailscale verbunden: ${_ts_ip}"
+
+        # tailscale serve: Console über Tailnet HTTPS erreichbar machen
+        # nginx läuft auf 127.0.0.1:8080 (HTTP), tailscale serve kümmert sich um TLS
+        tailscale serve reset 2>/dev/null || true
+        tailscale serve --bg https / http://127.0.0.1:8080
+        success "tailscale serve aktiviert — Console via Tailnet HTTPS erreichbar"
+
+        # Tailscale-Hostname für VPN-Config ermitteln
+        _ts_dns="$(tailscale status --json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Self',{}).get('DNSName','').rstrip('.'))" 2>/dev/null || echo "")"
+        info "Console URL: https://${_ts_dns:-${_ts_hostname}.tailnet.ts.net}"
+
+        # VPN-Config schreiben (als konfiguriert markieren)
+        cat > "${VPN_CONFIG}" << VPNCFG
+{
+  "mode": "tailscale",
+  "configured": true,
+  "auth_key": "",
+  "login_server": "https://controlplane.tailscale.com",
+  "tailscale_ip": "${_ts_ip}",
+  "tailscale_serve": true,
+  "hostname": "${_ts_hostname}"
+}
+VPNCFG
+        chmod 600 "${VPN_CONFIG}"
+        chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${VPN_CONFIG}"
+        success "VPN-Config geschrieben"
+    else
+        warn "Tailscale-IP nicht verfügbar — Auth-Key korrekt? → tailscale status prüfen"
+    fi
+
+    # Sudoers für tailscale serve
+    SUDOERS_FILE="/etc/sudoers.d/hydrahive-tailscale"
+    cat > "$SUDOERS_FILE" << 'SUDOERS'
+# HydraHive: Core darf Tailscale VPN + Serve steuern
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale up *
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale down
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale set *
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale status *
+hydrahive ALL=(ALL) NOPASSWD: /usr/bin/tailscale serve *
+SUDOERS
+    chmod 440 "$SUDOERS_FILE"
+    visudo -c -f "$SUDOERS_FILE" &>/dev/null && success "Tailscale-Sudoers aktualisiert" || { rm "$SUDOERS_FILE"; warn "Sudoers-Syntax ungültig"; }
+
+    return 0
+fi
+
 # --- Headscale installieren (optional) ---
 if [ "${VPN_MODE}" = "headscale" ]; then
     info "Installiere Headscale (self-hosted Koordinator)..."

@@ -13,6 +13,77 @@ NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
 SERVER_IP="$(hostname -I | awk '{print $1}')" || SERVER_IP="127.0.0.1"
 SERVER_HOST="${DOMAIN:-${SERVER_IP}}"
 
+# Im Tailscale-Modus: nginx nur auf localhost, kein TLS (tailscale serve übernimmt)
+if [ "${TAILSCALE_SERVE:-0}" = "1" ]; then
+    info "Tailscale-Modus: nginx wird nur auf 127.0.0.1:8080 konfiguriert (kein TLS, kein öffentlicher Port)"
+    cat > "${NGINX_CONF}" << NGINXCONF
+# HydraHive Console — Tailscale-only Modus
+# Nur auf localhost erreichbar; tailscale serve kümmert sich um HTTPS
+server {
+    listen 127.0.0.1:8080;
+    server_name localhost;
+
+    root /opt/hydrahive/console;
+    index index.html;
+
+    error_page 502 503 /502.html;
+    location = /502.html { internal; }
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+        add_header Cache-Control "no-store, no-cache";
+    }
+
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8765/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+        proxy_next_upstream   error timeout;
+        proxy_intercept_errors off;
+    }
+
+    location /.well-known/ {
+        proxy_pass         http://127.0.0.1:8765/.well-known/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_read_timeout    60s;
+    }
+
+    location /a2a/ {
+        proxy_pass         http://127.0.0.1:8765/a2a/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+    }
+
+    location /assets/ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+NGINXCONF
+
+    ln -sf "${NGINX_CONF}" /etc/nginx/sites-enabled/hydrahive-console 2>/dev/null || true
+    if nginx -t &>/dev/null; then
+        systemctl is-active --quiet nginx && systemctl reload nginx || systemctl start nginx
+        success "nginx gestartet (127.0.0.1:8080, Tailscale-Modus)"
+    else
+        nginx -t
+        warn "nginx-Konfiguration fehlerhaft — bitte manuell prüfen"
+    fi
+    return 0
+fi
+
 info "Konfiguriere HTTPS (TLS)..."
 
 # --- openssl pruefen ---
