@@ -23,6 +23,7 @@ import {
   EyeOff,
   KeyRound,
   Code2,
+  GitBranch,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -92,6 +93,10 @@ export function ProjectsPage() {
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [sambaResetting, setSambaResetting] = useState<string | null>(null);
   const [codeserverPassword, setCodeserverPassword] = useState<string | null>(null);
+  const [giteaCreds, setGiteaCreds] = useState<{url:string;username:string;password:string;token:string}|null>(null);
+  const [giteaLoading, setGiteaLoading] = useState(false);
+  const [showGiteaPw, setShowGiteaPw] = useState(false);
+  const [showGiteaToken, setShowGiteaToken] = useState(false);
 
   async function load() {
     try {
@@ -131,6 +136,17 @@ export function ProjectsPage() {
       setSambaCreds(c => ({...c, [id]: null}));
     } finally {
       setSambaLoading(l => ({...l, [id]: false}));
+    }
+  }
+
+  async function loadGiteaCreds() {
+    setGiteaLoading(true);
+    try {
+      const data = await api.get<{url:string;username:string;password:string;token:string}>("/gitea/credentials");
+      setGiteaCreds(data);
+      setShowGiteaPw(true);
+    } catch { /* ignore */ } finally {
+      setGiteaLoading(false);
     }
   }
 
@@ -598,6 +614,42 @@ export function ProjectsPage() {
                                 <button type="button" onClick={() => setShowCodePw(true)}
                                   className="text-xs text-primary hover:underline">
                                   Zugangsdaten anzeigen
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {isAdmin && (
+                          <div className="flex items-start gap-2">
+                            <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium">Gitea-Zugangsdaten</p>
+                              {giteaCreds ? (
+                                <div className="mt-0.5 space-y-0.5">
+                                  <p className="text-xs text-muted-foreground font-mono">{giteaCreds.username}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-xs font-mono text-muted-foreground tracking-wider">
+                                      {showGiteaPw ? giteaCreds.password : "••••••••••••"}
+                                    </p>
+                                    <button type="button" onClick={() => setShowGiteaPw(v => !v)}
+                                      className="text-muted-foreground hover:text-foreground transition-colors">
+                                      {showGiteaPw ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground/60 font-mono truncate">
+                                    Token: {showGiteaToken ? giteaCreds.token : giteaCreds.token.slice(0,8)+"…"}
+                                    <button type="button" onClick={() => setShowGiteaToken(v => !v)}
+                                      className="ml-1 text-muted-foreground hover:text-foreground transition-colors align-middle">
+                                      {showGiteaToken ? <EyeOff className="h-2.5 w-2.5 inline" /> : <Eye className="h-2.5 w-2.5 inline" />}
+                                    </button>
+                                  </p>
+                                  <a href={giteaCreds.url} target="_blank" rel="noreferrer"
+                                    className="text-[10px] text-primary hover:underline truncate block">{giteaCreds.url}</a>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={loadGiteaCreds} disabled={giteaLoading}
+                                  className="text-xs text-primary hover:underline disabled:opacity-50">
+                                  {giteaLoading ? "Lade…" : "Zugangsdaten anzeigen"}
                                 </button>
                               )}
                             </div>

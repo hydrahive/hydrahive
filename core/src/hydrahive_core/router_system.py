@@ -377,6 +377,32 @@ def register_system_routes(
             "token_masked": token[:8] + "..." + token[-4:] if token else "",
         }
 
+    @admin_router.get("/gitea/credentials")
+    def get_gitea_credentials():
+        """Gibt Gitea-Zugangsdaten zurück (URL, Admin-User, Passwort, Token) für die Workspace-Anzeige."""
+        p = Path(gitea_config_file)
+        cfg = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        internal_url = cfg.get("url", "http://127.0.0.1:3001")
+        # Externe URL: intern 127.0.0.1:3001 → auf Port 3002 (nginx-Proxy) umschreiben
+        import re as _re
+        external_url = _re.sub(r"127\.0\.0\.1:3001", "127.0.0.1:3002", internal_url)
+        username = cfg.get("org", "hydrahive")
+        token = cfg.get("token", "")
+        # Passwort aus /etc/hydrahive/admin_credentials (console_password=...)
+        password = ""
+        cred_file = Path("/etc/hydrahive/admin_credentials")
+        if cred_file.exists():
+            for line in cred_file.read_text(encoding="utf-8").splitlines():
+                if line.startswith("console_password="):
+                    password = line.split("=", 1)[1].strip()
+                    break
+        return {
+            "url": external_url,
+            "username": username,
+            "password": password,
+            "token": token,
+        }
+
     @admin_router.put("/gitea/config")
     def update_gitea_config(req: GiteaConfigRequest):
         from .gitea import reload_gitea_client
