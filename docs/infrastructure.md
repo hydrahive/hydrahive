@@ -38,9 +38,9 @@ Stand: März 2026 | VM: <your-vm-ip> | Hostname: <your-hostname>
 |------|-----------|--------|--------------|
 | `80` | HTTP | **nginx → HydraHive Console** | React-Frontend + API-Proxy auf :8765 |
 | `3002` | HTTP | **nginx → Gitea** | Web-UI für lokalen Git-Server |
-| `8000` | HTTP | **AgentLink** | Ältere Agent-Handoff-API (FastAPI, 2 Worker) |
 | `8008` | HTTP | **nginx → Matrix** | Conduwuit Matrix-Homeserver (für Element etc.) |
-| `8020` | HTTP | **?** | Unbekannt — muss identifiziert werden |
+| `8020` | HTTP | **A-MEM MCP** | A-MEM Memory-Server (MCP-Endpoint) |
+| `8021` | HTTP | **A-MEM Search UI** | A-MEM Suchoberfläche |
 | `139` | TCP | **Samba** | NetBIOS (Windows-Freigaben) |
 | `445` | TCP | **Samba** | SMB (Windows-Freigaben) |
 | `22` | SSH | **OpenSSH** | Admin-Zugriff |
@@ -50,6 +50,7 @@ Stand: März 2026 | VM: <your-vm-ip> | Hostname: <your-hostname>
 | Port | Dienst | Beschreibung |
 |------|--------|--------------|
 | `8765` | **HydraHive Core** | FastAPI Backend (uvicorn, 1 Worker) |
+| `8010` | **AgentLink** | Agent-Handoff-API (FastAPI) |
 | `8767` | **WhatsApp Bridge** | Node.js Baileys-Bridge |
 | `6167` | **Conduwuit** | Matrix-Homeserver intern |
 | `6379` | **Redis** | Cache (für AgentLink) |
