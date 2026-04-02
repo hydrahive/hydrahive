@@ -179,7 +179,7 @@ SUPPORTED_PLATFORMS = {
 def discord_client_connected(username: str) -> bool:
     from .tool_registry import _discord_clients
 
-    client = _discord_clients.get(username)
+    client = _discord_clients.get(f"personal_{username}")
     if not client:
         return False
 
@@ -658,7 +658,7 @@ def register_user_integration_routes(
             delete_discord_config(username)
             raise HTTPException(400, f"Discord-Token ungueltig: {test_result.get('error', '')}")
 
-        await runtime.detach_discord_client(username)
+        await runtime.detach_discord_client(personal_agent_id)
         client = AgentDiscordClient(
             agent_id=personal_agent_id,
             bot_token=cfg["bot_token"],
@@ -690,8 +690,9 @@ def register_user_integration_routes(
         from .discord_agent import delete_discord_config
         from .tool_registry import _discord_clients
 
-        await runtime.detach_discord_client(username)
-        _discord_clients.pop(username, None)
+        personal_agent_id = f"personal_{username}"
+        await runtime.detach_discord_client(personal_agent_id)
+        _discord_clients.pop(personal_agent_id, None)
         delete_discord_config(username)
         audit_log("discord.removed", details={"user": username})
         return {"deleted": True}
