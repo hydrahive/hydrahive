@@ -37,10 +37,12 @@ function notifyAuthExpired(path: string) {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}`, ...(options.headers||{}) } });
+  const tokenAtRequest = getToken();
+  const res = await fetch(`${BASE}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenAtRequest}`, ...(options.headers||{}) } });
   if (!res.ok) {
     const e = await res.json().catch(()=>({detail:res.statusText}));
-    if (res.status === 401) notifyAuthExpired(path);
+    // Only trigger logout if the token hasn't changed since this request was sent
+    if (res.status === 401 && tokenAtRequest && tokenAtRequest === getToken()) notifyAuthExpired(path);
     throw new Error(e.detail||`HTTP ${res.status}`);
   }
   return res.json();

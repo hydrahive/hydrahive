@@ -21,6 +21,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   async function login(username: string, password: string) {
+    // Clear stale token before login so pending requests with old token
+    // won't trigger logout after we receive a fresh token
+    localStorage.removeItem("hydrahive_token");
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
