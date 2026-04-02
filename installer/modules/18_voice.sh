@@ -20,14 +20,14 @@ info "=== Voice Interface Setup (STT + TTS) ==="
 # --- Docker installieren falls nötig ---
 if ! command -v docker &>/dev/null; then
     info "Docker nicht gefunden — installiere..."
-    apt-get update -qq
-    apt-get install -y -qq ca-certificates curl gnupg
+    apt-get -o DPkg::Lock::Timeout=120 update -qq
+    apt-get -o DPkg::Lock::Timeout=120 install -y -qq ca-certificates curl gnupg
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
     chmod a+r /etc/apt/keyrings/docker.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-    apt-get update -qq
-    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    apt-get -o DPkg::Lock::Timeout=120 update -qq
+    apt-get -o DPkg::Lock::Timeout=120 install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
     systemctl enable --now docker
     success "Docker installiert"
 fi
