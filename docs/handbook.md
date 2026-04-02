@@ -148,16 +148,44 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 
 ### Konsolidierte Einstellungen
 
-Alle Admin-Konfigurationen sind in der Seite **Einstellungen** zusammengefasst. Die Seite enthält vier Tabs:
+Die Seite **Einstellungen** (`/settings`) fasst die Admin-Konfiguration in 10 Tabs zusammen:
 
 | Tab | Inhalt |
 |---|---|
-| **LLM** | Sprachmodell-Konfiguration (Ollama, Claude Max OAuth, OpenAI, Fallback-Modelle) |
+| **LLM** | Sprachmodell-Konfiguration (Ollama, Claude OAuth, OpenAI, Fallback-Modelle) |
 | **MCP** | Externe MCP-Server verwalten |
 | **Gitea** | Gitea-URL, Token, Organisation |
-| **VPN** | Tailscale/Headscale-Verbindung konfigurieren |
+| **GitHub** | GitHub-Token und Repository-Anbindung |
+| **VPN** | Tailscale-Verbindung konfigurieren |
+| **Mail / KAS** | E-Mail und All-Inkl KAS-Anbindung |
+| **Users** | Benutzer anlegen und verwalten |
+| **Backup** | Backups erstellen, herunterladen, wiederherstellen |
+| **Migration** | Daten-Import/Export zwischen Instanzen |
+| **Plugins** | Plugin-Verwaltung und Zuweisung |
 
-Die alten URLs `/llm`, `/mcp` und `/gitea` leiten automatisch auf `/settings` um.
+Die alten URLs `/llm`, `/mcp`, `/gitea`, `/vpn`, `/users` und `/backup` leiten automatisch auf `/settings` um.
+
+### Konfigurationsmatrix — Wo wird was konfiguriert?
+
+Nicht alle Einstellungen liegen auf der Settings-Seite. Diese Übersicht zeigt, wo welche Konfiguration gepflegt wird:
+
+| Bereich | UI-Pfad | Config-Datei | Zweck |
+|---|---|---|---|
+| LLM-Provider | Einstellungen → LLM | `/etc/hydrahive/llm_config.json` | API-Keys, Modell-Auswahl, OAuth |
+| MCP-Server | Einstellungen → MCP | `/etc/hydrahive/mcp_servers.json` | Externe Tool-Server |
+| Gitea | Einstellungen → Gitea | `/etc/hydrahive/gitea_config.json` | Git-Server-Anbindung |
+| GitHub | Einstellungen → GitHub | `/etc/hydrahive/github_token` | GitHub-Token |
+| VPN | Einstellungen → VPN | `/etc/hydrahive/vpn.json` | Tailscale-Konfiguration |
+| Mail / KAS | Einstellungen → Mail/KAS | `/etc/hydrahive/kas.json` | E-Mail und KAS-API |
+| Benutzer | Einstellungen → Users | `/etc/hydrahive/users.json` | Accounts und Rollen |
+| Discord | Mein Agent → Discord | `/etc/hydrahive/users.json` (pro User) | Persönlicher Discord-Bot |
+| WhatsApp | Mein Agent → WhatsApp | `/etc/hydrahive/whatsapp_bridge_secret` | WhatsApp-Bridge |
+| A2A Federation | Federation | `/etc/hydrahive/a2a_peers.json` | Peer-Verbindungen |
+| AgentLink | — (nur Datei) | `/etc/hydrahive/agentlink.json` | Handoff-API-Konfiguration |
+| Claude OAuth | Einstellungen → LLM | `/etc/hydrahive/claude_oauth_token` | Claude Max Token |
+| JWT-Secret | — (automatisch) | `/etc/hydrahive/jwt_secret` | Auth-Token-Signierung |
+| Schedules | Schedules | `/etc/hydrahive/schedules.json` | Zeitgesteuerte Tasks |
+| Butler-Regeln | Butler | `/etc/hydrahive/butler/` | Automatisierungs-Pipelines |
 
 ### Mehrsprachigkeit (DE/EN)
 
