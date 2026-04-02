@@ -252,18 +252,6 @@ export function AdminLayout() {
   }, []);
 
   useEffect(() => {
-    const next = getGroupIdForPath(location.pathname);
-    if (next && next !== openGroupId) {
-      setOpenGroupId(next);
-      try {
-        localStorage.setItem(NAV_OPEN_GROUP_KEY, next);
-      } catch {
-        // ignore
-      }
-    }
-  }, [location.pathname, openGroupId]);
-
-  useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
