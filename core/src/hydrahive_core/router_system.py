@@ -339,11 +339,11 @@ def register_system_routes(
 
     @admin_router.post("/admin/core/restart")
     async def restart_core():
-        if _restart_lock.locked():
+        if not _restart_lock.acquire_nowait():
             raise HTTPException(409, "Neustart läuft bereits")
 
         async def _do_restart():
-            async with _restart_lock:
+            try:
                 await asyncio.sleep(1.5)
                 try:
                     proc = await asyncio.create_subprocess_exec(
@@ -356,6 +356,8 @@ def register_system_routes(
                     logger.error("core/restart: systemctl timed out")
                 except Exception as e:
                     logger.error("core/restart: %s", e)
+            finally:
+                _restart_lock.release()
 
         asyncio.create_task(_do_restart())
         return {"status": "restarting", "message": "Core-Neustart ausgelöst — Seite lädt automatisch neu"}
