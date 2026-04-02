@@ -1157,9 +1157,17 @@ function SettingsPanel({
     try {
       const selectedModel = availableModels.find(m => m.id === model);
       const ollama_base_url = selectedModel?.wks_base_url ?? null;
+      const pendingFb = fbInput.trim();
+      const allFallbacks = pendingFb && !fallbacks.includes(pendingFb)
+        ? [...fallbacks, pendingFb]
+        : fallbacks;
+      if (pendingFb && !fallbacks.includes(pendingFb)) {
+        setFallbacks(allFallbacks);
+        setFbInput("");
+      }
       await api.put("/me/agent", {
         identity, soul, model, temperature, max_tokens: maxTokens,
-        fallback_models: fallbacks, tools, allowed_agents: allowedAgents,
+        fallback_models: allFallbacks, tools, allowed_agents: allowedAgents,
         ollama_base_url,
       });
       setSaveMsg(t("myAgent.settingsSaved"));
