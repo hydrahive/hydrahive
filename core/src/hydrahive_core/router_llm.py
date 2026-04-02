@@ -483,6 +483,19 @@ def register_llm_routes(
             return {"configured": False, "token_age_days": None, "warning": None}
 
         raw = token_file.read_text(encoding="utf-8").strip()
+
+        # Plain-text Terminal-Token in Datei (1 Jahr gültig)
+        if raw.startswith("sk-ant-oat01-") and "\n" not in raw:
+            return {
+                "configured": True,
+                "source": "terminal",
+                "token_age_days": None,
+                "remaining_days": None,
+                "warning": None,
+                "ttl_days": 365,
+                "has_refresh": False,
+            }
+
         has_refresh = False
         expires_at = 0
 
@@ -498,7 +511,7 @@ def register_llm_routes(
             remaining_seconds = expires_at - _time.time()
             remaining_days = remaining_seconds / 86400
         else:
-            # Legacy plain-text: Alter anhand mtime schätzen
+            # Unbekanntes Format — konservativ schätzen
             mtime = token_file.stat().st_mtime
             age_days = (_time.time() - mtime) / 86400
             token_ttl_days = 30
