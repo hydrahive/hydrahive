@@ -771,7 +771,7 @@ class Orchestrator:
 
         models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
 
-        _provider_err = check_llm_provider_available(models_to_try)
+        _provider_err = check_llm_provider_available(models_to_try, ollama_base_url=boss_cfg.llm.ollama_base_url)
         if _provider_err:
             yield f"data: {_json.dumps({'text': _provider_err})}\n\n"
             yield "data: {\"done\": true}\n\n"

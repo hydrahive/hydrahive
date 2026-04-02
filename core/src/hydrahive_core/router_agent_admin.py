@@ -23,15 +23,19 @@ class CreateAgentRequest(BaseModel):
     heartbeat_interval: str = "30s"
     heartbeat_timeout: str = "90s"
     heartbeat_on_failure: str = "restart"
+    ollama_base_url: str | None = None
 
 
 def build_agent_admin_llm_data(req: CreateAgentRequest) -> dict:
-    return {
+    llm_data: dict = {
         "model": req.model,
         "temperature": req.temperature,
         "max_tokens": req.max_tokens,
         "fallback_models": list(req.fallback_models),
     }
+    if req.ollama_base_url:
+        llm_data["ollama_base_url"] = req.ollama_base_url
+    return llm_data
 
 
 def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None) -> dict:

@@ -246,13 +246,15 @@ def _load_openai_codex_token() -> dict | None:
 
 # ---------------------------------------------------------------- Provider-Check
 
-def check_llm_provider_available(models: list[str]) -> str | None:
+def check_llm_provider_available(models: list[str], ollama_base_url: str | None = None) -> str | None:
     """
     Prüft ob für die übergebenen Modelle ein Provider verfügbar ist.
     Gibt None zurück wenn OK, sonst eine nutzerfreundliche Fehlermeldung.
+    ollama_base_url: wenn gesetzt (WKS-Ollama), wird dieser Endpunkt geprüft statt localhost.
     """
     import os
     import socket
+    from urllib.parse import urlparse
 
     for model in models:
         if not model:
@@ -289,11 +291,22 @@ def check_llm_provider_available(models: list[str]) -> str | None:
                 pass
 
         elif is_ollama:
-            try:
-                with socket.create_connection(("127.0.0.1", 11434), timeout=1):
-                    return None
-            except Exception:
-                pass
+            if ollama_base_url:
+                # WKS-Ollama: Endpunkt auf der Workstation prüfen
+                try:
+                    parsed = urlparse(ollama_base_url)
+                    host = parsed.hostname or "127.0.0.1"
+                    port = parsed.port or 11434
+                    with socket.create_connection((host, port), timeout=2):
+                        return None
+                except Exception:
+                    pass
+            else:
+                try:
+                    with socket.create_connection(("127.0.0.1", 11434), timeout=1):
+                        return None
+                except Exception:
+                    pass
 
     return (
         "## ⚠️ Kein LLM-Provider konfiguriert\n\n"
