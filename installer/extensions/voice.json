@@ -1,0 +1,12 @@
+{
+  "id": "voice",
+  "name": "Voice Interface (STT + TTS)",
+  "description": "Sprachsteuerung für HydraHive — faster-whisper (Speech-to-Text) und Piper (Text-to-Speech) als Docker-Container. Für XiaoZhi ESP32, Voice PE oder Custom-Clients.",
+  "icon": "Mic",
+  "category": "integrations",
+  "install_script": "extensions/install/voice.sh",
+  "uninstall_script": "extensions/uninstall/voice.sh",
+  "service": "hydrahive-stt",
+  "health_url": "http://127.0.0.1:10300/",
+  "installed_check": "/opt/hydrahive-voice"
+}

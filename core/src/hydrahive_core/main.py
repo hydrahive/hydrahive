@@ -51,6 +51,7 @@ from .notification_service import notification_service
 from .router_schedules import register_schedule_routes
 from .scheduler_service import scheduler_service
 from .router_core_misc import register_core_misc_routes
+from .router_voice import register_voice_routes
 from .router_llm import register_llm_routes
 from .router_mcp import register_mcp_routes
 from .router_project_integrations import register_project_integration_routes
@@ -1423,6 +1424,12 @@ register_pipeline_routes(
     admin_router,
     require_admin=require_admin,
     notify_fn=None,  # notification_service.notify falls verfügbar
+)
+register_voice_routes(
+    auth_router,
+    require_auth=require_auth,
+    discovery=discovery,
+    orchestrator=orchestrator,
 )
 
 
