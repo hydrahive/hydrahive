@@ -56,7 +56,7 @@ Stand: März 2026 | VM: <your-vm-ip> | Hostname: <your-hostname>
 | `5432` | **PostgreSQL** | Datenbank (nur `agentlink` DB aktiv) |
 | `11434` | **Ollama** | Lokale LLM-Inferenz (für A-MEM) |
 | `3001` | **Gitea intern** | Gitea-Prozess (nginx proxied nach 3002) |
-| `8181` | **QMD MCP** | Question-Driven Memory MCP-Server |
+| `8181` | **A-MEM Memory Search** | Semantischer Memory-Suchserver (ehem. QMD) |
 
 ---
 
@@ -138,11 +138,11 @@ Stand: März 2026 | VM: <your-vm-ip> | Hostname: <your-hostname>
   | `llama3.2:3b` | 2.0 GB | vor 6 Tagen |
 - **Zweck**: Lokale LLM-Inferenz für A-MEM (nicht für HydraHive-Core-Agents — die nutzen Claude API)
 
-### 4.9 QMD MCP (`qmd-mcp.service`)
+### 4.9 A-MEM Memory Search (`qmd-mcp.service`)
 - **Port**: `[::1]:8181`
 - **User**: `octopos`
 - **Binary**: `/usr/bin/qmd`
-- **Zweck**: Question-Driven Memory — MCP-Server für strukturiertes Wissensmanagement
+- **Zweck**: Semantische Suche über Agent-Memory-Dateien (ehem. QMD — Question-Driven Memory)
 - **Agents**: Wird in `update.sh` re-indexiert (`qmd update -q && qmd embed -q`)
 
 ### 4.10 PostgreSQL (`postgresql.service`)

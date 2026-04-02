@@ -167,11 +167,11 @@ main() {
             || warn "sysinfo-Scan fehlgeschlagen — wird übersprungen"
     fi
 
-    # --- 7. QMD re-indexieren (optional) ---
+    # --- 7. A-MEM Memory re-indexieren (optional) ---
     if command -v qmd &>/dev/null; then
-        info "QMD: re-indexiere Memory..."
+        info "A-MEM: re-indexiere Memory..."
         sudo -u hydrahive bash -c "HOME=/home/hydrahive qmd update -q 2>/dev/null && qmd embed -q 2>/dev/null" || true
-        success "QMD aktualisiert"
+        success "A-MEM aktualisiert"
     fi
 
     # --- 8. Gitea sicherstellen ---

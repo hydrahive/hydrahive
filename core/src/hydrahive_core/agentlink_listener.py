@@ -126,7 +126,7 @@ async def _handle_event(
     if required_skills:
         context_parts.append(f"Benötigte Skills: {', '.join(required_skills)}")
     if knowledge.get("qmd_refs"):
-        context_parts.append(f"Relevante QMD-Skills: {', '.join(knowledge['qmd_refs'])}")
+        context_parts.append(f"Relevante A-MEM Skills: {', '.join(knowledge['qmd_refs'])}")
     if working_mem.get("findings"):
         context_parts.append("Kontext:\n" + "\n".join(working_mem["findings"][:3]))
 

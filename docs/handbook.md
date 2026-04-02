@@ -665,9 +665,9 @@ Beim Start einer Session werden alle Memory-Dateien automatisch in den System-Pr
 | `read_memory` | Einzelne Gedächtnis-Datei lesen (`filename`) |
 | `write_memory` | Gedächtnis-Datei schreiben oder aktualisieren (`filename`, `content`) |
 
-Agenten sollten für gezielte Suche statt vollständiger Injektion QMD nutzen (spart Tokens).
+Agenten sollten für gezielte Suche statt vollständiger Injektion A-MEM Memory Search nutzen (spart Tokens).
 
-### QMD Memory Search
+### A-MEM Memory Search
 
 Wenn der Agent `qmd` als MCP-Server konfiguriert hat, kann er gezielt in den Memory-Dateien suchen:
 
@@ -853,13 +853,13 @@ Agenten mit `amem` in `mcp_servers` erhalten automatisch folgende Tools:
 
 A-MEM eignet sich für agentenübergreifendes Wissen: Recherche-Ergebnisse, Projekt-Erkenntnisse, geteilte Faktensammlungen.
 
-### QMD Memory Search MCP
+### A-MEM Memory Search MCP
 
-QMD ist ein semantischer Suchserver für die Memory-Dateien der Agenten. Er läuft als systemd-Service auf Port 8181:
+A-MEM Memory Search ist ein semantischer Suchserver für die Memory-Dateien der Agenten (ehem. QMD). Er läuft als systemd-Service auf Port 8181:
 
 ```bash
 sudo systemctl status qmd-mcp
-# Active: active (running) — QMD MCP server listening on http://localhost:8181/mcp
+# Active: active (running) — A-MEM MCP server listening on http://localhost:8181/mcp
 ```
 
 Agenten mit `qmd` in `mcp_servers` können gezielt in ihren Memory-Dateien suchen statt alle Dateien beim Start zu laden. Dies spart deutlich Tokens.
@@ -1113,7 +1113,7 @@ Admins sehen in der Sidebar einen **Update**-Button mit dem aktuellen Commit-Has
 4. Console bauen (`npm ci && npm run build`)
 5. Console deployen
 6. `hydrahive-core` neustarten
-7. QMD Memory re-indexieren
+7. A-MEM Memory re-indexieren
 
 Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann sich selbst neustarten ohne den Prozess zu unterbrechen.
 
@@ -1391,7 +1391,7 @@ Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler: `su
 
 Rate-Limiting: max. 10 Versuche pro Minute. Nach 60 Sekunden warten.
 
-### QMD-Service nicht erreichbar
+### A-MEM Memory Search nicht erreichbar
 
 ```bash
 sudo systemctl status qmd-mcp

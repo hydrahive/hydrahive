@@ -210,7 +210,7 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if _handbook_text:
             parts.append(_handbook_text)
 
-    # QMD-Skills laden (scope=always immer, on-demand: Keyword-Match + Semantik #44)
+    # A-MEM Skills laden (scope=always immer, on-demand: Keyword-Match + Semantik #44)
     if boss_cfg.agent_dir:
         all_skills = load_skills(boss_cfg.agent_dir)
         # Semantische Scores berechnen (fällt auf {} zurück wenn FAISS nicht verfügbar)

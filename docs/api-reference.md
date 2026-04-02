@@ -967,7 +967,7 @@ Alle konfigurierten MCP-Server auflisten.
   "servers": [
     {
       "id": "qmd",
-      "name": "QMD Memory Search",
+      "name": "A-MEM Memory Search",
       "transport": "streamableHttp",
       "url": "http://127.0.0.1:8181/mcp",
       "headers": {}
@@ -986,7 +986,7 @@ Neuen MCP-Server anlegen.
 ```json
 {
   "id": "qmd",
-  "name": "QMD Memory Search",
+  "name": "A-MEM Memory Search",
   "transport": "streamableHttp",
   "url": "http://127.0.0.1:8181/mcp",
   "headers": {}

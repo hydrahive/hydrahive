@@ -13,7 +13,7 @@ Diese Dokumentation richtet sich an Entwickler die HydraHive verstehen, erweiter
 5. [Orchestrator und Message-Flow](#5-orchestrator-und-message-flow)
 6. [Konfigurationsformate](#6-konfigurationsformate)
 7. [Tool-System](#7-tool-system)
-8. [Skill-System (QMD)](#8-skill-system-qmd)
+8. [Skill-System (A-MEM)](#8-skill-system-a-mem)
 9. [Matrix-Integration](#9-matrix-integration)
 10. [Session-Management](#10-session-management)
 11. [Sicherheitsmodell](#11-sicherheitsmodell)
@@ -91,7 +91,7 @@ hydrahive/
 │       ├── project_loader.py      # /projects/ Verzeichnis beobachten
 │       ├── session_manager.py     # Chat-History, Persistenz
 │       ├── matrix_agent.py        # Matrix-Bot Basisklasse + BossMatrixAgent
-│       ├── skill_loader.py        # QMD Skill-Parsing
+│       ├── skill_loader.py        # A-MEM Skill-Parsing (QMD-Format)
 │       ├── tool_registry.py       # Tool-Interface, Path-Safety
 │       ├── router_*.py            # Ausgelagerte API-Routen (Auth, Projekte, Chat, MCP, Gitea, ...)
 │       ├── execution_mode_policy.py # safe/elevated/root fuer Agenten
@@ -414,7 +414,7 @@ Du bist Steuerbert, ein erfahrener Steuerberater-Assistent.
 - Bei Unsicherheit: Fachmann empfehlen
 ```
 
-### QMD Skill-Datei
+### A-MEM Skill-Datei (QMD-Format)
 
 ```markdown
 ---
@@ -491,9 +491,9 @@ registry.register(FileWriteTool())
 
 ---
 
-## 8. Skill-System (QMD)
+## 8. Skill-System (A-MEM)
 
-QMD = YAML-Frontmatter + Markdown. Skills werden aus `/agents/<id>/skills/*.md` geladen.
+A-MEM Skills verwenden das QMD-Format (YAML-Frontmatter + Markdown). Skills werden aus `/agents/<id>/skills/*.md` geladen.
 
 **Ladereihenfolge:**
 1. `load_skills(agent_dir)` lädt alle `.md`-Dateien
@@ -644,7 +644,7 @@ Wie läuft eine User-Nachricht durch das gesamte System?
 
 5. _handle_message_impl() 
    a) Session: append(USER, "Was ist die Umsatzsteuer?")
-   b) System-Prompt: soul.md + QMD-Skills (on-demand: "umsatzsteuer" matched)
+   b) System-Prompt: soul.md + A-MEM Skills (on-demand: "umsatzsteuer" matched)
    c) History: letzte 20 Nachrichten aus Session
    d) Tools: dispatch_task, file_read (aus agent.yaml ∩ Registry ∩ permissions)
 
@@ -700,5 +700,5 @@ Wie läuft eine User-Nachricht durch das gesamte System?
 | main.py | Kern-Endpoints + Router-Wiring, nicht mehr alle Routen in einer Datei | Router-Refactoring weitgehend umgesetzt |
 | Worker-Agenten | Keine eigene Matrix-Identität | Nur Boss ist Matrix-Bot |
 | Task-Agent TTL | Nicht per Projekt konfigurierbar | 300s hardcoded in agent_runtime.py |
-| Sessions | Kein Memory zwischen Sessions | QMD-Skills als persistentes Wissen nutzen |
+| Sessions | Kein Memory zwischen Sessions | A-MEM Skills als persistentes Wissen nutzen |
 | AgentLink | State-Transfer noch nicht produktiv | #13 offen |

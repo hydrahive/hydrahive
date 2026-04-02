@@ -509,7 +509,7 @@ state = await client.create_state({
 HydraHive ist auf Deutsch optimiert aber modellunabhängig. Für andere Sprachen:
 
 1. `soul.md` in der gewünschten Sprache schreiben
-2. QMD-Skills in der gewünschten Sprache schreiben  
+2. A-MEM Skills in der gewünschten Sprache schreiben  
 3. System-Prompt Sprache wird durch soul.md bestimmt
 
 ```markdown

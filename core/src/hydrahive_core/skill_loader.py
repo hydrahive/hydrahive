@@ -1,5 +1,5 @@
 """
-skill_loader.py — QMD Skill-Loading (#8, QM1-QM4, #41, #44)
+skill_loader.py — A-MEM Skill-Loading (#8, QM1-QM4, #41, #44)
 
 Liest .md-Dateien aus /agents/<name>/skills/ mit YAML-Frontmatter.
 scope: always  → immer in den System-Prompt geladen
