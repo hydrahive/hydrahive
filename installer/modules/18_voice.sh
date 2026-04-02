@@ -43,12 +43,11 @@ services:
     image: rhasspy/wyoming-whisper
     container_name: hydrahive-stt
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:10300:10300"
+    network_mode: host
     command: >
       --model small
       --language de
-      --uri tcp://0.0.0.0:10300
+      --uri tcp://127.0.0.1:10300
     volumes:
       - stt-data:/data
     environment:
@@ -58,11 +57,10 @@ services:
     image: rhasspy/wyoming-piper
     container_name: hydrahive-tts
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:10200:10200"
+    network_mode: host
     command: >
       --voice de_DE-thorsten-high
-      --uri tcp://0.0.0.0:10200
+      --uri tcp://127.0.0.1:10200
     volumes:
       - tts-data:/data
 
@@ -74,8 +72,8 @@ COMPOSE
 # --- Container starten ---
 info "Starte STT + TTS Container (erster Start lädt Modelle — kann 2-5 Min dauern)..."
 cd "${VOICE_DIR}"
-docker compose pull 2>&1 || docker-compose pull 2>&1
-docker compose up -d 2>&1 || docker-compose up -d 2>&1
+docker compose pull 2>&1
+docker compose up -d 2>&1
 
 # --- Config schreiben ---
 info "Schreibe Voice-Config..."
