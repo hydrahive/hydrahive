@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Cpu, Plug, GitBranch, Network, Settings, Mail, Users, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
@@ -22,10 +23,27 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"];
 
+const TAB_BY_HASH: Record<string, TabId> = {
+  llm: "llm",
+  mcp: "mcp",
+  gitea: "gitea",
+  vpn: "vpn",
+  kas: "kas",
+  users: "users",
+  backup: "backup",
+};
+
+const DEFAULT_TAB: TabId = "llm";
+
 export function SettingsPage() {
   const { t } = useTranslation();
-  const [active, setActive] = useState<TabId>("llm");
+  const location = useLocation();
+  const [active, setActive] = useState<TabId>(() => TAB_BY_HASH[location.hash.slice(1)] ?? DEFAULT_TAB);
   const ActiveComponent = TABS.find(t => t.id === active)!.component;
+
+  useEffect(() => {
+    setActive(TAB_BY_HASH[location.hash.slice(1)] ?? DEFAULT_TAB);
+  }, [location.hash]);
 
   return (
     <div className="flex flex-col h-full">

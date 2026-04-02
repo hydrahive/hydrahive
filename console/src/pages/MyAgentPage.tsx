@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
@@ -9,6 +10,8 @@ import { useTranslation } from "react-i18next";
 // ── Typen ────────────────────────────────────────────────────────────────────
 
 interface Message { id: string; role: "user"|"assistant"|"system"; content: string; tokenUsage?: { input: number; output: number; rounds?: number }; }
+
+type AgentTab = "chat" | "settings" | "skills" | "mcp" | "platforms" | "wks" | "discord" | "whatsapp" | "telegram" | "mail" | "heartbeat";
 
 interface AgentCfg {
   identity:        string;
@@ -106,6 +109,22 @@ const KNOWN_MODELS = [
   "ollama/mistral:latest","ollama/llama3.1:8b","ollama/llama3.2:3b",
 ];
 
+const TAB_BY_HASH: Record<string, AgentTab> = {
+  chat: "chat",
+  settings: "settings",
+  skills: "skills",
+  mcp: "mcp",
+  platforms: "platforms",
+  wks: "wks",
+  discord: "discord",
+  whatsapp: "whatsapp",
+  telegram: "telegram",
+  mail: "mail",
+  heartbeat: "heartbeat",
+};
+
+const DEFAULT_TAB: AgentTab = "chat";
+
 // SLASH_COMMANDS moved inside MyAgentPage component to use live t() calls
 
 let _cnt = 0;
@@ -116,6 +135,7 @@ const mkMsg = (role: Message["role"], content: string): Message =>
 
 export function MyAgentPage() {
   const { t } = useTranslation();
+  const location = useLocation();
 
   const SLASH_COMMANDS = [
     { cmd: "/help",     desc: t("slashCommands.help") },
@@ -125,7 +145,7 @@ export function MyAgentPage() {
     { cmd: "/remember", desc: t("slashCommands.remember") },
   ];
 
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat">("chat");
+  const [tab,        setTab]        = useState<AgentTab>(() => TAB_BY_HASH[location.hash.slice(1)] ?? DEFAULT_TAB);
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -197,6 +217,9 @@ export function MyAgentPage() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { setShowSuggest(suggestions.length > 0 && input.length > 0); setSuggestIdx(0); }, [input]);
+  useEffect(() => {
+    setTab(TAB_BY_HASH[location.hash.slice(1)] ?? DEFAULT_TAB);
+  }, [location.hash]);
 
   // ── Chat-Logik ────────────────────────────────────────────────────────────
   function sysMsg(c: string) { setMessages(ms => [...ms, mkMsg("system", c)]); }

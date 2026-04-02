@@ -3,10 +3,12 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SupportWidget } from "@/components/SupportWidget";
 import {
+  Cpu,
   LayoutDashboard,
   Bot,
   Activity,
   FolderKanban,
+  MessageSquare,
   Server,
   Wrench,
   LogOut,
@@ -18,6 +20,8 @@ import {
   Menu,
   X,
   Settings,
+  Archive,
+  Users,
   BarChart2,
   Search,
   Calendar,
@@ -25,6 +29,14 @@ import {
   Globe,
   Code2,
   Puzzle,
+  Plug,
+  GitBranch,
+  Network,
+  Link2,
+  Phone,
+  Send,
+  Mail,
+  Monitor,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -143,41 +155,67 @@ export function AdminLayout() {
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
   type NavGroup = { label?: string; items: NavItem[] };
 
+  const assistantItem: NavItem = {
+    to: "/my-agent",
+    icon: Sparkles,
+    label: t("layout.assistantName"),
+    hint: t("layout.assistantHint"),
+  };
+
   const groupWorkspace: NavGroup = {
+    label: t("nav.groupWorkspace"),
     items: [
       { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
-      { to: "/my-agent",  icon: Sparkles,        label: t("nav.myAgent"),   hint: t("navHint.myAgent") },
+      { to: "/my-agent",  icon: MessageSquare,   label: t("nav.chat"),      hint: t("navHint.chat") },
       { to: "/projects",  icon: FolderKanban,    label: t("nav.projects"),  hint: t("navHint.projects") },
-      { to: "/tools",     icon: Wrench,          label: t("nav.tools"),     hint: t("navHint.tools") },
+      { to: "/agents",    icon: Bot,             label: t("nav.agents"),    hint: t("navHint.agents") },
+      { to: "/activity",  icon: Activity,        label: t("nav.activity"),  hint: t("navHint.activity") },
+      { to: "/search",    icon: Search,          label: t("nav.search"),    hint: t("navHint.search") },
     ],
   };
 
-  const groupOperations: NavGroup = {
-    label: t("nav.groupOperations"),
+  const groupIntegrations: NavGroup = {
+    label: t("nav.groupIntegrations"),
     items: [
-      { to: "/agents",   icon: Bot,      label: t("nav.agents"),   hint: t("navHint.agents") },
-      { to: "/activity", icon: Activity, label: t("nav.activity"), hint: t("navHint.activity") },
-      { to: "/usage",    icon: BarChart2,label: t("nav.usage"),    hint: t("navHint.usage") },
-      { to: "/search",     icon: Search,    label: t("nav.search"),     hint: t("navHint.search") },
-      { to: "/extensions", icon: Puzzle,    label: t("nav.extensions"), hint: t("navHint.extensions") },
-      { to: "/code-editor",icon: Code2,     label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
-      { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
-      { to: "/federation", icon: Globe,     label: t("nav.federation"), hint: t("navHint.federation") },
+      { to: "/settings#llm",  icon: Cpu,        label: "LLM",        hint: t("navHint.settings") },
+      { to: "/settings#mcp",  icon: Plug,       label: "MCP",        hint: t("navHint.settings") },
+      { to: "/settings#gitea",icon: GitBranch,  label: "Gitea",      hint: t("navHint.settings") },
+      { to: "/settings#vpn",  icon: Network,    label: "VPN",        hint: t("navHint.settings") },
+      { to: "/federation",    icon: Globe,      label: "A2A",        hint: t("navHint.federation") },
+      { to: "/projects",      icon: Link2,      label: "AgentLink",  hint: t("navHint.projects") },
+      { to: "/my-agent#discord",   icon: MessageSquare, label: "Discord",   hint: t("navHint.myAgent") },
+      { to: "/my-agent#whatsapp",  icon: Phone,         label: "WhatsApp",  hint: t("navHint.myAgent") },
+      { to: "/my-agent#telegram",  icon: Send,          label: "Telegram",  hint: t("navHint.myAgent") },
+      { to: "/settings#kas",       icon: Mail,          label: "Mail / KAS", hint: t("navHint.settings") },
+      { to: "/my-agent#wks",       icon: Monitor,       label: "WKS",       hint: t("navHint.myAgent") },
     ],
   };
 
-  const groupSystem: NavGroup = {
-    label: t("nav.groupSystem"),
+  const groupAdmin: NavGroup = {
+    label: t("nav.groupAdmin"),
+    items: [
+      { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
+      { to: "/backup",   icon: Archive,    label: t("nav.backup"),   hint: t("navHint.backup") },
+      { to: "/users",    icon: Users,      label: t("nav.users"),    hint: t("navHint.users") },
+    ],
+  };
+
+  const groupDiagnostics: NavGroup = {
+    label: t("nav.groupDiagnostics"),
     items: [
       { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
       { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
-      { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
+      { to: "/tools",    icon: Wrench,     label: t("nav.tools"),    hint: t("navHint.tools") },
+      { to: "/code-editor",icon: Code2,     label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
+      { to: "/extensions", icon: Puzzle,    label: t("nav.extensions"), hint: t("navHint.extensions") },
+      { to: "/schedules",  icon: Calendar,  label: t("nav.schedules"),  hint: t("navHint.schedules") },
+      { to: "/usage",      icon: BarChart2, label: t("nav.usage"),    hint: t("navHint.usage") },
     ],
   };
 
   const groups: NavGroup[] = isAdmin
-    ? [groupWorkspace, groupOperations, groupSystem]
-    : [groupWorkspace];
+    ? [groupWorkspace, groupIntegrations, groupAdmin, groupDiagnostics]
+    : [groupWorkspace, groupIntegrations];
 
   const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
@@ -185,14 +223,43 @@ export function AdminLayout() {
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
 
+  function splitTarget(to: string) {
+    const [pathname, hash = ""] = to.split("#", 2);
+    return { pathname, hash };
+  }
+
+  function hasHashSibling(pathname: string) {
+    return nav.some((item) => {
+      const target = splitTarget(item.to);
+      return target.pathname === pathname && Boolean(target.hash);
+    });
+  }
+
+  function isNavItemActive(to: string) {
+    const target = splitTarget(to);
+    const currentHash = location.hash.slice(1);
+
+    if (target.hash) {
+      return location.pathname === target.pathname && currentHash === target.hash;
+    }
+
+    const pathMatch = location.pathname === target.pathname || location.pathname.startsWith(`${target.pathname}/`);
+    if (!pathMatch) return false;
+    if (currentHash && hasHashSibling(target.pathname)) return false;
+    return true;
+  }
+
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const activeItem = useMemo(
-    () => nav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)) ?? nav[0],
-    [location.pathname, nav],
-  );
+  const currentItem = useMemo(() => {
+    if (location.pathname.startsWith("/my-agent")) {
+      const exact = nav.find((item) => isNavItemActive(item.to));
+      return exact ?? assistantItem;
+    }
+    return nav.find((item) => isNavItemActive(item.to)) ?? nav[0];
+  }, [assistantItem, isNavItemActive, location.pathname, nav]);
 
   const sidebar = (
     <aside className="app-sidebar">
@@ -215,12 +282,32 @@ export function AdminLayout() {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[hsl(var(--sidebar-foreground))]">
-          <div className="flex items-center justify-between gap-2">
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
+          <p className="text-[0.62rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">
+            {t("layout.assistantKicker")}
+          </p>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold leading-tight">{t("layout.assistantName")}</h2>
+              <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.assistantSubtitle")}</p>
+            </div>
+            <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
+              {t("layout.assistantStatus")}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/my-agent")}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15"
+          >
+            <MessageSquare className="h-4 w-4" />
+            {t("layout.assistantChatOpen")}
+          </button>
+          <p className="mt-3 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.hybridConsole")}</p>
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs">
             <span className="font-medium">{user?.username ?? t("layout.unknown")}</span>
             {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
           </div>
-          <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.hybridConsole")}</p>
         </div>
       </div>
 
@@ -238,7 +325,7 @@ export function AdminLayout() {
                   key={to}
                   to={to}
                   title={hint}
-                  className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+                  className={cn("nav-item", isNavItemActive(to) && "nav-item-active")}
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">{label}</span>
@@ -339,11 +426,11 @@ export function AdminLayout() {
               </button>
               <div>
                 <p className="text-[0.7rem] uppercase tracking-[0.24em] text-muted-foreground">{t("layout.operationsConsole")}</p>
-                <h2 className="text-xl font-semibold tracking-tight">{activeItem?.label ?? "HydraHive"}</h2>
+                <h2 className="text-xl font-semibold tracking-tight">{currentItem?.label ?? "HydraHive"}</h2>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="status-pill">{activeItem?.hint ?? t("layout.systemView")}</span>
+              <span className="status-pill">{currentItem?.hint ?? t("layout.systemView")}</span>
               <span className={cn("status-pill", updating ? "bg-accent/15 text-accent" : "status-pill-ok")}>
                 {updating ? t("layout.updateActive") : t("layout.systemReady")}
               </span>

@@ -1,7 +1,8 @@
 {
   "nav": {
     "dashboard": "Dashboard",
-    "myAgent": "My Agent",
+    "myAgent": "Your Assistant",
+    "chat": "Chat",
     "projects": "Projects",
     "tools": "Tools",
     "agents": "Agents",
@@ -17,12 +18,15 @@
     "codeEditor": "Code Editor",
     "schedules": "Schedules",
     "federation": "Federation",
-    "groupOperations": "Operations",
-    "groupSystem": "System"
+    "groupWorkspace": "Workspace",
+    "groupIntegrations": "Integrations",
+    "groupAdmin": "Admin / Setup",
+    "groupDiagnostics": "Diagnostics"
   },
   "navHint": {
     "dashboard": "Operations overview",
-    "myAgent": "Personal channel",
+    "myAgent": "Primary assistant",
+    "chat": "Direct working channel",
     "projects": "Queues and chats",
     "tools": "Actions and skills",
     "agents": "Runtime and profiles",
@@ -42,6 +46,12 @@
   "layout": {
     "controlFabric": "Control Fabric",
     "hybridConsole": "Hybrid console for agents, runtime and systems.",
+    "assistantKicker": "Personal entry point",
+    "assistantName": "Your Assistant",
+    "assistantSubtitle": "The main point of contact for everything HydraHive.",
+    "assistantStatus": "online • ready",
+    "assistantChatOpen": "Open chat",
+    "assistantHint": "Direct entry into the personal assistant",
     "unknown": "unknown",
     "deployment": "Deployment",
     "running": "running",
