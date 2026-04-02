@@ -53,6 +53,7 @@ from .scheduler_service import scheduler_service
 from .router_core_misc import register_core_misc_routes
 from .router_voice import register_voice_routes
 from .router_llm import register_llm_routes
+from .router_openai_compat import register_openai_compat_routes
 from .router_mcp import register_mcp_routes
 from .router_project_integrations import register_project_integration_routes
 from .router_project_lifecycle import register_project_lifecycle_routes, update_project_matrix_room, update_project_matrix_space
@@ -1428,6 +1429,12 @@ register_pipeline_routes(
 register_voice_routes(
     auth_router,
     require_auth=require_auth,
+    discovery=discovery,
+    orchestrator=orchestrator,
+)
+
+register_openai_compat_routes(
+    app,
     discovery=discovery,
     orchestrator=orchestrator,
 )
