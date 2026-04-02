@@ -25,11 +25,12 @@ export function ChatPage() {
   const navigate = useNavigate();
 
   const SLASH_COMMANDS = [
-    { cmd: "/help",   desc: t("slashCommands.help") },
-    { cmd: "/clear",  desc: t("slashCommands.clear") },
-    { cmd: "/status", desc: t("slashCommands.status") },
-    { cmd: "/retry",  desc: t("slashCommands.retry") },
-    { cmd: "/model",  desc: t("slashCommands.model") },
+    { cmd: "/help",     desc: t("slashCommands.help") },
+    { cmd: "/clear",    desc: t("slashCommands.clear") },
+    { cmd: "/status",   desc: t("slashCommands.status") },
+    { cmd: "/retry",    desc: t("slashCommands.retry") },
+    { cmd: "/model",    desc: t("slashCommands.model") },
+    { cmd: "/remember", desc: t("slashCommands.remember") },
   ];
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -163,6 +164,29 @@ export function ChatPage() {
       const model = bossModel.model ?? t("chat.notConfigured");
       const temp = bossModel.temperature ?? "—";
       sysMsg(`**Aktuelles Modell:** \`${model}\`\n**Temperatur:** ${temp}`);
+      return true;
+    }
+    if (base === "/remember") {
+      const cfg = projectData.config as { agents?: { boss?: string } } | undefined;
+      const bossId = cfg?.agents?.boss;
+      if (!bossId) {
+        sysMsg("Kein Boss-Agent konfiguriert.");
+        return true;
+      }
+      const text = parts.slice(1).join(" ").trim();
+      if (!text) {
+        sysMsg("Verwendung: `/remember <Text der gespeichert werden soll>`");
+        return true;
+      }
+      const token = localStorage.getItem("hydrahive_token") || "";
+      const entry = `\n- ${new Date().toISOString().slice(0, 10)}: ${text}`;
+      fetch(`/api/agents/${bossId}/memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ filename: "user-notes", content: entry, mode: "append" }),
+      })
+        .then((r) => r.ok ? sysMsg(`Gespeichert im Gedächtnis von \`${bossId}\`.`) : sysMsg("Fehler beim Speichern."))
+        .catch(() => sysMsg("Fehler beim Speichern."));
       return true;
     }
     sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\`.`);
