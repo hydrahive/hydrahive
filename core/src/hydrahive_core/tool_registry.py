@@ -478,13 +478,21 @@ class ListDirectoryTool(BaseTool):
                     "type":        "string",
                     "description": "Verzeichnis-Pfad relativ zum Projekt-Root (Standard: '.' = Root)",
                 },
+                "max_entries": {
+                    "type":        "integer",
+                    "description": "Maximale Anzahl Einträge (Standard: 200, Max: 500). Bei großen Repos mit offset paginieren.",
+                },
+                "offset": {
+                    "type":        "integer",
+                    "description": "Einträge überspringen (Standard: 0). Für Paginierung bei großen Verzeichnissen.",
+                },
             },
             "required": [],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        path: str = ".", **kwargs,
+        path: str = ".", max_entries: int = 200, offset: int = 0, **kwargs,
     ) -> dict:
         agent_permissions = kwargs.pop("_agent_permissions", None)
         try:
@@ -498,17 +506,29 @@ class ListDirectoryTool(BaseTool):
             return {"error": f"Kein Verzeichnis: {path} — für Dateien file_read verwenden"}
 
         try:
-            import os
+            max_entries = min(max(1, max_entries), 500)
+            offset = max(0, offset)
+            all_entries = sorted(safe_path.iterdir())
+            total = len(all_entries)
+            page = all_entries[offset:offset + max_entries]
             entries = []
-            for entry in sorted(safe_path.iterdir()):
-                stat = entry.stat()
-                entries.append({
-                    "name": entry.name,
-                    "type": "dir" if entry.is_dir() else "file",
-                    "size": stat.st_size if entry.is_file() else None,
-                    "path": str(entry.relative_to(Path(f"/projects/{project_id}"))),
-                })
-            return {"path": str(safe_path), "entries": entries, "count": len(entries)}
+            for entry in page:
+                try:
+                    stat = entry.stat()
+                    entries.append({
+                        "name": entry.name,
+                        "type": "dir" if entry.is_dir() else "file",
+                        "size": stat.st_size if entry.is_file() else None,
+                        "path": str(entry.relative_to(Path(f"/projects/{project_id}"))),
+                    })
+                except OSError:
+                    entries.append({"name": entry.name, "type": "unknown", "size": None})
+            result: dict = {"path": str(safe_path), "entries": entries, "count": len(entries), "total": total}
+            if offset + max_entries < total:
+                result["has_more"] = True
+                result["next_offset"] = offset + max_entries
+                result["hint"] = f"Zeige {len(entries)} von {total} Einträgen. Nutze offset={offset + max_entries} für weitere."
+            return result
         except OSError as e:
             return {"error": f"Lesefehler: {e}"}
 
@@ -1145,9 +1165,17 @@ class ShellExecTool(BaseTool):
                 proc.kill()
                 return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
 
+            out = stdout.decode(errors="replace")
+            err = stderr.decode(errors="replace")
+            # Limit output to prevent context overflow on large repos
+            max_out = 32000
+            if len(out) > max_out:
+                out = out[:max_out] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
+            if len(err) > max_out:
+                err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
             return {
-                "stdout":    stdout.decode(errors="replace"),
-                "stderr":    stderr.decode(errors="replace"),
+                "stdout":    out,
+                "stderr":    err,
                 "exit_code": proc.returncode,
                 "command":   command,
             }

@@ -364,6 +364,7 @@ async def _anthropic_oauth_call(
     client = _anthropic.AsyncAnthropic(
         api_key="",
         auth_token=token,
+        timeout=300.0,
         default_headers={
             "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
             "user-agent":     "claude-cli/2.1.62",
@@ -766,7 +767,7 @@ async def _llm_call_single(
         kwargs["tools"]       = tools
         kwargs["tool_choice"] = "auto"
 
-    resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True))
+    resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True, timeout=300))
 
     # Cache-Usage loggen (Anthropic Prompt Caching)
     try:

@@ -28,19 +28,30 @@ def _truncate_tool_result(result_str: str) -> str:
     """
     Kürzt Tool-Ergebnisse typ-abhängig — spart Input-Tokens ohne nützliche Struktur zu verlieren.
     Diffs/Patches bekommen mehr Platz als reine Logs oder JSON-Blobs.
+    Große Repos können 100k+ Zeichen pro Tool-Call produzieren → hier deckeln.
     """
     low = result_str.lstrip()
     # Diffs/Patches: Zeilenstruktur ist wichtig → großzügiger
     if low.startswith(("diff --git", "---", "@@")) or "\n@@" in result_str[:200]:
-        limit = 6000
-    # Repo-Tree (typischerweise JSON-Array mit Pfaden)
+        limit = 12000
+    # Repo-Tree / Verzeichnislisten (JSON-Array mit Pfaden)
     elif low.startswith("[") and '"path"' in result_str[:300]:
-        limit = 3000
-    # JSON-Blobs und Log-Ausgaben → knapper
+        limit = 8000
+    # Datei-Inhalt (beginnt oft mit Zeilentext, Code etc.)
+    elif len(result_str) > 10000:
+        limit = 10000
+    # JSON-Blobs und Log-Ausgaben
     else:
-        limit = 4000
+        limit = 8000
     if len(result_str) > limit:
-        return result_str[:limit] + f"\n...[gekürzt bei {limit} Zeichen]"
+        # Zeige Anfang + Ende für besseren Kontext
+        head = limit * 3 // 4
+        tail = limit // 4
+        return (
+            result_str[:head]
+            + f"\n\n...[gekürzt: {len(result_str)} Zeichen total, zeige Anfang + Ende]\n\n"
+            + result_str[-tail:]
+        )
     return result_str
 
 
