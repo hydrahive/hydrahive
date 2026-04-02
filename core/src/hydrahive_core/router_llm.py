@@ -460,6 +460,7 @@ def register_llm_routes(
 
     @admin_router.get("/llm/claude_token_status")
     def get_claude_token_status():
+        import json as _json
         import time as _time
 
         # Priorität 1: Terminal-Token aus ANTHROPIC_API_KEY (1 Jahr)
