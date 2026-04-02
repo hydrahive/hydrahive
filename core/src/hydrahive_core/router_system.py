@@ -83,7 +83,7 @@ def register_system_routes(
     def _get_remote_head() -> dict[str, str]:
         now = datetime.now(timezone.utc)
         checked_at = _UPDATE_HEAD_CACHE["checked_at"]
-        if isinstance(checked_at, datetime) and now - checked_at < timedelta(minutes=5):
+        if isinstance(checked_at, datetime) and now - checked_at < timedelta(seconds=30):
             return {
                 "remote_commit": str(_UPDATE_HEAD_CACHE["remote_commit"]),
                 "remote_commit_full": str(_UPDATE_HEAD_CACHE["remote_commit_full"]),
