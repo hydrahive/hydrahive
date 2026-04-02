@@ -49,6 +49,20 @@ if [ "${VPN_MODE}" = "skip" ]; then
     return 0
 fi
 
+# --- Preflight: TUN-Device prüfen (Proxmox LXC ohne TUN = Fehler) ---
+if [ ! -c /dev/net/tun ] && [ ! -e /dev/net/tun ]; then
+    warn "⚠ /dev/net/tun nicht gefunden!"
+    warn "  Falls dies ein Proxmox LXC-Container ist:"
+    warn "  → Im Proxmox-Host: pct set <CTID> -features nesting=1"
+    warn "  → Unter Options → Features: 'TUN' aktivieren"
+    warn "  → Container neustarten, dann Installer erneut ausführen"
+    warn "  VPN-Setup wird übersprungen."
+    echo '{"mode":"none","configured":false,"error":"no_tun_device"}' > "${VPN_CONFIG}"
+    chmod 600 "${VPN_CONFIG}"
+    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${VPN_CONFIG}"
+    return 0
+fi
+
 # --- Tailscale installieren (immer, egal ob tailscale oder headscale) ---
 if ! command -v tailscale &>/dev/null; then
     info "Installiere Tailscale-Client..."

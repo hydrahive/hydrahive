@@ -74,6 +74,8 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 - Root-Zugriff
 - Internetzugang für Download
 
+**Proxmox LXC:** Grundsätzlich unterstützt, aber VPN (Tailscale) benötigt TUN-Support. Im Proxmox-Host: `pct set <CTID> -features nesting=1` und unter Options → Features **TUN** aktivieren. Ohne TUN wird das VPN-Modul automatisch übersprungen. Empfohlen wird eine vollwertige VM statt LXC.
+
 ### Installer ausführen
 
 ```bash
