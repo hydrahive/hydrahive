@@ -218,6 +218,7 @@ export function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
+  const showDeploymentPanel = isAdmin && (updating || Boolean(updateError));
 
   const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
 
@@ -360,7 +361,7 @@ export function AdminLayout() {
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
-        {isAdmin && (
+        {showDeploymentPanel && (
           <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-[hsl(var(--sidebar-foreground))]">
             <div className="flex items-center justify-between gap-3">
               <span className="font-medium">{t("layout.deployment")}</span>
