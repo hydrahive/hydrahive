@@ -90,22 +90,22 @@ chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${VOICE_CONFIG}" 2>/dev/null || tru
 # --- Warten bis Services ready ---
 info "Warte auf STT-Service..."
 for i in $(seq 1 60); do
-    if curl -sf http://127.0.0.1:10300/ >/dev/null 2>&1; then
+    if (echo | timeout 2 nc -w1 127.0.0.1 10300) >/dev/null 2>&1; then
         success "STT (faster-whisper) läuft auf Port 10300"
         break
     fi
     [ "$i" -eq 60 ] && warn "STT noch nicht bereit — startet im Hintergrund weiter"
-    sleep 2
+    sleep 3
 done
 
 info "Warte auf TTS-Service..."
 for i in $(seq 1 60); do
-    if curl -sf http://127.0.0.1:10200/ >/dev/null 2>&1; then
+    if (echo | timeout 2 nc -w1 127.0.0.1 10200) >/dev/null 2>&1; then
         success "TTS (Piper) läuft auf Port 10200"
         break
     fi
     [ "$i" -eq 60 ] && warn "TTS noch nicht bereit — startet im Hintergrund weiter"
-    sleep 2
+    sleep 3
 done
 
 success "Voice Interface installiert!"
