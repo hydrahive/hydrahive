@@ -512,9 +512,9 @@ class DiscordAgentClient(ABC):
                         }
                     else:
                         text = await resp.text()
-                        return {"ok": False, "error": f"HTTP {resp.status}: {text[:200]}"}
+                        return {"ok": False, "invalid_token": resp.status == 401, "error": f"HTTP {resp.status}: {text[:200]}"}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "invalid_token": False, "error": str(e)}
 
     @property
     def is_connected(self) -> bool:

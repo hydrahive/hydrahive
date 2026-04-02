@@ -655,8 +655,9 @@ def register_user_integration_routes(
         )
         test_result = await test_client.test_connection()
         if not test_result.get("ok"):
-            delete_discord_config(username)
-            raise HTTPException(400, f"Discord-Token ungueltig: {test_result.get('error', '')}")
+            if test_result.get("invalid_token"):
+                delete_discord_config(username)
+            raise HTTPException(400, f"Discord-Verbindung fehlgeschlagen: {test_result.get('error', '')}")
 
         await runtime.detach_discord_client(personal_agent_id)
         client = AgentDiscordClient(
