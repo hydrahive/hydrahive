@@ -333,16 +333,27 @@ def register_llm_routes(
 
         token_data = resp.json()
         access_token = token_data.get("access_token", "")
+        refresh_token = token_data.get("refresh_token", "")
+        expires_in = token_data.get("expires_in", 3600)
         if not access_token or not access_token.startswith("sk-ant-oat01-"):
             raise HTTPException(400, f"Kein gültiger Anthropic Token in Response: {str(token_data)[:200]}")
 
+        import time as _time
         token_file = Path("/etc/hydrahive/claude_oauth_token")
         token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(access_token, encoding="utf-8")
+        token_file.write_text(
+            _json.dumps({
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "expires_at": int(_time.time()) + expires_in,
+            }, indent=2),
+            encoding="utf-8",
+        )
         token_file.chmod(0o600)
-        logger.info("Claude OAuth Token via PKCE gespeichert")
+        logger.info("Claude OAuth Token via PKCE gespeichert (refresh_token: %s, expires_in: %ds)",
+                     "ja" if refresh_token else "nein", expires_in)
         audit_log("llm.token_set", details={"provider": "anthropic", "via": "pkce_oauth"})
-        return {"updated": True, "provider": "anthropic"}
+        return {"updated": True, "provider": "anthropic", "has_refresh": bool(refresh_token)}
 
     @admin_router.post("/llm/oauth/openai_codex/start")
     async def start_openai_codex_oauth():
@@ -451,19 +462,51 @@ def register_llm_routes(
     def get_claude_token_status():
         import time as _time
 
+        # Priorität 1: Terminal-Token aus ANTHROPIC_API_KEY (1 Jahr)
+        env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if env_key and env_key.startswith("sk-ant-oat01-"):
+            return {
+                "configured": True,
+                "source": "terminal",
+                "token_age_days": None,
+                "remaining_days": None,
+                "warning": None,
+                "ttl_days": 365,
+                "has_refresh": False,
+            }
+
+        # Priorität 2: Console-OAuth-Token
         token_file = Path("/etc/hydrahive/claude_oauth_token")
         if not token_file.exists() or token_file.stat().st_size == 0:
             return {"configured": False, "token_age_days": None, "warning": None}
 
-        mtime = token_file.stat().st_mtime
-        age_seconds = _time.time() - mtime
-        age_days = age_seconds / 86400
-        token_ttl_days = 30
-        remaining_days = token_ttl_days - age_days
+        raw = token_file.read_text(encoding="utf-8").strip()
+        has_refresh = False
+        expires_at = 0
+
+        # Neues JSON-Format
+        try:
+            data = _json.loads(raw)
+            has_refresh = bool(data.get("refresh_token"))
+            expires_at = data.get("expires_at", 0)
+        except (ValueError, _json.JSONDecodeError):
+            pass
+
+        if expires_at:
+            remaining_seconds = expires_at - _time.time()
+            remaining_days = remaining_seconds / 86400
+        else:
+            # Legacy plain-text: Alter anhand mtime schätzen
+            mtime = token_file.stat().st_mtime
+            age_days = (_time.time() - mtime) / 86400
+            token_ttl_days = 30
+            remaining_days = token_ttl_days - age_days
 
         warning = None
-        if remaining_days <= 0:
+        if remaining_days <= 0 and not has_refresh:
             warning = "expired"
+        elif remaining_days <= 0 and has_refresh:
+            warning = "refresh_pending"
         elif remaining_days <= 3:
             warning = f"expires_soon_{int(remaining_days)}d"
         elif remaining_days <= 7:
@@ -471,10 +514,10 @@ def register_llm_routes(
 
         return {
             "configured": True,
-            "token_age_days": round(age_days, 1),
+            "source": "console_oauth",
             "remaining_days": round(remaining_days, 1),
             "warning": warning,
-            "ttl_days": token_ttl_days,
+            "has_refresh": has_refresh,
         }
 
     @auth_router.get("/llm/ollama/models")

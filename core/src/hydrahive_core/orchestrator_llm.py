@@ -139,13 +139,95 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float
 # ---------------------------------------------------------------- Token-Loader
 
 def _load_claude_oauth_token() -> str:
-    """Laedt Claude OAuth Token falls vorhanden."""
+    """Laedt Claude OAuth Token — prüft zuerst ANTHROPIC_API_KEY (langlebiger
+    Terminal-Token), dann claude_oauth_token (Console-OAuth, ggf. mit Refresh)."""
+    import json as _json, time as _time
+
+    # Priorität 1: Terminal-Token aus llm_env (1 Jahr gültig, kein Refresh nötig)
+    env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if env_key and env_key.startswith("sk-ant-oat01-"):
+        return env_key
+
+    # Priorität 2: Console-OAuth-Token (kurzlebig, mit Refresh)
     token_file = Path("/etc/hydrahive/claude_oauth_token")
     try:
-        token = token_file.read_text(encoding="utf-8").strip()
-        return token if token.startswith("sk-ant-oat01-") else ""
+        raw = token_file.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
+
+    # Legacy-Format: nur der Token als String
+    if raw.startswith("sk-ant-oat01-"):
+        return raw
+
+    # Neues JSON-Format mit refresh_token
+    try:
+        data = _json.loads(raw)
+    except (ValueError, _json.JSONDecodeError):
+        return ""
+
+    access_token = data.get("access_token", "")
+    refresh_token = data.get("refresh_token", "")
+    expires_at = data.get("expires_at", 0)
+
+    # Token noch gültig (5 Min Puffer)?
+    if access_token and _time.time() < expires_at - 300:
+        return access_token
+
+    # Refresh nötig
+    if not refresh_token:
+        return access_token or ""
+
+    try:
+        refreshed = _refresh_claude_token(refresh_token, token_file)
+        if refreshed:
+            return refreshed
+    except Exception as _e:
+        _logger = logging.getLogger(__name__)
+        _logger.warning("Claude OAuth refresh fehlgeschlagen: %s", _e)
+
+    return access_token or ""
+
+
+def _refresh_claude_token(refresh_token: str, token_file: Path) -> str:
+    """Synchroner Token-Refresh via Anthropic OAuth endpoint."""
+    import json as _json, time as _time
+    import urllib.request
+
+    body = _json.dumps({
+        "grant_type": "refresh_token",
+        "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+        "refresh_token": refresh_token,
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://console.anthropic.com/v1/oauth/token",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = _json.loads(resp.read())
+
+    new_access = data.get("access_token", "")
+    new_refresh = data.get("refresh_token", refresh_token)
+    expires_in = data.get("expires_in", 3600)
+
+    if not new_access:
+        return ""
+
+    token_file.write_text(
+        _json.dumps({
+            "access_token": new_access,
+            "refresh_token": new_refresh,
+            "expires_at": int(_time.time()) + expires_in,
+        }, indent=2),
+        encoding="utf-8",
+    )
+    token_file.chmod(0o600)
+
+    _logger = logging.getLogger(__name__)
+    _logger.info("Claude OAuth Token refreshed (expires in %ds)", expires_in)
+    return new_access
 
 
 def _load_openai_codex_token() -> dict | None:
@@ -656,11 +738,17 @@ async def _llm_call_single(
         if codex_token:
             return await _openai_codex_call(agent_cfg, messages, tools, codex_token, model_name)
 
-    # Claude Max OAuth
-    is_claude   = model_name.startswith(("claude-", "anthropic/"))
-    oauth_token = _load_claude_oauth_token() if is_claude else ""
-    if oauth_token:
-        return await _anthropic_oauth_call(agent_cfg, messages, tools, oauth_token, model_name)
+    # Claude: Terminal-Token (ANTHROPIC_API_KEY) → litellm, Console-OAuth → OAuth-Call
+    is_claude = model_name.startswith(("claude-", "anthropic/"))
+    if is_claude:
+        env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if env_key and env_key.startswith("sk-ant-oat01-"):
+            # Langlebiger Terminal-Token → über litellm als api_key (kein OAuth-Pfad)
+            pass
+        else:
+            oauth_token = _load_claude_oauth_token()
+            if oauth_token:
+                return await _anthropic_oauth_call(agent_cfg, messages, tools, oauth_token, model_name)
 
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
     is_anthropic = model.startswith(("anthropic/", "claude-"))
