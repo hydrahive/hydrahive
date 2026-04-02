@@ -173,19 +173,23 @@ export function ChatPage() {
         sysMsg("Kein Boss-Agent konfiguriert.");
         return true;
       }
-      const text = parts.slice(1).join(" ").trim();
-      if (!text) {
-        sysMsg("Verwendung: `/remember <Text der gespeichert werden soll>`");
-        return true;
-      }
+      const filename = parts[1]
+        ? parts[1].replace(/[^a-z0-9_-]/gi, "-").toLowerCase()
+        : new Date().toISOString().slice(0, 10);
+      const history = messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-30)
+        .map((m) => `**${m.role === "user" ? "User" : "Agent"}:** ${m.content}`)
+        .join("\n\n");
+      if (!history) { sysMsg("Kein Chat-Verlauf zum Speichern."); return true; }
+      const content = `# Session: ${new Date().toLocaleString("de")}\n\n${history}`;
       const token = localStorage.getItem("hydrahive_token") || "";
-      const entry = `\n- ${new Date().toISOString().slice(0, 10)}: ${text}`;
       fetch(`/api/agents/${bossId}/memory`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ filename: "user-notes", content: entry, mode: "append" }),
+        body: JSON.stringify({ filename, content }),
       })
-        .then((r) => r.ok ? sysMsg(`Gespeichert im Gedächtnis von \`${bossId}\`.`) : sysMsg("Fehler beim Speichern."))
+        .then((r) => r.ok ? sysMsg(`Gespeichert als \`${filename}.md\` im Gedächtnis von \`${bossId}\`.`) : sysMsg("Fehler beim Speichern."))
         .catch(() => sysMsg("Fehler beim Speichern."));
       return true;
     }
