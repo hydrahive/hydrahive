@@ -479,6 +479,24 @@ export function AdminLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={triggerUpdate}
+                  disabled={updating}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-medium transition",
+                    updateAvailable || updateError || updating
+                      ? "border-red-300/30 bg-red-500/15 text-red-100 hover:bg-red-500/20"
+                      : "border-white/10 bg-white/5 text-[hsl(var(--sidebar-foreground))] hover:bg-white/10",
+                    updating && "cursor-not-allowed opacity-70",
+                  )}
+                  title={updating ? t("layout.updateRunning") : updateAvailable ? t("layout.updateAvailable") : t("layout.triggerUpdate")}
+                >
+                  <RefreshCw className={cn("h-4 w-4", updating && "animate-spin")} />
+                  <span className="hidden sm:inline">{updating ? t("layout.updateRunning") : t("layout.triggerUpdate")}</span>
+                </button>
+              )}
               {/* Hint-Pill nur ab md */}
               <span className="status-pill hidden md:inline-flex">{activeItem?.hint ?? t("layout.systemView")}</span>
               {/* Status-Pill nur ab sm */}
