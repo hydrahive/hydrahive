@@ -232,6 +232,8 @@ export function LlmConfigPage() {
       if (flow.provider === "anthropic" && val.startsWith("sk-ant-oat01-") && !val.includes("#")) {
         await api.put("/llm/config/claude_max", { api_key: val });
         setOauthFlow(null);
+        setSaved("claude_max");
+        setTimeout(() => setSaved(null), 3000);
         await load();
         return;
       }
@@ -247,6 +249,8 @@ export function LlmConfigPage() {
       }
       await api.exchangeOAuth(flow.provider, body);
       setOauthFlow(null);
+      setSaved(flow.provider);
+      setTimeout(() => setSaved(null), 3000);
       await load();
     } catch(err) {
       setOauthFlow(f => f ? { ...f, loading: false, error: err instanceof Error ? err.message : t("common.error") } : f);
@@ -333,6 +337,11 @@ export function LlmConfigPage() {
         models={claudeStatus?.configured ? ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] : undefined}
         onStartOAuth={startOAuth}
       />
+      {(saved === "claude_max" || saved === "anthropic") && (
+        <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-4 py-2">
+          <CheckCircle className="h-4 w-4"/> Claude Token gespeichert
+        </div>
+      )}
 
       {/* OpenAI Codex OAuth */}
       <OAuthCard
