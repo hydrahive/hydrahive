@@ -1,7 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
-    "myAgent": "My Agent",
+    "myAgent": "Your Assistant",
     "projects": "Projects",
     "tools": "Tools",
     "agents": "Agents",
@@ -26,7 +26,7 @@
   },
   "navHint": {
     "dashboard": "Operations overview",
-    "myAgent": "Personal channel",
+    "myAgent": "Primary assistant",
     "projects": "Queues and chats",
     "tools": "Actions and skills",
     "agents": "Runtime and profiles",
@@ -49,6 +49,11 @@
   "layout": {
     "controlFabric": "Control Fabric",
     "hybridConsole": "Hybrid console for agents, runtime and systems.",
+    "assistantKicker": "Personal entry point",
+    "assistantName": "Your Assistant",
+    "assistantSubtitle": "The main point of contact for everything HydraHive.",
+    "assistantStatus": "online • ready",
+    "assistantChatOpen": "Open chat",
     "unknown": "unknown",
     "deployment": "Deployment",
     "running": "running",

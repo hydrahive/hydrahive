@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   Sparkles,
+  MessageSquare,
   RefreshCw,
   Menu,
   X,
@@ -185,8 +186,7 @@ export function AdminLayout() {
   const groupMyAgent: NavGroup = {
     id: "myAgent",
     label: t("nav.myAgent"),
-    collapsible: true,
-    defaultCollapsed: false,
+    collapsible: false,
     items: [
       { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
     ],
@@ -301,6 +301,28 @@ export function AdminLayout() {
             {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
           </div>
           <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.hybridConsole")}</p>
+        </div>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
+          <p className="text-[0.62rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">
+            {t("layout.assistantKicker")}
+          </p>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold leading-tight">{t("layout.assistantName")}</h2>
+              <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.assistantSubtitle")}</p>
+            </div>
+            <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
+              {t("layout.assistantStatus")}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/my-agent")}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-3 py-2 font-medium text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/15"
+          >
+            <MessageSquare className="h-4 w-4" />
+            {t("layout.assistantChatOpen")}
+          </button>
         </div>
       </div>
 
