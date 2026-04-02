@@ -39,6 +39,7 @@ const EMPTY_FORM = {
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
   heartbeat_on_failure: "restart",
+  ollama_base_url: null as string | null,
 };
 
 // Fallback falls API-Call fehlschlägt
@@ -118,6 +119,7 @@ export function AgentsPage() {
   const [logErr, setLogErr] = useState("");
   const [hbTasks, setHbTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [wksModels, setWksModels] = useState<{id:string;label:string;wks_base_url?:string}[]>([]);
   const [agentSearch, setAgentSearch] = useState("");
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -146,6 +148,9 @@ export function AgentsPage() {
     // Alle verfügbaren Tools aus der Registry laden
     api.get<Record<string, any>>("/tools").then(tools => {
       setKnownTools(Object.keys(tools).sort());
+    }).catch(() => {});
+    api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models").then(d => {
+      setWksModels(d.models.filter(m => m.provider === "wks_ollama"));
     }).catch(() => {});
   }, []);
   function refresh() {
@@ -224,6 +229,7 @@ export function AgentsPage() {
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
       heartbeat_on_failure: cfg?.heartbeat?.on_failure ?? "restart",
+      ollama_base_url: cfg?.llm?.ollama_base_url ?? null,
     });
     setEditId(id);
     setShowForm(true);
@@ -251,10 +257,26 @@ export function AgentsPage() {
     setSaving(true);
     setSaveErr("");
     try {
+      // fallbackInput flushen falls User getippt aber nicht + gedrückt hat
+      let finalForm = form;
+      if (fallbackInput.trim()) {
+        const v = fallbackInput.trim();
+        const updated = form.fallback_models.includes(v) ? form.fallback_models : [...form.fallback_models, v];
+        finalForm = { ...form, fallback_models: updated };
+        setFallbackInput("");
+      }
+      // ollama_base_url aus WKS-Modellen ableiten falls nicht explizit gesetzt
+      const allModels = [finalForm.model, ...finalForm.fallback_models];
+      if (!finalForm.ollama_base_url) {
+        for (const m of allModels) {
+          const wks = wksModels.find(w => w.id === m);
+          if (wks?.wks_base_url) { finalForm = { ...finalForm, ollama_base_url: wks.wks_base_url }; break; }
+        }
+      }
       if (editId) {
-        await api.updateAgent(editId, form);
+        await api.updateAgent(editId, finalForm);
       } else {
-        await (api as any).createAgent(form);
+        await (api as any).createAgent(finalForm);
       }
       closeForm();
       await load();
@@ -460,9 +482,9 @@ export function AgentsPage() {
                       className="flex-1 rounded-2xl border bg-background px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                     <datalist id="fallback-suggestions">
-                      {KNOWN_MODELS
+                      {[...KNOWN_MODELS, ...wksModels.map(m => m.id)]
                         .filter((m) => m !== form.model && !form.fallback_models.includes(m))
-                        .map((m) => <option key={m} value={m} />)}
+                        .map((m) => <option key={m} value={m} label={wksModels.find(w=>w.id===m)?.label} />)}
                     </datalist>
                     <button type="button" onClick={() => {
                       const v = fallbackInput.trim();
