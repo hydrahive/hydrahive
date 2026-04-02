@@ -141,32 +141,6 @@ function useDarkMode() {
   return [dark, () => setDark((d) => !d)] as const;
 }
 
-const NAV_COLLAPSE_KEY = "hh_nav_collapsed";
-
-function useNavCollapse(groupId: string, defaultCollapsed: boolean) {
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(NAV_COLLAPSE_KEY) || "{}");
-      return groupId in stored ? stored[groupId] : defaultCollapsed;
-    } catch {
-      return defaultCollapsed;
-    }
-  });
-
-  const toggle = useCallback(() => {
-    setCollapsed((prev: boolean) => {
-      const next = !prev;
-      try {
-        const stored = JSON.parse(localStorage.getItem(NAV_COLLAPSE_KEY) || "{}");
-        localStorage.setItem(NAV_COLLAPSE_KEY, JSON.stringify({ ...stored, [groupId]: next }));
-      } catch {}
-      return next;
-    });
-  }, [groupId]);
-
-  return [collapsed, toggle] as const;
-}
-
 export function AdminLayout() {
   const { t } = useTranslation();
   const { user, isAdmin, logout } = useAuth();
@@ -174,7 +148,7 @@ export function AdminLayout() {
   const location = useLocation();
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
-  type NavGroup = { id: string; label?: string; collapsible?: boolean; defaultCollapsed?: boolean; items: NavItem[] };
+  type NavGroup = { id: string; label?: string; collapsible?: boolean; items: NavItem[] };
 
   const groupTop: NavGroup = {
     id: "top",
@@ -196,7 +170,6 @@ export function AdminLayout() {
     id: "workspace",
     label: t("nav.groupWorkspace") || "Workspace",
     collapsible: true,
-    defaultCollapsed: false,
     items: [
       { to: "/projects",             icon: FolderKanban, label: t("nav.projects"),      hint: t("navHint.projects") },
       { to: "/blueprint",            icon: Workflow,     label: t("nav.blueprint"),     hint: t("navHint.blueprint") },
@@ -210,7 +183,6 @@ export function AdminLayout() {
     id: "operations",
     label: t("nav.groupOperations"),
     collapsible: true,
-    defaultCollapsed: true,
     items: [
       { to: "/agents",    icon: Bot,      label: t("nav.agents"),     hint: t("navHint.agents") },
       { to: "/activity",  icon: Activity, label: t("nav.activity"),   hint: t("navHint.activity") },
@@ -229,7 +201,6 @@ export function AdminLayout() {
     id: "system",
     label: t("nav.groupSystem"),
     collapsible: true,
-    defaultCollapsed: true,
     items: [
       { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
       { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
@@ -245,21 +216,52 @@ export function AdminLayout() {
   const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Collapse-State pro Gruppe (hook muss auf top-level bleiben)
-  const [myAgentCollapsed,   toggleMyAgent]   = useNavCollapse("myAgent",    false);
-  const [workspaceCollapsed, toggleWorkspace] = useNavCollapse("workspace",  false);
-  const [opsCollapsed,       toggleOps]       = useNavCollapse("operations", true);
-  const [systemCollapsed,    toggleSystem]    = useNavCollapse("system",     true);
-
-  const collapseState: Record<string, [boolean, () => void]> = {
-    myAgent:    [myAgentCollapsed,   toggleMyAgent],
-    workspace:  [workspaceCollapsed, toggleWorkspace],
-    operations: [opsCollapsed,       toggleOps],
-    system:     [systemCollapsed,    toggleSystem],
-  };
   const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
+
+  const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
+
+  function getGroupIdForPath(pathname: string) {
+    if (groupWorkspace.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "workspace";
+    if (groupOperations.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "operations";
+    if (groupSystem.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "system";
+    return null;
+  }
+
+  const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
+    try {
+      const stored = localStorage.getItem(NAV_OPEN_GROUP_KEY);
+      if (stored === "workspace" || stored === "operations" || stored === "system") return stored;
+    } catch {
+      // ignore
+    }
+    return getGroupIdForPath(location.pathname) ?? "workspace";
+  });
+
+  const toggleGroup = useCallback((groupId: string) => {
+    setOpenGroupId((prev) => {
+      const next = prev === groupId ? null : groupId;
+      try {
+        if (next) localStorage.setItem(NAV_OPEN_GROUP_KEY, next);
+        else localStorage.removeItem(NAV_OPEN_GROUP_KEY);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const next = getGroupIdForPath(location.pathname);
+    if (next && next !== openGroupId) {
+      setOpenGroupId(next);
+      try {
+        localStorage.setItem(NAV_OPEN_GROUP_KEY, next);
+      } catch {
+        // ignore
+      }
+    }
+  }, [location.pathname, openGroupId]);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -328,9 +330,8 @@ export function AdminLayout() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {groups.map((group) => {
-          const colEntry = collapseState[group.id];
-          const collapsed = colEntry ? colEntry[0] : false;
-          const toggle    = colEntry ? colEntry[1] : undefined;
+          const collapsed = Boolean(group.collapsible && openGroupId !== group.id);
+          const toggle = group.collapsible ? () => toggleGroup(group.id) : undefined;
 
           return (
             <div key={group.id}>
@@ -338,6 +339,7 @@ export function AdminLayout() {
                 <button
                   type="button"
                   onClick={toggle}
+                  aria-expanded={!collapsed}
                   className="flex w-full items-center justify-between px-2 py-1.5 mb-0.5 rounded-lg text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-white/5 transition-colors select-none"
                 >
                   <span>{group.label}</span>
