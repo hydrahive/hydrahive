@@ -603,6 +603,10 @@ export interface UpdateStatus {
   finished_at?: string;
   commit?:     string;
   commit_full?: string;
+  available?:  boolean;
+  remote_commit?: string;
+  remote_commit_full?: string;
+  source?: string;
   message?:    string;
   log_tail?:   string[];
   error?:      string;

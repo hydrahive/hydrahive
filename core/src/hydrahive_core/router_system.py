@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -24,6 +25,13 @@ class GiteaConfigRequest(BaseModel):
 
 
 _restart_lock = asyncio.Lock()
+_UPDATE_HEAD_CACHE: dict[str, object] = {
+    "checked_at": datetime.fromtimestamp(0, tz=timezone.utc),
+    "remote_commit": "",
+    "remote_commit_full": "",
+    "source": "github/hydrahive",
+    "error": "",
+}
 
 
 def register_system_routes(
@@ -47,6 +55,77 @@ def register_system_routes(
     app_version: str,
     logger: logging.Logger,
 ) -> None:
+    def _resolve_update_source() -> tuple[str, str]:
+        default_url = "https://github.com/hydrahive/hydrahive.git"
+        default_source = "github/hydrahive"
+        if not Path("/etc/hydrahive/use_local_gitea").exists():
+            return default_url, default_source
+        p = Path(gitea_config_file)
+        if not p.exists():
+            return default_url, default_source
+        try:
+            cfg = json.loads(p.read_text())
+        except Exception:
+            return default_url, default_source
+        base_url = str(cfg.get("url", "")).strip().rstrip("/")
+        org = str(cfg.get("org", "hydrahive")).strip() or "hydrahive"
+        repo = str(cfg.get("repo", org)).strip() or org
+        token = str(cfg.get("token", "")).strip()
+        if not base_url:
+            return default_url, default_source
+        if token:
+            if base_url.startswith("http://"):
+                base_url = base_url.replace("http://", f"http://{org}:{token}@")
+            elif base_url.startswith("https://"):
+                base_url = base_url.replace("https://", f"https://{org}:{token}@")
+        return f"{base_url}/{org}/{repo}.git", f"{org}/{repo}"
+
+    def _get_remote_head() -> dict[str, str]:
+        now = datetime.now(timezone.utc)
+        checked_at = _UPDATE_HEAD_CACHE["checked_at"]
+        if isinstance(checked_at, datetime) and now - checked_at < timedelta(minutes=5):
+            return {
+                "remote_commit": str(_UPDATE_HEAD_CACHE["remote_commit"]),
+                "remote_commit_full": str(_UPDATE_HEAD_CACHE["remote_commit_full"]),
+                "source": str(_UPDATE_HEAD_CACHE["source"]),
+                "error": str(_UPDATE_HEAD_CACHE["error"]),
+            }
+
+        remote_url, remote_source = _resolve_update_source()
+        remote_commit = ""
+        remote_commit_full = ""
+        error = ""
+        try:
+            proc = subprocess.run(
+                ["git", "ls-remote", "--heads", remote_url, "main"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if proc.returncode == 0:
+                line = (proc.stdout or "").strip().splitlines()[0] if (proc.stdout or "").strip() else ""
+                remote_commit_full = line.split()[0] if line else ""
+                remote_commit = remote_commit_full[:7] if remote_commit_full else ""
+            else:
+                error = (proc.stderr or proc.stdout or "").strip()[:200]
+        except Exception as e:
+            error = str(e)[:200]
+
+        _UPDATE_HEAD_CACHE.update(
+            checked_at=now,
+            remote_commit=remote_commit,
+            remote_commit_full=remote_commit_full,
+            source=remote_source,
+            error=error,
+        )
+        return {
+            "remote_commit": remote_commit,
+            "remote_commit_full": remote_commit_full,
+            "source": remote_source,
+            "error": error,
+        }
+
     def _load_update_status(status_file: str = "") -> dict:
         # Beide Pfade prüfen — hydrahive zuerst, hydrahive als Fallback
         if not status_file:
@@ -72,6 +151,21 @@ def register_system_routes(
                     status["stale"] = True
             except Exception:
                 pass
+        status["available"] = False
+        if status.get("status") not in {"running", "error"}:
+            remote = _get_remote_head()
+            if remote["remote_commit_full"]:
+                status["source"] = remote["source"]
+                status["remote_commit"] = remote["remote_commit"]
+                status["remote_commit_full"] = remote["remote_commit_full"]
+                if status.get("commit_full"):
+                    status["available"] = status.get("commit_full") != remote["remote_commit_full"]
+                elif status.get("commit"):
+                    status["available"] = status.get("commit") != remote["remote_commit"]
+            else:
+                status["source"] = remote["source"]
+                if remote["error"]:
+                    status["remote_error"] = remote["error"]
         return status
 
     @admin_router.get("/admin/network/profile")

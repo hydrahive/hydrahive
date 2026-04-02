@@ -42,6 +42,7 @@ import i18n from "@/lib/i18n";
 
 function useUpdateStatus(isAdmin: boolean) {
   const [updating, setUpdating] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [lastCommit, setLastCommit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +50,7 @@ function useUpdateStatus(isAdmin: boolean) {
     if (!isAdmin) return;
     try {
       const s = await api.updateStatus();
+      setUpdateAvailable(Boolean(s.available));
       if (s.status === "running") {
         setUpdating(true);
       } else {
@@ -76,6 +78,7 @@ function useUpdateStatus(isAdmin: boolean) {
       const poll = setInterval(async () => {
         try {
           const s = await api.updateStatus();
+          setUpdateAvailable(Boolean(s.available));
           if (s.status !== "running") {
             clearInterval(poll);
             setUpdating(false);
@@ -89,11 +92,12 @@ function useUpdateStatus(isAdmin: boolean) {
       }, 3000);
     } catch (e: unknown) {
       setUpdating(false);
+      setUpdateAvailable(false);
       setError(e instanceof Error ? e.message : "Fehler");
     }
   }, []);
 
-  return { updating, lastCommit, error, trigger };
+  return { updating, updateAvailable, lastCommit, error, trigger };
 }
 
 function useCoreConnection() {
@@ -216,9 +220,10 @@ export function AdminLayout() {
   const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { updating, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
+  const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
-  const showDeploymentPanel = isAdmin && (updating || Boolean(updateError));
+  const showDeploymentPanel = isAdmin && (updating || Boolean(updateError) || updateAvailable);
+  const deploymentUrgent = updating || Boolean(updateError) || updateAvailable;
 
   const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
 
@@ -364,11 +369,19 @@ export function AdminLayout() {
         {showDeploymentPanel && (
           <div className="mb-3 rounded-2xl border border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 p-3 text-xs text-[hsl(var(--sidebar-foreground))] shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.18)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-extrabold tracking-[0.18em] text-red-200">{t("layout.updateAlertTitle")}</span>
-              <span className={cn("status-pill", updating ? "bg-red-500/20 text-red-100" : "bg-amber-400/20 text-amber-100")}>{updating ? t("layout.running") : t("layout.ready")}</span>
+              <span className="font-extrabold tracking-[0.18em] text-red-200">{deploymentUrgent ? t("layout.updateAlertTitle") : t("layout.deployment")}</span>
+              <span className={cn("status-pill", deploymentUrgent ? "bg-red-500/20 text-red-100" : "status-pill-ok")}>
+                {updating ? t("layout.running") : updateAvailable ? t("layout.updateAvailable") : t("layout.ready")}
+              </span>
             </div>
             <p className="mt-2 text-[hsl(var(--sidebar-muted))]">
-              {updating ? t("layout.updateAlertDetail") : (lastCommit ? t("layout.lastCommit", { commit: lastCommit }) : t("layout.noCommit"))}
+              {updating
+                ? t("layout.updateAlertDetail")
+                : updateAvailable
+                  ? t("layout.updateAlertDetailAvailable", { commit: lastCommit ?? t("layout.noCommit") })
+                  : lastCommit
+                    ? t("layout.lastCommit", { commit: lastCommit })
+                    : t("layout.noCommit")}
             </p>
             {updateError && <p className="mt-2 text-[#ffd0d0]">{updateError}</p>}
             <button

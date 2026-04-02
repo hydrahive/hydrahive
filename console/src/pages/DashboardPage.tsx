@@ -65,8 +65,9 @@ export function DashboardPage() {
   const gpuList = gpu?.available && gpu.gpus ? gpu.gpus : [];
   const hottestGpu = gpuList.length > 0 ? [...gpuList].sort((a, b) => (b.temp_c ?? -1) - (a.temp_c ?? -1))[0] : null;
   const updateState = update?.status ?? "unknown";
+  const updateAvailable = Boolean(update?.available);
   const runningHeartbeats = heartbeatTasks.length;
-  const updateIsUrgent = updateState === "running" || updateState === "error";
+  const updateIsUrgent = updateState === "running" || updateState === "error" || updateAvailable;
   const problemAgents = useMemo(() => {
     return Object.entries(agentMap)
       .map(([id, entry]) => {
@@ -165,6 +166,12 @@ export function DashboardPage() {
       items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || "Der letzte Update-Lauf hat einen Fehler gemeldet." });
     } else if (updateState === "running") {
       items.push({ tone: "info", title: t("dashboard.updateRunning2"), detail: t("dashboard.updateRunning2Detail") });
+    } else if (updateAvailable) {
+      items.push({
+        tone: "warn",
+        title: t("dashboard.updateAlertTitle"),
+        detail: t("dashboard.updateAlertAvailable", { commit: update?.commit ?? t("dashboard.commitUnknown") }),
+      });
     }
     if (problemAgents.length > 0) {
       const critical = problemAgents.filter((entry) => entry.severity === "critical").length;
@@ -189,7 +196,7 @@ export function DashboardPage() {
       items.push({ tone: "info", title: t("dashboard.noIssues"), detail: t("dashboard.noIssuesDetail") });
     }
     return items.slice(0, 4);
-  }, [healthy, hottestGpu, problemAgents, update?.error, updateState, t]);
+  }, [healthy, hottestGpu, problemAgents, update?.commit, update?.error, updateAvailable, updateState, t]);
   const attentionTone = attentionItems.some((item) => item.tone === "critical")
     ? "bg-destructive/12 text-destructive"
     : attentionItems.some((item) => item.tone === "warn")
@@ -358,7 +365,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className={`section-card ${updateIsUrgent ? "border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.14)] backdrop-blur" : ""}`}>
+          <div className={`section-card ${updateIsUrgent ? "border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.14)] backdrop-blur" : ""}`}>
           <div className="flex items-center gap-2">
             {updateIsUrgent ? <Siren className="h-4 w-4 text-red-400" /> : <RefreshCw className="h-4 w-4 text-primary" />}
             <h2 className={`text-lg font-semibold tracking-tight ${updateIsUrgent ? "text-red-100" : ""}`}>
@@ -367,14 +374,26 @@ export function DashboardPage() {
           </div>
           {updateIsUrgent && (
             <p className="mt-2 text-sm text-red-100/80">
-              {updateState === "running" ? t("dashboard.updateAlertRunning") : t("dashboard.updateAlertError")}
+              {updateState === "running"
+                ? t("dashboard.updateAlertRunning")
+                : updateAvailable
+                  ? t("dashboard.updateAlertAvailable", { commit: update?.commit ?? t("dashboard.commitUnknown") })
+                  : t("dashboard.updateAlertError")}
             </p>
           )}
           <div className="mt-4 space-y-3 text-sm text-muted-foreground">
             <div className={`rounded-2xl px-4 py-3 ${updateIsUrgent ? "bg-red-500/10" : "bg-secondary/55"}`}>
               <div className="flex items-center justify-between gap-3">
                 <span>Status</span>
-                <span className={updateState === "ok" ? "status-pill status-pill-ok" : updateState === "running" ? "status-pill bg-red-500/20 text-red-100" : "status-pill bg-destructive/15 text-destructive"}>{updateState}</span>
+                <span className={updateState === "ok" && !updateAvailable ? "status-pill status-pill-ok" : "status-pill bg-red-500/20 text-red-100"}>
+                  {updateState === "running"
+                    ? t("layout.running")
+                    : updateAvailable
+                      ? t("layout.updateAvailable")
+                      : updateState === "error"
+                        ? t("dashboard.updateError")
+                        : updateState}
+                </span>
               </div>
             </div>
             <div className={`rounded-2xl px-4 py-3 ${updateIsUrgent ? "bg-red-500/10" : "bg-secondary/55"}`}>
