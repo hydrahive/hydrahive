@@ -44,26 +44,40 @@ def _load_voice_config() -> dict:
 # ── Wyoming Protocol Helpers ─────────────────────────────────────────
 # Wyoming is a simple line-based protocol: JSON event header + optional binary payload.
 
-async def _wyoming_send_event(writer: asyncio.StreamWriter, event: dict, payload: bytes = b""):
-    """Send a Wyoming event (JSON line + optional binary payload)."""
-    header = json.dumps(event, separators=(",", ":"))
-    writer.write(header.encode("utf-8") + b"\n")
+async def _wyoming_send_event(writer: asyncio.StreamWriter, etype: str, data: dict | None = None, payload: bytes = b""):
+    """Send a Wyoming event: header line + optional data JSON + optional binary payload."""
+    header: dict = {"type": etype}
+    data_bytes = b""
+    if data:
+        data_bytes = json.dumps(data, separators=(",", ":")).encode("utf-8")
+        header["data_length"] = len(data_bytes)
+    if payload:
+        header["payload_length"] = len(payload)
+    writer.write(json.dumps(header, separators=(",", ":")).encode("utf-8") + b"\n")
+    if data_bytes:
+        writer.write(data_bytes)
     if payload:
         writer.write(payload)
     await writer.drain()
 
 
-async def _wyoming_recv_event(reader: asyncio.StreamReader) -> tuple[dict, bytes]:
-    """Receive a Wyoming event. Returns (header_dict, payload_bytes)."""
-    line = await asyncio.wait_for(reader.readline(), timeout=30)
+async def _wyoming_recv_event(reader: asyncio.StreamReader) -> tuple[str, dict, bytes]:
+    """Receive a Wyoming event. Returns (type, data_dict, payload_bytes)."""
+    line = await asyncio.wait_for(reader.readline(), timeout=60)
     if not line:
         raise ConnectionError("Wyoming connection closed")
     header = json.loads(line.decode("utf-8"))
+    etype = header.get("type", "")
+    data = {}
+    data_length = header.get("data_length", 0)
+    if data_length > 0:
+        data_raw = await asyncio.wait_for(reader.readexactly(data_length), timeout=30)
+        data = json.loads(data_raw)
     payload = b""
-    payload_length = header.get("data", {}).get("payload_length", 0)
+    payload_length = header.get("payload_length", 0)
     if payload_length > 0:
         payload = await asyncio.wait_for(reader.readexactly(payload_length), timeout=30)
-    return header, payload
+    return etype, data, payload
 
 
 async def _wyoming_stt(audio_bytes: bytes, host: str, port: int) -> str:
@@ -72,53 +86,32 @@ async def _wyoming_stt(audio_bytes: bytes, host: str, port: int) -> str:
         asyncio.open_connection(host, port), timeout=10
     )
     try:
-        # Parse WAV to get audio parameters
         with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
             rate = wf.getframerate()
             width = wf.getsampwidth()
             channels = wf.getnchannels()
             frames = wf.readframes(wf.getnframes())
 
-        # Send Transcribe event
-        await _wyoming_send_event(writer, {
-            "type": "transcribe",
-            "data": {"language": "de"},
+        await _wyoming_send_event(writer, "transcribe", {"language": "de"})
+        await _wyoming_send_event(writer, "audio-start", {
+            "rate": rate, "width": width, "channels": channels,
         })
 
-        # Send AudioStart
-        await _wyoming_send_event(writer, {
-            "type": "audio-start",
-            "data": {
-                "rate": rate,
-                "width": width,
-                "channels": channels,
-            },
-        })
-
-        # Send audio in chunks
-        chunk_size = rate * width * channels  # ~1 second chunks
+        chunk_size = rate * width * channels
         for i in range(0, len(frames), chunk_size):
             chunk = frames[i:i + chunk_size]
-            await _wyoming_send_event(writer, {
-                "type": "audio-chunk",
-                "data": {
-                    "rate": rate,
-                    "width": width,
-                    "channels": channels,
-                    "payload_length": len(chunk),
-                },
+            await _wyoming_send_event(writer, "audio-chunk", {
+                "rate": rate, "width": width, "channels": channels,
             }, chunk)
 
-        # Send AudioStop
-        await _wyoming_send_event(writer, {"type": "audio-stop", "data": {}})
+        await _wyoming_send_event(writer, "audio-stop")
 
-        # Wait for Transcript
         while True:
-            event, _ = await _wyoming_recv_event(reader)
-            if event.get("type") == "transcript":
-                return event.get("data", {}).get("text", "")
-            if event.get("type") == "error":
-                raise RuntimeError(event.get("data", {}).get("text", "STT error"))
+            etype, data, _ = await _wyoming_recv_event(reader)
+            if etype == "transcript":
+                return data.get("text", "")
+            if etype == "error":
+                raise RuntimeError(data.get("text", "STT error"))
     finally:
         writer.close()
         await writer.wait_closed()
@@ -130,37 +123,27 @@ async def _wyoming_tts(text: str, host: str, port: int) -> bytes:
         asyncio.open_connection(host, port), timeout=10
     )
     try:
-        # Send Synthesize event
-        await _wyoming_send_event(writer, {
-            "type": "synthesize",
-            "data": {"text": text},
-        })
+        await _wyoming_send_event(writer, "synthesize", {"text": text})
 
-        # Collect audio chunks
         audio_chunks: list[bytes] = []
         rate = 22050
         width = 2
         channels = 1
 
         while True:
-            event, payload = await _wyoming_recv_event(reader)
-            etype = event.get("type", "")
+            etype, data, payload = await _wyoming_recv_event(reader)
 
             if etype == "audio-start":
-                rate = event["data"].get("rate", rate)
-                width = event["data"].get("width", width)
-                channels = event["data"].get("channels", channels)
-
+                rate = data.get("rate", rate)
+                width = data.get("width", width)
+                channels = data.get("channels", channels)
             elif etype == "audio-chunk":
                 audio_chunks.append(payload)
-
             elif etype == "audio-stop":
                 break
-
             elif etype == "error":
-                raise RuntimeError(event.get("data", {}).get("text", "TTS error"))
+                raise RuntimeError(data.get("text", "TTS error"))
 
-        # Build WAV
         pcm = b"".join(audio_chunks)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
