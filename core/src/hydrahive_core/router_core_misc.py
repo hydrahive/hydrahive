@@ -727,6 +727,19 @@ def register_core_misc_routes(
         except Exception as e:
             raise HTTPException(500, f"Schreibfehler: {e}")
 
+    @admin_router.delete("/admin/files/delete")
+    def delete_file(path: str):
+        """Datei löschen (nur erlaubte Pfade)."""
+        if not path:
+            raise HTTPException(400, "path fehlt")
+        resolved = Path(path).resolve()
+        if not any(str(resolved).startswith(r) for r in ALLOWED_FS_ROOTS):
+            raise HTTPException(403, f"Zugriff auf '{path}' nicht erlaubt")
+        if not resolved.is_file():
+            raise HTTPException(404, "Datei nicht gefunden")
+        resolved.unlink()
+        return {"ok": True, "path": str(resolved)}
+
     # ── Eingeschränkte Shell (#129) ───────────────────────────────────
 
     ALLOWED_SHELL_COMMANDS = {

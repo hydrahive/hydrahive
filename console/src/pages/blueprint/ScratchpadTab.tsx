@@ -156,12 +156,12 @@ function ScratchpadInner() {
   async function deletePad(name: string) {
     if (!confirm(`Scratchpad "${name}" löschen?`)) return;
     try {
-      await api.post("/admin/shell", { command: `rm -f ${SCRATCHPADS_DIR}/${name}.json` });
+      await api.delete(`/admin/files/delete?path=${SCRATCHPADS_DIR}/${name}.json`);
       if (padName === name) { setPadName("default"); loadPad("default"); }
       loadPadList();
       setToast(`"${name}" gelöscht`);
       setTimeout(() => setToast(null), 2000);
-    } catch {}
+    } catch (e: any) { setToast("Fehler: " + e.message); }
   }
 
   function createNewPad() {
