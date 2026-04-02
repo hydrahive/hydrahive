@@ -134,9 +134,7 @@ Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die li
 | **Aktivität** | Live-Übersicht aller aktiven Agenten mit Notfall-Stop und Detail-Logs | alle |
 | **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose & Tests | alle |
 | **Tools** | Verfügbare Tools anzeigen | alle |
-| **Einstellungen** | LLM, MCP-Server, Gitea, VPN und Mail/KAS konfigurieren (Tab-basiert) | admin |
-| **Benutzer** | Benutzer anlegen und verwalten | admin |
-| **Backup** | Backups erstellen, herunterladen und wiederherstellen | admin |
+| **Einstellungen** | Zentrale Konfiguration mit 10 Tabs: LLM, MCP, Gitea, GitHub, VPN, Mail/KAS, Users, Backup, Migration, Plugins | admin |
 | **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
 | **API Usage** | Token-Verbrauch und API-Kosten nach Projekt und Modell | admin |
 | **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
