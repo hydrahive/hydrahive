@@ -53,18 +53,14 @@ def register_notification_routes(router: APIRouter, *, require_auth, verify_jwt,
         username, _ = auth
         return {"count": notification_service.unread_count(username)}
 
-    # SSE-Stream — primär fetch+Authorization-Header, Fallback ?token= für alte Clients
+    # SSE-Stream — Auth nur via Authorization-Header (#136: kein Token in URL)
     @public_router.get("/notifications/stream")
-    async def notification_stream(request: Request, token: str | None = None):
+    async def notification_stream(request: Request):
         from fastapi import HTTPException as _HTTPException
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            resolved_token = auth_header[7:]
-        elif token:
-            resolved_token = token
-        else:
+        if not auth_header.startswith("Bearer "):
             raise _HTTPException(401, "Kein Token")
-        username, _ = verify_jwt(resolved_token)
+        username, _ = verify_jwt(auth_header[7:])
 
         async def event_stream():
             async for notif in notification_service.subscribe(username):
