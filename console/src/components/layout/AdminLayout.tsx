@@ -362,13 +362,13 @@ export function AdminLayout() {
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
         {showDeploymentPanel && (
-          <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-xs text-[hsl(var(--sidebar-foreground))]">
+          <div className="mb-3 rounded-2xl border border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 p-3 text-xs text-[hsl(var(--sidebar-foreground))] shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.18)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">{t("layout.deployment")}</span>
-              <span className={cn("status-pill", updating ? "bg-white/10 text-[hsl(var(--sidebar-foreground))]" : "status-pill-ok")}>{updating ? t("layout.running") : t("layout.ready")}</span>
+              <span className="font-extrabold tracking-[0.18em] text-red-200">{t("layout.updateAlertTitle")}</span>
+              <span className={cn("status-pill", updating ? "bg-red-500/20 text-red-100" : "bg-amber-400/20 text-amber-100")}>{updating ? t("layout.running") : t("layout.ready")}</span>
             </div>
             <p className="mt-2 text-[hsl(var(--sidebar-muted))]">
-              {lastCommit ? t("layout.lastCommit", { commit: lastCommit }) : t("layout.noCommit")}
+              {updating ? t("layout.updateAlertDetail") : (lastCommit ? t("layout.lastCommit", { commit: lastCommit }) : t("layout.noCommit"))}
             </p>
             {updateError && <p className="mt-2 text-[#ffd0d0]">{updateError}</p>}
             <button

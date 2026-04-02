@@ -58,6 +58,8 @@
     "deployment": "Deployment",
     "running": "running",
     "ready": "ready",
+    "updateAlertTitle": "PLEASE UPDATE",
+    "updateAlertDetail": "An update is active or has been reported.",
     "lastCommit": "Last state {{commit}}",
     "noCommit": "No commit state available",
     "updateRunning": "Update running",

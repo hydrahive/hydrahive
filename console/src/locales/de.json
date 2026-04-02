@@ -58,6 +58,8 @@
     "deployment": "Deployment",
     "running": "laeuft",
     "ready": "bereit",
+    "updateAlertTitle": "BITTE UPDATEN",
+    "updateAlertDetail": "Ein Update ist aktiv oder wurde gemeldet.",
     "lastCommit": "Letzter Stand {{commit}}",
     "noCommit": "Kein Commit-Stand vorhanden",
     "updateRunning": "Update laeuft",
