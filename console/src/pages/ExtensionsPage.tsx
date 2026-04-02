@@ -189,6 +189,20 @@ export function ExtensionsPage() {
           } catch { /* ignore */ }
         }
       }
+      // Flush remaining buffer after stream ends
+      if (buf.trim()) {
+        const line = buf.replace(/^data: /, "").trim();
+        try {
+          const d = JSON.parse(line);
+          if (d.line !== undefined) setLog(l => [...l.slice(-199), d.line]);
+          if (d.done) {
+            setLogDone(d.ok);
+            if (d.ok) load(true);
+          }
+        } catch { /* ignore */ }
+      }
+      // If stream ended without a done event, mark as failed
+      setLogDone(prev => prev ?? false);
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== "AbortError") {
         setLog(l => [...l.slice(-199), `[ERROR] ${e.message}`]);
