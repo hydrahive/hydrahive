@@ -31,6 +31,7 @@ import {
   Store,
   KeyRound,
   Brain,
+  Mic,
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -197,6 +198,7 @@ export function AdminLayout() {
       { to: "/plugins",   icon: Puzzle,   label: "Plugins",           hint: "Plugin-System verwalten" },
       { to: "/hub",       icon: Store,    label: "HydraHub",          hint: "Agenten & Tools installieren" },
       { to: "/brain",     icon: Brain,    label: "HydraBrain",        hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/voice",     icon: Mic,      label: "Voice",             hint: "Sprachsteuerung — STT, TTS, Agent" },
       { to: "/federation",icon: Globe,    label: t("nav.federation"), hint: t("navHint.federation") },
     ],
   };

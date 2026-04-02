@@ -31,6 +31,7 @@ const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m
 const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
 const SecretsPage            = lazy(() => import("@/pages/SecretsPage").then((m) => ({ default: m.SecretsPage })));
 const HydraBrainPage         = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
+const VoicePage              = lazy(() => import("@/pages/VoicePage").then((m) => ({ default: m.VoicePage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
 const InvitePage             = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
 
@@ -117,6 +118,7 @@ export default function App() {
             <Route path="hub"                  element={<HubPage />} />
             <Route path="secrets"           element={<SecretsPage />} />
             <Route path="brain"             element={<HydraBrainPage />} />
+            <Route path="voice"             element={<VoicePage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
             <Route path="audit"             element={<AuditPage />} />

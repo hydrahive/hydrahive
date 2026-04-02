@@ -1,0 +1,54 @@
+# XiaoZhi Backend Server — HydraHive Voice Integration
+# Kopiere nach: xiaozhi-esp32-server/data/.config.yaml
+#
+# Voraussetzung: Voice-Extension in HydraHive installiert (STT + TTS Docker)
+# Anleitung: https://github.com/hydrahive/hydrahive/issues/131
+
+server:
+  # WebSocket-URL — muss von der Voice PE erreichbar sein!
+  # Ersetze <HYDRAHIVE-IP> mit der IP deines HydraHive-Servers
+  websocket: "ws://<HYDRAHIVE-IP>:8000/xiaozhi/v1/"
+  http: "http://<HYDRAHIVE-IP>:8003/"
+
+# ── Modul-Auswahl ────────────────────────────────────────────────────
+selected_module:
+  LLM: "OpenAILLM"        # HydraHive Agent-API (OpenAI-kompatibel)
+  ASR: "FunASR"            # Lokaler STT (im Server eingebaut)
+  TTS: "EdgeTTS"           # Microsoft Edge TTS (kostenlos, gute Qualität)
+  VAD: "SileroVAD"         # Voice Activity Detection
+  Memory: "local"          # Lokales Gedächtnis
+
+# ── LLM: HydraHive Agent als Backend ─────────────────────────────────
+# XiaoZhi sendet Text an den HydraHive-Agenten und bekommt Antwort zurück.
+# Wir nutzen den /voice Endpunkt über einen kleinen Wrapper.
+llm:
+  OpenAILLM:
+    api_key: "hydrahive"
+    # HydraHive Voice-Endpunkt (muss OpenAI-kompatibel sein)
+    # Option A: Direkt HydraHive API (empfohlen)
+    base_url: "http://127.0.0.1:8765/api/v1"
+    model: "hydrahive"
+
+# ── ASR: Lokaler Speech-to-Text ──────────────────────────────────────
+# FunASR ist im XiaoZhi-Server eingebaut — kein externer Service nötig.
+# Alternative: faster-whisper über die HydraHive Voice-Extension (Port 10300)
+asr:
+  FunASR:
+    enabled: true
+
+# ── TTS: Text-to-Speech ──────────────────────────────────────────────
+# EdgeTTS: kostenlos, gute deutsche Stimmen, braucht Internet
+# Alternative: Piper über die HydraHive Voice-Extension (Port 10200)
+tts:
+  EdgeTTS:
+    voice: "de-DE-ConradNeural"   # Männliche deutsche Stimme
+    # Alternativen:
+    # voice: "de-DE-KatjaNeural"  # Weibliche deutsche Stimme
+    # voice: "de-DE-AmalaNeural"  # Weitere weibliche Stimme
+    rate: 1.0
+
+# ── VAD: Spracherkennung ─────────────────────────────────────────────
+vad:
+  SileroVAD:
+    threshold: 0.5
+    min_silence_duration_ms: 500
