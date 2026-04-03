@@ -595,15 +595,16 @@ class Orchestrator:
             response = await self._llm_call(boss_cfg, messages, litellm_tools)
         except Exception as e:
             err_str = str(e).lower()
-            if "prompt is too long" in err_str or "maximum context length" in err_str or "context_length_exceeded" in err_str:
+            _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
+                               "error in input stream", "input too long", "request too large")
+            if any(s in err_str for s in _context_errors):
                 logger.warning(
                     "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
                     project_id, e,
                 )
                 await self._sessions.new_session(project_id)
                 return (
-                    "Der Konversationsverlauf war zu lang für das Sprachmodell. "
-                    "Die Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
+                    "Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
                 ), []
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
             return f"[Fehler] LLM nicht erreichbar: {e}", []
@@ -1291,13 +1292,15 @@ class Orchestrator:
 
         except Exception as e:
             err_str = str(e).lower()
-            if "prompt is too long" in err_str or "maximum context length" in err_str or "context_length_exceeded" in err_str:
+            _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
+                               "error in input stream", "input too long", "request too large")
+            if any(s in err_str for s in _context_errors):
                 logger.warning(
                     "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
                     project_id, e,
                 )
                 await self._sessions.new_session(project_id)
-                yield f"data: {_json.dumps({'error': 'Der Konversationsverlauf war zu lang für das Sprachmodell. Die Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.'})}\n\n"
+                yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
             else:
                 logger.error("Streaming-Fehler: %s", e)
                 if user_msg_saved:

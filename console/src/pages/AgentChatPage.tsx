@@ -284,6 +284,7 @@ export function AgentChatPage() {
                   setMessages(ms => ms.map(m => m.id === assistantMsg.id ? { ...m, ...updates } : m));
                 break outer;
               } else if (evt.error) {
+                if (evt.session_reset) setMessages([]);
                 throw new Error(evt.error);
               }
             } catch (parseErr) {

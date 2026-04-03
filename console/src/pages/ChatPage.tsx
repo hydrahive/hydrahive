@@ -295,6 +295,7 @@ export function ChatPage() {
                   ));
                 break outer;
               } else if (evt.error) {
+                if (evt.session_reset) setMessages([]);
                 throw new Error(evt.error);
               }
             } catch (parseErr) {

@@ -349,7 +349,12 @@ export function MyAgentPage() {
                   setMessages(ms => ms.map(m => m.id===asstMsg.id ? {...m, ...updates} : m));
                 break outer;
               }
-              else if (evt.error) throw new Error(evt.error);
+              else if (evt.error) {
+                if (evt.session_reset) {
+                  setMessages([]);  // Chat leeren nach Session-Reset
+                }
+                throw new Error(evt.error);
+              }
             } catch(pe) { if (pe instanceof Error && pe.message !== "Unexpected end of JSON input") throw pe; }
           }
         }
