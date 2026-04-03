@@ -3,7 +3,7 @@ info "Installiere System-Dependencies..."
 
 apt-get update -qq
 
-DEPS=(python3 python3-pip python3-venv git curl samba nginx build-essential rsync sudo tree jq)
+DEPS=(python3 python3-pip python3-venv git curl samba nginx build-essential rsync sudo tree jq ffmpeg)
 
 MISSING=()
 for dep in "${DEPS[@]}"; do
