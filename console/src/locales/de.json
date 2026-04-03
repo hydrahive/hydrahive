@@ -72,6 +72,25 @@
     "skillInstalled": "installiert",
     "error": "Fehler"
   },
+  "blueprint": {
+    "automation": "Automation",
+    "automationHint": "Butler Event-Flows",
+    "pipelines": "Datei-Pipelines",
+    "pipelinesHint": "Dateien sortieren und verarbeiten",
+    "architect": "Projekt-Architekt",
+    "architectHint": "Boss + Worker verdrahten",
+    "workflow": "Projekt-Workflow",
+    "workflowHint": "Arbeitsablauf für Agenten definieren",
+    "agentblueprint": "Agent-Blueprint",
+    "agentblueprintHint": "Repos, Skills, Memory verdrahten",
+    "scratchpad": "Scratchpad",
+    "scratchpadHint": "Freies Whiteboard — Ideen skizzieren",
+    "notifications": "Notifications",
+    "notificationsHint": "Alert-Routing",
+    "permissions": "Berechtigungen",
+    "permissionsHint": "User-Rechte visuell",
+    "loading": "Laden..."
+  },
   "navHint": {
     "dashboard": "Lagebild",
     "myAgent": "Hauptansprechpartner",

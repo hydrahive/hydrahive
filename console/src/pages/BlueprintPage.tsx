@@ -2,6 +2,7 @@ import { useState, lazy, Suspense } from "react";
 import { Workflow, Network, ShieldCheck, Bell, Cpu, Bot, FolderOpen, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useTranslation } from "react-i18next";
 import { ButlerPage } from "@/pages/ButlerPage";
 import { ProjectArchitectTab } from "@/pages/blueprint/ProjectArchitectTab";
 import { PermissionsTab }      from "@/pages/blueprint/PermissionsTab";
@@ -12,14 +13,14 @@ import { FilePipelineTab }      from "@/pages/blueprint/FilePipelineTab";
 const ScratchpadTab = lazy(() => import("@/pages/blueprint/ScratchpadTab").then(m => ({ default: m.ScratchpadTab })));
 
 const ALL_TABS = [
-  { id: "automation",      label: "Automation",        icon: Workflow,    hint: "Butler Event-Flows",                   minGroup: "chatter" },
-  { id: "pipelines",       label: "Datei-Pipelines",   icon: FolderOpen,  hint: "Dateien sortieren und verarbeiten",    minGroup: "admin" },
-  { id: "architect",       label: "Projekt-Architekt", icon: Network,     hint: "Boss + Worker verdrahten",             minGroup: "standard" },
-  { id: "workflow",        label: "Projekt-Workflow",  icon: Cpu,         hint: "Arbeitsablauf für Agenten definieren", minGroup: "standard" },
-  { id: "agentblueprint",  label: "Agent-Blueprint",   icon: Bot,         hint: "Repos, Skills, Memory verdrahten",     minGroup: "dev" },
-  { id: "scratchpad",      label: "Scratchpad",        icon: PenTool,     hint: "Freies Whiteboard — Ideen skizzieren", minGroup: "chatter" },
-  { id: "notifications",   label: "Notifications",     icon: Bell,        hint: "Alert-Routing",                        minGroup: "admin" },
-  { id: "permissions",     label: "Berechtigungen",    icon: ShieldCheck, hint: "User-Rechte visuell",                  minGroup: "admin" },
+  { id: "automation",      i18nKey: "automation",      icon: Workflow,    minGroup: "chatter" },
+  { id: "pipelines",       i18nKey: "pipelines",       icon: FolderOpen,  minGroup: "admin" },
+  { id: "architect",       i18nKey: "architect",        icon: Network,     minGroup: "standard" },
+  { id: "workflow",        i18nKey: "workflow",         icon: Cpu,         minGroup: "standard" },
+  { id: "agentblueprint",  i18nKey: "agentblueprint",  icon: Bot,         minGroup: "dev" },
+  { id: "scratchpad",      i18nKey: "scratchpad",       icon: PenTool,     minGroup: "chatter" },
+  { id: "notifications",   i18nKey: "notifications",   icon: Bell,        minGroup: "admin" },
+  { id: "permissions",     i18nKey: "permissions",      icon: ShieldCheck, minGroup: "admin" },
 ] as const;
 
 const GROUP_RANK: Record<string, number> = {
@@ -29,6 +30,7 @@ const GROUP_RANK: Record<string, number> = {
 type TabId = typeof ALL_TABS[number]["id"];
 
 export function BlueprintPage() {
+  const { t } = useTranslation();
   const { user, isAdmin } = useAuth();
   const group = isAdmin ? "admin" : (user?.group ?? "standard");
   const rank  = GROUP_RANK[group] ?? 2;
@@ -43,20 +45,20 @@ export function BlueprintPage() {
     <div className="flex flex-col h-full -mx-4 -my-4 md:-mx-6 md:-my-6 lg:-mx-8 lg:-my-8">
       {/* Tab bar */}
       <div className="flex items-center gap-0.5 px-4 pt-3 pb-0 border-b border-white/10 bg-[hsl(var(--sidebar-bg,220_15%_8%))] shrink-0 overflow-x-auto">
-        {TABS.map(t => (
+        {TABS.map(tb => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            title={t.hint}
+            key={tb.id}
+            onClick={() => setTab(tb.id)}
+            title={t(`blueprint.${tb.i18nKey}Hint`)}
             className={cn(
               "flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 -mb-px whitespace-nowrap transition-colors",
-              tab === t.id
+              tab === tb.id
                 ? "border-indigo-500 text-white bg-zinc-900"
                 : "border-transparent text-white/40 hover:text-white/70 hover:bg-white/5"
             )}
           >
-            <t.icon className="h-3.5 w-3.5 shrink-0" />
-            {t.label}
+            <tb.icon className="h-3.5 w-3.5 shrink-0" />
+            {t(`blueprint.${tb.i18nKey}`)}
           </button>
         ))}
       </div>
@@ -70,7 +72,7 @@ export function BlueprintPage() {
         {tab === "notifications"  && <NotificationRouterTab />}
         {tab === "workflow"       && <WorkflowTab />}
         {tab === "agentblueprint" && <AgentBlueprintTab />}
-        {tab === "scratchpad"     && <Suspense fallback={<div className="flex items-center justify-center h-full text-white/20">Laden...</div>}><ScratchpadTab /></Suspense>}
+        {tab === "scratchpad"     && <Suspense fallback={<div className="flex items-center justify-center h-full text-white/20">{t("blueprint.loading")}</div>}><ScratchpadTab /></Suspense>}
       </div>
     </div>
   );

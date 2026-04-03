@@ -72,6 +72,25 @@
     "skillInstalled": "installed",
     "error": "Error"
   },
+  "blueprint": {
+    "automation": "Automation",
+    "automationHint": "Butler event flows",
+    "pipelines": "File Pipelines",
+    "pipelinesHint": "Sort and process files",
+    "architect": "Project Architect",
+    "architectHint": "Wire boss + workers",
+    "workflow": "Project Workflow",
+    "workflowHint": "Define agent workflows",
+    "agentblueprint": "Agent Blueprint",
+    "agentblueprintHint": "Wire repos, skills, memory",
+    "scratchpad": "Scratchpad",
+    "scratchpadHint": "Freeform whiteboard — sketch ideas",
+    "notifications": "Notifications",
+    "notificationsHint": "Alert routing",
+    "permissions": "Permissions",
+    "permissionsHint": "Visual user permissions",
+    "loading": "Loading..."
+  },
   "navHint": {
     "dashboard": "Operations overview",
     "myAgent": "Primary assistant",
