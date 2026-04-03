@@ -171,7 +171,19 @@ def register_llm_routes(
 
         anthropic_cfg = providers.get("anthropic", {})
         claude_max_cfg = providers.get("claude_max", {})
-        if anthropic_cfg.get("enabled") or anthropic_cfg.get("api_key") or claude_max_cfg.get("enabled") or claude_max_cfg.get("api_key"):
+        # Check config, env var, AND llm_env file for Anthropic key
+        has_anthropic = (
+            anthropic_cfg.get("enabled") or anthropic_cfg.get("api_key")
+            or claude_max_cfg.get("enabled") or claude_max_cfg.get("api_key")
+            or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        )
+        if not has_anthropic:
+            try:
+                _env = Path("/etc/hydrahive/llm_env").read_text()
+                has_anthropic = "ANTHROPIC_API_KEY" in _env and "=" in _env
+            except OSError:
+                pass
+        if has_anthropic:
             for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]:
                 models.append({"id": model, "label": model, "provider": "anthropic"})
 
