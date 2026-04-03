@@ -342,6 +342,28 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
     Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
     ollama_base_url: wenn gesetzt, wird statt localhost dieser Endpunkt genutzt (WKS-Ollama).
     """
+    # Wenn kein ollama_base_url aber Modell Ollama: WKS-URL aus User-Config suchen
+    if not ollama_base_url and (model.startswith("ollama/") or "/" not in model):
+        try:
+            # 1. Globale Ollama-Config
+            from .router_llm import _load_llm_config
+            cfg = _load_llm_config()
+            ollama_base_url = cfg.get("providers", {}).get("ollama", {}).get("base_url")
+        except Exception:
+            pass
+        if not ollama_base_url:
+            try:
+                # 2. Erste WKS-Config aus users.json (für WKS-Ollama Fallback)
+                import json as _j
+                from pathlib import Path as _P
+                users = _j.loads(_P("/etc/hydrahive/users.json").read_text())
+                for u in users.values():
+                    wks = u.get("wks", {})
+                    if wks.get("ip"):
+                        ollama_base_url = f"http://{wks['ip']}:{wks.get('ollama_port', 11434)}"
+                        break
+            except Exception:
+                pass
     ollama_base = ollama_base_url or "http://localhost:11434"
     # ollama/ → ollama_chat/ damit /api/chat (mit Tool Calling) statt /api/generate genutzt wird
     if model.startswith("ollama/"):
