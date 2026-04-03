@@ -185,7 +185,7 @@ runtime          = AgentRuntime()
 projects         = ProjectLoader(PROJECTS_DIR)
 sessions         = SessionManager(PROJECTS_DIR)
 orchestrator     = Orchestrator(discovery, runtime, sessions)
-group_service    = GroupService(users_fn=_load_users)
+group_service    = GroupService(users_fn=lambda: _load_users())
 agent_sessions   = SessionManager(AGENTS_DIR)          # Direkte Agenten-Chats
 agent_orchestrator = Orchestrator(discovery, runtime, agent_sessions)
 provisioner:  Provisioner | None = None              # initialisiert im Lifespan
