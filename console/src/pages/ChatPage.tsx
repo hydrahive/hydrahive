@@ -12,6 +12,8 @@ interface Message {
   content: string;
   workers?: string[];
   tokenUsage?: { input: number; output: number; rounds?: number };
+  model?: string;
+  isFallback?: boolean;
 }
 
 let msgCounter = 0;
@@ -262,11 +264,15 @@ export function ChatPage() {
               } else if (evt.tool_call !== undefined) {
                 setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
               } else if (evt.done) {
-                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0)) {
+                const updates: Partial<Message> = {};
+                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+                  updates.tokenUsage = evt.usage;
+                if (evt.is_fallback)
+                  Object.assign(updates, { model: evt.model, isFallback: true });
+                if (Object.keys(updates).length > 0)
                   setMessages((ms) => ms.map((m) =>
-                    m.id === assistantMsg.id ? { ...m, tokenUsage: evt.usage } : m
+                    m.id === assistantMsg.id ? { ...m, ...updates } : m
                   ));
-                }
                 break outer;
               } else if (evt.error) {
                 throw new Error(evt.error);
@@ -518,14 +524,21 @@ export function ChatPage() {
                           ))}
                         </div>
                       )}
-                      {msg.role === "assistant" && msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
-                        <div className="flex gap-1 px-1">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort (inkl. aller Tool-Runden)">
-                            ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
-                            {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
-                              <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
-                            )}
-                          </span>
+                      {msg.role === "assistant" && (msg.tokenUsage || msg.isFallback) && (
+                        <div className="flex gap-1 px-1 flex-wrap">
+                          {msg.isFallback && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 border border-orange-500/30 px-2 py-0.5 text-xs text-orange-500" title="Antwort kam von einem Fallback-Modell">
+                              ⚡ Fallback: {msg.model}
+                            </span>
+                          )}
+                          {msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort (inkl. aller Tool-Runden)">
+                              ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
+                              {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
+                                <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
+                              )}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

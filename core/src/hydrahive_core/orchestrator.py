@@ -1265,10 +1265,11 @@ class Orchestrator:
                     raise
 
             # Antwort in Session speichern (mit echten Token-Counts aus API)
+            _is_fallback = _model_name != boss_cfg.llm.model
             _stream_meta: dict = {}
             if _usage.get("input") or _usage.get("output"):
                 _stream_meta = {
-                    "model":              boss_cfg.llm.model,
+                    "model":              _model_name,
                     "input_tokens":       _usage.get("input",       0),
                     "output_tokens":      _usage.get("output",      0),
                     "cache_write_tokens": _usage.get("cache_write", 0),
@@ -1282,7 +1283,11 @@ class Orchestrator:
             total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
             if total_tokens > 0 and _tool_reg._rate_limiter is not None:
                 _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
-            yield f"data: {_json.dumps({'done': True, 'session_id': None, 'usage': _usage})}\n\n"
+            _done_payload: dict = {'done': True, 'session_id': None, 'usage': _usage}
+            if _is_fallback:
+                _done_payload['model'] = _model_name
+                _done_payload['is_fallback'] = True
+            yield f"data: {_json.dumps(_done_payload)}\n\n"
 
         except Exception as e:
             err_str = str(e).lower()
