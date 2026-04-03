@@ -139,6 +139,7 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     role: str | None = None
+    group: str | None = None
     allowed_projects: list[str] | None = None
     allowed_agents: list[str] | None = None
     datasources: list[str] | None = None
@@ -392,6 +393,8 @@ def register_user_routes(
             if username == "admin" and req.role != "admin":
                 raise HTTPException(403, "Admin-User kann nicht auf 'user' gesetzt werden")
             users[username]["role"] = req.role
+        if req.group is not None:
+            users[username]["group"] = req.group
         if req.allowed_projects is not None:
             users[username]["allowed_projects"] = req.allowed_projects
         if req.allowed_agents is not None:

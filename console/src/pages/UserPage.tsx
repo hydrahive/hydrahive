@@ -31,6 +31,7 @@ interface OctoUser {
 
 interface EditForm {
   role:             string;
+  group:            string;
   allowed_projects: string[];
   allowed_agents:   string[];
   datasources:      string[];
@@ -43,6 +44,7 @@ const EMPTY = { username: "", password: "", role: "user", group: "standard" };
 export function UserPage() {
   const { t } = useTranslation();
   const [users,      setUsers]      = useState<Record<string, OctoUser>>({});
+  const [groups,     setGroups]     = useState<Record<string, { label: string }>>({});
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState("");
   const [showForm,   setShowForm]   = useState(false);
@@ -55,7 +57,7 @@ export function UserPage() {
   const [pwSaving,   setPwSaving]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editUser,   setEditUser]   = useState<string|null>(null);
-  const [editForm,   setEditForm]   = useState<EditForm>({ role: "user", allowed_projects: [], allowed_agents: [], datasources: [], wks_ip: "", discord_user_id: "" });
+  const [editForm,   setEditForm]   = useState<EditForm>({ role: "user", group: "standard", allowed_projects: [], allowed_agents: [], datasources: [], wks_ip: "", discord_user_id: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editErr,    setEditErr]    = useState("");
   const [dsInput,    setDsInput]    = useState("");
@@ -99,7 +101,12 @@ export function UserPage() {
 
   async function load() {
     try {
-      setUsers(await api.get<Record<string,OctoUser>>("/users"));
+      const [usersRes, groupsRes] = await Promise.all([
+        api.get<Record<string, OctoUser>>("/users"),
+        api.get<{ groups: Record<string, { label: string }> }>("/admin/groups").catch(() => ({ groups: {} })),
+      ]);
+      setUsers(usersRes);
+      if (groupsRes.groups) setGroups(groupsRes.groups);
       setError("");
     } catch(e) { setError(e instanceof Error ? e.message : t("common.error")); }
     finally { setLoading(false); setRefreshing(false); }
@@ -113,6 +120,7 @@ export function UserPage() {
     setDsInput("");
     setEditForm({
       role: u.role,
+      group: u.group ?? "standard",
       allowed_projects: u.allowed_projects ?? [],
       allowed_agents: u.allowed_agents ?? [],
       datasources: u.datasources ?? [],
@@ -227,10 +235,10 @@ export function UserPage() {
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
               <select value={form.group} onChange={e=>setForm({...form,group:e.target.value})}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                <option value="chatter">Chatter (nur Chat)</option>
-                <option value="standard">Standard</option>
-                <option value="learning">Learning (+Web-Suche)</option>
-                <option value="dev">Dev (+Shell/Git)</option>
+                {Object.entries(groups).filter(([id]) => id !== "admin").map(([id, g]) => (
+                  <option key={id} value={id}>{g.label || id}</option>
+                ))}
+                {Object.keys(groups).length === 0 && <option value="standard">Standard</option>}
               </select>
               <p className="text-xs text-muted-foreground">Legt verfügbare Funktionen fest</p>
             </div>
@@ -341,15 +349,27 @@ export function UserPage() {
             </div>
             <form onSubmit={handleEdit} className="space-y-5 p-6">
 
-              {/* Rolle */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rolle</label>
-                <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                  disabled={editUser === "admin"}>
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                </select>
+              {/* Rolle + Gruppe */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rolle</label>
+                  <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={editUser === "admin"}>
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
+                  <select value={editForm.group} onChange={e => setEditForm(f => ({ ...f, group: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                    {Object.entries(groups).map(([id, g]) => (
+                      <option key={id} value={id}>{g.label || id}</option>
+                    ))}
+                    {Object.keys(groups).length === 0 && <option value="standard">Standard</option>}
+                  </select>
+                </div>
               </div>
 
               {/* WKS IP + Discord */}
@@ -514,10 +534,10 @@ export function UserPage() {
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
               <select value={inviteForm.group} onChange={e => setInviteForm({...inviteForm, group: e.target.value})}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                <option value="chatter">chatter</option>
-                <option value="standard">standard</option>
-                <option value="learning">learning</option>
-                <option value="dev">dev</option>
+                {Object.entries(groups).filter(([id]) => id !== "admin").map(([id, g]) => (
+                  <option key={id} value={id}>{g.label || id}</option>
+                ))}
+                {Object.keys(groups).length === 0 && <option value="standard">Standard</option>}
               </select>
             </div>
             <div className="space-y-1.5">
