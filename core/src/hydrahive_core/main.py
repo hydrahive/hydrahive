@@ -1741,6 +1741,7 @@ def get_agents_live(_a=Depends(require_admin)):
             "heartbeat_interval":  rs.get("heartbeat_interval"),
             "tokens_1h":        tokens_1h,
             "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            "token_history":    rate_limiter.get_token_history(agent_id, minutes=60, bucket_minutes=5),
         })
     # Auch registrierte Agenten aus Discovery anzeigen die noch nie gestartet wurden
     for cfg in discovery.agents.values():

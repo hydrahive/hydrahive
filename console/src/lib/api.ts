@@ -500,6 +500,7 @@ export interface AgentLiveEntry {
   heartbeat_interval:  number | null;
   tokens_1h:          number;
   token_warn_threshold: number;
+  token_history?:     { minute: number; tokens: number }[];
 }
 
 export interface AgentsLiveReport {

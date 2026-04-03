@@ -253,3 +253,17 @@ class RateLimiter:
         now = time.time()
         hour_ago = now - 3600
         return sum(n for t, n in self._agent_token_usage.get(agent_id, []) if t > hour_ago)
+
+    def get_token_history(self, agent_id: str, minutes: int = 60, bucket_minutes: int = 1) -> list[dict]:
+        """Token-Usage als Zeitreihe in Minuten-Buckets (für Sparkline-Charts)."""
+        now = time.time()
+        cutoff = now - minutes * 60
+        entries = [(t, n) for t, n in self._agent_token_usage.get(agent_id, []) if t > cutoff]
+        num_buckets = minutes // bucket_minutes
+        buckets = [0] * num_buckets
+        for ts, tokens in entries:
+            age_min = (now - ts) / 60
+            idx = num_buckets - 1 - int(age_min / bucket_minutes)
+            if 0 <= idx < num_buckets:
+                buckets[idx] += tokens
+        return [{"minute": i * bucket_minutes, "tokens": b} for i, b in enumerate(buckets)]

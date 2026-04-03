@@ -35,16 +35,40 @@ function statusIcon(status: string, hung: boolean) {
   }
 }
 
+// ---------------------------------------------------------------- Sparkline
+
+function Sparkline({ data, width = 120, height = 24 }: { data: number[]; width?: number; height?: number }) {
+  if (!data.length || data.every(v => v === 0)) return null;
+  const max = Math.max(...data, 1);
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - (v / max) * (height - 2) - 1;
+    return `${x},${y}`;
+  }).join(" ");
+  const fillPoints = `0,${height} ${points} ${width},${height}`;
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      <polyline points={fillPoints} fill="currentColor" opacity={0.1} />
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // ---------------------------------------------------------------- TokenBar
 
-function TokenBar({ tokens, warn }: { tokens: number; warn: number }) {
+function TokenBar({ tokens, warn, history }: { tokens: number; warn: number; history?: { minute: number; tokens: number }[] }) {
   const pct = Math.min(100, (tokens / warn) * 100);
   const color = pct >= 100 ? "bg-red-500" : pct >= 70 ? "bg-yellow-400" : "bg-green-500";
+  const sparkColor = pct >= 100 ? "text-red-500" : pct >= 70 ? "text-yellow-400" : "text-primary";
+  const sparkData = history?.map(h => h.tokens) ?? [];
   return (
     <div className="w-full">
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+      <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 mb-0.5">
         <span>{tokens.toLocaleString()} Tokens/h</span>
-        <span className={cn("font-medium", pct >= 100 && "text-red-500")}>{Math.round(pct)}%</span>
+        <div className="flex items-center gap-2">
+          {sparkData.length > 0 && <span className={sparkColor}><Sparkline data={sparkData} /></span>}
+          <span className={cn("font-medium", pct >= 100 && "text-red-500")}>{Math.round(pct)}%</span>
+        </div>
       </div>
       <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
         <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
@@ -151,7 +175,7 @@ function AgentCard({
 
       {/* Metriken */}
       <div className="space-y-2">
-        <TokenBar tokens={agent.tokens_1h} warn={agent.token_warn_threshold} />
+        <TokenBar tokens={agent.tokens_1h} warn={agent.token_warn_threshold} history={agent.token_history} />
         <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
           <span>{agent.model ?? "—"}</span>
           <span className={cn(hung && "text-orange-500", agent.status === "error" && "text-red-500")}>
@@ -285,7 +309,7 @@ function AgentDetailPanel({
             </div>
           </div>
 
-          <TokenBar tokens={agent.tokens_1h} warn={agent.token_warn_threshold} />
+          <TokenBar tokens={agent.tokens_1h} warn={agent.token_warn_threshold} history={agent.token_history} />
 
           {/* Stop-Button */}
           <button
