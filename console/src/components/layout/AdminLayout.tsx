@@ -172,7 +172,7 @@ export function AdminLayout() {
 
   const groupAgents: NavGroup = {
     id: "agents",
-    label: "Agenten & Projekte",
+    label: t("nav.groupAgents"),
     collapsible: true,
     items: [
       { to: "/agents",              icon: Bot,         label: t("nav.agents"),       hint: t("navHint.agents") },
@@ -186,7 +186,7 @@ export function AdminLayout() {
 
   const groupAnalytics: NavGroup = {
     id: "analytics",
-    label: "Analytik",
+    label: t("nav.groupAnalytics"),
     collapsible: true,
     items: [
       { to: "/activity",  icon: Activity,   label: t("nav.activity"),  hint: t("navHint.activity") },
@@ -198,7 +198,7 @@ export function AdminLayout() {
 
   const groupKnowledge: NavGroup = {
     id: "knowledge",
-    label: "Wissen & Suche",
+    label: t("nav.groupKnowledge"),
     collapsible: true,
     items: [
       { to: "/brain",       icon: Brain,  label: "HydraBrain",    hint: "3D-Graph: Agenten, Tools & Memory" },
@@ -209,7 +209,7 @@ export function AdminLayout() {
 
   const groupNetwork: NavGroup = {
     id: "network",
-    label: "Netzwerk",
+    label: t("nav.groupNetwork"),
     collapsible: true,
     items: [
       { to: "/federation",  icon: Globe,  label: t("nav.federation"),  hint: t("navHint.federation") },

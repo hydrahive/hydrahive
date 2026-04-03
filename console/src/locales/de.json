@@ -22,7 +22,11 @@
     "skillPackages": "Skill-Pakete",
     "groupWorkspace": "Workspace",
     "groupOperations": "Operations",
-    "groupSystem": "System"
+    "groupSystem": "System",
+    "groupAgents": "Agenten & Projekte",
+    "groupAnalytics": "Analytik",
+    "groupKnowledge": "Wissen & Suche",
+    "groupNetwork": "Netzwerk"
   },
   "navHint": {
     "dashboard": "Lagebild",
