@@ -664,7 +664,7 @@ class WebSearchTool(BaseTool):
 
 
 class HttpRequestTool(BaseTool):
-    """HTTP-Request an externe URLs (#20). GET/POST mit optionalem JSON-Body."""
+    """HTTP-Request an externe URLs (#20). GET/POST/PUT/PATCH/DELETE mit optionalem JSON-Body."""
 
     @property
     def id(self) -> str:   return "http_request"
@@ -685,12 +685,12 @@ class HttpRequestTool(BaseTool):
                 "url":     {"type": "string", "description": "Ziel-URL"},
                 "method": {
                     "type":        "string",
-                    "enum":        ["GET", "POST", "PUT", "DELETE"],
+                    "enum":        ["GET", "POST", "PUT", "PATCH", "DELETE"],
                     "description": "HTTP-Methode (Standard: GET)",
                 },
                 "json_body": {
                     "type":                 "object",
-                    "description":          "JSON-Body fuer POST/PUT (optional)",
+                    "description":          "JSON-Body fuer POST/PUT/PATCH (optional)",
                     "properties":           {},
                     "additionalProperties": True,
                 },
