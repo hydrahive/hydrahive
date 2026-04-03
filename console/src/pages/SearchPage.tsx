@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, CheckCircle, XCircle, RefreshCw, Play, ExternalLink, Download, Loader2 } from "lucide-react";
-import { api, SearxngStatus, SearxngTestResult } from "@/lib/api";
+import { Search, CheckCircle, XCircle, RefreshCw, Play, ExternalLink, Download, Loader2, BookOpen, Globe } from "lucide-react";
+import { api, SearxngStatus, SearxngTestResult, KnowledgeResult } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 
 export function SearchPage() {
   const { t } = useTranslation();
@@ -225,6 +226,8 @@ export function SearchPage() {
         </div>
       )}
 
+      <KnowledgePanel />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="section-card p-5 space-y-4">
           <h2 className="text-sm font-semibold">{t("searchPage.testSearch")}</h2>
@@ -343,6 +346,112 @@ export function SearchPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Knowledge Search (A-MEM) ────────────────────────────────── */
+
+function KnowledgePanel() {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"hybrid" | "agentic">("hybrid");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<KnowledgeResult[] | null>(null);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState<{ available: boolean; total_notes: number } | null>(null);
+
+  useEffect(() => {
+    api.knowledgeStatus().then(setStatus).catch(() => setStatus({ available: false, total_notes: 0 }));
+  }, []);
+
+  async function handleSearch() {
+    if (!query.trim()) return;
+    setSearching(true); setResults(null); setError("");
+    try {
+      const r = await api.knowledgeSearch({ query: query.trim(), mode, limit: 15 });
+      if (r.error) setError(r.error);
+      else setResults(r.results);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler");
+    } finally { setSearching(false); }
+  }
+
+  return (
+    <div className="section-card p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">Wissen (A-MEM)</h2>
+          {status && (
+            <span className={cn("status-pill text-xs", status.available ? "status-pill-ok" : "status-pill-warn")}>
+              {status.available ? `${status.total_notes} Einträge` : "Offline"}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1">
+          {(["hybrid", "agentic"] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)}
+              className={cn("px-2.5 py-1 text-xs rounded-lg transition-colors",
+                mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>
+              {m === "hybrid" ? "Hybrid" : "Semantisch"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!status?.available && (
+        <p className="text-xs text-muted-foreground">
+          A-MEM ist nicht erreichbar. Aktiviere den Service unter Einstellungen → MCP → A-MEM Preset.
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <input value={query} onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleSearch()}
+          placeholder="Wissen durchsuchen..."
+          className="flex-1 rounded-2xl border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+        <button onClick={handleSearch}
+          disabled={searching || !query.trim() || !status?.available}
+          className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors">
+          {searching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          Suchen
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {results && results.length === 0 && (
+        <p className="text-xs text-muted-foreground">Keine Ergebnisse.</p>
+      )}
+
+      {results && results.length > 0 && (
+        <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+          {results.map((r, i) => (
+            <div key={r.id || i} className="rounded-xl border bg-muted/30 p-3 space-y-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm text-foreground whitespace-pre-wrap line-clamp-4">{r.content}</p>
+                {r.score != null && (
+                  <span className="shrink-0 text-xs text-muted-foreground font-mono">
+                    {(r.score * 100).toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {r.category && (
+                  <span className="px-1.5 py-0.5 text-xs rounded bg-primary/10 text-primary">{r.category}</span>
+                )}
+                {r.tags?.map(tag => (
+                  <span key={tag} className="px-1.5 py-0.5 text-xs rounded bg-muted text-muted-foreground">{tag}</span>
+                ))}
+                {r.keywords?.slice(0, 5).map(kw => (
+                  <span key={kw} className="text-xs text-muted-foreground/60">#{kw}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

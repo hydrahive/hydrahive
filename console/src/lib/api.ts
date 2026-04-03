@@ -164,6 +164,9 @@ export const api = {
   // SearXNG Web-Suche
   searxngStatus: () => api.get<SearxngStatus>("/admin/searxng/status"),
   searxngTest:   (body: { query: string; engines?: string }) => api.post<SearxngTestResult>("/admin/searxng/test", body),
+  knowledgeStatus: () => api.get<{ available: boolean; total_notes: number }>("/admin/knowledge/status"),
+  knowledgeSearch: (body: { query: string; mode?: string; limit?: number }) =>
+    api.post<{ results: KnowledgeResult[]; total: number; mode: string; query: string; error?: string }>("/admin/knowledge/search", body),
   // Schedules
   schedules:        () => api.get<{ schedules: Schedule[] }>("/schedules"),
   createSchedule:   (d: SchedulePayload) => api.post<Schedule>("/schedules", d),
@@ -644,6 +647,16 @@ export interface SearxngTestResult {
   results:      SearxngResult[];
   suggestions?: string[];
   error?:       string;
+}
+
+export interface KnowledgeResult {
+  id:       string;
+  content:  string;
+  score?:   number;
+  keywords: string[];
+  category: string;
+  tags:     string[];
+  context:  string;
 }
 
 export interface Schedule {
