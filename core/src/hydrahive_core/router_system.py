@@ -248,6 +248,45 @@ def register_system_routes(
         except Exception as e:
             return {"available": False, "reason": str(e)}
 
+    # ── Systemzeit / Timezone ────────────────────────────────────────
+
+    @auth_router.get("/admin/system/time")
+    def get_system_time():
+        """Aktuelle Serverzeit + Zeitzone."""
+        import time as _time
+        tz_name = _time.tzname[_time.daylight] if _time.daylight else _time.tzname[0]
+        try:
+            tz_full = Path("/etc/timezone").read_text().strip()
+        except OSError:
+            tz_full = subprocess.run(
+                ["timedatectl", "show", "-p", "Timezone", "--value"],
+                capture_output=True, text=True
+            ).stdout.strip() or "unknown"
+        now = datetime.now()
+        utc_now = datetime.now(timezone.utc)
+        offset_h = round((now - utc_now.replace(tzinfo=None)).total_seconds() / 3600, 1)
+        return {
+            "server_time": now.isoformat(timespec="seconds"),
+            "utc_time": utc_now.isoformat(timespec="seconds"),
+            "timezone": tz_full,
+            "timezone_abbr": tz_name,
+            "utc_offset_hours": offset_h,
+        }
+
+    @admin_router.put("/admin/system/timezone")
+    def set_system_timezone(body: dict):
+        """Systemzeitzone setzen (erfordert timedatectl-Berechtigung)."""
+        tz = body.get("timezone", "").strip()
+        if not tz or "/" not in tz:
+            raise HTTPException(400, "Ungültige Zeitzone (Format: Region/Stadt, z.B. Europe/Berlin)")
+        result = subprocess.run(
+            ["sudo", "timedatectl", "set-timezone", tz],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            raise HTTPException(500, f"timedatectl Fehler: {result.stderr.strip()}")
+        return {"updated": True, "timezone": tz}
+
     @auth_router.get("/status")
     def system_status():
         return {

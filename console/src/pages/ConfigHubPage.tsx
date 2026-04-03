@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CheckCircle, XCircle, ChevronDown, ChevronRight, Cpu, Key,
-  MessageSquare, GitBranch, Github, Mail, Network, Mic, Save, Loader2, AlertTriangle,
+  MessageSquare, GitBranch, Github, Mail, Network, Mic, Save, Loader2, AlertTriangle, Clock,
 } from "lucide-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -544,6 +544,91 @@ function VoiceSection() {
   );
 }
 
+/* ── System Time Section ──────────────────────────────────────── */
+
+const COMMON_TIMEZONES = [
+  "Europe/Berlin", "Europe/Vienna", "Europe/Zurich", "Europe/London",
+  "Europe/Paris", "Europe/Amsterdam", "Europe/Madrid", "Europe/Rome",
+  "Europe/Warsaw", "Europe/Prague", "Europe/Istanbul",
+  "US/Eastern", "US/Central", "US/Mountain", "US/Pacific",
+  "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata",
+  "Australia/Sydney", "UTC",
+];
+
+function SystemTimeSection() {
+  const [info, setInfo] = useState<{
+    server_time?: string; utc_time?: string; timezone?: string;
+    timezone_abbr?: string; utc_offset_hours?: number;
+  } | null>(null);
+  const [newTz, setNewTz] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(() => {
+    api.get<any>("/admin/system/time").then(r => {
+      setInfo(r);
+      setNewTz(r.timezone || "");
+    }).catch(() => setInfo(null));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const isUtc = info?.timezone === "Etc/UTC" || info?.timezone === "UTC";
+  const configured = info ? !isUtc : null;
+
+  async function save() {
+    setSaving(true); setMsg("");
+    try {
+      await api.put("/admin/system/timezone", { timezone: newTz });
+      load();
+      setMsg("Zeitzone gesetzt — wirkt sofort");
+      setTimeout(() => setMsg(""), 4000);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Section title="Systemzeit" icon={Clock} configured={configured}
+      badge={info ? `${info.timezone_abbr} (UTC${(info.utc_offset_hours ?? 0) >= 0 ? "+" : ""}${info.utc_offset_hours})` : undefined}>
+      <div className="space-y-4 mt-2">
+        {info && (
+          <div className="grid gap-3 md:grid-cols-3 text-sm">
+            <div>
+              <span className="text-muted-foreground">Serverzeit:</span>
+              <p className="font-mono">{info.server_time}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">UTC:</span>
+              <p className="font-mono">{info.utc_time}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Zeitzone:</span>
+              <p className="font-mono">{info.timezone}</p>
+            </div>
+          </div>
+        )}
+        {isUtc && (
+          <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm text-orange-500">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Zeitzone ist UTC — zeitgesteuerte Aktionen (Butler, Schedules) laufen zur falschen Uhrzeit!
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <select value={newTz} onChange={e => setNewTz(e.target.value)}
+            className="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+            {!COMMON_TIMEZONES.includes(info?.timezone || "") && info?.timezone && (
+              <option value={info.timezone}>{info.timezone}</option>
+            )}
+            {COMMON_TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+          </select>
+          <SaveBtn saving={saving} onClick={save} disabled={!newTz || newTz === info?.timezone} />
+          {msg && <span className="text-sm text-green-500">{msg}</span>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 /* ── Main Page ────────────────────────────────────────────────── */
 
 export function ConfigHubPage() {
@@ -563,6 +648,7 @@ export function ConfigHubPage() {
         </div>
       </div>
 
+      {isAdmin && <SystemTimeSection />}
       <LlmSection />
       <PlatformsSection />
       {isAdmin && <GitSection />}
