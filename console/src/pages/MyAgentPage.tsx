@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -136,6 +136,7 @@ export function MyAgentPage() {
   const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
   const [coachFeedback, setCoachFeedback] = useState<{ ok: boolean; suggestion?: string; reason?: string } | null>(null);
   const [coachChecking, setCoachChecking] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
   const [showSuggest,  setShowSuggest]  = useState(false);
@@ -397,43 +398,85 @@ export function MyAgentPage() {
   return (
     <div className="flex flex-col h-full min-w-0 overflow-x-hidden">
       {/* Header + Tabs */}
-      <div className="border-b flex-shrink-0 min-w-0">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <Bot className="h-4 w-4 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-sm font-semibold truncate">{identity}</h1>
-            {model && <p className="text-xs text-muted-foreground font-mono">{model}</p>}
-          </div>
-        </div>
-        <div className="flex gap-0 px-4 overflow-x-auto scrollbar-none min-w-0">
-          {[
-            { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
-            { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
-            { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
-            { id: "skills",    label: t("myAgent.skillsTab"),     icon: BookOpen },
-            { id: "mcp",       label: t("myAgent.mcpTab"),        icon: Plug },
-            { id: "platforms", label: t("myAgent.platformsTab"),  icon: Wifi },
-            { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
-            { id: "discord",   label: t("myAgent.discordTab"),    icon: MessageSquare },
-            { id: "whatsapp",  label: t("myAgent.whatsappTab"),   icon: Phone },
-            { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
-            { id: "mail",      label: t("myAgent.mailTab"),       icon: Mail },
-            { id: "butler",    label: "Butler",                   icon: Workflow },
-            { id: "account",   label: "Mein Konto",               icon: KeyRound },
-          ].map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => setTab(id as typeof tab)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs border-b-2 transition-colors ${
-                tab === id
-                  ? "border-primary text-primary font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}>
-              <Icon className="h-3.5 w-3.5" />{label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {(() => {
+        const TAB_LIST = [
+          { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
+          { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
+          { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
+          { id: "skills",    label: t("myAgent.skillsTab"),     icon: BookOpen },
+          { id: "mcp",       label: t("myAgent.mcpTab"),        icon: Plug },
+          { id: "platforms", label: t("myAgent.platformsTab"),  icon: Wifi },
+          { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
+          { id: "discord",   label: t("myAgent.discordTab"),    icon: MessageSquare },
+          { id: "whatsapp",  label: t("myAgent.whatsappTab"),   icon: Phone },
+          { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
+          { id: "mail",       label: t("myAgent.mailTab"),       icon: Mail },
+          { id: "butler",    label: "Butler",                   icon: Workflow },
+          { id: "account",   label: "Mein Konto",               icon: KeyRound },
+        ];
+        const activeTab = TAB_LIST.find(t => t.id === tab);
+        return (
+          <>
+            <div className="border-b flex-shrink-0 min-w-0">
+              <div className="flex items-center gap-3 px-4 py-3">
+                {/* Hamburger — nur Mobile */}
+                <button onClick={() => setDrawerOpen(true)} className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+                  <Menu className="h-5 w-5" />
+                </button>
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 hidden md:flex">
+                  <Bot className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-sm font-semibold truncate">{identity}</h1>
+                  {model && <p className="text-xs text-muted-foreground font-mono truncate">{model}</p>}
+                </div>
+                {/* Mobile: aktiver Tab als Badge */}
+                {activeTab && (
+                  <span className="md:hidden text-xs text-primary font-medium flex items-center gap-1">
+                    <activeTab.icon className="h-3.5 w-3.5" />{activeTab.label}
+                  </span>
+                )}
+              </div>
+              {/* Desktop Tabs */}
+              <div className="hidden md:flex gap-0 px-4 overflow-x-auto scrollbar-none min-w-0">
+                {TAB_LIST.map(({ id, label, icon: Icon }) => (
+                  <button key={id} onClick={() => setTab(id as typeof tab)}
+                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs border-b-2 transition-colors ${
+                      tab === id
+                        ? "border-primary text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}>
+                    <Icon className="h-3.5 w-3.5" />{label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile Drawer */}
+            {drawerOpen && (
+              <>
+                <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setDrawerOpen(false)} />
+                <div className="fixed left-0 top-0 bottom-0 w-64 bg-card border-r z-50 md:hidden overflow-y-auto">
+                  <div className="flex items-center justify-between px-4 py-3 border-b">
+                    <span className="text-sm font-semibold">{identity}</span>
+                    <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-muted"><X className="h-4 w-4" /></button>
+                  </div>
+                  <div className="py-2">
+                    {TAB_LIST.map(({ id, label, icon: Icon }) => (
+                      <button key={id} onClick={() => { setTab(id as typeof tab); setDrawerOpen(false); }}
+                        className={`flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors ${
+                          tab === id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                        }`}>
+                        <Icon className="h-4 w-4" />{label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
@@ -530,7 +573,7 @@ export function MyAgentPage() {
                   </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto min-h-0 space-y-4 px-4 py-5 sm:px-5">
+                <div className="flex-1 overflow-y-auto min-h-0 space-y-3 sm:space-y-4 px-3 py-3 sm:px-5 sm:py-5">
                   {!viewSession && messages.length === 0 && (
                     <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-muted/20 px-6 text-center text-muted-foreground">
                       <Bot className="h-10 w-10 opacity-70" />
@@ -690,12 +733,12 @@ export function MyAgentPage() {
                       )}
                       {/* Coach Feedback */}
                       {coachFeedback && !coachFeedback.ok && (
-                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 mb-2 text-sm space-y-2">
-                          <p className="text-orange-400 font-medium">{coachFeedback.reason || "Dein Prompt könnte klarer sein"}</p>
+                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-3 py-2 sm:px-4 sm:py-3 mb-2 text-sm space-y-2">
+                          <p className="text-orange-400 font-medium text-xs sm:text-sm">{coachFeedback.reason || "Dein Prompt könnte klarer sein"}</p>
                           {coachFeedback.suggestion && (
                             <p className="text-muted-foreground text-xs bg-muted/30 rounded-lg p-2 font-mono">{coachFeedback.suggestion}</p>
                           )}
-                          <div className="flex gap-2">
+                          <div className="flex flex-wrap gap-2">
                             {coachFeedback.suggestion && (
                               <button onClick={() => { setInput(coachFeedback.suggestion!); setCoachFeedback(null); }}
                                 className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
@@ -706,43 +749,46 @@ export function MyAgentPage() {
                               className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
                               Trotzdem senden
                             </button>
-                            <a href="/prompt-guide" className="rounded-lg px-3 py-1.5 text-xs text-primary hover:underline flex items-center gap-1">
+                            <a href="/prompt-guide" className="hidden sm:flex rounded-lg px-3 py-1.5 text-xs text-primary hover:underline items-center gap-1">
                               <Lightbulb className="h-3 w-3" /> Prompt-Tipps
                             </a>
                           </div>
                         </div>
                       )}
-                      {/* Coach Toggle + Input */}
-                      <div className="flex items-center gap-2 mb-1">
-                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                      {/* Toolbar: Coach + Emoji */}
+                      <div className="flex items-center gap-1 sm:gap-2 mb-1 flex-wrap">
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
                           <input type="checkbox" checked={coachEnabled} onChange={e => {
                             setCoachEnabled(e.target.checked);
                             localStorage.setItem("hh_prompt_coach", e.target.checked ? "1" : "0");
                           }} className="rounded" />
-                          Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
+                          <span className="hidden sm:inline">Prompt-Coach</span>
+                          <span className="sm:hidden">🧠</span>
+                          {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
                         </label>
+                        <button onClick={() => setShowEmoji(v => !v)} type="button"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition">
+                          <Smile className="h-3.5 w-3.5" /><span className="hidden sm:inline">Emoji</span>
+                        </button>
                       </div>
-                      <div className="flex items-end gap-2 min-w-0">
+                      {/* Input + Send */}
+                      <div className="flex items-end gap-1.5 sm:gap-2 min-w-0">
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
                           onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
                           placeholder={viewSession ? "Vergangene Session — schreibgeschützt" : t("myAgent.messagePlaceholder")} rows={1}
                           disabled={!!viewSession}
-                          className="min-h-[3rem] min-w-0 flex-1 resize-none rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="min-h-[2.5rem] sm:min-h-[3rem] min-w-0 flex-1 resize-none rounded-xl sm:rounded-2xl border border-border/60 bg-card px-3 py-2 sm:px-4 sm:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ maxHeight: "160px", overflowY: "auto" }} />
-                        <button onClick={() => setShowEmoji(v => !v)} type="button"
-                          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-card transition hover:bg-muted">
-                          <Smile className="h-5 w-5 text-muted-foreground" />
-                        </button>
                         {sending ? (
                           <button onClick={stop}
-                            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
+                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
                             title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
                             <Square className="h-4 w-4" />
                           </button>
                         ) : (
                           <button onClick={() => send()} disabled={!input.trim() || coachChecking}
-                            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                             <Send className="h-4 w-4" />
                           </button>
                         )}
