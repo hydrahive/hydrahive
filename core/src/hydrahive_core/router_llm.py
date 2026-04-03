@@ -171,7 +171,7 @@ def register_llm_routes(
 
         anthropic_cfg = providers.get("anthropic", {})
         claude_max_cfg = providers.get("claude_max", {})
-        if anthropic_cfg.get("enabled") or anthropic_cfg.get("api_key") or claude_max_cfg.get("enabled"):
+        if anthropic_cfg.get("enabled") or anthropic_cfg.get("api_key") or claude_max_cfg.get("enabled") or claude_max_cfg.get("api_key"):
             for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]:
                 models.append({"id": model, "label": model, "provider": "anthropic"})
 
