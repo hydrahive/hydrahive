@@ -297,15 +297,18 @@ def register_system_routes(
     @auth_router.get("/admin/system/time")
     def get_system_time():
         """Aktuelle Serverzeit + Zeitzone."""
+        # timedatectl is authoritative — /etc/timezone may be stale
+        tz_full = subprocess.run(
+            ["timedatectl", "show", "-p", "Timezone", "--value"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        if not tz_full:
+            try:
+                tz_full = Path("/etc/timezone").read_text().strip()
+            except OSError:
+                tz_full = "unknown"
         import time as _time
         tz_name = _time.tzname[_time.daylight] if _time.daylight else _time.tzname[0]
-        try:
-            tz_full = Path("/etc/timezone").read_text().strip()
-        except OSError:
-            tz_full = subprocess.run(
-                ["timedatectl", "show", "-p", "Timezone", "--value"],
-                capture_output=True, text=True
-            ).stdout.strip() or "unknown"
         now = datetime.now()
         utc_now = datetime.now(timezone.utc)
         offset_h = round((now - utc_now.replace(tzinfo=None)).total_seconds() / 3600, 1)
