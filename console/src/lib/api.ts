@@ -407,6 +407,8 @@ export interface WhatsAppConfig {
   allowed_numbers:       string[];
   blocked_numbers:       string[];
   owner_numbers:         string[];
+  voice_mode:            string;
+  voice_name:            string;
 }
 
 export interface WhatsAppStatus extends Partial<WhatsAppConfig> {

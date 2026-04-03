@@ -6,6 +6,7 @@ import subprocess as _sp
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, validator
 
 
@@ -902,9 +903,49 @@ def register_user_integration_routes(
             "allowed_numbers":       list(body.get("allowed_numbers", cfg.get("allowed_numbers", []))),
             "blocked_numbers":       list(body.get("blocked_numbers", cfg.get("blocked_numbers", []))),
             "owner_numbers":         list(body.get("owner_numbers",   cfg.get("owner_numbers", []))),
+            "voice_mode":            str(body.get("voice_mode", cfg.get("voice_mode", "echo"))).strip(),
+            "voice_name":            str(body.get("voice_name", cfg.get("voice_name", "de-DE-KatjaNeural"))).strip(),
         })
         save_whatsapp_config(username, cfg)
         return {"updated": True}
+
+    @auth_router.post("/me/whatsapp/voice-preview")
+    async def whatsapp_voice_preview(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+        """Spielt eine TTS-Stimme als Preview ab."""
+        voice = body.get("voice", "de-DE-KatjaNeural")
+        text = body.get("text", "Hallo, ich bin dein HydraHive Assistent. So klinge ich!")
+        if len(text) > 200:
+            text = text[:200]
+        try:
+            from .whatsapp_tts import text_to_ogg_b64
+            audio_b64 = await text_to_ogg_b64(text, voice=voice)
+            if audio_b64:
+                import base64
+                audio_bytes = base64.b64decode(audio_b64)
+                return Response(content=audio_bytes, media_type="audio/ogg")
+            return Response(content=b"", status_code=500)
+        except Exception as e:
+            raise HTTPException(500, f"TTS Preview fehlgeschlagen: {e}")
+
+    @auth_router.get("/me/whatsapp/voices")
+    def list_whatsapp_voices(auth: tuple = Depends(require_auth)):
+        """Liste der verfügbaren TTS-Stimmen."""
+        return {"voices": [
+            {"id": "de-DE-KatjaNeural",    "label": "Katja (DE, weiblich)",     "lang": "de"},
+            {"id": "de-DE-ConradNeural",   "label": "Conrad (DE, männlich)",    "lang": "de"},
+            {"id": "de-AT-IngridNeural",   "label": "Ingrid (AT, weiblich)",    "lang": "de"},
+            {"id": "de-CH-LeniNeural",     "label": "Leni (CH, weiblich)",      "lang": "de"},
+            {"id": "en-US-JennyNeural",    "label": "Jenny (US, female)",       "lang": "en"},
+            {"id": "en-US-GuyNeural",      "label": "Guy (US, male)",           "lang": "en"},
+            {"id": "en-GB-SoniaNeural",    "label": "Sonia (GB, female)",       "lang": "en"},
+            {"id": "en-GB-RyanNeural",     "label": "Ryan (GB, male)",          "lang": "en"},
+            {"id": "fr-FR-DeniseNeural",   "label": "Denise (FR, féminin)",     "lang": "fr"},
+            {"id": "es-ES-ElviraNeural",   "label": "Elvira (ES, femenino)",    "lang": "es"},
+            {"id": "it-IT-ElsaNeural",     "label": "Elsa (IT, femminile)",     "lang": "it"},
+            {"id": "tr-TR-EmelNeural",     "label": "Emel (TR, kadın)",         "lang": "tr"},
+            {"id": "pl-PL-AgnieszkaNeural","label": "Agnieszka (PL, kobieta)",  "lang": "pl"},
+            {"id": "ru-RU-SvetlanaNeural", "label": "Svetlana (RU, женский)",   "lang": "ru"},
+        ]}
 
     @auth_router.post("/me/whatsapp/connect")
     async def connect_my_whatsapp(auth: tuple = Depends(require_auth)):
@@ -1184,16 +1225,22 @@ def register_user_integration_routes(
 
         response_text = "".join(response_parts).strip()
         if response_text:
-            if is_audio:
+            # Voice-Modus bestimmen (#172)
+            voice_mode = wa_cfg.get("voice_mode", "echo") if wa_cfg else "echo"
+            voice_name = wa_cfg.get("voice_name", "de-DE-KatjaNeural") if wa_cfg else "de-DE-KatjaNeural"
+            send_voice = (
+                (voice_mode == "echo" and is_audio) or
+                (voice_mode == "always")
+            )
+            if send_voice and voice_mode != "never":
                 # Voice-Antwort: TTS → OGG → senden
                 try:
                     from .whatsapp_tts import text_to_ogg_b64
                     from .whatsapp_agent import bridge_send_voice
-                    audio_b64 = await text_to_ogg_b64(response_text)
+                    audio_b64 = await text_to_ogg_b64(response_text, voice=voice_name)
                     if audio_b64:
                         await bridge_send_voice(agent_id, from_jid, audio_b64)
                     else:
-                        # TTS fehlgeschlagen → Fallback auf Text
                         from .whatsapp_agent import bridge_send
                         await bridge_send(agent_id, from_jid, response_text)
                 except Exception as e:

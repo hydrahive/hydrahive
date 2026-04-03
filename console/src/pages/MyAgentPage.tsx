@@ -2232,11 +2232,15 @@ function WhatsAppTab() {
     allowed_numbers:       [],
     blocked_numbers:       [],
     owner_numbers:         [],
+    voice_mode:            "echo",
+    voice_name:            "de-DE-KatjaNeural",
   });
   const [cfgSaving, setCfgSaving] = useState(false);
   const [numInput,   setNumInput]   = useState("");
   const [blockInput, setBlockInput] = useState("");
   const [ownerInput, setOwnerInput] = useState("");
+  const [voices, setVoices] = useState<{ id: string; label: string; lang: string }[]>([]);
+  const [previewPlaying, setPreviewPlaying] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchStatus() {
@@ -2251,7 +2255,13 @@ function WhatsAppTab() {
           allowed_numbers:       s.allowed_numbers       ?? [],
           blocked_numbers:       s.blocked_numbers       ?? [],
           owner_numbers:         s.owner_numbers         ?? [],
+          voice_mode:            s.voice_mode            ?? "echo",
+          voice_name:            s.voice_name            ?? "de-DE-KatjaNeural",
         });
+      }
+      if (voices.length === 0) {
+        api.get<{ voices: { id: string; label: string; lang: string }[] }>("/me/whatsapp/voices")
+          .then(r => setVoices(r.voices || [])).catch(() => {});
       }
       if (s.status === "connected" || s.status === "bridge_unavailable" || s.status === "disconnected") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -2506,6 +2516,56 @@ function WhatsAppTab() {
                 className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
               <button type="button" onClick={() => { if (ownerInput.trim()) { setCfg(c => ({ ...c, owner_numbers: [...c.owner_numbers, ownerInput.trim()] })); setOwnerInput(""); }}}
                 className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors"><Plus className="h-4 w-4" /></button>
+            </div>
+          </div>
+
+          {/* Voice-Einstellungen (#172) */}
+          <div className="space-y-3 pt-3 border-t">
+            <h3 className="text-sm font-semibold">Sprachnachrichten</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Voice-Modus</label>
+                <select value={cfg.voice_mode} onChange={e => setCfg({ ...cfg, voice_mode: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                  <option value="echo">Echo (Voice → Voice, Text → Text)</option>
+                  <option value="always">Immer Voice-Antwort</option>
+                  <option value="never">Nie Voice (immer Text)</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Stimme</label>
+                <div className="flex gap-1.5">
+                  <select value={cfg.voice_name} onChange={e => setCfg({ ...cfg, voice_name: e.target.value })}
+                    className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                    {voices.length > 0 ? voices.map(v => (
+                      <option key={v.id} value={v.id}>{v.label}</option>
+                    )) : (
+                      <option value={cfg.voice_name}>{cfg.voice_name}</option>
+                    )}
+                  </select>
+                  <button type="button" onClick={async () => {
+                    setPreviewPlaying(cfg.voice_name);
+                    try {
+                      const token = localStorage.getItem("hydrahive_token") || "";
+                      const res = await fetch("/api/me/whatsapp/voice-preview", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ voice: cfg.voice_name }),
+                      });
+                      if (res.ok) {
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = new Audio(url);
+                        a.onended = () => { setPreviewPlaying(null); URL.revokeObjectURL(url); };
+                        a.play();
+                      }
+                    } catch {} finally { setTimeout(() => setPreviewPlaying(null), 5000); }
+                  }} disabled={previewPlaying !== null}
+                    className="px-3 py-2 text-sm border rounded-md hover:bg-accent transition-colors disabled:opacity-50 shrink-0">
+                    {previewPlaying ? "▶ ..." : "▶ Test"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
