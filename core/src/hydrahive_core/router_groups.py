@@ -10,7 +10,7 @@ GET    /admin/groups/permissions/{username} — Effektive Permissions eines User
 from __future__ import annotations
 
 import re
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 _GROUP_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
 
@@ -31,7 +31,7 @@ def register_group_routes(
         return {"groups": groups}
 
     @admin_router.post("/admin/groups", status_code=201)
-    def create_group(body: dict, _a=Depends(require_admin)):
+    def create_group(body: dict = Body(...), _a=Depends(require_admin)):
         """Neue Gruppe erstellen."""
         group_id = body.get("id", "").strip().lower()
         if not group_id or not _GROUP_ID_RE.fullmatch(group_id):
@@ -43,7 +43,7 @@ def register_group_routes(
             raise HTTPException(409, str(e))
 
     @admin_router.put("/admin/groups/{group_id}")
-    def update_group(group_id: str, body: dict, _a=Depends(require_admin)):
+    def update_group(group_id: str, body: dict = Body(...), _a=Depends(require_admin)):
         """Gruppe bearbeiten (Permissions, Label, Description)."""
         result = group_service.update_group(group_id, body)
         if result is None:
