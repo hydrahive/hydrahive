@@ -7,7 +7,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from .router_core_misc import collect_core_journal_report
@@ -278,7 +278,7 @@ def register_system_routes(
         }
 
     @admin_router.put("/admin/agentlink/config")
-    def set_agentlink_config(body: dict):
+    def set_agentlink_config(body: dict = Body(...)):
         """AgentLink-Konfiguration speichern."""
         from .agentlink_client import _config_cache
         cfg = {
@@ -318,7 +318,7 @@ def register_system_routes(
         }
 
     @admin_router.put("/admin/system/timezone")
-    def set_system_timezone(body: dict):
+    def set_system_timezone(body: dict = Body(...)):
         """Systemzeitzone setzen (erfordert timedatectl-Berechtigung)."""
         tz = body.get("timezone", "").strip()
         if not tz or "/" not in tz:
@@ -557,7 +557,7 @@ def register_system_routes(
         return result
 
     @admin_router.put("/admin/cleanup/config")
-    def update_cleanup_config(body: dict):
+    def update_cleanup_config(body: dict = Body(...)):
         from .cleanup_service import _load_config, save_config
         allowed = {"transcript_days", "backup_keep", "warn_pct_yellow", "warn_pct_red"}
         cfg = _load_config()
