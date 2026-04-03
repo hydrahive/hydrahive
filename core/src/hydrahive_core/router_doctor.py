@@ -79,6 +79,8 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
             return await _fix_install_chromium()
         if fix_id == "repair_whatsapp":
             return await _fix_repair_whatsapp()
+        if fix_id == "repair_agentlink":
+            return await _fix_repair_agentlink()
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -364,16 +366,23 @@ async def _fix_repair_whatsapp() -> dict:
     return {"ok": False, "error": (r.stderr or r.stdout or "Installer fehlgeschlagen").strip()[-500:]}
 
 
+def _agentlink_url() -> str:
+    """Liest AgentLink base_url aus /etc/hydrahive/agentlink.json (Default: http://localhost:8000)."""
+    try:
+        cfg = json.loads(Path("/etc/hydrahive/agentlink.json").read_text())
+        return cfg.get("base_url", "http://localhost:8000").rstrip("/")
+    except (OSError, json.JSONDecodeError):
+        return "http://localhost:8000"
+
+
 async def _check_agentlink() -> list[dict]:
-    """Prüft AgentLink Port + Health-Endpoint (Service-Status ist in _check_services)."""
-    import socket
+    """Prüft AgentLink Health-Endpoint."""
     results = []
+    url = _agentlink_url()
 
     try:
-        with socket.create_connection(("127.0.0.1", 8010), timeout=2):
-            pass
         import urllib.request
-        with urllib.request.urlopen("http://127.0.0.1:8010/health", timeout=5) as resp:
+        with urllib.request.urlopen(f"{url}/health", timeout=5) as resp:
             data = json.loads(resp.read())
         redis_ok = data.get("redis") == "connected"
         results.append(_check(
@@ -384,9 +393,53 @@ async def _check_agentlink() -> list[dict]:
         ))
     except Exception as e:
         results.append(_check("AgentLink: Health", "error", f"nicht erreichbar: {e}",
-                              "sudo bash /opt/hydrahive/installer/modules/11_agentlink.sh"))
+                              fix="repair_agentlink"))
 
     return results
+
+
+async def _fix_repair_agentlink() -> dict:
+    """Repariert AgentLink: DB-User-Reset + Service-Restart."""
+    output_lines = []
+    try:
+        # 1. PostgreSQL Passwort Reset
+        r = subprocess.run(
+            ["sudo", "-u", "postgres", "psql", "-c", "ALTER USER agentlink PASSWORD 'changeme';"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode == 0:
+            output_lines.append("PostgreSQL: Passwort zurückgesetzt")
+        else:
+            output_lines.append(f"PostgreSQL: {r.stderr.strip() or 'Fehler'}")
+
+        # 2. Git safe.directory
+        subprocess.run(
+            ["sudo", "git", "config", "--global", "--add", "safe.directory", "/agentlink"],
+            capture_output=True, timeout=5,
+        )
+
+        # 3. Service Restart
+        r = subprocess.run(
+            ["sudo", "systemctl", "restart", "agentlink"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if r.returncode == 0:
+            output_lines.append("AgentLink Service neu gestartet")
+        else:
+            output_lines.append(f"Service-Restart fehlgeschlagen: {r.stderr.strip()}")
+
+        # 4. Health-Check nach kurzer Wartezeit
+        import time
+        time.sleep(3)
+        import urllib.request
+        url = _agentlink_url()
+        with urllib.request.urlopen(f"{url}/health", timeout=5) as resp:
+            data = json.loads(resp.read())
+        output_lines.append(f"Health OK: status={data.get('status')} redis={data.get('redis')}")
+        return {"ok": True, "output": "\n".join(output_lines)}
+    except Exception as e:
+        output_lines.append(f"Health-Check nach Repair fehlgeschlagen: {e}")
+        return {"ok": False, "error": "\n".join(output_lines)}
 
 
 def _check_nginx_projects() -> list[dict]:
