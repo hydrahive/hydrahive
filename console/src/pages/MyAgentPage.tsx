@@ -136,7 +136,6 @@ export function MyAgentPage() {
   const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
   const [coachFeedback, setCoachFeedback] = useState<{ ok: boolean; suggestion?: string; reason?: string } | null>(null);
   const [coachChecking, setCoachChecking] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
   const [showSuggest,  setShowSuggest]  = useState(false);
@@ -397,7 +396,7 @@ export function MyAgentPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full min-w-0 overflow-x-hidden">
-      {/* Header + Tabs */}
+      {/* ── Sticky Header + Tab-Navigation ──────────────────────────────── */}
       {(() => {
         const TAB_LIST = [
           { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
@@ -414,75 +413,42 @@ export function MyAgentPage() {
           { id: "butler",    label: "Butler",                   icon: Workflow },
           { id: "account",   label: "Mein Konto",               icon: KeyRound },
         ];
-        const activeTab = TAB_LIST.find(t => t.id === tab);
         return (
-          <>
-            <div className="border-b flex-shrink-0 min-w-0">
-              <div className="flex items-center gap-3 px-4 py-3">
-                {/* Hamburger — nur Mobile */}
-                <button onClick={() => setDrawerOpen(true)} className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted transition-colors flex-shrink-0">
-                  <Menu className="h-5 w-5" />
-                </button>
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 hidden md:flex">
-                  <Bot className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-sm font-semibold truncate">{identity}</h1>
-                  {model && <p className="text-xs text-muted-foreground font-mono truncate">{model}</p>}
-                </div>
-                {/* Mobile: aktiver Tab als Badge */}
-                {activeTab && (
-                  <span className="md:hidden text-xs text-primary font-medium flex items-center gap-1">
-                    <activeTab.icon className="h-3.5 w-3.5" />{activeTab.label}
-                  </span>
-                )}
+          <div className="sticky top-0 z-30 bg-background border-b flex-shrink-0">
+            {/* Agent-Header */}
+            <div className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-3">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
               </div>
-              {/* Desktop Tabs */}
-              <div className="hidden md:flex gap-0 px-4 overflow-x-auto scrollbar-none min-w-0">
-                {TAB_LIST.map(({ id, label, icon: Icon }) => (
-                  <button key={id} onClick={() => setTab(id as typeof tab)}
-                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs border-b-2 transition-colors ${
-                      tab === id
-                        ? "border-primary text-primary font-medium"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}>
-                    <Icon className="h-3.5 w-3.5" />{label}
-                  </button>
-                ))}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xs sm:text-sm font-semibold truncate">{identity}</h1>
+                {model && <p className="text-[10px] sm:text-xs text-muted-foreground font-mono truncate">{model}</p>}
               </div>
             </div>
-
-            {/* Mobile Drawer */}
-            {drawerOpen && (
-              <>
-                <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setDrawerOpen(false)} />
-                <div className="fixed left-0 top-0 bottom-0 w-64 bg-card border-r z-50 md:hidden overflow-y-auto">
-                  <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <span className="text-sm font-semibold">{identity}</span>
-                    <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-muted"><X className="h-4 w-4" /></button>
-                  </div>
-                  <div className="py-2">
-                    {TAB_LIST.map(({ id, label, icon: Icon }) => (
-                      <button key={id} onClick={() => { setTab(id as typeof tab); setDrawerOpen(false); }}
-                        className={`flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors ${
-                          tab === id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                        }`}>
-                        <Icon className="h-4 w-4" />{label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </>
+            {/* Tab-Leiste: IMMER sichtbar, horizontal scrollbar */}
+            <div className="flex overflow-x-auto scrollbar-none border-t border-border/30">
+              {TAB_LIST.map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => setTab(id as typeof tab)}
+                  className={`flex shrink-0 items-center gap-1 sm:gap-1.5 whitespace-nowrap px-2.5 py-2 sm:px-3 text-[11px] sm:text-xs border-b-2 transition-colors ${
+                    tab === id
+                      ? "border-primary text-primary font-medium"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}>
+                  <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
+                  <span className="sm:hidden">{label.length > 6 ? label.slice(0, 4) + "…" : label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         );
       })()}
 
       {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
       {tab === "chat" && (
-        <div className="flex-1 overflow-hidden flex flex-col pt-4 pb-4 pl-4 sm:pt-6 sm:pb-6 sm:pl-6 pr-4 sm:pr-6 min-h-0 min-w-0">
-          <div className="grid flex-1 min-h-0 min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
-            <section className="flex flex-col min-h-0 min-w-0 gap-4">
+        <div className="flex-1 overflow-hidden flex flex-col px-2 py-2 sm:px-4 sm:py-4 lg:px-6 lg:py-6 min-h-0 min-w-0">
+          <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
+            <section className="flex flex-col min-h-0 min-w-0 gap-2 sm:gap-4">
               {loadError && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                   {loadError.includes("Token")
@@ -490,7 +456,7 @@ export function MyAgentPage() {
                     : loadError}
                 </div>
               )}
-              <div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+              <div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-xl sm:rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur overflow-hidden">
                 <div className="border-b border-border/60 px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -689,7 +655,7 @@ export function MyAgentPage() {
                   </div>
                 )}
 
-                <div className="border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px] flex-shrink-0 min-w-0">
+                <div className="border-t border-border/60 bg-card/95 backdrop-blur px-2 py-2 sm:px-4 sm:py-3 rounded-b-[20px] sm:rounded-b-[28px] flex-shrink-0 min-w-0 overflow-hidden">
                   <div className="relative min-w-0">
                     {showSuggest && suggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">
