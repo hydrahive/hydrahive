@@ -47,14 +47,25 @@ def _headers(token: str) -> dict:
     }
 
 
+class GitHubTokenError(Exception):
+    """Token ungültig oder GitHub API nicht erreichbar."""
+    def __init__(self, message: str, status: int = 0):
+        super().__init__(message)
+        self.status = status
+
+
 async def _test_token(token: str) -> dict:
-    """Ruft /user und /user/installations ab, gibt Account-Info zurück."""
+    """Ruft /user ab und gibt Account-Info zurück.
+
+    Raises GitHubTokenError (nicht HTTPException!) damit Aufrufer
+    entscheiden können ob sie 401/502 oder ein Result zurückgeben.
+    """
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(f"{GITHUB_API}/user", headers=_headers(token))
     if r.status_code == 401:
-        raise HTTPException(401, "GitHub-Token ungültig oder abgelaufen")
+        raise GitHubTokenError("GitHub-Token ungültig oder abgelaufen", 401)
     if r.status_code != 200:
-        raise HTTPException(502, f"GitHub API Fehler: {r.status_code}")
+        raise GitHubTokenError(f"GitHub API Fehler: {r.status_code}", r.status_code)
     d = r.json()
     scopes = r.headers.get("x-oauth-scopes", "")
     return {
@@ -85,8 +96,10 @@ def register_github_routes(
         """Globalen GitHub PAT speichern (nach Test)."""
         if not req.token.startswith(("ghp_", "github_pat_", "gho_", "ghs_")):
             raise HTTPException(400, "Kein gültiges GitHub-Token-Format")
-        # Token direkt testen vor dem Speichern
-        info = await _test_token(req.token)
+        try:
+            info = await _test_token(req.token)
+        except GitHubTokenError as e:
+            raise HTTPException(400, str(e))
         _save_token(req.token)
         logger.info("GitHub-Token gespeichert für Account: %s", info["login"])
         return {"saved": True, **info}
@@ -99,12 +112,19 @@ def register_github_routes(
 
     @admin_router.get("/github/token/status")
     async def github_token_status(_a: tuple = Depends(require_admin)):
-        """Token-Status abrufen ohne Token zu exponieren."""
+        """Token-Status abrufen ohne Token zu exponieren.
+
+        Gibt immer 200 zurück — nie 401, da das Frontend sonst
+        einen HydraHive-Auth-Fehler annimmt und den User ausloggt.
+        """
         token = _load_token()
         if not token:
             return {"configured": False}
-        info = await _test_token(token)
-        return {"configured": True, **info}
+        try:
+            info = await _test_token(token)
+            return {"configured": True, **info}
+        except GitHubTokenError as e:
+            return {"configured": False, "error": str(e)}
 
     @admin_router.get("/github/repos")
     async def list_github_repos(
