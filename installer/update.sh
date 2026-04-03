@@ -140,6 +140,12 @@ main() {
     chown -R www-data:www-data "${HYDRAHIVE_DIR}/console/"
     success "Console deployed"
 
+    # --- 5a2. System Handbook deployen (Anti-Documentation-Drift #170) ---
+    if [ -f "${TMPDIR_BASE}/installer/system_handbook.md" ]; then
+        install -m 644 -o hydrahive -g hydrahive "${TMPDIR_BASE}/installer/system_handbook.md" /etc/hydrahive/system_handbook.md
+        info "System Handbook deployed"
+    fi
+
     # --- 5b. sudoers: hydrahive-installer deployen (In-Console-Installation) ---
     if [ -f "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" ]; then
         install -m 440 "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" /etc/sudoers.d/hydrahive-installer

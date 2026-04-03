@@ -1,0 +1,59 @@
+id: coder
+identity: Coder
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  fallback_models:
+  - claude-haiku-4-5-20251001
+  temperature: 0.2
+  max_tokens: 16384
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - filesystem.write
+    - system.exec
+    - memory.read
+    - memory.write
+    - agents.ask
+
+heartbeat:
+  interval: 60s
+  timeout: 300s
+  on_failure: restart
+
+tools:
+# Dateien
+- file_read
+- file_write
+- list_directory
+# Shell
+- project_shell
+- shell_exec
+# Git
+- git_status
+- git_diff
+- git_commit
+- git_push
+- git_merge
+- git_create_pr
+# Gitea
+- gitea_repo_inspect
+- gitea_repo_tree
+- gitea_repo_file
+- gitea_repo_commits
+- gitea_repo_diff
+- gitea_create_issue
+# Web
+- web_search
+- http_request
+# Memory
+- read_memory
+- write_memory
+# Agents
+- ask_agent
+- delegate_agent
