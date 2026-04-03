@@ -353,6 +353,69 @@ def register_user_integration_routes(
     projects=None,
     internal_router: APIRouter | None = None,
 ) -> None:
+
+    # ── Prompt-Coach (#169) ──────────────────────────────────────
+
+    COACH_SYSTEM_PROMPT = (
+        "Du bist ein Prompt-Qualitäts-Checker. Bewerte ob der User-Prompt "
+        "klar genug ist damit ein KI-Agent ihn gut beantworten kann.\n\n"
+        "Antworte NUR als JSON: {\"ok\": true} oder {\"ok\": false, \"suggestion\": \"verbesserter Prompt\", \"reason\": \"kurze Begründung\"}\n\n"
+        "NICHT OK: kein Kontext, zu vage (\"mach mal\", \"fix das\"), kein Ziel beschrieben, "
+        "mehrere komplexe Aufgaben ohne Struktur.\n"
+        "OK: spezifische Datei/Funktion genannt, klares Ziel, auch kurze Prompts wenn spezifisch.\n"
+        "Kurze Follow-ups sind OK (\"ja mach das\", \"genau so\", \"weiter\")."
+    )
+
+    @auth_router.post("/me/agent/coach")
+    async def prompt_coach(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+        """LLM-gestützter Prompt-Qualitätscheck vor dem Senden."""
+        import json as _json
+        content = body.get("content", "").strip()
+        if not content:
+            return {"ok": True}
+
+        # Coach-Config laden
+        from .router_llm import _load_llm_config
+        cfg = _load_llm_config()
+        coach_cfg = cfg.get("coach", {})
+        if not coach_cfg.get("enabled"):
+            return {"ok": True}
+        coach_model = coach_cfg.get("model", "")
+        if not coach_model:
+            return {"ok": True}
+
+        try:
+            from .orchestrator_llm import _resolve_model, _llm_with_retry
+            import litellm
+            resolved_model, extra_kwargs = _resolve_model(coach_model, cfg.get("providers", {}).get("ollama", {}).get("base_url"))
+            messages = [
+                {"role": "system", "content": COACH_SYSTEM_PROMPT},
+                {"role": "user", "content": content},
+            ]
+
+            async def _call():
+                return await litellm.acompletion(
+                    model=resolved_model, messages=messages,
+                    max_tokens=200, temperature=0.1,
+                    timeout=5, **extra_kwargs,
+                )
+
+            resp = await _llm_with_retry(_call)
+            text = (resp.choices[0].message.content or "").strip()
+            # JSON aus der Antwort extrahieren
+            if "{" in text:
+                json_str = text[text.index("{"):text.rindex("}") + 1]
+                result = _json.loads(json_str)
+                return {
+                    "ok": result.get("ok", True),
+                    "suggestion": result.get("suggestion"),
+                    "reason": result.get("reason"),
+                }
+            return {"ok": True}
+        except Exception as e:
+            logger.debug("Prompt-Coach Fehler (durchlassen): %s", e)
+            return {"ok": True}  # Bei Fehler: durchlassen
+
     @auth_router.get("/me/credentials")
     def get_my_credentials(auth: tuple = Depends(require_auth)):
         """Alle Zugangsdaten des eingeloggten Users."""

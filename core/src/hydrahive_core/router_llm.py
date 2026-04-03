@@ -69,6 +69,22 @@ def register_llm_routes(
             }
         return {"providers": masked}
 
+    @admin_router.get("/llm/config/coach")
+    def get_coach_config():
+        config = _load_llm_config()
+        coach = config.get("coach", {})
+        return {"model": coach.get("model", ""), "enabled": coach.get("enabled", False)}
+
+    @admin_router.put("/llm/config/coach")
+    def set_coach_config(body: dict):
+        config = _load_llm_config()
+        config["coach"] = {
+            "model": body.get("model", "").strip(),
+            "enabled": bool(body.get("enabled", False)),
+        }
+        _save_llm_config(config)
+        return {"updated": True, **config["coach"]}
+
     @admin_router.get("/llm/config/system_default")
     def get_system_default():
         config = _load_llm_config()

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -133,6 +133,9 @@ export function MyAgentPage() {
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
   const [chatError,  setChatError]  = useState("");
+  const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
+  const [coachFeedback, setCoachFeedback] = useState<{ ok: boolean; suggestion?: string; reason?: string } | null>(null);
+  const [coachChecking, setCoachChecking] = useState(false);
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
   const [showSuggest,  setShowSuggest]  = useState(false);
@@ -282,11 +285,27 @@ export function MyAgentPage() {
     fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
   }
 
-  async function send() {
-    if (!input.trim() || sending) return;
-    const content = input.trim();
-    setInput(""); setChatError(""); setShowSuggest(false);
+  async function send(overrideContent?: string) {
+    const rawContent = overrideContent ?? input.trim();
+    if (!rawContent || sending) return;
+    const content = rawContent;
+    setInput(""); setChatError(""); setShowSuggest(false); setCoachFeedback(null);
     if (content.startsWith("/")) { handleSlash(content); return; }
+
+    // Prompt-Coach Check (#169)
+    if (!overrideContent && coachEnabled) {
+      setCoachChecking(true);
+      try {
+        const check = await api.post<{ ok: boolean; suggestion?: string; reason?: string }>("/me/agent/coach", { content });
+        if (!check.ok) {
+          setCoachFeedback(check);
+          setInput(content); // Input wiederherstellen
+          setCoachChecking(false);
+          return;
+        }
+      } catch { /* Coach-Fehler → durchlassen */ }
+      setCoachChecking(false);
+    }
 
     const userMsg = mkMsg("user", content);
     const asstMsg = mkMsg("assistant", "");
@@ -664,6 +683,40 @@ export function MyAgentPage() {
                         </div>
                         </>
                       )}
+                      {/* Coach Feedback */}
+                      {coachFeedback && !coachFeedback.ok && (
+                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 mb-2 text-sm space-y-2">
+                          <p className="text-orange-400 font-medium">{coachFeedback.reason || "Dein Prompt könnte klarer sein"}</p>
+                          {coachFeedback.suggestion && (
+                            <p className="text-muted-foreground text-xs bg-muted/30 rounded-lg p-2 font-mono">{coachFeedback.suggestion}</p>
+                          )}
+                          <div className="flex gap-2">
+                            {coachFeedback.suggestion && (
+                              <button onClick={() => { setInput(coachFeedback.suggestion!); setCoachFeedback(null); }}
+                                className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
+                                Übernehmen
+                              </button>
+                            )}
+                            <button onClick={() => { setCoachFeedback(null); send(input); }}
+                              className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
+                              Trotzdem senden
+                            </button>
+                            <a href="/prompt-guide" className="rounded-lg px-3 py-1.5 text-xs text-primary hover:underline flex items-center gap-1">
+                              <Lightbulb className="h-3 w-3" /> Prompt-Tipps
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      {/* Coach Toggle + Input */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                          <input type="checkbox" checked={coachEnabled} onChange={e => {
+                            setCoachEnabled(e.target.checked);
+                            localStorage.setItem("hh_prompt_coach", e.target.checked ? "1" : "0");
+                          }} className="rounded" />
+                          Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
+                        </label>
+                      </div>
                       <div className="flex items-end gap-2 min-w-0">
                         <textarea ref={textareaRef} value={input}
                           onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
@@ -683,7 +736,7 @@ export function MyAgentPage() {
                             <Square className="h-4 w-4" />
                           </button>
                         ) : (
-                          <button onClick={send} disabled={!input.trim()}
+                          <button onClick={() => send()} disabled={!input.trim() || coachChecking}
                             className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
                             <Send className="h-4 w-4" />
                           </button>
