@@ -34,8 +34,8 @@ class TestSanitizeAgentId:
             rui._sanitize_agent_id(agent_id)
 
     def test_username_from_auth_delegiert_sanitize(self):
-        with pytest.raises(ValueError):
-            rui._username_from_auth(("../evil", "token"))
+        with pytest.raises(ValueError, match="Ungültiger Username"):
+            rui._sanitize_username("../evil")
 
     def test_username_from_auth_valide(self):
         assert rui._username_from_auth(("alice", "token")) == "alice"

@@ -32,13 +32,16 @@ _USERNAME_RE = re.compile(r"^[a-z0-9._-]+$")
 def _sanitize_username(username: str) -> str:
     """Validiert Username — erlaubt Dots, verhindert Path-Traversal."""
     if not username or ".." in username or "/" in username or not _USERNAME_RE.fullmatch(username):
-        raise HTTPException(400, f"Ungültiger Username: '{username}'")
+        raise ValueError(f"Ungültiger Username: '{username}'")
     return username
 
 
 def _username_from_auth(auth: tuple) -> str:
     username, _ = auth
-    return _sanitize_username(username)
+    try:
+        return _sanitize_username(username)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 class WksConfigRequest(BaseModel):

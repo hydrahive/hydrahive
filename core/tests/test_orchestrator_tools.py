@@ -43,26 +43,27 @@ class TestTruncateToolResult:
     def test_kurze_ausgabe_unveraendert(self):
         assert _truncate_tool_result("hello") == "hello"
 
-    def test_json_blob_bei_4000_zeichen_gekuerzt(self):
-        long_json = '{"data": "' + "x" * 5000 + '"}'
+    def test_json_blob_bei_limit_gekuerzt(self):
+        # 9000 Zeichen: fällt in else-Branch (limit=8000), nicht in len>10000 Branch
+        long_json = '{"data": "' + "x" * 9000 + '"}'
         result = _truncate_tool_result(long_json)
-        assert len(result) <= 4040  # 4000 + Marker
+        assert len(result) < len(long_json)
         assert "gekürzt" in result
 
     def test_diff_bekommt_mehr_platz(self):
-        diff = "diff --git a/foo b/foo\n" + "+" * 7000
+        diff = "diff --git a/foo b/foo\n" + "+" * 10000
         result = _truncate_tool_result(diff)
-        assert len(result) > 4000  # Limit 6000 für Diffs
+        assert len(result) > 8000  # Limit 12000 für Diffs
 
-    def test_diff_bei_6000_zeichen_gekuerzt(self):
-        diff = "diff --git a/foo b/foo\n" + "+" * 7000
+    def test_diff_bei_limit_gekuerzt(self):
+        diff = "diff --git a/foo b/foo\n" + "+" * 15000
         result = _truncate_tool_result(diff)
         assert "gekürzt" in result
 
-    def test_repo_tree_bei_3000_zeichen_gekuerzt(self):
-        repo_tree = '[{"path": "src/foo.py"}, ' + '{"path": "x"},' * 1000 + "]"
+    def test_repo_tree_bei_limit_gekuerzt(self):
+        repo_tree = '[{"path": "src/foo.py"}, ' + '{"path": "x"},' * 2000 + "]"
         result = _truncate_tool_result(repo_tree)
-        assert len(result) <= 3050
+        assert len(result) <= 8200  # 8000 + Marker
         assert "gekürzt" in result
 
     def test_patch_format_erkennt_diff(self):
