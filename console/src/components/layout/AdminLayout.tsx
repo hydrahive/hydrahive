@@ -156,51 +156,66 @@ export function AdminLayout() {
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
   type NavGroup = { id: string; label?: string; collapsible?: boolean; items: NavItem[] };
 
-  const groupTop: NavGroup = {
-    id: "top",
+  const groupDashboard: NavGroup = {
+    id: "dashboard",
     items: [
       { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
     ],
   };
 
-  const groupMyAgent: NavGroup = {
-    id: "myAgent",
-    label: t("nav.myAgent"),
-    collapsible: false,
+  const groupAssistant: NavGroup = {
+    id: "assistant",
     items: [
       { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
     ],
   };
 
-  const groupWorkspace: NavGroup = {
-    id: "workspace",
-    label: t("nav.groupWorkspace") || "Workspace",
+  const groupAgents: NavGroup = {
+    id: "agents",
+    label: "Agenten & Projekte",
     collapsible: true,
     items: [
-      { to: "/projects",             icon: FolderKanban, label: t("nav.projects"),      hint: t("navHint.projects") },
-      { to: "/blueprint",            icon: Workflow,     label: t("nav.blueprint"),     hint: t("navHint.blueprint") },
-      { to: "/tools",                icon: Wrench,       label: t("nav.tools"),         hint: t("navHint.tools") },
-      { to: "/tools/skill-packages", icon: Package,      label: t("nav.skillPackages"), hint: t("navHint.skillPackages") },
-      { to: "/code-editor",          icon: Code2,        label: t("nav.codeEditor"),    hint: t("navHint.codeEditor") },
+      { to: "/agents",              icon: Bot,         label: t("nav.agents"),       hint: t("navHint.agents") },
+      { to: "/projects",            icon: FolderKanban,label: t("nav.projects"),     hint: t("navHint.projects") },
+      { to: "/tools",               icon: Wrench,      label: t("nav.tools"),        hint: t("navHint.tools") },
+      { to: "/tools/skill-packages",icon: Package,     label: t("nav.skillPackages"),hint: t("navHint.skillPackages") },
+      { to: "/blueprint",           icon: Workflow,    label: t("nav.blueprint"),    hint: t("navHint.blueprint") },
+      { to: "/hub",                 icon: Store,       label: "HydraHub",            hint: "Agenten & Tools installieren" },
     ],
   };
 
-  const groupOperations: NavGroup = {
-    id: "operations",
-    label: t("nav.groupOperations"),
+  const groupAnalytics: NavGroup = {
+    id: "analytics",
+    label: "Analytik",
     collapsible: true,
     items: [
-      { to: "/agents",    icon: Bot,      label: t("nav.agents"),     hint: t("navHint.agents") },
-      { to: "/activity",  icon: Activity, label: t("nav.activity"),   hint: t("navHint.activity") },
-      { to: "/usage",     icon: BarChart2,label: t("nav.usage"),      hint: t("navHint.usage") },
-      { to: "/schedules", icon: Calendar, label: t("nav.schedules"),  hint: t("navHint.schedules") },
-      { to: "/search",    icon: Search,   label: t("nav.search"),     hint: t("navHint.search") },
-      { to: "/extensions",icon: Puzzle,   label: t("nav.extensions"), hint: t("navHint.extensions") },
-      { to: "/plugins",   icon: Puzzle,   label: "Plugins",           hint: "Plugin-System verwalten" },
-      { to: "/hub",       icon: Store,    label: "HydraHub",          hint: "Agenten & Tools installieren" },
-      { to: "/brain",     icon: Brain,    label: "HydraBrain",        hint: "3D-Graph: Agenten, Tools & Memory" },
-      { to: "/voice",     icon: Mic,      label: "Voice",             hint: "Sprachsteuerung — STT, TTS, Agent" },
-      { to: "/federation",icon: Globe,    label: t("nav.federation"), hint: t("navHint.federation") },
+      { to: "/activity",  icon: Activity,   label: t("nav.activity"),  hint: t("navHint.activity") },
+      { to: "/usage",     icon: BarChart2,  label: t("nav.usage"),     hint: t("navHint.usage") },
+      { to: "/audit",     icon: ShieldCheck,label: t("nav.auditLog"),  hint: t("navHint.auditLog") },
+      { to: "/schedules", icon: Calendar,   label: t("nav.schedules"), hint: t("navHint.schedules") },
+    ],
+  };
+
+  const groupKnowledge: NavGroup = {
+    id: "knowledge",
+    label: "Wissen & Suche",
+    collapsible: true,
+    items: [
+      { to: "/brain",       icon: Brain,  label: "HydraBrain",    hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/search",      icon: Search, label: t("nav.search"), hint: t("navHint.search") },
+      { to: "/code-editor", icon: Code2,  label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
+    ],
+  };
+
+  const groupNetwork: NavGroup = {
+    id: "network",
+    label: "Netzwerk",
+    collapsible: true,
+    items: [
+      { to: "/federation",  icon: Globe,  label: t("nav.federation"),  hint: t("navHint.federation") },
+      { to: "/voice",       icon: Mic,    label: "Voice",              hint: "Sprachsteuerung — STT, TTS, Agent" },
+      { to: "/extensions",  icon: Puzzle, label: t("nav.extensions"),  hint: t("navHint.extensions") },
+      { to: "/plugins",     icon: Puzzle, label: "Plugins",            hint: "Plugin-System verwalten" },
     ],
   };
 
@@ -209,12 +224,11 @@ export function AdminLayout() {
     label: t("nav.groupSystem"),
     collapsible: true,
     items: [
-      { to: "/config-hub",     icon: Settings,    label: "Setup",           hint: "Zentrale Konfiguration — alles an einem Ort" },
-      { to: "/usermanagement", icon: Users,      label: "Usermanagement",  hint: "Benutzer, Gruppen & Berechtigungen" },
-      { to: "/system",        icon: Server,      label: t("nav.system"),   hint: t("navHint.system") },
-      { to: "/audit",         icon: ShieldCheck, label: t("nav.auditLog"), hint: t("navHint.auditLog") },
-      { to: "/secrets",       icon: KeyRound,    label: "Secrets",         hint: "API-Keys & Tokens für Agenten" },
-      { to: "/settings",      icon: Settings,    label: t("nav.settings"), hint: t("navHint.settings") },
+      { to: "/config-hub",     icon: Settings,  label: "Setup",          hint: "Zentrale Konfiguration — alles an einem Ort" },
+      { to: "/usermanagement", icon: Users,     label: "Usermanagement", hint: "Benutzer, Gruppen & Berechtigungen" },
+      { to: "/system",         icon: Server,    label: t("nav.system"),  hint: t("navHint.system") },
+      { to: "/secrets",        icon: KeyRound,  label: "Secrets",        hint: "API-Keys & Tokens für Agenten" },
+      { to: "/settings",       icon: Settings,  label: t("nav.settings"),hint: t("navHint.settings") },
     ],
   };
 
@@ -230,7 +244,7 @@ export function AdminLayout() {
     };
   };
 
-  const allGroups = [groupTop, groupMyAgent, groupWorkspace, groupOperations, groupSystem];
+  const allGroups = [groupDashboard, groupAssistant, groupAgents, groupAnalytics, groupKnowledge, groupNetwork, groupSystem];
   const groups: NavGroup[] = allGroups
     .map(filterByPerms)
     .filter(g => g.items.length > 0);
@@ -246,16 +260,16 @@ export function AdminLayout() {
   const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
 
   function getGroupIdForPath(pathname: string) {
-    if (groupWorkspace.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "workspace";
-    if (groupOperations.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "operations";
-    if (groupSystem.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return "system";
+    for (const g of [groupAgents, groupAnalytics, groupKnowledge, groupNetwork, groupSystem]) {
+      if (g.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return g.id;
+    }
     return null;
   }
 
   const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem(NAV_OPEN_GROUP_KEY);
-      if (stored === "workspace" || stored === "operations" || stored === "system") return stored;
+      if (["agents", "analytics", "knowledge", "network", "system"].includes(stored ?? "")) return stored;
     } catch {
       // ignore
     }
@@ -340,10 +354,11 @@ export function AdminLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5">
         {groups.map((group) => {
           const collapsed = Boolean(group.collapsible && openGroupId !== group.id);
           const toggle = group.collapsible ? () => toggleGroup(group.id) : undefined;
+          const hasActiveChild = group.items.some(({ to }) => location.pathname === to || location.pathname.startsWith(`${to}/`));
 
           return (
             <div key={group.id}>
@@ -352,25 +367,35 @@ export function AdminLayout() {
                   type="button"
                   onClick={toggle}
                   aria-expanded={!collapsed}
-                  className="flex w-full items-center justify-between px-2 py-1.5 mb-0.5 rounded-lg text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-white/5 transition-colors select-none"
+                  className={cn(
+                    "flex w-full items-center justify-between px-3 py-2 mb-0.5 rounded-xl text-xs font-medium transition-colors select-none",
+                    hasActiveChild
+                      ? "bg-orange-500/15 text-orange-300 border border-orange-500/30"
+                      : "text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-white/5 border border-transparent"
+                  )}
                 >
                   <span>{group.label}</span>
-                  <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", collapsed && "-rotate-90")} />
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", collapsed && "-rotate-90")} />
                 </button>
               ) : group.label ? (
-                <p className="px-2 mb-1 text-[0.6rem] uppercase tracking-[0.2em] text-[hsl(var(--sidebar-muted))] select-none">
+                <p className="px-3 mb-1 text-xs font-medium text-[hsl(var(--sidebar-muted))] select-none">
                   {group.label}
                 </p>
               ) : null}
 
               {!collapsed && (
-                <div className="space-y-0.5 mb-2">
+                <div className="space-y-0.5 mb-1.5 ml-1">
                   {group.items.map(({ to, icon: Icon, label, hint }) => (
                     <NavLink
                       key={to}
                       to={to}
                       title={hint}
-                      className={({ isActive }) => cn("nav-item", isActive && "nav-item-active")}
+                      className={({ isActive }) => cn(
+                        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+                        isActive
+                          ? "bg-orange-500/20 text-orange-200 border border-orange-500/30 font-medium"
+                          : "text-[hsl(var(--sidebar-foreground))] hover:bg-white/8 border border-transparent"
+                      )}
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />
                       <span className="truncate">{label}</span>
