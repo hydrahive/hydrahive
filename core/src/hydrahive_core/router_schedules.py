@@ -58,7 +58,7 @@ def register_schedule_routes(router: APIRouter, *, require_auth) -> None:
             raise HTTPException(404, "Schedule nicht gefunden")
         return s.to_dict()
 
-    @router.delete("/schedules/{schedule_id}", status_code=204)
+    @router.delete("/schedules/{schedule_id}")
     def delete_schedule(
         schedule_id: str,
         auth: tuple[str, str] = Depends(require_auth),
@@ -67,6 +67,7 @@ def register_schedule_routes(router: APIRouter, *, require_auth) -> None:
         ok = scheduler_service.delete(schedule_id, user, role)
         if not ok:
             raise HTTPException(404, "Schedule nicht gefunden")
+        return {"deleted": True}
 
     @router.post("/schedules/{schedule_id}/run", status_code=202)
     async def run_schedule_now(
