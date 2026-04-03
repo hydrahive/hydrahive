@@ -312,6 +312,7 @@ class Provisioner:
             f"   valid users = {username}\n"
             f"   read only = no\n"
             f"   browseable = yes\n"
+            f"   force group = hydrahive\n"
             f"   create mask = 0660\n"
             f"   directory mask = 0770\n"
             f"{marker_end}\n"

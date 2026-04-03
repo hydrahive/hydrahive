@@ -120,6 +120,17 @@ echo "==> [6/5] Gitea-Status prüfen"
 $SSH "$VM" "systemctl is-active gitea && echo 'Gitea läuft' || echo 'WARNUNG: Gitea nicht aktiv — starte...'; sudo systemctl start gitea 2>/dev/null; true"
 
 echo ""
+echo "==> [7/7] Samba-Shares: force group = hydrahive nachrüsten"
+SAMBA_INCLUDES="/etc/samba/hydrahive-shares.conf"
+$SSH "$VM" "if [ -f $SAMBA_INCLUDES ] && ! grep -q 'force group' $SAMBA_INCLUDES 2>/dev/null; then
+  sudo sed -i '/create mask/i\\   force group = hydrahive' $SAMBA_INCLUDES
+  sudo smbcontrol smbd reload-config 2>/dev/null || sudo systemctl reload smbd 2>/dev/null
+  echo '   force group = hydrahive nachgerüstet + smbd reloaded'
+else
+  echo '   Samba OK (force group bereits gesetzt oder keine Shares)'
+fi" || echo "   (Samba-Check übersprungen)"
+
+echo ""
 echo "==> Commit-Stand in Update-Status schreiben"
 COMMIT=$(git rev-parse --short HEAD)
 DEPLOY_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S+00:00")
