@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -39,6 +39,9 @@ export function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
+  const [coachFeedback, setCoachFeedback] = useState<{ ok: boolean; suggestion?: string; reason?: string } | null>(null);
+  const [coachChecking, setCoachChecking] = useState(false);
   const [projectName, setProjectName] = useState(id ?? "");
   const [showSwarm, setShowSwarm] = useState(false);
   const [projectData, setProjectData] = useState<Record<string, unknown>>({});
@@ -207,16 +210,33 @@ export function ChatPage() {
     }
   }
 
-  async function send() {
-    if (!input.trim() || sending || !id) return;
-    const content = input.trim();
+  async function send(overrideContent?: string) {
+    const rawContent = overrideContent ?? input.trim();
+    if (!rawContent || sending || !id) return;
+    const content = rawContent;
     setInput("");
     setError("");
     setShowSuggest(false);
+    setCoachFeedback(null);
 
     if (content.startsWith("/")) {
       handleSlashCommand(content);
       return;
+    }
+
+    // Prompt-Coach (#169)
+    if (!overrideContent && coachEnabled) {
+      setCoachChecking(true);
+      try {
+        const check = await api.post<{ ok: boolean; suggestion?: string; reason?: string }>("/me/agent/coach", { content });
+        if (!check.ok) {
+          setCoachFeedback(check);
+          setInput(content);
+          setCoachChecking(false);
+          return;
+        }
+      } catch { /* Coach-Fehler → durchlassen */ }
+      setCoachChecking(false);
     }
 
     const userMsg = mkMsg("user", content);
@@ -628,6 +648,37 @@ export function ChatPage() {
                   </div>
                   </>
                 )}
+                {/* Coach Feedback */}
+                {coachFeedback && !coachFeedback.ok && (
+                  <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 mb-2 text-sm space-y-2">
+                    <p className="text-orange-400 font-medium">{coachFeedback.reason || "Dein Prompt könnte klarer sein"}</p>
+                    {coachFeedback.suggestion && (
+                      <p className="text-muted-foreground text-xs bg-muted/30 rounded-lg p-2 font-mono">{coachFeedback.suggestion}</p>
+                    )}
+                    <div className="flex gap-2">
+                      {coachFeedback.suggestion && (
+                        <button onClick={() => { setInput(coachFeedback.suggestion!); setCoachFeedback(null); }}
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
+                          {t("common.apply") || "Übernehmen"}
+                        </button>
+                      )}
+                      <button onClick={() => { setCoachFeedback(null); send(input); }}
+                        className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
+                        Trotzdem senden
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {/* Coach Toggle */}
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input type="checkbox" checked={coachEnabled} onChange={e => {
+                      setCoachEnabled(e.target.checked);
+                      localStorage.setItem("hh_prompt_coach", e.target.checked ? "1" : "0");
+                    }} className="rounded" />
+                    Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
+                  </label>
+                </div>
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={textareaRef}
@@ -649,7 +700,7 @@ export function ChatPage() {
                       <Square className="h-4 w-4" />
                     </button>
                   ) : (
-                    <button onClick={send} disabled={!input.trim()} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
+                    <button onClick={() => send()} disabled={!input.trim() || coachChecking} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
                       <Send className="h-4 w-4" />
                     </button>
                   )}
