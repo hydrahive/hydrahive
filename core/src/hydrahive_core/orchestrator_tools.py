@@ -91,9 +91,14 @@ async def _execute_tool(
     if tool is None:
         return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}
     agent_permissions = list(boss_cfg.effective_permissions(execution_mode) or [])
+    # Only pass _agent_permissions if the tool's execute method accepts **kwargs
+    import inspect
+    sig = inspect.signature(tool.execute)
+    has_kwargs = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
+    extra = {"_agent_permissions": agent_permissions} if has_kwargs else {}
     return await tool.execute(
         agent_id=boss_cfg.id,
         project_id=effective_pid,
-        _agent_permissions=agent_permissions,
+        **extra,
         **args,
     )
