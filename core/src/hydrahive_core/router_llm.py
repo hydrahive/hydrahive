@@ -169,11 +169,14 @@ def register_llm_routes(
         config = _load_llm_config()
         providers = config.get("providers", {})
 
-        if providers.get("claude_max", {}).get("enabled") or providers.get("anthropic", {}).get("enabled"):
+        anthropic_cfg = providers.get("anthropic", {})
+        claude_max_cfg = providers.get("claude_max", {})
+        if anthropic_cfg.get("enabled") or anthropic_cfg.get("api_key") or claude_max_cfg.get("enabled"):
             for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]:
                 models.append({"id": model, "label": model, "provider": "anthropic"})
 
-        if providers.get("openai", {}).get("enabled"):
+        openai_cfg = providers.get("openai", {})
+        if openai_cfg.get("enabled") or openai_cfg.get("api_key"):
             for model in ["gpt-4o-mini", "gpt-4o"]:
                 models.append({"id": model, "label": model, "provider": "openai"})
 
