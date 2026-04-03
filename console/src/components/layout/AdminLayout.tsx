@@ -34,6 +34,7 @@ import {
   Mic,
   ChevronDown,
   Users,
+  Lightbulb,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -201,9 +202,10 @@ export function AdminLayout() {
     label: t("nav.groupKnowledge"),
     collapsible: true,
     items: [
-      { to: "/brain",       icon: Brain,  label: "HydraBrain",    hint: "3D-Graph: Agenten, Tools & Memory" },
-      { to: "/search",      icon: Search, label: t("nav.search"), hint: t("navHint.search") },
-      { to: "/code-editor", icon: Code2,  label: t("nav.codeEditor"), hint: t("navHint.codeEditor") },
+      { to: "/brain",        icon: Brain,     label: "HydraBrain",          hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/search",       icon: Search,   label: t("nav.search"),       hint: t("navHint.search") },
+      { to: "/prompt-guide", icon: Lightbulb,label: "Prompt in a Nutshell", hint: "KI-Tipps: So schreibst du gute Prompts" },
+      { to: "/code-editor",  icon: Code2,    label: t("nav.codeEditor"),   hint: t("navHint.codeEditor") },
     ],
   };
 
