@@ -55,6 +55,7 @@ function ModelRow({ model, data }: {
 }
 
 function ProjectCard({ proj }: { proj: UsageProject }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const hasModels = Object.keys(proj.model_breakdown).length > 0;
 
@@ -77,11 +78,11 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
             <span className="text-muted-foreground">Cache</span>
             <span className="tabular-nums text-right text-blue-500">{fmtK(proj.total_cache_read)}</span>
           </>}
-          <span className="text-muted-foreground">Kosten</span>
+          <span className="text-muted-foreground">{t("usage.costs")}</span>
           <span className={cn("tabular-nums font-semibold text-right", proj.total_cost > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
             {fmtCost(proj.total_cost)}
           </span>
-          <span className="text-muted-foreground">Sessions</span>
+          <span className="text-muted-foreground">{t("usage.sessions")}</span>
           <span className="tabular-nums text-right">{proj.sessions_with_usage}</span>
         </div>
         <div className="text-right text-muted-foreground text-xs mt-1">{open ? "▲" : "▼"}</div>
@@ -89,16 +90,16 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
 
       {open && hasModels && (
         <div className="px-5 pb-4 border-t border-border/40">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground mt-3 mb-2">Aufschlüsselung nach Modell</p>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mt-3 mb-2">{t("usage.modelBreakdown")}</p>
           <table className="w-full">
             <thead>
               <tr className="text-xs text-muted-foreground">
-                <th className="text-left pb-1 pr-4">Modell</th>
+                <th className="text-left pb-1 pr-4">{t("usage.model")}</th>
                 <th className="text-right pb-1 pr-4">Input</th>
                 <th className="text-right pb-1 pr-4">Output</th>
                 <th className="text-right pb-1 pr-4 text-blue-500">Cache Hit</th>
-                <th className="text-right pb-1 pr-4">Gesamt</th>
-                <th className="text-right pb-1">Kosten</th>
+                <th className="text-right pb-1 pr-4">{t("usage.total")}</th>
+                <th className="text-right pb-1">{t("usage.costs")}</th>
               </tr>
             </thead>
             <tbody>
@@ -112,7 +113,7 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
 
       {open && !hasModels && (
         <div className="px-5 pb-4 pt-3 border-t border-border/40 text-sm text-muted-foreground">
-          Keine Modell-Aufschlüsselung verfügbar (alte Session-Daten ohne Token-Counts).
+          {t("usage.noBreakdown")}
         </div>
       )}
     </div>
@@ -149,8 +150,8 @@ export function UsagePage() {
     <div className="p-6 space-y-6 max-w-5xl">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">Token-Statistik</p>
-          <h2 className="text-xl font-semibold">API Usage</h2>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground">{t("usage.kicker")}</p>
+          <h2 className="text-xl font-semibold">{t("usage.title")}</h2>
         </div>
         <button
           type="button"
@@ -173,45 +174,45 @@ export function UsagePage() {
         <>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard
-              label="Input Tokens"
+              label={t("usage.inputTokens")}
               value={fmtK(gt?.input ?? 0)}
-              sub="ohne Cache"
+              sub={t("usage.noCache")}
               icon={TrendingUp}
             />
             <StatCard
-              label="Output Tokens"
+              label={t("usage.outputTokens")}
               value={fmtK(gt?.output ?? 0)}
-              sub="generiert"
+              sub={t("usage.generated")}
               icon={Zap}
             />
             <StatCard
-              label="Cache Hits"
+              label={t("usage.cacheHits")}
               value={fmtK(gt?.cache_read ?? 0)}
-              sub={cacheRatio > 0 ? `${cacheRatio}% gecacht` : "noch keine"}
+              sub={cacheRatio > 0 ? `${cacheRatio}% ${t("usage.cached")}` : t("usage.noneYet")}
               icon={Database}
             />
             <StatCard
-              label="API-Kosten"
+              label={t("usage.apiCosts")}
               value={fmtCost(gt?.cost ?? 0)}
-              sub="geschätzt"
+              sub={t("usage.estimated")}
               icon={DollarSign}
             />
           </div>
 
           {cacheRatio > 0 && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
-              <strong>Prompt Caching aktiv:</strong> {cacheRatio}% der Tokens aus Cache — ohne Caching wären die Kosten ca.{" "}
-              <strong>{fmtCost((gt?.cost ?? 0) / Math.max(0.1, 1 - cacheRatio / 100))}</strong> gewesen.
+              <strong>{t("usage.cachingActive")}</strong> {cacheRatio}% {t("usage.cachingDesc")}{" "}
+              <strong>{fmtCost((gt?.cost ?? 0) / Math.max(0.1, 1 - cacheRatio / 100))}</strong> {t("usage.cachingSuffix")}
             </div>
           )}
 
           <div className="space-y-3">
             <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
-              Projekte ({data.projects.length})
+              {t("usage.projects")} ({data.projects.length})
             </p>
             {data.projects.length === 0 ? (
               <div className="rounded-2xl border border-border/60 bg-card px-5 py-8 text-center text-muted-foreground text-sm">
-                Noch keine Token-Daten vorhanden. Token-Counts werden ab dem nächsten Agent-Gespräch gespeichert.
+                {t("usage.noData")}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -223,7 +224,7 @@ export function UsagePage() {
           </div>
 
           <div className="rounded-xl border border-border/60 bg-card/50 px-5 py-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Preisreferenz ($/1M Tokens)</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">{t("usage.pricingRef")}</p>
             <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3">
               {Object.entries(data.pricing_ref).map(([model, p]) => (
                 <div key={model} className="flex items-baseline justify-between gap-2 text-xs">
@@ -239,7 +240,7 @@ export function UsagePage() {
       {loading && !data && (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-          Lade Usage-Daten…
+          {t("usage.loading")}
         </div>
       )}
     </div>
