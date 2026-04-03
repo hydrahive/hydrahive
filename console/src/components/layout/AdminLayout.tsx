@@ -208,6 +208,7 @@ export function AdminLayout() {
     label: t("nav.groupSystem"),
     collapsible: true,
     items: [
+      { to: "/config-hub", icon: Settings,  label: "Setup",           hint: "Zentrale Konfiguration — alles an einem Ort" },
       { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
       { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
       { to: "/secrets",  icon: KeyRound,   label: "Secrets",         hint: "API-Keys & Tokens für Agenten" },
