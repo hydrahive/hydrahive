@@ -542,19 +542,23 @@ export function LlmConfigPage() {
         <div className="flex gap-2 items-end">
           <div className="flex-1 space-y-1">
             <label className="text-xs text-muted-foreground">Modell</label>
-            {availModels.length > 0 ? (
-              <select value={systemModel} onChange={e => setSystemModel(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                <option value="">— Modell wählen —</option>
-                {availModels.map(m => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
-            ) : (
-              <input value={systemModel} onChange={e => setSystemModel(e.target.value)}
-                placeholder="z.B. claude-haiku-4-5-20251001 oder ollama/mistral-nemo:12b"
-                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
-            )}
+            {(() => {
+              const KNOWN = ["claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6","gpt-4o-mini","gpt-4o"];
+              const apiIds = new Set(availModels.map(m => m.id));
+              const allModels = [
+                ...availModels,
+                ...KNOWN.filter(id => !apiIds.has(id)).map(id => ({ id, label: id, provider: "cloud" })),
+              ];
+              return (
+                <select value={systemModel} onChange={e => setSystemModel(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                  <option value="">— Modell wählen —</option>
+                  {allModels.map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              );
+            })()}
           </div>
           <button
             onClick={async () => {
