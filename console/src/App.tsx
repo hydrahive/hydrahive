@@ -35,6 +35,7 @@ const VoicePage              = lazy(() => import("@/pages/VoicePage").then((m) =
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
 const InvitePage             = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
 const ConfigHubPage          = lazy(() => import("@/pages/ConfigHubPage").then((m) => ({ default: m.ConfigHubPage })));
+const UserManagementPage     = lazy(() => import("@/pages/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -126,6 +127,7 @@ export default function App() {
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
             <Route path="config-hub"       element={<ConfigHubPage />} />
+            <Route path="usermanagement"  element={<UserManagementPage />} />
             {/* Redirects für alte Bookmarks */}
             <Route path="llm"    element={<Navigate to="/settings" replace />} />
             <Route path="mcp"    element={<Navigate to="/settings" replace />} />

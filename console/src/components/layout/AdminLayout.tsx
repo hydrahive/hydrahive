@@ -33,6 +33,7 @@ import {
   Brain,
   Mic,
   ChevronDown,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -208,11 +209,12 @@ export function AdminLayout() {
     label: t("nav.groupSystem"),
     collapsible: true,
     items: [
-      { to: "/config-hub", icon: Settings,  label: "Setup",           hint: "Zentrale Konfiguration — alles an einem Ort" },
-      { to: "/system",   icon: Server,     label: t("nav.system"),   hint: t("navHint.system") },
-      { to: "/audit",    icon: ShieldCheck,label: t("nav.auditLog"), hint: t("navHint.auditLog") },
-      { to: "/secrets",  icon: KeyRound,   label: "Secrets",         hint: "API-Keys & Tokens für Agenten" },
-      { to: "/settings", icon: Settings,   label: t("nav.settings"), hint: t("navHint.settings") },
+      { to: "/config-hub",     icon: Settings,    label: "Setup",           hint: "Zentrale Konfiguration — alles an einem Ort" },
+      { to: "/usermanagement", icon: Users,      label: "Usermanagement",  hint: "Benutzer, Gruppen & Berechtigungen" },
+      { to: "/system",        icon: Server,      label: t("nav.system"),   hint: t("navHint.system") },
+      { to: "/audit",         icon: ShieldCheck, label: t("nav.auditLog"), hint: t("navHint.auditLog") },
+      { to: "/secrets",       icon: KeyRound,    label: "Secrets",         hint: "API-Keys & Tokens für Agenten" },
+      { to: "/settings",      icon: Settings,    label: t("nav.settings"), hint: t("navHint.settings") },
     ],
   };
 
