@@ -1293,7 +1293,17 @@ function SettingsPanel({
         {/* Delegation */}
         {agents.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionDelegation")}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionDelegation")}</h2>
+              <button type="button" onClick={() => setAllowedAgents([...agents])}
+                className="text-xs text-muted-foreground hover:text-foreground transition">
+                Alle
+              </button>
+              <button type="button" onClick={() => setAllowedAgents([])}
+                className="text-xs text-muted-foreground hover:text-foreground transition">
+                Keine
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground">{t("myAgent.settingsDelegationHint")}</p>
             <div className="grid grid-cols-2 gap-2">
               {agents.map(id => (

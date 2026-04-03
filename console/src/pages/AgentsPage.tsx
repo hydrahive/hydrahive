@@ -566,7 +566,17 @@ export function AgentsPage() {
 
             {agentList.filter(([aid]) => aid !== editId).length > 0 && (
               <div>
-                <p className="metric-kicker mb-3">Erlaubte Agenten (allowed_agents)</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <p className="metric-kicker">Erlaubte Agenten (allowed_agents)</p>
+                  <button type="button" onClick={() => set("allowed_agents", agentList.filter(([aid]) => aid !== editId).map(([aid]) => aid))}
+                    className="text-xs text-muted-foreground hover:text-foreground transition">
+                    Alle
+                  </button>
+                  <button type="button" onClick={() => set("allowed_agents", [])}
+                    className="text-xs text-muted-foreground hover:text-foreground transition">
+                    Keine
+                  </button>
+                </div>
                 <p className="text-xs text-muted-foreground mb-2">Welche Agenten darf dieser Agent via ask_agent / delegate_agent ansprechen?</p>
                 <div className="flex flex-wrap gap-2">
                   {agentList.filter(([aid]) => aid !== editId).map(([aid, ag]) => (
