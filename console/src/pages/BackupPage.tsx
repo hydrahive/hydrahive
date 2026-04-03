@@ -74,6 +74,7 @@ export function BackupPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{t("backup.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("pageDesc.backup")}</p>
           <p className="text-sm text-muted-foreground">
             {t("backup.subtitle")}
           </p>

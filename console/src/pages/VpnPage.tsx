@@ -123,6 +123,7 @@ export function VpnPage() {
           <Network size={22} className="text-blue-400" />
           <div>
             <h1 className="text-lg font-semibold text-zinc-100">VPN</h1>
+            <p className="text-xs text-zinc-500">{t("pageDesc.vpn")}</p>
             <p className="text-xs text-zinc-500">
               {isHeadscale ? "Headscale (self-hosted)" : "Tailscale"}
             </p>
@@ -175,6 +176,7 @@ export function VpnPage() {
           <h2 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
             <Key size={14} /> Auth-Key
           </h2>
+          <p className="text-xs text-zinc-500">{t("pageDesc.vpnAuthKey")}</p>
 
           {/* Mode-Selector */}
           <div className="flex gap-2">

@@ -43,6 +43,7 @@ export function ToolsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{t("tools.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("pageDesc.tools")}</p>
           <p className="text-sm text-muted-foreground">
             {toolList.length !== 1
               ? t("tools.subtitlePlural", { count: toolList.length })

@@ -434,6 +434,7 @@ export function A2APage() {
               </span>
             </div>
             <h1 className="shell-title">{t("a2a.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("pageDesc.federation")}</p>
             <p className="shell-copy max-w-2xl">{t("a2a.subtitle")}</p>
           </div>
           <div className="lg:col-span-4">

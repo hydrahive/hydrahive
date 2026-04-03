@@ -231,6 +231,7 @@ export function ExtensionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{t("extensions.title")}</h1>
+          <p className="text-xs text-muted-foreground">{t("pageDesc.extensions")}</p>
           <p className="text-sm text-muted-foreground mt-1">{t("extensions.subtitle")}</p>
         </div>
         <button

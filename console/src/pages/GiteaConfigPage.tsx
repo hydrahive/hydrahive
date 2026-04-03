@@ -48,7 +48,10 @@ export default function GiteaConfigPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <GitBranch className="w-6 h-6 text-emerald-400" />
-          <h1 className="text-xl font-bold text-white">Gitea-Konfiguration</h1>
+          <div>
+            <h1 className="text-xl font-bold text-white">Gitea-Konfiguration</h1>
+            <p className="text-xs text-gray-400">{t("pageDesc.gitea")}</p>
+          </div>
           <a
             href={externalUrl}
             target="_blank"
@@ -70,6 +73,7 @@ export default function GiteaConfigPage() {
                 value={config.url}
                 onChange={e => setConfig(c => ({ ...c, url: e.target.value }))}
               />
+              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaUrl")}</p>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">API-Token</label>
@@ -80,6 +84,7 @@ export default function GiteaConfigPage() {
                 onChange={e => setConfig(c => ({ ...c, token: e.target.value }))}
                 placeholder="Gitea API-Token"
               />
+              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaToken")}</p>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Organisation / User</label>
@@ -88,6 +93,7 @@ export default function GiteaConfigPage() {
                 value={config.org}
                 onChange={e => setConfig(c => ({ ...c, org: e.target.value }))}
               />
+              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaOrg")}</p>
             </div>
             <div>
               <label className="block text-xs text-gray-400 mb-1">Webhook-Secret (optional)</label>
@@ -98,6 +104,7 @@ export default function GiteaConfigPage() {
                 onChange={e => setConfig(c => ({ ...c, webhook_secret: e.target.value }))}
                 placeholder="Leer lassen = kein Secret"
               />
+              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaWebhook")}</p>
             </div>
 
             {msg && (

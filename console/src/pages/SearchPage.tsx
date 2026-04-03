@@ -152,6 +152,7 @@ export function SearchPage() {
             </div>
             <div>
               <h1 className="shell-title">{t("searchPage.title")}</h1>
+              <p className="text-xs text-muted-foreground">{t("pageDesc.search")}</p>
               <p className="shell-copy mt-2 max-w-2xl">{t("searchPage.subtitle")}</p>
             </div>
           </div>

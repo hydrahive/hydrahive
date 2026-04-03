@@ -4,10 +4,12 @@ import {
   Wrench, Zap, X, Shield, Users, Trash2,
 } from "lucide-react";
 import { api, type PluginInfo } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 type PluginDetail = PluginInfo & { agents: string[] };
 
 export function PluginsPage() {
+  const { t } = useTranslation();
   const [plugins, setPlugins]     = useState<PluginInfo[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
@@ -104,6 +106,7 @@ export function PluginsPage() {
             <Puzzle className="h-6 w-6 text-primary" />
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Plugins</h1>
+              <p className="text-xs text-muted-foreground">{t("pageDesc.plugins")}</p>
               <p className="text-sm text-muted-foreground">
                 {plugins.length > 0 ? `${plugins.length} Plugin(s) installiert` : "Keine Plugins installiert"}
               </p>

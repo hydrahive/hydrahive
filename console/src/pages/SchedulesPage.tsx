@@ -92,6 +92,7 @@ function ScheduleModal({ initial, projects, agents, onSave, onClose }: ModalProp
             onChange={e => set("cron", e.target.value)}
             placeholder="0 8 * * *"
           />
+          <p className="text-xs text-zinc-500 mt-1">{t("pageDesc.schedulesCron")}</p>
         </label>
 
         <label className="block">
@@ -237,7 +238,10 @@ export default function SchedulesPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Calendar className="w-6 h-6 text-blue-400" />
-          <h1 className="text-xl font-semibold">{t("schedules.title")}</h1>
+          <div>
+            <h1 className="text-xl font-semibold">{t("schedules.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("pageDesc.schedules")}</p>
+          </div>
         </div>
         <button
           onClick={() => setModal("new")}
