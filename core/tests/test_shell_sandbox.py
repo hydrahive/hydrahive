@@ -62,11 +62,12 @@ def test_backtick_geblockt():
 
 # ============================================================= Interpreter Inline-Code
 
-def test_python3_c_geblockt():
-    assert blocked("python3 -c 'import shutil; shutil.rmtree(\"/opt\")'")
+def test_python3_c_erlaubt():
+    """python3 -c ist erlaubt (für File-Patching bei großen Dateien)."""
+    assert not blocked("python3 -c 'print(\"hallo\")'")
 
-def test_python_c_geblockt():
-    assert blocked("python -c 'print(\"hallo\")'")
+def test_python_c_erlaubt():
+    assert not blocked("python -c 'print(\"hallo\")'")
 
 def test_perl_e_geblockt():
     assert blocked("perl -e 'unlink \"/etc/passwd\"'")
