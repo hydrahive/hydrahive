@@ -994,8 +994,7 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
     (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
     (r"cd\s+/opt/(hydrahive|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
-    # Inline-Code-Ausführung in Interpreter (python -c, perl -e, etc.)
-    (r"\bpython[23]?\s+-[a-zA-Z]*c\b", "python -c (Inline-Code) verboten"),
+    # Inline-Code-Ausführung in Interpreter (perl -e, ruby -e etc. — python3 -c erlaubt für File-Patching)
     (r"\bperl\s+-[a-zA-Z]*e\b",     "perl -e (Inline-Code) verboten"),
     (r"\bruby\s+-[a-zA-Z]*e\b",     "ruby -e (Inline-Code) verboten"),
     (r"\bnode\s+-[a-zA-Z]*e\b",     "node -e (Inline-Code) verboten"),
