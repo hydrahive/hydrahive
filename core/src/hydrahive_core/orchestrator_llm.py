@@ -77,6 +77,8 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
 # ---------------------------------------------------------------- Failover
 
 _FAILOVER_SIGNALS = [
+    "401", "authentication_error", "expired", "oauth token has expired",
+    "invalid api key", "invalid x-api-key", "unauthorized",
     "402", "payment", "credit", "quota", "insufficient",
     "429", "rate_limit", "rate limit",
     "529", "overloaded", "capacity", "credit_balance",

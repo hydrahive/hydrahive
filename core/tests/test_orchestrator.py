@@ -159,9 +159,10 @@ class TestLlmFailover:
         assert _should_failover(Exception("overloaded"))          is True
         assert _should_failover(Exception("529"))                  is True
 
-    def test_kein_failover_bei_auth_fehler(self):
-        assert _should_failover(Exception("401 unauthorized"))  is False
-        assert _should_failover(Exception("invalid_api_key"))   is False
+    def test_failover_bei_auth_fehler(self):
+        """Auth-Fehler lösen jetzt Failover aus (expired tokens → nächstes Modell)."""
+        assert _should_failover(Exception("401 unauthorized"))  is True
+        assert _should_failover(Exception("OAuth token has expired")) is True
 
     def test_kein_failover_bei_prompt_too_long(self):
         assert _should_failover(Exception("prompt is too long")) is False

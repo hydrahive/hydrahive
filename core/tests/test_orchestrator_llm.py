@@ -43,9 +43,11 @@ class TestShouldFailover:
         assert _should_failover(Exception("insufficient credit")) is True
         assert _should_failover(Exception("your credit balance is too low")) is True
 
-    def test_auth_error_kein_failover(self):
-        assert _should_failover(Exception("401 unauthorized")) is False
-        assert _should_failover(Exception("invalid_api_key"))  is False
+    def test_auth_error_failover(self):
+        """Auth-Fehler lösen Failover aus (abgelaufene Tokens → nächstes Modell)."""
+        assert _should_failover(Exception("401 unauthorized")) is True
+        assert _should_failover(Exception("OAuth token has expired")) is True
+        assert _should_failover(Exception("invalid api key")) is True
 
     def test_context_overflow_kein_failover(self):
         assert _should_failover(Exception("prompt is too long")) is False
@@ -189,7 +191,8 @@ class TestLlmCallFailover:
             with pytest.raises(Exception, match="overloaded"):
                 await _llm_call(agent_cfg, [], None)
 
-    async def test_kein_failover_bei_auth_fehler(self):
+    async def test_failover_bei_auth_fehler(self):
+        """Auth-Fehler (401/expired) lösen jetzt Failover auf nächstes Modell aus."""
         agent_cfg = self._make_agent_cfg(
             model="claude-3-5-sonnet-20241022",
             fallback_models=["claude-3-haiku-20240307"],
@@ -198,11 +201,14 @@ class TestLlmCallFailover:
 
         async def fake_single(model_name, *a, **kw):
             calls.append(model_name)
-            raise Exception("401 unauthorized")
+            if model_name == "claude-3-5-sonnet-20241022":
+                raise Exception("401 OAuth token has expired")
+            return MagicMock(choices=[MagicMock(message=MagicMock(content="ok", tool_calls=None))],
+                            usage=MagicMock(prompt_tokens=10, completion_tokens=5))
 
         with patch("hydrahive_core.orchestrator_llm._llm_call_single", side_effect=fake_single):
-            with pytest.raises(Exception, match="401"):
-                await _llm_call(agent_cfg, [], None)
+            result = await _llm_call(agent_cfg, [], None)
 
-        # Kein Failover — nur ein Versuch
-        assert len(calls) == 1
+        # Failover auf Fallback-Modell
+        assert len(calls) == 2
+        assert calls[1] == "claude-3-haiku-20240307"
