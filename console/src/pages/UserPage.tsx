@@ -233,9 +233,12 @@ export function UserPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
-              <select value={form.group} onChange={e=>setForm({...form,group:e.target.value})}
+              <select value={form.group} onChange={e => {
+                  const g = e.target.value;
+                  setForm({...form, group: g, role: g === "admin" ? "admin" : form.role === "admin" ? "user" : form.role});
+                }}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                {Object.entries(groups).filter(([id]) => id !== "admin").map(([id, g]) => (
+                {Object.entries(groups).map(([id, g]) => (
                   <option key={id} value={id}>{g.label || id}</option>
                 ))}
                 {Object.keys(groups).length === 0 && <option value="standard">Standard</option>}
@@ -362,7 +365,10 @@ export function UserPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
-                  <select value={editForm.group} onChange={e => setEditForm(f => ({ ...f, group: e.target.value }))}
+                  <select value={editForm.group} onChange={e => {
+                      const g = e.target.value;
+                      setEditForm(f => ({ ...f, group: g, role: g === "admin" ? "admin" : f.role === "admin" ? "user" : f.role }));
+                    }}
                     className="w-full px-3 py-2 text-sm border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary">
                     {Object.entries(groups).map(([id, g]) => (
                       <option key={id} value={id}>{g.label || id}</option>
@@ -534,7 +540,7 @@ export function UserPage() {
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gruppe</label>
               <select value={inviteForm.group} onChange={e => setInviteForm({...inviteForm, group: e.target.value})}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                {Object.entries(groups).filter(([id]) => id !== "admin").map(([id, g]) => (
+                {Object.entries(groups).map(([id, g]) => (
                   <option key={id} value={id}>{g.label || id}</option>
                 ))}
                 {Object.keys(groups).length === 0 && <option value="standard">Standard</option>}
