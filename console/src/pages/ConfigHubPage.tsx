@@ -514,6 +514,76 @@ function VpnSection() {
   );
 }
 
+/* ── AgentLink Section ────────────────────────────────────────── */
+
+function AgentLinkSection() {
+  const [cfg, setCfg] = useState<{ base_url?: string; ws_url?: string; enabled?: boolean; healthy?: boolean } | null>(null);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [wsUrl, setWsUrl] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = useCallback(() => {
+    api.get<any>("/admin/agentlink/config").then(r => {
+      setCfg(r);
+      setBaseUrl(r.base_url || "http://localhost:8000");
+      setWsUrl(r.ws_url || "ws://localhost:8000");
+      setEnabled(r.enabled ?? true);
+    }).catch(() => setCfg({ enabled: false }));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const configured = cfg ? !!cfg.enabled : null;
+
+  async function save() {
+    setSaving(true); setMsg("");
+    try {
+      await api.put("/admin/agentlink/config", { base_url: baseUrl, ws_url: wsUrl, enabled });
+      load();
+      setMsg("Gespeichert");
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Section title="AgentLink" icon={MessageSquare} configured={configured}
+      badge={cfg?.healthy ? "Healthy" : cfg?.enabled ? "Nicht erreichbar" : "Deaktiviert"}>
+      <div className="space-y-4 mt-2">
+        {cfg?.healthy === false && cfg?.enabled && (
+          <div className="flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3 text-sm text-orange-500">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            AgentLink nicht erreichbar — Service läuft evtl. nicht. Fix unter System → Doctor.
+          </div>
+        )}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className={labelCls}>Base URL (HTTP)</label>
+            <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
+              placeholder="http://localhost:8000" className={inputCls} />
+          </div>
+          <div className="space-y-1">
+            <label className={labelCls}>WebSocket URL</label>
+            <input value={wsUrl} onChange={e => setWsUrl(e.target.value)}
+              placeholder="ws://localhost:8000" className={inputCls} />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="rounded" />
+          AgentLink aktiviert
+        </label>
+        <div className="flex items-center gap-3">
+          <SaveBtn saving={saving} onClick={save} />
+          {msg && <span className="text-sm text-green-500">{msg}</span>}
+        </div>
+        <p className={hintCls}>AgentLink ist das State/Handoff-System für Agent-zu-Agent-Kommunikation. Config: /etc/hydrahive/agentlink.json</p>
+      </div>
+    </Section>
+  );
+}
+
 /* ── Voice Section ────────────────────────────────────────────── */
 
 function VoiceSection() {
@@ -654,6 +724,7 @@ export function ConfigHubPage() {
       {isAdmin && <GitSection />}
       {isAdmin && <KasSection />}
       {isAdmin && <VpnSection />}
+      {isAdmin && <AgentLinkSection />}
       <VoiceSection />
     </div>
   );

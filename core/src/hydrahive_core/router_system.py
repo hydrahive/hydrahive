@@ -248,6 +248,50 @@ def register_system_routes(
         except Exception as e:
             return {"available": False, "reason": str(e)}
 
+    # ── AgentLink Config ─────────────────────────────────────────────
+
+    _AGENTLINK_CFG = Path("/etc/hydrahive/agentlink.json")
+
+    @admin_router.get("/admin/agentlink/config")
+    def get_agentlink_config():
+        """AgentLink-Konfiguration lesen."""
+        try:
+            data = json.loads(_AGENTLINK_CFG.read_text())
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        # Health-Check
+        healthy = False
+        url = data.get("base_url", "")
+        if url and data.get("enabled"):
+            try:
+                import urllib.request
+                with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=3) as resp:
+                    h = json.loads(resp.read())
+                    healthy = h.get("status") == "healthy"
+            except Exception:
+                pass
+        return {
+            "base_url": data.get("base_url", ""),
+            "ws_url":   data.get("ws_url", ""),
+            "enabled":  data.get("enabled", False),
+            "healthy":  healthy,
+        }
+
+    @admin_router.put("/admin/agentlink/config")
+    def set_agentlink_config(body: dict):
+        """AgentLink-Konfiguration speichern."""
+        from .agentlink_client import _config_cache
+        cfg = {
+            "base_url": body.get("base_url", "http://localhost:8000").strip().rstrip("/"),
+            "ws_url":   body.get("ws_url", "ws://localhost:8000").strip().rstrip("/"),
+            "enabled":  bool(body.get("enabled", True)),
+        }
+        _AGENTLINK_CFG.write_text(json.dumps(cfg, indent=2))
+        # Cache invalidieren
+        import hydrahive_core.agentlink_client as _alc
+        _alc._config_cache = None
+        return {"saved": True, **cfg}
+
     # ── Systemzeit / Timezone ────────────────────────────────────────
 
     @auth_router.get("/admin/system/time")
