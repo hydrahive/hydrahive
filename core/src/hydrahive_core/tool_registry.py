@@ -2362,7 +2362,7 @@ class GiteaRepoInspectTool(BaseTool):
             "required": ["repo"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 5) -> dict:
+    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 5, **kwargs) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
         client = get_gitea_client()
@@ -2434,7 +2434,7 @@ class GiteaRepoTreeTool(BaseTool):
             "required": ["repo"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, repo: str, path: str = "", ref: str = "") -> dict:
+    async def execute(self, agent_id: str, project_id: str, repo: str, path: str = "", ref: str = "", **kwargs) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
         client = get_gitea_client()
@@ -2493,7 +2493,7 @@ class GiteaRepoFileTool(BaseTool):
             "required": ["repo", "path"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, repo: str, path: str, ref: str = "") -> dict:
+    async def execute(self, agent_id: str, project_id: str, repo: str, path: str, ref: str = "", **kwargs) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
         client = get_gitea_client()
@@ -2542,7 +2542,7 @@ class GiteaRepoCommitsTool(BaseTool):
             "required": ["repo"],
         }
 
-    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 10) -> dict:
+    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 10, **kwargs) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
         client = get_gitea_client()
@@ -2615,6 +2615,7 @@ class GiteaRepoDiffTool(BaseTool):
         head: str = "",
         path: str = "",
         stat_only: bool = False,
+        **kwargs,
     ) -> dict:
         from .gitea import GiteaClient, get_gitea_client, resolve_repo_ref, repo_workspace_key
 
@@ -2710,6 +2711,7 @@ class GiteaCreateIssueTool(BaseTool):
         title: str,
         body: str = "",
         labels: list[str] | None = None,
+        **kwargs,
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
@@ -2769,6 +2771,7 @@ class GiteaCommentIssueTool(BaseTool):
         repo: str,
         issue_number: int,
         body: str,
+        **kwargs,
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
@@ -2842,6 +2845,7 @@ class GiteaUpdateIssueTool(BaseTool):
         body: str = "",
         state: str = "",
         labels: list[str] | None = None,
+        **kwargs,
     ) -> dict:
         from .gitea import get_gitea_client, resolve_repo_ref
 
