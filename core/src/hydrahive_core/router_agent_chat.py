@@ -74,6 +74,7 @@ def register_agent_chat_routes(
     audit_log,
     logger,
     incoming_message_model,
+    group_service=None,
 ) -> None:
     @auth_router.get("/agents/{agent_id}/session/history")
     def agent_session_history(agent_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
@@ -254,6 +255,10 @@ def register_agent_chat_routes(
             audit_source="agents.message",
         )
         check_message_rate(req.sender, agent_id)
+        # Gruppen-Berechtigung prüfen (#165)
+        _username, _ = _a
+        if group_service and not group_service.has_agent_access(_username, agent_id):
+            raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
         cfg = discovery.get(agent_id)
         if not cfg:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -294,6 +299,10 @@ def register_agent_chat_routes(
             audit_source="agents.message.stream",
         )
         check_message_rate(req.sender, agent_id)
+        # Gruppen-Berechtigung prüfen (#165)
+        _username, _ = _a
+        if group_service and not group_service.has_agent_access(_username, agent_id):
+            raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
         cfg = discovery.get(agent_id)
         if not cfg:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")

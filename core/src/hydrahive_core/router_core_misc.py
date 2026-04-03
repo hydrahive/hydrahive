@@ -197,6 +197,7 @@ def register_core_misc_routes(
     runtime,
     read_audit_logs,
     logger: logging.Logger,
+    group_service=None,
 ) -> type[IncomingMessage]:
     @public_router.get("/setup/status")
     def setup_status():
@@ -280,9 +281,10 @@ def register_core_misc_routes(
             if user and verify_password(req.password, user.get("password_hash", "")):
                 role  = user.get("role", "user")
                 group = user.get("group", "standard")
-                token = make_jwt(req.username, role)
+                token = make_jwt(req.username, role, group)
                 logger.info("Login erfolgreich (users.json): %s", req.username)
-                return {"access_token": token, "token_type": "bearer", "role": role, "group": group, "username": req.username}
+                perms = group_service.get_permissions(req.username) if group_service else {}
+                return {"access_token": token, "token_type": "bearer", "role": role, "group": group, "username": req.username, "permissions": perms}
             raise HTTPException(401, "Ungültige Zugangsdaten")
 
         admin_pass = read_admin_password()
@@ -290,9 +292,9 @@ def register_core_misc_routes(
             raise HTTPException(503, "Kein Admin-Passwort konfiguriert — Setup erforderlich")
         if req.username != "admin" or req.password != admin_pass:
             raise HTTPException(401, "Ungültige Zugangsdaten")
-        token = make_jwt(req.username, "admin")
+        token = make_jwt(req.username, "admin", "admin")
         logger.info("Login erfolgreich (admin_credentials): %s", req.username)
-        return {"access_token": token, "token_type": "bearer", "role": "admin", "username": req.username}
+        return {"access_token": token, "token_type": "bearer", "role": "admin", "group": "admin", "username": req.username, "permissions": {"pages": ["*"], "tools": ["*"], "plugins": ["*"], "agents": ["*"]}}
 
     @auth_router.get("/auth/me")
     def whoami(auth: tuple[str, str] = Depends(require_auth)):

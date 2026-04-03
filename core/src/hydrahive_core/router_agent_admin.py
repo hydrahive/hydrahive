@@ -227,6 +227,9 @@ def register_agent_admin_routes(
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
         disabled_dir = Path(agents_dir) / f"_{agent_id}_disabled"
         agent_dir.rename(disabled_dir)
+        # Discovery-Cache aktualisieren damit Agent sofort aus der Liste verschwindet
+        if agent_id in discovery.agents:
+            del discovery.agents[agent_id]
         logger.info("Agent deaktiviert: %s -> %s", agent_dir, disabled_dir)
         audit_log("agent.delete", target=agent_id)
         return {"disabled": True, "agent_id": agent_id, "moved_to": str(disabled_dir)}

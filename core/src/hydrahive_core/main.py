@@ -70,6 +70,8 @@ from .router_plugins import register_plugin_routes
 from .router_tailscale import register_tailscale_routes
 from .plugin_manager import plugin_manager
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
+from .group_service import GroupService
+from .router_groups import register_group_routes
 from .pipeline_executor import execute_pipeline, get_watch_folders
 from .folder_watcher import run_folder_watcher
 from .router_users import (
@@ -183,6 +185,7 @@ runtime          = AgentRuntime()
 projects         = ProjectLoader(PROJECTS_DIR)
 sessions         = SessionManager(PROJECTS_DIR)
 orchestrator     = Orchestrator(discovery, runtime, sessions)
+group_service    = GroupService(users_fn=_load_users)
 agent_sessions   = SessionManager(AGENTS_DIR)          # Direkte Agenten-Chats
 agent_orchestrator = Orchestrator(discovery, runtime, agent_sessions)
 provisioner:  Provisioner | None = None              # initialisiert im Lifespan
@@ -498,14 +501,15 @@ def _read_admin_password() -> str:
     return ""
 
 
-def _make_jwt(username: str, role: str = "user") -> str:
+def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str:
     """JWT-Token für den angegebenen User erstellen."""
     from jose import jwt as jose_jwt
     payload = {
-        "sub":  username,
-        "role": role,
-        "exp":  datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
-        "iat":  datetime.now(timezone.utc),
+        "sub":   username,
+        "role":  role,
+        "group": group,
+        "exp":   datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
+        "iat":   datetime.now(timezone.utc),
     }
     return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
@@ -673,6 +677,7 @@ IncomingMessage = register_core_misc_routes(
     runtime=runtime,
     read_audit_logs=lambda limit, project_id="", user="", action="": _read_audit_logs(limit, project_id, user, action),
     logger=logger,
+    group_service=group_service,
 )
 
 
@@ -780,6 +785,7 @@ register_agent_chat_routes(
     audit_log=audit_log,
     logger=logger,
     incoming_message_model=IncomingMessage,
+    group_service=group_service,
 )
 
 
@@ -1421,6 +1427,7 @@ register_agent_secret_routes(admin_router, get_current_admin=require_admin)
 register_brain_routes(auth_router, discovery=discovery, runtime=runtime, projects=projects)
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
+register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
 register_plugin_routes(admin_router, require_admin=require_admin, agents_dir=AGENTS_DIR)
 register_tailscale_routes(admin_router, require_admin=require_admin)
 register_pipeline_routes(

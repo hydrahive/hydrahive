@@ -1120,5 +1120,20 @@
     "secrets": "Secure storage for API keys and tokens used by agent tools. Only visible to admins.",
     "secretsName": "Unique name (e.g. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "The secret value — stored encrypted and only accessible by agent tools"
+  },
+  "groups": {
+    "title": "Groups & Permissions",
+    "description": "Groups define which pages, tools, plugins and agents a user can access.",
+    "newGroup": "New Group",
+    "system": "System",
+    "save": "Save",
+    "saved": "Saved",
+    "delete": "Delete",
+    "pages": "Visible Pages",
+    "tools": "Allowed Tools",
+    "agents": "Allowed Agents",
+    "all": "All",
+    "none": "None",
+    "selectGroup": "Select a group from the list to edit permissions."
   }
 }

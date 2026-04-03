@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft, Puzzle } from "lucide-react";
+import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft, Puzzle, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
 import { McpConfigPage } from "@/pages/McpConfigPage";
@@ -11,6 +11,7 @@ import { KasConfigPage } from "@/pages/KasConfigPage";
 import { UserPage } from "@/pages/UserPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { MigrationPage } from "@/pages/MigrationPage";
+import { GroupsPage } from "@/pages/GroupsPage";
 import { useTranslation } from "react-i18next";
 
 const TABS = [
@@ -21,6 +22,7 @@ const TABS = [
   { id: "vpn",       label: "VPN",        icon: Network,          component: VpnPage },
   { id: "kas",       label: "Mail / KAS", icon: Mail,             component: KasConfigPage },
   { id: "users",     label: "Users",      icon: Users,            component: UserPage },
+  { id: "groups",    label: "Gruppen",    icon: Shield,           component: GroupsPage },
   { id: "backup",    label: "Backup",     icon: Archive,          component: BackupPage },
   { id: "migration", label: "Migration",  icon: ArrowRightLeft,   component: MigrationPage },
   { id: "plugins",   label: "Plugins",    icon: Puzzle,           component: PluginsPage },

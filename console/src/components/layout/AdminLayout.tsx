@@ -148,7 +148,7 @@ function useDarkMode() {
 
 export function AdminLayout() {
   const { t } = useTranslation();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, hasPageAccess, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -216,9 +216,22 @@ export function AdminLayout() {
     ],
   };
 
-  const groups: NavGroup[] = isAdmin
-    ? [groupTop, groupMyAgent, groupWorkspace, groupOperations, groupSystem]
-    : [groupTop, groupMyAgent, groupWorkspace];
+  // Gruppen-Berechtigungen: Seiten nach Permissions filtern
+  const filterByPerms = (group: NavGroup): NavGroup => {
+    if (isAdmin) return group; // Admins sehen alles
+    return {
+      ...group,
+      items: group.items.filter(item => {
+        const pageId = item.to.replace(/^\//, "");
+        return hasPageAccess(pageId);
+      }),
+    };
+  };
+
+  const allGroups = [groupTop, groupMyAgent, groupWorkspace, groupOperations, groupSystem];
+  const groups: NavGroup[] = allGroups
+    .map(filterByPerms)
+    .filter(g => g.items.length > 0);
 
   const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();

@@ -1120,5 +1120,20 @@
     "secrets": "Sichere Speicherung von API-Keys und Tokens für Agenten-Tools. Nur von Admins einsehbar.",
     "secretsName": "Eindeutiger Name (z.B. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich"
+  },
+  "groups": {
+    "title": "Gruppen & Berechtigungen",
+    "description": "Gruppen definieren welche Seiten, Tools, Plugins und Agenten ein User nutzen darf.",
+    "newGroup": "Neue Gruppe",
+    "system": "System",
+    "save": "Speichern",
+    "saved": "Gespeichert",
+    "delete": "Löschen",
+    "pages": "Sichtbare Seiten",
+    "tools": "Erlaubte Tools",
+    "agents": "Erlaubte Agenten",
+    "all": "Alle",
+    "none": "Keine",
+    "selectGroup": "Wähle eine Gruppe aus der Liste um Berechtigungen zu bearbeiten."
   }
 }
