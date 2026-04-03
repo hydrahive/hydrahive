@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/hooks/useAuth";
 import {
   CheckCircle, XCircle, ChevronDown, ChevronRight, Cpu, Key,
   MessageSquare, GitBranch, Github, Mail, Network, Mic, Save, Loader2, AlertTriangle,
@@ -546,6 +547,8 @@ function VoiceSection() {
 /* ── Main Page ────────────────────────────────────────────────── */
 
 export function ConfigHubPage() {
+  const { isAdmin } = useAuth();
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
       <div className="mb-6">
@@ -562,9 +565,9 @@ export function ConfigHubPage() {
 
       <LlmSection />
       <PlatformsSection />
-      <GitSection />
-      <KasSection />
-      <VpnSection />
+      {isAdmin && <GitSection />}
+      {isAdmin && <KasSection />}
+      {isAdmin && <VpnSection />}
       <VoiceSection />
     </div>
   );
