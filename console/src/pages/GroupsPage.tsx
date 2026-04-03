@@ -56,6 +56,8 @@ export function GroupsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [newId, setNewId] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [newDesc, setNewDesc] = useState("");
   const [showNew, setShowNew] = useState(false);
 
   async function load() {
@@ -101,8 +103,8 @@ export function GroupsPage() {
     if (!id) return;
     setSaving(true); setMsg("");
     try {
-      await api.post("/admin/groups", { id, label: newId.trim(), permissions: { pages: ["dashboard", "my-agent"], tools: [], plugins: [], agents: [] } });
-      setNewId(""); setShowNew(false);
+      await api.post("/admin/groups", { id, label: newLabel.trim() || newId.trim(), description: newDesc.trim(), permissions: { pages: ["dashboard", "my-agent"], tools: [], plugins: [], agents: [] } });
+      setNewId(""); setNewLabel(""); setNewDesc(""); setShowNew(false);
       await load();
       selectGroup(id);
     } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
@@ -168,9 +170,13 @@ export function GroupsPage() {
       </div>
 
       {showNew && (
-        <div className="flex gap-2 items-center border rounded-lg p-3 bg-muted/30">
+        <div className="flex flex-wrap gap-2 items-center border rounded-lg p-3 bg-muted/30">
           <input value={newId} onChange={e => setNewId(e.target.value)} placeholder="gruppen-id"
-            className="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono" />
+            className="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono w-40" />
+          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Anzeigename"
+            className="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring w-40" />
+          <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Beschreibung"
+            className="rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring flex-1 min-w-48" />
           <button onClick={createGroup} disabled={!newId.trim() || saving}
             className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
             Erstellen
