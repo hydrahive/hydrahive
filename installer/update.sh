@@ -117,6 +117,14 @@ main() {
         || error "pip install fehlgeschlagen"
     success "Python-Dependencies aktualisiert"
 
+    # --- 3b. System-Dependencies nachrüsten (idempotent) ---
+    for pkg in ffmpeg jq tree; do
+        if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+            info "Installiere fehlende Abhängigkeit: $pkg"
+            apt-get install -y -qq "$pkg" || warn "$pkg konnte nicht installiert werden"
+        fi
+    done
+
     # --- 4. Console bauen ---
     info "Baue Console..."
     local CONSOLE_SRC="${TMPDIR_BASE}/console"
