@@ -54,6 +54,24 @@
     "total": "Total",
     "noBreakdown": "No model breakdown available (older session data without token counts)."
   },
+  "hub": {
+    "packagesAvailable": "{{count}} packages available",
+    "subtitle": "Curated agents, extensions and tools",
+    "searchPlaceholder": "Search by name, description or tag...",
+    "all": "All",
+    "notReachable": "Hub not reachable",
+    "installFailed": "Installation failed",
+    "pluginsAvailable": "{{count}} plugin(s) available",
+    "noPlugins": "No plugins in hub",
+    "noAgentAvailable": "– no agent available –",
+    "uninstallConfirm": "uninstall?",
+    "asOf": "As of:",
+    "searchSkills": "Search ClawhHub skills…",
+    "tokenNeeded": "Token is required for skill search and installation.",
+    "createAt": "Create one at",
+    "skillInstalled": "installed",
+    "error": "Error"
+  },
   "navHint": {
     "dashboard": "Operations overview",
     "myAgent": "Primary assistant",

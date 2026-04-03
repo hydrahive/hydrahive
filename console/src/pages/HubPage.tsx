@@ -24,6 +24,7 @@ const CATEGORY_ORDER = [
 // ── ClawhHub Tab ─────────────────────────────────────────────────────────────
 
 function ClawhubTab() {
+  const { t } = useTranslation();
   const [tab, setTab]             = useState<"skills">("skills");
   const [query, setQuery]         = useState("");
   const [skills, setSkills]       = useState<ClawhubSkillItem[]>([]);
@@ -385,7 +386,7 @@ function HydraHubTab() {
       setInstalled(Array.isArray(inst) ? inst : []);
       setHubUpdated(idx.updated);
     } catch (e: any) {
-      setError(e.message || "Hub nicht erreichbar");
+      setError(e.message || t("hub.notReachable"));
     } finally {
       setLoading(false);
     }
@@ -447,8 +448,8 @@ function HydraHubTab() {
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-muted-foreground">
             {packages.length > 0
-              ? `${packages.length} Pakete verfügbar`
-              : "Kuratierte Agenten, Erweiterungen und Tools"}
+              ? t("hub.packagesAvailable", { count: packages.length })
+              : t("hub.subtitle")}
             {hubUpdated && (
               <span className="ml-2 opacity-50 text-xs">
                 · Stand: {new Date(hubUpdated).toLocaleDateString("de-DE")}
@@ -470,7 +471,7 @@ function HydraHubTab() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Suche nach Name, Beschreibung oder Tag..."
+            placeholder={t("hub.searchPlaceholder")}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border/50 bg-background/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
@@ -484,7 +485,7 @@ function HydraHubTab() {
             className={`w-full text-left px-3 py-1.5 rounded-lg text-sm flex items-center justify-between transition-colors
               ${category === "all" ? "bg-primary text-primary-foreground" : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"}`}
           >
-            <span>Alle</span>
+            <span>{t("hub.all")}</span>
             <span className="text-xs opacity-70">{packages.length}</span>
           </button>
           {categories.map(({ key, label, count }) => (
@@ -676,6 +677,7 @@ function HydraHubTab() {
 // ── HydraHub Plugins Tab ──────────────────────────────────────────────────────
 
 function HubPluginsTab() {
+  const { t } = useTranslation();
   const [plugins, setPlugins]       = useState<HubPackage[]>([]);
   const [installed, setInstalled]   = useState<Set<string>>(new Set());
   const [loading, setLoading]       = useState(true);
@@ -720,7 +722,7 @@ function HubPluginsTab() {
     <div className="flex flex-col h-full overflow-hidden p-4 gap-4">
       <div className="flex items-center justify-between flex-shrink-0">
         <p className="text-sm text-muted-foreground">
-          {plugins.length > 0 ? `${plugins.length} Plugin(s) verfügbar` : "Keine Plugins im Hub"}
+          {plugins.length > 0 ? t("hub.pluginsAvailable", { count: plugins.length }) : t("hub.noPlugins")}
         </p>
         <button onClick={load} disabled={loading} className="p-2 rounded-xl border border-border/50 hover:bg-muted/50 disabled:opacity-40">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />

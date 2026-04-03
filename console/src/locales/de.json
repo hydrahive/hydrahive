@@ -54,6 +54,24 @@
     "total": "Gesamt",
     "noBreakdown": "Keine Modell-Aufschlüsselung verfügbar (alte Session-Daten ohne Token-Counts)."
   },
+  "hub": {
+    "packagesAvailable": "{{count}} Pakete verfügbar",
+    "subtitle": "Kuratierte Agenten, Erweiterungen und Tools",
+    "searchPlaceholder": "Suche nach Name, Beschreibung oder Tag...",
+    "all": "Alle",
+    "notReachable": "Hub nicht erreichbar",
+    "installFailed": "Installation fehlgeschlagen",
+    "pluginsAvailable": "{{count}} Plugin(s) verfügbar",
+    "noPlugins": "Keine Plugins im Hub",
+    "noAgentAvailable": "– kein Agent verfügbar –",
+    "uninstallConfirm": "deinstallieren?",
+    "asOf": "Stand:",
+    "searchSkills": "ClawhHub Skills suchen…",
+    "tokenNeeded": "Token wird für die Skill-Suche und Installation benötigt.",
+    "createAt": "Erstelle einen unter",
+    "skillInstalled": "installiert",
+    "error": "Fehler"
+  },
   "navHint": {
     "dashboard": "Lagebild",
     "myAgent": "Hauptansprechpartner",
