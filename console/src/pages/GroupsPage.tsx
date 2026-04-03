@@ -62,12 +62,16 @@ export function GroupsPage() {
     try {
       const [gRes, tRes, aRes] = await Promise.all([
         api.get<{ groups: Record<string, Group> }>("/admin/groups"),
-        api.get<{ tools: { id: string }[] }>("/tools"),
-        api.get<{ agents: { id: string; identity: string }[] }>("/agents"),
+        api.get<Record<string, unknown>>("/tools"),
+        api.get<Record<string, unknown>>("/agents"),
       ]);
       setGroups(gRes.groups || {});
-      setKnownTools((tRes.tools || []).map((t: any) => t.id || t));
-      setAgents((aRes.agents || []).map((a: any) => ({ id: a.id, identity: a.identity || a.config?.identity || a.id })));
+      // /tools returns {tool_id: tool_def, ...} — extract keys
+      setKnownTools(Object.keys(tRes).filter(k => k !== "count"));
+      // /agents returns {agent_id: agent_obj, ...} — extract id + identity
+      setAgents(Object.entries(aRes)
+        .filter(([k]) => k !== "count")
+        .map(([id, a]: [string, any]) => ({ id, identity: a?.config?.identity || a?.identity || id })));
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }
