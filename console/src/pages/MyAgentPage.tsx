@@ -1264,7 +1264,17 @@ function SettingsPanel({
 
         {/* Tools */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
+            <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
+              className="text-xs text-muted-foreground hover:text-foreground transition">
+              Alle außer ⚠
+            </button>
+            <button type="button" onClick={() => setTools([])}
+              className="text-xs text-muted-foreground hover:text-foreground transition">
+              Keine
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {ALL_TOOLS.map(t => {
               const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);

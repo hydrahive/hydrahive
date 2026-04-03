@@ -523,7 +523,17 @@ export function AgentsPage() {
             </div>
 
             <div>
-              <p className="metric-kicker mb-3">{t("agents.tools")}</p>
+              <div className="flex items-center gap-3 mb-3">
+                <p className="metric-kicker">{t("agents.tools")}</p>
+                <button type="button" onClick={() => setForm(f => ({ ...f, tools: knownTools.filter(t => !DANGER_TOOLS.has(t)) }))}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Alle außer ⚠
+                </button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, tools: [] }))}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Keine
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {knownTools.map((t) => {
                   const isDanger = DANGER_TOOLS.has(t);
