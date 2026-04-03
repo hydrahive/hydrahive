@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -128,7 +128,7 @@ export function MyAgentPage() {
     { cmd: "/history",  desc: "Vergangene Sessions anzeigen" },
   ];
 
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat"|"butler">("chat");
+  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat"|"butler"|"account">("chat");
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -397,6 +397,7 @@ export function MyAgentPage() {
             { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
             { id: "mail",      label: t("myAgent.mailTab"),       icon: Mail },
             { id: "butler",    label: "Butler",                   icon: Workflow },
+            { id: "account",   label: "Mein Konto",               icon: KeyRound },
           ].map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id as typeof tab)}
               className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs border-b-2 transition-colors ${
@@ -844,6 +845,106 @@ export function MyAgentPage() {
           </div>
         </Suspense>
       )}
+
+      {tab === "account" && <AccountTab />}
+    </div>
+  );
+}
+
+/* ── Account Tab — Mein Konto ────────────────────────────────── */
+
+function AccountTab() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState("");
+
+  useEffect(() => {
+    api.get<any>("/me/credentials").then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  function copy(text: string, label: string) {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 2000);
+  }
+
+  if (loading) return <div className="p-8 text-sm text-muted-foreground">Lade...</div>;
+  if (!data) return <div className="p-8 text-sm text-destructive">Fehler beim Laden der Kontodaten.</div>;
+
+  return (
+    <div className="p-5 space-y-5 max-w-2xl">
+      <div>
+        <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><User className="h-4 w-4 text-primary" /> Benutzerkonto</h2>
+        <div className="grid gap-2 text-sm">
+          <InfoRow label="Benutzername" value={data.username} onCopy={copy} copied={copied} />
+          <InfoRow label="Rolle" value={data.role} />
+          <InfoRow label="Gruppe" value={data.group} />
+          <InfoRow label="Console" value={data.console_url} onCopy={copy} copied={copied} />
+        </div>
+      </div>
+
+      {data.tailscale_ip && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Wifi className="h-4 w-4 text-primary" /> Tailscale VPN</h2>
+          <div className="grid gap-2 text-sm">
+            <InfoRow label="Tailscale IP" value={data.tailscale_ip} onCopy={copy} copied={copied} />
+          </div>
+        </div>
+      )}
+
+      {data.samba?.shares?.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><KeyRound className="h-4 w-4 text-primary" /> Samba-Zugang (Dateifreigaben)</h2>
+          <p className="text-xs text-muted-foreground mb-3">Verbinde dich mit dem Dateimanager: <code className="bg-muted px-1 rounded">{data.samba.hint}</code></p>
+          <div className="space-y-2">
+            {data.samba.shares.map((s: any) => (
+              <div key={s.project} className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs font-medium mb-1">{s.project}</p>
+                <div className="grid gap-1.5">
+                  <InfoRow label="Benutzer" value={s.username} onCopy={copy} copied={copied} small />
+                  <InfoRow label="Passwort" value={s.password} onCopy={copy} copied={copied} small secret />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.wks?.ip && (
+        <div>
+          <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Monitor className="h-4 w-4 text-primary" /> Workstation (WKS)</h2>
+          <div className="grid gap-2 text-sm">
+            <InfoRow label="IP" value={data.wks.ip} onCopy={copy} copied={copied} />
+            <InfoRow label="SSH-User" value={data.wks.ssh_user || "—"} />
+            <InfoRow label="Ollama-Port" value={String(data.wks.ollama_port || 11434)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value, onCopy, copied, small, secret }: {
+  label: string; value: string; onCopy?: (v: string, l: string) => void;
+  copied?: string; small?: boolean; secret?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className={`flex items-center justify-between gap-2 ${small ? "text-xs" : "text-sm"}`}>
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="font-mono truncate">{secret && !show ? "••••••••" : value}</span>
+        {secret && (
+          <button onClick={() => setShow(!show)} className="text-xs text-muted-foreground hover:text-foreground">
+            {show ? "Verbergen" : "Anzeigen"}
+          </button>
+        )}
+        {onCopy && (
+          <button onClick={() => onCopy(value, label)} className="text-muted-foreground hover:text-foreground shrink-0">
+            {copied === label ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

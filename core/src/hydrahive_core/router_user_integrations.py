@@ -353,6 +353,72 @@ def register_user_integration_routes(
     projects=None,
     internal_router: APIRouter | None = None,
 ) -> None:
+    @auth_router.get("/me/credentials")
+    def get_my_credentials(auth: tuple = Depends(require_auth)):
+        """Alle Zugangsdaten des eingeloggten Users."""
+        import subprocess as _sp
+        username = _username_from_auth(auth)
+        users = load_users()
+        user = users.get(username, {})
+
+        # Samba-Credentials für persönliches Projekt
+        samba_user = f"proj_personal_{username}"
+        samba_pw = None
+        try:
+            r = _sp.run(["sudo", "grep", f"^{samba_user}:", "/etc/hydrahive/samba_credentials"],
+                        capture_output=True, text=True, timeout=5)
+            if r.returncode == 0 and ":" in r.stdout.strip():
+                samba_pw = r.stdout.strip().split(":", 1)[1]
+        except Exception:
+            pass
+
+        # Alle Projekt-Samba-Credentials die der User sehen darf
+        samba_shares = []
+        allowed = user.get("allowed_projects") or []
+        if projects:
+            for pid in (projects.projects if not allowed else [p for p in projects.projects if p in allowed or p == f"personal_{username}"]):
+                s_user = f"proj_{pid}"
+                s_pw = None
+                try:
+                    r = _sp.run(["sudo", "grep", f"^{s_user}:", "/etc/hydrahive/samba_credentials"],
+                                capture_output=True, text=True, timeout=3)
+                    if r.returncode == 0 and ":" in r.stdout.strip():
+                        s_pw = r.stdout.strip().split(":", 1)[1]
+                except Exception:
+                    pass
+                if s_pw:
+                    samba_shares.append({"project": pid, "username": s_user, "password": s_pw})
+
+        # Tailscale
+        tailscale_ip = None
+        try:
+            r = _sp.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                tailscale_ip = r.stdout.strip()
+        except Exception:
+            pass
+
+        # Server-IP
+        import socket
+        try:
+            server_ip = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            server_ip = "127.0.0.1"
+
+        return {
+            "username": username,
+            "role": user.get("role", "user"),
+            "group": user.get("group", "standard"),
+            "server_ip": server_ip,
+            "tailscale_ip": tailscale_ip,
+            "samba": {
+                "shares": samba_shares,
+                "hint": f"\\\\{tailscale_ip or server_ip}\\ + Projektname",
+            },
+            "wks": user.get("wks", {}),
+            "console_url": f"https://{tailscale_ip or server_ip}",
+        }
+
     @auth_router.get("/me/wks")
     def get_my_wks(auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)
