@@ -339,6 +339,9 @@ def _load_agent_workflow_prompt(agent_dir) -> str:
         logger.debug("Failed to parse workflow flow %s: %s", wf_path, e)
         return ""
 
+    if not wf.get("enabled", True):
+        return ""
+
     nodes: list[dict] = wf.get("nodes", [])
     edges: list[dict] = wf.get("edges", [])
     if not nodes:

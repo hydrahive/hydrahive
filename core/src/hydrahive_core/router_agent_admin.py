@@ -248,6 +248,16 @@ def register_agent_admin_routes(
         logger.info("workflow_flow.json gespeichert: %s", wf_path)
         return {"saved": True}
 
+    @auth_router.get("/agents/{agent_id}/workflow-flow/preview")
+    def preview_workflow_flow(agent_id: str, _a: tuple = Depends(require_auth)):
+        """Zeigt den generierten Prompt-Text des Agent-Workflows."""
+        from .orchestrator_context import _load_agent_workflow_prompt
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        prompt = _load_agent_workflow_prompt(agent_dir)
+        return {"preview": prompt}
+
     @admin_router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
         agent_dir = Path(agents_dir) / agent_id
