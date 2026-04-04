@@ -220,6 +220,34 @@ def register_agent_admin_routes(
         logger.info("workflow_blueprint.json gespeichert: %s", wf_path)
         return {"saved": True}
 
+    # ── Agent Workflow Flow (Arbeitsablauf) ──────────────────────────
+    @auth_router.get("/agents/{agent_id}/workflow-flow")
+    def get_workflow_flow(agent_id: str, _a: tuple = Depends(require_auth)):
+        import json as _json
+        wf_path = Path(agents_dir) / agent_id / "workflow_flow.json"
+        if not wf_path.exists():
+            return {"nodes": [], "edges": []}
+        try:
+            return _json.loads(wf_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"nodes": [], "edges": []}
+
+    @auth_router.put("/agents/{agent_id}/workflow-flow")
+    def save_workflow_flow(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
+        import json as _json
+        agent_dir = Path(agents_dir) / agent_id
+        if not agent_dir.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        wf_path = agent_dir / "workflow_flow.json"
+        wf_path.write_text(_json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+        try:
+            from .orchestrator_context import invalidate_prompt_cache
+            invalidate_prompt_cache(agent_id)
+        except Exception:
+            pass
+        logger.info("workflow_flow.json gespeichert: %s", wf_path)
+        return {"saved": True}
+
     @admin_router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
         agent_dir = Path(agents_dir) / agent_id

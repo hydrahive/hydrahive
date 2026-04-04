@@ -9,6 +9,7 @@ import {
 import {
   GitBranch, KeyRound, BookOpen, Brain, Shield, Bot, Save, Loader2, X,
   Wrench, Server, Puzzle, Cpu, PlusCircle, Rocket, Sparkles, ChevronDown,
+  Play, GitFork, Square, Database, Workflow,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -167,6 +168,69 @@ function AgentProfileNode({ data, selected }: { data: any; selected: boolean }) 
   );
 }
 
+// ── Workflow-Flow Nodes ───────────────────────────────────────────────────────
+
+function StepFlowNode({ data, selected }: { data: any; selected: boolean }) {
+  return (
+    <div className={cn("min-w-[180px] max-w-[260px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-indigo-950/60 border-indigo-500/60", selected && "ring-2 ring-white/25")}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Play className="h-3 w-3 text-indigo-400" />
+        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-indigo-400">Schritt</span>
+      </div>
+      <p className="text-sm font-medium text-white leading-tight">{data.label || "Schritt"}</p>
+      {data.toolId && <p className="text-[0.6rem] text-indigo-400/60 mt-0.5 font-mono">{data.toolId}</p>}
+      {data.description && <p className="text-[0.55rem] text-white/30 mt-0.5 leading-snug">{data.description}</p>}
+      <Handle type="target" position={Position.Left} id="in" style={{ background: "#818cf8", border: "2px solid #4338ca", width: 10, height: 10 }} />
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "#818cf8", border: "2px solid #4338ca", width: 10, height: 10 }} />
+    </div>
+  );
+}
+
+function SourceFlowNode({ data, selected }: { data: any; selected: boolean }) {
+  return (
+    <div className={cn("min-w-[180px] max-w-[240px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-emerald-950/60 border-emerald-500/60", selected && "ring-2 ring-white/25")}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Database className="h-3 w-3 text-emerald-400" />
+        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-emerald-400">Quelle</span>
+      </div>
+      <p className="text-sm font-medium text-white leading-tight">{data.label || "Quelle"}</p>
+      {data.sourceType && <p className="text-[0.6rem] text-emerald-400/60 mt-0.5">{data.sourceType}: {data.sourceId || "—"}</p>}
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "#34d399", border: "2px solid #065f46", width: 10, height: 10 }} />
+    </div>
+  );
+}
+
+function BranchFlowNode({ data, selected }: { data: any; selected: boolean }) {
+  return (
+    <div className={cn("min-w-[180px] max-w-[260px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-amber-950/60 border-amber-500/60", selected && "ring-2 ring-white/25")}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <GitFork className="h-3 w-3 text-amber-400" />
+        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-amber-400">Entscheidung</span>
+      </div>
+      <p className="text-sm font-medium text-white leading-tight">{data.label || "Bedingung?"}</p>
+      {data.condition && <p className="text-[0.55rem] text-white/30 mt-0.5 leading-snug">{data.condition}</p>}
+      <Handle type="target" position={Position.Left} id="in" style={{ background: "#fbbf24", border: "2px solid #92400e", width: 10, height: 10 }} />
+      <Handle type="source" position={Position.Right} id="true" style={{ background: "#4ade80", border: "2px solid #166534", width: 10, height: 10, top: "30%" }} />
+      <Handle type="source" position={Position.Right} id="false" style={{ background: "#f87171", border: "2px solid #991b1b", width: 10, height: 10, top: "70%" }} />
+      <span className="absolute -right-1 translate-x-full text-[0.5rem] text-green-400/60" style={{ top: "26%" }}>Ja</span>
+      <span className="absolute -right-1 translate-x-full text-[0.5rem] text-red-400/60" style={{ top: "66%" }}>Nein</span>
+    </div>
+  );
+}
+
+function EndFlowNode({ data, selected }: { data: any; selected: boolean }) {
+  return (
+    <div className={cn("min-w-[140px] max-w-[200px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-zinc-800/60 border-zinc-500/60", selected && "ring-2 ring-white/25")}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Square className="h-3 w-3 text-zinc-400" />
+        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-zinc-400">Ende</span>
+      </div>
+      <p className="text-sm font-medium text-white leading-tight">{data.label || "Ende"}</p>
+      <Handle type="target" position={Position.Left} id="in" style={{ background: "#a1a1aa", border: "2px solid #52525b", width: 10, height: 10 }} />
+    </div>
+  );
+}
+
 const NODE_TYPES = {
   repository:   RepoNode         as any,
   credential:   CredentialNode   as any,
@@ -177,6 +241,10 @@ const NODE_TYPES = {
   mcp:          McpNode          as any,
   plugin:       PluginNode       as any,
   agentprofile: AgentProfileNode as any,
+  stepFlow:     StepFlowNode     as any,
+  sourceFlow:   SourceFlowNode   as any,
+  branchFlow:   BranchFlowNode   as any,
+  endFlow:      EndFlowNode      as any,
 };
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -205,7 +273,7 @@ const MODELS = [
 
 // ── Properties Panel ──────────────────────────────────────────────────────────
 
-function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins, availableSkills }: {
+function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins, availableSkills, viewMode }: {
   node: Node | null;
   onChange: (id: string, data: any) => void;
   onDelete: (id: string) => void;
@@ -213,10 +281,68 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
   availableMcp: string[];
   availablePlugins: string[];
   availableSkills: string[];
+  viewMode?: ViewMode;
 }) {
   if (!node) return (
-    <div className="flex items-center justify-center h-full text-white/20 text-xs p-4 text-center">
-      Node auswählen um Eigenschaften zu bearbeiten
+    <div className="p-4 text-xs text-white/20 space-y-4 overflow-y-auto h-full">
+      {viewMode === "workflow" ? (
+        <div className="space-y-3 text-left">
+          <p className="text-indigo-300/80 font-bold text-sm">Workflow-Editor — Anleitung</p>
+
+          <div className="space-y-1.5">
+            <p className="text-white/40 font-semibold">Was ist ein Agent-Workflow?</p>
+            <p className="text-white/25 leading-relaxed">
+              Ein Workflow definiert den Arbeitsablauf, den ein Agent bei jeder Aufgabe befolgt.
+              Statt dem Agent nur Tools und eine Persönlichkeit zu geben, legst du hier fest
+              <strong className="text-white/40"> in welcher Reihenfolge</strong> er arbeiten soll.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-white/40 font-semibold">So erstellst du einen Workflow:</p>
+            <ol className="list-decimal list-inside space-y-1 text-white/25 leading-relaxed">
+              <li>Wähle oben einen Agenten aus dem Dropdown</li>
+              <li>Klicke auf <strong className="text-white/40">Palette</strong> in der Toolbar</li>
+              <li>Füge Nodes hinzu: <strong className="text-indigo-300/60">Schritt</strong>, <strong className="text-emerald-300/60">Quelle</strong>, <strong className="text-amber-300/60">Entscheidung</strong>, <strong className="text-zinc-300/60">Ende</strong></li>
+              <li>Verbinde die Nodes: Ziehe vom rechten Handle (Ausgang) zum linken Handle (Eingang) des nächsten Nodes</li>
+              <li>Klicke auf einen Node um rechts seine Eigenschaften zu bearbeiten</li>
+              <li>Klicke <strong className="text-white/40">Speichern</strong></li>
+            </ol>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-white/40 font-semibold">Node-Typen:</p>
+            <div className="space-y-1.5">
+              <p><strong className="text-indigo-300/60">Schritt</strong> — Ein Arbeitsschritt. Optional mit Tool verknüpfen (z.B. file_read, git_diff).</p>
+              <p><strong className="text-emerald-300/60">Quelle</strong> — Startpunkt: eine Datenquelle (Repo, Memory, Skill, URL) die der Agent zuerst lesen soll.</p>
+              <p><strong className="text-amber-300/60">Entscheidung</strong> — Verzweigung mit Ja/Nein. Der grüne Ausgang = Ja, der rote = Nein.</p>
+              <p><strong className="text-zinc-300/60">Ende</strong> — Workflow abgeschlossen. Der Agent gibt seine Antwort aus.</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-white/40 font-semibold">Beispiel: Code-Reviewer</p>
+            <p className="text-white/25 leading-relaxed">
+              Quelle (Repo) → Schritt (git_diff) → Entscheidung ("Gibt es Probleme?")
+              → Ja: Schritt (Issue erstellen) → Ende
+              → Nein: Ende
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-white/40 font-semibold">Tipps:</p>
+            <ul className="list-disc list-inside space-y-0.5 text-white/25 leading-relaxed">
+              <li>Flow von links nach rechts aufbauen</li>
+              <li>Jeder Flow braucht mindestens einen Ende-Node</li>
+              <li>Der Agent sieht den Workflow als nummerierte Arbeitsanweisung</li>
+              <li>Ressourcen (Tools, MCP etc.) im Tab "Ressourcen" zuweisen</li>
+              <li>Workflow und Ressourcen werden getrennt gespeichert</li>
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <p className="text-center">Node auswählen um Eigenschaften zu bearbeiten</p>
+      )}
     </div>
   );
 
@@ -371,13 +497,81 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
           </label>
         </div>
       </>}
+
+      {/* ── Workflow-Flow Node Properties ── */}
+      {n.type === "stepFlow" && <>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Beschreibung</label>
+          <textarea value={d.description || ""} onChange={e => upd({ description: e.target.value })}
+            rows={3} placeholder="Was soll in diesem Schritt passieren?"
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500/60 resize-none" />
+        </div>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Tool (optional)</label>
+          <select value={d.toolId || ""} onChange={e => upd({ toolId: e.target.value })}
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none">
+            <option value="">— kein Tool —</option>
+            {availableTools.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </>}
+
+      {n.type === "sourceFlow" && <>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Quellen-Typ</label>
+          <select value={d.sourceType || ""} onChange={e => upd({ sourceType: e.target.value })}
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none">
+            <option value="">— wählen —</option>
+            <option value="repo">Repository</option>
+            <option value="memory">Memory</option>
+            <option value="skill">Skill</option>
+            <option value="url">URL</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Ressource-ID</label>
+          <input value={d.sourceId || ""} onChange={e => upd({ sourceId: e.target.value })}
+            placeholder="z.B. best-practices.md"
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/60" />
+        </div>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Beschreibung</label>
+          <textarea value={d.description || ""} onChange={e => upd({ description: e.target.value })}
+            rows={2} placeholder="Was liefert diese Quelle?"
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/60 resize-none" />
+        </div>
+      </>}
+
+      {n.type === "branchFlow" && <>
+        <div>
+          <label className="block text-[0.65rem] text-white/40 mb-1">Bedingung</label>
+          <textarea value={d.condition || ""} onChange={e => upd({ condition: e.target.value })}
+            rows={3} placeholder="Unter welcher Bedingung Ja/Nein?"
+            className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/60 resize-none" />
+        </div>
+      </>}
+
+      {n.type === "endFlow" && (
+        <p className="text-[0.65rem] text-white/30">End-Node — der Agent gibt hier seine Antwort aus.</p>
+      )}
     </div>
   );
 }
 
+// ── Flow Palette ─────────────────────────────────────────────────────────────
+
+const FLOW_PALETTE_ITEMS = [
+  { type: "stepFlow",   label: "Schritt",      icon: Play,    color: "text-indigo-400" },
+  { type: "sourceFlow", label: "Quelle",       icon: Database, color: "text-emerald-400" },
+  { type: "branchFlow", label: "Entscheidung", icon: GitFork, color: "text-amber-400" },
+  { type: "endFlow",    label: "Ende",         icon: Square,  color: "text-zinc-400" },
+];
+
 // ── Inner Component ───────────────────────────────────────────────────────────
 
 interface AgentEntry { id: string; identity: string }
+
+type ViewMode = "resources" | "workflow";
 
 function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   const { t } = useTranslation();
@@ -395,6 +589,11 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   const [availablePlugins, setAvailablePlugins] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills]   = useState<string[]>([]);
   const [showPalette, setShowPalette]           = useState(false);
+  const [viewMode, setViewMode]                 = useState<ViewMode>("resources");
+  // Workflow-Flow eigener State (unabhängig von Ressourcen-Blueprint)
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node>([]);
+  const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<Edge>([]);
+  const [flowLoading, setFlowLoading] = useState(false);
   const rf = useReactFlow();
 
   // Verfügbare Tools, MCP-Server, Plugins laden
@@ -514,12 +713,28 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     })().finally(() => setLoading(false));
   }, [selectedAgentId, setNodes, setEdges, rf, isNewMode]);
 
+  // Workflow-Flow laden wenn Agent wechselt oder Workflow-Mode aktiviert wird
+  useEffect(() => {
+    if (!selectedAgentId || viewMode !== "workflow" || isNewMode) return;
+    setFlowLoading(true);
+    setSelectedNode(null);
+    api.get<{ nodes: any[]; edges: any[] }>(`/agents/${selectedAgentId}/workflow-flow`)
+      .then(wf => {
+        setFlowNodes(wf.nodes || []);
+        setFlowEdges(wf.edges || []);
+        setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
+      })
+      .catch(() => { setFlowNodes([]); setFlowEdges([]); })
+      .finally(() => setFlowLoading(false));
+  }, [selectedAgentId, viewMode, setFlowNodes, setFlowEdges, rf, isNewMode]);
+
   const onConnect = useCallback((c: Connection) => {
-    setEdges(es => addEdge({
+    const setter = viewMode === "workflow" ? setFlowEdges : setEdges;
+    setter(es => addEdge({
       ...c, animated: true,
-      style: { stroke: "#6366f1", strokeWidth: 2 },
+      style: { stroke: viewMode === "workflow" ? "#818cf8" : "#6366f1", strokeWidth: 2 },
     } as Edge, es));
-  }, [setEdges]);
+  }, [setEdges, setFlowEdges, viewMode]);
 
   function addNode(type: string, label?: string) {
     const defaults: Record<string, string> = {
@@ -527,19 +742,28 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
       memory: "Memory", toolpolicy: "Tool Policy", tool: "tool",
       mcp: "MCP Server", plugin: "Plugin",
       agentprofile: "Neuer Agent",
+      stepFlow: "Schritt", sourceFlow: "Quelle",
+      branchFlow: "Bedingung?", endFlow: "Ende",
     };
     const id = `${type}-${Date.now()}`;
-    const cnt = nodes.length;
+    const isFlow = type.endsWith("Flow");
+    const targetNodes = isFlow ? flowNodes : nodes;
+    const cnt = targetNodes.length;
     const config: any = {};
     if (type === "agentprofile") {
       config.isNew = isNewMode;
       config.type = "specialist";
       config.model = "claude-sonnet-4-6";
     }
-    setNodes(ns => [...ns, {
+    const newNode: Node = {
       id, type, position: { x: 80 + cnt * 25, y: 80 + cnt * 18 },
       data: { label: label || defaults[type] || type, config },
-    }]);
+    };
+    if (isFlow) {
+      setFlowNodes(ns => [...ns, newNode]);
+    } else {
+      setNodes(ns => [...ns, newNode]);
+    }
   }
 
   function startNewAgent() {
@@ -565,13 +789,22 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   }
 
   function updateNodeData(nodeId: string, data: any) {
-    setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, data } : n));
+    if (viewMode === "workflow") {
+      setFlowNodes(ns => ns.map(n => n.id === nodeId ? { ...n, data } : n));
+    } else {
+      setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, data } : n));
+    }
     setSelectedNode(prev => prev?.id === nodeId ? { ...prev, data } : prev);
   }
 
   function deleteNode(nodeId: string) {
-    setNodes(ns => ns.filter(n => n.id !== nodeId));
-    setEdges(es => es.filter(e => e.source !== nodeId && e.target !== nodeId));
+    if (viewMode === "workflow") {
+      setFlowNodes(ns => ns.filter(n => n.id !== nodeId));
+      setFlowEdges(es => es.filter(e => e.source !== nodeId && e.target !== nodeId));
+    } else {
+      setNodes(ns => ns.filter(n => n.id !== nodeId));
+      setEdges(es => es.filter(e => e.source !== nodeId && e.target !== nodeId));
+    }
     setSelectedNode(null);
   }
 
@@ -579,7 +812,11 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     if (!selectedAgentId) return;
     setSaving(true);
     try {
-      await api.put(`/agents/${selectedAgentId}/workflow-blueprint`, { nodes, edges });
+      if (viewMode === "workflow") {
+        await api.put(`/agents/${selectedAgentId}/workflow-flow`, { nodes: flowNodes, edges: flowEdges });
+      } else {
+        await api.put(`/agents/${selectedAgentId}/workflow-blueprint`, { nodes, edges });
+      }
       setToast(t("common.saved"));
       setTimeout(() => setToast(null), 3000);
     } catch (e) {
@@ -695,12 +932,28 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
           </>
         )}
         <div className="h-4 w-px bg-white/10" />
+        {/* Mode Toggle */}
+        {!isNewMode && (
+          <div className="flex rounded-lg overflow-hidden border border-white/10">
+            <button onClick={() => { setViewMode("resources"); setSelectedNode(null); }}
+              className={cn("flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors",
+                viewMode === "resources" ? "bg-indigo-600 text-white" : "bg-zinc-900 text-white/50 hover:text-white")}>
+              <Cpu className="h-3 w-3" /> Ressourcen
+            </button>
+            <button onClick={() => { setViewMode("workflow"); setSelectedNode(null); }}
+              className={cn("flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors",
+                viewMode === "workflow" ? "bg-indigo-600 text-white" : "bg-zinc-900 text-white/50 hover:text-white")}>
+              <Workflow className="h-3 w-3" /> Workflow
+            </button>
+          </div>
+        )}
+        <div className="h-4 w-px bg-white/10" />
         {/* Palette Toggle */}
         <button onClick={() => setShowPalette(p => !p)}
           className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-zinc-800 transition-colors">
           <ChevronDown className={cn("h-3 w-3 transition-transform", showPalette && "rotate-180")} /> Palette
         </button>
-        {showPalette && PALETTE_ITEMS.map(item => (
+        {showPalette && (viewMode === "workflow" ? FLOW_PALETTE_ITEMS : PALETTE_ITEMS).map(item => (
           <button key={item.type} onClick={() => addNode(item.type)}
             className="flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white transition-colors">
             <item.icon className={cn("h-3 w-3", item.color)} />
@@ -727,14 +980,16 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
       {/* Canvas + Properties */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 relative">
-          {loading && (
+          {(loading || flowLoading) && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950/60">
               <Loader2 className="h-6 w-6 animate-spin text-white/30" />
             </div>
           )}
           <ReactFlow
-            nodes={nodes} edges={edges}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            nodes={viewMode === "workflow" ? flowNodes : nodes}
+            edges={viewMode === "workflow" ? flowEdges : edges}
+            onNodesChange={viewMode === "workflow" ? onFlowNodesChange : onNodesChange}
+            onEdgesChange={viewMode === "workflow" ? onFlowEdgesChange : onEdgesChange}
             onConnect={onConnect} nodeTypes={NODE_TYPES}
             colorMode="dark" fitView
             onNodeClick={(_, n) => setSelectedNode(n)}
@@ -746,10 +1001,24 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               repository: "#60a5fa", credential: "#fb923c", skill: "#c084fc",
               memory: "#2dd4bf", toolpolicy: "#4ade80", tool: "#22d3ee",
               mcp: "#f472b6", plugin: "#fbbf24", agentprofile: "#818cf8",
+              stepFlow: "#818cf8", sourceFlow: "#34d399", branchFlow: "#fbbf24", endFlow: "#a1a1aa",
             }[n.type ?? ""] ?? "#6366f1")} />
-            {nodes.length === 0 && !loading && !isNewMode && (
+            {viewMode === "resources" && nodes.length === 0 && !loading && !isNewMode && (
               <Panel position="top-center" style={{ marginTop: 60 }}>
                 <p className="text-white/20 text-sm pointer-events-none">Nodes über die Palette hinzufügen und mit dem Agenten verdrahten</p>
+              </Panel>
+            )}
+            {viewMode === "workflow" && flowNodes.length === 0 && !flowLoading && (
+              <Panel position="top-center" style={{ marginTop: 60 }}>
+                <div className="text-center space-y-2 pointer-events-none max-w-md">
+                  <p className="text-indigo-300/60 text-sm font-medium">Workflow-Editor</p>
+                  <p className="text-white/20 text-xs leading-relaxed">
+                    Definiere hier den Arbeitsablauf für diesen Agenten.
+                    Füge über die Palette Schritte, Quellen, Entscheidungen und ein Ende hinzu.
+                    Verbinde die Nodes von links nach rechts.
+                    Der Agent befolgt diesen Ablauf bei jeder Aufgabe.
+                  </p>
+                </div>
               </Panel>
             )}
             {isNewMode && nodes.length === 1 && (
@@ -775,6 +1044,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               availableMcp={availableMcp}
               availablePlugins={availablePlugins}
               availableSkills={availableSkills}
+              viewMode={viewMode}
             />
           </div>
         </div>

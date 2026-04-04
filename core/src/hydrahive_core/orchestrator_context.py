@@ -75,6 +75,9 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     if skills_dir.exists():
         for f in sorted(skills_dir.glob("*.md")):
             parts.append(f"{f.name}:{f.stat().st_mtime:.0f}")
+    wf_flow = agent_dir / "workflow_flow.json"
+    if wf_flow.exists():
+        parts.append(f"workflow_flow:{wf_flow.stat().st_mtime:.0f}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
@@ -231,6 +234,12 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if blueprint_ctx:
             parts.append(blueprint_ctx)
 
+    # Agent-Workflow (workflow_flow.json) — Arbeitsanweisung wie der Agent Aufgaben bearbeitet
+    if boss_cfg.agent_dir:
+        agent_wf = _load_agent_workflow_prompt(boss_cfg.agent_dir)
+        if agent_wf:
+            parts.append(agent_wf)
+
     repo_guidance = _repo_review_guidance(boss_cfg, user_text)
     if repo_guidance:
         parts.append(repo_guidance)
@@ -310,6 +319,99 @@ def _load_agent_blueprint_context(agent_dir) -> str:
     if len(parts) == 1:
         return ""  # Nur Überschrift, keine Inhalte
     return "\n\n".join(parts)
+
+
+def _load_agent_workflow_prompt(agent_dir) -> str:
+    """
+    Liest workflow_flow.json aus dem Agent-Verzeichnis und serialisiert es
+    als Arbeitsanweisung für den System-Prompt.
+    Analog zu _load_workflow_prompt() in orchestrator.py, aber agent-scoped.
+    """
+    import json as _json
+
+    wf_path = Path(agent_dir) / "workflow_flow.json"
+    if not wf_path.exists():
+        return ""
+    try:
+        wf = _json.loads(wf_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+
+    nodes: list[dict] = wf.get("nodes", [])
+    edges: list[dict] = wf.get("edges", [])
+    if not nodes:
+        return ""
+
+    # Topologische Reihenfolge via BFS ab Start-Nodes (ohne eingehende Edges)
+    targets = {e["target"] for e in edges}
+    start_ids = [n["id"] for n in nodes if n["id"] not in targets]
+    if not start_ids:
+        start_ids = [nodes[0]["id"]]
+
+    ordered: list[dict] = []
+    visited: set[str] = set()
+    queue = list(start_ids)
+    node_map = {n["id"]: n for n in nodes}
+    edge_map: dict[str, list[dict]] = {}
+    for e in edges:
+        edge_map.setdefault(e["source"], []).append(e)
+
+    while queue:
+        nid = queue.pop(0)
+        if nid in visited or nid not in node_map:
+            continue
+        visited.add(nid)
+        ordered.append(node_map[nid])
+        for e in edge_map.get(nid, []):
+            if e["target"] not in visited:
+                queue.append(e["target"])
+
+    lines = [
+        "## Arbeitsanweisung — Agent-Workflow",
+        "Bearbeite Aufgaben IMMER nach folgendem Arbeitsablauf:",
+        "",
+    ]
+    step_num = 1
+    for node in ordered:
+        ntype = node.get("type", "stepNode").replace("Node", "")
+        data = node.get("data", {})
+        label = data.get("label", "")
+        desc = data.get("description", "")
+        tool_id = data.get("toolId", "")
+
+        if ntype == "end":
+            lines.append(f"{step_num}. **[Ende]** {label or 'Workflow abgeschlossen — gib deine Antwort aus.'}")
+        elif ntype == "source":
+            src_type = data.get("sourceType", "")
+            src_id = data.get("sourceId", "")
+            lines.append(f"{step_num}. **[Quelle: {src_type or 'extern'}]** {label}")
+            if src_id:
+                lines.append(f"   → Ressource: `{src_id}`")
+            if desc:
+                lines.append(f"   → {desc}")
+        elif ntype == "branch":
+            condition = data.get("condition", label or "Bedingung prüfen")
+            lines.append(f"{step_num}. **[Entscheidung]** {condition}")
+            out_edges = edge_map.get(node["id"], [])
+            for oe in out_edges:
+                handle = oe.get("sourceHandle", "")
+                target_node = node_map.get(oe["target"])
+                target_label = target_node.get("data", {}).get("label", oe["target"]) if target_node else oe["target"]
+                branch_label = "Ja" if handle == "true" else "Nein" if handle == "false" else handle or "→"
+                lines.append(f"   → {branch_label}: weiter mit '{target_label}'")
+        else:  # step
+            tool_hint = f" (Tool: `{tool_id}`)" if tool_id else ""
+            lines.append(f"{step_num}. **[Schritt]** {label}{tool_hint}")
+            if desc:
+                lines.append(f"   → {desc}")
+
+        step_num += 1
+
+    lines += [
+        "",
+        "Arbeite jeden Schritt der Reihe nach ab bevor du antwortest.",
+    ]
+    return "\n".join(lines)
 
 
 def _repo_review_guidance(agent_cfg, user_text: str) -> str:
