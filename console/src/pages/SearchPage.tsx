@@ -107,7 +107,7 @@ export function SearchPage() {
         <button
           onClick={handleInstall}
           disabled={installing}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 text-sm font-medium"
         >
           {installing
             ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -119,7 +119,7 @@ export function SearchPage() {
       {installLog.length > 0 && (
         <div
           ref={logRef}
-          className="rounded-xl bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs text-zinc-300 max-h-72 overflow-y-auto space-y-0.5"
+          className="rounded-xl bg-background border border-border p-4 font-mono text-xs text-foreground max-h-72 overflow-y-auto space-y-0.5"
         >
           {installLog.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
         </div>
@@ -200,7 +200,7 @@ export function SearchPage() {
             </button>
           )}
           {installLog.length > 0 && (
-            <div ref={logRef} className="rounded-xl bg-zinc-950 border border-zinc-800 p-3 font-mono text-xs text-zinc-300 max-h-48 overflow-y-auto space-y-0.5">
+            <div ref={logRef} className="rounded-xl bg-background border border-border p-3 font-mono text-xs text-foreground max-h-48 overflow-y-auto space-y-0.5">
               {installLog.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
             </div>
           )}

@@ -12,6 +12,8 @@ import {
   AlertCircle, Power, ChevronDown, ChevronRight, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const API = "/api";
 function authHeaders() {
@@ -292,12 +294,14 @@ function PipelineEditor({ pipeline, onSaved, onClose }: {
 // ── Haupt-Tab ─────────────────────────────────────────────────────────────────
 
 export function FilePipelineTab() {
+  const { t } = useTranslation();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading]     = useState(true);
   const [editing, setEditing]     = useState<Pipeline | "new" | null>(null);
   const [runResult, setRunResult] = useState<{pipeline_id: string; steps: any[]} | null>(null);
   const [runPath, setRunPath]     = useState("");
   const [runLoading, setRunLoading] = useState(false);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     try {
@@ -315,10 +319,15 @@ export function FilePipelineTab() {
     load();
   }
 
-  async function deletePipeline(p: Pipeline) {
-    if (!confirm(`Pipeline "${p.name}" wirklich löschen?`)) return;
-    await fetch(`${API}/pipelines/${p.id}`, { method: "DELETE", headers: authHeaders() });
-    load();
+  function deletePipeline(p: Pipeline) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("confirm.deletePipeline", { name: p.name }),
+      action: async () => {
+        await fetch(`${API}/pipelines/${p.id}`, { method: "DELETE", headers: authHeaders() });
+        load();
+      },
+    });
   }
 
   async function runTest(p: Pipeline) {
@@ -430,6 +439,14 @@ export function FilePipelineTab() {
           ))}
         </div>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

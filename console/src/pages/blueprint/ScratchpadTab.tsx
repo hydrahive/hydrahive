@@ -9,6 +9,8 @@ import {
 import { PlusCircle, Save, Loader2, Trash2, Palette, X, PenTool, FolderOpen, FilePlus, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const COLORS = [
   { id: "zinc",    bg: "bg-zinc-800/80",    border: "border-zinc-500/50", text: "text-white",       handle: "#a1a1aa" },
@@ -45,6 +47,7 @@ const NODE_TYPES = { scratch: ScratchNode as any };
 const SCRATCHPADS_DIR = "/etc/hydrahive/scratchpads";
 
 function ScratchpadInner() {
+  const { t } = useTranslation();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNode, setSelectedNode]  = useState<Node | null>(null);
@@ -55,6 +58,7 @@ function ScratchpadInner() {
   const [padList, setPadList]         = useState<string[]>([]);
   const [showPadList, setShowPadList] = useState(false);
   const [newPadName, setNewPadName]   = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
   const rf = useReactFlow();
   const counter = useRef(0);
 
@@ -149,19 +153,29 @@ function ScratchpadInner() {
   }
 
   function clearAll() {
-    if (!confirm("Alles löschen?")) return;
-    setNodes([]); setEdges([]); setSelectedNode(null); counter.current = 0;
+    setConfirmState({
+      title: t("confirm.titleClear"),
+      message: t("confirm.clearAll"),
+      action: () => {
+        setNodes([]); setEdges([]); setSelectedNode(null); counter.current = 0;
+      },
+    });
   }
 
-  async function deletePad(name: string) {
-    if (!confirm(`Scratchpad "${name}" löschen?`)) return;
-    try {
-      await api.delete(`/admin/files/delete?path=${SCRATCHPADS_DIR}/${name}.json`);
-      if (padName === name) { setPadName("default"); loadPad("default"); }
-      loadPadList();
-      setToast(`"${name}" gelöscht`);
-      setTimeout(() => setToast(null), 2000);
-    } catch (e: any) { setToast("Fehler: " + e.message); }
+  function deletePad(name: string) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("confirm.deleteScratchpad", { name }),
+      action: async () => {
+        try {
+          await api.delete(`/admin/files/delete?path=${SCRATCHPADS_DIR}/${name}.json`);
+          if (padName === name) { setPadName("default"); loadPad("default"); }
+          loadPadList();
+          setToast(`"${name}" gelöscht`);
+          setTimeout(() => setToast(null), 2000);
+        } catch (e: any) { setToast("Fehler: " + e.message); }
+      },
+    });
   }
 
   function createNewPad() {
@@ -295,6 +309,14 @@ function ScratchpadInner() {
           </div>
         </div>
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

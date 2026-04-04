@@ -10,7 +10,7 @@ function StatusBadge({ connected, state }: { connected: boolean; state?: string 
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-700 text-zinc-400 border border-zinc-600">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
       <WifiOff size={11} /> {state || "Getrennt"}
     </span>
   );
@@ -18,15 +18,15 @@ function StatusBadge({ connected, state }: { connected: boolean; state?: string 
 
 function PeerRow({ peer }: { peer: VpnPeer }) {
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50">
+    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/60 border border-border">
       <div className="flex items-center gap-3">
-        <span className={`w-2 h-2 rounded-full ${peer.online ? "bg-green-400" : "bg-zinc-600"}`} />
+        <span className={`w-2 h-2 rounded-full ${peer.online ? "bg-green-400" : "bg-muted-foreground/30"}`} />
         <div>
-          <div className="text-sm font-medium text-zinc-200">{peer.hostname}</div>
-          <div className="text-xs text-zinc-500">{peer.ip} · {peer.os}</div>
+          <div className="text-sm font-medium text-foreground">{peer.hostname}</div>
+          <div className="text-xs text-muted-foreground">{peer.ip} · {peer.os}</div>
         </div>
       </div>
-      <span className={`text-xs ${peer.online ? "text-green-400" : "text-zinc-500"}`}>
+      <span className={`text-xs ${peer.online ? "text-green-400" : "text-muted-foreground"}`}>
         {peer.online ? "Online" : "Offline"}
       </span>
     </div>
@@ -109,7 +109,7 @@ export function VpnPage() {
   }
 
   if (loading) return (
-    <div className="p-6 text-zinc-500 text-sm">Lade VPN-Status...</div>
+    <div className="p-6 text-muted-foreground text-sm">Lade VPN-Status...</div>
   );
 
   const notInstalled = !status || status.mode === "none";
@@ -120,17 +120,17 @@ export function VpnPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Network size={22} className="text-blue-400" />
+          <Network size={22} className="text-primary" />
           <div>
-            <h1 className="text-lg font-semibold text-zinc-100">VPN</h1>
-            <p className="text-xs text-zinc-500">{t("pageDesc.vpn")}</p>
-            <p className="text-xs text-zinc-500">
+            <h1 className="text-lg font-semibold text-foreground">VPN</h1>
+            <p className="text-xs text-muted-foreground">{t("pageDesc.vpn")}</p>
+            <p className="text-xs text-muted-foreground">
               {isHeadscale ? "Headscale (self-hosted)" : "Tailscale"}
             </p>
           </div>
         </div>
         <button onClick={refresh} disabled={refreshing}
-          className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors">
+          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
           <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
         </button>
       </div>
@@ -140,23 +140,23 @@ export function VpnPage() {
       )}
 
       {/* Status Card */}
-      <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 divide-y divide-zinc-700/40">
+      <div className="rounded-xl border border-border bg-card divide-y divide-border">
         <div className="p-4 flex items-center justify-between">
-          <span className="text-sm text-zinc-400">Status</span>
+          <span className="text-sm text-muted-foreground">Status</span>
           {notInstalled
-            ? <span className="text-xs text-zinc-500">Nicht installiert — Installer erneut ausführen</span>
+            ? <span className="text-xs text-muted-foreground">Nicht installiert — Installer erneut ausführen</span>
             : <StatusBadge connected={status.connected} state={status.backend_state} />
           }
         </div>
         {status?.tailscale_ip && (
           <div className="p-4 flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Tailscale-IP</span>
-            <span className="text-sm font-mono text-zinc-200">{status.tailscale_ip}</span>
+            <span className="text-sm text-muted-foreground">Tailscale-IP</span>
+            <span className="text-sm font-mono text-foreground">{status.tailscale_ip}</span>
           </div>
         )}
         {isHeadscale && (
           <div className="p-4 flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Headscale</span>
+            <span className="text-sm text-muted-foreground">Headscale</span>
             <span className={`text-xs ${status.headscale_running ? "text-green-400" : "text-red-400"}`}>
               {status.headscale_running ? "läuft" : "gestoppt"}
             </span>
@@ -164,19 +164,19 @@ export function VpnPage() {
         )}
         {status?.login_server && (
           <div className="p-4 flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Koordinator</span>
-            <span className="text-xs font-mono text-zinc-400 truncate max-w-xs">{status.login_server}</span>
+            <span className="text-sm text-muted-foreground">Koordinator</span>
+            <span className="text-xs font-mono text-muted-foreground truncate max-w-xs">{status.login_server}</span>
           </div>
         )}
       </div>
 
       {/* Connect / Disconnect */}
       {!notInstalled && (
-        <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 p-4 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-medium text-foreground flex items-center gap-2">
             <Key size={14} /> Auth-Key
           </h2>
-          <p className="text-xs text-zinc-500">{t("pageDesc.vpnAuthKey")}</p>
+          <p className="text-xs text-muted-foreground">{t("pageDesc.vpnAuthKey")}</p>
 
           {/* Mode-Selector */}
           <div className="flex gap-2">
@@ -184,8 +184,8 @@ export function VpnPage() {
               <button key={m} onClick={() => { setSelectedMode(m); if (m === "tailscale") setLoginServer(""); }}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                   selectedMode === m
-                    ? "bg-blue-600/20 border-blue-500/50 text-blue-300"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                    ? "bg-primary/20 border-primary/50 text-primary"
+                    : "bg-muted border-border text-muted-foreground hover:text-foreground"
                 }`}>
                 {m === "tailscale" ? "Tailscale Cloud" : "Headscale (self-hosted)"}
               </button>
@@ -193,13 +193,13 @@ export function VpnPage() {
           </div>
 
           {selectedMode === "headscale" && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               Headscale-Modus: Auth-Key über den Button unten generieren oder
-              manuell mit <code className="bg-zinc-800 px-1 rounded">headscale preauthkeys create</code> erstellen.
+              manuell mit <code className="bg-muted px-1 rounded">headscale preauthkeys create</code> erstellen.
             </p>
           )}
           {selectedMode === "tailscale" && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               Auth-Key in den{" "}
               <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noreferrer"
                 className="text-blue-400 hover:underline">Tailscale Admin-Einstellungen</a>{" "}
@@ -217,7 +217,7 @@ export function VpnPage() {
             value={authKey}
             onChange={e => setAuthKey(e.target.value)}
             placeholder={status?.configured ? "Leer lassen für Reconnect, oder neuen Key eingeben" : "tskey-auth-..."}
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+            className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
 
           {selectedMode === "headscale" && (
@@ -226,7 +226,7 @@ export function VpnPage() {
               value={loginServer}
               onChange={e => setLoginServer(e.target.value)}
               placeholder="http://YOUR-VM-IP:8089"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           )}
 
@@ -235,18 +235,18 @@ export function VpnPage() {
             value={hostname}
             onChange={e => setHostname(e.target.value)}
             placeholder={`Hostname (optional, z.B. hydrahive-server)`}
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+            className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
 
           <div className="flex gap-2">
             <button onClick={handleConnect} disabled={connecting}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium transition-colors">
               <Power size={14} />
               {connecting ? t("common.connecting") : t("common.connect")}
             </button>
             {status?.connected && (
               <button onClick={handleDisconnect} disabled={disconnecting}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-200 text-sm font-medium transition-colors">
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-50 text-foreground text-sm font-medium transition-colors">
                 <PowerOff size={14} />
                 {disconnecting ? t("common.deleting") : t("common.disconnect")}
               </button>
@@ -257,23 +257,23 @@ export function VpnPage() {
 
       {/* Headscale: Auth-Key für neue Nodes generieren */}
       {isHeadscale && status?.connected && (
-        <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/60 p-4 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-300">Neuen Node einladen</h2>
-          <p className="text-xs text-zinc-500">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-medium text-foreground">Neuen Node einladen</h2>
+          <p className="text-xs text-muted-foreground">
             Generiert einen wiederverwendbaren Auth-Key (90 Tage) für weitere HydraHive-Nodes.
           </p>
           <button onClick={handleGenKey} disabled={genKey}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-zinc-200 text-sm transition-colors">
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-50 text-foreground text-sm transition-colors">
             <Key size={13} />
             {genKey ? "Generiere..." : "Auth-Key generieren"}
           </button>
           {hsKey && (
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 rounded-lg bg-zinc-800 text-xs text-zinc-300 font-mono truncate border border-zinc-700">
+              <code className="flex-1 px-3 py-2 rounded-lg bg-muted text-xs text-foreground font-mono truncate border border-border">
                 {hsKey}
               </code>
               <button onClick={copyKey}
-                className="p-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors">
+                className="p-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground transition-colors">
                 {hsKeyCopied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
               </button>
             </div>
@@ -284,7 +284,7 @@ export function VpnPage() {
       {/* Peers */}
       {status?.connected && (status.peers?.length ?? 0) > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-medium text-zinc-400">
+          <h2 className="text-sm font-medium text-muted-foreground">
             Verbundene Peers ({status.peers!.length})
           </h2>
           <div className="space-y-1.5">
@@ -294,9 +294,9 @@ export function VpnPage() {
       )}
 
       {status?.connected && (status.peers?.length ?? 0) === 0 && (
-        <div className="p-4 rounded-xl border border-zinc-700/40 bg-zinc-900/40 text-center">
-          <p className="text-sm text-zinc-500">Keine weiteren Nodes verbunden</p>
-          <p className="text-xs text-zinc-600 mt-1">
+        <div className="p-4 rounded-xl border border-border bg-card text-center">
+          <p className="text-sm text-muted-foreground">Keine weiteren Nodes verbunden</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
             {isHeadscale
               ? "Auth-Key generieren und auf weiteren HydraHive-Instanzen eingeben"
               : "Weitere Nodes mit demselben Tailscale-Account verbinden"}

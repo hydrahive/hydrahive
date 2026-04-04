@@ -92,23 +92,23 @@ export function SecretsPage() {
       )}
 
       <div className="flex items-center gap-3">
-        <KeyRound className="h-5 w-5 text-white/50" />
+        <KeyRound className="h-5 w-5 text-muted-foreground" />
         <div>
-          <h1 className="text-lg font-semibold text-white">Agent Secrets</h1>
-          <p className="text-xs text-white/40">Zugangsdaten für Agenten-Tools (get_secret). Nur von Admins einsehbar.</p>
+          <h1 className="text-lg font-semibold text-foreground">Agent Secrets</h1>
+          <p className="text-xs text-muted-foreground">Zugangsdaten für Agenten-Tools (get_secret). Nur von Admins einsehbar.</p>
         </div>
       </div>
 
       {/* Add new */}
       <div className="card flex flex-col gap-3">
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">Neues Secret</p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Neues Secret</p>
         <div className="flex gap-2">
           <input
             type="text"
             placeholder="Name (z.B. github_token)"
             value={newName}
             onChange={e => setNewName(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "_"))}
-            className="flex-1 rounded-lg bg-zinc-900 border border-white/15 px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30"
+            className="flex-1 rounded-lg bg-background border border-border px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <input
             type="password"
@@ -116,40 +116,40 @@ export function SecretsPage() {
             value={newValue}
             onChange={e => setNewValue(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleAdd()}
-            className="flex-1 rounded-lg bg-zinc-900 border border-white/15 px-3 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/30"
+            className="flex-1 rounded-lg bg-background border border-border px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             type="button"
             onClick={handleAdd}
             disabled={saving || !newName.trim() || !newValue.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-3 py-2 text-sm text-white transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 px-3 py-2 text-sm text-primary-foreground transition-colors"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             <span>{t("common.add")}</span>
           </button>
         </div>
-        <p className="text-[11px] text-white/25">
+        <p className="text-[11px] text-muted-foreground/60">
           Name: nur Buchstaben, Zahlen, _ und -. Agenten verwenden <code className="text-cyan-400">get_secret(name="...")</code> zum Lesen.
         </p>
       </div>
 
       {/* List */}
-      <div className="card flex flex-col gap-0 divide-y divide-white/5">
+      <div className="card flex flex-col gap-0 divide-y divide-border">
         {loading ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-white/30" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : secrets.length === 0 ? (
-          <p className="text-sm text-white/30 text-center py-8">Noch keine Secrets gespeichert.</p>
+          <p className="text-sm text-muted-foreground text-center py-8">Noch keine Secrets gespeichert.</p>
         ) : (
           secrets.map(s => (
             <div key={s.name} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-              <KeyRound className="h-4 w-4 text-white/30 shrink-0" />
+              <KeyRound className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-mono text-white truncate">{s.name}</p>
+                <p className="text-sm font-mono text-foreground truncate">{s.name}</p>
                 <p className={cn(
                   "text-xs font-mono mt-0.5",
-                  revealed[s.name] ? "text-amber-300" : "text-white/25"
+                  revealed[s.name] ? "text-amber-300" : "text-muted-foreground/50"
                 )}>
                   {revealed[s.name] ?? s.masked}
                 </p>
@@ -157,7 +157,7 @@ export function SecretsPage() {
               <button
                 type="button"
                 onClick={() => handleReveal(s.name)}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 title={revealed[s.name] ? "Verbergen" : "Anzeigen"}
               >
                 {revealLoading === s.name
@@ -167,7 +167,7 @@ export function SecretsPage() {
               <button
                 type="button"
                 onClick={() => handleDelete(s.name)}
-                className="p-1.5 rounded-lg hover:bg-red-900/40 text-white/20 hover:text-red-400 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-red-900/40 text-muted-foreground/50 hover:text-red-400 transition-colors"
                 title={t("common.delete")}
               >
                 <Trash2 className="h-4 w-4" />
@@ -177,11 +177,11 @@ export function SecretsPage() {
         )}
       </div>
 
-      <div className="rounded-xl border border-white/8 bg-white/3 px-4 py-3">
-        <p className="text-xs text-white/35 leading-relaxed">
-          <strong className="text-white/55">Hinweis:</strong> Secrets werden in <code className="text-cyan-400">/etc/hydrahive/agent_secrets.json</code> gespeichert (chmod 600).
+      <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <strong className="text-foreground/70">Hinweis:</strong> Secrets werden in <code className="text-cyan-400">/etc/hydrahive/agent_secrets.json</code> gespeichert (chmod 600).
           Agenten mit dem <code className="text-cyan-400">vault</code>-Permission können darauf zugreifen.
-          Nutze <strong className="text-white/55">Vaultwarden</strong> unter <a href="/vault/" target="_blank" className="text-indigo-400 hover:underline">/vault/</a> für die persönliche Passwortverwaltung.
+          Nutze <strong className="text-foreground/70">Vaultwarden</strong> unter <a href="/vault/" target="_blank" className="text-primary hover:underline">/vault/</a> für die persönliche Passwortverwaltung.
         </p>
       </div>
     <ConfirmDialog

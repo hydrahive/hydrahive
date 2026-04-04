@@ -32,7 +32,7 @@ function Section({ title, icon: Icon, configured, defaultOpen, badge, children }
 
   const statusColor =
     configured === null ? "text-muted-foreground" :
-    configured ? "text-green-500" : "text-zinc-500";
+    configured ? "text-green-500" : "text-muted-foreground";
   const StatusIcon = configured === null ? Loader2 : configured ? CheckCircle : XCircle;
 
   return (
@@ -245,7 +245,7 @@ function PlatformsSection() {
                 <span className="text-sm font-medium">{p.label}</span>
                 {p.configured
                   ? <CheckCircle className="h-4 w-4 text-green-500" />
-                  : <XCircle className="h-4 w-4 text-zinc-500" />}
+                  : <XCircle className="h-4 w-4 text-muted-foreground" />}
               </div>
               <p className="text-xs text-muted-foreground">
                 {p.configured ? (p.connected ? "Verbunden" : "Konfiguriert") : "Nicht eingerichtet"}
@@ -601,12 +601,12 @@ function VoiceSection() {
         <div className="flex items-center gap-2">
           {status?.stt?.available
             ? <><CheckCircle className="h-4 w-4 text-green-500" /> STT (Speech-to-Text) verfügbar</>
-            : <><XCircle className="h-4 w-4 text-zinc-500" /> STT nicht verfügbar</>}
+            : <><XCircle className="h-4 w-4 text-muted-foreground" /> STT nicht verfügbar</>}
         </div>
         <div className="flex items-center gap-2">
           {status?.tts?.available
             ? <><CheckCircle className="h-4 w-4 text-green-500" /> TTS (Text-to-Speech) verfügbar</>
-            : <><XCircle className="h-4 w-4 text-zinc-500" /> TTS nicht verfügbar</>}
+            : <><XCircle className="h-4 w-4 text-muted-foreground" /> TTS nicht verfügbar</>}
         </div>
         <p className={hintCls}>Voice-Dienste werden über Docker-Container bereitgestellt (faster-whisper, Piper). Konfiguration unter Voice-Seite.</p>
       </div>

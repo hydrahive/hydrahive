@@ -50,7 +50,7 @@ export default function GiteaConfigPage() {
           <GitBranch className="w-6 h-6 text-emerald-400" />
           <div>
             <h1 className="text-xl font-bold text-white">Gitea-Konfiguration</h1>
-            <p className="text-xs text-gray-400">{t("pageDesc.gitea")}</p>
+            <p className="text-xs text-muted-foreground">{t("pageDesc.gitea")}</p>
           </div>
           <a
             href={externalUrl}
@@ -63,48 +63,48 @@ export default function GiteaConfigPage() {
         </div>
 
         {loading ? (
-          <p className="text-gray-400 text-sm">Lade…</p>
+          <p className="text-muted-foreground text-sm">Lade…</p>
         ) : (
-          <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+          <div className="bg-card rounded-lg p-4 space-y-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Gitea URL (intern)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Gitea URL (intern)</label>
               <input
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-background text-foreground rounded px-3 py-2 text-sm border border-border focus:outline-none focus:border-emerald-500"
                 value={config.url}
                 onChange={e => setConfig(c => ({ ...c, url: e.target.value }))}
               />
-              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaUrl")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("pageDesc.giteaUrl")}</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">API-Token</label>
+              <label className="block text-xs text-muted-foreground mb-1">API-Token</label>
               <input
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full bg-background text-foreground rounded px-3 py-2 text-sm border border-border focus:outline-none focus:border-emerald-500 font-mono"
                 type="password"
                 value={config.token}
                 onChange={e => setConfig(c => ({ ...c, token: e.target.value }))}
                 placeholder="Gitea API-Token"
               />
-              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaToken")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("pageDesc.giteaToken")}</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Organisation / User</label>
+              <label className="block text-xs text-muted-foreground mb-1">Organisation / User</label>
               <input
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-background text-foreground rounded px-3 py-2 text-sm border border-border focus:outline-none focus:border-emerald-500"
                 value={config.org}
                 onChange={e => setConfig(c => ({ ...c, org: e.target.value }))}
               />
-              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaOrg")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("pageDesc.giteaOrg")}</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Webhook-Secret (optional)</label>
+              <label className="block text-xs text-muted-foreground mb-1">Webhook-Secret (optional)</label>
               <input
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm border border-gray-600 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full bg-background text-foreground rounded px-3 py-2 text-sm border border-border focus:outline-none focus:border-emerald-500 font-mono"
                 type="password"
                 value={config.webhook_secret}
                 onChange={e => setConfig(c => ({ ...c, webhook_secret: e.target.value }))}
                 placeholder="Leer lassen = kein Secret"
               />
-              <p className="text-xs text-gray-500 mt-1">{t("pageDesc.giteaWebhook")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("pageDesc.giteaWebhook")}</p>
             </div>
 
             {msg && (
@@ -125,24 +125,24 @@ export default function GiteaConfigPage() {
         {/* Repo-Liste */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-300">Repositories ({repos.length})</h2>
+            <h2 className="text-sm font-semibold text-foreground">Repositories ({repos.length})</h2>
             <button
               onClick={load}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
               <RefreshCw className="w-3 h-3" /> {t("common.refresh")}
             </button>
           </div>
           {repos.length === 0 ? (
-            <p className="text-gray-500 text-sm">Noch keine Repos angelegt. Erstelle ein Projekt um automatisch ein Repo zu erhalten.</p>
+            <p className="text-muted-foreground text-sm">Noch keine Repos angelegt. Erstelle ein Projekt um automatisch ein Repo zu erhalten.</p>
           ) : (
             <div className="space-y-2">
               {repos.map(r => (
-                <div key={r.name} className="bg-gray-800 rounded p-3 flex items-center justify-between">
+                <div key={r.name} className="bg-card rounded p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-white font-medium">{r.name}</p>
-                    {r.description && <p className="text-xs text-gray-400">{r.description}</p>}
-                    <p className="text-xs text-gray-500 mt-0.5">Branch: {r.default_branch}</p>
+                    <p className="text-sm text-foreground font-medium">{r.name}</p>
+                    {r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}
+                    <p className="text-xs text-muted-foreground mt-0.5">Branch: {r.default_branch}</p>
                   </div>
                   <a
                     href={r.html_url.replace("127.0.0.1:3001", `${window.location.hostname}:3002`)}

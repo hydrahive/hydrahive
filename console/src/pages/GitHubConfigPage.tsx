@@ -78,8 +78,8 @@ export function GitHubConfigPage() {
   return (
     <div className="p-6 max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center">
-          <Github className="h-5 w-5 text-zinc-300" />
+        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+          <Github className="h-5 w-5 text-foreground" />
         </div>
         <div>
           <h2 className="text-base font-semibold">GitHub-Integration</h2>

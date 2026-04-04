@@ -38,12 +38,12 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 pt-6 pb-0 border-b border-zinc-800">
+      <div className="px-6 pt-6 pb-0 border-b border-border">
         <div className="flex items-center gap-2 mb-1">
-          <Settings size={20} className="text-zinc-400" />
-          <h1 className="text-lg font-semibold text-zinc-100">{t("settings.title")}</h1>
+          <Settings size={20} className="text-muted-foreground" />
+          <h1 className="text-lg font-semibold text-foreground">{t("settings.title")}</h1>
         </div>
-        <p className="text-xs text-zinc-500 mb-4">{t("pageDesc.settings")}</p>
+        <p className="text-xs text-muted-foreground mb-4">{t("pageDesc.settings")}</p>
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TABS.map(tab => (
             <button
@@ -52,8 +52,8 @@ export function SettingsPage() {
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
                 active === tab.id
-                  ? "border-blue-500 text-zinc-100 bg-zinc-900"
-                  : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                  ? "border-primary text-foreground bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
               <tab.icon size={14} />

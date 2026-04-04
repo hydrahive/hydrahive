@@ -39,54 +39,54 @@ export function KasConfigPage() {
     } finally { setSaving(false); }
   }
 
-  if (loading) return <div className="p-6 text-sm text-zinc-500">Lade KAS-Konfiguration...</div>;
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Lade KAS-Konfiguration...</div>;
 
   return (
     <div className="p-6 max-w-xl space-y-6">
       <div className="flex items-center gap-3">
-        <Mail size={20} className="text-zinc-400" />
+        <Mail size={20} className="text-muted-foreground" />
         <div>
-          <h2 className="text-base font-semibold text-zinc-100">All-Inkl KAS</h2>
-          <p className="text-xs text-zinc-500">Zugangsdaten für automatische Postfach-Anlage via KAS API</p>
+          <h2 className="text-base font-semibold text-foreground">All-Inkl KAS</h2>
+          <p className="text-xs text-muted-foreground">Zugangsdaten für automatische Postfach-Anlage via KAS API</p>
         </div>
       </div>
 
       <form onSubmit={save} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm text-zinc-300">KAS-Login</label>
+            <label className="text-sm text-foreground">KAS-Login</label>
             <input value={login} onChange={e => setLogin(e.target.value)}
               placeholder="w012345e"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500" />
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-zinc-300">KAS-Passwort</label>
+            <label className="text-sm text-foreground">KAS-Passwort</label>
             <input type="password" value={pw} onChange={e => setPw(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500" />
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm text-zinc-300">Standard-Domain</label>
+          <label className="text-sm text-foreground">Standard-Domain</label>
           <input value={domain} onChange={e => setDomain(e.target.value)}
             placeholder="deine-domain.de"
-            className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500" />
-          <p className="text-xs text-zinc-600">Wird verwendet wenn beim Mailanlegen keine Domain angegeben wird</p>
+            className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          <p className="text-xs text-muted-foreground">Wird verwendet wenn beim Mailanlegen keine Domain angegeben wird</p>
         </div>
 
         <div className="grid grid-cols-[1fr_120px] gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm text-zinc-300">SMTP-Host</label>
+            <label className="text-sm text-foreground">SMTP-Host</label>
             <input value={smtp} onChange={e => setSmtp(e.target.value)}
               placeholder="dd12345.kasserver.com"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500" />
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-zinc-300">SMTP-Port</label>
+            <label className="text-sm text-foreground">SMTP-Port</label>
             <input value={port} onChange={e => setPort(e.target.value)}
               placeholder="587"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-blue-500" />
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
         </div>
 
@@ -94,7 +94,7 @@ export function KasConfigPage() {
 
         <div className="flex items-center gap-3 pt-1">
           <button type="submit" disabled={saving || !login || !pw}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-sm font-medium transition-colors">
             <Save size={14} />
             {saving ? t("common.saving") : t("common.save")}
           </button>
@@ -106,8 +106,8 @@ export function KasConfigPage() {
         </div>
       </form>
 
-      <div className="rounded-xl border border-zinc-700/50 bg-zinc-800/40 p-4 text-xs text-zinc-500 space-y-1">
-        <p className="font-medium text-zinc-400">Wo finde ich diese Daten?</p>
+      <div className="rounded-xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground space-y-1">
+        <p className="font-medium text-foreground">Wo finde ich diese Daten?</p>
         <p>Login und Passwort: KAS-Panel → Zugangsdaten (nicht der E-Mail-Login, sondern der KAS-API-Zugang)</p>
         <p>SMTP-Host: KAS-Panel → E-Mail → Server-Einstellungen</p>
       </div>
