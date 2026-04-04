@@ -756,7 +756,7 @@ def register_core_misc_routes(
     _SHELL_INJECTION_CHARS = {";", "&", "`", "$", "(", ")", "\n", "\\"}
 
     @admin_router.post("/admin/shell")
-    def run_shell(body: dict, _a: tuple = Depends(require_admin)):
+    def run_shell(body: dict):
         """Eingeschränkter Shell-Zugriff (Whitelist)."""
         import subprocess, shlex
         cmd = body.get("command", "").strip()
