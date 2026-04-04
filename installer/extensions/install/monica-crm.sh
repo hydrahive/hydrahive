@@ -88,13 +88,31 @@ success "Datenbank '${MONICA_DB}' bereit"
 
 # --- Monica herunterladen ---
 info "Lade Monica herunter..."
-git clone --depth 1 https://github.com/monicahq/monica.git "${MONICA_DIR}" 2>/dev/null
+MONICA_VERSION=$(curl -sf "https://api.github.com/repos/monicahq/monica/releases/latest" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','v4.1.2'))" 2>/dev/null || echo "v4.1.2")
+info "Version: ${MONICA_VERSION}"
+
+mkdir -p "${MONICA_DIR}"
+curl -fSL "https://github.com/monicahq/monica/releases/download/${MONICA_VERSION}/monica-${MONICA_VERSION}.tar.bz2" -o /tmp/monica.tar.bz2 \
+    || { warn "Release-Archiv nicht gefunden — versuche git clone..."; git clone --depth 1 https://github.com/monicahq/monica.git "${MONICA_DIR}" || error "Monica Download fehlgeschlagen"; }
+
+if [ -f /tmp/monica.tar.bz2 ]; then
+    tar -xjf /tmp/monica.tar.bz2 -C "${MONICA_DIR}" --strip-components=0 2>/dev/null \
+        || tar -xjf /tmp/monica.tar.bz2 -C "${MONICA_DIR}" 2>/dev/null \
+        || { warn "tar.bz2 fehlgeschlagen — versuche git clone..."; rm -rf "${MONICA_DIR}"; mkdir -p "${MONICA_DIR}"; git clone --depth 1 https://github.com/monicahq/monica.git "${MONICA_DIR}" || error "Monica Download fehlgeschlagen"; }
+    rm -f /tmp/monica.tar.bz2
+fi
+
 chown -R "${MONICA_USER}:${MONICA_USER}" "${MONICA_DIR}"
-success "Monica geklont nach ${MONICA_DIR}"
+success "Monica ${MONICA_VERSION} nach ${MONICA_DIR}"
 
 # --- .env konfigurieren ---
 cd "${MONICA_DIR}"
-sudo -u "${MONICA_USER}" cp .env.example .env
+if [ -f .env.example ]; then
+    sudo -u "${MONICA_USER}" cp .env.example .env
+else
+    touch .env
+    chown "${MONICA_USER}:${MONICA_USER}" .env
+fi
 
 # App-Key generieren und Konfiguration setzen
 MONICA_APP_KEY=$(sudo -u "${MONICA_USER}" $PHP_BIN artisan key:generate --show 2>/dev/null || echo "")
