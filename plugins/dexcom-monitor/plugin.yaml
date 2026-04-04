@@ -1,0 +1,56 @@
+id: dexcom-monitor
+name: Dexcom Glukose-Monitor
+version: 1.0.0
+description: "Überwacht Dexcom G7 CGM Glukosewerte und sendet WhatsApp-Alerts bei kritischen Werten."
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  tab:
+    label: "Glukose"
+    icon: "Heart"
+    order: 50
+  config_fields:
+    - id: dexcom_username
+      label: "Dexcom Benutzername"
+      type: text
+      hint: "Dein Dexcom Share Benutzername (oder E-Mail)"
+    - id: dexcom_password
+      label: "Dexcom Passwort"
+      type: password
+      hint: "Dexcom Share Passwort"
+    - id: dexcom_region
+      label: "Region"
+      type: text
+      default: "eu"
+      hint: "eu (Europa) oder us (USA)"
+    - id: alert_low
+      label: "Hypo-Alarm unter (mg/dL)"
+      type: number
+      default: 70
+      hint: "WhatsApp-Alert wenn Glukose unter diesem Wert"
+    - id: alert_high
+      label: "Hyper-Alarm über (mg/dL)"
+      type: number
+      default: 250
+      hint: "WhatsApp-Alert wenn Glukose über diesem Wert"
+    - id: notify_numbers
+      label: "WhatsApp-Nummern für Alarm"
+      type: text
+      hint: "Kommagetrennt, z.B. 491701234567,491709876543"
+    - id: check_interval_min
+      label: "Prüf-Intervall (Minuten)"
+      type: number
+      default: 5
+      hint: "Wie oft Glukosewerte abgefragt werden"
+    - id: cooldown_min
+      label: "Alarm-Cooldown (Minuten)"
+      type: number
+      default: 15
+      hint: "Mindestabstand zwischen zwei Alarmen"
+    - id: enabled
+      label: "Monitoring aktiv"
+      type: toggle
+      hint: "Glukose-Überwachung ein/ausschalten"
