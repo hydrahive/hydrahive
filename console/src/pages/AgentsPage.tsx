@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ToolGroupSelector } from "@/components/ToolGroupSelector";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
-import { agentCategory, AGENT_COLORS } from "@/lib/utils";
+import { agentCategory, AGENT_COLORS, cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ToolsPage } from "@/pages/ToolsPage";
+import { A2APage } from "@/pages/A2APage";
+import { AgentBlueprintTab } from "@/pages/blueprint/AgentBlueprintTab";
 
 interface AgentRuntime {
   status: string;
@@ -95,7 +98,7 @@ function Input({ value, onChange, ...props }: React.InputHTMLAttributes<HTMLInpu
   );
 }
 
-export function AgentsPage() {
+function AgentsCrudTab() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -933,6 +936,53 @@ export function AgentsPage() {
       onCancel={() => setConfirmState(null)}
       variant="danger"
     />
+    </div>
+  );
+}
+
+// ── Tab shell ─────────────────────────────────────────────────────────────────
+
+type AgentsTabId = "agents" | "tools" | "federation" | "blueprint";
+
+const AGENTS_TABS: { id: AgentsTabId; labelKey: string; icon: React.ElementType }[] = [
+  { id: "agents",     labelKey: "agents.tabAgents",     icon: Bot },
+  { id: "tools",      labelKey: "agents.tabTools",      icon: Wrench },
+  { id: "federation", labelKey: "agents.tabFederation", icon: Globe },
+  { id: "blueprint",  labelKey: "agents.tabBlueprint",  icon: Workflow },
+];
+
+export function AgentsPage() {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<AgentsTabId>("agents");
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-0 border-b border-border">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
+          {AGENTS_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
+                activeTab === tab.id
+                  ? "border-primary text-foreground bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
+            >
+              <tab.icon size={14} />
+              {t(tab.labelKey, { defaultValue: tab.id })}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {activeTab === "agents"     && <div className="p-6"><AgentsCrudTab /></div>}
+        {activeTab === "tools"      && <ToolsPage />}
+        {activeTab === "federation" && <A2APage />}
+        {activeTab === "blueprint"  && <AgentBlueprintTab />}
+      </div>
     </div>
   );
 }
