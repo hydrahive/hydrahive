@@ -2671,6 +2671,36 @@ class GiteaRepoDiffTool(BaseTool):
         }
 
 
+class FixPermissionsTool(BaseTool):
+    """Repariert Dateiberechtigungen eines Projekts (nach Samba-Upload etc.)."""
+
+    @property
+    def id(self) -> str: return "fix_permissions"
+    @property
+    def name(self) -> str: return "Dateiberechtigungen reparieren"
+    @property
+    def description(self) -> str:
+        return "Setzt Dateiberechtigungen für das aktuelle Projekt sodass alle Dateien lesbar und schreibbar sind. Nutze dieses Tool wenn du 'Permission denied' bei einer Datei bekommst."
+
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        import subprocess
+        proj_dir = Path(f"/projects/{project_id}")
+        if not proj_dir.is_dir():
+            return {"error": f"Projektverzeichnis /projects/{project_id} nicht gefunden"}
+        try:
+            subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
+                           capture_output=True, check=True, timeout=60)
+            subprocess.run(["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
+                           capture_output=True, check=True, timeout=60)
+            return {"ok": True, "project_id": project_id, "message": "Berechtigungen korrigiert"}
+        except Exception as e:
+            return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
+
+
 class GiteaCreateIssueTool(BaseTool):
     """Erstellt ein Gitea-Issue in einem Ziel-Repository."""
 
@@ -4166,6 +4196,7 @@ registry.register(GiteaRepoTreeTool())
 registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
 registry.register(GiteaRepoDiffTool())
+registry.register(FixPermissionsTool())
 registry.register(GiteaCreateIssueTool())
 registry.register(GiteaCommentIssueTool())
 registry.register(GiteaUpdateIssueTool())
