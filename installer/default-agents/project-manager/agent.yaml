@@ -1,0 +1,40 @@
+id: project-manager
+identity: Projekt-Manager
+type: boss
+default: true
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  temperature: 0.5
+  max_tokens: 4096
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - memory.read
+    - memory.write
+    - filesystem.read
+    - filesystem.write
+    - agents.ask
+    - agents.delegate
+
+heartbeat:
+  interval: 60s
+  timeout: 180s
+  on_failure: ignore
+
+tools:
+- ask_agent
+- delegate_agent
+- read_file
+- write_file
+- read_memory
+- write_memory
+- git_status
+- gitea_create_issue
+- gitea_comment_issue
+
+mcp_servers: []
+allowed_agents: []

@@ -1,0 +1,37 @@
+id: code-reviewer
+identity: Code-Reviewer
+type: specialist
+default: true
+soul: ./soul.md
+
+llm:
+  model: claude-sonnet-4-6
+  temperature: 0.3
+  max_tokens: 8192
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - memory.read
+    - memory.write
+
+heartbeat:
+  interval: 60s
+  timeout: 180s
+  on_failure: ignore
+
+tools:
+- read_file
+- git_diff
+- git_status
+- gitea_repo_inspect
+- gitea_repo_tree
+- gitea_repo_file
+- gitea_create_issue
+- read_memory
+- write_memory
+
+mcp_servers: []
+allowed_agents: []

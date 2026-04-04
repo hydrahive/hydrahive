@@ -109,6 +109,13 @@ rsync -av --no-owner --no-group --ignore-existing \
   -e "ssh -i $SSH_KEY" \
   "$REPO/agents/" \
   "$VM:/agents/"
+# Default-Agents aus installer/default-agents/ (nur neue, --ignore-existing)
+if [ -d "$REPO/installer/default-agents" ]; then
+  rsync -av --no-owner --no-group --ignore-existing \
+    -e "ssh -i $SSH_KEY" \
+    "$REPO/installer/default-agents/" \
+    "$VM:/agents/"
+fi
 $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} /agents/"
 
 echo ""

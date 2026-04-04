@@ -1,0 +1,55 @@
+{
+  "nodes": [
+    {
+      "id": "source-repo",
+      "type": "sourceFlow",
+      "position": { "x": 50, "y": 150 },
+      "data": { "label": "Repository laden", "sourceType": "repo", "sourceId": "", "description": "Repo-Struktur und relevante Dateien lesen" }
+    },
+    {
+      "id": "step-diff",
+      "type": "stepFlow",
+      "position": { "x": 300, "y": 150 },
+      "data": { "label": "Diff analysieren", "toolId": "git_diff", "description": "Aktuelle Änderungen lesen und verstehen" }
+    },
+    {
+      "id": "step-review",
+      "type": "stepFlow",
+      "position": { "x": 550, "y": 150 },
+      "data": { "label": "Review schreiben", "toolId": "", "description": "Code gegen Checkliste prüfen, Findings sammeln" }
+    },
+    {
+      "id": "branch-issues",
+      "type": "branchFlow",
+      "position": { "x": 800, "y": 150 },
+      "data": { "label": "Probleme gefunden?", "condition": "Gibt es kritische oder wichtige Findings?" }
+    },
+    {
+      "id": "step-create-issue",
+      "type": "stepFlow",
+      "position": { "x": 1050, "y": 80 },
+      "data": { "label": "Issue erstellen", "toolId": "gitea_create_issue", "description": "Issue mit Findings und Empfehlungen anlegen" }
+    },
+    {
+      "id": "step-memory",
+      "type": "stepFlow",
+      "position": { "x": 1050, "y": 250 },
+      "data": { "label": "Erkenntnisse merken", "toolId": "write_memory", "description": "Wiederkehrende Patterns und Learnings speichern" }
+    },
+    {
+      "id": "end",
+      "type": "endFlow",
+      "position": { "x": 1300, "y": 150 },
+      "data": { "label": "Review abgeschlossen" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "source-repo", "target": "step-diff", "animated": true, "style": { "stroke": "#818cf8", "strokeWidth": 2 } },
+    { "id": "e2", "source": "step-diff", "target": "step-review", "animated": true, "style": { "stroke": "#818cf8", "strokeWidth": 2 } },
+    { "id": "e3", "source": "step-review", "target": "branch-issues", "animated": true, "style": { "stroke": "#818cf8", "strokeWidth": 2 } },
+    { "id": "e4", "source": "branch-issues", "sourceHandle": "true", "target": "step-create-issue", "animated": true, "style": { "stroke": "#4ade80", "strokeWidth": 2 } },
+    { "id": "e5", "source": "branch-issues", "sourceHandle": "false", "target": "step-memory", "animated": true, "style": { "stroke": "#f87171", "strokeWidth": 2 } },
+    { "id": "e6", "source": "step-create-issue", "target": "end", "animated": true, "style": { "stroke": "#818cf8", "strokeWidth": 2 } },
+    { "id": "e7", "source": "step-memory", "target": "end", "animated": true, "style": { "stroke": "#818cf8", "strokeWidth": 2 } }
+  ]
+}

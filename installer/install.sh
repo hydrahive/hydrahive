@@ -166,6 +166,25 @@ if id www-data &>/dev/null; then
     success "nginx (www-data) zur hydrahive-Gruppe hinzugefügt — /projects/ erreichbar"
 fi
 
+# Standard-Agenten installieren (nur wenn Agent-ID noch nicht existiert)
+_DEFAULT_AGENTS_DIR="$(dirname "${BASH_SOURCE[0]}")/default-agents"
+if [ -d "${_DEFAULT_AGENTS_DIR}" ]; then
+    _installed=0
+    for _agent_dir in "${_DEFAULT_AGENTS_DIR}"/*/; do
+        _agent_id="$(basename "${_agent_dir}")"
+        if [ ! -d "/agents/${_agent_id}" ]; then
+            cp -r "${_agent_dir}" "/agents/${_agent_id}"
+            chown -R hydrahive:hydrahive "/agents/${_agent_id}"
+            _installed=$((_installed + 1))
+        fi
+    done
+    if [ $_installed -gt 0 ]; then
+        success "${_installed} Standard-Agenten installiert (chat-assistant, code-reviewer, ...)"
+    else
+        info "Standard-Agenten bereits vorhanden — übersprungen"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Installation abgeschlossen       ║${NC}"
