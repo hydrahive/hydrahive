@@ -170,7 +170,7 @@ Type=simple
 User=${MONICA_USER}
 Group=${MONICA_USER}
 WorkingDirectory=${MONICA_DIR}
-ExecStart=${PHP_BIN} artisan serve --host=127.0.0.1 --port=${MONICA_PORT}
+ExecStart=${PHP_BIN} artisan serve --host=0.0.0.0 --port=${MONICA_PORT}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -183,23 +183,6 @@ SVCEOF
 systemctl daemon-reload
 systemctl enable --now monica
 success "systemd Service 'monica' gestartet auf Port ${MONICA_PORT}"
-
-# --- nginx Proxy ---
-NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
-if [ -f "${NGINX_CONF}" ] && ! grep -q "location /monica" "${NGINX_CONF}"; then
-    # Vor dem letzten } einfügen
-    sed -i '/^}/i \
-    # Monica CRM\
-    location /monica/ {\
-        proxy_pass http://127.0.0.1:'"${MONICA_PORT}"'/;\
-        proxy_set_header Host $host;\
-        proxy_set_header X-Real-IP $remote_addr;\
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-        proxy_set_header X-Forwarded-Proto $scheme;\
-    }' "${NGINX_CONF}"
-    nginx -t 2>/dev/null && systemctl reload nginx
-    success "nginx Proxy: /monica/ → localhost:${MONICA_PORT}"
-fi
 
 # --- HydraHive Config speichern ---
 MONICA_CONFIG="/etc/hydrahive/monica.json"
