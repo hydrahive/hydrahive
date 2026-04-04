@@ -160,6 +160,16 @@ main() {
         info "Plugins deployed"
     fi
 
+    # --- 5g. Git Performance für große Projekt-Repos ---
+    for _repo in /projects/*/files; do
+        if [ -d "${_repo}/.git" ]; then
+            git -C "${_repo}" config core.preloadindex true 2>/dev/null
+            git -C "${_repo}" config core.fscache true 2>/dev/null
+            git -C "${_repo}" config gc.auto 256 2>/dev/null
+        fi
+    done
+    info "Git Performance-Config für Projekt-Repos gesetzt"
+
     # --- 6. Service neustarten ---
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
