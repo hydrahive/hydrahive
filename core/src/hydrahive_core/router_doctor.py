@@ -612,11 +612,15 @@ async def _fix_samba_permissions() -> dict:
     try:
         shares_file = Path("/etc/samba/hydrahive-shares.conf")
         if shares_file.exists():
-            content = shares_file.read_text(encoding="utf-8")
+            content = subprocess.run(["sudo", "cat", str(shares_file)],
+                                     capture_output=True, text=True, timeout=5).stdout
             if "force group" not in content:
-                # force group vor create mask einfügen
                 content = content.replace("create mask", "force group = hydrahive\n   create mask")
-                shares_file.write_text(content, encoding="utf-8")
+                tmp = Path("/tmp/hydrahive-samba-fix.conf")
+                tmp.write_text(content, encoding="utf-8")
+                subprocess.run(["sudo", "cp", str(tmp), str(shares_file)],
+                               capture_output=True, check=True, timeout=5)
+                tmp.unlink(missing_ok=True)
                 output.append("force group = hydrahive in Samba-Config eingefügt")
 
                 subprocess.run(["sudo", "smbcontrol", "smbd", "reload-config"],
