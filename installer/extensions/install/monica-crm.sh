@@ -66,11 +66,7 @@ if ! command -v mysql &>/dev/null; then
 fi
 success "MySQL/MariaDB verfügbar"
 
-# Composer
-if ! command -v composer &>/dev/null; then
-    curl -sS https://getcomposer.org/installer | $PHP_BIN -- --install-dir=/usr/local/bin --filename=composer --quiet
-fi
-success "Composer verfügbar"
+# Composer nicht nötig — Release-Archiv enthält vendor/
 
 # --- System-User ---
 if ! id "${MONICA_USER}" &>/dev/null; then
@@ -149,12 +145,6 @@ ENVEOF
 chown "${MONICA_USER}:${MONICA_USER}" "${MONICA_DIR}/.env"
 chmod 600 "${MONICA_DIR}/.env"
 success ".env konfiguriert"
-
-# --- Composer Install ---
-info "Installiere PHP-Abhängigkeiten (dauert ~2 Min)..."
-sudo -u "${MONICA_USER}" composer install --no-dev --no-interaction --optimize-autoloader --quiet \
-    --working-dir="${MONICA_DIR}" 2>&1 | tail -3 || error "Composer install fehlgeschlagen"
-success "Composer install abgeschlossen"
 
 # --- Datenbank-Migration ---
 info "Führe Datenbank-Migration aus..."
