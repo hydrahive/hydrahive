@@ -80,6 +80,7 @@ CHROMA_HOST=localhost
 CHROMA_PORT=8011
 ENV
 chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DIR}/backend/.env"
+chmod 600 "${AGENTLINK_DIR}/backend/.env"
 chmod 640 "${AGENTLINK_DIR}/backend/.env"
 
 # ─── 6. DB-Schema initialisieren ─────────────────────────────────────────────

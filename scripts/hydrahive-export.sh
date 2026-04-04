@@ -167,7 +167,7 @@ tar \
     /agents/ \
     --exclude '/agents/*/.sessions' \
     --exclude '/agents/*/memory_index.db' \
-    $(find /etc/hydrahive -maxdepth 1 -not -path '/etc/hydrahive/tls' -not -name '*.crt' -not -name '*.key' | tail -n +2 | sed 's/^//' | tr '\n' ' ') \
+    $(find /etc/hydrahive -maxdepth 1 -not -path '/etc/hydrahive/tls' -not -name '*.crt' -not -name '*.key' -not -name 'jwt_secret' -not -name 'internal_secret' | tail -n +2 | sed 's/^//' | tr '\n' ' ') \
     $([ -f /var/log/hydrahive/notifications.db ] && echo "/var/log/hydrahive/notifications.db" || echo "") \
     $([ $INCLUDE_AMEM -eq 1 ] && echo "/var/lib/hydrahive/amem/chromadb_data/" || echo "") \
     2>/dev/null \
