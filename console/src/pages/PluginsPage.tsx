@@ -108,7 +108,7 @@ export function PluginsPage() {
               <h1 className="text-2xl font-bold tracking-tight">Plugins</h1>
               <p className="text-xs text-muted-foreground">{t("pageDesc.plugins")}</p>
               <p className="text-sm text-muted-foreground">
-                {plugins.length > 0 ? `${plugins.length} Plugin(s) installiert` : "Keine Plugins installiert"}
+                {plugins.length > 0 ? t("plugins.installed", { count: plugins.length }) : t("plugins.noPluginsInstalled")}
               </p>
             </div>
           </div>
@@ -119,7 +119,7 @@ export function PluginsPage() {
               className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${actionBusy === "all" ? "animate-spin" : ""}`} />
-              Alle neu laden
+              {t("plugins.reloadAll")}
             </button>
           </div>
         </div>
@@ -137,14 +137,14 @@ export function PluginsPage() {
         {loading && plugins.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <RefreshCw className="h-6 w-6 animate-spin mb-3" />
-            <p className="text-sm">Lade Plugins...</p>
+            <p className="text-sm">{t("plugins.loading")}</p>
           </div>
         ) : plugins.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <Puzzle className="h-12 w-12 mb-4 opacity-30" />
-            <p className="text-lg font-medium mb-2">Keine Plugins installiert</p>
-            <p className="text-sm">Lege Plugin-Verzeichnisse unter <code className="bg-muted px-2 py-0.5 rounded">/plugins/</code> an</p>
-            <p className="text-xs mt-2 opacity-70">Jedes Plugin braucht: plugin.yaml + plugin.py</p>
+            <p className="text-lg font-medium mb-2">{t("plugins.emptyTitle")}</p>
+            <p className="text-sm">{t("plugins.emptyHint")}</p>
+            <p className="text-xs mt-2 opacity-70">{t("plugins.emptySubHint")}</p>
           </div>
         ) : (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -173,7 +173,7 @@ export function PluginsPage() {
                       onClick={e => { e.stopPropagation(); toggleEnable(p); }}
                       disabled={actionBusy === p.id}
                       className="p-1 rounded-lg hover:bg-muted/50 transition-colors"
-                      title={p.enabled ? "Deaktivieren" : "Aktivieren"}
+                      title={p.enabled ? t("plugins.deactivate") : t("plugins.activate")}
                     >
                       {p.enabled
                         ? <Power className="h-4 w-4 text-green-500" />
@@ -185,7 +185,7 @@ export function PluginsPage() {
 
                 <h3 className="font-medium text-sm mb-1 line-clamp-1">{p.name}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2.5rem]">
-                  {p.description || "Keine Beschreibung"}
+                  {p.description || t("plugins.noDescription")}
                 </p>
 
                 {p.error && <p className="text-xs text-destructive line-clamp-1 mb-2">{p.error}</p>}
@@ -248,7 +248,7 @@ export function PluginsPage() {
               {selected.permissions.length > 0 && (
                 <div>
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                    <Shield className="h-3 w-3" /> Permissions
+                    <Shield className="h-3 w-3" /> {t("plugins.permissions")}
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {selected.permissions.map(p => (
@@ -260,7 +260,7 @@ export function PluginsPage() {
 
               <div>
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                  <Users className="h-3 w-3" /> Agent-Zuweisung
+                  <Users className="h-3 w-3" /> {t("plugins.agentAssignment")}
                 </h3>
                 <div className="space-y-1.5">
                   {agents.map(aid => {
@@ -281,7 +281,7 @@ export function PluginsPage() {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                <span className="opacity-60">Pfad:</span>{" "}
+                <span className="opacity-60">{t("plugins.path")}</span>{" "}
                 <code className="bg-muted px-1.5 py-0.5 rounded">{selected.path}</code>
               </div>
             </div>
@@ -296,7 +296,7 @@ export function PluginsPage() {
                     : "bg-primary text-primary-foreground hover:bg-primary/90"
                   }`}
               >
-                {selected.enabled ? <><PowerOff className="h-4 w-4" />Deaktivieren</> : <><Power className="h-4 w-4" />Aktivieren</>}
+                {selected.enabled ? <><PowerOff className="h-4 w-4" />{t("plugins.deactivate")}</> : <><Power className="h-4 w-4" />{t("plugins.activate")}</>}
               </button>
               <button
                 onClick={() => reloadPlugin(selected.id)}
@@ -318,7 +318,7 @@ export function PluginsPage() {
                 }}
                 disabled={!!actionBusy}
                 className="px-4 py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                title="Deinstallieren"
+                title={t("plugins.uninstall")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>

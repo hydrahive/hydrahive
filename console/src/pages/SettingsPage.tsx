@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft, Puzzle, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
@@ -14,26 +14,27 @@ import { MigrationPage } from "@/pages/MigrationPage";
 import { GroupsPage } from "@/pages/GroupsPage";
 import { useTranslation } from "react-i18next";
 
-const TABS = [
-  { id: "llm",       label: "LLM",        icon: Cpu,              component: LlmConfigPage },
-  { id: "mcp",       label: "MCP",        icon: Plug,             component: McpConfigPage },
-  { id: "gitea",     label: "Gitea",      icon: GitBranch,        component: GiteaConfigPage },
-  { id: "github",    label: "GitHub",     icon: Github,           component: GitHubConfigPage },
-  { id: "vpn",       label: "VPN",        icon: Network,          component: VpnPage },
-  { id: "kas",       label: "Mail / KAS", icon: Mail,             component: KasConfigPage },
-  { id: "users",     label: "Users",      icon: Users,            component: UserPage },
-  { id: "groups",    label: "Gruppen",    icon: Shield,           component: GroupsPage },
-  { id: "backup",    label: "Backup",     icon: Archive,          component: BackupPage },
-  { id: "migration", label: "Migration",  icon: ArrowRightLeft,   component: MigrationPage },
-  { id: "plugins",   label: "Plugins",    icon: Puzzle,           component: PluginsPage },
-] as const;
-
-type TabId = typeof TABS[number]["id"];
+type TabId = "llm" | "mcp" | "gitea" | "github" | "vpn" | "kas" | "users" | "groups" | "backup" | "migration" | "plugins";
 
 export function SettingsPage() {
   const { t } = useTranslation();
   const [active, setActive] = useState<TabId>("llm");
-  const ActiveComponent = TABS.find(t => t.id === active)!.component;
+
+  const TABS: { id: TabId; label: string; icon: React.ElementType; component: React.ComponentType }[] = useMemo(() => [
+    { id: "llm",       label: t("settings.tabLlm", { defaultValue: "LLM" }),        icon: Cpu,              component: LlmConfigPage },
+    { id: "mcp",       label: t("settings.tabMcp", { defaultValue: "MCP" }),         icon: Plug,             component: McpConfigPage },
+    { id: "gitea",     label: t("settings.tabGitea", { defaultValue: "Gitea" }),     icon: GitBranch,        component: GiteaConfigPage },
+    { id: "github",    label: t("settings.tabGithub", { defaultValue: "GitHub" }),   icon: Github,           component: GitHubConfigPage },
+    { id: "vpn",       label: t("settings.tabVpn", { defaultValue: "VPN" }),         icon: Network,          component: VpnPage },
+    { id: "kas",       label: t("settings.tabKas"),      icon: Mail,             component: KasConfigPage },
+    { id: "users",     label: t("settings.tabUsers"),    icon: Users,            component: UserPage },
+    { id: "groups",    label: t("settings.tabGroups"),   icon: Shield,           component: GroupsPage },
+    { id: "backup",    label: t("settings.tabBackup", { defaultValue: "Backup" }),   icon: Archive,          component: BackupPage },
+    { id: "migration", label: t("settings.tabMigration", { defaultValue: "Migration" }), icon: ArrowRightLeft, component: MigrationPage },
+    { id: "plugins",   label: t("settings.tabPlugins", { defaultValue: "Plugins" }), icon: Puzzle,           component: PluginsPage },
+  ], [t]);
+
+  const ActiveComponent = TABS.find(tab => tab.id === active)!.component;
 
   return (
     <div className="flex flex-col h-full">

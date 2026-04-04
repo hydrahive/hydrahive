@@ -74,18 +74,18 @@ export function DashboardPage() {
         if (id.endsWith("_template") || id.endsWith("-template")) return null;
         const runtimeState = entry?.runtime;
         if (!runtimeState) {
-          return { id, severity: "warn", summary: t("agents.noRuntime"), detail: "Agent ist konfiguriert, aber aktuell nicht gestartet." };
+          return { id, severity: "warn", summary: t("agents.noRuntime"), detail: t("dashboard.agentConfiguredNotStarted") };
         }
         if (runtimeState.status !== "running") {
-          return { id, severity: "critical", summary: `Runtime ${runtimeState.status}`, detail: "Agent meldet keinen laufenden Zustand." };
+          return { id, severity: "critical", summary: `Runtime ${runtimeState.status}`, detail: t("dashboard.agentNotRunning") };
         }
         if (runtimeState.restart_count > 0) {
-          return { id, severity: "warn", summary: `${runtimeState.restart_count} Restarts`, detail: "Runtime wurde bereits neu gestartet." };
+          return { id, severity: "warn", summary: `${runtimeState.restart_count} Restarts`, detail: t("dashboard.agentRestarted") };
         }
         const heartbeatAge = Number(runtimeState.last_heartbeat_age ?? 0);
         const heartbeatTimeout = Number(runtimeState.heartbeat_timeout ?? 0);
         if (heartbeatTimeout > 0 && heartbeatAge > heartbeatTimeout * 0.75) {
-          return { id, severity: "warn", summary: "Heartbeat spaet", detail: `${heartbeatAge.toFixed(0)}s seit letztem Heartbeat.` };
+          return { id, severity: "warn", summary: t("dashboard.heartbeatLate"), detail: t("dashboard.heartbeatLateDetail", { age: heartbeatAge.toFixed(0) }) };
         }
         return null;
       })
@@ -99,8 +99,8 @@ export function DashboardPage() {
         return {
           id,
           title: id,
-          summary: "Aktive Session ohne Projektdefinition",
-          meta: "Der Session-Manager meldet Aktivitaet, aber es gibt kein passendes Projektobjekt.",
+          summary: t("dashboard.sessionNoProject"),
+          meta: t("dashboard.sessionNoProjectDetail"),
           tone: "warn",
         };
       }
@@ -109,7 +109,7 @@ export function DashboardPage() {
         id,
         title: entry.name || id,
         summary: `Boss ${entry.boss || "-"}`,
-        meta: `${workerCount} Worker · ${entry.matrix_room ? "Matrix aktiv" : "keine Matrix-Room-ID"}`,
+        meta: `${workerCount} Worker · ${entry.matrix_room ? t("dashboard.matrixActive") : t("dashboard.noMatrixRoom")}`,
         tone: "ok",
       };
     });
@@ -163,7 +163,7 @@ export function DashboardPage() {
       items.push({ tone: "critical", title: t("dashboard.coreDisturbed2"), detail: t("dashboard.coreDisturbed2Detail") });
     }
     if (updateState === "error") {
-      items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || "Der letzte Update-Lauf hat einen Fehler gemeldet." });
+      items.push({ tone: "critical", title: t("dashboard.updateError"), detail: update?.error || t("dashboard.updateErrorFallback") });
     } else if (updateState === "running") {
       items.push({ tone: "info", title: t("dashboard.updateRunning2"), detail: t("dashboard.updateRunning2Detail") });
     } else if (updateAvailable) {
@@ -189,7 +189,7 @@ export function DashboardPage() {
       items.push({
         tone: "warn",
         title: t("dashboard.gpuHot", { temp: hottestGpu.temp_c ?? "-" }),
-        detail: `${hottestGpu.name} liegt über dem normalen Temperaturfenster.`,
+        detail: t("dashboard.gpuHotDetail", { name: hottestGpu.name }),
       });
     }
     if (items.length === 0) {
@@ -322,7 +322,7 @@ export function DashboardPage() {
             </div>
             <div className="rounded-2xl bg-secondary/55 px-4 py-3">
               <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t("dashboard.activeObservers")}</div>
-              <div className="mt-2 text-foreground">{runningHeartbeats} Heartbeats · {activeProjects.length} Sessions · {problemAgents.length} Signale</div>
+              <div className="mt-2 text-foreground">{t("dashboard.observerSummaryInline", { hb: runningHeartbeats, sessions: activeProjects.length, signals: problemAgents.length })}</div>
             </div>
           </div>
         </div>

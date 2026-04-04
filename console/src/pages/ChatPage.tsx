@@ -152,13 +152,13 @@ export function ChatPage() {
       const boss = cfg?.agents?.boss ?? "—";
       const workers = cfg?.agents?.workers?.join(", ") || "—";
       const model = bossModel.model ?? t("chat.notConfigured");
-      sysMsg(`**Projekt:** ${projectName} (\`${id}\`)\n**Boss-Agent:** ${boss}\n**Worker-Agenten:** ${workers}\n**LLM-Modell:** ${model}`);
+      sysMsg(`**${t("chat.projectPanel")}:** ${projectName} (\`${id}\`)\n**Boss-Agent:** ${boss}\n**Worker:** ${workers}\n**LLM:** ${model}`);
       return true;
     }
     if (base === "/retry") {
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
       if (!lastUser) {
-        sysMsg("Keine vorherige Nachricht zum Wiederholen.");
+        sysMsg(t("chat.noRetryMessage"));
         return true;
       }
       setInput(lastUser.content);
@@ -168,14 +168,14 @@ export function ChatPage() {
     if (base === "/model") {
       const model = bossModel.model ?? t("chat.notConfigured");
       const temp = bossModel.temperature ?? "—";
-      sysMsg(`**Aktuelles Modell:** \`${model}\`\n**Temperatur:** ${temp}`);
+      sysMsg(`**${t("chat.currentModel")}:** \`${model}\`\n**${t("chat.temperatureLabel")}:** ${temp}`);
       return true;
     }
     if (base === "/remember") {
       const cfg = projectData.config as { agents?: { boss?: string } } | undefined;
       const bossId = cfg?.agents?.boss;
       if (!bossId) {
-        sysMsg("Kein Boss-Agent konfiguriert.");
+        sysMsg(t("chat.noBossAgent"));
         return true;
       }
       const filename = parts[1]
@@ -186,7 +186,7 @@ export function ChatPage() {
         .slice(-30)
         .map((m) => `**${m.role === "user" ? "User" : "Agent"}:** ${m.content}`)
         .join("\n\n");
-      if (!history) { sysMsg("Kein Chat-Verlauf zum Speichern."); return true; }
+      if (!history) { sysMsg(t("chat.noHistory")); return true; }
       const content = `# Session: ${new Date().toLocaleString("de")}\n\n${history}`;
       const token = localStorage.getItem("hydrahive_token") || "";
       fetch(`/api/agents/${bossId}/memory`, {
@@ -194,11 +194,11 @@ export function ChatPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ filename, content }),
       })
-        .then((r) => r.ok ? sysMsg(`Gespeichert als \`${filename}.md\` im Gedächtnis von \`${bossId}\`.`) : sysMsg("Fehler beim Speichern."))
-        .catch(() => sysMsg("Fehler beim Speichern."));
+        .then((r) => r.ok ? sysMsg(t("chat.savedMemory", { filename, agent: bossId })) : sysMsg(t("chat.saveError")))
+        .catch(() => sysMsg(t("chat.saveError")));
       return true;
     }
-    sysMsg(`Unbekannter Command: \`${base}\`. Tippe \`/help\`.`);
+    sysMsg(t("chat.unknownCommand", { cmd: base }));
     return true;
   }
 

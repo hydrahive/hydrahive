@@ -26,7 +26,16 @@
     "groupAgents": "Agenten & Projekte",
     "groupAnalytics": "Analytik",
     "groupKnowledge": "Wissen & Suche",
-    "groupNetwork": "Netzwerk"
+    "groupNetwork": "Netzwerk",
+    "hydraHub": "HydraHub",
+    "hydraBrain": "HydraBrain",
+    "promptGuide": "Prompt in a Nutshell",
+    "voice": "Voice",
+    "plugins": "Plugins",
+    "setup": "Setup",
+    "usermanagement": "Usermanagement",
+    "secrets": "Secrets",
+    "more": "Mehr"
   },
   "usage": {
     "title": "API Usage",
@@ -250,7 +259,15 @@
     "federation": "Peer-zu-Peer Agenten-Federation",
     "butler": "Visuelle Automatisierungsregeln",
     "blueprint": "Automation, Architektur, Rechte",
-    "skillPackages": "QMD Skills bündeln"
+    "skillPackages": "QMD Skills bündeln",
+    "hydraHub": "Agenten & Tools installieren",
+    "hydraBrain": "3D-Graph: Agenten, Tools & Memory",
+    "promptGuide": "KI-Tipps: So schreibst du gute Prompts",
+    "voice": "Sprachsteuerung — STT, TTS, Agent",
+    "plugins": "Plugin-System verwalten",
+    "setup": "Zentrale Konfiguration — alles an einem Ort",
+    "usermanagement": "Benutzer, Gruppen & Berechtigungen",
+    "secrets": "API-Keys & Tokens für Agenten"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -357,7 +374,19 @@
     "gpuHot": "GPU heiß ({{temp}}°C)",
     "noIssues": "Keine akuten Auffälligkeiten",
     "noIssuesDetail": "Core, Runtime und Update-Lage wirken im Moment stabil.",
-    "updateSync": "Update {{time}}"
+    "updateSync": "Update {{time}}",
+    "agentConfiguredNotStarted": "Agent ist konfiguriert, aber aktuell nicht gestartet.",
+    "agentNotRunning": "Agent meldet keinen laufenden Zustand.",
+    "agentRestarted": "Runtime wurde bereits neu gestartet.",
+    "heartbeatLate": "Heartbeat spät",
+    "heartbeatLateDetail": "{{age}}s seit letztem Heartbeat.",
+    "sessionNoProject": "Aktive Session ohne Projektdefinition",
+    "sessionNoProjectDetail": "Der Session-Manager meldet Aktivität, aber es gibt kein passendes Projektobjekt.",
+    "matrixActive": "Matrix aktiv",
+    "noMatrixRoom": "keine Matrix-Room-ID",
+    "updateErrorFallback": "Der letzte Update-Lauf hat einen Fehler gemeldet.",
+    "gpuHotDetail": "{{name}} liegt über dem normalen Temperaturfenster.",
+    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signale"
   },
   "agents": {
     "title": "Agentenverwaltung mit Runtime-, Skill- und Log-Fokus",
@@ -635,7 +664,18 @@
     "delete": "Löschen"
   },
   "settings": {
-    "title": "Systemeinstellungen"
+    "title": "Systemeinstellungen",
+    "tabLlm": "LLM",
+    "tabMcp": "MCP",
+    "tabGitea": "Gitea",
+    "tabGithub": "GitHub",
+    "tabVpn": "VPN",
+    "tabKas": "Mail / KAS",
+    "tabUsers": "Benutzer",
+    "tabGroups": "Gruppen",
+    "tabBackup": "Backup",
+    "tabMigration": "Migration",
+    "tabPlugins": "Plugins"
   },
   "login": {
     "subtitle": "Melde dich an um fortzufahren",
@@ -699,7 +739,15 @@
     "shortcuts": "Shortcuts",
     "noModel": "kein Modell",
     "swarmVisiblePill": "Swarm sichtbar",
-    "swarmCompactPill": "Swarm kompakt"
+    "swarmCompactPill": "Swarm kompakt",
+    "noRetryMessage": "Keine vorherige Nachricht zum Wiederholen.",
+    "noBossAgent": "Kein Boss-Agent konfiguriert.",
+    "noHistory": "Kein Chat-Verlauf zum Speichern.",
+    "savedMemory": "Gespeichert als `{{filename}}.md` im Gedächtnis von `{{agent}}`.",
+    "saveError": "Fehler beim Speichern.",
+    "unknownCommand": "Unbekannter Command: `{{cmd}}`. Tippe `/help`.",
+    "currentModel": "Aktuelles Modell",
+    "temperatureLabel": "Temperatur"
   },
   "agentChat": {
     "emptyChat": "Direkter Chat mit {{name}}.",
@@ -1326,6 +1374,22 @@
     "secrets": "Sichere Speicherung von API-Keys und Tokens für Agenten-Tools. Nur von Admins einsehbar.",
     "secretsName": "Eindeutiger Name (z.B. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich"
+  },
+  "plugins": {
+    "installed": "{{count}} Plugin(s) installiert",
+    "noPluginsInstalled": "Keine Plugins installiert",
+    "reloadAll": "Alle neu laden",
+    "loading": "Lade Plugins...",
+    "emptyTitle": "Keine Plugins installiert",
+    "emptyHint": "Lege Plugin-Verzeichnisse unter /plugins/ an",
+    "emptySubHint": "Jedes Plugin braucht: plugin.yaml + plugin.py",
+    "noDescription": "Keine Beschreibung",
+    "deactivate": "Deaktivieren",
+    "activate": "Aktivieren",
+    "permissions": "Permissions",
+    "agentAssignment": "Agent-Zuweisung",
+    "path": "Pfad:",
+    "uninstall": "Deinstallieren"
   },
   "groups": {
     "title": "Gruppen & Berechtigungen",

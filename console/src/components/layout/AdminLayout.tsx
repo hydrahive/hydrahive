@@ -181,7 +181,7 @@ export function AdminLayout() {
       { to: "/tools",               icon: Wrench,      label: t("nav.tools"),        hint: t("navHint.tools") },
       { to: "/tools/skill-packages",icon: Package,     label: t("nav.skillPackages"),hint: t("navHint.skillPackages") },
       { to: "/blueprint",           icon: Workflow,    label: t("nav.blueprint"),    hint: t("navHint.blueprint") },
-      { to: "/hub",                 icon: Store,       label: "HydraHub",            hint: "Agenten & Tools installieren" },
+      { to: "/hub",                 icon: Store,       label: t("nav.hydraHub"),     hint: t("navHint.hydraHub") },
     ],
   };
 
@@ -202,9 +202,9 @@ export function AdminLayout() {
     label: t("nav.groupKnowledge"),
     collapsible: true,
     items: [
-      { to: "/brain",        icon: Brain,     label: "HydraBrain",          hint: "3D-Graph: Agenten, Tools & Memory" },
+      { to: "/brain",        icon: Brain,     label: t("nav.hydraBrain"),    hint: t("navHint.hydraBrain") },
       { to: "/search",       icon: Search,   label: t("nav.search"),       hint: t("navHint.search") },
-      { to: "/prompt-guide", icon: Lightbulb,label: "Prompt in a Nutshell", hint: "KI-Tipps: So schreibst du gute Prompts" },
+      { to: "/prompt-guide", icon: Lightbulb,label: t("nav.promptGuide"),   hint: t("navHint.promptGuide") },
       { to: "/code-editor",  icon: Code2,    label: t("nav.codeEditor"),   hint: t("navHint.codeEditor") },
     ],
   };
@@ -215,9 +215,9 @@ export function AdminLayout() {
     collapsible: true,
     items: [
       { to: "/federation",  icon: Globe,  label: t("nav.federation"),  hint: t("navHint.federation") },
-      { to: "/voice",       icon: Mic,    label: "Voice",              hint: "Sprachsteuerung — STT, TTS, Agent" },
+      { to: "/voice",       icon: Mic,    label: t("nav.voice"),       hint: t("navHint.voice") },
       { to: "/extensions",  icon: Puzzle, label: t("nav.extensions"),  hint: t("navHint.extensions") },
-      { to: "/plugins",     icon: Puzzle, label: "Plugins",            hint: "Plugin-System verwalten" },
+      { to: "/plugins",     icon: Puzzle, label: t("nav.plugins"),     hint: t("navHint.plugins") },
     ],
   };
 
@@ -226,10 +226,10 @@ export function AdminLayout() {
     label: t("nav.groupSystem"),
     collapsible: true,
     items: [
-      { to: "/config-hub",     icon: Settings,  label: "Setup",          hint: "Zentrale Konfiguration — alles an einem Ort" },
-      { to: "/usermanagement", icon: Users,     label: "Usermanagement", hint: "Benutzer, Gruppen & Berechtigungen" },
+      { to: "/config-hub",     icon: Settings,  label: t("nav.setup"),          hint: t("navHint.setup") },
+      { to: "/usermanagement", icon: Users,     label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
       { to: "/system",         icon: Server,    label: t("nav.system"),  hint: t("navHint.system") },
-      { to: "/secrets",        icon: KeyRound,  label: "Secrets",        hint: "API-Keys & Tokens für Agenten" },
+      { to: "/secrets",        icon: KeyRound,  label: t("nav.secrets"),  hint: t("navHint.secrets") },
       { to: "/settings",       icon: Settings,  label: t("nav.settings"),hint: t("navHint.settings") },
     ],
   };
@@ -588,7 +588,7 @@ export function AdminLayout() {
             className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
           >
             <Menu className="h-5 w-5 shrink-0" />
-            <span className="text-[0.6rem] font-medium">Mehr</span>
+            <span className="text-[0.6rem] font-medium">{t("nav.more")}</span>
           </button>
         </div>
       </nav>

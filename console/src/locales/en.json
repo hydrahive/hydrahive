@@ -26,7 +26,16 @@
     "groupAgents": "Agents & Projects",
     "groupAnalytics": "Analytics",
     "groupKnowledge": "Knowledge & Search",
-    "groupNetwork": "Network"
+    "groupNetwork": "Network",
+    "hydraHub": "HydraHub",
+    "hydraBrain": "HydraBrain",
+    "promptGuide": "Prompt in a Nutshell",
+    "voice": "Voice",
+    "plugins": "Plugins",
+    "setup": "Setup",
+    "usermanagement": "User Management",
+    "secrets": "Secrets",
+    "more": "More"
   },
   "usage": {
     "title": "API Usage",
@@ -250,7 +259,15 @@
     "federation": "Peer-to-peer agent federation",
     "butler": "Visual automation rules",
     "blueprint": "Automation, architecture, permissions",
-    "skillPackages": "Bundle QMD Skills"
+    "skillPackages": "Bundle QMD Skills",
+    "hydraHub": "Install agents & tools",
+    "hydraBrain": "3D graph: agents, tools & memory",
+    "promptGuide": "AI tips: How to write good prompts",
+    "voice": "Voice control — STT, TTS, Agent",
+    "plugins": "Manage plugin system",
+    "setup": "Central configuration — everything in one place",
+    "usermanagement": "Users, groups & permissions",
+    "secrets": "API keys & tokens for agents"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -357,7 +374,19 @@
     "gpuHot": "GPU hot ({{temp}}°C)",
     "noIssues": "No acute issues",
     "noIssuesDetail": "Core, runtime and update status appear stable at the moment.",
-    "updateSync": "Updated {{time}}"
+    "updateSync": "Updated {{time}}",
+    "agentConfiguredNotStarted": "Agent is configured but currently not started.",
+    "agentNotRunning": "Agent reports no running state.",
+    "agentRestarted": "Runtime has already been restarted.",
+    "heartbeatLate": "Heartbeat late",
+    "heartbeatLateDetail": "{{age}}s since last heartbeat.",
+    "sessionNoProject": "Active session without project definition",
+    "sessionNoProjectDetail": "The session manager reports activity but there is no matching project object.",
+    "matrixActive": "Matrix active",
+    "noMatrixRoom": "no Matrix room ID",
+    "updateErrorFallback": "The last update run reported an error.",
+    "gpuHotDetail": "{{name}} is above the normal temperature range.",
+    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signals"
   },
   "agents": {
     "title": "Agent management with runtime, skill and log focus",
@@ -635,7 +664,18 @@
     "delete": "Delete"
   },
   "settings": {
-    "title": "System settings"
+    "title": "System settings",
+    "tabLlm": "LLM",
+    "tabMcp": "MCP",
+    "tabGitea": "Gitea",
+    "tabGithub": "GitHub",
+    "tabVpn": "VPN",
+    "tabKas": "Mail / KAS",
+    "tabUsers": "Users",
+    "tabGroups": "Groups",
+    "tabBackup": "Backup",
+    "tabMigration": "Migration",
+    "tabPlugins": "Plugins"
   },
   "login": {
     "subtitle": "Sign in to continue",
@@ -699,7 +739,15 @@
     "shortcuts": "Shortcuts",
     "noModel": "no model",
     "swarmVisiblePill": "Swarm visible",
-    "swarmCompactPill": "Swarm compact"
+    "swarmCompactPill": "Swarm compact",
+    "noRetryMessage": "No previous message to retry.",
+    "noBossAgent": "No boss agent configured.",
+    "noHistory": "No chat history to save.",
+    "savedMemory": "Saved as `{{filename}}.md` in the memory of `{{agent}}`.",
+    "saveError": "Error saving.",
+    "unknownCommand": "Unknown command: `{{cmd}}`. Type `/help`.",
+    "currentModel": "Current model",
+    "temperatureLabel": "Temperature"
   },
   "agentChat": {
     "emptyChat": "Direct chat with {{name}}.",
@@ -1326,6 +1374,22 @@
     "secrets": "Secure storage for API keys and tokens used by agent tools. Only visible to admins.",
     "secretsName": "Unique name (e.g. GITHUB_TOKEN, SLACK_WEBHOOK)",
     "secretsValue": "The secret value — stored encrypted and only accessible by agent tools"
+  },
+  "plugins": {
+    "installed": "{{count}} plugin(s) installed",
+    "noPluginsInstalled": "No plugins installed",
+    "reloadAll": "Reload all",
+    "loading": "Loading plugins...",
+    "emptyTitle": "No plugins installed",
+    "emptyHint": "Create plugin directories under /plugins/",
+    "emptySubHint": "Each plugin needs: plugin.yaml + plugin.py",
+    "noDescription": "No description",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "permissions": "Permissions",
+    "agentAssignment": "Agent Assignment",
+    "path": "Path:",
+    "uninstall": "Uninstall"
   },
   "groups": {
     "title": "Groups & Permissions",
