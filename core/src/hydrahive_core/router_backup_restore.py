@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 
-_BACKUP_NAME_RE = r"^hydrahive-backup-[\w\-]+\.tar\.gz$"
+_BACKUP_NAME_RE = r"^hydrahive-backup-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.tar\.gz$"
 
 
 def _list_backups(backup_dir: Path) -> list[dict]:
@@ -81,7 +81,9 @@ def register_backup_restore_routes(
 
         if not _re.match(_BACKUP_NAME_RE, name):
             raise HTTPException(400, "Ungültiger Backup-Name")
-        path = backup_dir / name
+        path = (backup_dir / name).resolve()
+        if not str(path).startswith(str(backup_dir.resolve())):
+            raise HTTPException(403, "Zugriff verweigert")
         if not path.exists():
             raise HTTPException(404, "Backup nicht gefunden")
         return FileResponse(path, media_type="application/gzip", filename=name)

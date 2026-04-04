@@ -1,9 +1,10 @@
 # HydraHive Provisioner: Projekt-User anlegen, Verzeichnisse und Samba einrichten
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd *
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/userdel *
+# Eingeschränkte Wildcards — nur erlaubte Argumente
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd -m -s /usr/sbin/nologin proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/userdel -r proj_*
 hydrahive ALL=(root) NOPASSWD: /bin/mkdir -p /projects/*
-hydrahive ALL=(root) NOPASSWD: /bin/chown * /projects/*
-hydrahive ALL=(root) NOPASSWD: /bin/chmod * /projects/*
-hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd *
-hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol * reload-config
+hydrahive ALL=(root) NOPASSWD: /bin/chown -R proj_*\:hydrahive /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chmod -R [0-9][0-9][0-9] /projects/*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -a proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol all reload-config
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd

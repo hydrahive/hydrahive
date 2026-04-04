@@ -30,7 +30,13 @@ fi
 
 # --- Passwordless sudo für Extension-Manager (sudo -n braucht NOPASSWD) ---
 cat > /etc/sudoers.d/hydrahive << SUDOEOF
-hydrahive ALL=(ALL) NOPASSWD:ALL
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-core, /bin/systemctl stop hydrahive-core, /bin/systemctl start hydrahive-core
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd, /bin/systemctl reload nginx
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd *, /usr/sbin/userdel *
+hydrahive ALL=(root) NOPASSWD: /bin/chown * /projects/*, /bin/chmod * /projects/*, /bin/mkdir -p /projects/*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd *, /usr/bin/smbcontrol *
+hydrahive ALL=(root) NOPASSWD: /usr/bin/fuser -k 8765/tcp
+hydrahive ALL=(root) NOPASSWD: /bin/journalctl *
 Defaults:hydrahive !requiretty
 SUDOEOF
 chmod 440 /etc/sudoers.d/hydrahive
@@ -40,7 +46,7 @@ mkdir -p "${CORE_DIR}/src/hydrahive_core" /agents /projects /etc/hydrahive
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}" /agents /projects
 # /etc/hydrahive braucht hydrahive-Schreibrechte (jwt_secret, users.json etc.)
 chown root:${HYDRAHIVE_USER} /etc/hydrahive
-chmod 770 /etc/hydrahive
+chmod 750 /etc/hydrahive
 
 # --- Konfig-Dateien voranlegen (hydrahive-core braucht Schreibrechte) ---
 for _f in jwt_secret llm_env llm_config.json gitea_config.json users.json admin_credentials; do

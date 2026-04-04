@@ -752,26 +752,42 @@ def register_core_misc_routes(
     }
     BLOCKED_SHELL_PATTERNS = {"rm -rf", "mkfs", "dd if=", ":(){ :|:&", "shutdown", "reboot", "halt", "init 0"}
 
+    # Shell-Metazeichen die Command-Injection ermöglichen (außer |)
+    _SHELL_INJECTION_CHARS = {";", "&", "`", "$", "(", ")", "\n", "\\"}
+
     @admin_router.post("/admin/shell")
-    def run_shell(body: dict):
+    def run_shell(body: dict, _a: tuple = Depends(require_admin)):
         """Eingeschränkter Shell-Zugriff (Whitelist)."""
         import subprocess, shlex
         cmd = body.get("command", "").strip()
         if not cmd:
             raise HTTPException(400, "command fehlt")
+        # Shell-Injection-Zeichen blockieren (;, &, $, `, Backticks etc.)
+        for ch in _SHELL_INJECTION_CHARS:
+            if ch in cmd:
+                raise HTTPException(403, f"Befehl blockiert: Zeichen '{ch}' nicht erlaubt")
         # Blocked patterns
         cmd_lower = cmd.lower()
         for blocked in BLOCKED_SHELL_PATTERNS:
             if blocked in cmd_lower:
                 raise HTTPException(403, f"Befehl blockiert: enthält '{blocked}'")
-        # Erstes Wort muss in der Whitelist sein
-        first_word = shlex.split(cmd)[0] if cmd else ""
-        base_cmd = Path(first_word).name  # /usr/bin/git → git
-        if base_cmd not in ALLOWED_SHELL_COMMANDS:
-            raise HTTPException(403, f"Befehl '{base_cmd}' nicht erlaubt. Erlaubt: {', '.join(sorted(ALLOWED_SHELL_COMMANDS))}")
+        # Jeden Pipe-Teil einzeln gegen Whitelist prüfen
+        pipe_parts = [p.strip() for p in cmd.split("|")]
+        for part in pipe_parts:
+            if not part:
+                raise HTTPException(400, "Leerer Pipe-Teil")
+            try:
+                first_word = shlex.split(part)[0]
+            except ValueError:
+                raise HTTPException(400, "Ungültige Befehlssyntax")
+            base_cmd = Path(first_word).name
+            if base_cmd not in ALLOWED_SHELL_COMMANDS:
+                raise HTTPException(403, f"Befehl '{base_cmd}' nicht erlaubt. Erlaubt: {', '.join(sorted(ALLOWED_SHELL_COMMANDS))}")
         try:
             r = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=30,
+                shlex.split(pipe_parts[0]) if len(pipe_parts) == 1 else cmd,
+                shell=len(pipe_parts) > 1,  # shell=True nur bei Pipes, sonst False
+                capture_output=True, text=True, timeout=30,
                 cwd="/tmp",
             )
             return {

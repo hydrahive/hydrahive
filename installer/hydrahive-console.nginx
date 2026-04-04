@@ -31,7 +31,7 @@ server {
         proxy_next_upstream   error timeout;
         # API-Fehler nicht durch error_page umleiten — JS behandelt 502 selbst
         proxy_intercept_errors off;
-        client_max_body_size   50M;
+        client_max_body_size   10M;
     }
 
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
@@ -61,11 +61,10 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar
+    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar (Auth über API)
     location /projects/ {
         alias /projects/;
-        autoindex on;
-        autoindex_exact_size off;
+        autoindex off;
         add_header Cache-Control "no-store";
     }
 }
