@@ -116,7 +116,7 @@ function ScratchpadInner() {
   useEffect(() => {
     const t = setInterval(() => {
       const data = JSON.stringify({ nodes, edges, counter: counter.current });
-      api.put("/admin/files/write", { path: `${SCRATCHPADS_DIR}/${padName}.json`, content: data }).catch(() => {});
+      api.put("/admin/files/write", { path: `${SCRATCHPADS_DIR}/${padName}.json`, content: data }).catch(e => console.error("Failed to auto-save scratchpad", e));
       try { localStorage.setItem("hydrahive_scratchpad", data); } catch {}
     }, 10000);
     return () => clearInterval(t);

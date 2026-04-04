@@ -24,7 +24,7 @@ export function KasConfigPage() {
         setSmtp(d.smtp_host  ?? "");
         setPort(String(d.smtp_port ?? 587));
       }
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(e => console.error("Failed to load KAS config", e)).finally(() => setLoading(false));
   }, []);
 
   async function save(e: React.FormEvent) {

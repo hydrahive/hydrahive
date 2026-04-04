@@ -192,7 +192,7 @@ export function MyAgentPage() {
 
   useEffect(() => {
     loadAgent();
-    api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(() => {});
+    api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(e => console.error("Failed to load user apps", e));
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(
       "/me/agent/session/history"
     ).then(d => {
@@ -200,11 +200,11 @@ export function MyAgentPage() {
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => mkMsg(m.role as "user"|"assistant", m.content));
       if (loaded.length > 0) setMessages(loaded);
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load agent session history", e));
     api.get<Record<string,unknown>>("/agents").then(d => {
       setAgents(Object.keys(d).filter(id => !id.startsWith("personal_")));
-    }).catch(() => {});
-    api.mcpServers().then(d => setMcpServers(d.servers)).catch(() => {});
+    }).catch(e => console.error("Failed to load agents list", e));
+    api.mcpServers().then(d => setMcpServers(d.servers)).catch(e => console.error("Failed to load MCP servers", e));
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -213,7 +213,7 @@ export function MyAgentPage() {
   // ── Chat-Logik ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!showHistory || !agentInfo?.agent_id) return;
-    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(() => {});
+    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(e => console.error("Failed to list past sessions", e));
   }, [showHistory, agentInfo?.agent_id]);
 
   async function openPastSession(sid: string) {
@@ -249,7 +249,7 @@ export function MyAgentPage() {
     if (base === "/help") { sysMsg("**Commands:**\n\n" + SLASH_COMMANDS.map(c=>`\`${c.cmd}\` — ${c.desc}`).join("\n")); return true; }
     if (base === "/clear") {
       setMessages([]);
-      api.delete("/me/agent/session").catch(() => {});
+      api.delete("/me/agent/session").catch(e => console.error("Failed to clear agent session", e));
       sysMsg("Chat-Verlauf geleert."); return true;
     }
     if (base === "/model") {
@@ -285,7 +285,7 @@ export function MyAgentPage() {
   async function stop() {
     if (abortRef.current) abortRef.current.abort();
     const token = localStorage.getItem("hydrahive_token") || "";
-    fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Failed to interrupt agent", e));
   }
 
   async function send(overrideContent?: string) {
@@ -573,7 +573,7 @@ export function MyAgentPage() {
                         className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
                         <RotateCcw className="h-3 w-3" /> Fortsetzen
                       </button>
-                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(() => {}); setMessages([]); }}
+                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(e => console.error("Failed to delete agent session", e)); setMessages([]); }}
                         className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
                         <Plus className="h-3 w-3" /> Neuer Chat
                       </button>
@@ -1054,7 +1054,7 @@ function AccountTab() {
   const [copied, setCopied] = useState("");
 
   useEffect(() => {
-    api.get<any>("/me/credentials").then(setData).catch(() => {}).finally(() => setLoading(false));
+    api.get<any>("/me/credentials").then(setData).catch(e => console.error("Failed to load credentials", e)).finally(() => setLoading(false));
   }, []);
 
   function copy(text: string, label: string) {
@@ -1431,7 +1431,7 @@ function SettingsPanel({
   useEffect(() => {
     api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models")
       .then(r => setAvailableModels(r.models))
-      .catch(() => {});
+      .catch(e => console.error("Failed to load available models", e));
   }, []);
 
   // Sync state wenn agentInfo von außen aktualisiert wird (nach Speichern oder Reload)
@@ -1770,9 +1770,9 @@ function WksTab() {
       setSshUser(d.ssh_user);
       setOllamaPort(d.ollama_port);
       if (d.has_ssh_key) {
-        api.getWksPubkey().then(r => setPubKey(r.public_key)).catch(() => {});
+        api.getWksPubkey().then(r => setPubKey(r.public_key)).catch(e => console.error("Failed to load WKS public key", e));
       }
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load WKS config", e));
   }, []);
 
   async function save(e: React.FormEvent) {
@@ -1999,7 +1999,7 @@ function DiscordTab() {
       setRoleBlacklist(new Set(d.role_blacklist ?? []));
       setUserWhitelist(d.user_whitelist ?? []);
       setUserBlacklist(d.user_blacklist ?? []);
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load Discord config", e));
   }, []);
 
   async function loadChannels() {
@@ -2403,7 +2403,7 @@ function WhatsAppTab() {
       }
       if (voices.length === 0) {
         api.get<{ voices: { id: string; label: string; lang: string }[] }>("/me/whatsapp/voices")
-          .then(r => setVoices(r.voices || [])).catch(() => {});
+          .then(r => setVoices(r.voices || [])).catch(e => console.error("Failed to load WhatsApp voices", e));
       }
       if (s.status === "connected" || s.status === "bridge_unavailable" || s.status === "disconnected") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -3001,7 +3001,7 @@ function MailTab() {
     api.getMail().then(d => {
       setCfg(d);
       setMailAddress(d.mail_address ?? "");
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load mail config", e));
   }, []);
 
   async function handleSave(e: React.FormEvent) {

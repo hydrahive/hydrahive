@@ -148,10 +148,10 @@ export function AgentsPage() {
     // Alle verfügbaren Tools aus der Registry laden
     api.get<Record<string, any>>("/tools").then(tools => {
       setKnownTools(Object.keys(tools).sort());
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load tools registry", e));
     api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models").then(d => {
       setWksModels(d.models.filter(m => m.provider === "wks_ollama"));
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load available models", e));
   }, []);
   function refresh() {
     setRefreshing(true);

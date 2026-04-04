@@ -1100,7 +1100,7 @@ function ButlerPageInner() {
   useEffect(() => {
     api.get<ButlerFlow[]>("/butler/flows")
       .then(setFlows)
-      .catch(() => {});
+      .catch(e => console.error("Failed to load butler flows", e));
 
     api.get<Record<string, { config: { identity?: string } }>>("/agents")
       .then(res => {
@@ -1110,7 +1110,7 @@ function ButlerPageInner() {
         }));
         setAgents(list);
       })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load agents for butler", e));
   }, []);
 
   const loadFlow = (flow: ButlerFlow) => {

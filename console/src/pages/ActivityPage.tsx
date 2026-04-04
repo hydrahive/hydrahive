@@ -240,7 +240,7 @@ function AgentDetailPanel({
       <div className="fixed inset-0 bg-black/30 dark:bg-black/50 z-40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col">
+      <div className="fixed inset-y-0 right-0 w-[calc(100%-2rem)] sm:max-w-lg bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col">
 
         {/* Panel-Header */}
         <div className={cn(

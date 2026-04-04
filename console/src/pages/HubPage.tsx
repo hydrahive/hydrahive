@@ -56,7 +56,7 @@ function ClawhubTab() {
     // /agents gibt Dict {agentId: {...}} zurück
     api.get<Record<string, unknown>>("/agents").then(d => {
       setAgents(Object.keys(d).sort());
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load agents for hub", e));
     api.clawhubStatus().then(d => {
       setCliInstalled(d.installed);
       setTokenConfigured(d.token_configured);

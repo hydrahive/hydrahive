@@ -63,7 +63,7 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
           navigate("/onboarding", { replace: true });
         }
       })
-      .catch(() => {})
+      .catch(e => console.error("Failed to check wizard status", e))
       .finally(() => setChecked(true));
   }, [isAuthenticated, navigate]);
 
@@ -81,7 +81,7 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
       .then((d: { needs_setup: boolean }) => {
         if (d.needs_setup) navigate("/setup", { replace: true });
       })
-      .catch(() => {})
+      .catch(e => console.error("Failed to check setup status", e))
       .finally(() => setChecked(true));
   }, [navigate]);
 

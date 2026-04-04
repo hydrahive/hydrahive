@@ -637,13 +637,13 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     // /tools gibt Dict {tool_id: {name, description, ...}} zurück
     api.get<Record<string, any>>("/tools").then(tools => {
       setAvailableTools(Object.keys(tools).sort());
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load tools for blueprint", e));
     api.get<{servers:{id:string}[]}>("/mcp/servers").then(d => {
       setAvailableMcp((d.servers || []).map(s => s.id));
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load MCP servers for blueprint", e));
     api.pluginsList().then(d => {
       setAvailablePlugins(d.plugins.filter(p => p.enabled).map(p => p.id));
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load plugins for blueprint", e));
   }, []);
 
   // Blueprint laden — oder aus Agent-Config generieren
@@ -914,11 +914,11 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
         .map(n => (n.data as any).config?.pluginId)
         .filter(Boolean);
       if (pluginIds.length > 0) {
-        await api.pluginAgentSet(agentId, pluginIds).catch(() => {});
+        await api.pluginAgentSet(agentId, pluginIds).catch(e => console.error("Failed to assign plugins to agent", e));
       }
 
       // Blueprint speichern
-      await api.put(`/agents/${agentId}/workflow-blueprint`, { nodes, edges }).catch(() => {});
+      await api.put(`/agents/${agentId}/workflow-blueprint`, { nodes, edges }).catch(e => console.error("Failed to save workflow blueprint", e));
 
       setToast(`Agent "${identity}" erstellt!`);
       setIsNewMode(false);

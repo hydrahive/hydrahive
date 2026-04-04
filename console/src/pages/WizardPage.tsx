@@ -166,7 +166,7 @@ function LlmStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void })
       if (!systemModel && ollamaModels.length > 0) {
         setSystemModel(ollamaModels[0].id);
       }
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load available models for wizard", e));
   }, []);
 
   async function save() {

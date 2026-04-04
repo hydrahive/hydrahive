@@ -330,8 +330,8 @@ function GitSection() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    api.githubTokenStatus().then(r => setGhStatus(r as { configured: boolean })).catch(() => {});
-    api.giteaConfig().then(r => { setGiteaCfg(r); setGiteaUrl(r.url || ""); setGiteaOrg(r.org || ""); }).catch(() => {});
+    api.githubTokenStatus().then(r => setGhStatus(r as { configured: boolean })).catch(e => console.error("Failed to load GitHub token status", e));
+    api.giteaConfig().then(r => { setGiteaCfg(r); setGiteaUrl(r.url || ""); setGiteaOrg(r.org || ""); }).catch(e => console.error("Failed to load Gitea config", e));
   }, []);
 
   const configured = ghStatus !== null && giteaCfg !== null

@@ -30,7 +30,7 @@ export function ProjectCreatePage() {
   const [error,       setError]       = useState("");
 
   useEffect(() => {
-    api.agents().then(d => setAgents(d as Record<string, AgentEntry>)).catch(() => {});
+    api.agents().then(d => setAgents(d as Record<string, AgentEntry>)).catch(e => console.error("Failed to load agents", e));
   }, []);
 
   const agentIds = Object.keys(agents);

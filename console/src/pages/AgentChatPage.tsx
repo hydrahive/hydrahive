@@ -69,7 +69,7 @@ export function AgentChatPage() {
         if (cfg?.identity) setAgentName(cfg.identity);
         if (cfg?.llm) setAgentModel(cfg.llm);
       })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load agent config", e));
     api.get<{ session_id: string | null; messages: { role: string; content: string }[]; count: number }>(
       `/agents/${id}/session/history`
     )
@@ -79,7 +79,7 @@ export function AgentChatPage() {
           .map(m => mkMsg(m.role as "user" | "assistant", m.content));
         if (loaded.length > 0) setMessages(loaded);
       })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load agent session history", e));
   }, [id]);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function AgentChatPage() {
 
   useEffect(() => {
     if (!showHistory || !id) return;
-    api.listSessions(id, 30).then(d => setSessions(d.sessions)).catch(() => {});
+    api.listSessions(id, 30).then(d => setSessions(d.sessions)).catch(e => console.error("Failed to list agent sessions", e));
   }, [showHistory, id]);
 
   async function openSession(sid: string) {
@@ -135,7 +135,7 @@ export function AgentChatPage() {
     }
     if (base === "/clear") {
       setMessages([]);
-      api.delete(`/agents/${id}/session`).catch(() => {});
+      api.delete(`/agents/${id}/session`).catch(e => console.error("Failed to clear agent session", e));
       sysMsg(t("slashCommands.clear") + ".");
       return true;
     }
@@ -199,7 +199,7 @@ export function AgentChatPage() {
     if (abortRef.current) abortRef.current.abort();
     if (id) {
       const token = localStorage.getItem("hydrahive_token") || "";
-      fetch(`/api/agents/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      fetch(`/api/agents/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Failed to interrupt agent", e));
     }
   }
 
@@ -399,7 +399,7 @@ export function AgentChatPage() {
               className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
               <RotateCcw className="h-3 w-3" /> {t("chat.resume")}
             </button>
-            <button onClick={() => { setViewSession(null); api.delete(`/agents/${id}/session`).catch(() => {}); setMessages([]); }}
+            <button onClick={() => { setViewSession(null); api.delete(`/agents/${id}/session`).catch(e => console.error("Failed to delete agent session", e)); setMessages([]); }}
               className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
               <Plus className="h-3 w-3" /> {t("chat.newChat")}
             </button>

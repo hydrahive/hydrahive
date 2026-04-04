@@ -118,7 +118,7 @@ export function ProjectsPage() {
     fetch("/api/admin/codeserver/status", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.password) setCodeserverPassword(d.password); })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load code-server status", e));
   }, []);
 
   function refresh() {

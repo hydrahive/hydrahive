@@ -139,7 +139,7 @@ function CleanupPanel() {
     api.cleanupStatus().then(s => {
       setStatus(s);
       setCfg(s.config);
-    }).catch(() => {});
+    }).catch(e => console.error("Failed to load cleanup status", e));
   }, []);
 
   async function runCleanup() {

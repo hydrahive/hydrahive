@@ -93,16 +93,16 @@ export function ChatPage() {
               const llm = (a as any)?.config?.llm as { model?: string; temperature?: number } | undefined;
               if (llm) setBossModel(llm);
             })
-            .catch(() => {});
+            .catch(e => console.error("Failed to load boss agent config", e));
         }
       })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load project config", e));
     api.sessionHistory(id)
       .then((d) => {
         const loaded = d.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => mkMsg(m.role as "user" | "assistant", m.content));
         if (loaded.length > 0) setMessages(loaded);
       })
-      .catch(() => {});
+      .catch(e => console.error("Failed to load session history", e));
   }, [id]);
 
   function openHistory() {
@@ -110,7 +110,7 @@ export function ChatPage() {
     setViewSession(null);
     if (!id) return;
     setHistoryLoading(true);
-    api.listSessions(id).then((d) => setHistoryList(d.sessions)).catch(() => {}).finally(() => setHistoryLoading(false));
+    api.listSessions(id).then((d) => setHistoryList(d.sessions)).catch(e => console.error("Failed to list sessions", e)).finally(() => setHistoryLoading(false));
   }
 
   async function openSession(sessionId: string) {
@@ -206,7 +206,7 @@ export function ChatPage() {
     if (abortRef.current) abortRef.current.abort();
     if (id) {
       const token = localStorage.getItem("hydrahive_token") || "";
-      fetch(`/api/projects/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      fetch(`/api/projects/${id}/interrupt`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Failed to interrupt project", e));
     }
   }
 
@@ -416,7 +416,7 @@ export function ChatPage() {
             {showHistory && (
               <div className="absolute inset-0 z-20 flex">
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => { setShowHistory(false); setViewSession(null); }} />
-                <div className="relative ml-auto flex h-full w-full max-w-md flex-col border-l bg-background shadow-xl">
+                <div className="relative ml-auto flex h-full w-[calc(100%-1rem)] sm:max-w-md flex-col border-l bg-background shadow-xl">
                   <div className="flex items-center justify-between border-b px-5 py-4">
                     {viewSession ? (
                       <button onClick={() => setViewSession(null)} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">

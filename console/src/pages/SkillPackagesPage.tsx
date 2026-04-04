@@ -394,7 +394,7 @@ function SkillPackagesPageInner() {
   useEffect(() => {
     api.get<SkillPackage[]>("/admin/skill-packages")
       .then(setPackages)
-      .catch(() => {});
+      .catch(e => console.error("Failed to load skill packages", e));
   }, []);
 
   const loadPackage = (pkg: SkillPackage) => {

@@ -41,7 +41,7 @@ export function NotificationRouterTab() {
   useEffect(() => {
     api.get<RoutingConfig>("/admin/notification-routes")
       .then(d => setConfig(d))
-      .catch(() => {})
+      .catch(e => console.error("Failed to load notification routes", e))
       .finally(() => setLoading(false));
   }, []);
 
