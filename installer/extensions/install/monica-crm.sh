@@ -92,8 +92,7 @@ curl -fSL "https://github.com/monicahq/monica/releases/download/${MONICA_VERSION
     || { warn "Release-Archiv nicht gefunden — versuche git clone..."; git clone --depth 1 https://github.com/monicahq/monica.git "${MONICA_DIR}" || error "Monica Download fehlgeschlagen"; }
 
 if [ -f /tmp/monica.tar.bz2 ]; then
-    tar -xjf /tmp/monica.tar.bz2 -C "${MONICA_DIR}" --strip-components=0 2>/dev/null \
-        || tar -xjf /tmp/monica.tar.bz2 -C "${MONICA_DIR}" 2>/dev/null \
+    tar -xjf /tmp/monica.tar.bz2 -C "${MONICA_DIR}" --strip-components=1 \
         || { warn "tar.bz2 fehlgeschlagen — versuche git clone..."; rm -rf "${MONICA_DIR}"; mkdir -p "${MONICA_DIR}"; git clone --depth 1 https://github.com/monicahq/monica.git "${MONICA_DIR}" || error "Monica Download fehlgeschlagen"; }
     rm -f /tmp/monica.tar.bz2
 fi
