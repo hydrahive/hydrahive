@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Users, Shield } from "lucide-react";
+import { Users, Shield, KeyRound, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserPage } from "@/pages/UserPage";
 import { GroupsPage } from "@/pages/GroupsPage";
+import { SecretsPage } from "@/pages/SecretsPage";
+import { PermissionsTab } from "@/pages/blueprint/PermissionsTab";
 import { useTranslation } from "react-i18next";
 
 const TABS = [
-  { id: "users",  label: "Benutzer", labelEn: "Users",  icon: Users },
-  { id: "groups", label: "Gruppen",  labelEn: "Groups", icon: Shield },
+  { id: "users",       label: "Benutzer",       labelEn: "Users",       icon: Users },
+  { id: "groups",      label: "Gruppen",        labelEn: "Groups",      icon: Shield },
+  { id: "secrets",     label: "Secrets",        labelEn: "Secrets",     icon: KeyRound },
+  { id: "permissions", label: "Berechtigungen", labelEn: "Permissions", icon: Lock },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -47,6 +51,8 @@ export function UserManagementPage() {
       <div className="flex-1 overflow-auto">
         {active === "users" && <UserPage />}
         {active === "groups" && <GroupsPage />}
+        {active === "secrets" && <SecretsPage />}
+        {active === "permissions" && <PermissionsTab />}
       </div>
     </div>
   );

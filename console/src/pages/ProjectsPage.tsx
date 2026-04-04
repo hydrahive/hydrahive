@@ -24,12 +24,15 @@ import {
   KeyRound,
   Code2,
   GitBranch,
+  Calendar,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
+import SchedulesPage from "@/pages/SchedulesPage";
 
 interface ProjectEntry {
   name: string;
@@ -65,7 +68,7 @@ interface EditForm {
 
 const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
 
-export function ProjectsPage() {
+function ProjectsContent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -776,6 +779,53 @@ export function ProjectsPage() {
         </div>
       </div>
     )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- tab wrapper
+
+type ProjectsTabId = "projects" | "schedules";
+
+export function ProjectsPage() {
+  const { t } = useTranslation();
+  const [active, setActive] = useState<ProjectsTabId>("projects");
+
+  const TABS: { id: ProjectsTabId; label: string; icon: React.ElementType }[] = useMemo(() => [
+    { id: "projects",  label: t("projects.title", { defaultValue: "Projekte" }),   icon: FolderKanban },
+    { id: "schedules", label: t("schedules.title", { defaultValue: "Schedules" }), icon: Calendar },
+  ], [t]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-0 border-b border-border">
+        <div className="flex items-center gap-2 mb-1">
+          <FolderKanban size={20} className="text-muted-foreground" />
+          <h1 className="text-lg font-semibold text-foreground">{t("projects.title", { defaultValue: "Projekte" })}</h1>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">{t("pageDesc.projects", { defaultValue: "" })}</p>
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActive(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
+                active === tab.id
+                  ? "border-primary text-foreground bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {active === "projects" ? <ProjectsContent /> : <SchedulesPage />}
+      </div>
     </div>
   );
 }

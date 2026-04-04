@@ -190,9 +190,6 @@ export function AdminLayout() {
     label: t("nav.groupAnalytics"),
     collapsible: true,
     items: [
-      { to: "/activity",  icon: Activity,   label: t("nav.activity"),  hint: t("navHint.activity") },
-      { to: "/usage",     icon: BarChart2,  label: t("nav.usage"),     hint: t("navHint.usage") },
-      { to: "/audit",     icon: ShieldCheck,label: t("nav.auditLog"),  hint: t("navHint.auditLog") },
       { to: "/schedules", icon: Calendar,   label: t("nav.schedules"), hint: t("navHint.schedules") },
     ],
   };

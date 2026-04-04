@@ -105,8 +105,8 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
             <Route path="agents"            element={<AgentsPage />} />
-            <Route path="activity"          element={<ActivityPage />} />
-            <Route path="usage"             element={<UsagePage />} />
+            <Route path="activity"          element={<Navigate to="/dashboard?tab=activity" replace />} />
+            <Route path="usage"             element={<Navigate to="/dashboard?tab=usage" replace />} />
             <Route path="projects"          element={<ProjectsPage />} />
             <Route path="projects/new"      element={<ProjectCreatePage />} />
             <Route path="chat/:id"          element={<ChatPage />} />
@@ -126,7 +126,7 @@ export default function App() {
             <Route path="voice"             element={<VoicePage />} />
             <Route path="system"            element={<SystemPage />} />
             <Route path="tools"             element={<ToolsPage />} />
-            <Route path="audit"             element={<AuditPage />} />
+            <Route path="audit"             element={<Navigate to="/dashboard?tab=audit" replace />} />
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
             <Route path="config-hub"       element={<ConfigHubPage />} />

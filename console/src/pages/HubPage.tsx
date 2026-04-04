@@ -1,8 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
-import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle, Trash2 } from "lucide-react";
+import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle, Trash2, Code2, Blocks } from "lucide-react";
 import { api, type HubPackage, type HubInstalledEntry, type ClawhubSkillItem, type ClawhubPackageItem } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ExtensionsPage } from "@/pages/ExtensionsPage";
+import { PluginsPage } from "@/pages/PluginsPage";
+import { SkillPackagesPage } from "@/pages/SkillPackagesPage";
 
 const CATEGORY_LABELS: Record<string, string> = {
   engineering:  "Engineering",
@@ -819,35 +822,57 @@ function HubPluginsTab() {
 
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
-export function HubPage() {
-  const [activeTab, setActiveTab] = useState<"hydrahub"|"plugins"|"clawhub">("hydrahub");
+type HubTabId = "hydrahub" | "hub-plugins" | "clawhub" | "extensions" | "plugins" | "skill-packages";
 
-  const tabCls = (t: string) => `px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
-    ${activeTab === t
-      ? "bg-background border border-b-background border-border/50 -mb-px text-foreground"
-      : "text-muted-foreground hover:text-foreground"}`;
+export function HubPage() {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<HubTabId>("hydrahub");
+
+  const tabCls = (id: string) => `flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px
+    ${activeTab === id
+      ? "border-primary text-foreground bg-background"
+      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"}`;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-6 pt-6 pb-0 border-b border-border/40 flex-shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight mb-4">HydraHub</h1>
-        <div className="flex gap-1">
+      <div className="px-6 pt-6 pb-0 border-b border-border flex-shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight mb-1">HydraHub</h1>
+        <p className="text-xs text-muted-foreground mb-4">{t("pageDesc.hub", { defaultValue: "Pakete, Extensions, Plugins und Skills verwalten" })}</p>
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           <button onClick={() => setActiveTab("hydrahub")} className={tabCls("hydrahub")}>
+            <Package size={14} />
             Agenten
           </button>
-          <button onClick={() => setActiveTab("plugins")} className={tabCls("plugins") + " flex items-center gap-1.5"}>
-            <Puzzle className="h-3.5 w-3.5 text-primary" />
+          <button onClick={() => setActiveTab("hub-plugins")} className={tabCls("hub-plugins")}>
+            <Puzzle size={14} />
+            Hub-Plugins
+          </button>
+          <button onClick={() => setActiveTab("clawhub")} className={tabCls("clawhub")}>
+            <Zap size={14} />
+            ClawhHub
+          </button>
+          <button onClick={() => setActiveTab("extensions")} className={tabCls("extensions")}>
+            <Code2 size={14} />
+            Extensions
+          </button>
+          <button onClick={() => setActiveTab("plugins")} className={tabCls("plugins")}>
+            <Blocks size={14} />
             Plugins
           </button>
-          <button onClick={() => setActiveTab("clawhub")} className={tabCls("clawhub") + " flex items-center gap-1.5"}>
-            <Zap className="h-3.5 w-3.5 text-amber-500" />
-            ClawhHub
+          <button onClick={() => setActiveTab("skill-packages")} className={tabCls("skill-packages")}>
+            <Package size={14} />
+            Skill-Pakete
           </button>
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === "hydrahub" ? <HydraHubTab /> : activeTab === "plugins" ? <HubPluginsTab /> : <ClawhubTab />}
+        {activeTab === "hydrahub" && <HydraHubTab />}
+        {activeTab === "hub-plugins" && <HubPluginsTab />}
+        {activeTab === "clawhub" && <ClawhubTab />}
+        {activeTab === "extensions" && <ExtensionsPage />}
+        {activeTab === "plugins" && <PluginsPage />}
+        {activeTab === "skill-packages" && <SkillPackagesPage />}
       </div>
     </div>
   );

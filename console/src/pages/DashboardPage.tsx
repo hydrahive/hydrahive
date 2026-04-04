@@ -1,9 +1,78 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset } from "lucide-react";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { ActivityPage } from "@/pages/ActivityPage";
+import { UsagePage } from "@/pages/UsagePage";
+import { AuditPage } from "@/pages/AuditPage";
+
+type DashboardTab = "overview" | "activity" | "usage" | "audit";
+
+const TAB_DEFS: { id: DashboardTab; labelKey: string; icon: React.ElementType }[] = [
+  { id: "overview",  labelKey: "dashboard.tabOverview",  icon: LayoutDashboard },
+  { id: "activity",  labelKey: "dashboard.tabActivity",  icon: Activity },
+  { id: "usage",     labelKey: "dashboard.tabUsage",     icon: BarChart2 },
+  { id: "audit",     labelKey: "dashboard.tabAudit",     icon: ShieldCheck },
+];
 
 export function DashboardPage() {
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get("tab") ?? "overview";
+  const activeTab: DashboardTab = (["overview", "activity", "usage", "audit"] as const).includes(rawTab as DashboardTab)
+    ? (rawTab as DashboardTab)
+    : "overview";
+
+  function switchTab(tab: DashboardTab) {
+    if (tab === "overview") {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab }, { replace: true });
+    }
+  }
+
+  const TabContent = activeTab === "activity" ? ActivityPage
+    : activeTab === "usage" ? UsagePage
+    : activeTab === "audit" ? AuditPage
+    : null;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-0 border-b border-border">
+        <div className="flex items-center gap-2 mb-1">
+          <LayoutDashboard size={20} className="text-muted-foreground" />
+          <h1 className="text-lg font-semibold text-foreground">{t("nav.dashboard")}</h1>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">{t("dashboard.subtitle")}</p>
+        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
+          {TAB_DEFS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => switchTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
+                activeTab === tab.id
+                  ? "border-primary text-foreground bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}
+            >
+              <tab.icon size={14} />
+              {t(tab.labelKey, { defaultValue: tab.id.charAt(0).toUpperCase() + tab.id.slice(1) })}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {TabContent ? <TabContent /> : <DashboardOverview />}
+      </div>
+    </div>
+  );
+}
+
+function DashboardOverview() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
