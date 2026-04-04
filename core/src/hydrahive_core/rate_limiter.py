@@ -32,7 +32,7 @@ return 1
 
 @dataclass(frozen=True)
 class RateLimitSettings:
-    login_max: int = 10
+    login_max: int = 5
     login_window_s: int = 60
     message_max: int = 50
     message_window_s: int = 60
