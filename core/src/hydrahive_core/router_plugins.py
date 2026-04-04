@@ -29,8 +29,10 @@ class AgentPluginsRequest(BaseModel):
 
 def register_plugin_routes(
     admin_router: APIRouter,
+    auth_router: APIRouter | None = None,
     *,
     require_admin,
+    require_auth=None,
     agents_dir: str,
 ) -> None:
 
@@ -132,3 +134,71 @@ def register_plugin_routes(
             "agent_id": agent_id,
             "plugins":  body.plugin_ids,
         }
+
+    # ── User Apps (Plugins mit UI-Tab) ─────────────────────────────────
+
+    if auth_router and require_auth:
+        import json as _json
+        from pathlib import Path as _P
+        from fastapi import Body as _Body
+
+        _USER_APP_CFG_DIR = _P("/etc/hydrahive/user_app_config")
+
+        def _load_user_app_config(username: str, app_id: str) -> dict:
+            path = _USER_APP_CFG_DIR / username / f"{app_id}.json"
+            try:
+                return _json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, _json.JSONDecodeError):
+                return {}
+
+        def _save_user_app_config(username: str, app_id: str, data: dict) -> None:
+            user_dir = _USER_APP_CFG_DIR / username
+            user_dir.mkdir(parents=True, exist_ok=True)
+            path = user_dir / f"{app_id}.json"
+            path.write_text(_json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            import os; os.chmod(path, 0o600)
+
+        @auth_router.get("/me/user-apps")
+        def list_user_apps(auth: tuple = Depends(require_auth)):
+            """Alle installierten Plugins mit UI-Tab."""
+            username, _ = auth
+            apps = []
+            for pid, lp in plugin_manager._plugins.items():
+                ui = lp.manifest.ui
+                if ui and ui.get("tab"):
+                    apps.append({
+                        "id": pid,
+                        "name": lp.manifest.name,
+                        "description": lp.manifest.description,
+                        "version": lp.manifest.version,
+                        "tab": ui["tab"],
+                        "config_fields": ui.get("config_fields", []),
+                        "config": _load_user_app_config(username, pid),
+                        "enabled": lp.enabled,
+                    })
+            apps.sort(key=lambda a: a["tab"].get("order", 100))
+            return {"apps": apps}
+
+        @auth_router.get("/me/user-apps/{app_id}")
+        def get_user_app(app_id: str, auth: tuple = Depends(require_auth)):
+            """Config eines User-App Plugins."""
+            username, _ = auth
+            lp = plugin_manager._plugins.get(app_id)
+            if not lp or not lp.manifest.ui.get("tab"):
+                raise HTTPException(404, f"User-App '{app_id}' nicht gefunden")
+            return {
+                "id": app_id,
+                "name": lp.manifest.name,
+                "config_fields": lp.manifest.ui.get("config_fields", []),
+                "config": _load_user_app_config(username, app_id),
+            }
+
+        @auth_router.put("/me/user-apps/{app_id}/config")
+        def save_user_app_config(app_id: str, body: dict = _Body(...), auth: tuple = Depends(require_auth)):
+            """User-spezifische App-Konfiguration speichern."""
+            username, _ = auth
+            lp = plugin_manager._plugins.get(app_id)
+            if not lp or not lp.manifest.ui.get("tab"):
+                raise HTTPException(404, f"User-App '{app_id}' nicht gefunden")
+            _save_user_app_config(username, app_id, body)
+            return {"saved": True, "app_id": app_id}

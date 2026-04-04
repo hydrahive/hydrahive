@@ -64,6 +64,7 @@ class PluginManifest:
     sandbox:      bool = False
     auto_attach:  bool = False
     default_agents: list[str] = field(default_factory=list)
+    ui:           dict = field(default_factory=dict)  # {tab: {label, icon, order}, config_fields: [...]}
 
     @classmethod
     def from_yaml(cls, path: Path) -> PluginManifest:
@@ -84,6 +85,7 @@ class PluginManifest:
             sandbox=raw.get("sandbox", False),
             auto_attach=raw.get("auto_attach", False),
             default_agents=raw.get("default_agents", []),
+            ui=raw.get("ui", {}),
         )
 
 

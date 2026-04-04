@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle } from "lucide-react";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -128,7 +128,8 @@ export function MyAgentPage() {
     { cmd: "/history",  desc: "Vergangene Sessions anzeigen" },
   ];
 
-  const [tab,        setTab]        = useState<"chat"|"settings"|"skills"|"mcp"|"platforms"|"wks"|"discord"|"whatsapp"|"telegram"|"mail"|"heartbeat"|"butler"|"account">("chat");
+  const [tab,        setTab]        = useState<string>("chat");
+  const [userApps, setUserApps] = useState<{ id: string; name: string; tab: { label: string; icon: string; order: number }; config_fields: any[]; config: Record<string, unknown>; enabled: boolean }[]>([]);
   const [messages,   setMessages]   = useState<Message[]>([]);
   const [input,      setInput]      = useState("");
   const [sending,    setSending]    = useState(false);
@@ -191,6 +192,7 @@ export function MyAgentPage() {
 
   useEffect(() => {
     loadAgent();
+    api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(() => {});
     api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(
       "/me/agent/session/history"
     ).then(d => {
@@ -413,6 +415,12 @@ export function MyAgentPage() {
           { id: "mail",       label: t("myAgent.mailTab"),       icon: Mail },
           { id: "butler",    label: "Butler",                   icon: Workflow },
           { id: "account",   label: "Mein Konto",               icon: KeyRound },
+          // Dynamische User-App Tabs
+          ...userApps.filter(a => a.enabled).map(a => ({
+            id: `app-${a.id}`,
+            label: a.tab.label,
+            icon: Puzzle, // Default Icon für User-Apps
+          })),
         ];
         const activeTab = TAB_LIST.find(t => t.id === tab);
         return (
@@ -951,6 +959,89 @@ export function MyAgentPage() {
       )}
 
       {tab === "account" && <AccountTab />}
+
+      {/* Dynamische User-App Tabs */}
+      {tab.startsWith("app-") && (
+        <UserAppTab appId={tab.replace("app-", "")} apps={userApps} />
+      )}
+    </div>
+  );
+}
+
+/* ── User App Tab (dynamisch) ────────────────────────────────── */
+
+function UserAppTab({ appId, apps }: { appId: string; apps: any[] }) {
+  const app = apps.find(a => a.id === appId);
+  const [config, setConfig] = useState<Record<string, unknown>>({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (app?.config) setConfig(app.config);
+  }, [app]);
+
+  if (!app) return <div className="p-8 text-muted-foreground text-sm">App nicht gefunden.</div>;
+
+  async function save() {
+    setSaving(true); setMsg("");
+    try {
+      await api.put(`/me/user-apps/${appId}/config`, config);
+      setMsg("Gespeichert");
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="p-5 max-w-2xl space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Puzzle className="h-5 w-5 text-primary" /> {app.name}
+        </h2>
+        {app.description && <p className="text-xs text-muted-foreground mt-1">{app.description}</p>}
+        <span className="text-xs text-muted-foreground">v{app.version}</span>
+      </div>
+
+      {app.config_fields?.length > 0 ? (
+        <div className="space-y-3">
+          {app.config_fields.map((field: any) => (
+            <div key={field.id} className="space-y-1">
+              <label className="text-sm font-medium">{field.label}</label>
+              {field.type === "password" ? (
+                <input type="password" value={String(config[field.id] ?? field.default ?? "")}
+                  onChange={e => setConfig({ ...config, [field.id]: e.target.value })}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono" />
+              ) : field.type === "number" ? (
+                <input type="number" value={String(config[field.id] ?? field.default ?? "")}
+                  onChange={e => setConfig({ ...config, [field.id]: Number(e.target.value) })}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              ) : field.type === "toggle" ? (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={!!config[field.id]}
+                    onChange={e => setConfig({ ...config, [field.id]: e.target.checked })}
+                    className="rounded" />
+                  <span className="text-xs text-muted-foreground">{field.hint || ""}</span>
+                </label>
+              ) : (
+                <input value={String(config[field.id] ?? field.default ?? "")}
+                  onChange={e => setConfig({ ...config, [field.id]: e.target.value })}
+                  placeholder={field.placeholder || ""}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              )}
+              {field.hint && field.type !== "toggle" && <p className="text-xs text-muted-foreground">{field.hint}</p>}
+            </div>
+          ))}
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={save} disabled={saving}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40">
+              <Save className="h-4 w-4" />{saving ? "Speichern..." : "Speichern"}
+            </button>
+            {msg && <span className="text-sm text-green-500">{msg}</span>}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Diese App hat keine Konfigurationsoptionen.</p>
+      )}
     </div>
   );
 }
