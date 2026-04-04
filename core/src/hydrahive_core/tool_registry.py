@@ -4341,6 +4341,160 @@ class RemoteAgentTool(BaseTool):
         }
 
 
+# ── Scratchpad Tools ─────────────────────────────────────────────────────────
+
+SCRATCHPADS_DIR = Path("/etc/hydrahive/scratchpads")
+
+
+class ReadScratchpadTool(BaseTool):
+    """Liest Scratchpad-Notizen (visuelles Whiteboard aus dem Blueprint-Tab)."""
+
+    @property
+    def id(self) -> str:   return "read_scratchpad"
+    @property
+    def name(self) -> str: return "Scratchpad lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest ein Scratchpad (visuelles Whiteboard). "
+            "Ohne name: listet alle vorhandenen Scratchpads auf. "
+            "Mit name: gibt die Nodes und deren Inhalte zurück."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["system.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type":        "string",
+                    "description": "Name des Scratchpads (ohne .json). Leer lassen um alle aufzulisten.",
+                },
+            },
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, name: str = "") -> dict:
+        if not SCRATCHPADS_DIR.exists():
+            return {"pads": [], "count": 0} if not name else {"error": "Kein Scratchpad-Verzeichnis vorhanden."}
+
+        if not name:
+            pads = sorted(p.stem for p in SCRATCHPADS_DIR.glob("*.json"))
+            return {"pads": pads, "count": len(pads)}
+
+        safe = name.replace("/", "").replace("..", "").strip()
+        if not safe:
+            return {"error": "Ungültiger Name."}
+        p = SCRATCHPADS_DIR / f"{safe}.json"
+        if not p.exists():
+            return {"error": f"Scratchpad '{safe}' nicht gefunden."}
+
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {"error": f"Scratchpad '{safe}' konnte nicht gelesen werden."}
+
+        nodes = data.get("nodes", [])
+        summary = []
+        for node in nodes:
+            d = node.get("data", {})
+            label = d.get("label", "")
+            body = d.get("body", "")
+            color = d.get("color", "")
+            if label or body:
+                summary.append({"label": label, "body": body, "color": color})
+
+        return {"name": safe, "nodes": len(nodes), "content": summary}
+
+
+class WriteScratchpadTool(BaseTool):
+    """Schreibt oder aktualisiert Nodes in einem Scratchpad."""
+
+    @property
+    def id(self) -> str:   return "write_scratchpad"
+    @property
+    def name(self) -> str: return "Scratchpad schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Fügt eine Notiz (Node) zu einem Scratchpad hinzu oder aktualisiert eine bestehende. "
+            "Das Scratchpad wird automatisch angelegt wenn es nicht existiert."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["system.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type":        "string",
+                    "description": "Name des Scratchpads (ohne .json).",
+                },
+                "label": {
+                    "type":        "string",
+                    "description": "Überschrift der Notiz.",
+                },
+                "body": {
+                    "type":        "string",
+                    "description": "Inhalt der Notiz (Markdown).",
+                },
+                "color": {
+                    "type":        "string",
+                    "description": "Farbe: zinc, blue, emerald, amber, rose, violet, cyan, orange, lime (default: zinc).",
+                },
+            },
+            "required": ["name", "label"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, name: str = "", label: str = "", body: str = "", color: str = "zinc") -> dict:
+        safe = name.replace("/", "").replace("..", "").strip()
+        if not safe:
+            return {"error": "Name fehlt."}
+        if not label:
+            return {"error": "Label fehlt."}
+
+        SCRATCHPADS_DIR.mkdir(parents=True, exist_ok=True)
+        p = SCRATCHPADS_DIR / f"{safe}.json"
+
+        data: dict = {"nodes": [], "edges": []}
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        nodes = data.get("nodes", [])
+
+        # Bestehenden Node mit gleichem Label updaten oder neuen anlegen
+        existing = next((n for n in nodes if n.get("data", {}).get("label") == label), None)
+        if existing:
+            existing["data"]["body"] = body
+            existing["data"]["color"] = color
+        else:
+            import time as _time
+            node_id = f"agent-{int(_time.time() * 1000)}"
+            y_offset = len(nodes) * 120
+            nodes.append({
+                "id": node_id,
+                "type": "scratch",
+                "position": {"x": 100, "y": 100 + y_offset},
+                "data": {"label": label, "body": body, "color": color},
+            })
+
+        data["nodes"] = nodes
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        return {"saved": True, "name": safe, "total_nodes": len(nodes)}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
@@ -4358,6 +4512,8 @@ registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
+registry.register(ReadScratchpadTool())
+registry.register(WriteScratchpadTool())
 registry.register(CreateSkillTool())
 registry.register(ListSkillsTool())
 registry.register(DeleteSkillTool())
