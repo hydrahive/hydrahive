@@ -129,7 +129,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
         # Berechtigungen
         try:
-            subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True)
+            await asyncio.to_thread(lambda: subprocess.run(
+                ["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True))
         except Exception:
             pass
 
@@ -230,10 +231,10 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         # Berechtigungen setzen (hydrahive user)
         try:
             import subprocess
-            subprocess.run(
+            await asyncio.to_thread(lambda: subprocess.run(
                 ["chown", "-R", "hydrahive:hydrahive", str(target)],
                 check=False, capture_output=True
-            )
+            ))
         except Exception:
             pass
 
@@ -530,10 +531,10 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
         # Berechtigungen setzen
         try:
-            subprocess.run(
+            await asyncio.to_thread(lambda: subprocess.run(
                 ["chown", "hydrahive:hydrahive", str(out_path)],
                 check=False, capture_output=True
-            )
+            ))
         except Exception:
             pass
 

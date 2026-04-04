@@ -63,11 +63,11 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         service_active = False
         service_uptime = ""
         try:
-            r = subprocess.run(
+            r = await asyncio.to_thread(lambda: subprocess.run(
                 ["systemctl", "show", "searxng",
                  "--property=ActiveState,ActiveEnterTimestamp"],
                 capture_output=True, text=True, timeout=5,
-            )
+            ))
             props = {
                 k: v for k, v in
                 (line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
@@ -95,10 +95,10 @@ def register_searxng_routes(admin_router: APIRouter, *, require_admin) -> None:
         # 3. Version aus git tag
         version = None
         try:
-            r2 = subprocess.run(
+            r2 = await asyncio.to_thread(lambda: subprocess.run(
                 ["git", "-C", str(SEARXNG_DIR), "log", "--oneline", "-1"],
                 capture_output=True, text=True, timeout=5,
-            )
+            ))
             version = r2.stdout.strip()[:40] or None
         except Exception:
             pass

@@ -223,6 +223,7 @@ def register_project_lifecycle_routes(
     @admin_router.post("/projects/{project_id}/fix-permissions")
     async def fix_project_permissions(project_id: str, _a: tuple = Depends(require_admin)):
         """Setzt Dateiberechtigungen für ein Projekt (nach Samba-Upload etc.)."""
+        import asyncio
         import subprocess
         cfg = projects.get(project_id)
         if not cfg:
@@ -231,10 +232,12 @@ def register_project_lifecycle_routes(
         if not proj_dir.is_dir():
             raise HTTPException(404, "Projektverzeichnis nicht gefunden")
         try:
-            subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
-                           capture_output=True, check=True, timeout=60)
-            subprocess.run(["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
-                           capture_output=True, check=True, timeout=60)
+            await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
+                capture_output=True, check=True, timeout=60))
+            await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
+                capture_output=True, check=True, timeout=60))
             return {"ok": True, "project_id": project_id}
         except Exception as e:
             raise HTTPException(500, f"Berechtigungen konnten nicht gesetzt werden: {e}")

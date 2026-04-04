@@ -119,10 +119,10 @@ def register_tailscale_routes(
         import subprocess
         local_status = {"logged_in": False, "ip": None, "hostname": None}
         try:
-            r = subprocess.run(
+            r = await asyncio.to_thread(lambda: subprocess.run(
                 ["tailscale", "status", "--json"],
                 capture_output=True, text=True, timeout=5,
-            )
+            ))
             if r.returncode == 0:
                 ts = json.loads(r.stdout)
                 self_node = ts.get("Self", {})
@@ -192,7 +192,7 @@ def register_tailscale_routes(
         import subprocess
         my_ip = None
         try:
-            r = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
+            r = await asyncio.to_thread(lambda: subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5))
             if r.returncode == 0:
                 my_ip = r.stdout.strip()
         except Exception as e:
@@ -345,7 +345,7 @@ def register_tailscale_routes(
                 raise HTTPException(500, f"tailscale up fehlgeschlagen: {result.stderr.strip()[-300:]}")
             # Status abfragen
             await asyncio.sleep(2)
-            r2 = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
+            r2 = await asyncio.to_thread(lambda: subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5))
             ip = r2.stdout.strip() if r2.returncode == 0 else None
             return {"ok": True, "ip": ip, "hostname": hostname}
         except subprocess.TimeoutExpired:

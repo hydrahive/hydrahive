@@ -48,6 +48,7 @@ _discovery: Any = None
 # ---------------------------------------------------------------------------
 # Notification-Helper — project_id → User(s) ermitteln und push aufrufen
 # ---------------------------------------------------------------------------
+import asyncio
 import asyncio as _asyncio_notif
 
 def _notify(project_id: str, type: str, title: str, body: str, link: str | None = None) -> None:
@@ -2692,10 +2693,12 @@ class FixPermissionsTool(BaseTool):
         if not proj_dir.is_dir():
             return {"error": f"Projektverzeichnis /projects/{project_id} nicht gefunden"}
         try:
-            subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
-                           capture_output=True, check=True, timeout=60)
-            subprocess.run(["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
-                           capture_output=True, check=True, timeout=60)
+            await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
+                capture_output=True, check=True, timeout=60))
+            await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
+                capture_output=True, check=True, timeout=60))
             return {"ok": True, "project_id": project_id, "message": "Berechtigungen korrigiert"}
         except Exception as e:
             return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
@@ -2742,7 +2745,7 @@ class FileSearchTool(BaseTool):
 
         cmd = ["grep", "-rn", "--include", file_pattern or "*", "-m", str(max_results * 3), pattern, str(search_dir)]
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            r = await asyncio.to_thread(lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=30))
         except subprocess.TimeoutExpired:
             return {"error": "Suche dauerte zu lange (>30s) — verwende file_pattern um einzugrenzen"}
 
@@ -2846,7 +2849,8 @@ class FilePatchTool(BaseTool):
             with tempfile.NamedTemporaryFile(mode="w", suffix=".tmp", delete=False, encoding="utf-8") as tmp:
                 tmp.write(new_content)
                 tmp_path = tmp.name
-            r = subprocess.run(["sudo", "cp", tmp_path, str(file_path)], capture_output=True, timeout=10)
+            r = await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "cp", tmp_path, str(file_path)], capture_output=True, timeout=10))
             Path(tmp_path).unlink(missing_ok=True)
             if r.returncode != 0:
                 return {"error": f"Schreibfehler (auch mit sudo): {r.stderr.decode()[:200]}"}

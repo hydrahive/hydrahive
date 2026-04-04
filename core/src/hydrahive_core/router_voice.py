@@ -86,11 +86,10 @@ async def _wyoming_stt(audio_bytes: bytes, host: str, port: int) -> str:
         asyncio.open_connection(host, port), timeout=10
     )
     try:
-        with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
-            rate = wf.getframerate()
-            width = wf.getsampwidth()
-            channels = wf.getnchannels()
-            frames = wf.readframes(wf.getnframes())
+        def _read_wav():
+            with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
+                return wf.getframerate(), wf.getsampwidth(), wf.getnchannels(), wf.readframes(wf.getnframes())
+        rate, width, channels, frames = await asyncio.to_thread(_read_wav)
 
         await _wyoming_send_event(writer, "transcribe", {"language": "de"})
         await _wyoming_send_event(writer, "audio-start", {
@@ -145,13 +144,15 @@ async def _wyoming_tts(text: str, host: str, port: int) -> bytes:
                 raise RuntimeError(data.get("text", "TTS error"))
 
         pcm = b"".join(audio_chunks)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wf:
-            wf.setnchannels(channels)
-            wf.setsampwidth(width)
-            wf.setframerate(rate)
-            wf.writeframes(pcm)
-        return buf.getvalue()
+        def _write_wav():
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as wf:
+                wf.setnchannels(channels)
+                wf.setsampwidth(width)
+                wf.setframerate(rate)
+                wf.writeframes(pcm)
+            return buf.getvalue()
+        return await asyncio.to_thread(_write_wav)
     finally:
         writer.close()
         await writer.wait_closed()

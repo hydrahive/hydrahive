@@ -36,11 +36,11 @@ def register_codeserver_routes(admin_router: APIRouter, *, require_admin) -> Non
         # systemd-Status
         service_active = False
         try:
-            r = subprocess.run(
+            r = await asyncio.to_thread(lambda: subprocess.run(
                 ["systemctl", "show", "hydrahive-codeserver",
                  "--property=ActiveState"],
                 capture_output=True, text=True, timeout=5,
-            )
+            ))
             props = {
                 k: v for k, v in
                 (line.split("=", 1) for line in r.stdout.splitlines() if "=" in line)
@@ -53,10 +53,10 @@ def register_codeserver_routes(admin_router: APIRouter, *, require_admin) -> Non
         CS_BIN = Path("/opt/codeserver/bin/code-server")
         version = ""
         try:
-            r2 = subprocess.run(
+            r2 = await asyncio.to_thread(lambda: subprocess.run(
                 [str(CS_BIN), "--version"],
                 capture_output=True, text=True, timeout=5,
-            )
+            ))
             version = r2.stdout.strip().splitlines()[0] if r2.returncode == 0 else ""
         except Exception:
             pass

@@ -406,38 +406,39 @@ async def _fix_repair_agentlink() -> dict:
     output_lines = []
     try:
         # 1. PostgreSQL Passwort Reset
-        r = subprocess.run(
+        r = await asyncio.to_thread(lambda: subprocess.run(
             ["sudo", "-u", "postgres", "psql", "-c", "ALTER USER agentlink PASSWORD 'changeme';"],
             capture_output=True, text=True, timeout=10,
-        )
+        ))
         if r.returncode == 0:
             output_lines.append("PostgreSQL: Passwort zurückgesetzt")
         else:
             output_lines.append(f"PostgreSQL: {r.stderr.strip() or 'Fehler'}")
 
         # 2. Git safe.directory
-        subprocess.run(
+        await asyncio.to_thread(lambda: subprocess.run(
             ["sudo", "git", "config", "--global", "--add", "safe.directory", "/agentlink"],
             capture_output=True, timeout=5,
-        )
+        ))
 
         # 3. Service Restart
-        r = subprocess.run(
+        r = await asyncio.to_thread(lambda: subprocess.run(
             ["sudo", "systemctl", "restart", "agentlink"],
             capture_output=True, text=True, timeout=15,
-        )
+        ))
         if r.returncode == 0:
             output_lines.append("AgentLink Service neu gestartet")
         else:
             output_lines.append(f"Service-Restart fehlgeschlagen: {r.stderr.strip()}")
 
         # 4. Health-Check nach kurzer Wartezeit
-        import time
-        time.sleep(3)
+        await asyncio.sleep(3)
         import urllib.request
         url = _agentlink_url()
-        with urllib.request.urlopen(f"{url}/health", timeout=5) as resp:
-            data = json.loads(resp.read())
+        def _health_check():
+            with urllib.request.urlopen(f"{url}/health", timeout=5) as resp:
+                return json.loads(resp.read())
+        data = await asyncio.to_thread(_health_check)
         output_lines.append(f"Health OK: status={data.get('status')} redis={data.get('redis')}")
         return {"ok": True, "output": "\n".join(output_lines)}
     except Exception as e:
@@ -612,19 +613,23 @@ async def _fix_samba_permissions() -> dict:
     try:
         shares_file = Path("/etc/samba/hydrahive-shares.conf")
         if shares_file.exists():
-            content = subprocess.run(["sudo", "cat", str(shares_file)],
-                                     capture_output=True, text=True, timeout=5).stdout
+            r_cat = await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "cat", str(shares_file)],
+                capture_output=True, text=True, timeout=5))
+            content = r_cat.stdout
             if "force group" not in content:
                 content = content.replace("create mask", "force group = hydrahive\n   create mask")
                 tmp = Path("/tmp/hydrahive-samba-fix.conf")
                 tmp.write_text(content, encoding="utf-8")
-                subprocess.run(["sudo", "cp", str(tmp), str(shares_file)],
-                               capture_output=True, check=True, timeout=5)
+                await asyncio.to_thread(lambda: subprocess.run(
+                    ["sudo", "cp", str(tmp), str(shares_file)],
+                    capture_output=True, check=True, timeout=5))
                 tmp.unlink(missing_ok=True)
                 output.append("force group = hydrahive in Samba-Config eingefügt")
 
-                subprocess.run(["sudo", "smbcontrol", "smbd", "reload-config"],
-                               capture_output=True, timeout=10)
+                await asyncio.to_thread(lambda: subprocess.run(
+                    ["sudo", "smbcontrol", "smbd", "reload-config"],
+                    capture_output=True, timeout=10))
                 output.append("Samba-Config reloaded")
             else:
                 output.append("force group bereits gesetzt")
@@ -632,10 +637,12 @@ async def _fix_samba_permissions() -> dict:
         # Dateiberechtigungen fixen — sowohl files/ als auch Projektroot
         for proj in Path("/projects").iterdir():
             if proj.is_dir():
-                subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(proj)],
-                               capture_output=True, timeout=60)
-                subprocess.run(["sudo", "chmod", "-R", "g+rw", str(proj)],
-                               capture_output=True, timeout=60)
+                await asyncio.to_thread(lambda p=proj: subprocess.run(
+                    ["sudo", "chgrp", "-R", "hydrahive", str(p)],
+                    capture_output=True, timeout=60))
+                await asyncio.to_thread(lambda p=proj: subprocess.run(
+                    ["sudo", "chmod", "-R", "g+rw", str(p)],
+                    capture_output=True, timeout=60))
         output.append("Dateiberechtigungen für alle Projekte korrigiert")
 
         return {"ok": True, "output": "\n".join(output)}
