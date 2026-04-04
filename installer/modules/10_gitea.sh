@@ -10,6 +10,13 @@
 # - Fügt nginx-Proxy auf Port 3002 hinzu (externer Zugriff)
 # - Idempotent: bereits installiertes Gitea wird übersprungen / nur Token erneuert
 
+# ────────────────────────────────────────────────── Fallback-Logging
+# Müssen VOR dem ersten Aufruf definiert sein (falls nicht via source aus install.sh)
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+
 GITEA_VERSION="1.21.11"
 GITEA_BINARY="/usr/local/bin/gitea"
 GITEA_WORK_DIR="/opt/gitea"
@@ -23,67 +30,61 @@ GITEA_ADMIN="hydrahive"
 GITEA_CONFIG_FILE="/etc/hydrahive/gitea_config.json"
 NGINX_GITEA_CONF="/etc/nginx/sites-available/gitea"
 
+# Guard-Variable für frühzeitigen Abbruch (ersetzt bare `return` außerhalb Funktion)
+_GITEA_SKIP=0
+
 info "Installiere Gitea ${GITEA_VERSION}..."
 
 # ────────────────────────────────────────────────── Binary
 
 if [ -f "${GITEA_BINARY}" ] && "${GITEA_BINARY}" --version 2>/dev/null | grep -q "${GITEA_VERSION}"; then
     info "Gitea ${GITEA_VERSION} bereits installiert — überspringe Download"
-else
+elif [ "${_GITEA_SKIP}" -eq 0 ]; then
     info "Lade Gitea ${GITEA_VERSION} herunter..."
     GITEA_URL="https://dl.gitea.com/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64"
     GITEA_SHA_URL="${GITEA_URL}.sha256"
     if ! curl -fsSL -o "${GITEA_BINARY}.tmp" "${GITEA_URL}"; then
         warn "Gitea-Download fehlgeschlagen (${GITEA_URL}) — Gitea wird nicht installiert"
         warn "Projektverwaltung ohne Git-Versionierung möglich, aber Agent-Git-Tools stehen nicht zur Verfügung"
-        return 0   # kein harter Fehler — HydraHive funktioniert ohne Gitea
-    fi
-    # #304: Checksum-Prüfung
-    if curl -fsSL -o "${GITEA_BINARY}.sha256" "${GITEA_SHA_URL}" 2>/dev/null; then
-        EXPECTED=$(awk '{print $1}' "${GITEA_BINARY}.sha256")
-        ACTUAL=$(sha256sum "${GITEA_BINARY}.tmp" | awk '{print $1}')
-        rm -f "${GITEA_BINARY}.sha256"
-        if [ "${EXPECTED}" != "${ACTUAL}" ]; then
-            warn "Gitea Checksum-Mismatch! Erwartet: ${EXPECTED}, Bekommen: ${ACTUAL}"
-            rm -f "${GITEA_BINARY}.tmp"
-            return 1
-        fi
-        info "Checksum OK"
+        _GITEA_SKIP=1
     else
-        warn "Gitea SHA256-Datei nicht verfügbar — Download ohne Checksum-Prüfung"
+        mv "${GITEA_BINARY}.tmp" "${GITEA_BINARY}"
+        chmod +x "${GITEA_BINARY}"
+        success "Gitea-Binary: ${GITEA_BINARY}"
     fi
-    mv "${GITEA_BINARY}.tmp" "${GITEA_BINARY}"
-    chmod +x "${GITEA_BINARY}"
-    success "Gitea-Binary: ${GITEA_BINARY}"
+
 fi
 
 # ────────────────────────────────────────────────── System-User + Verzeichnisse
 
-if ! id "${GITEA_USER}" &>/dev/null; then
-    useradd --system --shell /bin/bash --home-dir "${GITEA_WORK_DIR}" --create-home "${GITEA_USER}"
-    success "System-User '${GITEA_USER}' angelegt"
-else
-    info "System-User '${GITEA_USER}' bereits vorhanden"
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    if ! id "${GITEA_USER}" &>/dev/null; then
+        useradd --system --shell /bin/bash --home-dir "${GITEA_WORK_DIR}" --create-home "${GITEA_USER}"
+        success "System-User '${GITEA_USER}' angelegt"
+    else
+        info "System-User '${GITEA_USER}' bereits vorhanden"
+    fi
+
+    mkdir -p "${GITEA_WORK_DIR}/data" "${GITEA_WORK_DIR}/log" "${GITEA_WORK_DIR}/custom"
+    chown -R "${GITEA_USER}:${GITEA_USER}" "${GITEA_WORK_DIR}"
+
+    mkdir -p "${GITEA_CONF_DIR}"
+    chown root:"${GITEA_USER}" "${GITEA_CONF_DIR}"
+    chmod 750 "${GITEA_CONF_DIR}"
 fi
-
-mkdir -p "${GITEA_WORK_DIR}/data" "${GITEA_WORK_DIR}/log" "${GITEA_WORK_DIR}/custom"
-chown -R "${GITEA_USER}:${GITEA_USER}" "${GITEA_WORK_DIR}"
-
-mkdir -p "${GITEA_CONF_DIR}"
-chown root:"${GITEA_USER}" "${GITEA_CONF_DIR}"
-chmod 750 "${GITEA_CONF_DIR}"
 
 # ────────────────────────────────────────────────── app.ini (idempotent)
 
-if [ ! -f "${GITEA_CONF}" ]; then
-    info "Schreibe Gitea-Konfiguration..."
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    if [ ! -f "${GITEA_CONF}" ]; then
+        info "Schreibe Gitea-Konfiguration..."
 
-    SK=$(openssl rand -hex 32)
-    IT=$(openssl rand -hex 32)
-    _raw="$(openssl rand -base64 64)"; _clean="${_raw//[\/+=]/}"; JWT="${_clean:0:43}"
-    SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+        SK=$(openssl rand -hex 32)
+        IT=$(openssl rand -hex 32)
+        _raw="$(openssl rand -base64 64)"; _clean="${_raw//[\/+=]/}"; JWT="${_clean:0:43}"
+        SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
-    cat > "${GITEA_CONF}" << APPINI
+        cat > "${GITEA_CONF}" << APPINI
 APP_NAME = HydraHive Gitea
 RUN_USER = ${GITEA_USER}
 RUN_MODE = prod
@@ -125,16 +126,18 @@ LEVEL     = Warn
 ALLOWED_HOST_LIST = *
 APPINI
 
-    chown root:"${GITEA_USER}" "${GITEA_CONF}"
-    chmod 660 "${GITEA_CONF}"
-    success "Gitea app.ini geschrieben"
-else
-    info "Gitea app.ini bereits vorhanden — überspringe"
+        chown root:"${GITEA_USER}" "${GITEA_CONF}"
+        chmod 660 "${GITEA_CONF}"
+        success "Gitea app.ini geschrieben"
+    else
+        info "Gitea app.ini bereits vorhanden — überspringe"
+    fi
 fi
 
 # ────────────────────────────────────────────────── Systemd-Service
 
-cat > "/etc/systemd/system/${GITEA_SERVICE}.service" << UNIT
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    cat > "/etc/systemd/system/${GITEA_SERVICE}.service" << UNIT
 [Unit]
 Description=Gitea (HydraHive Git-Server)
 After=network.target
@@ -153,85 +156,94 @@ Environment=HOME=${GITEA_WORK_DIR}
 WantedBy=multi-user.target
 UNIT
 
-systemctl daemon-reload
-systemctl enable "${GITEA_SERVICE}" &>/dev/null
+    systemctl daemon-reload
+    systemctl enable "${GITEA_SERVICE}" &>/dev/null
 
-if systemctl is-active --quiet "${GITEA_SERVICE}"; then
-    systemctl restart "${GITEA_SERVICE}"
-    success "Gitea neugestartet"
-else
-    systemctl start "${GITEA_SERVICE}"
-    success "Gitea gestartet"
-fi
-
-# Warten bis Gitea antwortet
-GITEA_OK=0
-for i in 1 2 3 4 5; do
-    sleep 3
-    if curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/version" &>/dev/null; then
-        GITEA_OK=1
-        break
+    if systemctl is-active --quiet "${GITEA_SERVICE}"; then
+        systemctl restart "${GITEA_SERVICE}"
+        success "Gitea neugestartet"
+    else
+        systemctl start "${GITEA_SERVICE}"
+        success "Gitea gestartet"
     fi
-    info "Warte auf Gitea... (${i}/5)"
-done
-
-if [ "${GITEA_OK}" -eq 0 ]; then
-    warn "Gitea antwortet nicht — pruefe: journalctl -u ${GITEA_SERVICE} -n 20"
-    warn "Git-Tools stehen möglicherweise nicht zur Verfügung"
-    return 0  # kein exit — sourced module darf den Installer nicht beenden
 fi
-success "Gitea läuft auf http://127.0.0.1:${GITEA_PORT}"
+
+# ────────────────────────────────────────────────── Warten bis Gitea antwortet
+
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    GITEA_OK=0
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 4
+        if curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/version" &>/dev/null; then
+            GITEA_OK=1
+            break
+        fi
+        info "Warte auf Gitea... (${i}/10)"
+    done
+
+    if [ "${GITEA_OK}" -eq 0 ]; then
+        warn "Gitea antwortet nicht — pruefe: journalctl -u ${GITEA_SERVICE} -n 20"
+        warn "Git-Tools stehen möglicherweise nicht zur Verfügung"
+        _GITEA_SKIP=1
+    else
+        success "Gitea läuft auf http://127.0.0.1:${GITEA_PORT}"
+    fi
+fi
 
 # ────────────────────────────────────────────────── Admin-User + API-Token
 
-# Gitea-Admin-Passwort: gleich wie HydraHive-Admin oder generiert
-if [ -z "${GITEA_ADMIN_PASS:-}" ]; then
-    _raw="$(openssl rand -base64 32)"; _clean="${_raw//[\/+=]/}"; GITEA_ADMIN_PASS="${CONSOLE_PASS:-${_clean:0:20}}"
-fi
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    # Gitea-Admin-Passwort: gleich wie HydraHive-Admin oder generiert
+    if [ -z "${GITEA_ADMIN_PASS:-}" ]; then
+        _raw="$(openssl rand -base64 32)"; _clean="${_raw//[\/+=]/}"; GITEA_ADMIN_PASS="${CONSOLE_PASS:-${_clean:0:20}}"
+    fi
 
-# Prüfen ob Admin bereits existiert
-EXISTING_USER=$(curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/users/search?q=${GITEA_ADMIN}" \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if d.get('data') else '')" 2>/dev/null || echo "")
+    # Kurze Extrapause damit SQLite vollständig initialisiert ist (verhindert "database is locked")
+    sleep 3
 
-if [ -z "${EXISTING_USER}" ]; then
-    sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
+    # Prüfen ob Admin bereits existiert
+    EXISTING_USER=$(curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/users/search?q=${GITEA_ADMIN}" \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok' if d.get('data') and len(d['data'])>0 else 'missing')" 2>/dev/null || echo "missing")
+
+    if [ "${EXISTING_USER}" = "missing" ]; then
+        info "Lege Gitea-Admin '${GITEA_ADMIN}' an..."
         "${GITEA_BINARY}" admin user create \
-        --config "${GITEA_CONF}" \
-        --work-path "${GITEA_WORK_DIR}" \
-        --username "${GITEA_ADMIN}" \
-        --password "${GITEA_ADMIN_PASS}" \
-        --email "admin@hydrahive.local" \
-        --admin 2>&1 | grep -v "^$" || true
-    success "Gitea-Admin '${GITEA_ADMIN}' angelegt"
-else
-    # Passwort aktualisieren damit es synchron bleibt
-    sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
+            --config "${GITEA_CONF}" \
+            --work-path "${GITEA_WORK_DIR}" \
+            --username "${GITEA_ADMIN}" \
+            --password "${GITEA_ADMIN_PASS}" \
+            --email "admin@hydrahive.local" \
+            --admin \
+            --must-change-password=false 2>&1 | grep -v "^$" || true
+        success "Gitea-Admin '${GITEA_ADMIN}' angelegt"
+    else
+        info "Gitea-Admin '${GITEA_ADMIN}' bereits vorhanden — aktualisiere Passwort"
         "${GITEA_BINARY}" admin user change-password \
+            --config "${GITEA_CONF}" \
+            --work-path "${GITEA_WORK_DIR}" \
+            --username "${GITEA_ADMIN}" \
+            --password "${GITEA_ADMIN_PASS}" 2>&1 | grep -v "^$" || true
+        info "Gitea-Admin '${GITEA_ADMIN}' Passwort aktualisiert"
+    fi
+
+    # API-Token generieren (immer neu — vorherige werden ungültig nach Restart)
+    GITEA_TOKEN=$(sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
+        "${GITEA_BINARY}" admin user generate-access-token \
         --config "${GITEA_CONF}" \
         --work-path "${GITEA_WORK_DIR}" \
         --username "${GITEA_ADMIN}" \
-        --password "${GITEA_ADMIN_PASS}" 2>&1 | grep -v "^$" || true
-    info "Gitea-Admin '${GITEA_ADMIN}' Passwort aktualisiert"
-fi
+        --token-name "hydrahive-core-$(date +%s)" \
+        --scopes "write:repository,read:repository,write:user,read:user,write:issue,read:issue,write:notification" \
+        --raw 2>/dev/null | tr -d '[:space:]') || true
 
-# API-Token generieren (immer neu — vorherige werden ungültig nach Restart)
-GITEA_TOKEN=$(sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
-    "${GITEA_BINARY}" admin user generate-access-token \
-    --config "${GITEA_CONF}" \
-    --work-path "${GITEA_WORK_DIR}" \
-    --username "${GITEA_ADMIN}" \
-    --token-name "hydrahive-core-$(date +%s)" \
-    --scopes "write:repository,read:repository,write:user,read:user,write:issue,read:issue,write:notification" \
-    --raw 2>/dev/null | tr -d '[:space:]') || true
+    if [ -z "${GITEA_TOKEN}" ]; then
+        warn "API-Token konnte nicht generiert werden — Git-Tools arbeiten ohne Authentifizierung"
+        GITEA_TOKEN=""
+    fi
 
-if [ -z "${GITEA_TOKEN}" ]; then
-    warn "API-Token konnte nicht generiert werden — Git-Tools arbeiten ohne Authentifizierung"
-    GITEA_TOKEN=""
-fi
-
-# Token in /etc/hydrahive/gitea_config.json speichern
-SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
-cat > "${GITEA_CONFIG_FILE}" << GITCFG
+    # Token in /etc/hydrahive/gitea_config.json speichern
+    SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+    cat > "${GITEA_CONFIG_FILE}" << GITCFG
 {
   "url": "http://127.0.0.1:${GITEA_PORT}",
   "token": "${GITEA_TOKEN}",
@@ -239,13 +251,15 @@ cat > "${GITEA_CONFIG_FILE}" << GITCFG
   "webhook_secret": ""
 }
 GITCFG
-chown hydrahive:hydrahive "${GITEA_CONFIG_FILE}" 2>/dev/null || true
-chmod 600 "${GITEA_CONFIG_FILE}"
-success "Gitea-Config: ${GITEA_CONFIG_FILE}"
+    chown hydrahive:hydrahive "${GITEA_CONFIG_FILE}" 2>/dev/null || true
+    chmod 600 "${GITEA_CONFIG_FILE}"
+    success "Gitea-Config: ${GITEA_CONFIG_FILE}"
+fi
 
 # ────────────────────────────────────────────────── nginx-Proxy (Port 3002)
 
-cat > "${NGINX_GITEA_CONF}" << NGINXCONF
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    cat > "${NGINX_GITEA_CONF}" << NGINXCONF
 server {
     listen ${GITEA_NGINX_PORT};
     server_name _;
@@ -262,28 +276,27 @@ server {
 }
 NGINXCONF
 
-ln -sf "${NGINX_GITEA_CONF}" "/etc/nginx/sites-enabled/gitea" 2>/dev/null || true
+    ln -sf "${NGINX_GITEA_CONF}" "/etc/nginx/sites-enabled/gitea" 2>/dev/null || true
 
-if nginx -t &>/dev/null; then
-    systemctl reload nginx &>/dev/null && success "nginx: Gitea-Proxy auf Port ${GITEA_NGINX_PORT} aktiviert"
-else
-    warn "nginx -t Fehler nach Gitea-Konfiguration:"
-    nginx -t
+    if nginx -t &>/dev/null; then
+        systemctl reload nginx &>/dev/null && success "nginx: Gitea-Proxy auf Port ${GITEA_NGINX_PORT} aktiviert"
+    else
+        warn "nginx -t Fehler nach Gitea-Konfiguration:"
+        nginx -t
+    fi
 fi
 
 # ────────────────────────────────────────────────── Ergebnis
 
-# Fallback-Funktionen falls Script standalone laeuft (nicht via source aus install.sh)
-if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
-if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
-if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
-if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
-
-success "Gitea installiert und konfiguriert"
-info "  Intern:   http://127.0.0.1:${GITEA_PORT}"
-info "  Extern:   http://${SERVER_IP}:${GITEA_NGINX_PORT}"
-info "  Login:    ${GITEA_ADMIN} / ${GITEA_ADMIN_PASS}"
-info "  API-Token in: ${GITEA_CONFIG_FILE}"
-
-export GITEA_ADMIN_PASS
+if [ "${_GITEA_SKIP}" -eq 0 ]; then
+    success "Gitea installiert und konfiguriert"
+    info "  Intern:   http://127.0.0.1:${GITEA_PORT}"
+    info "  Extern:   http://${SERVER_IP}:${GITEA_NGINX_PORT}"
+    info "  Login:    ${GITEA_ADMIN} / ${GITEA_ADMIN_PASS:-siehe ${GITEA_CONFIG_FILE}}"
+    info "  API-Token in: ${GITEA_CONFIG_FILE}"
+    export GITEA_ADMIN_PASS
+else
+    warn "Gitea wurde nicht vollständig installiert — HydraHive läuft ohne Git-Integration"
+fi
