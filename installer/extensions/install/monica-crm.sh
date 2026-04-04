@@ -145,6 +145,13 @@ chown "${MONICA_USER}:${MONICA_USER}" "${MONICA_DIR}/.env"
 chmod 600 "${MONICA_DIR}/.env"
 success ".env konfiguriert"
 
+# --- HTTPS-Redirect deaktivieren (läuft hinter nginx reverse proxy) ---
+ROUTE_PROVIDER="${MONICA_DIR}/app/Providers/RouteServiceProvider.php"
+if [ -f "${ROUTE_PROVIDER}" ]; then
+    sed -i "s|URL::forceScheme('https');|// URL::forceScheme('https'); // disabled for reverse-proxy|" "${ROUTE_PROVIDER}"
+    success "HTTPS-Redirect deaktiviert (reverse-proxy)"
+fi
+
 # --- Datenbank-Migration ---
 info "Führe Datenbank-Migration aus..."
 cd "${MONICA_DIR}"
