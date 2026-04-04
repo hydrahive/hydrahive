@@ -65,7 +65,7 @@ class AgentDiscovery:
     def _scan_all(self) -> None:
         found = 0
         for entry in self._dir.iterdir():
-            if entry.is_dir():
+            if entry.is_dir() and not entry.name.startswith("_"):
                 self._register(entry)
                 found += 1
         logger.info("Initialer Scan: %d Agenten-Verzeichnisse gefunden", found)
@@ -128,9 +128,11 @@ class _DiscoveryEventHandler(FileSystemEventHandler):
     def on_created(self, event: FileSystemEvent) -> None:
         path = Path(event.src_path)
         if event.is_directory:
+            if path.name.startswith("_"):
+                return
             logger.debug("Neues Verzeichnis: %s", path)
             self._d._register(path)
-        elif path.name == "agent.yaml":
+        elif path.name == "agent.yaml" and not path.parent.name.startswith("_"):
             self._d._register(path.parent)
 
     def on_deleted(self, event: FileSystemEvent) -> None:
