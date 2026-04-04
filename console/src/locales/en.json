@@ -64,6 +64,12 @@
     "noBreakdown": "No model breakdown available (older session data without token counts)."
   },
   "hub": {
+    "tabAgents": "Agents",
+    "tabHubPlugins": "Hub Plugins",
+    "tabClawhub": "ClawhHub",
+    "tabExtensions": "Extensions",
+    "tabPlugins": "Plugins",
+    "tabSkillPackages": "Skill Packages",
     "packagesAvailable": "{{count}} packages available",
     "subtitle": "Curated agents, extensions and tools",
     "searchPlaceholder": "Search by name, description or tag...",
@@ -301,6 +307,10 @@
     "restartingWait": "Please wait, reconnecting automatically."
   },
   "dashboard": {
+    "tabOverview": "Overview",
+    "tabActivity": "Activity",
+    "tabUsage": "Usage",
+    "tabAudit": "Audit",
     "title": "Operations dashboard for the running HydraHive stack",
     "subtitle": "This area now shows not just base numbers but the most important operational signals: core state, update status, GPU/runtime, heartbeats and recent audit activity.",
     "coreReachable": "Core reachable",
@@ -389,6 +399,10 @@
     "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signals"
   },
   "agents": {
+    "tabAgents": "Agents",
+    "tabTools": "Tools",
+    "tabFederation": "Federation",
+    "tabBlueprint": "Blueprint",
     "title": "Agent management with runtime, skill and log focus",
     "subtitle": "This area organizes agent profiles, heartbeats, direct chats, skills and logs into a clearer operational view. The functions remain the same, but the interface now separates analysis, configuration and runtime more clearly.",
     "loaded": "{{count}} agent loaded",
@@ -454,6 +468,8 @@
     "soulHint": "Markdown describes character and communication style of the agent"
   },
   "projects": {
+    "tabProjects": "Projects",
+    "tabSchedules": "Schedules",
     "title": "Projects as manageable workspaces",
     "subtitle": "Projects connect boss agents, workers, filesystem, Matrix, integrations and the operational chat. This page now emphasizes the actual workspace per project rather than just its configuration.",
     "activeCount": "{{count}} project active",
@@ -665,6 +681,7 @@
   },
   "settings": {
     "title": "System settings",
+    "tabOverview": "Overview",
     "tabLlm": "LLM",
     "tabMcp": "MCP",
     "tabGitea": "Gitea",
@@ -676,6 +693,14 @@
     "tabBackup": "Backup",
     "tabMigration": "Migration",
     "tabPlugins": "Plugins"
+  },
+  "usermanagement": {
+    "title": "User Management",
+    "subtitle": "Create users, manage groups and assign permissions.",
+    "tabUsers": "Users",
+    "tabGroups": "Groups",
+    "tabSecrets": "Secrets",
+    "tabPermissions": "Permissions"
   },
   "login": {
     "subtitle": "Sign in to continue",

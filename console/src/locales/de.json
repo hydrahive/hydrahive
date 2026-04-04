@@ -64,6 +64,12 @@
     "noBreakdown": "Keine Modell-Aufschlüsselung verfügbar (alte Session-Daten ohne Token-Counts)."
   },
   "hub": {
+    "tabAgents": "Agenten",
+    "tabHubPlugins": "Hub-Plugins",
+    "tabClawhub": "ClawhHub",
+    "tabExtensions": "Extensions",
+    "tabPlugins": "Plugins",
+    "tabSkillPackages": "Skill-Pakete",
     "packagesAvailable": "{{count}} Pakete verfügbar",
     "subtitle": "Kuratierte Agenten, Erweiterungen und Tools",
     "searchPlaceholder": "Suche nach Name, Beschreibung oder Tag...",
@@ -301,6 +307,10 @@
     "restartingWait": "Bitte warten, Verbindung wird automatisch wiederhergestellt."
   },
   "dashboard": {
+    "tabOverview": "Übersicht",
+    "tabActivity": "Aktivität",
+    "tabUsage": "Usage",
+    "tabAudit": "Audit",
     "title": "Operations-Dashboard fuer den laufenden HydraHive-Stack",
     "subtitle": "Diese Flaeche zeigt jetzt nicht nur Basiszahlen, sondern die fuer den Betrieb wichtigsten Signale: Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivitaet.",
     "coreReachable": "Core erreichbar",
@@ -389,6 +399,10 @@
     "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signale"
   },
   "agents": {
+    "tabAgents": "Agenten",
+    "tabTools": "Tools",
+    "tabFederation": "Federation",
+    "tabBlueprint": "Blueprint",
     "title": "Agentenverwaltung mit Runtime-, Skill- und Log-Fokus",
     "subtitle": "Diese Flaeche ordnet Agentprofile, Heartbeats, direkte Chats, Skills und Logs in eine klarere Betriebsansicht. Die Funktionen bleiben gleich, aber die Oberflaeche trennt Analyse, Konfiguration und Laufzeit jetzt sauberer.",
     "loaded": "{{count}} Agent geladen",
@@ -454,6 +468,8 @@
     "soulHint": "Markdown beschreibt Charakter und Kommunikationsstil des Agenten"
   },
   "projects": {
+    "tabProjects": "Projekte",
+    "tabSchedules": "Schedules",
     "title": "Projekte als steuerbare Arbeitsraeume",
     "subtitle": "Projekte verbinden Boss-Agenten, Worker, Filesystem, Matrix, Integrationen und den operativen Chat. Diese Seite zeigt jetzt staerker den echten Arbeitsraum pro Projekt statt nur seine Konfiguration.",
     "activeCount": "{{count}} Projekt aktiv",
@@ -665,6 +681,7 @@
   },
   "settings": {
     "title": "Systemeinstellungen",
+    "tabOverview": "Übersicht",
     "tabLlm": "LLM",
     "tabMcp": "MCP",
     "tabGitea": "Gitea",
@@ -676,6 +693,14 @@
     "tabBackup": "Backup",
     "tabMigration": "Migration",
     "tabPlugins": "Plugins"
+  },
+  "usermanagement": {
+    "title": "Usermanagement",
+    "subtitle": "Benutzer anlegen, Gruppen verwalten und Berechtigungen zuweisen.",
+    "tabUsers": "Benutzer",
+    "tabGroups": "Gruppen",
+    "tabSecrets": "Secrets",
+    "tabPermissions": "Berechtigungen"
   },
   "login": {
     "subtitle": "Melde dich an um fortzufahren",

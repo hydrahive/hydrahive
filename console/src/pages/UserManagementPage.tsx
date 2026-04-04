@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ElementType } from "react";
 import { Users, Shield, KeyRound, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserPage } from "@/pages/UserPage";
@@ -7,28 +8,27 @@ import { SecretsPage } from "@/pages/SecretsPage";
 import { PermissionsTab } from "@/pages/blueprint/PermissionsTab";
 import { useTranslation } from "react-i18next";
 
-const TABS = [
-  { id: "users",       label: "Benutzer",       labelEn: "Users",       icon: Users },
-  { id: "groups",      label: "Gruppen",        labelEn: "Groups",      icon: Shield },
-  { id: "secrets",     label: "Secrets",        labelEn: "Secrets",     icon: KeyRound },
-  { id: "permissions", label: "Berechtigungen", labelEn: "Permissions", icon: Lock },
-] as const;
+const TABS: { id: "users" | "groups" | "secrets" | "permissions"; labelKey: string; icon: ElementType }[] = [
+  { id: "users",       labelKey: "usermanagement.tabUsers",       icon: Users },
+  { id: "groups",      labelKey: "usermanagement.tabGroups",      icon: Shield },
+  { id: "secrets",     labelKey: "usermanagement.tabSecrets",     icon: KeyRound },
+  { id: "permissions", labelKey: "usermanagement.tabPermissions", icon: Lock },
+];
 
 type TabId = typeof TABS[number]["id"];
 
 export function UserManagementPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [active, setActive] = useState<TabId>("users");
-  const isDE = i18n.language?.startsWith("de");
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 pt-6 pb-0 border-b border-border">
         <div className="flex items-center gap-2 mb-1">
           <Users size={20} className="text-muted-foreground" />
-          <h1 className="text-lg font-semibold text-foreground">Usermanagement</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("usermanagement.title")}</h1>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">{isDE ? "Benutzer anlegen, Gruppen verwalten und Berechtigungen zuweisen." : "Create users, manage groups and assign permissions."}</p>
+        <p className="text-xs text-muted-foreground mb-4">{t("usermanagement.subtitle")}</p>
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TABS.map(tab => (
             <button
@@ -42,7 +42,7 @@ export function UserManagementPage() {
               )}
             >
               <tab.icon size={14} />
-              {isDE ? tab.label : tab.labelEn}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>

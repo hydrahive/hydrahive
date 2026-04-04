@@ -841,27 +841,27 @@ export function HubPage() {
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           <button onClick={() => setActiveTab("hydrahub")} className={tabCls("hydrahub")}>
             <Package size={14} />
-            Agenten
+            {t("hub.tabAgents")}
           </button>
           <button onClick={() => setActiveTab("hub-plugins")} className={tabCls("hub-plugins")}>
             <Puzzle size={14} />
-            Hub-Plugins
+            {t("hub.tabHubPlugins")}
           </button>
           <button onClick={() => setActiveTab("clawhub")} className={tabCls("clawhub")}>
             <Zap size={14} />
-            ClawhHub
+            {t("hub.tabClawhub")}
           </button>
           <button onClick={() => setActiveTab("extensions")} className={tabCls("extensions")}>
             <Code2 size={14} />
-            Extensions
+            {t("hub.tabExtensions")}
           </button>
           <button onClick={() => setActiveTab("plugins")} className={tabCls("plugins")}>
             <Blocks size={14} />
-            Plugins
+            {t("hub.tabPlugins")}
           </button>
           <button onClick={() => setActiveTab("skill-packages")} className={tabCls("skill-packages")}>
             <Package size={14} />
-            Skill-Pakete
+            {t("hub.tabSkillPackages")}
           </button>
         </div>
       </div>

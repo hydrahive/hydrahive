@@ -792,8 +792,8 @@ export function ProjectsPage() {
   const [active, setActive] = useState<ProjectsTabId>("projects");
 
   const TABS: { id: ProjectsTabId; label: string; icon: React.ElementType }[] = useMemo(() => [
-    { id: "projects",  label: t("projects.title", { defaultValue: "Projekte" }),   icon: FolderKanban },
-    { id: "schedules", label: t("schedules.title", { defaultValue: "Schedules" }), icon: Calendar },
+    { id: "projects",  label: t("projects.tabProjects"),  icon: FolderKanban },
+    { id: "schedules", label: t("projects.tabSchedules"), icon: Calendar },
   ], [t]);
 
   return (
