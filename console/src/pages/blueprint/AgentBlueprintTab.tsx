@@ -710,9 +710,11 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
         });
 
         // Skills links unten
+        let skillCount = 0;
         try {
           const skillsResp = await api.get<{skills:{filename:string;skill?:string}[]}>(`/agents/${selectedAgentId}/skills`);
           const skills = skillsResp.skills || [];
+          skillCount = skills.length;
           const toolCount = tools.length;
           skills.forEach((s, i) => {
             const nodeId = `skill-${s.filename}`;
@@ -741,6 +743,21 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
             genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "plugins", animated: true, style: { ...edgeStyle, stroke: "#fbbf24" } });
           });
         } catch { /* keine Plugins */ }
+
+        // Workflow-Flow Node automatisch generieren wenn workflow_flow.json existiert
+        try {
+          const flow = await api.get<{ nodes: any[] }>(`/agents/${selectedAgentId}/workflow-flow`);
+          const flowCount = (flow.nodes || []).length;
+          if (flowCount > 0) {
+            const nodeId = "workflow-auto";
+            genNodes.push({
+              id: nodeId, type: "workflowOverview",
+              position: { x: 60, y: 80 + (tools.length + skillCount) * 50 + 80 },
+              data: { label: "Arbeitsablauf", stepCount: flowCount },
+            });
+            genEdges.push({ id: `e-${nodeId}`, source: nodeId, sourceHandle: "out", target: agentNodeId, targetHandle: "workflow", animated: true, style: { stroke: "#8b5cf6", strokeWidth: 2 } });
+          }
+        } catch { /* kein Workflow */ }
 
         setNodes(genNodes);
         setEdges(genEdges);
@@ -777,11 +794,15 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
 
   const onConnect = useCallback((c: Connection) => {
     const setter = viewMode === "workflow" ? setFlowEdges : setEdges;
+    const sourceNodes = viewMode === "workflow" ? flowNodes : nodes;
+    const sourceNode = sourceNodes.find(n => n.id === c.source);
+    const isBranch = sourceNode?.type === "branchFlow";
     setter(es => addEdge({
       ...c, animated: true,
-      style: { stroke: viewMode === "workflow" ? "#818cf8" : "#6366f1", strokeWidth: 2 },
+      style: { stroke: isBranch ? (c.sourceHandle === "true" ? "#4ade80" : "#f87171") : (viewMode === "workflow" ? "#818cf8" : "#6366f1"), strokeWidth: 2 },
+      ...(isBranch ? { label: c.sourceHandle === "true" ? "Ja" : "Nein", labelStyle: { fill: c.sourceHandle === "true" ? "#4ade80" : "#f87171", fontSize: 12, fontWeight: 600 } } : {}),
     } as Edge, es));
-  }, [setEdges, setFlowEdges, viewMode]);
+  }, [setEdges, setFlowEdges, viewMode, flowNodes, nodes]);
 
   function addNode(type: string, label?: string) {
     const defaults: Record<string, string> = {
@@ -996,6 +1017,9 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               className={cn("flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors",
                 viewMode === "workflow" ? "bg-indigo-600 text-white" : "bg-zinc-900 text-white/50 hover:text-white")}>
               <Workflow className="h-3 w-3" /> Workflow
+              {flowNodes.length > 0 && (
+                <span className="ml-1 rounded-full bg-indigo-500 px-1.5 py-0.5 text-[0.6rem] font-bold leading-none">{flowNodes.length}</span>
+              )}
             </button>
           </div>
         )}
@@ -1102,6 +1126,14 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
           </div>
         </div>
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }
