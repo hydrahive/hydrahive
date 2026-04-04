@@ -160,12 +160,15 @@ def register_plugin_routes(
 
         @auth_router.get("/me/user-apps")
         def list_user_apps(auth: tuple = Depends(require_auth)):
-            """Alle installierten Plugins mit UI-Tab."""
+            """Nur Plugins mit UI-Tab die dem persönlichen Agent zugewiesen sind."""
             username, _ = auth
+            # Prüfe welche Plugins dem persönlichen Agent zugewiesen sind
+            agent_id = f"personal_{username}"
+            assigned_plugins = set(plugin_manager.get_agent_plugins(agent_id))
             apps = []
             for pid, lp in plugin_manager._plugins.items():
                 ui = lp.manifest.ui
-                if ui and ui.get("tab"):
+                if ui and ui.get("tab") and pid in assigned_plugins:
                     apps.append({
                         "id": pid,
                         "name": lp.manifest.name,
