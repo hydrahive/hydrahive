@@ -293,7 +293,7 @@ export function AdminLayout() {
 
   useEffect(() => {
     setMobileOpen(false);
-  }, [location.pathname, location.hash]);
+  }, [location.pathname]);
 
   const activeItem = useMemo(
     () => nav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)) ?? nav[0],
