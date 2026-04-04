@@ -101,7 +101,8 @@ def _post_sync(url: str, headers: dict, body: dict, timeout: int = 60) -> tuple[
     except urllib.error.HTTPError as e:
         try:
             detail = json.loads(e.read().decode()).get("detail", str(e))
-        except Exception:
+        except Exception as parse_err:
+            logger.debug("Failed to parse HTTP error body: %s", parse_err)
             detail = str(e)
         return e.code, {"error": detail}
     except Exception as e:

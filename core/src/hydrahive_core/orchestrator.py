@@ -88,7 +88,8 @@ def _load_workflow_prompt(project_dir) -> str:
         return ""
     try:
         wf = _json.loads(wf_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse workflow file %s: %s", wf_path, e)
         return ""
 
     nodes: list[dict] = wf.get("nodes", [])
@@ -344,7 +345,8 @@ class Orchestrator:
         try:
             data = _json.loads(Path(self._mcp_servers_file).read_text())
             return {s["id"]: s for s in data.get("servers", [])}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load MCP servers config: %s", e)
             return {}
 
     async def _mcp_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
@@ -1212,8 +1214,8 @@ class Orchestrator:
                                                 s = s if s.endswith("}") else s + "}"
                                                 merged.update(_json2.loads(s))
                                             return _json2.dumps(merged)
-                                    except Exception:
-                                        pass
+                                    except Exception as merge_err:
+                                        logger.debug("Failed to merge split JSON objects: %s", merge_err)
                                     return "{}"
 
                             # Assistant-Nachricht ohne tool_calls einfügen (plain text) +
@@ -1385,8 +1387,8 @@ class Orchestrator:
                                f"Tool-Loop Limit erreicht",
                                f"Agent hat {max_rounds} Runden durchlaufen — Antwort wird erzwungen.",
                                link=f"/chat/{project_id}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to send tool-loop warning notification: %s", e)
                 try:
                     final = await self._finalize_tool_loop_response(
                         boss_cfg,

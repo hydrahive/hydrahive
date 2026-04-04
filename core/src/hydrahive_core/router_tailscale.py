@@ -79,7 +79,8 @@ def _check_hydrahive(ip: str, timeout: float = 5) -> dict | None:
                 data = json.loads(r.read().decode())
                 if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
                     return {"ip": ip, "port": port, "scheme": scheme, "health": data}
-        except Exception:
+        except Exception as e:
+            logger.debug("Probe %s://%s:%s failed: %s", scheme, ip, port, e)
             continue
     return None
 
@@ -132,8 +133,8 @@ def register_tailscale_routes(
                     "dns_name": self_node.get("DNSName", "").rstrip("."),
                     "online": self_node.get("Online", False),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get tailscale local status: %s", e)
 
         return {
             "api_configured": has_key,
@@ -194,8 +195,8 @@ def register_tailscale_routes(
             r = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5)
             if r.returncode == 0:
                 my_ip = r.stdout.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get own tailscale IP: %s", e)
 
         # Parallel alle Devices proben (online-Status kann null sein bei manchen Plänen)
         found = []
@@ -245,7 +246,8 @@ def register_tailscale_routes(
         a2a_config_path = Path("/etc/hydrahive/a2a_peers.json")
         try:
             a2a_cfg = json.loads(a2a_config_path.read_text()) if a2a_config_path.exists() else {}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load a2a_peers.json: %s", e)
             a2a_cfg = {}
 
         peers = a2a_cfg.get("peers", [])
@@ -284,8 +286,8 @@ def register_tailscale_routes(
             )
             device_hostname = dev_data.get("hostname", "")
             device_ip = (dev_data.get("addresses") or [None])[0] or ""
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get device info for %s: %s", device_id, e)
 
         # Device aus Tailnet löschen
         try:
@@ -330,7 +332,8 @@ def register_tailscale_routes(
             try:
                 import socket
                 hostname = f"hydrahive-{socket.gethostname()}"
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get hostname for tailscale: %s", e)
                 hostname = "hydrahive"
         try:
             result = await asyncio.to_thread(

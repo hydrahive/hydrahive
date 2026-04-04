@@ -34,8 +34,8 @@ def _load_config() -> dict:
     if HOOKS_CONFIG.exists():
         try:
             return json.loads(HOOKS_CONFIG.read_text())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load webhook config: %s", e)
     return {"secret": ""}
 
 
@@ -200,7 +200,8 @@ def register_webhook_butler_routes(
         # Payload parsen
         try:
             payload = json.loads(body) if body else {}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse webhook payload as JSON: %s", e)
             payload = {"raw": body.decode(errors="replace")}
 
         event = ButlerEvent(
@@ -238,7 +239,8 @@ def register_webhook_butler_routes(
         event_name = request.headers.get("X-GitHub-Event", "push")
         try:
             payload = json.loads(body) if body else {}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse GitHub webhook payload: %s", e)
             payload = {}
 
         extra = _parse_git_event(event_name, payload)
@@ -265,7 +267,8 @@ def register_webhook_butler_routes(
             from .gitea import _load_config as _gitea_cfg
             gitea_cfg = _gitea_cfg()
             secret = gitea_cfg.get("webhook_secret", "")
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to load gitea config for webhook secret: %s", e)
             secret = ""
 
         sig = request.headers.get("X-Gitea-Signature", "")
@@ -278,7 +281,8 @@ def register_webhook_butler_routes(
         event_name = request.headers.get("X-Gitea-Event", "push")
         try:
             payload = json.loads(body) if body else {}
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse Gitea webhook payload: %s", e)
             payload = {}
 
         extra = _parse_git_event(event_name, payload)

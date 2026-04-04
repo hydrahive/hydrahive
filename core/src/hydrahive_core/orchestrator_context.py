@@ -267,7 +267,8 @@ def _load_agent_blueprint_context(agent_dir) -> str:
         return ""
     try:
         wf = _json.loads(wf_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse workflow blueprint %s: %s", wf_path, e)
         return ""
 
     nodes: list[dict] = wf.get("nodes", [])
@@ -334,7 +335,8 @@ def _load_agent_workflow_prompt(agent_dir) -> str:
         return ""
     try:
         wf = _json.loads(wf_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse workflow flow %s: %s", wf_path, e)
         return ""
 
     nodes: list[dict] = wf.get("nodes", [])

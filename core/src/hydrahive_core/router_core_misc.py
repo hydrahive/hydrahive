@@ -226,7 +226,8 @@ def register_core_misc_routes(
         try:
             data = json.loads(p.read_text())
             return {"configured": True, **data}
-        except Exception:
+        except Exception as e:
+            logger.debug("KAS config parse failed: %s", e)
             return {"configured": False}
 
     @admin_router.put("/admin/kas")
@@ -467,15 +468,15 @@ def register_core_misc_routes(
             mins = rem // 60
             info["uptime"] = f"{days}d {hours}h {mins}m"
             info["uptime_seconds"] = int(secs)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read uptime: %s", e)
 
         # Load
         try:
             load1, load5, load15 = os.getloadavg()
             info["load"] = {"1m": round(load1, 2), "5m": round(load5, 2), "15m": round(load15, 2)}
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read load average: %s", e)
 
         # CPU
         try:
@@ -484,8 +485,8 @@ def register_core_misc_routes(
             total = sum(int(x) for x in cpu[1:])
             idle = int(cpu[4])
             info["cpu_percent"] = round(100 * (1 - idle / max(total, 1)), 1)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read CPU stats: %s", e)
 
         # RAM
         try:
@@ -502,8 +503,8 @@ def register_core_misc_routes(
                 "total_mb": total_mb, "used_mb": used_mb, "available_mb": avail_mb,
                 "percent": round(100 * used_mb / max(total_mb, 1), 1),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read RAM info: %s", e)
 
         # Disk
         try:
@@ -515,15 +516,15 @@ def register_core_misc_routes(
                 "total_gb": total_gb, "used_gb": used_gb, "free_gb": free_gb,
                 "percent": round(100 * used_gb / max(total_gb, 1), 1),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read disk stats: %s", e)
 
         # Hostname
         try:
             import socket
             info["hostname"] = socket.gethostname()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to get hostname: %s", e)
 
         return info
 
@@ -543,7 +544,8 @@ def register_core_misc_routes(
                     capture_output=True, text=True, timeout=5,
                 )
                 status = r.stdout.strip()
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to check service '%s' status: %s", svc, e)
                 status = "unknown"
             result.append({"name": svc, "status": status})
         return {"services": result}
@@ -619,8 +621,8 @@ def register_core_misc_routes(
         # Agent neu registrieren
         try:
             discovery._register(cfg.agent_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to re-register agent '%s': %s", agent_id, e)
         return {"ok": True, "agent_id": agent_id}
 
     @admin_router.post("/agents/{agent_id}/clone")
@@ -650,8 +652,8 @@ def register_core_misc_routes(
             import subprocess
             subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(new_dir)], check=False, capture_output=True)
             discovery._register(new_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to register cloned agent '%s': %s", new_id, e)
         return {"ok": True, "agent_id": new_id, "cloned_from": agent_id}
 
     # ── Phase 3: Config-Export (#129) ─────────────────────────────────

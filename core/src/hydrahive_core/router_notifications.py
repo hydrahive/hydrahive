@@ -30,8 +30,8 @@ def _load_notif_routes() -> dict:
     if _NOTIF_ROUTES_FILE.exists():
         try:
             return json.loads(_NOTIF_ROUTES_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load notification routes: %s", e)
     return {}
 
 

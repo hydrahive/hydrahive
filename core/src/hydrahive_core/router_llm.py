@@ -111,8 +111,8 @@ def register_llm_routes(
                     data["llm"]["model"] = model
                     yaml_path.write_text(_yaml.dump(data, default_flow_style=False, allow_unicode=True))
                     updated.append(agent_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to update LLM model for agent '%s': %s", agent_id, e)
         logger.info("System-Standard-LLM gesetzt: %s (aktualisiert: %s)", model, updated)
         audit_log("llm.system_default_set", details={"model": model, "updated_agents": updated})
         return {"updated": True, "model": model, "agents_updated": updated}
@@ -214,8 +214,8 @@ def register_llm_routes(
                             "label": f"Codex: {model}",
                             "provider": "openai_codex",
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to load OpenAI Codex models: %s", e)
 
         ollama_cfg = providers.get("ollama", {})
         ollama_base = ollama_cfg.get("base_url", "http://localhost:11434")
@@ -227,8 +227,8 @@ def register_llm_routes(
                         name = tag.get("name", "")
                         if name:
                             models.append({"id": f"ollama/{name}", "label": f"ollama/{name}", "provider": "ollama"})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to fetch ollama models: %s", e)
 
         wks = load_users().get(username, {}).get("wks", {})
         if wks.get("ip"):
@@ -246,8 +246,8 @@ def register_llm_routes(
                                     "provider": "wks_ollama",
                                     "wks_base_url": wks_url,
                                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to fetch WKS ollama models: %s", e)
 
         return {"models": models}
 
@@ -299,8 +299,8 @@ def register_llm_routes(
                         "gpt-5.4",
                     ],
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to load OpenAI Codex OAuth config: %s", e)
         return {"configured": False, "account_id": None}
 
     @admin_router.post("/llm/oauth/anthropic/start")
@@ -466,8 +466,8 @@ def register_llm_routes(
             payload_b64 = access_token.split(".")[1]
             payload = _json.loads(_b64.urlsafe_b64decode(payload_b64 + "=="))
             account_id = payload.get("https://api.openai.com/auth", {}).get("chatgpt_account_id", "")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to extract account_id from OpenAI token: %s", e)
         if not account_id:
             raise HTTPException(400, "account_id konnte nicht aus Token extrahiert werden")
 
@@ -621,8 +621,8 @@ def register_llm_routes(
                 for line in llm_env.read_text().splitlines():
                     if line.startswith("VOYAGE_API_KEY=") and line.split("=", 1)[1].strip():
                         voyage_key_set = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to read llm_env for Voyage key check: %s", e)
 
         return {
             "model":          model,
@@ -651,8 +651,8 @@ def register_llm_routes(
             if llm_env_path.exists():
                 try:
                     lines = llm_env_path.read_text().splitlines()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to read existing llm_env: %s", e)
             # Bestehende VOYAGE_API_KEY-Zeile entfernen
             lines = [l for l in lines if not l.startswith("VOYAGE_API_KEY=")]
             lines.append(f"VOYAGE_API_KEY={voyage_key}")

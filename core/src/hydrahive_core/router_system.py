@@ -65,7 +65,8 @@ def register_system_routes(
             return default_url, default_source
         try:
             cfg = json.loads(p.read_text())
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to parse gitea config: %s", e)
             return default_url, default_source
         base_url = str(cfg.get("url", "")).strip().rstrip("/")
         org = str(cfg.get("org", "hydrahive")).strip() or "hydrahive"
@@ -139,7 +140,8 @@ def register_system_routes(
         if p.exists():
             try:
                 status = json.loads(p.read_text())
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse update status file: %s", e)
                 status = {"status": "unknown"}
         else:
             status = {"status": "never"}
@@ -149,8 +151,8 @@ def register_system_routes(
                 if datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc) > timedelta(minutes=10):
                     status["status"] = "ok"
                     status["stale"] = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to parse update started_at timestamp: %s", e)
         status["available"] = False
         if status.get("status") not in {"running", "error"}:
             remote = _get_remote_head()
@@ -222,13 +224,13 @@ def register_system_routes(
                 def _int(v: str):
                     try:
                         return int(v)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
 
                 def _float(v: str):
                     try:
                         return round(float(v), 1)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
 
                 gpus.append({
@@ -268,8 +270,8 @@ def register_system_routes(
                 with urllib.request.urlopen(f"{url.rstrip('/')}/health", timeout=3) as resp:
                     h = json.loads(resp.read())
                     healthy = h.get("status") == "healthy"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("AgentLink health check failed: %s", e)
         return {
             "base_url": data.get("base_url", ""),
             "ws_url":   data.get("ws_url", ""),
@@ -364,7 +366,8 @@ def register_system_routes(
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()
             status["log_tail"] = lines[-20:]
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to read update log: %s", e)
             status["log_tail"] = []
         return status
 
@@ -400,8 +403,8 @@ def register_system_routes(
                     try:
                         all_users = _luf()
                         users = [u for u, d in all_users.items() if d.get("role") == "admin"]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Failed to load admin users for update notification: %s", e)
                 users = users or ["admin"]
                 if status.get("status") == "ok":
                     commit = status.get("commit", "")
@@ -417,8 +420,8 @@ def register_system_routes(
                                        title="Update fehlgeschlagen",
                                        body=status.get("error", "Unbekannter Fehler")[:120],
                                        link="/system")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to send update notification: %s", e)
 
         asyncio.create_task(_run_and_notify())
         return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
