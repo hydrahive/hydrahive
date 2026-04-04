@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const AdminLayout       = lazy(() => import("@/components/layout/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LoginPage         = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -91,6 +92,7 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <SetupGuard>
       <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>
@@ -141,5 +143,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </SetupGuard>
+    </ErrorBoundary>
   );
 }

@@ -203,6 +203,67 @@ export function DashboardPage() {
       ? "bg-accent/15 text-accent"
       : "status-pill-ok";
 
+  if (status === null) {
+    return (
+      <div className="space-y-6">
+        {/* Hero skeleton */}
+        <div className="hero-panel">
+          <div className="relative z-10 shell-grid">
+            <div className="space-y-5 lg:col-span-8">
+              <div className="flex gap-3">
+                <div className="animate-pulse rounded-full bg-zinc-800/50 h-6 w-28" />
+                <div className="animate-pulse rounded-full bg-zinc-800/50 h-6 w-24" />
+              </div>
+              <div className="space-y-3">
+                <div className="animate-pulse rounded-lg bg-zinc-800/50 h-8 w-64" />
+                <div className="animate-pulse rounded-lg bg-zinc-800/50 h-5 w-96 max-w-full" />
+              </div>
+            </div>
+            <div className="lg:col-span-4">
+              <div className="animate-pulse rounded-xl bg-zinc-800/50 h-44" />
+            </div>
+          </div>
+        </div>
+
+        {/* Metric cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="metric-card">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-3">
+                  <div className="animate-pulse rounded-lg bg-zinc-800/50 h-4 w-20" />
+                  <div className="animate-pulse rounded-lg bg-zinc-800/50 h-8 w-16" />
+                </div>
+                <div className="animate-pulse rounded-2xl bg-zinc-800/50 h-11 w-11" />
+              </div>
+              <div className="animate-pulse rounded-lg bg-zinc-800/50 h-4 w-32 mt-3" />
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom sections skeleton */}
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+          <div className="section-card">
+            <div className="animate-pulse rounded-lg bg-zinc-800/50 h-6 w-40" />
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="animate-pulse rounded-2xl bg-zinc-800/50 h-24" />
+              ))}
+            </div>
+          </div>
+          <div className="section-card">
+            <div className="animate-pulse rounded-lg bg-zinc-800/50 h-6 w-36" />
+            <div className="mt-4 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="animate-pulse rounded-2xl bg-zinc-800/50 h-16" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="hero-panel">
