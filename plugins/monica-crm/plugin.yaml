@@ -1,0 +1,27 @@
+id: monica-crm
+name: Monica CRM
+version: 1.0.0
+description: "Persönliches CRM — Kontakte, Aktivitäten, Erinnerungen und Notizen über Monica verwalten."
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  tab:
+    label: "Kontakte"
+    icon: "Users"
+    order: 40
+  config_fields:
+    - id: monica_url
+      label: "Monica URL"
+      type: text
+      hint: "URL deiner Monica-Instanz, z.B. https://monica.example.com"
+    - id: monica_token
+      label: "API Token"
+      type: password
+      hint: "Monica → Settings → API → Personal Access Token erstellen"
+    - id: enabled
+      label: "Monica aktiv"
+      type: toggle
+      hint: "Monica-Integration ein/ausschalten"
