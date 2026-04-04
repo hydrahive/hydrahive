@@ -109,16 +109,10 @@ else
     chown "${MONICA_USER}:${MONICA_USER}" .env
 fi
 
-# App-Key generieren und Konfiguration setzen
-MONICA_APP_KEY=$(sudo -u "${MONICA_USER}" $PHP_BIN artisan key:generate --show 2>/dev/null || echo "")
-if [ -z "${MONICA_APP_KEY}" ]; then
-    MONICA_APP_KEY="base64:$(head -c 32 /dev/urandom | base64)"
-fi
-
 cat > "${MONICA_DIR}/.env" << ENVEOF
 APP_NAME=Monica
 APP_ENV=production
-APP_KEY=${MONICA_APP_KEY}
+APP_KEY=
 APP_DEBUG=false
 APP_URL=http://localhost:${MONICA_PORT}
 APP_TRUSTED_PROXIES=*
@@ -143,7 +137,12 @@ ENVEOF
 
 chown "${MONICA_USER}:${MONICA_USER}" "${MONICA_DIR}/.env"
 chmod 600 "${MONICA_DIR}/.env"
-success ".env konfiguriert"
+
+# App-Key generieren (muss NACH .env passieren)
+cd "${MONICA_DIR}"
+sudo -u "${MONICA_USER}" $PHP_BIN artisan key:generate --force --quiet 2>/dev/null \
+    || { FALLBACK_KEY="base64:$(head -c 32 /dev/urandom | base64)"; sed -i "s|APP_KEY=|APP_KEY=${FALLBACK_KEY}|" "${MONICA_DIR}/.env"; }
+success ".env konfiguriert + App-Key generiert"
 
 # --- HTTPS-Redirect deaktivieren (läuft hinter nginx reverse proxy) ---
 ROUTE_PROVIDER="${MONICA_DIR}/app/Providers/RouteServiceProvider.php"
@@ -194,7 +193,7 @@ cat > "${MONICA_CONFIG}" << CFGEOF
   "db_name": "${MONICA_DB}",
   "db_user": "${MONICA_DB_USER}",
   "db_pass": "${MONICA_DB_PASS}",
-  "app_key": "${MONICA_APP_KEY}"
+  "app_key": "generated"
 }
 CFGEOF
 chown hydrahive:hydrahive "${MONICA_CONFIG}" 2>/dev/null || true
