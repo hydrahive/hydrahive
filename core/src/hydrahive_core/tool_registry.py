@@ -1209,6 +1209,10 @@ _PROJECT_SHELL_WHITELIST: frozenset[str] = frozenset({
     # Hilfsprogramme
     "xargs",  # nur mit whitelisted Befehlen nach Pipe
     "which", "type",
+    # Encoding / Scripting (für Gitea API Uploads, File-Patching etc.)
+    "base64",
+    "python3", "python",
+    "curl",
 })
 
 # git-Subkommandos die in project_shell BLOCKIERT sind (Netzwerk / Destruktiv)
