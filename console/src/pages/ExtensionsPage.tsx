@@ -29,6 +29,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   communication: "Kommunikation",
   network:       "Netzwerk",
   security:      "Sicherheit",
+  productivity:  "Produktivität",
+  integrations:  "Integrationen",
+  media:         "Medien",
+  gaming:        "Gaming",
 };
 
 function ExtCard({
