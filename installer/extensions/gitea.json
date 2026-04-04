@@ -8,6 +8,6 @@
   "uninstall_script": "extensions/uninstall/gitea.sh",
   "service": "gitea",
   "health_url": "http://127.0.0.1:3001/api/v1/version",
-  "open_url": null,
+  "open_url": ":3002/",
   "installed_check": "/usr/local/bin/gitea"
 }
