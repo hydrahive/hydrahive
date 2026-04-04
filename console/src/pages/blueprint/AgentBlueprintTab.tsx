@@ -604,6 +604,67 @@ const FLOW_PALETTE_ITEMS = [
   { type: "endFlow",    label: "Ende",         icon: Square,  color: "text-zinc-400" },
 ];
 
+// ── Workflow Templates ──────────────────────────────────────────────────────
+
+const WORKFLOW_TEMPLATES = [
+  {
+    name: "Code-Review",
+    nodes: [
+      { id: "t1", type: "sourceFlow", position: {x:50,y:150}, data: {label:"Repository",sourceType:"repo"} },
+      { id: "t2", type: "stepFlow", position: {x:300,y:150}, data: {label:"Diff analysieren",toolId:"git_diff"} },
+      { id: "t3", type: "stepFlow", position: {x:550,y:150}, data: {label:"Review schreiben"} },
+      { id: "t4", type: "branchFlow", position: {x:800,y:150}, data: {label:"Probleme?",condition:"Kritische Findings?"} },
+      { id: "t5", type: "stepFlow", position: {x:1050,y:80}, data: {label:"Issue erstellen",toolId:"gitea_create_issue"} },
+      { id: "t6", type: "endFlow", position: {x:1250,y:150}, data: {label:"Fertig"} },
+    ] as Node[],
+    edges: [
+      {id:"te1",source:"t1",target:"t2",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te2",source:"t2",target:"t3",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te3",source:"t3",target:"t4",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te4",source:"t4",sourceHandle:"true",target:"t5",animated:true,style:{stroke:"#4ade80",strokeWidth:2},label:"Ja",labelStyle:{fill:"#4ade80",fontSize:12,fontWeight:600}},
+      {id:"te5",source:"t4",sourceHandle:"false",target:"t6",animated:true,style:{stroke:"#f87171",strokeWidth:2},label:"Nein",labelStyle:{fill:"#f87171",fontSize:12,fontWeight:600}},
+      {id:"te6",source:"t5",target:"t6",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+    ] as Edge[],
+  },
+  {
+    name: "Recherche",
+    nodes: [
+      { id: "t1", type: "stepFlow", position: {x:50,y:150}, data: {label:"Web-Suche",toolId:"web_search"} },
+      { id: "t2", type: "stepFlow", position: {x:300,y:150}, data: {label:"Quellen lesen",toolId:"http_request"} },
+      { id: "t3", type: "stepFlow", position: {x:550,y:150}, data: {label:"Zusammenfassen"} },
+      { id: "t4", type: "stepFlow", position: {x:800,y:150}, data: {label:"Memory speichern",toolId:"write_memory"} },
+      { id: "t5", type: "endFlow", position: {x:1050,y:150}, data: {label:"Fertig"} },
+    ] as Node[],
+    edges: [
+      {id:"te1",source:"t1",target:"t2",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te2",source:"t2",target:"t3",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te3",source:"t3",target:"t4",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te4",source:"t4",target:"t5",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+    ] as Edge[],
+  },
+  {
+    name: "Bug-Fix",
+    nodes: [
+      { id: "t1", type: "stepFlow", position: {x:50,y:150}, data: {label:"Issue lesen",description:"Bug-Report verstehen"} },
+      { id: "t2", type: "stepFlow", position: {x:300,y:150}, data: {label:"Code suchen",toolId:"read_file"} },
+      { id: "t3", type: "stepFlow", position: {x:550,y:150}, data: {label:"Fix implementieren",toolId:"write_file"} },
+      { id: "t4", type: "stepFlow", position: {x:800,y:150}, data: {label:"Testen",toolId:"shell_exec"} },
+      { id: "t5", type: "branchFlow", position: {x:1050,y:150}, data: {label:"Tests OK?",condition:"Alle Tests bestanden?"} },
+      { id: "t6", type: "stepFlow", position: {x:1300,y:80}, data: {label:"Committen",toolId:"git_commit"} },
+      { id: "t7", type: "endFlow", position: {x:1500,y:150}, data: {label:"Fertig"} },
+    ] as Node[],
+    edges: [
+      {id:"te1",source:"t1",target:"t2",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te2",source:"t2",target:"t3",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te3",source:"t3",target:"t4",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te4",source:"t4",target:"t5",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+      {id:"te5",source:"t5",sourceHandle:"true",target:"t6",animated:true,style:{stroke:"#4ade80",strokeWidth:2},label:"Ja",labelStyle:{fill:"#4ade80",fontSize:12,fontWeight:600}},
+      {id:"te6",source:"t5",sourceHandle:"false",target:"t3",animated:true,style:{stroke:"#f87171",strokeWidth:2},label:"Nein",labelStyle:{fill:"#f87171",fontSize:12,fontWeight:600}},
+      {id:"te7",source:"t6",target:"t7",animated:true,style:{stroke:"#818cf8",strokeWidth:2}},
+    ] as Edge[],
+  },
+];
+
 // ── Inner Component ───────────────────────────────────────────────────────────
 
 interface AgentEntry { id: string; identity: string }
@@ -632,6 +693,8 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node>([]);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState<Edge>([]);
   const [flowLoading, setFlowLoading] = useState(false);
+  const [flowEnabled, setFlowEnabled] = useState(true);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const rf = useReactFlow();
 
   // Verfügbare Tools, MCP-Server, Plugins laden
@@ -782,13 +845,14 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     if (!selectedAgentId || viewMode !== "workflow" || isNewMode) return;
     setFlowLoading(true);
     setSelectedNode(null);
-    api.get<{ nodes: any[]; edges: any[] }>(`/agents/${selectedAgentId}/workflow-flow`)
+    api.get<{ nodes: any[]; edges: any[]; enabled?: boolean }>(`/agents/${selectedAgentId}/workflow-flow`)
       .then(wf => {
         setFlowNodes(wf.nodes || []);
         setFlowEdges(wf.edges || []);
+        setFlowEnabled(wf.enabled !== false);
         setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
       })
-      .catch(() => { setFlowNodes([]); setFlowEdges([]); })
+      .catch(() => { setFlowNodes([]); setFlowEdges([]); setFlowEnabled(true); })
       .finally(() => setFlowLoading(false));
   }, [selectedAgentId, viewMode, setFlowNodes, setFlowEdges, rf, isNewMode]);
 
@@ -832,6 +896,41 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     } else {
       setNodes(ns => [...ns, newNode]);
     }
+  }
+
+  function addNodeAt(type: string, position: { x: number; y: number }) {
+    const defaults: Record<string, string> = {
+      stepFlow: "Schritt", sourceFlow: "Quelle",
+      branchFlow: "Bedingung?", endFlow: "Ende",
+      repository: "Repo", credential: "Token", skill: "Skill",
+      memory: "Memory", toolpolicy: "Tool Policy", tool: "tool",
+      mcp: "MCP Server", plugin: "Plugin", workflowOverview: "Arbeitsablauf",
+      agentprofile: "Neuer Agent",
+    };
+    const id = `${type}-${Date.now()}`;
+    const isFlow = type.endsWith("Flow");
+    const config: any = {};
+    if (type === "agentprofile") {
+      config.isNew = isNewMode;
+      config.type = "specialist";
+      config.model = "claude-sonnet-4-6";
+    }
+    const newNode: Node = {
+      id, type, position,
+      data: { label: defaults[type] || type, config },
+    };
+    if (isFlow) {
+      setFlowNodes(ns => [...ns, newNode]);
+    } else {
+      setNodes(ns => [...ns, newNode]);
+    }
+  }
+
+  function loadTemplate(tpl: typeof WORKFLOW_TEMPLATES[number]) {
+    setFlowNodes(tpl.nodes);
+    setFlowEdges(tpl.edges);
+    setShowTemplateMenu(false);
+    setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
   }
 
   function startNewAgent() {
@@ -881,7 +980,21 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     setSaving(true);
     try {
       if (viewMode === "workflow") {
-        await api.put(`/agents/${selectedAgentId}/workflow-flow`, { nodes: flowNodes, edges: flowEdges });
+        // Workflow-Validierung
+        const warnings: string[] = [];
+        if (!flowNodes.some(n => n.type === "endFlow")) warnings.push("Kein Ende-Node vorhanden");
+        const connectedIds = new Set(flowEdges.flatMap(e => [e.source, e.target]));
+        const disconnected = flowNodes.filter(n => !connectedIds.has(n.id));
+        if (disconnected.length > 0) warnings.push(`${disconnected.length} Node(s) nicht verbunden`);
+        flowNodes.filter(n => n.type === "branchFlow").forEach(n => {
+          const outEdges = flowEdges.filter(e => e.source === n.id);
+          if (outEdges.length < 2) warnings.push(`"${(n.data as any).label}" hat nur ${outEdges.length} Ausgang`);
+        });
+        if (warnings.length > 0) {
+          setToast("\u26a0 " + warnings.join(" \u00b7 "));
+          setTimeout(() => setToast(null), 6000);
+        }
+        await api.put(`/agents/${selectedAgentId}/workflow-flow`, { nodes: flowNodes, edges: flowEdges, enabled: flowEnabled });
       } else {
         await api.put(`/agents/${selectedAgentId}/workflow-blueprint`, { nodes, edges });
       }
@@ -1030,12 +1143,55 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
           <ChevronDown className={cn("h-3 w-3 transition-transform", showPalette && "rotate-180")} /> Palette
         </button>
         {showPalette && (viewMode === "workflow" ? FLOW_PALETTE_ITEMS : PALETTE_ITEMS).map(item => (
-          <button key={item.type} onClick={() => addNode(item.type)}
-            className="flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white transition-colors">
+          <button key={item.type}
+            draggable
+            onDragStart={e => { e.dataTransfer.setData("application/workflow-node", item.type); e.dataTransfer.effectAllowed = "move"; }}
+            onClick={() => addNode(item.type)}
+            className="flex items-center gap-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white transition-colors cursor-grab">
             <item.icon className={cn("h-3 w-3", item.color)} />
             {item.label}
           </button>
         ))}
+        {/* Template-Dropdown */}
+        {viewMode === "workflow" && !isNewMode && (
+          <div className="relative">
+            <button onClick={() => setShowTemplateMenu(m => !m)}
+              className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-zinc-800 transition-colors">
+              <Sparkles className="h-3 w-3 text-violet-400" /> Vorlage
+              <ChevronDown className={cn("h-3 w-3 transition-transform", showTemplateMenu && "rotate-180")} />
+            </button>
+            {showTemplateMenu && (
+              <div className="absolute top-full left-0 mt-1 z-50 rounded-lg bg-zinc-900 border border-white/15 shadow-xl py-1 min-w-[160px]">
+                {WORKFLOW_TEMPLATES.map(tpl => (
+                  <button key={tpl.name}
+                    onClick={() => {
+                      if (flowNodes.length > 0) {
+                        setConfirmState({
+                          title: "Vorlage laden",
+                          message: "Bestehenden Workflow ersetzen?",
+                          action: () => loadTemplate(tpl),
+                        });
+                        setShowTemplateMenu(false);
+                      } else {
+                        loadTemplate(tpl);
+                      }
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs text-white hover:bg-white/10 transition-colors">
+                    {tpl.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* Aktiv/Inaktiv Toggle */}
+        {viewMode === "workflow" && !isNewMode && (
+          <button onClick={() => setFlowEnabled(e => !e)}
+            className={cn("flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs transition-colors border",
+              flowEnabled ? "bg-green-600/20 border-green-500/40 text-green-400" : "bg-zinc-800 border-white/10 text-white/40")}>
+            {flowEnabled ? "Aktiv" : "Inaktiv"}
+          </button>
+        )}
         <div className="flex-1" />
         {toast && <span className="text-xs text-indigo-300">{toast}</span>}
         {isNewMode ? (
@@ -1069,7 +1225,15 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
             onConnect={onConnect} nodeTypes={NODE_TYPES}
             colorMode="dark" fitView
             onNodeClick={(_, n) => setSelectedNode(n)}
-            onPaneClick={() => setSelectedNode(null)}
+            onPaneClick={() => { setSelectedNode(null); setShowTemplateMenu(false); }}
+            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+            onDrop={e => {
+              e.preventDefault();
+              const type = e.dataTransfer.getData("application/workflow-node");
+              if (!type) return;
+              const position = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+              addNodeAt(type, position);
+            }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255,255,255,0.05)" />
             <Controls />
