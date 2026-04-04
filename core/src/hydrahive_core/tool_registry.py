@@ -2701,6 +2701,107 @@ class FixPermissionsTool(BaseTool):
             return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
 
 
+class FilePatchTool(BaseTool):
+    """Sucht und ersetzt Text in einer Datei — ohne die ganze Datei lesen zu müssen."""
+
+    @property
+    def id(self) -> str: return "file_patch"
+    @property
+    def name(self) -> str: return "Datei patchen (Suchen & Ersetzen)"
+    @property
+    def description(self) -> str:
+        return (
+            "Sucht einen Text-Abschnitt in einer Datei und ersetzt ihn. "
+            "Ideal für gezielte Änderungen in großen Dateien ohne die ganze Datei lesen zu müssen. "
+            "Gibt Kontext um die Stelle zurück (5 Zeilen davor/danach). "
+            "Unterstützt mehrzeilige Suche und Ersetzung."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["filesystem.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Dateipfad (relativ zum Projekt oder absolut)"},
+                "search": {"type": "string", "description": "Text der gesucht werden soll (exakt, mehrzeilig möglich)"},
+                "replace": {"type": "string", "description": "Ersetzungstext"},
+                "count": {"type": "integer", "description": "Max. Anzahl Ersetzungen (0 = alle, Standard: 1)"},
+            },
+            "required": ["path", "search", "replace"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, path: str, search: str, replace: str, count: int = 1, **kwargs) -> dict:
+        # Pfad auflösen
+        file_path = Path(path)
+        if not file_path.is_absolute():
+            file_path = Path(f"/projects/{project_id}/files") / path
+            if not file_path.exists():
+                file_path = Path(f"/projects/{project_id}") / path
+
+        if not file_path.exists():
+            return {"error": f"Datei nicht gefunden: {path}"}
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            return {"error": f"Datei nicht lesbar: {e}"}
+
+        occurrences = content.count(search)
+        if occurrences == 0:
+            # Zeige einen Ausschnitt der Datei damit der Agent den richtigen Text finden kann
+            lines = content.split("\n")
+            snippet = "\n".join(lines[:30]) if len(lines) > 30 else content[:2000]
+            return {
+                "error": "Suchtext nicht gefunden",
+                "occurrences": 0,
+                "file_lines": len(lines),
+                "file_size": len(content),
+                "first_30_lines": snippet,
+            }
+
+        if count == 0:
+            new_content = content.replace(search, replace)
+            replaced = occurrences
+        else:
+            new_content = content.replace(search, replace, count)
+            replaced = min(count, occurrences)
+
+        try:
+            file_path.write_text(new_content, encoding="utf-8")
+        except PermissionError:
+            # Fallback: sudo über temp file
+            import subprocess, tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmp", delete=False, encoding="utf-8") as tmp:
+                tmp.write(new_content)
+                tmp_path = tmp.name
+            r = subprocess.run(["sudo", "cp", tmp_path, str(file_path)], capture_output=True, timeout=10)
+            Path(tmp_path).unlink(missing_ok=True)
+            if r.returncode != 0:
+                return {"error": f"Schreibfehler (auch mit sudo): {r.stderr.decode()[:200]}"}
+
+        # Kontext um die erste Ersetzung zeigen
+        new_lines = new_content.split("\n")
+        context_lines = []
+        for i, line in enumerate(new_lines):
+            if replace in line or (i > 0 and replace in new_lines[i-1]):
+                start = max(0, i - 3)
+                end = min(len(new_lines), i + 4)
+                context_lines = [f"{start+j+1:4d} | {new_lines[start+j]}" for j in range(end - start)]
+                break
+
+        return {
+            "ok": True,
+            "path": str(file_path),
+            "occurrences_found": occurrences,
+            "replaced": replaced,
+            "context": "\n".join(context_lines) if context_lines else "(keine Kontextzeilen)",
+        }
+
+
 class GiteaCreateIssueTool(BaseTool):
     """Erstellt ein Gitea-Issue in einem Ziel-Repository."""
 
@@ -4197,6 +4298,7 @@ registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
 registry.register(GiteaRepoDiffTool())
 registry.register(FixPermissionsTool())
+registry.register(FilePatchTool())
 registry.register(GiteaCreateIssueTool())
 registry.register(GiteaCommentIssueTool())
 registry.register(GiteaUpdateIssueTool())

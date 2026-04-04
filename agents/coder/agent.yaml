@@ -21,6 +21,8 @@ execution_modes:
     - memory.write
     - agents.ask
 
+max_tool_rounds: 30
+
 heartbeat:
   interval: 60s
   timeout: 300s
@@ -30,6 +32,8 @@ tools:
 # Dateien
 - file_read
 - file_write
+- file_patch
+- fix_permissions
 - list_directory
 # Shell
 - project_shell
