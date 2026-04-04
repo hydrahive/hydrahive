@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api, HeartbeatTaskStatus, McpServer } from "@/lib/api";
+import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { ToolGroupSelector } from "@/components/ToolGroupSelector";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { agentCategory, AGENT_COLORS } from "@/lib/utils";
@@ -120,6 +121,8 @@ export function AgentsPage() {
   const [logErr, setLogErr] = useState("");
   const [hbTasks, setHbTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [agentPlugins, setAgentPlugins] = useState<string[]>([]);
   const [wksModels, setWksModels] = useState<{id:string;label:string;wks_base_url?:string}[]>([]);
   const [agentSearch, setAgentSearch] = useState("");
   const logBottomRef = useRef<HTMLDivElement>(null);
@@ -128,14 +131,16 @@ export function AgentsPage() {
 
   async function load() {
     try {
-      const [agentsData, hbData, mcpData] = await Promise.allSettled([
+      const [agentsData, hbData, mcpData, pluginsData] = await Promise.allSettled([
         api.agents() as Promise<Record<string, AgentEntry>>,
         api.heartbeatTasks(),
         api.mcpServers(),
+        api.pluginsList(),
       ]);
       if (agentsData.status === "fulfilled") setAgents(agentsData.value);
       if (hbData.status === "fulfilled") setHbTasks(hbData.value.tasks);
       if (mcpData.status === "fulfilled") setMcpServers(mcpData.value.servers);
+      if (pluginsData.status === "fulfilled") setPlugins(pluginsData.value.plugins.filter(p => p.enabled));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
@@ -203,15 +208,18 @@ export function AgentsPage() {
     setForm({ ...EMPTY_FORM });
     setEditId(null);
     setSaveErr("");
+    setAgentPlugins([]);
     setShowForm(true);
   }
 
   async function openEdit(id: string, entry: AgentEntry) {
     setSaveErr("");
-    const [full, soul] = await Promise.all([
+    const [full, soul, agPlugins] = await Promise.all([
       api.get<{ config: Record<string, unknown> }>(`/agents/${id}`).catch(() => null),
       api.getAgentSoul(id).catch(() => ({ soul: "", exists: false })),
+      api.pluginAgentGet(id).catch(() => ({ agent_id: id, plugins: [] as string[] })),
     ]);
+    setAgentPlugins(agPlugins.plugins);
     const cfg = full?.config as any;
     setFallbackInput("");
     setForm({
@@ -277,8 +285,14 @@ export function AgentsPage() {
       }
       if (editId) {
         await api.updateAgent(editId, finalForm);
+        // Plugins separat speichern
+        await api.pluginAgentSet(editId, agentPlugins).catch(() => {});
       } else {
         await (api as any).createAgent(finalForm);
+        // Plugins nach Agent-Erstellung zuweisen
+        if (agentPlugins.length > 0) {
+          await api.pluginAgentSet(finalForm.id, agentPlugins).catch(() => {});
+        }
       }
       closeForm();
       await load();
@@ -541,23 +555,10 @@ export function AgentsPage() {
                   Keine
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {knownTools.map((t) => {
-                  const isDanger = DANGER_TOOLS.has(t);
-                  const isActive = form.tools.includes(t);
-                  const activeClass = isDanger
-                    ? "border-red-600 bg-red-600 text-white"
-                    : "border-primary bg-primary text-primary-foreground";
-                  const inactiveClass = isDanger
-                    ? "border-red-500 text-red-500 hover:bg-red-500/10"
-                    : "hover:bg-accent";
-                  return (
-                    <button key={t} type="button" onClick={() => toggleTool(t)} className={`rounded-full border px-3 py-1.5 text-xs transition ${isActive ? activeClass : inactiveClass}`}>
-                      {isDanger && "⚠ "}{t}
-                    </button>
-                  );
-                })}
-              </div>
+              <ToolGroupSelector
+                selectedTools={form.tools}
+                onChange={(tools) => setForm(f => ({ ...f, tools }))}
+              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -574,7 +575,8 @@ export function AgentsPage() {
             {agentList.filter(([aid]) => aid !== editId).length > 0 && (
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <p className="metric-kicker">Erlaubte Agenten (allowed_agents)</p>
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                  <p className="metric-kicker">Erlaubte Agenten</p>
                   <button type="button" onClick={() => set("allowed_agents", agentList.filter(([aid]) => aid !== editId).map(([aid]) => aid))}
                     className="text-xs text-muted-foreground hover:text-foreground transition">
                     Alle
@@ -585,13 +587,18 @@ export function AgentsPage() {
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground mb-2">Welche Agenten darf dieser Agent via ask_agent / delegate_agent ansprechen?</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="rounded-xl border border-border/60 bg-card p-3 space-y-1.5 max-h-[200px] overflow-y-auto">
                   {agentList.filter(([aid]) => aid !== editId).map(([aid, ag]) => (
-                    <button key={aid} type="button"
-                      onClick={() => set("allowed_agents", form.allowed_agents.includes(aid) ? form.allowed_agents.filter((x: string) => x !== aid) : [...form.allowed_agents, aid])}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition ${form.allowed_agents.includes(aid) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-                      {ag.config.identity || aid}
-                    </button>
+                    <label key={aid} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors hover:bg-muted/60">
+                      <input
+                        type="checkbox"
+                        checked={form.allowed_agents.includes(aid)}
+                        onChange={() => set("allowed_agents", form.allowed_agents.includes(aid) ? form.allowed_agents.filter((x: string) => x !== aid) : [...form.allowed_agents, aid])}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                      <span className="text-foreground">{ag.config.identity || aid}</span>
+                      <span className="text-xs text-muted-foreground font-mono ml-auto">{aid}</span>
+                    </label>
                   ))}
                 </div>
               </div>
@@ -599,17 +606,49 @@ export function AgentsPage() {
 
             {isAdmin && mcpServers.length > 0 && (
               <div>
-                <p className="metric-kicker mb-3">{t("agents.mcpServers")}</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <ServerIcon className="h-4 w-4 text-muted-foreground" />
+                  <p className="metric-kicker">{t("agents.mcpServers")}</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card p-3 space-y-1.5">
                   {mcpServers.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => set("mcp_servers", form.mcp_servers.includes(s.id) ? form.mcp_servers.filter((x: string) => x !== s.id) : [...form.mcp_servers, s.id])}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition ${form.mcp_servers.includes(s.id) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                    >
-                      {s.name}
-                    </button>
+                    <label key={s.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors hover:bg-muted/60">
+                      <input
+                        type="checkbox"
+                        checked={form.mcp_servers.includes(s.id)}
+                        onChange={() => set("mcp_servers", form.mcp_servers.includes(s.id) ? form.mcp_servers.filter((x: string) => x !== s.id) : [...form.mcp_servers, s.id])}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                      <span className="text-foreground">{s.name}</span>
+                      <span className="text-xs text-muted-foreground font-mono ml-auto">{s.transport}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isAdmin && plugins.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Puzzle className="h-4 w-4 text-muted-foreground" />
+                  <p className="metric-kicker">Plugins</p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-card p-3 space-y-1.5">
+                  {plugins.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer transition-colors hover:bg-muted/60">
+                      <input
+                        type="checkbox"
+                        checked={agentPlugins.includes(p.id)}
+                        onChange={() => setAgentPlugins(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id])}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                      <span className="text-foreground">{p.name}</span>
+                      {p.tools.length > 0 && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground ml-auto">
+                          {p.tools.length} tools
+                        </span>
+                      )}
+                    </label>
                   ))}
                 </div>
               </div>
