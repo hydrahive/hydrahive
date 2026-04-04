@@ -29,6 +29,10 @@ export function UserManagementPage() {
           <h1 className="text-lg font-semibold text-foreground">{t("usermanagement.title")}</h1>
         </div>
         <p className="text-xs text-muted-foreground mb-4">{t("usermanagement.subtitle")}</p>
+        <div className="mb-4 rounded-xl border bg-muted/30 p-4 space-y-2">
+          <h3 className="text-sm font-semibold">{t("usermanagement.infoTitle")}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("usermanagement.infoText")}</p>
+        </div>
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TABS.map(tab => (
             <button

@@ -43,6 +43,14 @@ export function BlueprintPage() {
 
   return (
     <div className="flex flex-col h-full -mx-4 -my-4 md:-mx-6 md:-my-6 lg:-mx-8 lg:-my-8">
+      {/* Info block */}
+      <div className="px-4 pt-4 md:px-6 lg:px-8">
+        <div className="mb-4 rounded-xl border bg-muted/30 p-4 space-y-2">
+          <h3 className="text-sm font-semibold">{t("blueprint.infoTitle")}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("blueprint.infoText")}</p>
+        </div>
+      </div>
+
       {/* Tab bar */}
       <div className="flex items-center gap-0.5 px-4 pt-3 pb-0 border-b border-white/10 bg-[hsl(var(--sidebar-bg,220_15%_8%))] shrink-0 overflow-x-auto">
         {TABS.map(tb => (

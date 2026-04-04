@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react"
 import type ForceGraph3DType from "react-force-graph-3d";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph3D = lazy(() => import("react-force-graph-3d")) as any as typeof ForceGraph3DType;
-import { Loader2, RefreshCw, Eye, EyeOff, Globe } from "lucide-react";
+import { Loader2, RefreshCw, Eye, EyeOff, Globe, InfoIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 interface GraphNode {
   id: string;
@@ -103,6 +104,7 @@ const LEGEND_FED = [
 ];
 
 export function HydraBrainPage() {
+  const { t } = useTranslation();
   const [baseGraph,   setBaseGraph]   = useState<GraphData>({ nodes: [], links: [] });
   const [fedExtra,    setFedExtra]    = useState<GraphData>({ nodes: [], links: [] });
   const [graphData,   setGraphData]   = useState<GraphData>({ nodes: [], links: [] });
@@ -373,6 +375,17 @@ export function HydraBrainPage() {
             : <Globe className="h-4 w-4" />}
           <span className="text-xs font-medium">Federation</span>
         </button>
+      </div>
+
+      {/* Info Block */}
+      <div className="absolute top-20 left-4 z-20 rounded-xl bg-black/70 border border-white/20 px-4 py-3 backdrop-blur max-w-xs">
+        <div className="flex items-start gap-2">
+          <InfoIcon className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="flex flex-col gap-1">
+            <h3 className="text-xs font-semibold text-white">{t("brain.infoTitle")}</h3>
+            <p className="text-[11px] text-white/60 leading-relaxed">{t("brain.infoText")}</p>
+          </div>
+        </div>
       </div>
 
       {/* Legende */}

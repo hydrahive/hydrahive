@@ -38,6 +38,10 @@ export function SettingsPage() {
           <h1 className="text-lg font-semibold text-foreground">{t("settings.title")}</h1>
         </div>
         <p className="text-xs text-muted-foreground mb-4">{t("pageDesc.settings")}</p>
+        <div className="mb-4 rounded-xl border bg-muted/30 p-4 space-y-2">
+          <h3 className="text-sm font-semibold">{t("settings.infoTitle")}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("settings.infoText")}</p>
+        </div>
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TABS.map(tab => (
             <button

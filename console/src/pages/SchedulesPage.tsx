@@ -265,6 +265,11 @@ export default function SchedulesPage() {
         </div>
       )}
 
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+        <h3 className="text-sm font-semibold">{t("schedules.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("schedules.infoText")}</p>
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

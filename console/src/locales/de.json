@@ -88,6 +88,8 @@
     "error": "Fehler"
   },
   "blueprint": {
+    "infoTitle": "Blueprint — Visueller Automatisierungs-Editor",
+    "infoText": "Im Blueprint baust du visuelle Workflows und Automatisierungen. Automation: Event-basierte Regeln für Nachrichten. Pipelines: Datei-Verarbeitung automatisieren. Architect: Boss/Worker-Struktur deiner Projekte. Workflow: Schritt-für-Schritt Arbeitsabläufe. Agent Blueprint: Ressourcen und Workflows pro Agent. Scratchpad: Freies Whiteboard für Ideen. Notifications: Benachrichtigungs-Routing.",
     "automation": "Automation",
     "automationHint": "Butler Event-Flows",
     "pipelines": "Datei-Pipelines",
@@ -470,6 +472,8 @@
     "soulHint": "Markdown beschreibt Charakter und Kommunikationsstil des Agenten"
   },
   "projects": {
+    "infoTitle": "Projekte verwalten",
+    "infoText": "Ein Projekt verbindet einen Boss-Agent mit Worker-Agenten. Der Boss koordiniert Aufgaben und delegiert an Worker. Jedes Projekt hat ein eigenes Dateisystem, optionale Git-Integration (Webhooks) und kann mit AgentLink andere Systeme anbinden. Der Code Editor öffnet eine Web-IDE für das Projekt-Verzeichnis.",
     "tabProjects": "Projekte",
     "tabSchedules": "Schedules",
     "title": "Projekte als steuerbare Arbeitsraeume",
@@ -696,7 +700,9 @@
     "tabGroups": "Gruppen",
     "tabBackup": "Backup",
     "tabMigration": "Migration",
-    "tabPlugins": "Plugins"
+    "tabPlugins": "Plugins",
+    "infoTitle": "Einstellungen",
+    "infoText": "Konfiguriere die Kernkomponenten deiner HydraHive-Instanz. LLM: Sprachmodelle und API-Keys einrichten (Anthropic, OpenAI, Ollama). Gitea/GitHub: Git-Integration für Agenten-Projekte. VPN: Tailscale für sichere Verbindungen. Mail: SMTP für E-Mail-Versand. Backup: Regelmäßige Datensicherung."
   },
   "usermanagement": {
     "title": "Usermanagement",
@@ -704,7 +710,9 @@
     "tabUsers": "Benutzer",
     "tabGroups": "Gruppen",
     "tabSecrets": "Secrets",
-    "tabPermissions": "Berechtigungen"
+    "tabPermissions": "Berechtigungen",
+    "infoTitle": "Benutzer & Berechtigungen",
+    "infoText": "Verwalte wer Zugang zu deiner HydraHive-Instanz hat. Unter Users legst du Accounts an und versendest Einladungen. Groups steuern welche Seiten, Tools und Agenten ein User nutzen darf. Secrets sind API-Keys und Tokens die Agenten verwenden können. Permissions zeigen die Zugriffs-Matrix."
   },
   "login": {
     "subtitle": "Melde dich an um fortzufahren",
@@ -1338,6 +1346,8 @@
     "password": "Passwort"
   },
   "schedules": {
+    "infoTitle": "Zeitgesteuerte Aufgaben",
+    "infoText": "Schedules sind zeitgesteuerte Aufgaben die automatisch ausgeführt werden — z.B. tägliche Berichte, regelmäßige Checks oder wöchentliche Zusammenfassungen. Erstelle einen neuen Schedule mit Cron-Zeitplan und weise ihn einem Agenten und Projekt zu.",
     "title": "Geplante Aufgaben",
     "new": "Neuer Schedule",
     "newTitle": "Schedule erstellen",
@@ -1476,6 +1486,10 @@
     "all": "Alle",
     "none": "Keine",
     "selectGroup": "Wähle eine Gruppe aus der Liste um Berechtigungen zu bearbeiten."
+  },
+  "brain": {
+    "infoTitle": "HydraBrain — 3D Systemübersicht",
+    "infoText": "Der 3D-Graph zeigt alle Agenten, Tools, Projekte und ihre Verbindungen. Drehe die Ansicht mit der Maus, zoome mit dem Scrollrad, und klicke auf Knoten für Details. Farben: Blau = Agenten, Grün = Tools, Orange = Projekte, Lila = Memory."
   },
   "heartbeat": {
     "infoTitle": "Was sind Heartbeat-Tasks?",

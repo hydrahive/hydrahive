@@ -88,6 +88,8 @@
     "error": "Error"
   },
   "blueprint": {
+    "infoTitle": "Blueprint — Visual Automation Editor",
+    "infoText": "Build visual workflows and automations in Blueprint. Automation: Event-based rules for messages. Pipelines: Automate file processing. Architect: Boss/worker structure for projects. Workflow: Step-by-step task sequences. Agent Blueprint: Resources and workflows per agent. Scratchpad: Free whiteboard for ideas. Notifications: Notification routing.",
     "automation": "Automation",
     "automationHint": "Butler event flows",
     "pipelines": "File Pipelines",
@@ -470,6 +472,8 @@
     "soulHint": "Markdown describes character and communication style of the agent"
   },
   "projects": {
+    "infoTitle": "Manage Projects",
+    "infoText": "A project connects a boss agent with worker agents. The boss coordinates tasks and delegates to workers. Each project has its own filesystem, optional git integration (webhooks), and can connect to other systems via AgentLink. The Code Editor opens a web IDE for the project directory.",
     "tabProjects": "Projects",
     "tabSchedules": "Schedules",
     "title": "Projects as manageable workspaces",
@@ -696,7 +700,9 @@
     "tabGroups": "Groups",
     "tabBackup": "Backup",
     "tabMigration": "Migration",
-    "tabPlugins": "Plugins"
+    "tabPlugins": "Plugins",
+    "infoTitle": "Settings",
+    "infoText": "Configure the core components of your HydraHive instance. LLM: Set up language models and API keys (Anthropic, OpenAI, Ollama). Gitea/GitHub: Git integration for agent projects. VPN: Tailscale for secure connections. Mail: SMTP for email delivery. Backup: Regular data backups."
   },
   "usermanagement": {
     "title": "User Management",
@@ -704,7 +710,9 @@
     "tabUsers": "Users",
     "tabGroups": "Groups",
     "tabSecrets": "Secrets",
-    "tabPermissions": "Permissions"
+    "tabPermissions": "Permissions",
+    "infoTitle": "Users & Permissions",
+    "infoText": "Manage who has access to your HydraHive instance. Under Users you create accounts and send invitations. Groups control which pages, tools, and agents a user can access. Secrets are API keys and tokens that agents can use. Permissions show the access matrix."
   },
   "login": {
     "subtitle": "Sign in to continue",
@@ -1338,6 +1346,8 @@
     "password": "Password"
   },
   "schedules": {
+    "infoTitle": "Scheduled Tasks",
+    "infoText": "Schedules are timed tasks that run automatically — e.g. daily reports, regular checks, or weekly summaries. Create a new schedule with a cron expression and assign it to an agent and project.",
     "title": "Scheduled Tasks",
     "new": "New Schedule",
     "newTitle": "Create Schedule",
@@ -1476,6 +1486,10 @@
     "all": "All",
     "none": "None",
     "selectGroup": "Select a group from the list to edit permissions."
+  },
+  "brain": {
+    "infoTitle": "HydraBrain — 3D System Overview",
+    "infoText": "The 3D graph shows all agents, tools, projects and their connections. Rotate with the mouse, zoom with the scroll wheel, click nodes for details. Colors: Blue = Agents, Green = Tools, Orange = Projects, Purple = Memory."
   },
   "heartbeat": {
     "infoTitle": "What are Heartbeat Tasks?",

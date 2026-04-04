@@ -326,6 +326,11 @@ function ProjectsContent() {
         </div>
       </section>
 
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+        <h3 className="text-sm font-semibold">{t("projects.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("projects.infoText")}</p>
+      </div>
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => (
           <div key={item.label} className="metric-card">
