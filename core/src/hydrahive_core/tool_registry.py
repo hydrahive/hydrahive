@@ -4495,6 +4495,75 @@ class WriteScratchpadTool(BaseTool):
         return {"saved": True, "name": safe, "total_nodes": len(nodes)}
 
 
+# ============================================================= Tool-Gruppen
+
+TOOL_GROUPS: dict[str, dict] = {
+    "web": {
+        "label": "Chat & Web",
+        "icon": "globe",
+        "tools": ["web_search", "http_request"],
+    },
+    "memory": {
+        "label": "Memory & Scratchpad",
+        "icon": "brain",
+        "tools": ["read_memory", "write_memory", "read_scratchpad", "write_scratchpad"],
+    },
+    "files": {
+        "label": "Dateien",
+        "icon": "folder",
+        "tools": ["file_read", "file_write", "list_directory", "file_search", "file_patch", "fix_permissions"],
+    },
+    "shell": {
+        "label": "Shell",
+        "icon": "terminal",
+        "tools": ["shell_exec", "project_shell"],
+    },
+    "git": {
+        "label": "Git",
+        "icon": "git-branch",
+        "tools": ["git_status", "git_diff", "git_commit", "git_push", "git_create_pr", "git_merge"],
+    },
+    "gitea": {
+        "label": "Gitea",
+        "icon": "server",
+        "tools": ["gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits", "gitea_repo_diff", "gitea_create_issue", "gitea_comment_issue", "gitea_update_issue"],
+    },
+    "agents": {
+        "label": "Agenten",
+        "icon": "bot",
+        "tools": ["ask_agent", "delegate_agent", "dispatch_task", "spawn_agent"],
+    },
+    "system": {
+        "label": "System & WKS",
+        "icon": "monitor",
+        "tools": ["read_system_file", "write_system_file", "wks_shell_exec", "wks_file_read", "wks_file_write"],
+    },
+    "communication": {
+        "label": "Kommunikation",
+        "icon": "mail",
+        "tools": ["send_mail", "receive_mail", "write_handoff", "read_handoff", "remote_agent"],
+    },
+    "discord": {
+        "label": "Discord",
+        "icon": "message-circle",
+        "tools": ["discord_send", "discord_read", "discord_list_channels", "discord_list_all_channels",
+                  "discord_create_category", "discord_create_channel", "discord_delete_channel",
+                  "discord_set_topic", "discord_rename_channel", "discord_list_members",
+                  "discord_list_roles", "discord_delete_message", "discord_pin_message"],
+    },
+    "skills": {
+        "label": "Skills",
+        "icon": "book-open",
+        "tools": ["create_skill", "list_skills", "delete_skill"],
+    },
+    "secrets": {
+        "label": "Secrets",
+        "icon": "key",
+        "tools": ["get_secret"],
+    },
+}
+
+
 # ============================================================= Globale Registry
 
 registry = ToolRegistry()
