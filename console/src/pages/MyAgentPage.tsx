@@ -404,10 +404,7 @@ export function MyAgentPage() {
       {(() => {
         const TAB_LIST = [
           { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
-          { id: "settings",  label: t("myAgent.settingsTab"),   icon: Settings },
           { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
-          { id: "skills",    label: t("myAgent.skillsTab"),     icon: BookOpen },
-          { id: "mcp",       label: t("myAgent.mcpTab"),        icon: Plug },
           { id: "platforms", label: t("myAgent.platformsTab"),  icon: Wifi },
           { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
           { id: "discord",   label: t("myAgent.discordTab"),    icon: MessageSquare },
