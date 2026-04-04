@@ -1203,7 +1203,7 @@ _PROJECT_SHELL_WHITELIST: frozenset[str] = frozenset({
     # Git (Subkommando wird separat geprüft)
     "git",
     # Datei-Management innerhalb des Projekts
-    "mkdir", "cp", "mv", "touch",
+    "mkdir", "cp", "mv", "touch", "chmod", "chown",
     "rm",   # ohne -rf — blockiert via _check_shell_blocklist
     "tee",
     # Hilfsprogramme

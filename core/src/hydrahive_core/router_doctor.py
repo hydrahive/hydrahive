@@ -629,14 +629,13 @@ async def _fix_samba_permissions() -> dict:
             else:
                 output.append("force group bereits gesetzt")
 
-        # Dateiberechtigungen fixen
+        # Dateiberechtigungen fixen — sowohl files/ als auch Projektroot
         for proj in Path("/projects").iterdir():
-            files_dir = proj / "files"
-            if files_dir.is_dir():
-                subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(files_dir)],
-                               capture_output=True, timeout=30)
-                subprocess.run(["sudo", "chmod", "-R", "g+rw", str(files_dir)],
-                               capture_output=True, timeout=30)
+            if proj.is_dir():
+                subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(proj)],
+                               capture_output=True, timeout=60)
+                subprocess.run(["sudo", "chmod", "-R", "g+rw", str(proj)],
+                               capture_output=True, timeout=60)
         output.append("Dateiberechtigungen für alle Projekte korrigiert")
 
         return {"ok": True, "output": "\n".join(output)}
