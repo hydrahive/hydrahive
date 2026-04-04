@@ -2701,6 +2701,74 @@ class FixPermissionsTool(BaseTool):
             return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
 
 
+class FileSearchTool(BaseTool):
+    """Durchsucht alle Dateien im Projekt nach einem Text — wie grep -rn."""
+
+    @property
+    def id(self) -> str: return "file_search"
+    @property
+    def name(self) -> str: return "In Dateien suchen (grep)"
+    @property
+    def description(self) -> str:
+        return (
+            "Durchsucht alle Dateien im Projektverzeichnis nach einem Text oder Pattern. "
+            "Gibt Dateinamen, Zeilennummern und Kontext zurück. "
+            "Nutze dieses Tool um die richtige Datei zu finden bevor du sie mit file_patch änderst."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["filesystem.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Suchtext oder Pattern"},
+                "path": {"type": "string", "description": "Verzeichnis oder Datei (optional, Standard: Projektroot)"},
+                "file_pattern": {"type": "string", "description": "Dateiname-Filter z.B. '*.cpp' oder '*.py' (optional)"},
+                "max_results": {"type": "integer", "description": "Max. Treffer (Standard: 20)"},
+            },
+            "required": ["pattern"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, pattern: str, path: str = "", file_pattern: str = "", max_results: int = 20, **kwargs) -> dict:
+        import subprocess
+
+        search_dir = Path(path) if path and Path(path).is_absolute() else Path(f"/projects/{project_id}") / (path or "")
+        if not search_dir.exists():
+            return {"error": f"Verzeichnis nicht gefunden: {search_dir}"}
+
+        cmd = ["grep", "-rn", "--include", file_pattern or "*", "-m", str(max_results * 3), pattern, str(search_dir)]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            return {"error": "Suche dauerte zu lange (>30s) — verwende file_pattern um einzugrenzen"}
+
+        if r.returncode == 1:
+            return {"matches": [], "count": 0, "pattern": pattern}
+
+        lines = r.stdout.strip().split("\n")[:max_results]
+        matches = []
+        for line in lines:
+            if ":" in line:
+                parts = line.split(":", 2)
+                if len(parts) >= 3:
+                    matches.append({
+                        "file": parts[0].replace(str(search_dir) + "/", ""),
+                        "line": int(parts[1]) if parts[1].isdigit() else 0,
+                        "text": parts[2][:200].strip(),
+                    })
+
+        return {
+            "matches": matches,
+            "count": len(matches),
+            "pattern": pattern,
+            "search_dir": str(search_dir),
+        }
+
+
 class FilePatchTool(BaseTool):
     """Sucht und ersetzt Text in einer Datei — ohne die ganze Datei lesen zu müssen."""
 
@@ -4298,6 +4366,7 @@ registry.register(GiteaRepoFileTool())
 registry.register(GiteaRepoCommitsTool())
 registry.register(GiteaRepoDiffTool())
 registry.register(FixPermissionsTool())
+registry.register(FileSearchTool())
 registry.register(FilePatchTool())
 registry.register(GiteaCreateIssueTool())
 registry.register(GiteaCommentIssueTool())

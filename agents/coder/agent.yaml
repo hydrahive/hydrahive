@@ -33,6 +33,7 @@ tools:
 - file_read
 - file_write
 - file_patch
+- file_search
 - fix_permissions
 - list_directory
 # Shell
