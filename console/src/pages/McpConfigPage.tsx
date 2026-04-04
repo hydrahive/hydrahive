@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Edit2, Save, X, RefreshCw, Server, Brain, ExternalLink } from "lucide-react";
 import { api, McpServer } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const TRANSPORTS = ["streamableHttp", "sse", "stdio"];
 const AMEM_BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
@@ -31,6 +32,7 @@ export function McpConfigPage() {
   const [form,     setForm]     = useState<typeof EMPTY>({ ...EMPTY });
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
   const hasAmem = useMemo(() => servers.some((s) => s.id === "amem"), [servers]);
 
   async function load() {
@@ -102,12 +104,17 @@ export function McpConfigPage() {
     finally { setSaving(false); }
   }
 
-  async function del(id: string) {
-    if (!confirm(t("common.confirmDelete", { name: id }))) return;
-    try {
-      await api.deleteMcpServer(id);
-      await load();
-    } catch (e) { alert(e instanceof Error ? e.message : t("common.error")); }
+  function del(id: string) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("common.confirmDelete", { name: id }),
+      action: async () => {
+        try {
+          await api.deleteMcpServer(id);
+          await load();
+        } catch (e) { alert(e instanceof Error ? e.message : t("common.error")); }
+      },
+    });
   }
 
   if (loading) return <div className="p-6"><div className="animate-pulse space-y-3">{[1,2].map(i=><div key={i} className="h-20 bg-muted rounded-lg"/>)}</div></div>;
@@ -263,6 +270,14 @@ export function McpConfigPage() {
         <p>Konfigurierte Server können Agenten unter <strong>Agenten → Bearbeiten</strong> zugewiesen werden. Admins können jeden Agenten konfigurieren; normale User können ihrem persönlichen Agenten unter <strong>Mein Agent → MCP</strong> Server zuweisen.</p>
         <p>MCP-Server werden beim nächsten Aufruf des Agenten aktiviert und stellen dem Modell externe Tools zur Verfügung.</p>
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

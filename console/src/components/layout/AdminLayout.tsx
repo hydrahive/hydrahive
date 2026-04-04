@@ -321,6 +321,7 @@ export function AdminLayout() {
             type="button"
             onClick={() => setMobileOpen(false)}
             className="rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
+            aria-label="Close menu"
           >
             <X className="h-5 w-5" />
           </button>

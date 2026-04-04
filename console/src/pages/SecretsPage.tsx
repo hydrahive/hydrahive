@@ -3,6 +3,7 @@ import { KeyRound, Plus, Trash2, Eye, EyeOff, Save, Loader2 } from "lucide-react
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface SecretMeta {
   name: string;
@@ -20,6 +21,7 @@ export function SecretsPage() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealLoading, setRevealLoading] = useState<string | null>(null);
   const [toast, setToast]       = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -54,12 +56,17 @@ export function SecretsPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
-    if (!confirm(`Secret "${name}" wirklich löschen?`)) return;
-    await api.delete(`/admin/agent-secrets/${name}`);
-    setRevealed(r => { const n = { ...r }; delete n[name]; return n; });
-    showToast(`"${name}" gelöscht`);
-    await load();
+  const handleDelete = (name: string) => {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("confirm.deleteSecret", { name }),
+      action: async () => {
+        await api.delete(`/admin/agent-secrets/${name}`);
+        setRevealed(r => { const n = { ...r }; delete n[name]; return n; });
+        showToast(`"${name}" gelöscht`);
+        await load();
+      },
+    });
   };
 
   const handleReveal = async (name: string) => {
@@ -177,6 +184,14 @@ export function SecretsPage() {
           Nutze <strong className="text-white/55">Vaultwarden</strong> unter <a href="/vault/" target="_blank" className="text-indigo-400 hover:underline">/vault/</a> für die persönliche Passwortverwaltung.
         </p>
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

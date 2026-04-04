@@ -1,5 +1,6 @@
 import "@xyflow/react/dist/style.css";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -1089,6 +1090,7 @@ function ButlerPageInner() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
 
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
   const rf = useReactFlow();
 
   const showToast = (msg: string) => {
@@ -1160,16 +1162,22 @@ function ButlerPageInner() {
     }
   };
 
-  const deleteFlow = async () => {
-    if (!activeFlowId || !confirm(t("common.confirmDelete", { name: flowName }))) return;
-    try {
-      await api.delete(`/butler/flows/${activeFlowId}`);
-      setFlows(fs => fs.filter(f => f.id !== activeFlowId));
-      newFlow();
-      showToast(t("common.deleted"));
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : t("common.error"));
-    }
+  const deleteFlow = () => {
+    if (!activeFlowId) return;
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("common.confirmDelete", { name: flowName }),
+      action: async () => {
+        try {
+          await api.delete(`/butler/flows/${activeFlowId}`);
+          setFlows(fs => fs.filter(f => f.id !== activeFlowId));
+          newFlow();
+          showToast(t("common.deleted"));
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : t("common.error"));
+        }
+      },
+    });
   };
 
   const toggleFlow = async () => {
@@ -1368,6 +1376,14 @@ function ButlerPageInner() {
           />
         )}
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

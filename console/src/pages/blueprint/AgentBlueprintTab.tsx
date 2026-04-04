@@ -14,6 +14,7 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // ── Node-Typen ────────────────────────────────────────────────────────────────
 
@@ -625,6 +626,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   const [availablePlugins, setAvailablePlugins] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills]   = useState<string[]>([]);
   const [showPalette, setShowPalette]           = useState(false);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
   const [viewMode, setViewMode]                 = useState<ViewMode>("resources");
   // Workflow-Flow eigener State (unabhängig von Ressourcen-Blueprint)
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node>([]);
@@ -948,17 +950,22 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               <PlusCircle className="h-3.5 w-3.5" /> Neuer Agent
             </button>
             {selectedAgentId && !selectedAgentId.startsWith("personal_") && (
-              <button onClick={async () => {
+              <button onClick={() => {
                 const name = agents.find(a => a.id === selectedAgentId)?.identity || selectedAgentId;
-                if (!confirm(`Agent "${name}" wirklich löschen?`)) return;
-                try {
-                  await api.delete(`/agents/${selectedAgentId}`);
-                  const idx = agents.findIndex(a => a.id === selectedAgentId);
-                  if (idx >= 0) agents.splice(idx, 1);
-                  setSelectedAgentId(agents[0]?.id ?? "");
-                  setToast(`Agent "${name}" gelöscht`);
-                  setTimeout(() => setToast(null), 3000);
-                } catch (e: any) { setToast(e.message); }
+                setConfirmState({
+                  title: t("confirm.titleDelete"),
+                  message: t("confirm.deleteAgent", { name }),
+                  action: async () => {
+                    try {
+                      await api.delete(`/agents/${selectedAgentId}`);
+                      const idx = agents.findIndex(a => a.id === selectedAgentId);
+                      if (idx >= 0) agents.splice(idx, 1);
+                      setSelectedAgentId(agents[0]?.id ?? "");
+                      setToast(`Agent "${name}" gelöscht`);
+                      setTimeout(() => setToast(null), 3000);
+                    } catch (e: any) { setToast(e.message); }
+                  },
+                });
               }}
                 className="flex items-center gap-1.5 rounded-lg border border-red-500/40 px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/15 transition-colors">
                 <X className="h-3 w-3" /> Löschen

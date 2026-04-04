@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Globe, Plus, Trash2, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronUp, Eye, EyeOff, Send, Radar, Wifi, WifiOff, Link } from "lucide-react";
 import { api, A2APeer, A2APeersResponse, A2ATestResult } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // ── Tailscale Discovery ──────────────────────────────────────────────────────
 
 function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<{api_configured:boolean;local:{logged_in:boolean;ip:string|null;hostname:string|null}} | null>(null);
   const [devices, setDevices] = useState<{id:string;hostname:string;ip:string;os:string;online:boolean}[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -20,6 +22,7 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
   const [savingKey, setSavingKey] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function reload() {
     const s = await api.tailscaleStatus().catch(() => null);
@@ -51,14 +54,19 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
     finally { setConnecting(false); }
   }
 
-  async function disconnect() {
-    if (!confirm("Tailscale trennen?")) return;
-    setConnecting(true); setError(null);
-    try {
-      await api.post("/admin/tailscale/disconnect", {});
-      await reload();
-    } catch (e: any) { setError(e.message); }
-    finally { setConnecting(false); }
+  function disconnect() {
+    setConfirmState({
+      title: t("confirm.titleDisconnect"),
+      message: t("confirm.disconnectTailscale"),
+      action: async () => {
+        setConnecting(true); setError(null);
+        try {
+          await api.post("/admin/tailscale/disconnect", {});
+          await reload();
+        } catch (e: any) { setError(e.message); }
+        finally { setConnecting(false); }
+      },
+    });
   }
 
   async function scan() {
@@ -270,12 +278,17 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">{d.os}</span>
                   <button
-                    onClick={async () => {
-                      if (!confirm(`"${d.hostname}" aus dem Tailnet entfernen?`)) return;
-                      try {
-                        await api.tailscaleRemoveDevice(d.id);
-                        setDevices(prev => prev.filter(x => x.id !== d.id));
-                      } catch (e: any) { setError(e.message); }
+                    onClick={() => {
+                      setConfirmState({
+                        title: t("confirm.titleRemove"),
+                        message: t("confirm.removeDevice", { name: d.hostname }),
+                        action: async () => {
+                          try {
+                            await api.tailscaleRemoveDevice(d.id);
+                            setDevices(prev => prev.filter(x => x.id !== d.id));
+                          } catch (e: any) { setError(e.message); }
+                        },
+                      });
                     }}
                     className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                     title="Aus Tailnet entfernen"
@@ -319,6 +332,14 @@ function TailscaleSection({ onPeerAdded }: { onPeerAdded: () => void }) {
           )}
         </div>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

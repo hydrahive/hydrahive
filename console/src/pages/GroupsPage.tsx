@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   Plus, Save, Trash2, Shield, ChevronDown, ChevronRight, Loader2, CheckCircle,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface GroupPermissions {
   pages: string[];
@@ -59,6 +60,7 @@ export function GroupsPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     try {
@@ -111,13 +113,19 @@ export function GroupsPage() {
     finally { setSaving(false); }
   }
 
-  async function deleteGroup() {
-    if (!selected || !confirm(`Gruppe "${selected}" wirklich löschen?`)) return;
-    try {
-      await api.delete(`/admin/groups/${selected}`);
-      setSelected(null); setEditData(null);
-      await load();
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+  function deleteGroup() {
+    if (!selected) return;
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("confirm.deleteGroup", { name: selected }),
+      action: async () => {
+        try {
+          await api.delete(`/admin/groups/${selected}`);
+          setSelected(null); setEditData(null);
+          await load();
+        } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+      },
+    });
   }
 
   function togglePerm(cat: keyof GroupPermissions, item: string) {
@@ -247,6 +255,14 @@ export function GroupsPage() {
           </div>
         )}
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

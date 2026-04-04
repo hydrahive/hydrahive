@@ -34,6 +34,7 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SkillNodeData {
@@ -384,6 +385,7 @@ function SkillPackagesPageInner() {
   const [selectedId, setSelectedId]     = useState<string | null>(null);
 
   const rf = useReactFlow();
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -447,16 +449,22 @@ function SkillPackagesPageInner() {
     }
   };
 
-  const deletePackage = async () => {
-    if (!activePkgId || !confirm(t("common.confirmDelete", { name: pkgName }))) return;
-    try {
-      await api.delete(`/admin/skill-packages/${activePkgId}`);
-      setPackages(ps => ps.filter(p => p.id !== activePkgId));
-      newPackage();
-      showToast(t("common.deleted"));
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : t("common.error"));
-    }
+  const deletePackage = () => {
+    if (!activePkgId) return;
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("common.confirmDelete", { name: pkgName }),
+      action: async () => {
+        try {
+          await api.delete(`/admin/skill-packages/${activePkgId}`);
+          setPackages(ps => ps.filter(p => p.id !== activePkgId));
+          newPackage();
+          showToast(t("common.deleted"));
+        } catch (e) {
+          showToast(e instanceof Error ? e.message : t("common.error"));
+        }
+      },
+    });
   };
 
   const toggleEnabled = () => {
@@ -657,6 +665,14 @@ function SkillPackagesPageInner() {
           />
         )}
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

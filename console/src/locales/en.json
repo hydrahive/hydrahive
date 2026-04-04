@@ -1104,6 +1104,27 @@
     "active": "Active",
     "inactive": "Inactive"
   },
+  "confirm": {
+    "titleDelete": "Delete",
+    "titleUninstall": "Uninstall",
+    "titleDisconnect": "Disconnect",
+    "titleRevoke": "Revoke",
+    "titleRemove": "Remove",
+    "titleClear": "Clear",
+    "titleDeactivate": "Deactivate",
+    "uninstallAgent": "Uninstall agent \"{{name}}\"?",
+    "uninstallPlugin": "Really uninstall plugin \"{{name}}\"?",
+    "deleteAgent": "Really delete agent \"{{name}}\"?",
+    "deletePipeline": "Really delete pipeline \"{{name}}\"?",
+    "clearAll": "Clear all?",
+    "deleteScratchpad": "Delete scratchpad \"{{name}}\"?",
+    "deleteSecret": "Really delete secret \"{{name}}\"?",
+    "disconnectTailscale": "Disconnect Tailscale?",
+    "removeDevice": "Remove \"{{name}}\" from Tailnet?",
+    "revokeInvite": "Revoke invitation?",
+    "deleteGithubToken": "Really remove GitHub token?",
+    "deleteGroup": "Really delete group \"{{name}}\"?"
+  },
   "slashCommands": {
     "help": "Show available commands",
     "clear": "Clear chat history",

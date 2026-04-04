@@ -5,6 +5,7 @@ import {
   Clock, Plus, Trash2, Pencil, CheckCircle2, XCircle,
   Loader2, Calendar, Play,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // ---------------------------------------------------------------- helpers
 
@@ -156,6 +157,7 @@ export default function SchedulesPage() {
   const [loading,   setLoading]   = useState(true);
   const [modal,     setModal]     = useState<null | "new" | Schedule>(null);
   const [error,     setError]     = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     setLoading(true);
@@ -222,14 +224,19 @@ export default function SchedulesPage() {
     }
   }
 
-  async function handleDelete(s: Schedule) {
-    if (!confirm(t("schedules.confirmDelete", { name: s.name }))) return;
-    try {
-      await api.deleteSchedule(s.id);
-      load();
-    } catch (e) {
-      setError(String(e));
-    }
+  function handleDelete(s: Schedule) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("schedules.confirmDelete", { name: s.name }),
+      action: async () => {
+        try {
+          await api.deleteSchedule(s.id);
+          load();
+        } catch (e) {
+          setError(String(e));
+        }
+      },
+    });
   }
 
   return (
@@ -341,6 +348,14 @@ export default function SchedulesPage() {
           onClose={() => setModal(null)}
         />
       )}
+      <ConfirmDialog
+        open={!!confirmState}
+        title={confirmState?.title || ""}
+        message={confirmState?.message || ""}
+        onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+        onCancel={() => setConfirmState(null)}
+        variant="danger"
+      />
     </div>
   );
 }

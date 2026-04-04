@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle, Trash2 } from "lucide-react";
 import { api, type HubPackage, type HubInstalledEntry, type ClawhubSkillItem, type ClawhubPackageItem } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const CATEGORY_LABELS: Record<string, string> = {
   engineering:  "Engineering",
@@ -376,6 +377,7 @@ function HydraHubTab() {
   const [installErr, setInstallErr] = useState<string | null>(null);
   const [agentIdInput, setAgentIdInput] = useState("");
   const [hubUpdated, setHubUpdated] = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     setLoading(true);
@@ -631,16 +633,21 @@ function HydraHubTab() {
             <div className="p-6 border-t border-border/40 flex-shrink-0">
               {installedIds.has(selected.id) ? (
                 <button
-                  onClick={async () => {
-                    if (!confirm(`Agent "${selected.id}" deinstallieren?`)) return;
-                    setInstalling(selected.id);
-                    try {
-                      await api.hubUninstall(selected.id);
-                      const inst = await api.hubInstalled();
-                      setInstalled(Array.isArray(inst) ? inst : []);
-                      setSelected(null);
-                    } catch (e: any) { setInstallErr(e.message); }
-                    finally { setInstalling(null); }
+                  onClick={() => {
+                    setConfirmState({
+                      title: t("confirm.titleUninstall"),
+                      message: t("confirm.uninstallAgent", { name: selected.id }),
+                      action: async () => {
+                        setInstalling(selected.id);
+                        try {
+                          await api.hubUninstall(selected.id);
+                          const inst = await api.hubInstalled();
+                          setInstalled(Array.isArray(inst) ? inst : []);
+                          setSelected(null);
+                        } catch (e: any) { setInstallErr(e.message); }
+                        finally { setInstalling(null); }
+                      },
+                    });
                   }}
                   disabled={installing === selected.id}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors disabled:opacity-50"
@@ -670,6 +677,14 @@ function HydraHubTab() {
           </div>
         </div>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }
@@ -683,6 +698,7 @@ function HubPluginsTab() {
   const [loading, setLoading]       = useState(true);
   const [installing, setInstalling] = useState<string | null>(null);
   const [error, setError]           = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     setLoading(true); setError(null);
@@ -707,15 +723,20 @@ function HubPluginsTab() {
     finally { setInstalling(null); }
   }
 
-  async function uninstallPlugin(id: string) {
-    if (!confirm(`Plugin "${id}" wirklich deinstallieren?`)) return;
-    setInstalling(id); setError(null);
-    try {
-      await api.hubUninstallPlugin(id);
-      const inst = await api.hubInstalled();
-      setInstalled(new Set((Array.isArray(inst) ? inst : []).map((i: any) => i.id)));
-    } catch (e: any) { setError(e.message); }
-    finally { setInstalling(null); }
+  function uninstallPlugin(id: string) {
+    setConfirmState({
+      title: t("confirm.titleUninstall"),
+      message: t("confirm.uninstallPlugin", { name: id }),
+      action: async () => {
+        setInstalling(id); setError(null);
+        try {
+          await api.hubUninstallPlugin(id);
+          const inst = await api.hubInstalled();
+          setInstalled(new Set((Array.isArray(inst) ? inst : []).map((i: any) => i.id)));
+        } catch (e: any) { setError(e.message); }
+        finally { setInstalling(null); }
+      },
+    });
   }
 
   return (
@@ -784,6 +805,14 @@ function HubPluginsTab() {
           </div>
         )}
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

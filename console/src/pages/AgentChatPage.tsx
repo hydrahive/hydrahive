@@ -330,7 +330,8 @@ export function AgentChatPage() {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
         <button onClick={() => navigate("/agents")}
-          className="p-1.5 rounded-md hover:bg-accent transition-colors">
+          className="p-1.5 rounded-md hover:bg-accent transition-colors"
+          aria-label="Back to agents">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -342,7 +343,8 @@ export function AgentChatPage() {
         </div>
         <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
           className={`p-1.5 rounded-md transition-colors ${showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
-          title="Chat-Verlauf">
+          title="Chat-Verlauf"
+          aria-label="Toggle chat history">
           <Clock className="h-4 w-4" />
         </button>
       </div>
@@ -352,7 +354,7 @@ export function AgentChatPage() {
         <div className="flex-1 overflow-y-auto border-b bg-muted/20">
           <div className="flex items-center justify-between px-4 py-2 border-b">
             <span className="text-xs font-medium text-muted-foreground">{t("chat.pastSessions")}</span>
-            <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent">
+            <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent" aria-label="Close history">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -374,6 +376,7 @@ export function AgentChatPage() {
                   </button>
                   <button onClick={() => resumeSession(s.id)}
                     title="Chat fortsetzen"
+                    aria-label="Resume session"
                     className="flex items-center gap-1 px-3 text-xs text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
                     <RotateCcw className="h-3.5 w-3.5" />
                   </button>
@@ -567,18 +570,21 @@ export function AgentChatPage() {
             className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
           <button onClick={() => setShowEmoji(v => !v)} type="button"
-            className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0">
+            className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
+            aria-label="Toggle emoji picker">
             <Smile className="h-4 w-4 text-muted-foreground" />
           </button>
           {sending ? (
             <button onClick={stop}
               className="p-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors flex-shrink-0"
-              title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
+              title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}
+              aria-label="Stop generation">
               <Square className="h-4 w-4" />
             </button>
           ) : (
             <button onClick={() => send()} disabled={!input.trim() || coachChecking}
-              className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0">
+              className="p-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0"
+              aria-label="Send message">
               <Send className="h-4 w-4" />
             </button>
           )}

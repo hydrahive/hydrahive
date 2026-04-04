@@ -6,6 +6,7 @@ import { SkillsPanel } from "@/components/SkillsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { agentCategory, AGENT_COLORS } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface AgentRuntime {
   status: string;
@@ -123,6 +124,7 @@ export function AgentsPage() {
   const [agentSearch, setAgentSearch] = useState("");
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     try {
@@ -287,17 +289,22 @@ export function AgentsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm(t("agents.deactivateConfirm", { id }))) return;
-    setDeleting(id);
-    try {
-      await api.deleteAgent(id);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.deleteError"));
-    } finally {
-      setDeleting(null);
-    }
+  function handleDelete(id: string) {
+    setConfirmState({
+      title: t("confirm.titleDeactivate"),
+      message: t("agents.deactivateConfirm", { id }),
+      action: async () => {
+        setDeleting(id);
+        try {
+          await api.deleteAgent(id);
+          await load();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : t("common.deleteError"));
+        } finally {
+          setDeleting(null);
+        }
+      },
+    });
   }
 
   function openHbEdit(id: string, rt: AgentRuntime | null) {
@@ -879,6 +886,14 @@ export function AgentsPage() {
           )}
         </section>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

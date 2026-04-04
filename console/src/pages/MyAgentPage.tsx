@@ -5,6 +5,7 @@ const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.Bu
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 
@@ -428,7 +429,7 @@ export function MyAgentPage() {
             <div className="border-b flex-shrink-0 min-w-0">
               <div className="flex items-center gap-3 px-4 py-3">
                 {/* Hamburger — nur Mobile */}
-                <button onClick={() => setDrawerOpen(true)} className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+                <button onClick={() => setDrawerOpen(true)} className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted transition-colors flex-shrink-0" aria-label="Open menu">
                   <Menu className="h-5 w-5" />
                 </button>
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 hidden md:flex">
@@ -467,7 +468,7 @@ export function MyAgentPage() {
                 <div className="fixed left-0 top-0 bottom-0 w-64 bg-card border-r z-50 md:hidden overflow-y-auto">
                   <div className="flex items-center justify-between px-4 py-3 border-b">
                     <span className="text-sm font-semibold">{identity}</span>
-                    <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-muted"><X className="h-4 w-4" /></button>
+                    <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-muted" aria-label="Close menu"><X className="h-4 w-4" /></button>
                   </div>
                   <div className="py-2">
                     {TAB_LIST.map(({ id, label, icon: Icon }) => (
@@ -514,7 +515,8 @@ export function MyAgentPage() {
                       )}
                       <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
                         className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
-                        title="Vergangene Sessions">
+                        title="Vergangene Sessions"
+                        aria-label="Toggle chat history">
                         <Clock className="h-4 w-4" />
                       </button>
                     </div>
@@ -526,7 +528,7 @@ export function MyAgentPage() {
                   <div className="border-b border-border/60">
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30">
                       <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
-                      <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent">
+                      <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent" aria-label="Close history">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -548,6 +550,7 @@ export function MyAgentPage() {
                             </button>
                             <button onClick={() => resumePastSession(s.id)}
                               title="Chat fortsetzen"
+                              aria-label="Resume session"
                               className="flex items-center px-3 text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
                               <RotateCcw className="h-3.5 w-3.5" />
                             </button>
@@ -791,12 +794,14 @@ export function MyAgentPage() {
                         {sending ? (
                           <button onClick={stop}
                             className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
-                            title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}>
+                            title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}
+                            aria-label="Stop generation">
                             <Square className="h-4 w-4" />
                           </button>
                         ) : (
                           <button onClick={() => send()} disabled={!input.trim() || coachChecking}
-                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+                            aria-label="Send message">
                             <Send className="h-4 w-4" />
                           </button>
                         )}
@@ -1981,6 +1986,7 @@ function DiscordTab() {
   const [userBlacklist,  setUserBlacklist]  = useState<string[]>([]);
   const [userWlInput,    setUserWlInput]    = useState("");
   const [userBlInput,    setUserBlInput]    = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   useEffect(() => {
     api.getDiscord().then(d => {
@@ -2072,15 +2078,20 @@ function DiscordTab() {
     } finally { setSaving(false); }
   }
 
-  async function handleDelete() {
-    if (!confirm(t("myAgent.discordDeleteConfirm"))) return;
-    await api.deleteDiscord();
-    setCfg({ configured: false });
-    setGuildId(""); setSelectedIds(new Set()); setChannels([]);
-    setChannelModes({}); setChannelNames({}); setRoles([]);
-    setRoleWhitelist(new Set()); setRoleBlacklist(new Set());
-    setUserWhitelist([]); setUserBlacklist([]);
-    setMsg("Bot entfernt");
+  function handleDelete() {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("myAgent.discordDeleteConfirm"),
+      action: async () => {
+        await api.deleteDiscord();
+        setCfg({ configured: false });
+        setGuildId(""); setSelectedIds(new Set()); setChannels([]);
+        setChannelModes({}); setChannelNames({}); setRoles([]);
+        setRoleWhitelist(new Set()); setRoleBlacklist(new Set());
+        setUserWhitelist([]); setUserBlacklist([]);
+        setMsg("Bot entfernt");
+      },
+    });
   }
 
   async function handleTest() {
@@ -2356,6 +2367,14 @@ function DiscordTab() {
           <li>{t("myAgent.discordSetup6")}</li>
         </ol>
       </section>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }
@@ -2384,6 +2403,7 @@ function WhatsAppTab() {
   const [voices, setVoices] = useState<{ id: string; label: string; lang: string }[]>([]);
   const [previewPlaying, setPreviewPlaying] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function fetchStatus() {
     try {
@@ -2450,16 +2470,21 @@ function WhatsAppTab() {
     } finally { setLoading(false); }
   }
 
-  async function handleDisconnect() {
-    if (!confirm(t("myAgent.whatsappDisconnect") + "?")) return;
-    try {
-      await api.disconnectWhatsApp();
-      setStatus({ configured: false, status: "disconnected", qr: null, phone: null });
-      setMsg(t("myAgent.whatsappDisconnected2"));
-      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    } catch (err: unknown) {
-      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
-    }
+  function handleDisconnect() {
+    setConfirmState({
+      title: t("confirm.titleDisconnect"),
+      message: t("myAgent.whatsappDisconnect") + "?",
+      action: async () => {
+        try {
+          await api.disconnectWhatsApp();
+          setStatus({ configured: false, status: "disconnected", qr: null, phone: null });
+          setMsg(t("myAgent.whatsappDisconnected2"));
+          if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        } catch (err: unknown) {
+          setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
+        }
+      },
+    });
   }
 
   async function handleInstallChromium() {
@@ -2720,6 +2745,14 @@ function WhatsAppTab() {
           </div>
         </section>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }
@@ -2996,6 +3029,7 @@ function MailTab() {
   const [imapHost,     setImapHost]    = useState("");
   const [saving,       setSaving]      = useState(false);
   const [msg,          setMsg]         = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   useEffect(() => {
     api.getMail().then(d => {
@@ -3031,16 +3065,21 @@ function MailTab() {
     } finally { setSaving(false); }
   }
 
-  async function handleDelete() {
-    if (!confirm(t("myAgent.mailDeleteConfirm"))) return;
-    try {
-      await api.deleteMail();
-      setCfg({ configured: false, mail_address: "", smtp_host: "" });
-      setMailAddress(""); setDomain(""); setSmtpHost(""); setSmtpPassword("");
-      setMsg(t("myAgent.mailRemoved"));
-    } catch (err: unknown) {
-      setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
-    }
+  function handleDelete() {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("myAgent.mailDeleteConfirm"),
+      action: async () => {
+        try {
+          await api.deleteMail();
+          setCfg({ configured: false, mail_address: "", smtp_host: "" });
+          setMailAddress(""); setDomain(""); setSmtpHost(""); setSmtpPassword("");
+          setMsg(t("myAgent.mailRemoved"));
+        } catch (err: unknown) {
+          setMsg(t("common.error") + ": " + (err instanceof Error ? err.message : String(err)));
+        }
+      },
+    });
   }
 
   return (
@@ -3159,6 +3198,14 @@ function MailTab() {
           <li>{t("myAgent.mailNote3")}</li>
         </ul>
       </section>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }
@@ -3184,6 +3231,7 @@ function TelegramTab() {
   const [uidInput,   setUidInput]   = useState("");
   const [blockInput, setBlockInput] = useState("");
   const [adminInput, setAdminInput] = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function fetchStatus() {
     try {
@@ -3218,15 +3266,20 @@ function TelegramTab() {
     }
   }
 
-  async function handleDisconnect() {
-    if (!confirm(t("myAgent.telegramDisconnectConfirm"))) return;
-    setLoading(true);
-    try {
-      await api.disconnectTelegram();
-      setStatus({ configured: false, enabled: false, status: "stopped", bot_username: "" });
-    } finally {
-      setLoading(false);
-    }
+  function handleDisconnect() {
+    setConfirmState({
+      title: t("confirm.titleDisconnect"),
+      message: t("myAgent.telegramDisconnectConfirm"),
+      action: async () => {
+        setLoading(true);
+        try {
+          await api.disconnectTelegram();
+          setStatus({ configured: false, enabled: false, status: "stopped", bot_username: "" });
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   }
 
   async function saveCfg() {
@@ -3429,6 +3482,14 @@ function TelegramTab() {
           <li>{t("myAgent.telegramSetup4")}</li>
         </ol>
       </section>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

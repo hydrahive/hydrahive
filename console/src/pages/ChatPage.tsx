@@ -425,7 +425,7 @@ export function ChatPage() {
                     ) : (
                       <h3 className="font-semibold">{t("chat.history")}</h3>
                     )}
-                    <button onClick={() => { setShowHistory(false); setViewSession(null); }} className="rounded-lg p-1.5 hover:bg-muted">
+                    <button onClick={() => { setShowHistory(false); setViewSession(null); }} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Close history">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -693,15 +693,15 @@ export function ChatPage() {
                     style={{ maxHeight: "140px", overflowY: "auto" }}
                   />
                   {/* Emoji-Button auf Mobile ausblenden um Platz zu sparen */}
-                  <button onClick={() => setShowEmoji(v => !v)} type="button" className="hidden sm:flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted">
+                  <button onClick={() => setShowEmoji(v => !v)} type="button" className="hidden sm:flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-2xl border bg-background transition hover:bg-muted" aria-label="Toggle emoji picker">
                     <Smile className="h-5 w-5 text-muted-foreground" />
                   </button>
                   {sending ? (
-                    <button onClick={stop} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
+                    <button onClick={stop} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90 sm:h-[52px] sm:w-[52px] sm:rounded-2xl" aria-label="Stop generation">
                       <Square className="h-4 w-4" />
                     </button>
                   ) : (
-                    <button onClick={() => send()} disabled={!input.trim() || coachChecking} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 sm:h-[52px] sm:w-[52px] sm:rounded-2xl">
+                    <button onClick={() => send()} disabled={!input.trim() || coachChecking} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 sm:h-[52px] sm:w-[52px] sm:rounded-2xl" aria-label="Send message">
                       <Send className="h-4 w-4" />
                     </button>
                   )}

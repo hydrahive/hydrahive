@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Github, CheckCircle2, AlertCircle, Trash2, ExternalLink, Lock, Globe } from "lucide-react";
 import { api } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface TokenStatus {
   configured: boolean;
@@ -12,12 +14,14 @@ interface TokenStatus {
 }
 
 export function GitHubConfigPage() {
+  const { t } = useTranslation();
   const [status,  setStatus]  = useState<TokenStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [token,   setToken]   = useState("");
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function loadStatus() {
     try {
@@ -48,16 +52,21 @@ export function GitHubConfigPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm("GitHub-Token wirklich entfernen?")) return;
-    setError(""); setSuccess("");
-    try {
-      await api.deleteGithubToken();
-      setStatus({ configured: false });
-      setSuccess("Token entfernt");
-    } catch {
-      setError("Fehler beim Entfernen");
-    }
+  function handleDelete() {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("confirm.deleteGithubToken"),
+      action: async () => {
+        setError(""); setSuccess("");
+        try {
+          await api.deleteGithubToken();
+          setStatus({ configured: false });
+          setSuccess("Token entfernt");
+        } catch {
+          setError("Fehler beim Entfernen");
+        }
+      },
+    });
   }
 
   if (loading) return (
@@ -167,6 +176,14 @@ export function GitHubConfigPage() {
           <span className="flex items-center gap-1"><Globe className="h-3 w-3" /> Nur public: <code>public_repo</code></span>
         </div>
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

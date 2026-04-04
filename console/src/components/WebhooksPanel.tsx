@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Webhook as WebhookIcon, Plus, Trash2, X, Save, Eye, EyeOff, Zap, Radar } from "lucide-react";
 import { api, Webhook } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const ALL_EVENTS = ["message", "agent_error", "provision", "agent_start", "agent_stop"] as const;
 const EVENT_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ export function WebhooksPanel({ projectId }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     try {
@@ -96,20 +98,26 @@ export function WebhooksPanel({ projectId }: Props) {
     }
   }
 
-  async function handleDelete(wid: string, name: string) {
-    if (!confirm(t("common.confirmDelete", { name }))) return;
-    setDeleting(wid);
-    try {
-      await api.deleteWebhook(projectId, wid);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.error"));
-    } finally {
-      setDeleting(null);
-    }
+  function handleDelete(wid: string, name: string) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("common.confirmDelete", { name }),
+      action: async () => {
+        setDeleting(wid);
+        try {
+          await api.deleteWebhook(projectId, wid);
+          await load();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : t("common.error"));
+        } finally {
+          setDeleting(null);
+        }
+      },
+    });
   }
 
   return (
+    <>
     <div className="border-t bg-muted/10 px-5 py-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -221,5 +229,14 @@ export function WebhooksPanel({ projectId }: Props) {
         )}
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
+    </>
   );
 }

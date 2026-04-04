@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Users, Plus, RefreshCw, Trash2, KeyRound, ShieldCheck, User, Pencil, X, Save, Link, Copy, Check, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Invite {
   token:            string;
@@ -69,6 +70,7 @@ export function UserPage() {
   const [inviteSaving, setInviteSaving] = useState(false);
   const [newInviteLink, setNewInviteLink] = useState<string|null>(null);
   const [copied,      setCopied]      = useState(false);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function loadInvites() {
     try { setInvites(await api.get<Invite[]>("/invites")); } catch { /* ignore */ }
@@ -87,10 +89,15 @@ export function UserPage() {
     finally { setInviteSaving(false); }
   }
 
-  async function handleRevokeInvite(token: string) {
-    if (!confirm("Einladung widerrufen?")) return;
-    try { await api.delete(`/invites/${token}`); loadInvites(); }
-    catch(err) { alert(err instanceof Error ? err.message : "Fehler"); }
+  function handleRevokeInvite(token: string) {
+    setConfirmState({
+      title: t("confirm.titleRevoke"),
+      message: t("confirm.revokeInvite"),
+      action: async () => {
+        try { await api.delete(`/invites/${token}`); loadInvites(); }
+        catch(err) { alert(err instanceof Error ? err.message : "Fehler"); }
+      },
+    });
   }
 
   function copyLink(link: string) {
@@ -159,12 +166,17 @@ export function UserPage() {
     finally { setSaving(false); }
   }
 
-  async function handleDelete(username: string) {
-    if (!confirm(t("users.deleteConfirm", { user: username }))) return;
-    setDeleting(username);
-    try { await api.delete(`/users/${username}`); await load(); }
-    catch(e) { setError(e instanceof Error ? e.message : t("common.error")); }
-    finally { setDeleting(null); }
+  function handleDelete(username: string) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("users.deleteConfirm", { user: username }),
+      action: async () => {
+        setDeleting(username);
+        try { await api.delete(`/users/${username}`); await load(); }
+        catch(e) { setError(e instanceof Error ? e.message : t("common.error")); }
+        finally { setDeleting(null); }
+      },
+    });
   }
 
   async function handlePasswordChange(e: React.FormEvent) {
@@ -593,6 +605,14 @@ export function UserPage() {
           </div>
         )}
       </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

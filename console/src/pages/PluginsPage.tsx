@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { api, type PluginInfo } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 type PluginDetail = PluginInfo & { agents: string[] };
 
@@ -16,6 +17,7 @@ export function PluginsPage() {
   const [selected, setSelected]   = useState<PluginDetail | null>(null);
   const [agents, setAgents]       = useState<string[]>([]);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     setLoading(true); setError(null);
@@ -306,15 +308,20 @@ export function PluginsPage() {
                 <RefreshCw className={`h-4 w-4 ${actionBusy === selected.id ? "animate-spin" : ""}`} />
               </button>
               <button
-                onClick={async () => {
-                  if (!confirm(`Plugin "${selected.id}" deinstallieren?`)) return;
-                  setActionBusy(selected.id);
-                  try {
-                    await api.hubUninstallPlugin(selected.id);
-                    setSelected(null);
-                    await load();
-                  } catch (e: any) { setError(e.message); }
-                  finally { setActionBusy(null); }
+                onClick={() => {
+                  setConfirmState({
+                    title: t("confirm.titleUninstall"),
+                    message: t("confirm.uninstallPlugin", { name: selected.id }),
+                    action: async () => {
+                      setActionBusy(selected.id);
+                      try {
+                        await api.hubUninstallPlugin(selected.id);
+                        setSelected(null);
+                        await load();
+                      } catch (e: any) { setError(e.message); }
+                      finally { setActionBusy(null); }
+                    },
+                  });
                 }}
                 disabled={!!actionBusy}
                 className="px-4 py-2.5 rounded-xl border border-destructive/50 text-destructive text-sm hover:bg-destructive/10 transition-colors disabled:opacity-50"
@@ -326,6 +333,14 @@ export function PluginsPage() {
           </div>
         </div>
       )}
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
     </div>
   );
 }

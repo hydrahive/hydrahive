@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Plus, Trash2, Save, X, Pencil, Radar, Bot } from "lucide-react";
 import { api, AgentSkill } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const EMPTY_SKILL = {
   filename: "",
@@ -28,6 +29,7 @@ export function SkillsPanel({ agentId }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
   async function load() {
     try {
@@ -107,20 +109,26 @@ export function SkillsPanel({ agentId }: Props) {
     }
   }
 
-  async function handleDelete(filename: string) {
-    if (!confirm(t("skills.deleteConfirm", { file: filename }))) return;
-    setDeleting(filename);
-    try {
-      await api.deleteSkill(agentId, filename);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.error"));
-    } finally {
-      setDeleting(null);
-    }
+  function handleDelete(filename: string) {
+    setConfirmState({
+      title: t("confirm.titleDelete"),
+      message: t("skills.deleteConfirm", { file: filename }),
+      action: async () => {
+        setDeleting(filename);
+        try {
+          await api.deleteSkill(agentId, filename);
+          await load();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : t("common.error"));
+        } finally {
+          setDeleting(null);
+        }
+      },
+    });
   }
 
   return (
+    <>
     <div className="border-t bg-muted/10 px-5 py-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -248,5 +256,14 @@ export function SkillsPanel({ agentId }: Props) {
         )}
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmState}
+      title={confirmState?.title || ""}
+      message={confirmState?.message || ""}
+      onConfirm={() => { confirmState?.action(); setConfirmState(null); }}
+      onCancel={() => setConfirmState(null)}
+      variant="danger"
+    />
+    </>
   );
 }
