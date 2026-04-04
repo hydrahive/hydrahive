@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -114,6 +115,25 @@ const KNOWN_MODELS = [
 let _cnt = 0;
 const mkMsg = (role: Message["role"], content: string): Message =>
   ({ id: `m${++_cnt}`, role, content });
+
+// ── MessengerSection ──────────────────────────────────────────────────────────
+
+function MessengerSection({ title, icon: Icon, defaultOpen, children }: {
+  title: string; icon: any; defaultOpen?: boolean; children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className="font-medium text-sm">{title}</span>
+        <ChevronDown className={cn("h-4 w-4 ml-auto text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && <div className="border-t px-4 py-4">{children}</div>}
+    </div>
+  );
+}
 
 // ── Haupt-Komponente ──────────────────────────────────────────────────────────
 
@@ -405,12 +425,8 @@ export function MyAgentPage() {
         const TAB_LIST = [
           { id: "chat",      label: t("myAgent.chatTab"),       icon: Bot },
           { id: "heartbeat", label: t("myAgent.heartbeatTab"),  icon: Timer },
-          { id: "platforms", label: t("myAgent.platformsTab"),  icon: Wifi },
+          { id: "messenger", label: t("myAgent.messengerTab"),  icon: MessageSquare },
           { id: "wks",       label: t("myAgent.wksTab"),        icon: Monitor },
-          { id: "discord",   label: t("myAgent.discordTab"),    icon: MessageSquare },
-          { id: "whatsapp",  label: t("myAgent.whatsappTab"),   icon: Phone },
-          { id: "telegram",  label: t("myAgent.telegramTab"),   icon: Send },
-          { id: "mail",       label: t("myAgent.mailTab"),       icon: Mail },
           { id: "butler",    label: "Butler",                   icon: Workflow },
           { id: "account",   label: "Mein Konto",               icon: KeyRound },
           // Dynamische User-App Tabs
@@ -911,29 +927,28 @@ export function MyAgentPage() {
         </div>
       )}
 
-      {/* ── Platforms Tab ───────────────────────────────────────────────── */}
-      {tab === "platforms" && (
-        <PlatformsTab />
+      {/* ── Messenger Tab ─────────────────────────────────────────────────── */}
+      {tab === "messenger" && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Messenger</h2>
+          <MessengerSection title="WhatsApp" icon={Phone}>
+            <WhatsAppTab />
+          </MessengerSection>
+          <MessengerSection title="Discord" icon={MessageSquare}>
+            <DiscordTab />
+          </MessengerSection>
+          <MessengerSection title="Telegram" icon={Send}>
+            <TelegramTab />
+          </MessengerSection>
+          <MessengerSection title="Mail" icon={Mail}>
+            <MailTab />
+          </MessengerSection>
+        </div>
       )}
 
       {/* ── WKS Tab ───────────────────────────────────────────────────────── */}
       {tab === "wks" && (
         <WksTab />
-      )}
-
-      {/* ── Discord Tab ───────────────────────────────────────────────────── */}
-      {tab === "discord" && (
-        <DiscordTab />
-      )}
-
-      {/* ── WhatsApp Tab ──────────────────────────────────────────────────── */}
-      {tab === "whatsapp" && (
-        <WhatsAppTab />
-      )}
-
-      {/* ── Telegram Tab ──────────────────────────────────────────────────── */}
-      {tab === "telegram" && (
-        <TelegramTab />
       )}
 
       {/* ── Heartbeat Tab ─────────────────────────────────────────────────── */}
@@ -944,11 +959,6 @@ export function MyAgentPage() {
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
           <p className="text-sm">{t("myAgent.hbNotLoaded")}</p>
         </div>
-      )}
-
-      {/* ── Mail Tab ──────────────────────────────────────────────────────── */}
-      {tab === "mail" && (
-        <MailTab />
       )}
 
       {/* ── Butler Tab ────────────────────────────────────────────────────── */}
