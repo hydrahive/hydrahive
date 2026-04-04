@@ -6,26 +6,21 @@ import {
   LayoutDashboard,
   Bot,
   FolderKanban,
-  Server,
+  Monitor,
   LogOut,
   Sun,
   Moon,
-  Sparkles,
   MessageSquare,
   RefreshCw,
   Menu,
   X,
   Settings,
-  Search,
   Loader2,
-  Code2,
   Workflow,
-  Store,
+  Package,
   Brain,
-  Mic,
-  ChevronDown,
   Users,
-  Lightbulb,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -145,115 +140,33 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  type NavItem = { to: string; icon: React.ElementType; label: string; hint: string };
-  type NavGroup = { id: string; label?: string; collapsible?: boolean; items: NavItem[] };
+  type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
-  const groupDashboard: NavGroup = {
-    id: "dashboard",
-    items: [
-      { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard"), hint: t("navHint.dashboard") },
-    ],
-  };
+  const allNavItems: NavItem[] = [
+    { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
+    { to: "/my-agent",       icon: Bot,             label: t("nav.myAgent"),         hint: t("navHint.myAgent") },
+    { to: "/agents",         icon: Users,           label: t("nav.agents"),          hint: t("navHint.agents") },
+    { to: "/projects",       icon: FolderKanban,    label: t("nav.projects"),        hint: t("navHint.projects") },
+    { to: "/blueprint",      icon: Workflow,        label: t("nav.blueprint"),       hint: t("navHint.blueprint") },
+    { to: "/hub",            icon: Package,         label: t("nav.hydraHub"),        hint: t("navHint.hydraHub") },
+    { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
+    { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
+    { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
+    { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
+  ];
 
-  const groupAssistant: NavGroup = {
-    id: "assistant",
-    items: [
-      { to: "/my-agent", icon: Sparkles, label: t("nav.myAgent"), hint: t("navHint.myAgent") },
-    ],
-  };
+  const nav = allNavItems.filter((item) => {
+    if (isAdmin) return true;
+    const pageId = item.to.replace(/^\//, "");
+    return hasPageAccess(pageId);
+  });
 
-  const groupAgents: NavGroup = {
-    id: "agents",
-    label: t("nav.groupAgents"),
-    collapsible: true,
-    items: [
-      { to: "/agents",    icon: Bot,         label: t("nav.agents"),    hint: t("navHint.agents") },
-      { to: "/projects",  icon: FolderKanban,label: t("nav.projects"),  hint: t("navHint.projects") },
-      { to: "/blueprint", icon: Workflow,    label: t("nav.blueprint"), hint: t("navHint.blueprint") },
-      { to: "/hub",       icon: Store,       label: t("nav.hydraHub"),  hint: t("navHint.hydraHub") },
-    ],
-  };
-
-  const groupKnowledge: NavGroup = {
-    id: "knowledge",
-    label: t("nav.groupKnowledge"),
-    collapsible: true,
-    items: [
-      { to: "/brain",        icon: Brain,     label: t("nav.hydraBrain"),  hint: t("navHint.hydraBrain") },
-      { to: "/voice",        icon: Mic,       label: t("nav.voice"),       hint: t("navHint.voice") },
-      { to: "/search",       icon: Search,    label: t("nav.search"),      hint: t("navHint.search") },
-      { to: "/prompt-guide", icon: Lightbulb, label: t("nav.promptGuide"), hint: t("navHint.promptGuide") },
-      { to: "/code-editor",  icon: Code2,     label: t("nav.codeEditor"),  hint: t("navHint.codeEditor") },
-    ],
-  };
-
-  const groupSystem: NavGroup = {
-    id: "system",
-    label: t("nav.groupSystem"),
-    collapsible: true,
-    items: [
-      { to: "/usermanagement", icon: Users,   label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
-      { to: "/system",         icon: Server,  label: t("nav.system"),         hint: t("navHint.system") },
-      { to: "/settings",       icon: Settings,label: t("nav.settings"),       hint: t("navHint.settings") },
-    ],
-  };
-
-  // Gruppen-Berechtigungen: Seiten nach Permissions filtern
-  const filterByPerms = (group: NavGroup): NavGroup => {
-    if (isAdmin) return group; // Admins sehen alles
-    return {
-      ...group,
-      items: group.items.filter(item => {
-        const pageId = item.to.replace(/^\//, "");
-        return hasPageAccess(pageId);
-      }),
-    };
-  };
-
-  const allGroups = [groupDashboard, groupAssistant, groupAgents, groupKnowledge, groupSystem];
-  const groups: NavGroup[] = allGroups
-    .map(filterByPerms)
-    .filter(g => g.items.length > 0);
-
-  const nav = groups.flatMap(g => g.items);
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
   const showDeploymentPanel = isAdmin && (updating || Boolean(updateError) || updateAvailable);
   const deploymentUrgent = updating || Boolean(updateError) || updateAvailable;
-
-  const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
-
-  function getGroupIdForPath(pathname: string) {
-    for (const g of [groupAgents, groupKnowledge, groupSystem]) {
-      if (g.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return g.id;
-    }
-    return null;
-  }
-
-  const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
-    try {
-      const stored = localStorage.getItem(NAV_OPEN_GROUP_KEY);
-      if (["agents", "knowledge", "system"].includes(stored ?? "")) return stored;
-    } catch {
-      // ignore
-    }
-    return getGroupIdForPath(location.pathname) ?? "workspace";
-  });
-
-  const toggleGroup = useCallback((groupId: string) => {
-    setOpenGroupId((prev) => {
-      const next = prev === groupId ? null : groupId;
-      try {
-        if (next) localStorage.setItem(NAV_OPEN_GROUP_KEY, next);
-        else localStorage.removeItem(NAV_OPEN_GROUP_KEY);
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -321,58 +234,23 @@ export function AdminLayout() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5">
-        {groups.map((group) => {
-          const collapsed = Boolean(group.collapsible && openGroupId !== group.id);
-          const toggle = group.collapsible ? () => toggleGroup(group.id) : undefined;
-          const hasActiveChild = group.items.some(({ to }) => location.pathname === to || location.pathname.startsWith(`${to}/`));
-
-          return (
-            <div key={group.id}>
-              {group.label && group.collapsible ? (
-                <button
-                  type="button"
-                  onClick={toggle}
-                  aria-expanded={!collapsed}
-                  className={cn(
-                    "flex w-full items-center justify-between px-3 py-2 mb-0.5 rounded-xl text-xs font-medium transition-colors select-none",
-                    hasActiveChild
-                      ? "bg-orange-500/15 text-orange-300 border border-orange-500/30"
-                      : "text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-white/5 border border-transparent"
-                  )}
-                >
-                  <span>{group.label}</span>
-                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", collapsed && "-rotate-90")} />
-                </button>
-              ) : group.label ? (
-                <p className="px-3 mb-1 text-xs font-medium text-[hsl(var(--sidebar-muted))] select-none">
-                  {group.label}
-                </p>
-              ) : null}
-
-              {!collapsed && (
-                <div className="space-y-0.5 mb-1.5 ml-1">
-                  {group.items.map(({ to, icon: Icon, label, hint }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      title={hint}
-                      className={({ isActive }) => cn(
-                        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-                        isActive
-                          ? "bg-orange-500/20 text-orange-200 border border-orange-500/30 font-medium"
-                          : "text-[hsl(var(--sidebar-foreground))] hover:bg-white/8 border border-transparent"
-                      )}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate">{label}</span>
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+        {nav.map(({ to, icon: Icon, label, hint }) => (
+          <NavLink
+            key={to}
+            to={to}
+            title={hint}
+            className={({ isActive }) => cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <Icon className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">{label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
@@ -434,13 +312,12 @@ export function AdminLayout() {
     </aside>
   );
 
-  // Bottom-Nav für Mobile — die 5 wichtigsten Punkte
+  // Bottom-Nav für Mobile
   const bottomNavItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard") },
+    { to: "/my-agent",  icon: Bot,             label: t("nav.myAgent") },
+    { to: "/agents",    icon: Users,           label: t("nav.agents") },
     { to: "/projects",  icon: FolderKanban,    label: t("nav.projects") },
-    { to: "/my-agent",  icon: Sparkles,        label: t("nav.myAgent") },
-    { to: "/agents",    icon: Bot,             label: t("nav.agents") },
-    { to: "/settings",  icon: Settings,        label: t("nav.settings") },
   ];
 
   return (
