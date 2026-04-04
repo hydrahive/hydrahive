@@ -5,12 +5,9 @@ import { SupportWidget } from "@/components/SupportWidget";
 import {
   LayoutDashboard,
   Bot,
-  Activity,
   FolderKanban,
   Server,
-  Wrench,
   LogOut,
-  ShieldCheck,
   Sun,
   Moon,
   Sparkles,
@@ -19,17 +16,11 @@ import {
   Menu,
   X,
   Settings,
-  BarChart2,
   Search,
-  Calendar,
   Loader2,
-  Globe,
   Code2,
-  Puzzle,
   Workflow,
-  Package,
   Store,
-  KeyRound,
   Brain,
   Mic,
   ChevronDown,
@@ -176,21 +167,10 @@ export function AdminLayout() {
     label: t("nav.groupAgents"),
     collapsible: true,
     items: [
-      { to: "/agents",              icon: Bot,         label: t("nav.agents"),       hint: t("navHint.agents") },
-      { to: "/projects",            icon: FolderKanban,label: t("nav.projects"),     hint: t("navHint.projects") },
-      { to: "/tools",               icon: Wrench,      label: t("nav.tools"),        hint: t("navHint.tools") },
-      { to: "/tools/skill-packages",icon: Package,     label: t("nav.skillPackages"),hint: t("navHint.skillPackages") },
-      { to: "/blueprint",           icon: Workflow,    label: t("nav.blueprint"),    hint: t("navHint.blueprint") },
-      { to: "/hub",                 icon: Store,       label: t("nav.hydraHub"),     hint: t("navHint.hydraHub") },
-    ],
-  };
-
-  const groupAnalytics: NavGroup = {
-    id: "analytics",
-    label: t("nav.groupAnalytics"),
-    collapsible: true,
-    items: [
-      { to: "/schedules", icon: Calendar,   label: t("nav.schedules"), hint: t("navHint.schedules") },
+      { to: "/agents",    icon: Bot,         label: t("nav.agents"),    hint: t("navHint.agents") },
+      { to: "/projects",  icon: FolderKanban,label: t("nav.projects"),  hint: t("navHint.projects") },
+      { to: "/blueprint", icon: Workflow,    label: t("nav.blueprint"), hint: t("navHint.blueprint") },
+      { to: "/hub",       icon: Store,       label: t("nav.hydraHub"),  hint: t("navHint.hydraHub") },
     ],
   };
 
@@ -199,22 +179,11 @@ export function AdminLayout() {
     label: t("nav.groupKnowledge"),
     collapsible: true,
     items: [
-      { to: "/brain",        icon: Brain,     label: t("nav.hydraBrain"),    hint: t("navHint.hydraBrain") },
-      { to: "/search",       icon: Search,   label: t("nav.search"),       hint: t("navHint.search") },
-      { to: "/prompt-guide", icon: Lightbulb,label: t("nav.promptGuide"),   hint: t("navHint.promptGuide") },
-      { to: "/code-editor",  icon: Code2,    label: t("nav.codeEditor"),   hint: t("navHint.codeEditor") },
-    ],
-  };
-
-  const groupNetwork: NavGroup = {
-    id: "network",
-    label: t("nav.groupNetwork"),
-    collapsible: true,
-    items: [
-      { to: "/federation",  icon: Globe,  label: t("nav.federation"),  hint: t("navHint.federation") },
-      { to: "/voice",       icon: Mic,    label: t("nav.voice"),       hint: t("navHint.voice") },
-      { to: "/extensions",  icon: Puzzle, label: t("nav.extensions"),  hint: t("navHint.extensions") },
-      { to: "/plugins",     icon: Puzzle, label: t("nav.plugins"),     hint: t("navHint.plugins") },
+      { to: "/brain",        icon: Brain,     label: t("nav.hydraBrain"),  hint: t("navHint.hydraBrain") },
+      { to: "/voice",        icon: Mic,       label: t("nav.voice"),       hint: t("navHint.voice") },
+      { to: "/search",       icon: Search,    label: t("nav.search"),      hint: t("navHint.search") },
+      { to: "/prompt-guide", icon: Lightbulb, label: t("nav.promptGuide"), hint: t("navHint.promptGuide") },
+      { to: "/code-editor",  icon: Code2,     label: t("nav.codeEditor"),  hint: t("navHint.codeEditor") },
     ],
   };
 
@@ -223,11 +192,9 @@ export function AdminLayout() {
     label: t("nav.groupSystem"),
     collapsible: true,
     items: [
-      { to: "/config-hub",     icon: Settings,  label: t("nav.setup"),          hint: t("navHint.setup") },
-      { to: "/usermanagement", icon: Users,     label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
-      { to: "/system",         icon: Server,    label: t("nav.system"),  hint: t("navHint.system") },
-      { to: "/secrets",        icon: KeyRound,  label: t("nav.secrets"),  hint: t("navHint.secrets") },
-      { to: "/settings",       icon: Settings,  label: t("nav.settings"),hint: t("navHint.settings") },
+      { to: "/usermanagement", icon: Users,   label: t("nav.usermanagement"), hint: t("navHint.usermanagement") },
+      { to: "/system",         icon: Server,  label: t("nav.system"),         hint: t("navHint.system") },
+      { to: "/settings",       icon: Settings,label: t("nav.settings"),       hint: t("navHint.settings") },
     ],
   };
 
@@ -243,7 +210,7 @@ export function AdminLayout() {
     };
   };
 
-  const allGroups = [groupDashboard, groupAssistant, groupAgents, groupAnalytics, groupKnowledge, groupNetwork, groupSystem];
+  const allGroups = [groupDashboard, groupAssistant, groupAgents, groupKnowledge, groupSystem];
   const groups: NavGroup[] = allGroups
     .map(filterByPerms)
     .filter(g => g.items.length > 0);
@@ -259,7 +226,7 @@ export function AdminLayout() {
   const NAV_OPEN_GROUP_KEY = "hh_nav_open_group";
 
   function getGroupIdForPath(pathname: string) {
-    for (const g of [groupAgents, groupAnalytics, groupKnowledge, groupNetwork, groupSystem]) {
+    for (const g of [groupAgents, groupKnowledge, groupSystem]) {
       if (g.items.some(({ to }) => pathname === to || pathname.startsWith(`${to}/`))) return g.id;
     }
     return null;
@@ -268,7 +235,7 @@ export function AdminLayout() {
   const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem(NAV_OPEN_GROUP_KEY);
-      if (["agents", "analytics", "knowledge", "network", "system"].includes(stored ?? "")) return stored;
+      if (["agents", "knowledge", "system"].includes(stored ?? "")) return stored;
     } catch {
       // ignore
     }

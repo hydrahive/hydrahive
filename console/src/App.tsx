@@ -11,31 +11,20 @@ const AgentsPage        = lazy(() => import("@/pages/AgentsPage").then((m) => ({
 const ProjectsPage      = lazy(() => import("@/pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));
 const ProjectCreatePage = lazy(() => import("@/pages/ProjectCreatePage").then((m) => ({ default: m.ProjectCreatePage })));
 const SystemPage        = lazy(() => import("@/pages/SystemPage").then((m) => ({ default: m.SystemPage })));
-const ToolsPage         = lazy(() => import("@/pages/ToolsPage").then((m) => ({ default: m.ToolsPage })));
 const ChatPage          = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AgentChatPage     = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
-const AuditPage         = lazy(() => import("@/pages/AuditPage").then((m) => ({ default: m.AuditPage })));
 const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
-const ActivityPage      = lazy(() => import("@/pages/ActivityPage").then((m) => ({ default: m.ActivityPage })));
-const UsagePage         = lazy(() => import("@/pages/UsagePage").then((m) => ({ default: m.UsagePage })));
 const SearchPage        = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })));
 const CodeEditorPage    = lazy(() => import("@/pages/CodeEditorPage").then((m) => ({ default: m.CodeEditorPage })));
-const ExtensionsPage    = lazy(() => import("@/pages/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
-const PluginsPage       = lazy(() => import("@/pages/PluginsPage").then((m) => ({ default: m.PluginsPage })));
 const SchedulesPage     = lazy(() => import("@/pages/SchedulesPage"));
-const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
-const ButlerPage        = lazy(() => import("@/pages/ButlerPage").then((m) => ({ default: m.ButlerPage })));
 const BlueprintPage     = lazy(() => import("@/pages/BlueprintPage").then((m) => ({ default: m.BlueprintPage })));
-const SkillPackagesPage = lazy(() => import("@/pages/SkillPackagesPage").then((m) => ({ default: m.SkillPackagesPage })));
-const HubPage                = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
-const SecretsPage            = lazy(() => import("@/pages/SecretsPage").then((m) => ({ default: m.SecretsPage })));
-const HydraBrainPage         = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
-const VoicePage              = lazy(() => import("@/pages/VoicePage").then((m) => ({ default: m.VoicePage })));
+const HubPage           = lazy(() => import("@/pages/HubPage").then((m) => ({ default: m.HubPage })));
+const HydraBrainPage    = lazy(() => import("@/pages/HydraBrainPage").then((m) => ({ default: m.HydraBrainPage })));
+const VoicePage         = lazy(() => import("@/pages/VoicePage").then((m) => ({ default: m.VoicePage })));
 const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage").then((m) => ({ default: m.OnboardingWizardPage })));
 const InvitePage             = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
-const ConfigHubPage          = lazy(() => import("@/pages/ConfigHubPage").then((m) => ({ default: m.ConfigHubPage })));
 const UserManagementPage     = lazy(() => import("@/pages/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
 const PromptGuidePage        = lazy(() => import("@/pages/PromptGuidePage").then((m) => ({ default: m.PromptGuidePage })));
 
@@ -113,25 +102,26 @@ export default function App() {
             <Route path="agents/:id/chat"   element={<AgentChatPage />} />
             <Route path="search"            element={<SearchPage />} />
             <Route path="code-editor"       element={<CodeEditorPage />} />
-            <Route path="extensions"        element={<ExtensionsPage />} />
-            <Route path="plugins"           element={<PluginsPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
-            <Route path="federation"        element={<A2APage />} />
             <Route path="blueprint"         element={<BlueprintPage />} />
-            <Route path="butler"           element={<Navigate to="/blueprint" replace />} />
-            <Route path="tools/skill-packages" element={<SkillPackagesPage />} />
-            <Route path="hub"                  element={<HubPage />} />
-            <Route path="secrets"           element={<SecretsPage />} />
+            <Route path="hub"               element={<HubPage />} />
             <Route path="brain"             element={<HydraBrainPage />} />
             <Route path="voice"             element={<VoicePage />} />
             <Route path="system"            element={<SystemPage />} />
-            <Route path="tools"             element={<ToolsPage />} />
             <Route path="audit"             element={<Navigate to="/dashboard?tab=audit" replace />} />
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
-            <Route path="config-hub"       element={<ConfigHubPage />} />
-            <Route path="usermanagement"  element={<UserManagementPage />} />
-            <Route path="prompt-guide"    element={<PromptGuidePage />} />
+            <Route path="usermanagement"    element={<UserManagementPage />} />
+            <Route path="prompt-guide"      element={<PromptGuidePage />} />
+            {/* Redirects für konsolidierte Seiten */}
+            <Route path="tools"             element={<Navigate to="/agents?tab=tools" replace />} />
+            <Route path="tools/skill-packages" element={<Navigate to="/hub?tab=skill-packages" replace />} />
+            <Route path="federation"        element={<Navigate to="/agents?tab=federation" replace />} />
+            <Route path="extensions"        element={<Navigate to="/hub?tab=extensions" replace />} />
+            <Route path="plugins"           element={<Navigate to="/hub?tab=plugins" replace />} />
+            <Route path="secrets"           element={<Navigate to="/usermanagement?tab=secrets" replace />} />
+            <Route path="config-hub"        element={<Navigate to="/settings" replace />} />
+            <Route path="butler"            element={<Navigate to="/blueprint" replace />} />
             {/* Redirects für alte Bookmarks */}
             <Route path="llm"    element={<Navigate to="/settings" replace />} />
             <Route path="mcp"    element={<Navigate to="/settings" replace />} />

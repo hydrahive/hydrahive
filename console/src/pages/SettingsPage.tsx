@@ -1,37 +1,31 @@
 import { useMemo, useState } from "react";
-import { Cpu, Plug, GitBranch, Github, Network, Settings, Mail, Users, Archive, ArrowRightLeft, Puzzle, Shield } from "lucide-react";
+import { Cpu, GitBranch, Github, Network, Settings, Mail, Archive, ArrowRightLeft, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ConfigHubPage } from "@/pages/ConfigHubPage";
 import { LlmConfigPage } from "@/pages/LlmConfigPage";
-import { McpConfigPage } from "@/pages/McpConfigPage";
 import GiteaConfigPage from "@/pages/GiteaConfigPage";
 import { GitHubConfigPage } from "@/pages/GitHubConfigPage";
-import { PluginsPage } from "@/pages/PluginsPage";
 import { VpnPage } from "@/pages/VpnPage";
 import { KasConfigPage } from "@/pages/KasConfigPage";
-import { UserPage } from "@/pages/UserPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { MigrationPage } from "@/pages/MigrationPage";
-import { GroupsPage } from "@/pages/GroupsPage";
 import { useTranslation } from "react-i18next";
 
-type TabId = "llm" | "mcp" | "gitea" | "github" | "vpn" | "kas" | "users" | "groups" | "backup" | "migration" | "plugins";
+type TabId = "overview" | "llm" | "gitea" | "github" | "vpn" | "kas" | "backup" | "migration";
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const [active, setActive] = useState<TabId>("llm");
+  const [active, setActive] = useState<TabId>("overview");
 
   const TABS: { id: TabId; label: string; icon: React.ElementType; component: React.ComponentType }[] = useMemo(() => [
-    { id: "llm",       label: t("settings.tabLlm", { defaultValue: "LLM" }),        icon: Cpu,              component: LlmConfigPage },
-    { id: "mcp",       label: t("settings.tabMcp", { defaultValue: "MCP" }),         icon: Plug,             component: McpConfigPage },
-    { id: "gitea",     label: t("settings.tabGitea", { defaultValue: "Gitea" }),     icon: GitBranch,        component: GiteaConfigPage },
-    { id: "github",    label: t("settings.tabGithub", { defaultValue: "GitHub" }),   icon: Github,           component: GitHubConfigPage },
-    { id: "vpn",       label: t("settings.tabVpn", { defaultValue: "VPN" }),         icon: Network,          component: VpnPage },
-    { id: "kas",       label: t("settings.tabKas"),      icon: Mail,             component: KasConfigPage },
-    { id: "users",     label: t("settings.tabUsers"),    icon: Users,            component: UserPage },
-    { id: "groups",    label: t("settings.tabGroups"),   icon: Shield,           component: GroupsPage },
-    { id: "backup",    label: t("settings.tabBackup", { defaultValue: "Backup" }),   icon: Archive,          component: BackupPage },
-    { id: "migration", label: t("settings.tabMigration", { defaultValue: "Migration" }), icon: ArrowRightLeft, component: MigrationPage },
-    { id: "plugins",   label: t("settings.tabPlugins", { defaultValue: "Plugins" }), icon: Puzzle,           component: PluginsPage },
+    { id: "overview",  label: t("settings.tabOverview", { defaultValue: "Übersicht" }), icon: LayoutDashboard,  component: ConfigHubPage },
+    { id: "llm",       label: t("settings.tabLlm", { defaultValue: "LLM" }),            icon: Cpu,              component: LlmConfigPage },
+    { id: "gitea",     label: t("settings.tabGitea", { defaultValue: "Gitea" }),         icon: GitBranch,        component: GiteaConfigPage },
+    { id: "github",    label: t("settings.tabGithub", { defaultValue: "GitHub" }),       icon: Github,           component: GitHubConfigPage },
+    { id: "vpn",       label: t("settings.tabVpn", { defaultValue: "VPN" }),             icon: Network,          component: VpnPage },
+    { id: "kas",       label: t("settings.tabKas"),                                       icon: Mail,             component: KasConfigPage },
+    { id: "backup",    label: t("settings.tabBackup", { defaultValue: "Backup" }),       icon: Archive,          component: BackupPage },
+    { id: "migration", label: t("settings.tabMigration", { defaultValue: "Migration" }), icon: ArrowRightLeft,   component: MigrationPage },
   ], [t]);
 
   const ActiveComponent = TABS.find(tab => tab.id === active)!.component;
