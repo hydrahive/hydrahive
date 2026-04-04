@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Search, Code2, GitBranch, Cpu, MessageCircle, Network, KeyRound,
   CheckCircle, XCircle, AlertCircle, Download, Trash2,
-  ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp,
+  ExternalLink, Loader2, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -111,13 +111,24 @@ export function ExtensionsPage() {
   const [error,      setError]      = useState("");
 
   // Aktiver Stream-Vorgang
-  const [activeId,    setActiveId]    = useState<string | null>(null);
+  const [activeId,     setActiveId]     = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<"install" | "uninstall" | null>(null);
-  const [log,         setLog]         = useState<string[]>([]);
-  const [logDone,     setLogDone]     = useState<boolean | null>(null);
-  const [logExpanded, setLogExpanded] = useState(true);
+  const [log,          setLog]          = useState<string[]>([]);
+  const [logDone,      setLogDone]      = useState<boolean | null>(null);
   const logRef    = useRef<HTMLDivElement>(null);
   const abortRef  = useRef<AbortController | null>(null);
+
+  // Installing = modal is open and action is still running
+  const installing = activeId !== null && logDone === null;
+
+  // Prevent navigation away while installation is running
+  useEffect(() => {
+    if (installing) {
+      const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+      window.addEventListener("beforeunload", handler);
+      return () => window.removeEventListener("beforeunload", handler);
+    }
+  }, [installing]);
 
   // Cleanup bei Unmount: laufenden Stream abbrechen
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -156,7 +167,6 @@ export function ExtensionsPage() {
     setActiveAction(action);
     setLog([]);
     setLogDone(null);
-    setLogExpanded(true);
 
     const token = localStorage.getItem("hydrahive_token") || "";
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -230,8 +240,74 @@ export function ExtensionsPage() {
     <div className="p-8 text-sm text-muted-foreground">{t("extensions.loading")}</div>
   );
 
+  const activeExtName = extensions.find(e => e.id === activeId)?.name ?? "";
+
   return (
     <div className="p-8 space-y-8 max-w-4xl">
+      {/* Full-screen modal overlay during install/uninstall */}
+      {activeId !== null && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              {logDone === null && <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />}
+              {logDone === true  && <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
+              {logDone === false && <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
+              <div>
+                <h2 className="text-base font-semibold">
+                  {logDone === null
+                    ? (activeAction === "install" ? t("extensions.installRunning") : t("extensions.uninstallRunning"))
+                    : logDone === true
+                      ? (activeAction === "install" ? t("extensions.installSuccess") : t("extensions.uninstallSuccess"))
+                      : t("extensions.actionFailed")
+                  }
+                </h2>
+                <p className="text-sm text-muted-foreground">{activeExtName}</p>
+              </div>
+            </div>
+
+            {/* Warning — only while running */}
+            {logDone === null && (
+              <div className="text-amber-400 text-sm font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {t("extensions.doNotClose")}
+              </div>
+            )}
+
+            {/* Live log */}
+            <div
+              ref={logRef}
+              className="bg-black/50 rounded-lg p-4 font-mono text-xs text-green-400 h-64 overflow-y-auto"
+            >
+              {log.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
+            </div>
+
+            {/* Result message */}
+            {logDone === true && (
+              <p className="text-sm text-green-500 font-medium flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                {activeAction === "install" ? t("extensions.installSuccess") : t("extensions.uninstallSuccess")}
+              </p>
+            )}
+            {logDone === false && (
+              <p className="text-sm text-red-500 font-medium flex items-center gap-2">
+                <XCircle className="w-4 h-4 shrink-0" />
+                {t("extensions.actionFailed")}
+              </p>
+            )}
+
+            {/* Close button — only after completion */}
+            {logDone !== null && (
+              <div className="flex justify-end">
+                <button className="btn btn-sm" onClick={clearLog}>
+                  {t("extensions.close")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{t("extensions.title")}</h1>
@@ -252,53 +328,6 @@ export function ExtensionsPage() {
         <div className="flex items-center gap-2 text-red-500 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
-        </div>
-      )}
-
-      {/* Live-Log */}
-      {activeId && (
-        <div className="card border-primary/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {logDone === null && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
-              {logDone === true  && <CheckCircle className="w-4 h-4 text-green-500" />}
-              {logDone === false && <XCircle className="w-4 h-4 text-red-500" />}
-              <span className="text-sm font-medium">
-                {activeAction === "install" ? t("extensions.installing") : t("extensions.uninstalling")}
-                {" "}<span className="text-muted-foreground">{extensions.find(e => e.id === activeId)?.name}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="btn btn-sm" onClick={() => setLogExpanded(v => !v)}>
-                {logExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-              {logDone !== null && (
-                <button className="btn btn-sm" onClick={clearLog}>{t("extensions.close")}</button>
-              )}
-            </div>
-          </div>
-
-          {logExpanded && (
-            <div
-              ref={logRef}
-              className="bg-black text-green-400 font-mono text-xs rounded p-3 h-56 overflow-y-auto"
-            >
-              {log.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
-            </div>
-          )}
-
-          {logDone === true && (
-            <p className="text-sm text-green-600 font-medium flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" />
-              {activeAction === "install" ? t("extensions.installSuccess") : t("extensions.uninstallSuccess")}
-            </p>
-          )}
-          {logDone === false && (
-            <p className="text-sm text-red-500 font-medium flex items-center gap-2">
-              <XCircle className="w-4 h-4" />
-              {t("extensions.actionFailed")}
-            </p>
-          )}
         </div>
       )}
 
