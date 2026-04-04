@@ -1,5 +1,5 @@
-# octopos.conf — Lokale Deploy-Konfiguration
-# Kopieren nach octopos.conf und anpassen (wird nicht eingecheckt)
+# hydrahive.conf — Lokale Deploy-Konfiguration
+# Kopieren nach hydrahive.conf und anpassen (wird nicht eingecheckt)
 
-VM="octopos@192.168.1.10"       # IP/Hostname der OctopOS VM
+VM="hydrahive@<YOUR_VM_IP>"       # IP/Hostname der HydraHive VM
 SSH_KEY="$HOME/.ssh/id_rsa"       # SSH-Key für Verbindung zur VM

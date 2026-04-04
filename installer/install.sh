@@ -32,18 +32,7 @@ if [ "$EUID" -ne 0 ]; then
   error "Bitte als root ausfuehren: sudo bash install.sh"
 fi
 
-# --- Upgrade-Pfad: /etc/hydrahive → /etc/hydrahive ---
-if [ -d "/etc/hydrahive" ] && [ ! -d "/etc/hydrahive" ]; then
-  warn "Alte Installation erkannt: /etc/hydrahive gefunden — migriere nach /etc/hydrahive ..."
-  mv /etc/hydrahive /etc/hydrahive
-  ln -s /etc/hydrahive /etc/hydrahive
-  success "Migration abgeschlossen (/etc/hydrahive → /etc/hydrahive, Symlink gesetzt)"
-elif [ -d "/etc/hydrahive" ] && [ -d "/etc/hydrahive" ]; then
-  # Beide existieren — Symlink setzen falls noch nicht vorhanden
-  if [ ! -L "/etc/hydrahive" ]; then
-    ln -s /etc/hydrahive /etc/hydrahive 2>/dev/null || true
-  fi
-fi
+# (Migration octopos→hydrahive entfernt — nicht mehr nötig)
 
 # --- Dangling nginx-Symlinks bereinigen (von fehlgeschlagenen Vorinstalls) ---
 for _sl in /etc/nginx/sites-enabled/*; do
@@ -117,9 +106,30 @@ if [[ "${INSTALL_WHATSAPP,,}" == "y" ]]; then
     source "${MODULES_DIR}/13_whatsapp_bridge.sh"
 fi
 
+# --- Modul 14: SearXNG (optional) ---
+echo ""
+if [ -t 0 ]; then
+    read -rp "SearXNG (lokale Suchmaschine) installieren? (y/N) " INSTALL_SEARXNG
+else
+    INSTALL_SEARXNG="n"
+fi
+if [[ "${INSTALL_SEARXNG,,}" == "y" ]]; then
+    source "${MODULES_DIR}/14_searxng.sh"
+fi
+
 echo ""
 echo -e "${BLUE}--- Phase 7: Code Editor ---${NC}"
 source "${MODULES_DIR}/15_codeserver.sh"
+
+# Modul 16: nginx-Config aktualisieren (A2A-Blöcke, /projects/ etc.)
+if [ -f "${MODULES_DIR}/16_nginx_update.sh" ]; then
+    source "${MODULES_DIR}/16_nginx_update.sh"
+fi
+
+# Modul 17: System-Info Scan (Hardware-Erkennung)
+if [ -f "${MODULES_DIR}/17_sysinfo_scan.sh" ]; then
+    bash "${MODULES_DIR}/17_sysinfo_scan.sh" || true
+fi
 
 # Update-Script nach /opt/hydrahive/ kopieren
 cp "$(dirname "${BASH_SOURCE[0]}")/update.sh" "${HYDRAHIVE_DIR}/update.sh"

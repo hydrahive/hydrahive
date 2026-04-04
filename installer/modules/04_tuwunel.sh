@@ -14,7 +14,7 @@ fi
 
 # Aktuelles Release via GitHub API
 info "Suche aktuelles conduwuit Release..."
-RELEASE_INFO=$(curl -sL "https://api.github.com/repos/girlbossceo/conduwuit/releases/latest")
+RELEASE_INFO=$(curl -sfL "https://api.github.com/repos/girlbossceo/conduwuit/releases/latest" || echo "{}")
 RELEASE_TAG=$(echo "$RELEASE_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))")
 
 if [ -z "$RELEASE_TAG" ]; then

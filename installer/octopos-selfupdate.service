@@ -1,14 +1,14 @@
 [Unit]
-Description=OctopOS Self-Update
-After=network-online.target gitea.service
+Description=HydraHive Self-Update
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=root
 Group=root
-WorkingDirectory=/opt/octopos
-ExecStart=/bin/bash /opt/octopos/update.sh
+WorkingDirectory=/opt/hydrahive
+ExecStart=/bin/bash /opt/hydrahive/update.sh
 StandardOutput=journal
 StandardError=journal
 

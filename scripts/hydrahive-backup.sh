@@ -35,7 +35,7 @@ rsync -av -e "ssh -i $SSH_KEY" \
 
 echo ""
 echo "==> [3/3] /projects/ (Projekte + Sessions)"
-rsync -av --ignore-errors -e "ssh -i $SSH_KEY" \
+rsync -av -e "ssh -i $SSH_KEY" \
   "$VM:/projects/" \
   "$DEST/projects/"
 
