@@ -80,7 +80,7 @@ function ExtCard({
         )}
         {ext.installed && ext.open_url && ext.active && (
           <a
-            href={ext.open_url}
+            href={ext.open_url.startsWith(":") ? `http://${window.location.hostname}${ext.open_url}` : ext.open_url}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary btn-sm flex items-center gap-1.5"
