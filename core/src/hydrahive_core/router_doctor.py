@@ -81,6 +81,8 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
             return await _fix_repair_whatsapp()
         if fix_id == "repair_agentlink":
             return await _fix_repair_agentlink()
+        if fix_id == "repair_samba":
+            return await _fix_samba_permissions()
         raise _HTTP(400, f"Unbekannter Fix: {fix_id}")
 
     @admin_router.get("/admin/doctor")
@@ -96,6 +98,7 @@ def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
         checks += await _check_api()
         checks += _check_llm_config()
         checks += _check_nginx_upload_limit()
+        checks += _check_samba()
         checks += _check_vpn()
 
         total = len(checks)
@@ -553,3 +556,86 @@ def _check_vpn() -> list[dict]:
     except Exception as e:
         results.append(_check("VPN: Tailscale", "warn", str(e)))
     return results
+
+
+def _check_samba() -> list[dict]:
+    """Prüft Samba-Config: force group = hydrahive + Dateiberechtigungen."""
+    results = []
+    shares_file = Path("/etc/samba/hydrahive-shares.conf")
+
+    if not shares_file.exists():
+        return []  # Kein Samba konfiguriert
+
+    content = shares_file.read_text(encoding="utf-8")
+
+    # Check force group
+    if "force group = hydrahive" in content:
+        results.append(_check("Samba: force group", "ok", "hydrahive-Gruppe gesetzt"))
+    else:
+        results.append(_check("Samba: force group", "error",
+                              "force group = hydrahive fehlt — Agent kann Samba-Uploads nicht lesen",
+                              fix="repair_samba"))
+
+    # Check Dateiberechtigungen in /projects/
+    bad_perms = []
+    for proj in Path("/projects").iterdir():
+        files_dir = proj / "files"
+        if not files_dir.is_dir():
+            continue
+        try:
+            for f in list(files_dir.rglob("*"))[:50]:  # Max 50 Dateien samplen
+                if f.is_file():
+                    import grp
+                    try:
+                        fg = grp.getgrgid(f.stat().st_gid).gr_name
+                        if fg != "hydrahive":
+                            bad_perms.append(str(f.relative_to(files_dir)))
+                            break
+                    except (KeyError, OSError):
+                        pass
+        except Exception:
+            pass
+
+    if bad_perms:
+        results.append(_check("Samba: Dateiberechtigungen", "warn",
+                              f"{len(bad_perms)} Projekt(e) mit falscher Gruppe",
+                              fix="repair_samba"))
+    else:
+        results.append(_check("Samba: Dateiberechtigungen", "ok", "Alle Dateien in hydrahive-Gruppe"))
+
+    return results
+
+
+async def _fix_samba_permissions() -> dict:
+    """Repariert Samba: force group + Dateiberechtigungen."""
+    output = []
+    try:
+        shares_file = Path("/etc/samba/hydrahive-shares.conf")
+        if shares_file.exists():
+            content = shares_file.read_text(encoding="utf-8")
+            if "force group" not in content:
+                # force group vor create mask einfügen
+                content = content.replace("create mask", "force group = hydrahive\n   create mask")
+                shares_file.write_text(content, encoding="utf-8")
+                output.append("force group = hydrahive in Samba-Config eingefügt")
+
+                subprocess.run(["sudo", "smbcontrol", "smbd", "reload-config"],
+                               capture_output=True, timeout=10)
+                output.append("Samba-Config reloaded")
+            else:
+                output.append("force group bereits gesetzt")
+
+        # Dateiberechtigungen fixen
+        for proj in Path("/projects").iterdir():
+            files_dir = proj / "files"
+            if files_dir.is_dir():
+                subprocess.run(["sudo", "chgrp", "-R", "hydrahive", str(files_dir)],
+                               capture_output=True, timeout=30)
+                subprocess.run(["sudo", "chmod", "-R", "g+rw", str(files_dir)],
+                               capture_output=True, timeout=30)
+        output.append("Dateiberechtigungen für alle Projekte korrigiert")
+
+        return {"ok": True, "output": "\n".join(output)}
+    except Exception as e:
+        output.append(f"Fehler: {e}")
+        return {"ok": False, "error": "\n".join(output)}
