@@ -497,6 +497,21 @@ export function A2APage() {
         <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
       )}
 
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-3">
+        <h3 className="text-sm font-semibold">{t("federation.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("federation.infoText")}</p>
+        <div className="text-xs text-muted-foreground space-y-2">
+          <p className="font-semibold text-foreground">{t("federation.guideTitle")}</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>{t("federation.step1")}</li>
+            <li>{t("federation.step2")}</li>
+            <li>{t("federation.step3")}</li>
+            <li>{t("federation.step4")}</li>
+            <li>{t("federation.step5")}</li>
+          </ol>
+        </div>
+      </div>
+
       <div className="section-card p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">{t("a2a.peers")}</h2>

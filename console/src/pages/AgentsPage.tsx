@@ -743,6 +743,12 @@ function AgentsCrudTab() {
 
       {!loading && agentList.length > 0 && (
         <section className="section-card overflow-hidden p-0">
+          <div className="p-4 border-b border-border/40">
+            <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+              <h3 className="text-sm font-semibold">{t("agents.infoTitle")}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{t("agents.infoText")}</p>
+            </div>
+          </div>
           {/* Suchleiste */}
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/40">
             <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />

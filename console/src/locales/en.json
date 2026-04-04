@@ -399,6 +399,8 @@
     "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signals"
   },
   "agents": {
+    "infoTitle": "Manage Agents",
+    "infoText": "Agents are AI assistants that handle tasks for you. Each agent has an identity, an LLM model, and access to specific tools. Create a new agent, assign tools, and configure its behavior. Open the other tabs to manage tools, federation, and blueprints.",
     "tabAgents": "Agents",
     "tabTools": "Tools",
     "tabFederation": "Federation",
@@ -606,6 +608,8 @@
     "output": "Output"
   },
   "tools": {
+    "infoTitle": "Available Tools",
+    "infoText": "Tools are capabilities that agents can use — e.g. reading files, searching the web, or creating git commits. Tools are activated per agent in the Agents page. Here you can see all available tools with their descriptions.",
     "title": "Tools",
     "subtitle": "{{count}} tool in core registry",
     "subtitlePlural": "{{count}} tools in core registry",
@@ -1050,6 +1054,18 @@
     "telegramSetup4": "Find your user ID via @userinfobot → add as admin for full access",
     "telegramCreateHint": "Create bot: open Telegram → @BotFather → /newbot → copy token"
   },
+  "wks": {
+    "infoTitle": "Workstation Connection (WKS)",
+    "infoText": "Connect your agent to a remote computer via SSH. This lets your agent run commands on your PC or server, read and write files. Enter the IP address, generate an SSH key, and copy it to the target machine."
+  },
+  "butler": {
+    "infoTitle": "Butler — Automatic Message Processing",
+    "infoText": "The Butler automatically processes incoming messages based on your rules. Create flows with triggers (e.g. WhatsApp message), conditions (e.g. time, sender) and actions (e.g. forward to agent, auto-reply). Open the Blueprint tab for the visual flow editor."
+  },
+  "account": {
+    "infoTitle": "Your Account",
+    "infoText": "Manage your personal settings here. Change your password, set your preferred language, and configure your profile. These settings only apply to your account and don't affect other users."
+  },
   "skills": {
     "title": "Skills",
     "subtitle": "Skill files for the agent. Triggers, scope and priority remain unchanged — editing is now more clearly structured.",
@@ -1377,7 +1393,15 @@
     "remoteAgents": "Agents",
     "toolUsage": "Tool usage in agent configuration",
     "toolUsageDesc": "Add remote_agent to an agent's tools to enable peer access:",
-    "toolExample": "Example call:"
+    "toolExample": "Example call:",
+    "infoTitle": "Federation — Connect HydraHive Nodes",
+    "infoText": "Federation lets you connect multiple HydraHive instances. Agents can then communicate and delegate tasks across instance boundaries.",
+    "guideTitle": "How to connect two HydraHive nodes:",
+    "step1": "Activate Tailscale on both instances (Settings → VPN) and make sure both are in the same tailnet",
+    "step2": "Copy your instance's Tailscale IP and share it with the other user",
+    "step3": "Click 'Add Peer' and enter the Tailscale IP of the other node",
+    "step4": "The other user does the same with your IP — both sides must add each other as peers",
+    "step5": "Test the connection with the 'Test' button. If successful, agents can communicate via the 'remote_agent' tool"
   },
   "skillPackages": {
     "title": "Skill Packages",
@@ -1452,5 +1476,13 @@
     "all": "All",
     "none": "None",
     "selectGroup": "Select a group from the list to edit permissions."
+  },
+  "heartbeat": {
+    "infoTitle": "What are Heartbeat Tasks?",
+    "infoText": "Heartbeat tasks are automatic jobs your agent runs on a schedule — e.g. checking emails, creating reports, or monitoring systems. You define a message (the task) and a schedule.",
+    "helpTaskId": "Unique name for the task (e.g. 'daily-report', 'check-mails')",
+    "helpMessage": "The instruction your agent receives — write it like you'd brief a colleague",
+    "helpCron": "Schedule in cron format. Examples: '0 8 * * *' = daily at 8:00, '*/30 * * * *' = every 30 minutes, '0 9 * * 1' = Mondays at 9:00",
+    "helpInterval": "Alternative to cron: interval in seconds (e.g. 1800 = every 30 minutes)"
   }
 }

@@ -59,6 +59,11 @@ export function ToolsPage() {
 
       {error && <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">{error}</div>}
 
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+        <h3 className="text-sm font-semibold">{t("tools.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("tools.infoText")}</p>
+      </div>
+
       {loading && (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="bg-card border rounded-lg p-4 animate-pulse h-16" />)}
@@ -73,33 +78,32 @@ export function ToolsPage() {
       )}
 
       {!loading && toolList.length > 0 && (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {toolList.map(([id, tool]) => {
             const isOpen = expanded === id;
             const params = Object.entries(tool.parameters?.properties ?? {});
             const required = tool.parameters?.required ?? [];
 
             return (
-              <div key={id} className="bg-card border rounded-lg overflow-hidden">
+              <div key={id} className="rounded-xl border overflow-hidden bg-card">
                 <button
                   onClick={() => toggle(id)}
-                  className="w-full flex items-start gap-3 p-4 text-left hover:bg-accent/50 transition-colors"
+                  className="w-full flex items-start gap-2 p-3 text-left hover:bg-accent/50 transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Wrench className="h-4 w-4 text-primary" />
+                  <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Wrench className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{tool.name}</span>
-                      <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{id}</code>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-xs">{tool.name}</span>
+                      <code className="text-xs text-muted-foreground bg-muted px-1 py-0.5 rounded">{id}</code>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{tool.description}</p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tool.description}</p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     {tool.permissions_required.length > 0 && (
-                      <div className="flex items-center gap-1 text-xs text-orange-500">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        {tool.permissions_required.length}
+                      <div className="flex items-center gap-0.5 text-xs text-orange-500">
+                        <ShieldCheck className="h-3 w-3" />
                       </div>
                     )}
                     <span className="text-muted-foreground text-xs">{isOpen ? "▲" : "▼"}</span>
@@ -107,17 +111,17 @@ export function ToolsPage() {
                 </button>
 
                 {isOpen && (
-                  <div className="px-4 pb-4 space-y-4 border-t">
-                    <p className="text-sm text-muted-foreground pt-3">{tool.description}</p>
+                  <div className="px-3 pb-3 space-y-3 border-t">
+                    <p className="text-xs text-muted-foreground pt-2">{tool.description}</p>
 
                     {tool.permissions_required.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                          <ShieldCheck className="h-3.5 w-3.5" />{t("tools.requiredPermissions")}
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <ShieldCheck className="h-3 w-3" />{t("tools.requiredPermissions")}
                         </p>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1">
                           {tool.permissions_required.map(p => (
-                            <span key={p} className="text-xs bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded">
+                            <span key={p} className="text-xs bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded">
                               {p}
                             </span>
                           ))}
@@ -126,13 +130,13 @@ export function ToolsPage() {
                     )}
 
                     {params.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                          <Code2 className="h-3.5 w-3.5" />{t("tools.parameters")}
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                          <Code2 className="h-3 w-3" />{t("tools.parameters")}
                         </p>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           {params.map(([pname, pdef]) => (
-                            <div key={pname} className="flex items-start gap-3 text-xs bg-muted/50 rounded px-3 py-2">
+                            <div key={pname} className="flex items-start gap-2 text-xs bg-muted/50 rounded px-2 py-1.5">
                               <div className="flex-1">
                                 <span className="font-medium">{pname}</span>
                                 {required.includes(pname) && (
@@ -142,7 +146,7 @@ export function ToolsPage() {
                                 {pdef.enum && <span className="text-muted-foreground ml-1">({pdef.enum.join(" | ")})</span>}
                               </div>
                               {pdef.description && (
-                                <span className="text-muted-foreground">{pdef.description}</span>
+                                <span className="text-muted-foreground line-clamp-1">{pdef.description}</span>
                               )}
                             </div>
                           ))}

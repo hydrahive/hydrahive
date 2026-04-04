@@ -399,6 +399,8 @@
     "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signale"
   },
   "agents": {
+    "infoTitle": "Agenten verwalten",
+    "infoText": "Agenten sind KI-Assistenten die Aufgaben für dich erledigen. Jeder Agent hat eine Identität, ein LLM-Modell und Zugang zu bestimmten Tools. Erstelle einen neuen Agenten, weise ihm Tools zu und konfiguriere sein Verhalten. Öffne die anderen Tabs um Tools, Federation und Blueprints zu verwalten.",
     "tabAgents": "Agenten",
     "tabTools": "Tools",
     "tabFederation": "Federation",
@@ -606,6 +608,8 @@
     "output": "Ausgabe"
   },
   "tools": {
+    "infoTitle": "Verfügbare Tools",
+    "infoText": "Tools sind Fähigkeiten die Agenten nutzen können — z.B. Dateien lesen, im Web suchen oder Git-Commits erstellen. Tools werden pro Agent in der Agenten-Seite aktiviert. Hier siehst du alle verfügbaren Tools mit ihren Beschreibungen.",
     "title": "Tools",
     "subtitle": "{{count}} Tool im Core-Registry",
     "subtitlePlural": "{{count}} Tools im Core-Registry",
@@ -1050,6 +1054,18 @@
     "telegramSetup4": "Deine User-ID findest du via @userinfobot → als Admin eintragen für vollen Zugriff",
     "telegramCreateHint": "Bot erstellen: Telegram öffnen → @BotFather → /newbot → Token kopieren"
   },
+  "wks": {
+    "infoTitle": "Workstation-Verbindung (WKS)",
+    "infoText": "Verbinde deinen Agenten mit einem entfernten Computer per SSH. So kann dein Agent Befehle auf deinem PC oder Server ausführen, Dateien lesen und schreiben. Gib die IP-Adresse ein, generiere einen SSH-Key und kopiere ihn auf den Zielrechner."
+  },
+  "butler": {
+    "infoTitle": "Butler — Automatische Nachrichtenverarbeitung",
+    "infoText": "Der Butler verarbeitet eingehende Nachrichten automatisch nach deinen Regeln. Erstelle Flows mit Triggern (z.B. WhatsApp-Nachricht), Bedingungen (z.B. Uhrzeit, Absender) und Aktionen (z.B. an Agent weiterleiten, automatisch antworten). Öffne den Blueprint-Tab für den visuellen Flow-Editor."
+  },
+  "account": {
+    "infoTitle": "Dein Konto",
+    "infoText": "Hier verwaltest du deine persönlichen Einstellungen. Ändere dein Passwort, stelle deine bevorzugte Sprache ein und konfiguriere dein Profil. Diese Einstellungen gelten nur für deinen Account und beeinflussen nicht andere Benutzer."
+  },
   "skills": {
     "title": "Skills",
     "subtitle": "Skill-Dateien fuer den Agenten. Trigger, Scope und Prioritaet bleiben unveraendert, die Bearbeitung ist nur klarer strukturiert.",
@@ -1377,7 +1393,15 @@
     "remoteAgents": "Agenten",
     "toolUsage": "Tool-Nutzung in Agent-Konfiguration",
     "toolUsageDesc": "Füge remote_agent zu den Tools eines Agenten hinzu damit er Peers erreichen kann:",
-    "toolExample": "Beispiel-Aufruf:"
+    "toolExample": "Beispiel-Aufruf:",
+    "infoTitle": "Federation — HydraHive-Knoten verbinden",
+    "infoText": "Mit Federation kannst du mehrere HydraHive-Instanzen miteinander verbinden. Agenten können dann über Instanz-Grenzen hinweg kommunizieren und Aufgaben delegieren.",
+    "guideTitle": "So verbindest du zwei HydraHive-Knoten:",
+    "step1": "Aktiviere Tailscale auf beiden Instanzen (Settings → VPN) und stelle sicher dass beide im selben Tailnet sind",
+    "step2": "Kopiere die Tailscale-IP deiner Instanz und teile sie mit dem anderen Benutzer",
+    "step3": "Klicke 'Peer hinzufügen' und gib die Tailscale-IP des anderen Knotens ein",
+    "step4": "Der andere Benutzer macht dasselbe mit deiner IP — beide Seiten müssen den jeweils anderen als Peer hinzufügen",
+    "step5": "Teste die Verbindung mit dem 'Testen'-Button. Wenn der Test erfolgreich ist, können Agenten über 'remote_agent' Tool miteinander kommunizieren"
   },
   "skillPackages": {
     "title": "Skill-Pakete",
@@ -1452,5 +1476,13 @@
     "all": "Alle",
     "none": "Keine",
     "selectGroup": "Wähle eine Gruppe aus der Liste um Berechtigungen zu bearbeiten."
+  },
+  "heartbeat": {
+    "infoTitle": "Was sind Heartbeat-Tasks?",
+    "infoText": "Heartbeat-Tasks sind automatische Aufgaben die dein Agent regelmäßig ausführt — z.B. Mails checken, Berichte erstellen oder Systeme überwachen. Du definierst eine Nachricht (den Auftrag) und einen Zeitplan.",
+    "helpTaskId": "Eindeutiger Name für den Task (z.B. 'daily-report', 'check-mails')",
+    "helpMessage": "Der Auftrag den der Agent bekommt — schreib es wie eine Anweisung an einen Mitarbeiter",
+    "helpCron": "Zeitplan im Cron-Format. Beispiele: '0 8 * * *' = täglich um 8:00, '*/30 * * * *' = alle 30 Minuten, '0 9 * * 1' = Montags um 9:00",
+    "helpInterval": "Alternative zum Cron: Intervall in Sekunden (z.B. 1800 = alle 30 Minuten)"
   }
 }

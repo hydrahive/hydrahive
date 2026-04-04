@@ -964,8 +964,16 @@ export function MyAgentPage() {
       {/* ── Butler Tab ────────────────────────────────────────────────────── */}
       {tab === "butler" && (
         <Suspense fallback={<div className="p-8 text-muted-foreground text-sm">Lade Butler...</div>}>
-          <div style={{ height: "calc(100vh - 200px)" }}>
-            <ButlerEmbed />
+          <div className="flex flex-col h-screen">
+            <div className="p-6 border-b bg-background">
+              <div className="mb-0 rounded-xl border bg-muted/30 p-4 space-y-2 max-w-2xl">
+                <h3 className="text-sm font-semibold">{t("butler.infoTitle")}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{t("butler.infoText")}</p>
+              </div>
+            </div>
+            <div style={{ height: "calc(100vh - 200px)", flex: 1, overflow: "hidden" }}>
+              <ButlerEmbed />
+            </div>
           </div>
         </Suspense>
       )}
@@ -1061,6 +1069,7 @@ function UserAppTab({ appId, apps }: { appId: string; apps: any[] }) {
 /* ── Account Tab — Mein Konto ────────────────────────────────── */
 
 function AccountTab() {
+  const { t } = useTranslation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState("");
@@ -1080,6 +1089,11 @@ function AccountTab() {
 
   return (
     <div className="p-5 space-y-5 max-w-2xl">
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+        <h3 className="text-sm font-semibold">{t("account.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("account.infoText")}</p>
+      </div>
+
       <div>
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><User className="h-4 w-4 text-primary" /> Benutzerkonto</h2>
         <div className="grid gap-2 text-sm">
@@ -1843,6 +1857,11 @@ function WksTab() {
   return (
     <div className="flex-1 overflow-y-auto">
       <form onSubmit={save} className="p-6 space-y-8 max-w-2xl">
+        <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+          <h3 className="text-sm font-semibold">{t("wks.infoTitle")}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("wks.infoText")}</p>
+        </div>
+
         <div className="space-y-1">
           <h2 className="text-sm font-semibold flex items-center gap-2">
             <Monitor className="h-4 w-4" />{t("myAgent.wksTitle")}
@@ -2850,6 +2869,18 @@ function HeartbeatTab({ agentInfo, onSaved }: { agentInfo: AgentInfo; onSaved: (
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-8 max-w-2xl">
+
+      {/* Info Block */}
+      <div className="mb-6 rounded-xl border bg-muted/30 p-4 space-y-2">
+        <h3 className="text-sm font-semibold">{t("heartbeat.infoTitle")}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">{t("heartbeat.infoText")}</p>
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p><strong>Task-ID:</strong> {t("heartbeat.helpTaskId")}</p>
+          <p><strong>Nachricht:</strong> {t("heartbeat.helpMessage")}</p>
+          <p><strong>Cron:</strong> {t("heartbeat.helpCron")}</p>
+          <p><strong>Intervall:</strong> {t("heartbeat.helpInterval")}</p>
+        </div>
+      </div>
 
       {/* Basis-Config */}
       <section className="space-y-4">
