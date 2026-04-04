@@ -148,19 +148,21 @@ function AgentProfileNode({ data, selected }: { data: any; selected: boolean }) 
       {data.config?.type && <p className="text-[0.55rem] text-white/30 mt-0.5">{data.config.type}</p>}
 
       {/* Handle-Labels */}
-      <span className="absolute -left-1 top-[18%] -translate-x-full text-[0.5rem] text-cyan-400/60">Tools</span>
-      <span className="absolute -right-1 top-[18%] translate-x-full text-[0.5rem] text-pink-400/60">MCP</span>
-      <span className="absolute -left-1 top-[55%] -translate-x-full text-[0.5rem] text-purple-400/60">Skills</span>
-      <span className="absolute -right-1 top-[55%] translate-x-full text-[0.5rem] text-amber-400/60">Plugins</span>
+      <span className="absolute -left-1 top-[14%] -translate-x-full text-[0.5rem] text-cyan-400/60">Tools</span>
+      <span className="absolute -right-1 top-[14%] translate-x-full text-[0.5rem] text-pink-400/60">MCP</span>
+      <span className="absolute -left-1 top-[45%] -translate-x-full text-[0.5rem] text-purple-400/60">Skills</span>
+      <span className="absolute -right-1 top-[45%] translate-x-full text-[0.5rem] text-amber-400/60">Plugins</span>
+      <span className="absolute -left-1 top-[76%] -translate-x-full text-[0.5rem] text-violet-400/60">Workflow</span>
       <span className="absolute left-1/2 -translate-x-1/2 -top-1 -translate-y-full text-[0.5rem] text-teal-400/60">Memory</span>
       <span className="absolute left-1/2 -translate-x-1/2 -bottom-1 translate-y-full text-[0.5rem] text-blue-400/60">Repos</span>
 
-      {/* Handles: Links oben=Tools, links unten=Skills */}
-      <Handle type="target" position={Position.Left} id="tools" style={{ ...hBase, background: "#22d3ee", top: "20%" }} />
-      <Handle type="target" position={Position.Left} id="skills" style={{ ...hBase, background: "#c084fc", top: "60%" }} />
+      {/* Handles: Links oben=Tools, links mitte=Skills, links unten=Workflow */}
+      <Handle type="target" position={Position.Left} id="tools" style={{ ...hBase, background: "#22d3ee", top: "16%" }} />
+      <Handle type="target" position={Position.Left} id="skills" style={{ ...hBase, background: "#c084fc", top: "48%" }} />
+      <Handle type="target" position={Position.Left} id="workflow" style={{ ...hBase, background: "#8b5cf6", top: "80%" }} />
       {/* Handles: Rechts oben=MCP, rechts unten=Plugins */}
-      <Handle type="target" position={Position.Right} id="mcp" style={{ ...hBase, background: "#f472b6", top: "20%" }} />
-      <Handle type="target" position={Position.Right} id="plugins" style={{ ...hBase, background: "#fbbf24", top: "60%" }} />
+      <Handle type="target" position={Position.Right} id="mcp" style={{ ...hBase, background: "#f472b6", top: "16%" }} />
+      <Handle type="target" position={Position.Right} id="plugins" style={{ ...hBase, background: "#fbbf24", top: "48%" }} />
       {/* Handles: Oben=Memory, Unten=Repos */}
       <Handle type="target" position={Position.Top} id="memory" style={{ ...hBase, background: "#2dd4bf" }} />
       <Handle type="target" position={Position.Bottom} id="repos" style={{ ...hBase, background: "#60a5fa" }} />
@@ -231,33 +233,53 @@ function EndFlowNode({ data, selected }: { data: any; selected: boolean }) {
   );
 }
 
+function WorkflowOverviewNode({ data, selected }: { data: any; selected: boolean }) {
+  const stepCount = data.stepCount ?? 0;
+  const hasFlow = stepCount > 0;
+  return (
+    <div className={cn("min-w-[180px] max-w-[240px] rounded-xl border-2 px-3 py-2.5 shadow-lg select-none bg-violet-950/60 border-violet-500/60", selected && "ring-2 ring-white/25")}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Workflow className="h-3 w-3 text-violet-400" />
+        <span className="text-[0.55rem] font-bold uppercase tracking-widest text-violet-400">Workflow</span>
+      </div>
+      <p className="text-sm font-medium text-white leading-tight">{data.label || "Arbeitsablauf"}</p>
+      <p className="text-[0.6rem] text-violet-400/60 mt-0.5">
+        {hasFlow ? `${stepCount} Nodes definiert` : "Noch kein Workflow"}
+      </p>
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "#8b5cf6", border: "2px solid #5b21b6", width: 10, height: 10 }} />
+    </div>
+  );
+}
+
 const NODE_TYPES = {
-  repository:   RepoNode         as any,
-  credential:   CredentialNode   as any,
-  skill:        SkillNode        as any,
-  memory:       MemoryNode       as any,
-  toolpolicy:   ToolPolicyNode   as any,
-  tool:         ToolNode         as any,
-  mcp:          McpNode          as any,
-  plugin:       PluginNode       as any,
-  agentprofile: AgentProfileNode as any,
-  stepFlow:     StepFlowNode     as any,
-  sourceFlow:   SourceFlowNode   as any,
-  branchFlow:   BranchFlowNode   as any,
-  endFlow:      EndFlowNode      as any,
+  repository:       RepoNode             as any,
+  credential:       CredentialNode       as any,
+  skill:            SkillNode            as any,
+  memory:           MemoryNode           as any,
+  toolpolicy:       ToolPolicyNode       as any,
+  tool:             ToolNode             as any,
+  mcp:              McpNode              as any,
+  plugin:           PluginNode           as any,
+  agentprofile:     AgentProfileNode     as any,
+  workflowOverview: WorkflowOverviewNode as any,
+  stepFlow:         StepFlowNode         as any,
+  sourceFlow:       SourceFlowNode       as any,
+  branchFlow:       BranchFlowNode       as any,
+  endFlow:          EndFlowNode          as any,
 };
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 const PALETTE_ITEMS = [
-  { type: "tool",         label: "Tool",         icon: Wrench,    color: "text-cyan-400" },
-  { type: "skill",        label: "Skill",        icon: BookOpen,  color: "text-purple-400" },
-  { type: "memory",       label: "Memory",       icon: Brain,     color: "text-teal-400" },
-  { type: "mcp",          label: "MCP Server",   icon: Server,    color: "text-pink-400" },
-  { type: "plugin",       label: "Plugin",       icon: Puzzle,    color: "text-amber-400" },
-  { type: "repository",   label: "Repository",   icon: GitBranch, color: "text-blue-400" },
-  { type: "credential",   label: "Credential",   icon: KeyRound,  color: "text-orange-400" },
-  { type: "toolpolicy",   label: "Tool-Policy",  icon: Shield,    color: "text-green-400" },
+  { type: "tool",             label: "Tool",         icon: Wrench,    color: "text-cyan-400" },
+  { type: "skill",            label: "Skill",        icon: BookOpen,  color: "text-purple-400" },
+  { type: "memory",           label: "Memory",       icon: Brain,     color: "text-teal-400" },
+  { type: "mcp",              label: "MCP Server",   icon: Server,    color: "text-pink-400" },
+  { type: "plugin",           label: "Plugin",       icon: Puzzle,    color: "text-amber-400" },
+  { type: "repository",       label: "Repository",   icon: GitBranch, color: "text-blue-400" },
+  { type: "credential",       label: "Credential",   icon: KeyRound,  color: "text-orange-400" },
+  { type: "toolpolicy",       label: "Tool-Policy",  icon: Shield,    color: "text-green-400" },
+  { type: "workflowOverview", label: "Workflow",     icon: Workflow,  color: "text-violet-400" },
 ];
 
 const MODELS = [
@@ -273,7 +295,7 @@ const MODELS = [
 
 // ── Properties Panel ──────────────────────────────────────────────────────────
 
-function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins, availableSkills, viewMode }: {
+function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMcp, availablePlugins, availableSkills, viewMode, onEditWorkflow }: {
   node: Node | null;
   onChange: (id: string, data: any) => void;
   onDelete: (id: string) => void;
@@ -282,6 +304,7 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
   availablePlugins: string[];
   availableSkills: string[];
   viewMode?: ViewMode;
+  onEditWorkflow?: () => void;
 }) {
   if (!node) return (
     <div className="p-4 text-xs text-white/20 space-y-4 overflow-y-auto h-full">
@@ -498,6 +521,19 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
         </div>
       </>}
 
+      {/* Workflow Overview (Ressourcen-Ansicht) */}
+      {n.type === "workflowOverview" && <>
+        <p className="text-[0.65rem] text-white/30 leading-relaxed">
+          Dieser Node verbindet den Arbeitsablauf mit dem Agenten. Klicke unten um den Workflow zu bearbeiten.
+        </p>
+        {onEditWorkflow && (
+          <button onClick={onEditWorkflow}
+            className="flex items-center gap-1.5 w-full justify-center rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-2 text-xs text-white transition-colors">
+            <Workflow className="h-3.5 w-3.5" /> Workflow bearbeiten
+          </button>
+        )}
+      </>}
+
       {/* ── Workflow-Flow Node Properties ── */}
       {n.type === "stepFlow" && <>
         <div>
@@ -710,6 +746,15 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
       } catch {
         setNodes([]); setEdges([]);
       }
+      // Workflow-Flow Node-Count in WorkflowOverview-Nodes patchen
+      try {
+        const flow = await api.get<{ nodes: any[] }>(`/agents/${selectedAgentId}/workflow-flow`);
+        const flowCount = (flow.nodes || []).length;
+        setNodes(ns => ns.map(n => n.type === "workflowOverview"
+          ? { ...n, data: { ...n.data, stepCount: flowCount } }
+          : n
+        ));
+      } catch { /* kein Workflow */ }
     })().finally(() => setLoading(false));
   }, [selectedAgentId, setNodes, setEdges, rf, isNewMode]);
 
@@ -740,7 +785,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
     const defaults: Record<string, string> = {
       repository: "Repo", credential: "Token", skill: "Skill",
       memory: "Memory", toolpolicy: "Tool Policy", tool: "tool",
-      mcp: "MCP Server", plugin: "Plugin",
+      mcp: "MCP Server", plugin: "Plugin", workflowOverview: "Arbeitsablauf",
       agentprofile: "Neuer Agent",
       stepFlow: "Schritt", sourceFlow: "Quelle",
       branchFlow: "Bedingung?", endFlow: "Ende",
@@ -1000,7 +1045,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
             <MiniMap nodeColor={n => ({
               repository: "#60a5fa", credential: "#fb923c", skill: "#c084fc",
               memory: "#2dd4bf", toolpolicy: "#4ade80", tool: "#22d3ee",
-              mcp: "#f472b6", plugin: "#fbbf24", agentprofile: "#818cf8",
+              mcp: "#f472b6", plugin: "#fbbf24", agentprofile: "#818cf8", workflowOverview: "#8b5cf6",
               stepFlow: "#818cf8", sourceFlow: "#34d399", branchFlow: "#fbbf24", endFlow: "#a1a1aa",
             }[n.type ?? ""] ?? "#6366f1")} />
             {viewMode === "resources" && nodes.length === 0 && !loading && !isNewMode && (
@@ -1045,6 +1090,7 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
               availablePlugins={availablePlugins}
               availableSkills={availableSkills}
               viewMode={viewMode}
+              onEditWorkflow={() => { setViewMode("workflow"); setSelectedNode(null); }}
             />
           </div>
         </div>
