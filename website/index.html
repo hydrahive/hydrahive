@@ -167,14 +167,14 @@
       justify-content: center;
     }
     .hydra-svg {
-      width: 160px;
-      height: 160px;
+      width: 240px;
+      height: 240px;
       filter: drop-shadow(0 0 40px rgba(74,222,128,0.3));
-      animation: float 4s ease-in-out infinite;
+      animation: pulse-glow 3s ease-in-out infinite;
     }
-    @keyframes float {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-12px); }
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 40px rgba(74,222,128,0.3)); }
+      50% { transform: scale(1.04); filter: drop-shadow(0 0 55px rgba(74,222,128,0.5)); }
     }
 
     /* TAGLINE BAR */
