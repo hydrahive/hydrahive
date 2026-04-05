@@ -78,6 +78,34 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
     async def hub_index(_auth=Depends(require_admin)):
         return _get_index()
 
+    @router.get("/hub/local-plugins")
+    async def hub_local_plugins(_auth=Depends(require_admin)):
+        """Alle lokal installierten Plugins im Hub-Format (#262)."""
+        import yaml as _yaml
+        plugins_base = Path("/plugins")
+        result = []
+        if plugins_base.exists():
+            for plugin_dir in sorted(plugins_base.iterdir()):
+                yaml_path = plugin_dir / "plugin.yaml"
+                if not yaml_path.exists():
+                    continue
+                try:
+                    manifest = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+                    result.append({
+                        "id": manifest.get("id", plugin_dir.name),
+                        "name": manifest.get("name", plugin_dir.name),
+                        "description": manifest.get("description", ""),
+                        "version": manifest.get("version", "1.0.0"),
+                        "author": manifest.get("author", "HydraHive"),
+                        "type": "plugin",
+                        "category": manifest.get("category", "tools"),
+                        "local": True,
+                        "config_fields": manifest.get("config_fields", []),
+                    })
+                except Exception:
+                    pass
+        return {"plugins": result, "count": len(result)}
+
     @router.get("/hub/installed")
     async def hub_installed(_auth=Depends(require_admin)):
         """Gibt zurück welche Hub-Pakete bereits installiert sind (Agents + Plugins)."""

@@ -229,6 +229,7 @@ export const api = {
   // HydraHub
   hubIndex:     () => api.get<HubIndex>("/hub/index"),
   hubInstalled: () => api.get<HubInstalledEntry[]>("/hub/installed"),
+  hubLocalPlugins: () => api.get<{plugins: any[]; count: number}>("/hub/local-plugins"),
   hubInstall:   (d: HubInstallRequest) => api.post<HubInstallResult>("/hub/install", d),
   hubUninstall: (agentId: string) => api.delete<{uninstalled:boolean;agent_id:string}>(`/hub/installed/${agentId}`),
   hubUninstallPlugin: (pluginId: string) => api.delete<{uninstalled:boolean;plugin_id:string}>(`/hub/installed/plugin/${pluginId}`),

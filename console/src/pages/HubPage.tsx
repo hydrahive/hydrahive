@@ -704,13 +704,22 @@ function HubPluginsTab() {
   const [error, setError]           = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
 
+  const [localPlugins, setLocalPlugins] = useState<HubPackage[]>([]);
+
   async function load() {
     setLoading(true); setError(null);
     try {
-      const [idx, inst] = await Promise.all([api.hubIndex(), api.hubInstalled()]);
+      const [idx, inst, local] = await Promise.all([
+        api.hubIndex().catch(() => ({ packages: [] })),
+        api.hubInstalled().catch(() => []),
+        api.hubLocalPlugins().catch(() => ({ plugins: [] })),
+      ]);
       setPlugins(idx.packages.filter((p: any) => p.type === "plugin"));
       const instArr = Array.isArray(inst) ? inst : [];
       setInstalled(new Set(instArr.map((i: any) => i.id)));
+      setLocalPlugins((local.plugins || []).map((p: any) => ({
+        ...p, path: `local/${p.id}`, installed: true,
+      })));
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -807,6 +816,27 @@ function HubPluginsTab() {
               );
             })}
           </div>
+        )}
+        {/* Lokale Plugins (#262) */}
+        {localPlugins.length > 0 && (
+          <>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-6 mb-2 px-1">
+              {t("hub.localPlugins", { defaultValue: "Lokale Plugins" })} ({localPlugins.length})
+            </h3>
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {localPlugins.map((p: any) => (
+                <div key={p.id} className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-2xl leading-none">🔌</span>
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  </div>
+                  <div className="font-medium text-sm mb-1">{p.name}</div>
+                  <div className="text-xs text-muted-foreground line-clamp-2 mb-3 min-h-[2.5rem]">{p.description}</div>
+                  <div className="text-[10px] text-muted-foreground">v{p.version} · {p.author}</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     <ConfirmDialog
