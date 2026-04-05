@@ -1108,7 +1108,7 @@ function DexcomLivePanel() {
         alert_thresholds: { low: number; high: number };
       }>("/me/user-apps/dexcom-monitor/glucose?minutes=60&count=12");
       if (result.current) {
-        setData(result);
+        setData({ ...result, current: result.current });
       } else {
         setError("Keine Glukosewerte verfügbar — Sensor aktiv?");
       }

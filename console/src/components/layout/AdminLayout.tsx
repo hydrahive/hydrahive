@@ -33,15 +33,25 @@ import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
 
+// ANSI-Farbcodes aus Log-Zeilen entfernen
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+function stripAnsi(s: string): string { return s.replace(ANSI_RE, ""); }
+
 function useUpdateStatus(isAdmin: boolean) {
   const [updating, setUpdating] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [lastCommit, setLastCommit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Live-Log Modal State
-  const [showLog, setShowLog] = useState(false);
+  // Live-Log Modal State — bei Reload wiederherstellen
+  const [showLog, setShowLog] = useState(() => localStorage.getItem("hh_update_modal") === "1");
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logDone, setLogDone] = useState<boolean | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist modal state
+  useEffect(() => {
+    localStorage.setItem("hh_update_modal", showLog ? "1" : "0");
+  }, [showLog]);
 
   const check = useCallback(async () => {
     if (!isAdmin) return;
@@ -50,6 +60,10 @@ function useUpdateStatus(isAdmin: boolean) {
       setUpdateAvailable(Boolean(s.available));
       if (s.status === "running") {
         setUpdating(true);
+        // Falls Modal offen sein sollte (nach Reload), Polling starten
+        if (localStorage.getItem("hh_update_modal") === "1" && !pollRef.current) {
+          startPolling();
+        }
       } else {
         setUpdating(false);
         if (s.commit) setLastCommit(s.commit);
@@ -67,51 +81,39 @@ function useUpdateStatus(isAdmin: boolean) {
     return () => clearInterval(t);
   }, [check]);
 
-  const trigger = useCallback(async () => {
-    setUpdating(true);
-    setError(null);
-    setLogLines([]);
-    setLogDone(null);
-    setShowLog(true);
-
-    try {
-      await api.updateTrigger();
-    } catch (e: unknown) {
-      setUpdating(false);
-      setLogDone(false);
-      setError(e instanceof Error ? e.message : "Fehler");
-      setLogLines(l => [...l, `[ERROR] ${e instanceof Error ? e.message : "Unbekannter Fehler"}`]);
-      return;
-    }
-
-    // Polling-basiertes Log-Tailing (überlebt Core-Restart)
+  function startPolling() {
+    if (pollRef.current) return; // bereits aktiv
     let seenLines = 0;
     let finished = false;
     let retries = 0;
-    const MAX_RETRIES = 90; // ~3 Minuten bei 2s Intervall
+    const MAX_RETRIES = 120; // ~4 Minuten bei 2s Intervall
 
-    const poll = setInterval(async () => {
-      if (finished) { clearInterval(poll); return; }
+    setShowLog(true);
+
+    pollRef.current = setInterval(async () => {
+      if (finished) { clearInterval(pollRef.current!); pollRef.current = null; return; }
       const token = localStorage.getItem("hydrahive_token") || "";
       try {
         const res = await fetch("/api/admin/update/status", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
-          // Core ist noch weg (Restart) — weiter warten
           retries++;
+          if (retries <= 3) {
+            setLogLines(l => [...l, "⏳ Core startet neu..."]);
+          }
           if (retries > MAX_RETRIES) {
             finished = true;
-            clearInterval(poll);
+            clearInterval(pollRef.current!); pollRef.current = null;
             setLogLines(l => [...l, "[TIMEOUT] Update dauert zu lange oder Core nicht erreichbar"]);
             setLogDone(false);
             setUpdating(false);
           }
           return;
         }
-        retries = 0; // Reset bei Erfolg
+        retries = 0;
         const data = await res.json();
-        const logTail: string[] = data.log_tail || [];
+        const logTail: string[] = (data.log_tail || []).map(stripAnsi);
 
         // Neue Zeilen anzeigen
         if (logTail.length > seenLines) {
@@ -124,7 +126,7 @@ function useUpdateStatus(isAdmin: boolean) {
         const st = data.status || "";
         if (st === "ok" || st === "error") {
           finished = true;
-          clearInterval(poll);
+          clearInterval(pollRef.current!); pollRef.current = null;
           setLogDone(st === "ok");
           setUpdating(false);
           if (data.commit) setLastCommit(data.commit);
@@ -132,19 +134,38 @@ function useUpdateStatus(isAdmin: boolean) {
           else { setError(null); setUpdateAvailable(false); }
         }
       } catch {
-        // Netzwerk-Fehler (Core restartet gerade) — weiter warten
         retries++;
-        if (retries <= 5) {
-          setLogLines(l => [...l, "⏳ Core startet neu..."]);
+        if (retries <= 3) {
+          setLogLines(l => [...l, "⏳ Verbindung unterbrochen — warte auf Core..."]);
         }
         if (retries > MAX_RETRIES) {
           finished = true;
-          clearInterval(poll);
+          clearInterval(pollRef.current!); pollRef.current = null;
           setLogDone(false);
           setUpdating(false);
         }
       }
     }, 2000);
+  }
+
+  const trigger = useCallback(async () => {
+    setUpdating(true);
+    setError(null);
+    setLogLines([]);
+    setLogDone(null);
+
+    try {
+      await api.updateTrigger();
+    } catch (e: unknown) {
+      setUpdating(false);
+      setLogDone(false);
+      setShowLog(true);
+      setError(e instanceof Error ? e.message : "Fehler");
+      setLogLines(l => [...l, `[ERROR] ${e instanceof Error ? e.message : "Unbekannter Fehler"}`]);
+      return;
+    }
+
+    startPolling();
   }, []);
 
   const closeLog = useCallback(() => {
