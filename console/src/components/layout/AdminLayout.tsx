@@ -2,6 +2,7 @@ import React from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SupportWidget } from "@/components/SupportWidget";
+import { FloatingCompanion, useCompanionActivation } from "@/components/FloatingCompanion";
 import {
   LayoutDashboard,
   Bot,
@@ -228,6 +229,7 @@ export function AdminLayout() {
   const { user, isAdmin, hasPageAccess, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const companionTap = useCompanionActivation();
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
@@ -351,7 +353,7 @@ export function AdminLayout() {
                 {updating ? t("layout.running") : updateAvailable ? t("layout.updateAvailable") : t("layout.ready")}
               </span>
             </div>
-            <p className="mt-2 text-[hsl(var(--sidebar-muted))]">
+            <p className="mt-2 text-[hsl(var(--sidebar-muted))] cursor-default" onClick={companionTap}>
               {updating
                 ? t("layout.updateAlertDetail")
                 : updateAvailable
@@ -583,6 +585,7 @@ export function AdminLayout() {
       </nav>
 
       <SupportWidget />
+      <FloatingCompanion />
     </div>
   );
 }
