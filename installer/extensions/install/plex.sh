@@ -23,15 +23,10 @@ info "=== Plex Media Server installieren ==="
 # --- GPG-Schlüssel ---
 if [ ! -f "${PLEX_GPG_FILE}" ]; then
     info "Füge Plex GPG-Schlüssel hinzu..."
-    # Versuche mehrere Key-Quellen (Plex ändert die regelmäßig)
-    if curl -fsSL "https://downloads.plex.tv/plex-keys/PlexSign.key" -o /tmp/plex-key.pub 2>/dev/null; then
-        gpg --batch --yes --dearmor -o "${PLEX_GPG_FILE}" /tmp/plex-key.pub 2>/dev/null \
-            || cp /tmp/plex-key.pub "${PLEX_GPG_FILE}"
-        rm -f /tmp/plex-key.pub
-    fi
-    # Falls der Key nicht reicht, auch den fehlenden Key direkt vom Keyserver holen
-    gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys 97203C7B3ADCA79D 2>/dev/null || true
-    gpg --batch --export 97203C7B3ADCA79D 2>/dev/null | tee -a "${PLEX_GPG_FILE}" >/dev/null || true
+    # Key direkt per HTTPS vom Ubuntu Keyserver (funktioniert als root ohne gpg-agent)
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x97203C7B3ADCA79D" \
+        | gpg --batch --yes --dearmor -o "${PLEX_GPG_FILE}" 2>/dev/null \
+        || error "Plex GPG-Schlüssel konnte nicht importiert werden"
     chmod 644 "${PLEX_GPG_FILE}"
     success "GPG-Schlüssel importiert"
 fi
