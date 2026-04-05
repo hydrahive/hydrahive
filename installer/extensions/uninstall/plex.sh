@@ -22,6 +22,7 @@ fi
 
 # --- Repository und GPG-Schlüssel entfernen ---
 rm -f /etc/apt/sources.list.d/plexmediaserver.list
+rm -f /etc/apt/keyrings/plex.gpg
 rm -f /etc/apt/trusted.gpg.d/plexmediaserver.asc
 apt-get update -qq 2>/dev/null || true
 success "Plex apt-Repository entfernt"
