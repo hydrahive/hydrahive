@@ -345,6 +345,12 @@ export function AdminLayout() {
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
+        {/* Versionsanzeige — immer sichtbar für Admins (enthält Companion-Aktivierung) */}
+        {isAdmin && !showDeploymentPanel && lastCommit && (
+          <p className="mb-2 text-[10px] text-[hsl(var(--sidebar-muted))] cursor-default text-center" onClick={companionTap}>
+            {t("layout.lastCommit", { commit: lastCommit })}
+          </p>
+        )}
         {showDeploymentPanel && (
           <div className="mb-3 rounded-2xl border border-red-400/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-rose-500/10 p-3 text-xs text-[hsl(var(--sidebar-foreground))] shadow-[0_0_0_1px_rgba(248,113,113,0.12),0_18px_40px_rgba(239,68,68,0.18)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
