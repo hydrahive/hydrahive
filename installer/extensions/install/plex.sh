@@ -24,18 +24,20 @@ info "=== Plex Media Server installieren ==="
 if [ ! -f "${PLEX_GPG_FILE}" ]; then
     info "Füge Plex GPG-Schlüssel hinzu..."
     curl -fsSL "https://downloads.plex.tv/plex-keys/PlexSign.key" \
-        | gpg --dearmor -o "${PLEX_GPG_FILE}" \
-        || error "GPG-Schlüssel konnte nicht importiert werden"
+        -o /tmp/plex-key.pub \
+        || error "GPG-Schlüssel konnte nicht heruntergeladen werden"
+    gpg --batch --yes --dearmor -o "${PLEX_GPG_FILE}" /tmp/plex-key.pub 2>/dev/null \
+        || cp /tmp/plex-key.pub "${PLEX_GPG_FILE}"
+    rm -f /tmp/plex-key.pub
+    chmod 644 "${PLEX_GPG_FILE}"
     success "GPG-Schlüssel importiert"
 fi
 
 # --- Apt-Repository ---
-if [ ! -f "${PLEX_REPO_FILE}" ]; then
-    info "Füge Plex apt-Repository hinzu..."
-    echo "deb [signed-by=${PLEX_GPG_FILE}] https://downloads.plex.tv/repo/deb public main" \
-        > "${PLEX_REPO_FILE}"
-    success "Plex-Repository eingetragen: ${PLEX_REPO_FILE}"
-fi
+info "Konfiguriere Plex apt-Repository..."
+echo "deb [signed-by=${PLEX_GPG_FILE}] https://downloads.plex.tv/repo/deb public main" \
+    > "${PLEX_REPO_FILE}"
+success "Plex-Repository eingetragen: ${PLEX_REPO_FILE}"
 
 # --- Paket installieren / aktualisieren ---
 info "Aktualisiere Paketliste und installiere plexmediaserver..."
