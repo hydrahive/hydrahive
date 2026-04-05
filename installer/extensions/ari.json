@@ -1,0 +1,13 @@
+{
+  "id": "ari",
+  "name": "Ari (Tor / Onion Router)",
+  "description": "Anonymisierungs-Netzwerk über das Tor-Protokoll — SOCKS5-Proxy auf Port 9050 + Control-Port 9051 für Onion-Routing und Privacy-Anwendungen.",
+  "icon": "Shield",
+  "category": "security",
+  "install_script": "extensions/install/ari.sh",
+  "uninstall_script": "extensions/uninstall/ari.sh",
+  "service": "tor@default",
+  "health_url": "http://127.0.0.1:9051/",
+  "open_url": null,
+  "installed_check": "/usr/bin/tor"
+}

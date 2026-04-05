@@ -1,0 +1,13 @@
+{
+  "id": "heimdall",
+  "name": "Heimdall (App-Dashboard)",
+  "description": "Übersichtliches Startseiten-Dashboard für alle selbst-gehosteten Dienste — Links, Kategorien und Status-Pins in einer hübschen Oberfläche.",
+  "icon": "LayoutGrid",
+  "category": "dashboard",
+  "install_script": "extensions/install/heimdall.sh",
+  "uninstall_script": "extensions/uninstall/heimdall.sh",
+  "service": "heimdall",
+  "health_url": "http://127.0.0.1:8400/",
+  "open_url": ":8400/",
+  "installed_check": "/opt/heimdall"
+}

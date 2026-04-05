@@ -1,0 +1,13 @@
+{
+  "id": "paperless-ngx",
+  "name": "Paperless-ngx (Dokumenten-Management)",
+  "description": "Selbst-gehostetes DMS — scannt, indiziert und archiviert Papierdokumente als durchsuchbare PDFs mit OCR, Tags und automatischer Klassifikation.",
+  "icon": "FileText",
+  "category": "productivity",
+  "install_script": "extensions/install/paperless-ngx.sh",
+  "uninstall_script": "extensions/uninstall/paperless-ngx.sh",
+  "service": "paperless-webserver",
+  "health_url": "http://127.0.0.1:8200/",
+  "open_url": ":8200/",
+  "installed_check": "/opt/paperless-ngx"
+}

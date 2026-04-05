@@ -1,0 +1,13 @@
+{
+  "id": "adguard-home",
+  "name": "AdGuard Home (DNS-Blocker)",
+  "description": "Netzwerkweiter DNS-Sinkhole — blockiert Werbung, Tracker und Malware-Domains auf DNS-Ebene für alle Geräte im Netzwerk.",
+  "icon": "ShieldCheck",
+  "category": "network",
+  "install_script": "extensions/install/adguard-home.sh",
+  "uninstall_script": "extensions/uninstall/adguard-home.sh",
+  "service": "adguardhome",
+  "health_url": "http://127.0.0.1:8300/",
+  "open_url": ":8300/",
+  "installed_check": "/opt/adguard-home/AdGuardHome"
+}
