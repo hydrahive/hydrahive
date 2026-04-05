@@ -1,0 +1,19 @@
+id: nextcloud-manager
+name: Nextcloud Manager
+version: 1.0.0
+description: Nextcloud-Dateien, Kalender und Kontakte über die OCS-API verwalten.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: username
+    label: Username
+    type: string
+  - key: app_password
+    label: App Password
+    type: password

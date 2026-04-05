@@ -87,10 +87,28 @@ def register_project_integration_routes(
     logger,
     run_self_update,
 ) -> None:
+    def _check_project_access(project_id: str, auth: tuple[str, str]) -> None:
+        """#279: Prüft ob der User Zugriff auf das Projekt hat."""
+        username, role = auth
+        if role == "admin":
+            return
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+        # Personal-Projekt gehört dem User
+        if project_id == f"personal_{username}":
+            return
+        # Für andere Projekte: Owner-Check (owner-Feld oder project_id muss in allowed_projects sein)
+        owner = getattr(cfg, "owner", None) or ""
+        if owner == username:
+            return
+        raise HTTPException(403, f"Keine Berechtigung für Projekt '{project_id}'")
+
     @auth_router.get("/projects/{project_id}/agentlink")
     def list_agentlink(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
         from .agentlink import list_handoffs as _lh
 
+        _check_project_access(project_id, _a)
         project_dir = Path(projects_dir) / project_id
         if not project_dir.exists():
             raise HTTPException(404, "Projekt nicht gefunden")
@@ -101,6 +119,7 @@ def register_project_integration_routes(
     def delete_agentlink(project_id: str, handoff_id: str, _a: tuple[str, str] = Depends(require_auth)):
         from .agentlink import delete_handoff as _dh
 
+        _check_project_access(project_id, _a)
         project_dir = Path(projects_dir) / project_id
         if not project_dir.exists():
             raise HTTPException(404, "Projekt nicht gefunden")
@@ -113,6 +132,7 @@ def register_project_integration_routes(
     def create_agentlink(project_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
         from .agentlink import write_handoff as _wh
 
+        _check_project_access(project_id, _a)
         project_dir = Path(projects_dir) / project_id
         if not project_dir.exists():
             raise HTTPException(404, "Projekt nicht gefunden")

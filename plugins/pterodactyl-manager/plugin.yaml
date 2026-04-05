@@ -1,0 +1,16 @@
+id: pterodactyl-manager
+name: Pterodactyl Manager
+version: 1.0.0
+description: Pterodactyl Panel verwalten — Server auflisten, starten/stoppen, Konsole, Ressourcen.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Pterodactyl Base URL (z.B. https://panel.example.com)
+    type: string
+  - key: api_key
+    label: Client API Key
+    type: password

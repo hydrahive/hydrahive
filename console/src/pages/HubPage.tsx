@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, Download, CheckCircle2, ExternalLink, X, ChevronRight, RefreshCw, Package, Zap, Puzzle, Trash2, Code2, Blocks } from "lucide-react";
 import { api, type HubPackage, type HubInstalledEntry, type ClawhubSkillItem, type ClawhubPackageItem } from "@/lib/api";
 import { useTranslation } from "react-i18next";
@@ -824,9 +825,20 @@ function HubPluginsTab() {
 
 type HubTabId = "hydrahub" | "hub-plugins" | "clawhub" | "extensions" | "plugins" | "skill-packages";
 
+const VALID_HUB_TABS: HubTabId[] = ["hydrahub", "hub-plugins", "clawhub", "extensions", "plugins", "skill-packages"];
+
 export function HubPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<HubTabId>("hydrahub");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // #286: Tab-State aus URL lesen
+  const urlTab = searchParams.get("tab") as HubTabId | null;
+  const [activeTab, _setActiveTab] = useState<HubTabId>(
+    urlTab && VALID_HUB_TABS.includes(urlTab) ? urlTab : "hydrahub"
+  );
+  const setActiveTab = useCallback((id: HubTabId) => {
+    _setActiveTab(id);
+    setSearchParams({ tab: id }, { replace: true });
+  }, [setSearchParams]);
 
   const tabCls = (id: string) => `flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px
     ${activeTab === id

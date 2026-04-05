@@ -19,8 +19,12 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> [1/5] git pull (hydrahive remote)"
 cd "$REPO"
-# Versuche hydrahive-Remote, dann gitea-local, dann origin
-git pull hydrahive main 2>/dev/null || git pull gitea-local main 2>/dev/null || git pull 2>/dev/null || echo "   (kein Remote erreichbar — lokalen Stand deployen)"
+# #302: Bei fehlgeschlagenem Pull abbrechen statt stale Code deployen
+if ! git pull hydrahive main 2>/dev/null && ! git pull gitea-local main 2>/dev/null && ! git pull 2>/dev/null; then
+    echo "   FEHLER: Kein Remote erreichbar — Abbruch, um stale Code zu vermeiden."
+    echo "   Manuell prüfen: git remote -v && git status"
+    exit 1
+fi
 
 echo ""
 echo "==> [2/5] Core rsync → VM"

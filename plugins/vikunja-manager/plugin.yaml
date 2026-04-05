@@ -1,0 +1,16 @@
+id: vikunja-manager
+name: Vikunja Manager
+version: 1.0.0
+description: Vikunja-Aufgaben und -Projekte verwalten über die REST API.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: api_token
+    label: API Token
+    type: password

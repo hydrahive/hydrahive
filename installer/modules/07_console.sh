@@ -30,7 +30,10 @@ fi
 # --- Node.js pruefen ---
 if ! command -v node &>/dev/null; then
     info "Installiere Node.js 22..."
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - &>/dev/null
+    # #293: Download in Temp-File statt curl|bash
+    curl -fsSL -o /tmp/nodesource-setup.sh https://deb.nodesource.com/setup_22.x
+    bash /tmp/nodesource-setup.sh &>/dev/null
+    rm -f /tmp/nodesource-setup.sh
     apt-get install -y nodejs &>/dev/null
     success "Node.js $(node --version) installiert"
 else
@@ -51,9 +54,12 @@ if [ ! -d "${CONSOLE_SRC}" ]; then
     error "console/ nicht gefunden (${CONSOLE_SRC}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
 fi
 
+# #305: npm-Fehler nicht maskieren
 info "Installiere npm-Abhaengigkeiten..."
 pushd "${CONSOLE_SRC}" > /dev/null || error "cd ${CONSOLE_SRC} fehlgeschlagen"
-npm install --silent 2>&1 | grep -v "^npm warn" || true
+if ! npm install --silent 2>&1 | grep -v "^npm warn"; then
+    error "npm install fehlgeschlagen — Console kann nicht gebaut werden"
+fi
 success "npm-Abhaengigkeiten installiert"
 
 info "Baue Console (npm run build)..."

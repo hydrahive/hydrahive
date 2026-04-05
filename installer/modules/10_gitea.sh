@@ -32,10 +32,25 @@ if [ -f "${GITEA_BINARY}" ] && "${GITEA_BINARY}" --version 2>/dev/null | grep -q
 else
     info "Lade Gitea ${GITEA_VERSION} herunter..."
     GITEA_URL="https://dl.gitea.com/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-amd64"
+    GITEA_SHA_URL="${GITEA_URL}.sha256"
     if ! curl -fsSL -o "${GITEA_BINARY}.tmp" "${GITEA_URL}"; then
         warn "Gitea-Download fehlgeschlagen (${GITEA_URL}) — Gitea wird nicht installiert"
         warn "Projektverwaltung ohne Git-Versionierung möglich, aber Agent-Git-Tools stehen nicht zur Verfügung"
         return 0   # kein harter Fehler — HydraHive funktioniert ohne Gitea
+    fi
+    # #304: Checksum-Prüfung
+    if curl -fsSL -o "${GITEA_BINARY}.sha256" "${GITEA_SHA_URL}" 2>/dev/null; then
+        EXPECTED=$(awk '{print $1}' "${GITEA_BINARY}.sha256")
+        ACTUAL=$(sha256sum "${GITEA_BINARY}.tmp" | awk '{print $1}')
+        rm -f "${GITEA_BINARY}.sha256"
+        if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            warn "Gitea Checksum-Mismatch! Erwartet: ${EXPECTED}, Bekommen: ${ACTUAL}"
+            rm -f "${GITEA_BINARY}.tmp"
+            return 1
+        fi
+        info "Checksum OK"
+    else
+        warn "Gitea SHA256-Datei nicht verfügbar — Download ohne Checksum-Prüfung"
     fi
     mv "${GITEA_BINARY}.tmp" "${GITEA_BINARY}"
     chmod +x "${GITEA_BINARY}"

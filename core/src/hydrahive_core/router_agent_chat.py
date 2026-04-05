@@ -76,8 +76,17 @@ def register_agent_chat_routes(
     incoming_message_model,
     group_service=None,
 ) -> None:
+    def _check_agent_access(agent_id: str, auth: tuple[str, str]) -> None:
+        """Prüft ob der User Zugriff auf den Agent hat (Owner/Gruppe/Admin)."""
+        username, role = auth
+        if role == "admin":
+            return
+        if group_service and not group_service.has_agent_access(username, agent_id):
+            raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
+
     @auth_router.get("/agents/{agent_id}/session/history")
     def agent_session_history(agent_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         context = agent_sessions.get_context(agent_id, max_messages=limit)
         session = agent_sessions.get_active(agent_id)
         return {
@@ -88,10 +97,12 @@ def register_agent_chat_routes(
 
     @auth_router.get("/agents/{agent_id}/sessions")
     def agent_list_sessions(agent_id: str, limit: int = 30, _a: tuple[str, str] = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         return {"sessions": agent_sessions.list_sessions(agent_id, limit)}
 
     @auth_router.get("/agents/{agent_id}/sessions/{session_id}")
     def agent_get_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         session = agent_sessions.get_session_by_id(agent_id, session_id)
         if not session:
             raise HTTPException(404, "Session nicht gefunden")
@@ -109,6 +120,10 @@ def register_agent_chat_routes(
     def write_agent_memory(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
         import re as _re
 
+        _check_agent_access(agent_id, _a)
+        # #277: agent_id gegen Path Traversal absichern
+        if not _re.match(r"^[a-z0-9_-]+$", agent_id):
+            raise HTTPException(400, "Ungültige agent_id")
         filename = str(body.get("filename", "session")).strip().removesuffix(".md")
         content = str(body.get("content", "")).strip()
         mode = str(body.get("mode", "overwrite"))
@@ -128,6 +143,7 @@ def register_agent_chat_routes(
 
     @auth_router.post("/agents/{agent_id}/sessions/{session_id}/resume")
     async def agent_resume_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         session = await agent_sessions.resume_session(agent_id, session_id)
         if not session:
             raise HTTPException(404, "Session nicht gefunden")
@@ -146,6 +162,7 @@ def register_agent_chat_routes(
 
     @auth_router.delete("/agents/{agent_id}/session")
     async def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         context = agent_sessions.get_context(agent_id, max_messages=200)
         _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
         await agent_sessions.end_session(agent_id)
@@ -153,6 +170,7 @@ def register_agent_chat_routes(
 
     @auth_router.post("/agents/{agent_id}/session/compact")
     async def agent_session_compact(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_access(agent_id, _a)
         from .orchestrator import _load_claude_oauth_token
         from .session_manager import Message, MessageRole
 
@@ -254,9 +272,11 @@ def register_agent_chat_routes(
             audit_target=agent_id,
             audit_source="agents.message",
         )
-        check_message_rate(req.sender, agent_id)
-        # Gruppen-Berechtigung prüfen (#165)
+        # #278/#283: sender immer aus Auth ableiten, nie aus Body
         _username, _ = _a
+        sender = _username if _username != "internal" else (req.sender or "user")
+        check_message_rate(sender, agent_id)
+        # Gruppen-Berechtigung prüfen (#165)
         if group_service and not group_service.has_agent_access(_username, agent_id):
             raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
         cfg = discovery.get(agent_id)
@@ -268,13 +288,13 @@ def register_agent_chat_routes(
             identity=_PI(name=cfg.identity),
             agents=_PA(boss=agent_id, workers=[]),
         )
-        # Optionale project_id aus Body — ask_agent übergibt UUID für isolierte Sessions
-        project_id = body.get("project_id") or agent_id
+        # project_id immer auf agent_id setzen (kein client-controlled override)
+        project_id = agent_id
         response, _ = await agent_orchestrator.handle_message(
             project_id=project_id,
             project_cfg=virtual_cfg,
             content=req.content,
-            sender=req.sender,
+            sender=sender,
             execution_mode=execution_mode,
         )
         return {"response": response, "agent_id": agent_id}
@@ -298,9 +318,11 @@ def register_agent_chat_routes(
             audit_target=agent_id,
             audit_source="agents.message.stream",
         )
-        check_message_rate(req.sender, agent_id)
-        # Gruppen-Berechtigung prüfen (#165)
+        # #278/#283: sender immer aus Auth ableiten
         _username, _ = _a
+        sender = _username if _username != "internal" else (req.sender or "user")
+        check_message_rate(sender, agent_id)
+        # Gruppen-Berechtigung prüfen (#165)
         if group_service and not group_service.has_agent_access(_username, agent_id):
             raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
         cfg = discovery.get(agent_id)
@@ -318,7 +340,7 @@ def register_agent_chat_routes(
                 project_id=agent_id,
                 project_cfg=virtual_cfg,
                 content=req.content,
-                sender=req.sender,
+                sender=sender,
                 execution_mode=execution_mode,
             ):
                 yield chunk

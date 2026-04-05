@@ -165,15 +165,23 @@ for svc in hydrahive-core hydrahive-amem hydrahive-amem-search-ui; do
 done
 
 # Sicherheits-Backup
+# #301: Backup-Fehler nicht ignorieren
 SAFETY="/var/backups/hydrahive-pre-transfer-$(date +%Y%m%d-%H%M%S).tar.gz"
-tar -czf "$SAFETY" /agents/ /etc/hydrahive/users.json /etc/hydrahive/jwt_secret /etc/hydrahive/internal_secret 2>/dev/null || true
+if ! tar -czf "$SAFETY" /agents/ /etc/hydrahive/users.json /etc/hydrahive/jwt_secret /etc/hydrahive/internal_secret 2>/dev/null; then
+    echo "FEHLER: Sicherheits-Backup fehlgeschlagen — Transfer abgebrochen"
+    exit 1
+fi
 echo "backup: $SAFETY"
 
 # Entschlüsseln und entpacken
+# #294: kein --absolute-names — nur erlaubte Pfade extrahieren
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass "env:HYDRAHIVE_PASS" \
-| tar -xz --absolute-names --overwrite \
+| tar -xz --overwrite \
     --exclude '*/hydrahive-export-manifest.json' \
-    -C / 2>/dev/null
+    --exclude '*..*' \
+    -C / \
+    agents/ etc/hydrahive/ \
+    2>/dev/null || echo "warn: Einige Pfade nicht im Archiv (OK)"
 
 # Berechtigungen
 id hydrahive &>/dev/null && chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true

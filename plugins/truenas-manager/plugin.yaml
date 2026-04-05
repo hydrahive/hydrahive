@@ -1,0 +1,16 @@
+id: truenas-manager
+name: TrueNAS Manager
+version: 1.0.0
+description: TrueNAS Storage verwalten — Pools, Datasets, Alerts und SMART-Status abfragen.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: api_key
+    label: API Key
+    type: password

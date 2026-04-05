@@ -66,7 +66,10 @@ fi
 # --- Tailscale installieren (immer, egal ob tailscale oder headscale) ---
 if ! command -v tailscale &>/dev/null; then
     info "Installiere Tailscale-Client..."
-    curl -fsSL https://tailscale.com/install.sh | sh
+    # #293: Download in Temp-File statt curl|sh
+    curl -fsSL -o /tmp/tailscale-install.sh https://tailscale.com/install.sh
+    bash /tmp/tailscale-install.sh
+    rm -f /tmp/tailscale-install.sh
     success "Tailscale-Client installiert"
 else
     success "Tailscale-Client bereits installiert ($(tailscale version | head -1))"

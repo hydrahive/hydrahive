@@ -50,6 +50,7 @@ def _load_config() -> dict:
 def _save_config(cfg: dict) -> None:
     A2A_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     A2A_CONFIG.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    A2A_CONFIG.chmod(0o600)
 
 
 # ── Pydantic-Modelle ─────────────────────────────────────────────────────────

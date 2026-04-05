@@ -266,7 +266,7 @@ async def _check_api() -> list[dict]:
 
     # Update-Status — beide Pfade prüfen
     status_file = None
-    for sf in [Path("/var/run/hydrahive-update.json"), Path("/var/run/hydrahive-update.json")]:
+    for sf in [Path("/var/run/hydrahive-update.json"), Path("/var/run/octopos-update.json")]:
         if sf.exists():
             status_file = sf
             break

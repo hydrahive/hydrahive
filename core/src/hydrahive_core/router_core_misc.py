@@ -205,7 +205,7 @@ def register_core_misc_routes(
         from pathlib import Path as _Path
         users = load_users()
         kas_ok  = _Path("/etc/hydrahive/kas.json").exists()
-        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/hydrahive/llm_config.json").exists()
+        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/hydrahive/llm_env").exists()
         wizard_done = _Path("/etc/hydrahive/setup_wizard_done").exists()
         return {
             "needs_setup":   len(users) == 0,
@@ -766,7 +766,7 @@ def register_core_misc_routes(
     ALLOWED_SHELL_COMMANDS = {
         "df", "free", "uptime", "hostname", "whoami", "uname",
         "systemctl", "journalctl", "tailscale", "docker", "podman",
-        "pip", "npm", "node", "python3", "git", "ls", "cat", "wc",
+        "ls", "cat", "wc",
         "du", "head", "tail", "grep", "find", "which",
     }
     BLOCKED_SHELL_PATTERNS = {"rm -rf", "mkfs", "dd if=", ":(){ :|:&", "shutdown", "reboot", "halt", "init 0"}

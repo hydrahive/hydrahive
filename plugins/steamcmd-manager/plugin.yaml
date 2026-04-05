@@ -1,0 +1,22 @@
+id: steamcmd-manager
+name: SteamCMD Manager
+version: 1.0.0
+description: Spielserver via SteamCMD und LinuxGSM verwalten — installieren, updaten, Status prüfen.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: steamcmd_path
+    label: SteamCMD Pfad (z.B. /home/steam/steamcmd/steamcmd.sh)
+    type: string
+  - key: servers_dir
+    label: Server-Verzeichnis (z.B. /home/steam/servers)
+    type: string
+  - key: steam_user
+    label: Steam Username (für nicht-anonyme Downloads)
+    type: string
+  - key: steam_password
+    label: Steam Password
+    type: password

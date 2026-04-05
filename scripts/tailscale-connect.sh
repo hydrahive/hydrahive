@@ -43,7 +43,9 @@ if command -v tailscale &>/dev/null; then
     info "Tailscale bereits installiert: $(tailscale version | head -1)"
 else
     info "Installiere Tailscale..."
-    curl -fsSL https://tailscale.com/install.sh | sh
+    curl -fsSL -o /tmp/tailscale-install.sh https://tailscale.com/install.sh
+    bash /tmp/tailscale-install.sh
+    rm -f /tmp/tailscale-install.sh
     success "Tailscale installiert"
 fi
 

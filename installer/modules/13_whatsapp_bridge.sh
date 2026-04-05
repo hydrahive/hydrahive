@@ -35,7 +35,9 @@ fi
 
 if [ "${_node_ok}" -eq 0 ]; then
     info "Installiere Node.js 20.x via NodeSource..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    curl -fsSL -o /tmp/nodesource-setup.sh https://deb.nodesource.com/setup_20.x
+    bash /tmp/nodesource-setup.sh
+    rm -f /tmp/nodesource-setup.sh
     apt-get install -y nodejs
     success "Node.js $(node --version) installiert"
 fi

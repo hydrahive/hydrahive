@@ -31,6 +31,8 @@ def _save_mcp_servers(mcp_servers_file: str, servers: list[dict]) -> None:
     path = Path(mcp_servers_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_json.dumps({"servers": servers}, indent=2), encoding="utf-8")
+    # #284: MCP-Config enthält ggf. Tokens — nicht world-readable
+    path.chmod(0o600)
 
 
 def register_mcp_routes(
@@ -60,6 +62,9 @@ def register_mcp_routes(
 
     @admin_router.put("/mcp/servers/{server_id}")
     def update_mcp_server(server_id: str, req: McpServerEntry):
+        # #285: server_id im Pfad muss mit req.id übereinstimmen
+        if req.id != server_id:
+            raise HTTPException(400, f"server_id Mismatch: URL='{server_id}', Body='{req.id}'")
         servers = _load_mcp_servers(mcp_servers_file)
         idx = next((i for i, server in enumerate(servers) if server["id"] == server_id), None)
         if idx is None:

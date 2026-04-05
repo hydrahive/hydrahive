@@ -141,13 +141,16 @@ echo ""
 # ── Sicherheits-Backup der bestehenden Daten ─────────────────────────────────
 log "[3] Sicherheits-Backup bestehender Daten"
 SAFETY_BACKUP="/var/backups/hydrahive-pre-import-$(date +%Y%m%d-%H%M%S).tar.gz"
-tar -czf "$SAFETY_BACKUP" \
+# #301: Backup-Fehler nicht ignorieren — Abbruch wenn Safety-Backup fehlschlägt
+if ! tar -czf "$SAFETY_BACKUP" \
     /agents/ \
     /etc/hydrahive/users.json \
     /etc/hydrahive/admin_credentials \
     /etc/hydrahive/jwt_secret \
     /etc/hydrahive/internal_secret \
-    2>/dev/null || true
+    2>/dev/null; then
+    error "Sicherheits-Backup fehlgeschlagen — Import abgebrochen (keine Daten verändert)"
+fi
 info "Backup erstellt: $SAFETY_BACKUP"
 info "ROLLBACK: tar -xzf $SAFETY_BACKUP -C /"
 echo ""
@@ -156,14 +159,17 @@ echo ""
 log "[4] Daten einspielen"
 info "Entschlüssele und entpacke..."
 
+# #294: kein --absolute-names — nur erlaubte Pfade extrahieren
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass "pass:$IMPORT_PASS" \
     -in "$INPUT" \
 | tar -xz \
-    --absolute-names \
     --overwrite \
+    --strip-components=0 \
     --exclude '*/hydrahive-export-manifest.json' \
+    --exclude '*..*' \
     -C / \
-    2>/dev/null
+    agents/ etc/hydrahive/ \
+    2>/dev/null || warn "Einige Pfade nicht im Archiv (OK)"
 
 info "Daten eingespielt"
 echo ""

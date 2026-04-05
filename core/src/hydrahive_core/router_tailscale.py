@@ -36,6 +36,8 @@ def _load_ts_config() -> dict:
 def _save_ts_config(cfg: dict) -> None:
     TS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     TS_CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    # #303: API-Key nicht world-readable
+    TS_CONFIG_FILE.chmod(0o600)
 
 
 def _ts_api(path: str, api_key: str, timeout: int = 15) -> Any:

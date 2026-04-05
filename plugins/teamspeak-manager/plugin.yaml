@@ -1,0 +1,25 @@
+id: teamspeak-manager
+name: TeamSpeak Manager
+version: 1.0.0
+description: TeamSpeak 3 Server via ServerQuery verwalten — Info, Channels, Clients, Kick.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: host
+    label: Server Host
+    type: string
+  - key: port
+    label: ServerQuery Port (default: 10011)
+    type: number
+  - key: password
+    label: ServerQuery Password
+    type: password
+  - key: username
+    label: ServerQuery Username (default: serveradmin)
+    type: string
+  - key: server_id
+    label: Virtual Server ID (default: 1)
+    type: number

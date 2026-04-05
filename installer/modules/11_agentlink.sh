@@ -63,10 +63,17 @@ fi
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${AGENTLINK_DIR}"
 
 # ─── 4. Python venv + Abhängigkeiten ─────────────────────────────────────────
+# #299: Fehler bei venv/pip propagieren statt still verschlucken
 info "Python-Abhängigkeiten installieren (dauert etwas)..."
-python3 -m venv "${AGENTLINK_DIR}/venv"
+if ! python3 -m venv "${AGENTLINK_DIR}/venv"; then
+    warn "AgentLink venv-Erstellung fehlgeschlagen — AgentLink wird übersprungen"
+    return 1
+fi
 "${AGENTLINK_DIR}/venv/bin/pip" install -q --upgrade pip
-"${AGENTLINK_DIR}/venv/bin/pip" install -q -r "${AGENTLINK_DIR}/backend/requirements.txt"
+if ! "${AGENTLINK_DIR}/venv/bin/pip" install -q -r "${AGENTLINK_DIR}/backend/requirements.txt"; then
+    warn "AgentLink pip install fehlgeschlagen — AgentLink wird übersprungen"
+    return 1
+fi
 success "Python-Abhängigkeiten installiert"
 
 # ─── 5. Datenverzeichnis + .env ──────────────────────────────────────────────

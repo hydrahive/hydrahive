@@ -106,7 +106,12 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     async def _hub_install_plugin(pkg: dict, pkg_path: str):
         """Installiert ein Plugin vom Hub nach /plugins/<id>/."""
+        import re as _re
+
         plugin_id = pkg["id"]
+        # #280: plugin_id gegen Path Traversal absichern
+        if not _re.match(r"^[a-z0-9_-]+$", plugin_id):
+            raise HTTPException(400, f"Ungültige Plugin-ID: '{plugin_id}'")
         target = Path("/plugins") / plugin_id
         if target.exists():
             raise HTTPException(409, f"Plugin '{plugin_id}' existiert bereits")

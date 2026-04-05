@@ -235,6 +235,9 @@ export function ExtensionsPage() {
   }
 
   const categories = Array.from(new Set(extensions.map(e => e.category)));
+  const [filterCat, setFilterCat] = useState<string | null>(null);
+  const filteredExts = filterCat ? extensions.filter(e => e.category === filterCat) : extensions;
+  const displayCats = filterCat ? [filterCat] : categories;
 
   if (loading) return (
     <div className="p-8 text-sm text-muted-foreground">{t("extensions.loading")}</div>
@@ -243,7 +246,7 @@ export function ExtensionsPage() {
   const activeExtName = extensions.find(e => e.id === activeId)?.name ?? "";
 
   return (
-    <div className="p-8 space-y-8 max-w-4xl">
+    <div className="p-4 sm:p-8 flex gap-6 max-w-6xl">
       {/* Full-screen modal overlay during install/uninstall */}
       {activeId !== null && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
@@ -308,48 +311,93 @@ export function ExtensionsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">{t("extensions.title")}</h1>
-          <p className="text-xs text-muted-foreground">{t("pageDesc.extensions")}</p>
-          <p className="text-sm text-muted-foreground mt-1">{t("extensions.subtitle")}</p>
-        </div>
+      {/* #268: Kategorie-Sidebar (Desktop) */}
+      <aside className="hidden sm:block w-44 flex-shrink-0 space-y-1 sticky top-4 self-start">
         <button
-          className="btn btn-sm flex items-center gap-1.5"
-          onClick={() => load(true)}
-          disabled={refreshing}
+          onClick={() => setFilterCat(null)}
+          className={`w-full text-left px-3 py-1.5 text-xs rounded-md transition-colors ${
+            filterCat === null ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-muted"
+          }`}
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          {t("extensions.refresh")}
+          {t("extensions.allCategories", { defaultValue: "Alle" })}
+          <span className="ml-1 text-[10px] opacity-60">{extensions.length}</span>
         </button>
-      </div>
+        {categories.map(cat => {
+          const count = extensions.filter(e => e.category === cat).length;
+          return (
+            <button
+              key={cat}
+              onClick={() => setFilterCat(filterCat === cat ? null : cat)}
+              className={`w-full text-left px-3 py-1.5 text-xs rounded-md transition-colors ${
+                filterCat === cat ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {CATEGORY_LABELS[cat] ?? cat}
+              <span className="ml-1 text-[10px] opacity-60">{count}</span>
+            </button>
+          );
+        })}
+      </aside>
 
-      {error && (
-        <div className="flex items-center gap-2 text-red-500 text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
+      {/* Content */}
+      <div className="flex-1 min-w-0 space-y-8">
+        {/* Mobile: Kategorie-Dropdown */}
+        <div className="sm:hidden">
+          <select
+            value={filterCat ?? ""}
+            onChange={e => setFilterCat(e.target.value || null)}
+            className="w-full px-3 py-2 text-sm border rounded-lg bg-background"
+          >
+            <option value="">{t("extensions.allCategories", { defaultValue: "Alle" })} ({extensions.length})</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{CATEGORY_LABELS[cat] ?? cat} ({extensions.filter(e => e.category === cat).length})</option>
+            ))}
+          </select>
         </div>
-      )}
 
-      {/* Extensions nach Kategorie */}
-      {categories.map(cat => (
-        <div key={cat} className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            {CATEGORY_LABELS[cat] ?? cat}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {extensions
-              .filter(e => e.category === cat)
-              .map(ext => (
-                <ExtCard
-                  key={ext.id}
-                  ext={ext}
-                  onAction={handleAction}
-                />
-              ))}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">{t("extensions.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("pageDesc.extensions")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("extensions.subtitle")}</p>
           </div>
+          <button
+            className="btn btn-sm flex items-center gap-1.5"
+            onClick={() => load(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {t("extensions.refresh")}
+          </button>
         </div>
-      ))}
+
+        {error && (
+          <div className="flex items-center gap-2 text-red-500 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {/* Extensions nach Kategorie */}
+        {displayCats.map(cat => (
+          <div key={cat} className="space-y-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              {CATEGORY_LABELS[cat] ?? cat}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredExts
+                .filter(e => e.category === cat)
+                .map(ext => (
+                  <ExtCard
+                    key={ext.id}
+                    ext={ext}
+                    onAction={handleAction}
+                  />
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

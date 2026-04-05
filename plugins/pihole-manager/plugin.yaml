@@ -1,0 +1,16 @@
+id: pihole-manager
+name: Pi-hole Manager
+version: 1.0.0
+description: Pi-hole DNS-Filter verwalten — Statistiken, Top-Blocked-Domains und Ein-/Ausschalten.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: api_key
+    label: API Password/Token
+    type: password

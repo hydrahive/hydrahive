@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Cpu, GitBranch, Github, Network, Settings, Mail, Archive, ArrowRightLeft, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfigHubPage } from "@/pages/ConfigHubPage";
@@ -15,7 +16,17 @@ type TabId = "overview" | "llm" | "gitea" | "github" | "vpn" | "kas" | "backup" 
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const [active, setActive] = useState<TabId>("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // #286: Tab-State aus URL lesen
+  const urlTab = searchParams.get("tab") as TabId | null;
+  const [active, _setActive] = useState<TabId>(
+    urlTab && ["overview","llm","gitea","github","vpn","kas","backup","migration"].includes(urlTab)
+      ? urlTab : "overview"
+  );
+  const setActive = useCallback((id: TabId) => {
+    _setActive(id);
+    setSearchParams({ tab: id }, { replace: true });
+  }, [setSearchParams]);
 
   const TABS: { id: TabId; label: string; icon: React.ElementType; component: React.ComponentType }[] = useMemo(() => [
     { id: "overview",  label: t("settings.tabOverview", { defaultValue: "Übersicht" }), icon: LayoutDashboard,  component: ConfigHubPage },

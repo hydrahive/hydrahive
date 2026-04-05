@@ -103,15 +103,29 @@ def save_mail_config(username: str, cfg: dict) -> None:
 async def kas_create_mailaccount(local_part: str, domain_part: str, password: str, kas_cfg: dict) -> dict:
     """Legt ein Postfach via All-Inkl KAS SOAP API an."""
     import httpx
+    import json as _json
+
     login    = kas_cfg.get("login", "")
     auth_data = kas_cfg.get("password", "")
     if not login:
         return {"ok": False, "error": "KAS nicht konfiguriert (/etc/hydrahive/kas.json)"}
+    # #282: JSON-Serialisierung statt f-Strings — verhindert XML/JSON-Injection
+    params = _json.dumps({
+        "kas_login": login,
+        "kas_auth_data": auth_data,
+        "kas_auth_type": "plain",
+        "kas_action": "add_mailaccount",
+        "KasRequestParams": {
+            "local_part": local_part,
+            "domain_part": domain_part,
+            "mail_password": password,
+        },
+    }, ensure_ascii=True)
     soap = f"""<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="urn:xmethodsKasApi">
 <SOAP-ENV:Body>
   <ns1:KasApi>
-    <Params><![CDATA[{{"kas_login":"{login}","kas_auth_data":"{auth_data}","kas_auth_type":"plain","kas_action":"add_mailaccount","KasRequestParams":{{"local_part":"{local_part}","domain_part":"{domain_part}","mail_password":"{password}"}}}}]]></Params>
+    <Params><![CDATA[{params}]]></Params>
   </ns1:KasApi>
 </SOAP-ENV:Body>
 </SOAP-ENV:Envelope>"""

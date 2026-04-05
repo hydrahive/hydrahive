@@ -104,7 +104,7 @@ Erlaubte Pfade: `/agents/`, `/plugins/`, `/etc/hydrahive/`, `/projects/`
 |---------|------|-------------|
 | POST | `/admin/shell` | Befehl ausführen (`{"command":"git status"}`) |
 
-Erlaubte Befehle: git, docker, df, free, uptime, systemctl, journalctl, ls, cat, grep, find, pip, npm, python3, node, tail, head, wc, du, which
+Erlaubte Befehle: docker, podman, df, free, uptime, systemctl, journalctl, tailscale, ls, cat, grep, find, tail, head, wc, du, which
 
 ### Plugins
 

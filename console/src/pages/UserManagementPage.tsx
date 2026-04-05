@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ElementType } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Users, Shield, KeyRound, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserPage } from "@/pages/UserPage";
@@ -17,9 +18,20 @@ const TABS: { id: "users" | "groups" | "secrets" | "permissions"; labelKey: stri
 
 type TabId = typeof TABS[number]["id"];
 
+const VALID_UM_TABS: TabId[] = ["users", "groups", "secrets", "permissions"];
+
 export function UserManagementPage() {
   const { t } = useTranslation();
-  const [active, setActive] = useState<TabId>("users");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // #308: Tab-State aus URL lesen
+  const urlTab = searchParams.get("tab") as TabId | null;
+  const [active, _setActive] = useState<TabId>(
+    urlTab && VALID_UM_TABS.includes(urlTab) ? urlTab : "users"
+  );
+  const setActive = useCallback((id: TabId) => {
+    _setActive(id);
+    setSearchParams({ tab: id }, { replace: true });
+  }, [setSearchParams]);
 
   return (
     <div className="flex flex-col h-full">

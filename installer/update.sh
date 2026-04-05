@@ -49,10 +49,11 @@ main() {
     # GitHub ist primäre Quelle — funktioniert für alle User
     # Lokales Gitea wird als Override genutzt wenn /etc/hydrahive/use_local_gitea existiert
     local CLONE_URL="${GITHUB_REPO}"
+    local GH_TOKEN=""
     if [ -f "${TOKEN_FILE}" ]; then
-        local GH_TOKEN
         GH_TOKEN=$(tr -d '[:space:]' < "${TOKEN_FILE}")
-        CLONE_URL="https://${GH_TOKEN}@github.com/hydrahive/hydrahive.git"
+        # #292: Token NICHT in Clone-URL einbetten — Credential-Helper nutzen
+        git config --global credential.helper "!f() { echo username=hydrahive; echo password=${GH_TOKEN}; }; f"
     fi
     info "Klone von GitHub: ${GITHUB_REPO}"
 
@@ -65,7 +66,8 @@ main() {
         GITEA_REPO=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('repo', d.get('org','hydrahive')))" 2>/dev/null || echo "${GITEA_ORG}")
         if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
             CLONE_URL="${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}.git"
-            CLONE_URL="${CLONE_URL/http:\/\//http:\/\/${GITEA_ORG}:${GITEA_TOKEN}@}"
+            # #292: Token via Credential-Helper statt in URL
+            git config --global credential.helper "!f() { echo username=${GITEA_ORG}; echo password=${GITEA_TOKEN}; }; f"
             info "Lokaler Gitea-Override aktiv: ${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}"
         fi
     fi
@@ -163,11 +165,13 @@ main() {
         info "System Handbook deployed"
     fi
 
-    # --- 5b. sudoers: hydrahive-installer deployen (In-Console-Installation) ---
-    if [ -f "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" ]; then
-        install -m 440 "${TMPDIR_BASE}/installer/hydrahive-installer.sudoers" /etc/sudoers.d/hydrahive-installer
-        info "sudoers: hydrahive-installer aktualisiert"
-    fi
+    # --- 5b. sudoers: alle sudoers-Dateien synchronisieren (#298) ---
+    for _sudoer in hydrahive-installer hydrahive-update hydrahive-provisioner hydrahive-network-profile; do
+        if [ -f "${TMPDIR_BASE}/installer/${_sudoer}.sudoers" ]; then
+            install -m 440 "${TMPDIR_BASE}/installer/${_sudoer}.sudoers" "/etc/sudoers.d/${_sudoer}"
+            info "sudoers: ${_sudoer} aktualisiert"
+        fi
+    done
 
     # --- 5c. Plugins deployen (#110) ---
     if [ -d "${TMPDIR_BASE}/plugins" ]; then

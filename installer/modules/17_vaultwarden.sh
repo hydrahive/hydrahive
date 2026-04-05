@@ -50,7 +50,9 @@ else
     # --- 3b. Rust/Cargo installieren (falls nicht vorhanden) ---
     if ! command -v cargo &>/dev/null; then
         info "Installiere Rust-Toolchain..."
-        curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal 2>&1
+        curl -fsSL -o /tmp/rustup-init.sh https://sh.rustup.rs
+        bash /tmp/rustup-init.sh -y --profile minimal 2>&1
+        rm -f /tmp/rustup-init.sh
         source "$HOME/.cargo/env"
     fi
     export PATH="$HOME/.cargo/bin:$PATH"

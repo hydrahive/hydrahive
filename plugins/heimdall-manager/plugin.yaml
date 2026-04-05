@@ -1,0 +1,16 @@
+id: heimdall-manager
+name: Heimdall Manager
+version: 1.0.0
+description: Heimdall Application Dashboard verwalten — Apps anzeigen, hinzufügen und Status prüfen.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: api_key
+    label: API Key
+    type: password

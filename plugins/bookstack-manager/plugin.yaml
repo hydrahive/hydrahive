@@ -1,0 +1,19 @@
+id: bookstack-manager
+name: BookStack Manager
+version: 1.0.0
+description: BookStack-Wiki durchsuchen, Seiten lesen, erstellen und aktualisieren.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: token_id
+    label: Token ID
+    type: string
+  - key: token_secret
+    label: Token Secret
+    type: password

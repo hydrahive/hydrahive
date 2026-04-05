@@ -217,7 +217,7 @@ export const api = {
   // Voice Interface (#131)
   voiceStatus:    () => api.get<{installed:boolean;stt:{host:string;port:number;available:boolean};tts:{host:string;port:number;available:boolean};default_agent:string}>("/voice/status"),
   voiceText:      (text: string, agent_id?: string) => api.post<{text:string;agent_id:string}>("/voice", { text, agent_id }),
-  voiceTts:       async (text: string) => { const token = localStorage.getItem("hydrahive_token") || ""; const res = await fetch("/api/voice/tts", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) }); if (!res.ok) throw new Error(`TTS error: ${res.status}`); return res.blob(); },
+  voiceTts:       async (text: string) => { const token = getToken(); const res = await fetch("/api/voice/tts", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) }); if (!res.ok) { if (res.status === 401 && token && token === getToken()) notifyAuthExpired("/voice/tts"); throw new Error(`TTS error: ${res.status}`); } return res.blob(); },
   // A2A Federation (#50)
   a2aPeers:       () => api.get<A2APeersResponse>("/admin/a2a/peers"),
   a2aSetSecret:   (secret: string) => api.put<{ok:boolean}>("/admin/a2a/secret", { secret }),

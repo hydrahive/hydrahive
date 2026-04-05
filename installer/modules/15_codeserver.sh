@@ -53,6 +53,19 @@ if [ "${NEEDS_INSTALL}" -eq 1 ]; then
     CS_URL="https://github.com/coder/code-server/releases/download/v${CS_VERSION}/code-server-${CS_VERSION}-linux-amd64.tar.gz"
     info "Lade code-server ${CS_VERSION} herunter..."
     if curl -fsSL -o /tmp/codeserver.tar.gz "${CS_URL}"; then
+        # #304: Checksum wenn verfügbar
+        CS_SHA_URL="https://github.com/coder/code-server/releases/download/v${CS_VERSION}/code-server-${CS_VERSION}-linux-amd64.tar.gz.sha256"
+        if curl -fsSL -o /tmp/codeserver.sha256 "${CS_SHA_URL}" 2>/dev/null; then
+            EXPECTED=$(awk '{print $1}' /tmp/codeserver.sha256)
+            ACTUAL=$(sha256sum /tmp/codeserver.tar.gz | awk '{print $1}')
+            rm -f /tmp/codeserver.sha256
+            if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+                warn "code-server Checksum-Mismatch — Abbruch"
+                rm -f /tmp/codeserver.tar.gz
+                return 1
+            fi
+            info "Checksum OK"
+        fi
         tar -xzf /tmp/codeserver.tar.gz -C /opt/codeserver --strip-components=1
         rm -f /tmp/codeserver.tar.gz
         success "code-server ${CS_VERSION} installiert"
@@ -173,11 +186,11 @@ done
 # --- 8. Passwort in CRED_FILE speichern (idempotent, kein Doppeleintrag) ---
 touch "${CRED_FILE}"
 chmod 600 "${CRED_FILE}"
-if grep -q '^codeserver_password=' "${CRED_FILE}" 2>/dev/null; then
-    sed -i "s|^codeserver_password=.*|codeserver_password=${CS_PASS}|" "${CRED_FILE}"
-else
-    echo "codeserver_password=${CS_PASS}" >> "${CRED_FILE}"
-fi
+# #297: sed zerlegt Sonderzeichen — grep+rewrite statt sed
+grep -v '^codeserver_password=' "${CRED_FILE}" > "${CRED_FILE}.tmp" 2>/dev/null || true
+printf 'codeserver_password=%s\n' "${CS_PASS}" >> "${CRED_FILE}.tmp"
+mv "${CRED_FILE}.tmp" "${CRED_FILE}"
+chmod 600 "${CRED_FILE}"
 success "code-server Passwort in ${CRED_FILE} gespeichert"
 
 SERVER_IP="$(hostname -I | awk '{print $1}')" || SERVER_IP="127.0.0.1"

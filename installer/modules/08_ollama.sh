@@ -17,7 +17,10 @@ if command -v ollama &>/dev/null; then
   info "Ollama $OLLAMA_VER bereits installiert — überprüfe Modelle..."
 else
   info "Lade Ollama-Installer..."
-  curl -fsSL https://ollama.ai/install.sh | sh
+  # #293: Download in Temp-File statt curl|sh — erlaubt Inspektion
+  curl -fsSL -o /tmp/ollama-install.sh https://ollama.ai/install.sh
+  bash /tmp/ollama-install.sh
+  rm -f /tmp/ollama-install.sh
   success "Ollama installiert"
 fi
 

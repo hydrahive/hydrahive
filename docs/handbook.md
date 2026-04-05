@@ -171,8 +171,8 @@ Nicht alle Einstellungen liegen auf der Settings-Seite. Diese Übersicht zeigt, 
 | Mail / KAS | Settings → Mail/KAS | `/etc/hydrahive/kas.json` | E-Mail und KAS-API |
 | Benutzer | User-Verwaltung → Benutzer | `/etc/hydrahive/users.json` | Accounts und Rollen |
 | Secrets | User-Verwaltung → Secrets | `/etc/hydrahive/users.json` | Persönliche Secrets |
-| Discord | Mein Agent → Messenger → Discord | `/etc/hydrahive/users.json` (pro User) | Persönlicher Discord-Bot |
-| WhatsApp | Mein Agent → Messenger → WhatsApp | `/etc/hydrahive/whatsapp_bridge_secret` | WhatsApp-Bridge |
+| Discord | Mein Agent → Messenger → Discord | `/etc/hydrahive/agent_tokens/<agent_id>_discord.json` | Persönlicher Discord-Bot |
+| WhatsApp | Mein Agent → Messenger → WhatsApp | `/etc/hydrahive/agent_tokens/<agent_id>_whatsapp.json` | WhatsApp-Bridge |
 | A2A Federation | Agenten → Federation (Tab) | `/etc/hydrahive/a2a_peers.json` | Peer-Verbindungen |
 | AgentLink | — (nur Datei) | `/etc/hydrahive/agentlink.json` | Handoff-API-Konfiguration |
 | Claude OAuth | Settings → LLM | `/etc/hydrahive/claude_oauth_token` | Claude Max Token |
@@ -868,7 +868,7 @@ Oder in **Agenten** → Agent bearbeiten → MCP-Checkbox-Liste → Server aktiv
 
 ### A-MEM — Shared Memory MCP
 
-A-MEM ist die gemeinsame Langzeit-Wissensdatenbank für alle Agenten. Jeder neue Agent hat `mcp_servers: [amem]` bereits vorbelegt. A-MEM läuft als eigenständiger Service und ist über das LAN erreichbar.
+A-MEM ist die gemeinsame Langzeit-Wissensdatenbank für alle Agenten. A-MEM kann pro Agent unter **Agenten → Agent bearbeiten → MCP-Server** aktiviert werden (`mcp_servers: [amem]`). A-MEM läuft als eigenständiger Service und ist über das LAN erreichbar.
 
 Agenten mit `amem` in `mcp_servers` erhalten automatisch folgende Tools:
 

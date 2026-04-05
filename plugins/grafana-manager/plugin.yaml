@@ -1,0 +1,16 @@
+id: grafana-manager
+name: Grafana Manager
+version: 1.0.0
+description: Grafana überwachen — Dashboards, Alerts, Datasource-Queries und Annotations verwalten.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: Base URL
+    type: string
+  - key: api_key
+    label: Service Account Token
+    type: password

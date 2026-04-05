@@ -27,6 +27,7 @@ const OnboardingWizardPage   = lazy(() => import("@/pages/OnboardingWizardPage")
 const InvitePage             = lazy(() => import("@/pages/InvitePage").then((m) => ({ default: m.InvitePage })));
 const UserManagementPage     = lazy(() => import("@/pages/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
 const PromptGuidePage        = lazy(() => import("@/pages/PromptGuidePage").then((m) => ({ default: m.PromptGuidePage })));
+const McpConfigPage          = lazy(() => import("@/pages/McpConfigPage").then((m) => ({ default: m.McpConfigPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -124,7 +125,7 @@ export default function App() {
             <Route path="butler"            element={<Navigate to="/blueprint" replace />} />
             {/* Redirects für alte Bookmarks */}
             <Route path="llm"    element={<Navigate to="/settings" replace />} />
-            <Route path="mcp"    element={<Navigate to="/settings" replace />} />
+            <Route path="mcp"    element={<McpConfigPage />} />
             <Route path="gitea"  element={<Navigate to="/settings" replace />} />
             <Route path="vpn"    element={<Navigate to="/settings" replace />} />
             <Route path="users"  element={<Navigate to="/settings" replace />} />
