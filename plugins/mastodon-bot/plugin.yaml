@@ -1,0 +1,23 @@
+id: mastodon-bot
+name: Mastodon Bot
+version: 1.0.0
+description: Mastodon API — post toots, read timeline, notifications and search.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: instance_url
+      label: "Instance URL"
+      type: text
+      hint: "URL of your Mastodon instance, e.g. https://mastodon.social"
+    - id: access_token
+      label: "Access Token"
+      type: password
+      hint: "Mastodon application access token"
+    - id: enabled
+      label: "Mastodon active"
+      type: toggle
+      hint: "Enable/disable Mastodon integration"

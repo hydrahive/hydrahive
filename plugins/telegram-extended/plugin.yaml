@@ -1,0 +1,13 @@
+id: telegram-extended
+name: "Telegram Extended"
+version: 1.0.0
+description: "Telegram Bot API — Nachrichten senden, weiterleiten, anpinnen, Mitglieder und Polls."
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: bot_token
+    label: "Bot Token (von @BotFather)"
+    type: password

@@ -1,0 +1,23 @@
+id: homeassistant
+name: Home Assistant
+version: 1.0.0
+description: Home Assistant REST API — query states, call services, view history and automations.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: base_url
+      label: "Home Assistant URL"
+      type: text
+      hint: "URL of your Home Assistant instance, e.g. http://homeassistant.local:8123"
+    - id: api_token
+      label: "Long-Lived Access Token"
+      type: password
+      hint: "Home Assistant long-lived access token (Profile → Security)"
+    - id: enabled
+      label: "Home Assistant active"
+      type: toggle
+      hint: "Enable/disable Home Assistant integration"

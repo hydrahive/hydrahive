@@ -1,0 +1,19 @@
+id: adguard-home
+name: AdGuard Home
+version: 1.0.0
+description: AdGuard Home API — Status, Statistiken, Blocking-Toggle und Query-Log.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: "Base URL (z.B. http://localhost:3000)"
+    type: string
+  - key: username
+    label: "Username"
+    type: string
+  - key: password
+    label: "Password"
+    type: password

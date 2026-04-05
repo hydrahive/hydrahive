@@ -1,0 +1,23 @@
+id: plex-server
+name: Plex Media Server
+version: 1.0.0
+description: Plex Media Server API — browse libraries, search media, view sessions and recent additions.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: base_url
+      label: "Plex Server URL"
+      type: text
+      hint: "URL of your Plex server, e.g. http://localhost:32400"
+    - id: plex_token
+      label: "Plex Token"
+      type: password
+      hint: "Plex authentication token (find in Plex Web → Settings → Troubleshooting)"
+    - id: enabled
+      label: "Plex active"
+      type: toggle
+      hint: "Enable/disable Plex integration"

@@ -1,0 +1,16 @@
+id: sabnzbd-manager
+name: SABnzbd Manager
+version: 1.0.0
+description: SABnzbd API — Download-Queue, History, Pause und Resume verwalten.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: base_url
+    label: "Base URL (z.B. http://localhost:8080)"
+    type: string
+  - key: api_key
+    label: "API Key"
+    type: password

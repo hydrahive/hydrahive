@@ -1,0 +1,23 @@
+id: signal-messenger
+name: Signal Messenger
+version: 1.0.0
+description: Signal messages via Signal CLI REST API — send, receive, manage groups and contacts.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: base_url
+      label: "Signal CLI REST API URL"
+      type: text
+      hint: "URL of your signal-cli-rest-api instance, e.g. http://localhost:8080"
+    - id: phone_number
+      label: "Phone Number"
+      type: text
+      hint: "Registered Signal phone number (E.164 format, e.g. +49123456789)"
+    - id: enabled
+      label: "Signal active"
+      type: toggle
+      hint: "Enable/disable Signal integration"

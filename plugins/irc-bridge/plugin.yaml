@@ -1,0 +1,27 @@
+id: irc-bridge
+name: IRC Bridge
+version: 1.0.0
+description: IRC via REST bridge — send messages, list channels and users, join channels.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: bridge_url
+      label: "Bridge URL"
+      type: text
+      hint: "URL of your IRC REST bridge, e.g. http://localhost:9090"
+    - id: nickname
+      label: "Nickname"
+      type: text
+      hint: "IRC nickname to use"
+    - id: server
+      label: "IRC Server"
+      type: text
+      hint: "IRC server hostname, e.g. irc.libera.chat"
+    - id: enabled
+      label: "IRC active"
+      type: toggle
+      hint: "Enable/disable IRC integration"

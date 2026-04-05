@@ -1,0 +1,27 @@
+id: teams-integration
+name: MS Teams Integration
+version: 1.0.0
+description: Microsoft Teams via Graph API — send messages, list channels, chats and members.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: tenant_id
+      label: "Tenant ID"
+      type: text
+      hint: "Azure AD Tenant ID (Directory ID)"
+    - id: client_id
+      label: "Client ID"
+      type: text
+      hint: "Azure App Registration Client ID"
+    - id: client_secret
+      label: "Client Secret"
+      type: password
+      hint: "Azure App Registration Client Secret"
+    - id: enabled
+      label: "Teams active"
+      type: toggle
+      hint: "Enable/disable Teams integration"

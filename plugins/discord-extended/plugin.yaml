@@ -1,0 +1,13 @@
+id: discord-extended
+name: "Discord Extended"
+version: 1.0.0
+description: "Discord Bot API — Nachrichten, Embeds, Reaktionen, Threads und Rollen verwalten."
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: bot_token
+    label: "Bot Token (Discord Developer Portal)"
+    type: password

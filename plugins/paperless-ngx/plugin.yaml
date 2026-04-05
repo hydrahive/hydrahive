@@ -1,0 +1,23 @@
+id: paperless-ngx
+name: Paperless-ngx
+version: 1.0.0
+description: Paperless-ngx REST API — list documents, search, manage tags and upload files.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: base_url
+      label: "Paperless-ngx URL"
+      type: text
+      hint: "URL of your Paperless-ngx instance, e.g. http://localhost:8000"
+    - id: api_token
+      label: "API Token"
+      type: password
+      hint: "Paperless-ngx API token (Admin → Token)"
+    - id: enabled
+      label: "Paperless active"
+      type: toggle
+      hint: "Enable/disable Paperless-ngx integration"

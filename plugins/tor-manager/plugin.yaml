@@ -1,0 +1,19 @@
+id: tor-manager
+name: Tor Manager
+version: 1.0.0
+description: Tor Control Protocol — Status, Circuits, neue Identität und DNS-Auflösung.
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: control_host
+    label: "Control Host (z.B. 127.0.0.1)"
+    type: string
+  - key: control_port
+    label: "Control Port (Standard: 9051)"
+    type: number
+  - key: control_password
+    label: "Control Password"
+    type: password

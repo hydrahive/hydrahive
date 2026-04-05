@@ -1,0 +1,16 @@
+id: whatsapp-extended
+name: "WhatsApp Extended"
+version: 1.0.0
+description: "WhatsApp Bridge — Nachrichten senden, Gruppen, Kontakte und Status-Updates."
+author: HydraHive
+type: tool
+runtime: python
+permissions: []
+auto_attach: false
+config_fields:
+  - key: bridge_url
+    label: "Bridge URL (z.B. http://localhost:29318)"
+    type: string
+  - key: bridge_secret
+    label: "Bridge Secret/API Key"
+    type: password

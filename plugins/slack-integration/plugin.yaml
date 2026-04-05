@@ -1,0 +1,19 @@
+id: slack-integration
+name: Slack Integration
+version: 1.0.0
+description: Slack Web API integration — send messages, list channels, read history and users.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: bot_token
+      label: "Bot Token"
+      type: password
+      hint: "Slack Bot OAuth token (xoxb-...)"
+    - id: enabled
+      label: "Slack active"
+      type: toggle
+      hint: "Enable/disable Slack integration"

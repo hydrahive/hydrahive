@@ -1,0 +1,23 @@
+id: threema-gateway
+name: Threema Gateway
+version: 1.0.0
+description: Threema Gateway API — send text/file messages and look up Threema IDs.
+author: HydraHive
+type: tool
+runtime: python
+auto_attach: false
+
+ui:
+  config_fields:
+    - id: gateway_id
+      label: "Gateway ID"
+      type: text
+      hint: "Your Threema Gateway ID (starts with *)"
+    - id: api_secret
+      label: "API Secret"
+      type: password
+      hint: "Threema Gateway API secret"
+    - id: enabled
+      label: "Threema active"
+      type: toggle
+      hint: "Enable/disable Threema Gateway integration"
