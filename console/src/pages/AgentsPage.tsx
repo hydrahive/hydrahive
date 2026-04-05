@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ToolsPage } from "@/pages/ToolsPage";
 import { A2APage } from "@/pages/A2APage";
 import { AgentBlueprintTab } from "@/pages/blueprint/AgentBlueprintTab";
+import { PluginsPage } from "@/pages/PluginsPage";
 
 interface AgentRuntime {
   status: string;
@@ -948,11 +949,12 @@ function AgentsCrudTab() {
 
 // ── Tab shell ─────────────────────────────────────────────────────────────────
 
-type AgentsTabId = "agents" | "tools" | "federation" | "blueprint";
+type AgentsTabId = "agents" | "tools" | "plugins" | "federation" | "blueprint";
 
 const AGENTS_TABS: { id: AgentsTabId; labelKey: string; icon: React.ElementType }[] = [
   { id: "agents",     labelKey: "agents.tabAgents",     icon: Bot },
   { id: "tools",      labelKey: "agents.tabTools",      icon: Wrench },
+  { id: "plugins",    labelKey: "agents.tabPlugins",    icon: Puzzle },
   { id: "federation", labelKey: "agents.tabFederation", icon: Globe },
   { id: "blueprint",  labelKey: "agents.tabBlueprint",  icon: Workflow },
 ];
@@ -986,6 +988,7 @@ export function AgentsPage() {
       <div className="flex-1 overflow-auto">
         {activeTab === "agents"     && <div className="p-6"><AgentsCrudTab /></div>}
         {activeTab === "tools"      && <ToolsPage />}
+        {activeTab === "plugins"    && <PluginsPage />}
         {activeTab === "federation" && <A2APage />}
         {activeTab === "blueprint"  && <AgentBlueprintTab />}
       </div>
