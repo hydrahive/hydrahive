@@ -50,11 +50,8 @@ main() {
     # Lokales Gitea wird als Override genutzt wenn /etc/hydrahive/use_local_gitea existiert
     local CLONE_URL="${GITHUB_REPO}"
     local GH_TOKEN=""
-    local GIT_CRED_ARGS=""
     if [ -f "${TOKEN_FILE}" ]; then
         GH_TOKEN=$(tr -d '[:space:]' < "${TOKEN_FILE}")
-        # #324: Credential-Helper nur transient per -c, nicht global
-        GIT_CRED_ARGS="-c credential.helper=!f(){ echo username=hydrahive; echo password=${GH_TOKEN}; }; f"
     fi
     info "Klone von GitHub: ${GITHUB_REPO}"
 
@@ -67,8 +64,8 @@ main() {
         GITEA_REPO=$(python3 -c "import json; d=json.load(open('${GITEA_CONFIG}')); print(d.get('repo', d.get('org','hydrahive')))" 2>/dev/null || echo "${GITEA_ORG}")
         if [ -n "${GITEA_URL}" ] && [ -n "${GITEA_TOKEN}" ]; then
             CLONE_URL="${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}.git"
-            # #324: Credential-Helper nur transient
-            GIT_CRED_ARGS="-c credential.helper=!f(){ echo username=${GITEA_ORG}; echo password=${GITEA_TOKEN}; }; f"
+            # Token wird unten per GIT_ASKPASS übergeben
+            GH_TOKEN="${GITEA_TOKEN}"
             info "Lokaler Gitea-Override aktiv: ${GITEA_URL}/${GITEA_ORG}/${GITEA_REPO}"
         fi
     fi
@@ -90,8 +87,22 @@ main() {
 
     # --- 1. Repo klonen ---
     info "Klone aktuellen Stand..."
-    git ${GIT_CRED_ARGS} clone --depth 1 --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
-        || error "git clone fehlgeschlagen"
+    # Token per GIT_ASKPASS übergeben (transient, nicht in Prozessliste/Config)
+    local _CLONE_ENV=""
+    if [ -n "${GH_TOKEN}" ]; then
+        local _ASKPASS_SCRIPT
+        _ASKPASS_SCRIPT=$(mktemp)
+        printf '#!/bin/sh\necho "%s"\n' "${GH_TOKEN}" > "${_ASKPASS_SCRIPT}"
+        chmod +x "${_ASKPASS_SCRIPT}"
+        # URL mit Username-Platzhalter für ASKPASS
+        local _AUTH_URL="${CLONE_URL/https:\/\//https:\/\/hydrahive@}"
+        GIT_ASKPASS="${_ASKPASS_SCRIPT}" git clone --depth 1 --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
+            || { rm -f "${_ASKPASS_SCRIPT}"; error "git clone fehlgeschlagen"; }
+        rm -f "${_ASKPASS_SCRIPT}"
+    else
+        git clone --depth 1 --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
+            || error "git clone fehlgeschlagen"
+    fi
     success "Repo geklont"
 
     # --- 2. Core aktualisieren ---
