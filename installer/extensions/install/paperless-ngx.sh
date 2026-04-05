@@ -156,13 +156,23 @@ with open('/tmp/paperless-reqs-clean.txt', 'w') as f:
 print(f'{len(result)} Pakete extrahiert')
 " || error "Requirements-Parsing fehlgeschlagen"
 
-    # mysqlclient ausschließen (braucht MySQL-Dev-Libs, wir nutzen PostgreSQL)
-    grep -vi 'mysqlclient' /tmp/paperless-reqs-clean.txt > /tmp/paperless-reqs-final.txt
+    # Problematische Pakete ausschließen
+    grep -vi 'mysqlclient\|psycopg_c' /tmp/paperless-reqs-clean.txt > /tmp/paperless-reqs-final.txt
+    # .whl Dateinamen durch Paketnamen ersetzen (pip kann keine lokalen wheel-Pfade aus requirements)
+    sed -i 's/psycopg_c.*/psycopg[c]/' /tmp/paperless-reqs-final.txt
+    # Lokale .whl Referenzen entfernen
+    grep -v '\.whl' /tmp/paperless-reqs-final.txt > /tmp/paperless-reqs-final2.txt
+    mv /tmp/paperless-reqs-final2.txt /tmp/paperless-reqs-final.txt
 
     "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
         -r /tmp/paperless-reqs-final.txt \
-        2>&1 | tail -5 || warn "Einige pip-Pakete konnten nicht installiert werden"
+        2>&1 | tail -10 || warn "Einige pip-Pakete konnten nicht installiert werden"
     rm -f /tmp/paperless-reqs-clean.txt /tmp/paperless-reqs-final.txt
+
+    # Sicherstellen dass die Kern-Pakete installiert sind
+    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
+        django gunicorn uvicorn psycopg[binary] celery redis channels channels-redis \
+        2>/dev/null || warn "Einige Kern-Pakete konnten nicht installiert werden"
 fi
 
 # Sicherstellen dass gunicorn + uvicorn installiert sind
