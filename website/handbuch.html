@@ -355,7 +355,7 @@ certbot --nginx -d mein.domain.de</code></pre>
     </ul>
     <pre><code>sudo cat /etc/hydrahive/admin_credentials
 # matrix_admin_password=&lt;generiertes-passwort&gt;</code></pre>
-    <div class="note">Nach dem ersten Login empfiehlt sich das Anlegen eines persönlichen Admin-Accounts unter <strong>Benutzer</strong> → <strong>Neuer Benutzer</strong>.</div>
+    <div class="note">Nach dem ersten Login empfiehlt sich das Anlegen eines persönlichen Admin-Accounts unter <strong>User-Verwaltung</strong> → <strong>Neuer Benutzer</strong>.</div>
   </section>
 
   <!-- 3. WEBKONSOLE -->
@@ -784,14 +784,14 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
     </table>
   </section>
 
-  <!-- 13. MCP -->
+  <!-- 15. MCP -->
   <section class="chapter" id="mcp">
-    <h2>13. MCP-Server</h2>
+    <h2>15. MCP-Server</h2>
     <p>MCP (Model Context Protocol) ermöglicht Agenten den Zugriff auf externe Tool-Server. HydraHive unterstützt <code>streamableHttp</code>-Transport.</p>
 
-    <h3>MCP-Server konfigurieren (Admin)</h3>
+    <h3>MCP-Server konfigurieren</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>MCP-Server</strong> in der Sidebar → <strong>Neuer MCP-Server</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → Tab <strong>Tools</strong> → Bereich <strong>MCP</strong> → <strong>Neuer MCP-Server</strong></span></li>
       <li><span class="step-num">2</span><span>ID, Name, Transport (<code>streamableHttp</code>), URL eintragen</span></li>
     </ol>
 
@@ -807,15 +807,15 @@ sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
 ]</code></pre>
 
     <h3>MCP im Agenten aktivieren</h3>
-    <p>MCP-Server werden pro Agent in <code>agent.yaml</code> eingetragen:</p>
+    <p>MCP-Server sind standardmäßig <strong>nicht aktiviert</strong>. Um A-MEM oder andere MCP-Server für einen Agenten zu aktivieren, in <code>agent.yaml</code> eintragen:</p>
     <pre><code>mcp_servers:
   - amem</code></pre>
-    <p>Oder unter <strong>Mein Agent → MCP</strong> für den persönlichen Agenten.</p>
+    <p>Oder in der Konsole: <strong>Agenten</strong> → Agent auswählen → Tab <strong>Tools</strong> → MCP-Checkbox aktivieren.</p>
   </section>
 
-  <!-- 14. WEBHOOKS (was 9) -->
+  <!-- 19. WEBHOOKS -->
   <section class="chapter" id="webhooks">
-    <h2>14. Webhooks</h2>
+    <h2>19. Webhooks</h2>
     <p>Webhooks ermöglichen externen Systemen HydraHive zu triggern — z.B. bei einem Git-Push automatisch einen Agenten starten.</p>
 
     <h3>Webhook anlegen (Konsole)</h3>
@@ -840,13 +840,13 @@ expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></pre>
   </section>
 
-  <!-- 15. BENUTZER (was 10) -->
+  <!-- 32. BENUTZER -->
   <section class="chapter" id="benutzer">
-    <h2>15. Benutzer und Rollen</h2>
-    <p>Unter <strong>Benutzer</strong> (Admin only) werden Accounts verwaltet. HydraHive kennt zwei Rollen:</p>
+    <h2>32. Benutzer-Verwaltung</h2>
+    <p>Unter <strong>User-Verwaltung</strong> (Admin only) werden Accounts und Berechtigungen verwaltet. Die Seite hat vier Tabs: <strong>Users</strong>, <strong>Groups</strong>, <strong>Secrets</strong> und <strong>Permissions</strong>. HydraHive kennt zwei Rollen:</p>
     <table>
       <tr><th>Rolle</th><th>Rechte</th></tr>
-      <tr><td><strong>admin</strong></td><td>Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, Backup, Benutzerverwaltung</td></tr>
+      <tr><td><strong>admin</strong></td><td>Vollzugriff: Agenten/Projekte anlegen und löschen, Settings, Backup, Benutzerverwaltung</td></tr>
       <tr><td><strong>user</strong></td><td>Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, keine Konfiguration</td></tr>
     </table>
     <ul>
@@ -856,10 +856,10 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     </ul>
   </section>
 
-  <!-- 16. BACKUP (was 11) -->
+  <!-- 33. BACKUP -->
   <section class="chapter" id="backup">
-    <h2>16. Backup &amp; Restore</h2>
-    <p>Unter <strong>Backup</strong> (Admin only) können vollständige System-Backups erstellt und verwaltet werden.</p>
+    <h2>33. Backup &amp; Restore</h2>
+    <p>Unter <strong>Settings</strong> → <strong>Backup</strong> (Admin only) können vollständige System-Backups erstellt und verwaltet werden.</p>
 
     <h3>Was wird gesichert?</h3>
     <p>Ein Backup enthält als <code>tar.gz</code>:</p>
@@ -871,7 +871,7 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
 
     <h3>Backup erstellen</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Backup</strong> → <strong>Backup erstellen</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Settings</strong> → <strong>Backup</strong> → <strong>Backup erstellen</strong></span></li>
       <li><span class="step-num">2</span><span>Das Backup erscheint sofort in der Liste mit Zeitstempel und Größe</span></li>
     </ol>
 
@@ -887,9 +887,9 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     <div class="note">Nach der Wiederherstellung sind alle Agenten, Projekte und Konfigurationen auf den Stand des Backups zurückgesetzt.</div>
   </section>
 
-  <!-- 17. AUDIT (was 12) -->
+  <!-- 6. AUDIT (Dashboard-Tab) -->
   <section class="chapter" id="audit">
-    <h2>17. Audit-Log</h2>
+    <h2>6. Audit-Log (Dashboard-Tab)</h2>
     <p>Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:</p>
     <ul>
       <li>Logins (erfolgreich und fehlgeschlagen)</li>
@@ -904,9 +904,9 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     <p><strong>Filter:</strong> Nach Benutzer, Aktion, Projekt und Anzahl Einträge filterbar.</p>
   </section>
 
-  <!-- 18. MATRIX (was 13) -->
+  <!-- 27. MATRIX -->
   <section class="chapter" id="matrix">
-    <h2>18. Matrix-Integration</h2>
+    <h2>27. Matrix-Integration</h2>
     <p>HydraHive kann Nachrichten über Matrix (Element) empfangen und beantworten.</p>
 
     <h3>Element-Client verbinden</h3>
@@ -922,9 +922,9 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     <div class="note">Der Matrix-Watchdog startet abgestürzte Bots automatisch neu — mit 15 Sekunden Verzögerung.</div>
   </section>
 
-  <!-- 19. GPU (was 14) -->
+  <!-- 28. GPU -->
   <section class="chapter" id="gpu">
-    <h2>19. GPU-Monitoring</h2>
+    <h2>28. GPU-Monitoring</h2>
     <p>Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die <strong>System</strong>-Seite eine GPU-Auslastungsanzeige.</p>
 
     <h3>Angezeigte Werte</h3>
@@ -942,14 +942,14 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]</code></
     <p>NVIDIA-Treiber und <code>nvidia-smi</code> müssen installiert sein. Ohne GPU oder ohne Treiber wird die GPU-Sektion nicht angezeigt — kein Fehler.</p>
   </section>
 
-  <!-- 20. SYSTEM-UPDATE -->
+  <!-- 30. SYSTEM-UPDATE -->
   <section class="chapter" id="update">
-    <h2>20. System-Update</h2>
+    <h2>30. System-Update</h2>
     <p>HydraHive kann sich selbst aus der Webkonsole heraus auf den neuesten Stand bringen — ohne SSH.</p>
 
     <h3>Update starten</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span>Sidebar → <strong>Update</strong>-Button (Admin only, oben links neben dem Logo)</span></li>
+      <li><span class="step-num">1</span><span><strong>System</strong> → <strong>Update</strong>-Button (Admin only)</span></li>
       <li><span class="step-num">2</span><span>Bestätigen</span></li>
       <li><span class="step-num">3</span><span>Das System zieht die neuesten Änderungen aus dem Git-Repository, baut die Console neu und startet den Service</span></li>
     </ol>
@@ -967,14 +967,14 @@ sudo systemctl status hydrahive-selfupdate
 sudo systemctl start hydrahive-selfupdate</code></pre>
   </section>
 
-  <!-- 21. DISCORD -->
+  <!-- 35. DISCORD -->
   <section class="chapter" id="discord">
-    <h2>21. Discord-Integration</h2>
+    <h2>35. Discord-Integration</h2>
     <p>HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-Nachrichten empfangen, antworten und den Server aktiv verwalten.</p>
 
     <h3>Einrichten</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Mein Agent</strong> → Tab <strong>Plattformen</strong> → Discord</span></li>
+      <li><span class="step-num">1</span><span><strong>Mein Agent</strong> → <strong>Messenger</strong> → Discord</span></li>
       <li><span class="step-num">2</span><span>Bot-Token eingeben (Discord Developer Portal → Applications → Bot)</span></li>
       <li><span class="step-num">3</span><span>Guild-ID und Kanal-IDs eingeben → <strong>Verbinden</strong></span></li>
     </ol>
@@ -995,10 +995,10 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
     <div class="note">Discord gilt als „untrusted" Kanal — Nachrichten werden wie externe Inputs behandelt, nicht mit erhöhten Rechten.</div>
   </section>
 
-  <!-- 22. AKTIVITÄT -->
+  <!-- 4. AKTIVITÄT (Dashboard-Tab) -->
   <section class="chapter" id="aktivitaet">
-    <h2>22. Aktivitäts-Übersicht</h2>
-    <p>Die Seite <strong>Aktivität</strong> zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status.</p>
+    <h2>4. Aktivitäts-Übersicht (Dashboard-Tab)</h2>
+    <p>Der Tab <strong>Aktivität</strong> im Dashboard zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status.</p>
     <table>
       <tr><th>Funktion</th><th>Beschreibung</th></tr>
       <tr><td><strong>Live-Status</strong></td><td>Jeder laufende Agent mit aktuellem Task, Laufzeit und Modell</td></tr>
@@ -1009,10 +1009,10 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
     </table>
   </section>
 
-  <!-- 23. API USAGE -->
+  <!-- 5. API USAGE (Dashboard-Tab) -->
   <section class="chapter" id="api-usage">
-    <h2>23. API Usage &amp; Kostenübersicht</h2>
-    <p>Die Seite <strong>API Usage</strong> zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten.</p>
+    <h2>5. API Usage &amp; Kostenübersicht (Dashboard-Tab)</h2>
+    <p>Der Tab <strong>Usage</strong> im Dashboard zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten.</p>
     <table>
       <tr><th>Kennzahl</th><th>Beschreibung</th></tr>
       <tr><td><strong>Input Tokens</strong></td><td>System-Prompt + Nutzer-Nachrichten</td></tr>
@@ -1023,9 +1023,9 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
     <p>Aufschlüsselung nach Projekt und Modell. Preisreferenz-Tabelle für alle konfigurierten Modelle inklusive.</p>
   </section>
 
-  <!-- 24. DIAGNOSE -->
+  <!-- 29. DIAGNOSE -->
   <section class="chapter" id="diagnose">
-    <h2>24. Diagnose &amp; Tests</h2>
+    <h2>29. Diagnose &amp; Tests</h2>
     <p>Unter <strong>System → Diagnose</strong> gibt es zwei Werkzeuge zur Selbst-Diagnose:</p>
 
     <h3>Doctor</h3>
@@ -1035,9 +1035,9 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
     <p>Führt die integrierten Unit-Tests (22+ Tests) direkt aus der Konsole aus — Orchestrator, Sicherheit, Tool-Registry. Nur für Admins sichtbar.</p>
   </section>
 
-  <!-- 25. TROUBLESHOOTING -->
+  <!-- 31. TROUBLESHOOTING -->
   <section class="chapter" id="troubleshooting">
-    <h2>25. Troubleshooting</h2>
+    <h2>31. Troubleshooting</h2>
 
     <h3>Konsole nicht erreichbar</h3>
     <pre><code>sudo systemctl status nginx
@@ -1050,9 +1050,9 @@ sudo journalctl -u hydrahive-core -n 100 --no-pager</code></pre>
 
     <h3>Agent antwortet nicht</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → Logs-Icon prüfen</span></li>
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → Tab <strong>Tools</strong> → Logs prüfen</span></li>
       <li><span class="step-num">2</span><span>Heartbeat-Status in der Agent-Liste prüfen (orange = Warnung)</span></li>
-      <li><span class="step-num">3</span><span>LLM-Verbindung prüfen: <strong>LLM-Config</strong> → Status</span></li>
+      <li><span class="step-num">3</span><span>LLM-Verbindung prüfen: <strong>Settings</strong> → <strong>LLM</strong> → Status</span></li>
     </ol>
 
     <h3>Matrix-Bot antwortet nicht</h3>
@@ -1061,7 +1061,7 @@ sudo journalctl -u hydrahive-core -n 100 --no-pager</code></pre>
     <pre><code>sudo systemctl restart hydrahive-core</code></pre>
 
     <h3>OAuth-Token abgelaufen</h3>
-    <p><strong>LLM-Config</strong> → <strong>Claude Max</strong> → Token-Status prüfen. Neuen Token über <code>claude setup</code> holen und eintragen.</p>
+    <p><strong>Settings</strong> → <strong>LLM</strong> → <strong>Claude Max</strong> → Token-Status prüfen. Neuen Token über <code>claude setup</code> holen und eintragen.</p>
 
     <h3>Login funktioniert nicht (429 Too Many Requests)</h3>
     <p>Rate-Limiting: max. 10 Versuche pro Minute. Nach 60 Sekunden warten.</p>
@@ -1077,10 +1077,10 @@ sudo tail -f /var/log/hydrahive/audit.jsonl | python3 -m json.tool
 sudo tail -f /var/log/nginx/error.log</code></pre>
   </section>
 
-  <!-- 26. WHATSAPP -->
+  <!-- 10. WHATSAPP (Mein Agent → Messenger) -->
   <section class="chapter" id="whatsapp">
-    <h2>26. WhatsApp-Integration</h2>
-    <p>HydraHive unterstützt WhatsApp als Kommunikationskanal. Eine Node.js-basierte Bridge (Baileys) verbindet WhatsApp mit dem Agenten-System.</p>
+    <h2>10. Messenger-Integration (WhatsApp &amp; Co.)</h2>
+    <p>HydraHive unterstützt mehrere Messenger als Kommunikationskanal. Alle Plattformen werden unter <strong>Mein Agent → Messenger</strong> als Akkordeon verwaltet. WhatsApp nutzt eine Node.js-basierte Bridge (Baileys).</p>
 
     <h3>Funktionsumfang</h3>
     <table>
@@ -1093,10 +1093,11 @@ sudo tail -f /var/log/nginx/error.log</code></pre>
 
     <h3>Einrichten</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span>Service starten: <code>sudo systemctl start hydrahive-whatsapp-bridge</code></span></li>
-      <li><span class="step-num">2</span><span>QR-Code im Log: <code>sudo journalctl -u hydrahive-whatsapp-bridge -n 50</code></span></li>
-      <li><span class="step-num">3</span><span>WhatsApp auf Mobilgerät → <strong>Verknüpfte Geräte</strong> → QR-Code scannen</span></li>
-      <li><span class="step-num">4</span><span>Bridge läuft dauerhaft im Hintergrund</span></li>
+      <li><span class="step-num">1</span><span><strong>Mein Agent → Messenger</strong> öffnen → WhatsApp-Akkordeon aufklappen</span></li>
+      <li><span class="step-num">2</span><span>Service starten: <code>sudo systemctl start hydrahive-whatsapp-bridge</code></span></li>
+      <li><span class="step-num">3</span><span>QR-Code im Log: <code>sudo journalctl -u hydrahive-whatsapp-bridge -n 50</code></span></li>
+      <li><span class="step-num">4</span><span>WhatsApp auf Mobilgerät → <strong>Verknüpfte Geräte</strong> → QR-Code scannen</span></li>
+      <li><span class="step-num">5</span><span>Bridge läuft dauerhaft im Hintergrund</span></li>
     </ol>
 
     <h3>Butler-Integration</h3>
@@ -1105,9 +1106,9 @@ sudo tail -f /var/log/nginx/error.log</code></pre>
     <div class="note">Die WhatsApp-Verknüpfung muss nach einem Geräte-Reset oder längerer Inaktivität erneuert werden. Der QR-Code erscheint dann erneut im Service-Log.</div>
   </section>
 
-  <!-- 27. BUTLER -->
+  <!-- 11. BUTLER (Mein Agent → Butler) -->
   <section class="chapter" id="butler">
-    <h2>27. Butler — Visuelle Automatisierungsregeln</h2>
+    <h2>11. Butler — Visuelle Automatisierungsregeln</h2>
     <p>Butler ist ein Blueprint-Editor für Messenger-Automatisierung. Regeln werden visuell als verbundene Knoten definiert — ähnlich Unreal Engine Blueprints oder n8n.</p>
 
     <h3>Konzept</h3>
@@ -1135,7 +1136,7 @@ sudo tail -f /var/log/nginx/error.log</code></pre>
 
     <h3>Flow erstellen</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Butler</strong> → <strong>Neuen Flow anlegen</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Mein Agent → Butler</strong> → <strong>Neuen Flow anlegen</strong></span></li>
       <li><span class="step-num">2</span><span>Knoten aus der Palette auf die Canvas ziehen</span></li>
       <li><span class="step-num">3</span><span>Knoten verbinden — von Ausgabe-Punkt zu Eingabe-Punkt</span></li>
       <li><span class="step-num">4</span><span>Knoten anklicken → Properties-Panel öffnet sich</span></li>
@@ -1145,14 +1146,14 @@ sudo tail -f /var/log/nginx/error.log</code></pre>
     <div class="note">Butler-Regeln greifen <strong>vor</strong> dem normalen Agenten-Processing. Ein „Ignorieren"-Flow verhindert dass die Nachricht den Agenten je erreicht.</div>
   </section>
 
-  <!-- 28. SCHEDULES -->
+  <!-- 18. SCHEDULES (Projekte-Tab) -->
   <section class="chapter" id="schedules">
-    <h2>28. Schedules — Zeitgesteuerte Aufgaben</h2>
+    <h2>18. Schedules — Zeitgesteuerte Aufgaben (Projekte-Tab)</h2>
     <p>Mit Schedules können Agenten zu festen Zeiten oder in regelmäßigen Abständen automatisch aktiviert werden.</p>
 
     <h3>Schedule anlegen</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Schedules</strong> → <strong>+ Neuer Schedule</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Projekte</strong> → Tab <strong>Schedules</strong> → <strong>+ Neuer Schedule</strong></span></li>
       <li><span class="step-num">2</span><span>Agent auswählen und Aufgaben-Nachricht eingeben</span></li>
       <li><span class="step-num">3</span><span>Zeitplan: einmalig (Datum + Uhrzeit) oder wiederkehrend (Cron-Ausdruck)</span></li>
       <li><span class="step-num">4</span><span>Speichern → Schedule läuft ab sofort</span></li>
@@ -1173,17 +1174,36 @@ Beispiele:
 
     <table>
       <tr><th></th><th>Heartbeat</th><th>Schedule</th></tr>
-      <tr><td>Konfiguriert in</td><td>Agent-Einstellungen</td><td>Schedules-Seite</td></tr>
+      <tr><td>Konfiguriert in</td><td>Agent-Einstellungen</td><td>Projekte → Tab Schedules</td></tr>
       <tr><td>Trigger</td><td>Zeitintervall</td><td>Cron / Einmalig</td></tr>
       <tr><td>Nachricht</td><td>Fest im Agent</td><td>Frei wählbar</td></tr>
       <tr><td>Zweck</td><td>Monitoring, Watchdog</td><td>Aufgaben, Reports</td></tr>
     </table>
   </section>
 
-  <!-- 29. EXTENSIONS -->
+  <!-- 21. BLUEPRINT -->
+  <section class="chapter" id="blueprint">
+    <h2>21. Blueprint &amp; Pipelines</h2>
+    <p>Der <strong>Blueprint</strong>-Bereich bietet visuelle Automatisierungswerkzeuge für komplexe Agent-Workflows. Er ist über den gleichnamigen Menüpunkt in der Sidebar zugänglich.</p>
+
+    <h3>Bereiche</h3>
+    <table>
+      <tr><th>Tab</th><th>Beschreibung</th></tr>
+      <tr><td><strong>Automation</strong></td><td>Einfache Automatisierungsregeln — ähnlich Butler, aber serverübergreifend</td></tr>
+      <tr><td><strong>Pipelines</strong></td><td>Mehrstufige Agent-Ketten: Ausgabe eines Agenten wird Eingabe des nächsten</td></tr>
+      <tr><td><strong>Architect</strong></td><td>Visueller Editor zum Entwerfen von Agenten-Topologien</td></tr>
+      <tr><td><strong>Workflow</strong></td><td>Zustandsbasierte Workflows mit Verzweigungen und Schleifen</td></tr>
+      <tr><td><strong>Scratchpad</strong></td><td>Freier Arbeitsbereich zum Testen von Prompts und Flows</td></tr>
+      <tr><td><strong>Notifications</strong></td><td>Benachrichtigungsregeln — wann und wohin Ereignisse gemeldet werden</td></tr>
+    </table>
+
+    <div class="note">Blueprint-Pipelines und Workflows laufen serverübergreifend und können Agenten aus mehreren Projekten einbinden.</div>
+  </section>
+
+  <!-- 23. EXTENSIONS (Hub-Tab) -->
   <section class="chapter" id="extensions">
-    <h2>29. Erweiterungs-Manager</h2>
-    <p>Die Erweiterungsverwaltung ermöglicht das nachträgliche Installieren optionaler Komponenten direkt aus der Webkonsole — ohne SSH oder manuelle Befehle.</p>
+    <h2>23. Extensions &amp; Plugins (Hub)</h2>
+    <p>Der <strong>Hub</strong>-Bereich verwaltet alle Erweiterungen, Plugins und Skill-Pakete. Unter dem Tab <strong>Extensions</strong> können optionale Komponenten direkt aus der Webkonsole installiert werden — ohne SSH oder manuelle Befehle.</p>
 
     <h3>Verfügbare Erweiterungen</h3>
     <table>
@@ -1199,7 +1219,7 @@ Beispiele:
 
     <h3>Installation</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span>Gewünschte Erweiterung anklicken</span></li>
+      <li><span class="step-num">1</span><span><strong>Hub</strong> → Tab <strong>Extensions</strong> → Gewünschte Erweiterung anklicken</span></li>
       <li><span class="step-num">2</span><span><strong>Installieren</strong> drücken</span></li>
       <li><span class="step-num">3</span><span>Live-Log verfolgen — Installation läuft im Hintergrund</span></li>
       <li><span class="step-num">4</span><span>Bei Erfolg: Status wechselt auf <strong>Aktiv</strong></span></li>
@@ -1208,9 +1228,9 @@ Beispiele:
     <div class="note"><strong>Deinstallation:</strong> Daten bleiben erhalten — nur Service und Binaries werden entfernt. Neue Erweiterungen werden automatisch mit System-Updates mitgeliefert.</div>
   </section>
 
-  <!-- 30. SEARXNG -->
+  <!-- 24. SEARXNG (Hub) -->
   <section class="chapter" id="searxng">
-    <h2>30. Web-Suche (SearXNG)</h2>
+    <h2>24. Web-Suche (SearXNG)</h2>
     <p>SearXNG ist eine selbst-gehostete Metasuchmaschine die mehrere Suchmaschinen gleichzeitig abfragt — ohne Tracking, ohne API-Key.</p>
 
     <h3>Nutzung durch Agenten</h3>
@@ -1218,16 +1238,16 @@ Beispiele:
     <pre><code>→ web_search(query="Python 3.13 release notes")
 → Ergebnisse werden direkt in den Kontext injiziert</code></pre>
 
-    <p>Die SearXNG-Oberfläche ist unter <strong>Web-Suche</strong> in der Sidebar eingebettet (iframe). Die Konfigurationsdatei liegt unter <code>/etc/searxng/settings.yml</code>.</p>
+    <p>Die SearXNG-Oberfläche ist über <strong>Hub</strong> → Tab <strong>Extensions</strong> → Web-Suche eingebettet (iframe). Die Konfigurationsdatei liegt unter <code>/etc/searxng/settings.yml</code>.</p>
   </section>
 
-  <!-- 31. CODE EDITOR -->
+  <!-- 25. CODE EDITOR (Hub) -->
   <section class="chapter" id="code-editor">
-    <h2>31. Code Editor (VS Code im Browser)</h2>
+    <h2>25. Code Editor (VS Code im Browser)</h2>
     <p>code-server bringt VS Code vollständig in den Browser — inklusive Extensions, Terminal und Git-Integration.</p>
 
     <h3>Voraussetzung</h3>
-    <p>code-server muss über den <strong>Erweiterungs-Manager</strong> installiert sein. Erreichbar unter <strong>Code Editor</strong> in der Sidebar.</p>
+    <p>code-server muss über <strong>Hub</strong> → Tab <strong>Extensions</strong> installiert sein. Erreichbar unter <strong>Hub</strong> → Code Editor.</p>
 
     <h3>Funktionsumfang</h3>
     <ul>
@@ -1241,13 +1261,13 @@ Beispiele:
     <p>code-server läuft unter dem <code>hydrahive</code>-Benutzer auf Port 8080 (intern). nginx proxied unter <code>/code/</code>. Konfiguration: <code>/opt/hydrahive/.config/code-server/config.yaml</code>.</p>
   </section>
 
-  <!-- 32. VAULTWARDEN -->
+  <!-- 26. VAULTWARDEN (Hub) -->
   <section class="chapter" id="vaultwarden">
-    <h2>32. Vaultwarden — Passwort-Manager</h2>
+    <h2>26. Vaultwarden — Passwort-Manager</h2>
     <p>Vaultwarden ist ein selbst-gehosteter Passwort-Manager kompatibel mit dem Bitwarden-Protokoll. Er ermöglicht das sichere Speichern und Abrufen von Passwörtern und Secrets.</p>
 
     <h3>Voraussetzung</h3>
-    <p>Vaultwarden muss über den <strong>Erweiterungs-Manager</strong> installiert sein. Die Installation baut aus Rust-Source-Code — beim ersten Mal ca. 5–10 Minuten.</p>
+    <p>Vaultwarden muss über <strong>Hub</strong> → Tab <strong>Extensions</strong> installiert sein. Die Installation baut aus Rust-Source-Code — beim ersten Mal ca. 5–10 Minuten.</p>
 
     <h3>Zugangsdaten</h3>
     <ul>
@@ -1268,9 +1288,9 @@ Beispiele:
     <div class="note">Daten: <code>/var/lib/vaultwarden/</code> — Konfiguration: <code>/etc/hydrahive/vaultwarden.env</code></div>
   </section>
 
-  <!-- 33. A2A FEDERATION -->
+  <!-- 16. A2A FEDERATION (Agenten-Tab) -->
   <section class="chapter" id="federation">
-    <h2>33. A2A Federation</h2>
+    <h2>16. A2A Federation (Agenten-Tab)</h2>
     <p>HydraHive unterstützt das FastA2A-Protokoll für Agent-zu-Agent-Kommunikation zwischen verschiedenen HydraHive-Instanzen oder kompatiblen Systemen.</p>
 
     <h3>Funktionsweise</h3>
@@ -1278,18 +1298,18 @@ Beispiele:
 
     <h3>Peer einrichten</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Federation</strong> → <strong>Peers</strong> → <strong>+ Peer hinzufügen</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Tab <strong>Federation</strong> → <strong>Peers</strong> → <strong>+ Peer hinzufügen</strong></span></li>
       <li><span class="step-num">2</span><span>URL der anderen HydraHive-Instanz eingeben</span></li>
       <li><span class="step-num">3</span><span>Agent-Karten werden automatisch geladen</span></li>
       <li><span class="step-num">4</span><span>Agenten können via <code>remote_agent</code>-Tool peer-übergreifend kommunizieren</span></li>
     </ol>
 
-    <div class="note">Alle A2A-Verbindungen werden via Bearer-Token authentifiziert. <strong>Federation</strong> ist nur für Admins sichtbar.</div>
+    <div class="note">Alle A2A-Verbindungen werden via Bearer-Token authentifiziert. Der Tab <strong>Federation</strong> in der Agenten-Seite ist nur für Admins sichtbar.</div>
   </section>
 
-  <!-- 34. NOTIFICATIONS -->
+  <!-- 22. NOTIFICATIONS (Blueprint) -->
   <section class="chapter" id="notifications">
-    <h2>34. Benachrichtigungen</h2>
+    <h2>22. Benachrichtigungen (Blueprint)</h2>
     <p>Das Notification Center zeigt systemweite Ereignisse in Echtzeit — Agenten-Fehler, Update-Status, abgeschlossene Tasks.</p>
 
     <h3>Erreichbar über</h3>

@@ -1440,6 +1440,7 @@ register_voice_routes(
     require_auth=require_auth,
     discovery=discovery,
     orchestrator=orchestrator,
+    group_service=group_service,
 )
 
 register_openai_compat_routes(

@@ -166,10 +166,15 @@ def register_voice_routes(
     require_auth,
     discovery,
     orchestrator,
+    group_service=None,
 ) -> None:
 
-    async def _agent_respond(text: str, agent_id: str, username: str) -> str:
-        """Send text to agent and return response."""
+    async def _agent_respond(text: str, agent_id: str, auth: tuple[str, str]) -> str:
+        """Send text to agent and return response. Prüft Agent-Zugriff."""
+        username, role = auth
+        # #3: Access-Check wie in Agent-Chat-Routen
+        if role != "admin" and group_service and not group_service.has_agent_access(username, agent_id):
+            raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
         agent_cfg = discovery.get(agent_id)
         if not agent_cfg:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -184,7 +189,7 @@ def register_voice_routes(
             project_id=f"voice_{agent_id}",
             project_cfg=virtual_cfg,
             content=text,
-            sender=username,
+            sender=auth[0],
             execution_mode="sync",
         )
         return response
@@ -200,7 +205,7 @@ def register_voice_routes(
             raise HTTPException(400, "text erforderlich")
         cfg = _load_voice_config()
         agent_id = body.get("agent_id") or cfg.get("default_agent", "personal_admin")
-        response = await _agent_respond(text, agent_id, auth[0])
+        response = await _agent_respond(text, agent_id, auth)
         return {"text": response, "agent_id": agent_id}
 
     # ── Audio → Text (STT) ──────────────────────────────────────────
@@ -271,7 +276,7 @@ def register_voice_routes(
             raise HTTPException(400, "Kein Text erkannt")
 
         # 2. Agent
-        response = await _agent_respond(user_text, agent_id, auth[0])
+        response = await _agent_respond(user_text, agent_id, auth)
 
         # 3. TTS
         try:
