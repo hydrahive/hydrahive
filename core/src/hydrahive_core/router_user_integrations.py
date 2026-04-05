@@ -1152,8 +1152,27 @@ def register_user_integration_routes(
                 if _sub == "ignore":
                     return {"ok": True, "filtered": "butler_ignore"}
                 elif _sub == "reply_fixed":
-                    from .whatsapp_agent import bridge_send as _bsend
-                    await _bsend(agent_id, from_jid, _p.get("text", ""))
+                    # #321: Voice-Modus auch bei reply_fixed prüfen
+                    _fixed_text = _p.get("text", "")
+                    _voice_mode = wa_cfg.get("voice_mode", "echo") if wa_cfg else "echo"
+                    _voice_name = wa_cfg.get("voice_name", "de-DE-KatjaNeural") if wa_cfg else "de-DE-KatjaNeural"
+                    _send_voice = (_voice_mode == "echo" and is_audio) or (_voice_mode == "always")
+                    if _send_voice and _voice_mode != "never":
+                        try:
+                            from .whatsapp_tts import text_to_ogg_b64 as _tts
+                            from .whatsapp_agent import bridge_send_voice as _bsv
+                            _audio = await _tts(_fixed_text, voice=_voice_name)
+                            if _audio:
+                                await _bsv(agent_id, from_jid, _audio)
+                            else:
+                                from .whatsapp_agent import bridge_send as _bsend
+                                await _bsend(agent_id, from_jid, _fixed_text)
+                        except Exception:
+                            from .whatsapp_agent import bridge_send as _bsend
+                            await _bsend(agent_id, from_jid, _fixed_text)
+                    else:
+                        from .whatsapp_agent import bridge_send as _bsend
+                        await _bsend(agent_id, from_jid, _fixed_text)
                     return {"ok": True, "filtered": "butler_reply_fixed"}
                 elif _sub == "agent_reply_guided":
                     _instr = str(_p.get("instruction", "")).strip()
@@ -1166,9 +1185,12 @@ def register_user_integration_routes(
                     if _new_agent:
                         logger.info("Butler leitet WhatsApp-Nachricht um: %s → %s", agent_id, _new_agent)
                         agent_id = _new_agent
-                    # else: agent_id bleibt unverändert (leerer Wert in Flow-Config wird ignoriert)
+                    # else: agent_id bleibt unverändert
         except Exception as _be:
             logger.warning("Butler-Check fehlgeschlagen: %s", _be)
+
+        # #320: Original WhatsApp-Session-ID für Bridge-Sends (Butler kann agent_id umrouten)
+        wa_session_id = f"personal_{username}"
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
@@ -1253,22 +1275,22 @@ def register_user_integration_routes(
                     from .whatsapp_agent import bridge_send_voice
                     audio_b64 = await text_to_ogg_b64(response_text, voice=voice_name)
                     if audio_b64:
-                        await bridge_send_voice(agent_id, from_jid, audio_b64)
+                        await bridge_send_voice(wa_session_id, from_jid, audio_b64)
                     else:
                         from .whatsapp_agent import bridge_send
-                        await bridge_send(agent_id, from_jid, response_text)
+                        await bridge_send(wa_session_id, from_jid, response_text)
                 except Exception as e:
                     logger.error("TTS/Voice-Send Fehler: %s", e)
                     from .whatsapp_agent import bridge_send
-                    await bridge_send(agent_id, from_jid, response_text)
+                    await bridge_send(wa_session_id, from_jid, response_text)
             else:
                 # Text-Antwort (max 4096 Zeichen pro Nachricht)
                 from .whatsapp_agent import bridge_send
-                logger.info("WhatsApp bridge_send: agent=%s to=%s len=%d", agent_id, from_jid, len(response_text))
+                logger.info("WhatsApp bridge_send: agent=%s to=%s len=%d", wa_session_id, from_jid, len(response_text))
                 try:
                     for i in range(0, len(response_text), 4096):
-                        await bridge_send(agent_id, from_jid, response_text[i:i+4096])
-                    logger.info("WhatsApp reply sent: agent=%s to=%s", agent_id, from_jid)
+                        await bridge_send(wa_session_id, from_jid, response_text[i:i+4096])
+                    logger.info("WhatsApp reply sent: agent=%s to=%s", wa_session_id, from_jid)
                 except Exception as e:
                     logger.error("WhatsApp bridge_send Fehler: agent=%s to=%s error=%s", agent_id, from_jid, e)
                     return {"ok": False, "error": f"bridge_send: {e}"}

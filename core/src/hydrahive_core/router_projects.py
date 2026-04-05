@@ -268,7 +268,11 @@ def register_project_routes(
     async def git_clone_into_project(project_id: str, req: GitCloneRequest):
         """Klont ein Git-Repo in das Projektverzeichnis."""
         import asyncio as _asyncio
+        import re as _re
         import subprocess as _sp
+        # #335: project_id validieren gegen Path-Traversal
+        if not _re.match(r"^[a-z0-9_.\-]+$", project_id) or ".." in project_id:
+            raise HTTPException(400, "Ungültige project_id")
         project_dir = Path(projects_dir) / project_id
         if not project_dir.exists():
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -472,7 +476,8 @@ def register_project_routes(
     # ── Projekt-Workflow ──────────────────────────────────────────────────────
 
     @auth_router.get("/projects/{project_id}/workflow")
-    def get_workflow(project_id: str, _a: tuple = Depends(require_auth)):
+    def get_workflow(project_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(_a, project_id)
         import json as _json
         project_dir = Path(projects_dir) / project_id
         wf_path = project_dir / "workflow.json"
@@ -484,7 +489,8 @@ def register_project_routes(
             return {"nodes": [], "edges": []}
 
     @auth_router.put("/projects/{project_id}/workflow")
-    def save_workflow(project_id: str, body: dict, _a: tuple = Depends(require_auth)):
+    def save_workflow(project_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(_a, project_id)
         import json as _json
         project_dir = Path(projects_dir) / project_id
         if not project_dir.exists():

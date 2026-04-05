@@ -159,7 +159,7 @@ def register_agent_admin_routes(
     @admin_router.put("/agents/{agent_id}")
     async def update_agent(agent_id: str, req: CreateAgentRequest, _a: tuple = Depends(require_admin)):
         import yaml as _yaml
-
+        _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -177,7 +177,7 @@ def register_agent_admin_routes(
     @admin_router.patch("/agents/{agent_id}/tools")
     async def patch_agent_tools(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
         import yaml as _yaml
-
+        _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         yaml_path = agent_dir / "agent.yaml"
         if not yaml_path.exists():
@@ -192,11 +192,16 @@ def register_agent_admin_routes(
         logger.info("Agent tools aktualisiert: %s -> %s", agent_id, tools)
         return {"updated": True, "agent_id": agent_id, "tools": tools}
 
-    def _check_agent_read(agent_id: str, auth: tuple) -> None:
-        """#322: Prüft ob der User den Agent lesen darf (Admin oder eigener Agent)."""
-        import re as _re
-        if not _re.match(r"^[a-z0-9_-]+$", agent_id):
+    _SAFE_ID_RE = __import__("re").compile(r"^[a-z0-9_.\-]+$")
+
+    def _validate_agent_id(agent_id: str) -> None:
+        """Path-Traversal-Schutz für agent_id (#333)."""
+        if not agent_id or not _SAFE_ID_RE.fullmatch(agent_id) or ".." in agent_id:
             raise HTTPException(400, "Ungültige agent_id")
+
+    def _check_agent_read(agent_id: str, auth: tuple) -> None:
+        """Prüft ob der User den Agent lesen darf (Admin oder eigener Agent)."""
+        _validate_agent_id(agent_id)
         username, role = auth
         if role == "admin":
             return
@@ -218,6 +223,7 @@ def register_agent_admin_routes(
     @admin_router.put("/agents/{agent_id}/workflow-blueprint")
     def save_workflow_blueprint(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
         import json as _json
+        _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -248,6 +254,7 @@ def register_agent_admin_routes(
     @auth_router.put("/agents/{agent_id}/workflow-flow")
     def save_workflow_flow(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
         import json as _json
+        _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -274,6 +281,7 @@ def register_agent_admin_routes(
 
     @admin_router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, _a: tuple = Depends(require_admin)):
+        _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
