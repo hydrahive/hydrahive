@@ -22,10 +22,13 @@ import {
   Users,
   Shield,
   Lightbulb,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
@@ -35,6 +38,10 @@ function useUpdateStatus(isAdmin: boolean) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [lastCommit, setLastCommit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Live-Log Modal State
+  const [showLog, setShowLog] = useState(false);
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [logDone, setLogDone] = useState<boolean | null>(null);
 
   const check = useCallback(async () => {
     if (!isAdmin) return;
@@ -63,31 +70,73 @@ function useUpdateStatus(isAdmin: boolean) {
   const trigger = useCallback(async () => {
     setUpdating(true);
     setError(null);
+    setLogLines([]);
+    setLogDone(null);
+    setShowLog(true);
+
     try {
       await api.updateTrigger();
-      const poll = setInterval(async () => {
-        try {
-          const s = await api.updateStatus();
-          setUpdateAvailable(Boolean(s.available));
-          if (s.status !== "running") {
-            clearInterval(poll);
-            setUpdating(false);
-            if (s.commit) setLastCommit(s.commit);
-            if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
+
+      // SSE-Stream für Live-Log
+      const token = localStorage.getItem("hydrahive_token") || "";
+      const res = await fetch("/api/admin/update/stream", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok || !res.body) {
+        setLogLines(l => [...l, `Fehler: HTTP ${res.status}`]);
+        setLogDone(false);
+        setUpdating(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const parts = buf.split("\n\n");
+          buf = parts.pop() || "";
+          for (const part of parts) {
+            const line = part.replace(/^data: /, "").trim();
+            if (!line) continue;
+            try {
+              const d = JSON.parse(line);
+              if (d.line !== undefined) setLogLines(l => [...l.slice(-499), d.line]);
+              if (d.done) {
+                setLogDone(d.ok);
+                setUpdating(false);
+                if (d.status?.commit) setLastCommit(d.status.commit);
+                if (!d.ok) setError(d.status?.error || "Update fehlgeschlagen");
+                else setError(null);
+                setUpdateAvailable(false);
+              }
+            } catch { /* ignore parse errors */ }
           }
-        } catch {
-          clearInterval(poll);
-          setUpdating(false);
         }
-      }, 3000);
+      } finally {
+        reader.cancel().catch(() => {});
+      }
+      // Stream ended without done event
+      setLogDone(prev => prev ?? false);
+      setUpdating(false);
     } catch (e: unknown) {
       setUpdating(false);
-      setUpdateAvailable(false);
+      setLogDone(false);
       setError(e instanceof Error ? e.message : "Fehler");
+      setLogLines(l => [...l, `[ERROR] ${e instanceof Error ? e.message : "Unbekannter Fehler"}`]);
     }
   }, []);
 
-  return { updating, updateAvailable, lastCommit, error, trigger };
+  const closeLog = useCallback(() => {
+    setShowLog(false);
+    setLogLines([]);
+    setLogDone(null);
+  }, []);
+
+  return { updating, updateAvailable, lastCommit, error, trigger, showLog, logLines, logDone, closeLog };
 }
 
 function useCoreConnection() {
@@ -165,7 +214,7 @@ export function AdminLayout() {
 
   const [dark, toggleDark] = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate } = useUpdateStatus(isAdmin);
+  const { updating, updateAvailable, lastCommit, error: updateError, trigger: triggerUpdate, showLog, logLines, logDone, closeLog } = useUpdateStatus(isAdmin);
   const coreOnline = useCoreConnection();
   const showDeploymentPanel = isAdmin && (updating || Boolean(updateError) || updateAvailable);
   const deploymentUrgent = updating || Boolean(updateError) || updateAvailable;
@@ -320,8 +369,66 @@ export function AdminLayout() {
     { to: "/projects",  icon: FolderKanban,    label: t("nav.projects") },
   ];
 
+  // Auto-scroll für Update-Log
+  const updateLogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (updateLogRef.current) updateLogRef.current.scrollTop = updateLogRef.current.scrollHeight;
+  }, [logLines]);
+
   return (
     <div className="app-shell lg:grid lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
+      {/* Update Live-Log Modal */}
+      {showLog && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              {logDone === null && <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />}
+              {logDone === true && <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
+              {logDone === false && <XCircle className="w-5 h-5 text-red-500 shrink-0" />}
+              <div>
+                <h2 className="text-base font-semibold">
+                  {logDone === null
+                    ? t("layout.updateRunning")
+                    : logDone
+                      ? t("layout.updateSuccess", { defaultValue: "Update abgeschlossen" })
+                      : t("layout.updateFailed", { defaultValue: "Update fehlgeschlagen" })}
+                </h2>
+                <p className="text-sm text-muted-foreground">HydraHive Self-Update</p>
+              </div>
+            </div>
+            {logDone === null && (
+              <div className="text-amber-400 text-sm font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {t("layout.updateDoNotClose", { defaultValue: "Bitte nicht schließen — Update läuft..." })}
+              </div>
+            )}
+            <div
+              ref={updateLogRef}
+              className="bg-black/50 rounded-lg p-4 font-mono text-xs text-green-400 h-64 overflow-y-auto"
+            >
+              {logLines.length === 0 && logDone === null && (
+                <div className="text-muted-foreground">{t("layout.updateWaiting", { defaultValue: "Warte auf Log-Output..." })}</div>
+              )}
+              {logLines.map((l, i) => <div key={i}>{l || "\u00a0"}</div>)}
+            </div>
+            {logDone !== null && (
+              <div className="flex justify-end gap-2">
+                {logDone && (
+                  <p className="text-sm text-green-500 flex-1 self-center">
+                    {t("layout.updateReloadHint", { defaultValue: "Seite wird gleich neu geladen..." })}
+                  </p>
+                )}
+                <button
+                  className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => { closeLog(); if (logDone) window.location.reload(); }}
+                >
+                  {logDone ? t("layout.updateReload", { defaultValue: "Neu laden" }) : t("layout.updateClose", { defaultValue: "Schließen" })}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {!coreOnline && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95 backdrop-blur-sm">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />

@@ -495,6 +495,45 @@ def register_system_routes(
         asyncio.create_task(_run_and_notify())
         return {"status": "deploying", "message": "Update gestartet — GET /admin/update/status für Status"}
 
+    @admin_router.get("/admin/update/stream")
+    async def stream_update_log():
+        """SSE-Stream: tailed das Update-Log + Status live."""
+        from fastapi.responses import StreamingResponse
+        import json as _json
+
+        log_file = Path("/var/log/hydrahive-update.log")
+
+        async def event_stream():
+            sent_lines = 0
+            done = False
+            while not done:
+                # Log-Zeilen lesen
+                try:
+                    if log_file.exists():
+                        lines = log_file.read_text(errors="replace").splitlines()
+                    else:
+                        lines = []
+                except Exception:
+                    lines = []
+
+                # Neue Zeilen senden
+                for line in lines[sent_lines:]:
+                    yield f"data: {_json.dumps({'line': line})}\n\n"
+                sent_lines = len(lines)
+
+                # Status prüfen
+                status = _load_update_status()
+                st = status.get("status", "")
+                if st in ("ok", "error", ""):
+                    # Fertig — finale Statusmeldung senden
+                    yield f"data: {_json.dumps({'done': True, 'ok': st == 'ok', 'status': status})}\n\n"
+                    done = True
+                else:
+                    await asyncio.sleep(1)
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     @admin_router.post("/admin/core/restart")
     async def restart_core():
         if not _restart_lock.acquire_nowait():
