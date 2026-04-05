@@ -169,7 +169,7 @@ fi
 info "Konfiguriere nginx (Port ${HEIMDALL_PORT})..."
 cat > "${NGINX_CONF}" << NGXEOF
 server {
-    listen 127.0.0.1:${HEIMDALL_PORT};
+    listen 0.0.0.0:${HEIMDALL_PORT};
     server_name _;
 
     root ${HEIMDALL_DIR}/public;
