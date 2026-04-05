@@ -216,6 +216,7 @@ export function AgentChatPage() {
       handleSlashCommand(content);
       return;
     }
+    window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
 
     // Prompt-Coach (#169)
     if (!overrideContent && coachEnabled) {

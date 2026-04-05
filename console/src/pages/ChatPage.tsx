@@ -240,6 +240,8 @@ export function ChatPage() {
       handleSlashCommand(content);
       return;
     }
+    // Companion-Event
+    window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
 
     // Prompt-Coach (#169)
     if (!overrideContent && coachEnabled) {

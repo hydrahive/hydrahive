@@ -317,6 +317,8 @@ export function MyAgentPage() {
     const content = rawContent;
     setInput(""); setChatError(""); setShowSuggest(false); setCoachFeedback(null);
     if (content.startsWith("/")) { handleSlash(content); return; }
+    // Companion-Event
+    window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
 
     // Prompt-Coach Check (#169)
     if (!overrideContent && coachEnabled) {

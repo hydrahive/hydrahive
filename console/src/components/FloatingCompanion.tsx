@@ -97,26 +97,15 @@ export function FloatingCompanion() {
     return () => { window.removeEventListener("storage", handler); window.removeEventListener("hh-companion-toggle", handler); };
   }, []);
 
-  // Reagiere auf Seitenwechsel
-  useEffect(() => {
-    if (!visible) return;
-    const path = location.pathname;
-    if (path === lastPathRef.current) return;
-    lastPathRef.current = path;
-
-    // Throttle: max 1 Kommentar pro 30s
+  // Zentraler Kommentar-Trigger
+  function triggerComment(context: string) {
     const now = Date.now();
-    if (now - lastCommentRef.current < 30000) return;
+    if (now - lastCommentRef.current < 30000) return; // Throttle 30s
     lastCommentRef.current = now;
 
-    // Sleep-Timer reset
     clearTimeout(sleepTimerRef.current);
     setMood("think");
 
-    const context = Object.entries(PAGE_CONTEXTS).find(([p]) => path.startsWith(p))?.[1]
-      || "Der User navigiert in der Console.";
-
-    // LLM-Call über eigenen Tamagotchi-Endpoint (berührt keine Session)
     const token = localStorage.getItem("hydrahive_token") || "";
     const lang = document.documentElement.lang || (navigator.language?.startsWith("de") ? "de" : "en");
     fetch("/api/agents/personal_admin/tamagotchi", {
@@ -130,22 +119,84 @@ export function FloatingCompanion() {
           const text = d.comment.slice(0, 80);
           setBubble(text);
           setShowBubble(true);
-          // Mood basierend auf Inhalt
           if (text.match(/[♥❤😍🥰]/)) setMood("love");
           else if (text.match(/[!🎉✨⭐]/)) setMood("happy");
           else if (text.match(/[😢😔]/)) setMood("sad");
           else if (text.match(/[😱🫣]/)) setMood("shock");
           else setMood("happy");
-          // Bubble nach 6s ausblenden
           setTimeout(() => setShowBubble(false), 6000);
-          // Nach 2min Inaktivität schlafen
           sleepTimerRef.current = setTimeout(() => setMood("sleep"), 120000);
         } else {
           setMood("idle");
         }
       })
       .catch(() => setMood("idle"));
+  }
+
+  // Trigger: Seitenwechsel (immer)
+  useEffect(() => {
+    if (!visible) return;
+    const path = location.pathname;
+    if (path === lastPathRef.current) return;
+    lastPathRef.current = path;
+    const context = Object.entries(PAGE_CONTEXTS).find(([p]) => path.startsWith(p))?.[1]
+      || "Der User navigiert in der Console.";
+    triggerComment(context);
   }, [location.pathname, visible]);
+
+  // Trigger: Chat-Nachricht gesendet (~30% Chance)
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: Event) => {
+      if (Math.random() > 0.3) return; // nur 30% der Nachrichten kommentieren
+      const detail = (e as CustomEvent).detail || {};
+      const preview = (detail.text || "").slice(0, 60);
+      triggerComment(`Der User hat eine Chat-Nachricht gesendet: "${preview}"`);
+    };
+    window.addEventListener("hh-chat-sent", handler);
+    return () => window.removeEventListener("hh-chat-sent", handler);
+  }, [visible]);
+
+  // Trigger: Update fertig
+  useEffect(() => {
+    if (!visible) return;
+    const handler = () => triggerComment("Ein System-Update wurde gerade abgeschlossen.");
+    window.addEventListener("hh-update-done", handler);
+    return () => window.removeEventListener("hh-update-done", handler);
+  }, [visible]);
+
+  // Trigger: Fehler
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail?.message || "ein Fehler";
+      triggerComment(`Es ist ein Fehler aufgetreten: ${msg}`);
+    };
+    window.addEventListener("hh-error", handler);
+    return () => window.removeEventListener("hh-error", handler);
+  }, [visible]);
+
+  // Trigger: Erster Besuch heute
+  useEffect(() => {
+    if (!visible) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const lastVisit = localStorage.getItem("hh_companion_last_visit");
+    if (lastVisit !== today) {
+      localStorage.setItem("hh_companion_last_visit", today);
+      setTimeout(() => triggerComment("Der User hat sich heute zum ersten Mal eingeloggt. Begrüße ihn!"), 2000);
+    }
+  }, [visible]);
+
+  // Trigger: Zufällig alle 3-5 Minuten ein idle-Kommentar
+  useEffect(() => {
+    if (!visible) return;
+    const interval = setInterval(() => {
+      if (mood === "sleep") return;
+      if (Math.random() > 0.4) return; // 40% Chance alle 3 Min
+      triggerComment("Es ist gerade ruhig. Der User ist da aber macht nichts besonderes. Sag was nettes oder witziges.");
+    }, 180000);
+    return () => clearInterval(interval);
+  }, [visible, mood]);
 
   if (!visible) return null;
 
