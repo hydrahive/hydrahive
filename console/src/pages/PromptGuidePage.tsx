@@ -4,13 +4,13 @@ import { useTranslation } from "react-i18next";
 
 /* ── Collapsible Section ──────────────────────────────────────── */
 
-function Section({ title, icon: Icon, children, defaultOpen }: {
-  title: string; icon: React.ElementType; children: React.ReactNode; defaultOpen?: boolean;
+function Section({ title, icon: Icon, children, defaultOpen, id }: {
+  title: string; icon: React.ElementType; children: React.ReactNode; defaultOpen?: boolean; id?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <div className="rounded-xl border bg-card overflow-hidden">
+    <div id={id} className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
       <button onClick={() => setOpen(o => !o)}
         className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-muted/30 transition-colors">
         <Icon className="h-5 w-5 text-primary shrink-0" />
@@ -101,21 +101,22 @@ export function PromptGuidePage() {
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: de ? "Grundlagen" : "Basics", icon: Zap },
-            { label: de ? "Techniken" : "Techniques", icon: Target },
-            { label: "HydraHive", icon: Settings2 },
-            { label: de ? "Profi" : "Pro", icon: Brain },
-          ].map(({ label, icon: Icon }) => (
-            <div key={label} className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs">
+            { label: de ? "Grundlagen" : "Basics", icon: Zap, anchor: "mod-basics" },
+            { label: de ? "Techniken" : "Techniques", icon: Target, anchor: "mod-techniques" },
+            { label: "HydraHive", icon: Settings2, anchor: "mod-hydrahive" },
+            { label: de ? "Profi" : "Pro", icon: Brain, anchor: "mod-pro" },
+          ].map(({ label, icon: Icon, anchor }) => (
+            <button key={label} onClick={() => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth" })}
+              className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer">
               <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="font-medium">{label}</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
 
       {/* ── Goldene Regeln ── */}
-      <Section title={de ? "Die 5 goldenen Regeln" : "The 5 Golden Rules"} icon={Zap} defaultOpen>
+      <Section id="mod-basics" title={de ? "Die 5 goldenen Regeln" : "The 5 Golden Rules"} icon={Zap} defaultOpen>
         <div className="space-y-4 mt-3">
           <Rule n={1}
             title={de ? "Kontext geben" : "Provide Context"}
@@ -151,7 +152,7 @@ export function PromptGuidePage() {
       </Section>
 
       {/* ── Vorher / Nachher ── */}
-      <Section title={de ? "Vorher / Nachher Beispiele" : "Before / After Examples"} icon={Target}>
+      <Section id="mod-techniques" title={de ? "Vorher / Nachher Beispiele" : "Before / After Examples"} icon={Target}>
         <div className="space-y-5 mt-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
@@ -296,7 +297,7 @@ export function PromptGuidePage() {
       </Section>
 
       {/* ���─ Module 3: HydraHive-spezifisch ── */}
-      <Section title={de ? "HydraHive meistern" : "Mastering HydraHive"} icon={Settings2}>
+      <Section id="mod-hydrahive" title={de ? "HydraHive meistern" : "Mastering HydraHive"} icon={Settings2}>
         <div className="space-y-5 mt-3 text-sm">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -388,7 +389,7 @@ export function PromptGuidePage() {
       </Section>
 
       {/* ── Module 4: Profi-Techniken ── */}
-      <Section title={de ? "Profi-Techniken" : "Pro Techniques"} icon={Brain}>
+      <Section id="mod-pro" title={de ? "Profi-Techniken" : "Pro Techniques"} icon={Brain}>
         <div className="space-y-5 mt-3 text-sm">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
