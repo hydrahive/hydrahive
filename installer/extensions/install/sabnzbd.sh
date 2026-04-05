@@ -79,28 +79,12 @@ chown -R "${SAB_USER}:${SAB_USER}" "${SAB_DATA}"
 # --- sabnzbd.ini: Host + Port direkt setzen (falls Datei bereits existiert) ---
 if [ -f "${SAB_INI}" ]; then
     info "Aktualisiere sabnzbd.ini (Host + Port)..."
-    python3 - "${SAB_INI}" "${SAB_PORT}" << 'PYEOF'
-import sys, configparser, os
-
-ini_path = sys.argv[1]
-port     = sys.argv[2]
-
-cfg = configparser.RawConfigParser()
-cfg.optionxform = str
-cfg.read(ini_path)
-
-if not cfg.has_section('misc'):
-    cfg.add_section('misc')
-
-cfg.set('misc', 'host', '0.0.0.0')
-cfg.set('misc', 'port', port)
-cfg.set('misc', 'auto_browser', '0')
-
-with open(ini_path, 'w') as f:
-    cfg.write(f)
-
-print(f"sabnzbd.ini aktualisiert: host=0.0.0.0, port={port}")
-PYEOF
+    # sabnzbd.ini ist kein Standard-INI — hat __version__ ohne Section-Header
+    # Deshalb sed statt configparser
+    if grep -q '^\[misc\]' "${SAB_INI}"; then
+        sed -i "/^\[misc\]/,/^\[/ { s/^host = .*/host = 0.0.0.0/; s/^port = .*/port = ${SAB_PORT}/; s/^auto_browser = .*/auto_browser = 0/; }" "${SAB_INI}"
+    fi
+    success "sabnzbd.ini aktualisiert"
 fi
 
 # --- systemd Service neu laden und starten ---
