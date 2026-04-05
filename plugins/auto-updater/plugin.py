@@ -15,7 +15,6 @@ from pathlib import Path
 
 GITHUB_REPO = "hydrahive/hydrahive"
 VERSION_FILE = Path("/opt/hydrahive/VERSION")
-UPDATE_SCRIPT = Path("/opt/hydrahive/update.sh")
 
 
 def _github_api(path: str) -> dict | list | str:
@@ -174,19 +173,18 @@ def register(api):
         if not confirm:
             return "Update NICHT gestartet. Setze confirm=true um das Update wirklich auszuführen.\n\nHinweis: Der Server wird während des Updates kurz nicht erreichbar sein."
 
-        if not UPDATE_SCRIPT.exists():
-            return f"Update-Script nicht gefunden: {UPDATE_SCRIPT}"
-
         try:
-            # Update im Hintergrund starten (non-blocking, da der Core neugestartet wird)
+            # Update via systemd-Service starten (kein systemctl bash nötig)
             r = subprocess.run(
-                ["sudo", "bash", str(UPDATE_SCRIPT)],
-                capture_output=True, text=True, timeout=600,
+                ["systemctl", "start", "hydrahive-update.service"],
+                capture_output=True, text=True, timeout=30,
             )
             if r.returncode != 0:
-                return f"Update fehlgeschlagen:\n{r.stderr[-1000:]}"
-            return f"Update erfolgreich abgeschlossen!\n\n{r.stdout[-500:]}"
+                return f"Update-Service konnte nicht gestartet werden:\n{r.stderr[-500:]}"
+            return "Update-Service gestartet (hydrahive-update.service).\nDer Server wird kurz neu starten — das ist normal."
+        except FileNotFoundError:
+            return "systemctl nicht gefunden. Update muss manuell ausgeführt werden."
         except subprocess.TimeoutExpired:
-            return "Update Timeout (10 Minuten). Prüfe den Server-Status manuell."
+            return "Timeout beim Starten des Update-Services."
         except Exception as e:
             return f"Update-Fehler: {e}"
