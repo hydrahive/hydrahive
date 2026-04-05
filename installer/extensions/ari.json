@@ -7,7 +7,7 @@
   "install_script": "extensions/install/ari.sh",
   "uninstall_script": "extensions/uninstall/ari.sh",
   "service": "tor@default",
-  "health_url": "http://127.0.0.1:9051/",
+  "health_url": null,
   "open_url": null,
   "installed_check": "/usr/bin/tor"
 }
