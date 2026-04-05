@@ -85,12 +85,14 @@ mkdir -p /tmp/vikunja-extract
 unzip -o -q /tmp/vikunja.zip -d /tmp/vikunja-extract
 rm -f /tmp/vikunja.zip
 
-# Binary finden (kann vikunja oder Vikunja heißen)
-FOUND_BIN="$(find /tmp/vikunja-extract -name 'vikunja' -type f -executable | head -1)"
+# Binary finden — größte Datei im ZIP ist die Binary (nicht .sha256 oder LICENSE)
+FOUND_BIN="$(find /tmp/vikunja-extract -name 'vikunja*linux*amd64' -type f ! -name '*.sha256' | head -1)"
 if [ -z "${FOUND_BIN}" ]; then
-    FOUND_BIN="$(find /tmp/vikunja-extract -name 'vikunja*' -type f | head -1)"
+    # Fallback: größte Datei
+    FOUND_BIN="$(find /tmp/vikunja-extract -type f -printf '%s %p\n' | sort -rn | head -1 | awk '{print $2}')"
 fi
 [ -n "${FOUND_BIN}" ] || error "Binary nicht im ZIP gefunden"
+file "${FOUND_BIN}" | grep -q "ELF" || error "Gefundene Datei ist keine Binary: $(file "${FOUND_BIN}")"
 mv "${FOUND_BIN}" "${VIKUNJA_BINARY}"
 chmod 755 "${VIKUNJA_BINARY}"
 rm -rf /tmp/vikunja-extract
