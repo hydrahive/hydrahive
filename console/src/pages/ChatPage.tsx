@@ -105,6 +105,26 @@ export function ChatPage() {
       .catch(e => console.error("Failed to load session history", e));
   }, [id]);
 
+  // Live-Sync: History alle 3s refreshen wenn NICHT selbst am Streamen (#337)
+  useEffect(() => {
+    if (!id || sending) return;
+    const poll = setInterval(() => {
+      api.sessionHistory(id).then((d) => {
+        const loaded = d.messages
+          .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+          .map((m) => mkMsg(m.role as Message["role"], m.content));
+        if (loaded.length > 0) {
+          setMessages(prev => {
+            // Nur updaten wenn sich die Anzahl geändert hat (neuer Content)
+            if (loaded.length !== prev.length) return loaded;
+            return prev;
+          });
+        }
+      }).catch(() => {});
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [id, sending]);
+
   function openHistory() {
     setShowHistory(true);
     setViewSession(null);
