@@ -127,13 +127,28 @@ printf '%s\n' "${LATEST_TAG}" > "${PAPERLESS_DIR}/VERSION"
 success "Paperless-ngx ${LATEST_TAG} nach ${PAPERLESS_DIR} entpackt"
 
 # --- Python-Venv + Abhängigkeiten ---
-info "Richte Python-Virtualenv ein..."
+info "Richte Python-Virtualenv ein (dauert 2-5 Minuten)..."
 python3 -m venv "${PAPERLESS_DIR}/.venv"
-"${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --upgrade pip wheel 2>/dev/null || true
+"${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --upgrade pip wheel setuptools 2>/dev/null || true
+
+# Requirements mit Hash-Verifikation (uv-Export-Format) — Hashes strippen falls pip sie nicht versteht
 if [ -f "${PAPERLESS_DIR}/requirements.txt" ]; then
-    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet -r "${PAPERLESS_DIR}/requirements.txt" \
-        2>/dev/null | tail -5 || warn "Einige pip-Pakete konnten nicht installiert werden"
+    # Erst mit Hashes versuchen
+    if ! "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --require-hashes \
+        -r "${PAPERLESS_DIR}/requirements.txt" 2>/dev/null; then
+        info "Hash-Modus fehlgeschlagen — installiere ohne Hash-Verifikation..."
+        sed 's/ *\\$//; s/ *--hash=sha256:[a-f0-9]*//' "${PAPERLESS_DIR}/requirements.txt" \
+            | grep -v '^\s*#' | grep -v '^\s*$' \
+            > /tmp/paperless-requirements-nohash.txt
+        "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
+            -r /tmp/paperless-requirements-nohash.txt \
+            2>&1 | tail -5 || warn "Einige pip-Pakete konnten nicht installiert werden"
+        rm -f /tmp/paperless-requirements-nohash.txt
+    fi
 fi
+
+# Sicherstellen dass gunicorn + uvicorn installiert sind
+"${PAPERLESS_DIR}/.venv/bin/pip" install --quiet gunicorn uvicorn 2>/dev/null || true
 success "Python-Venv bereit"
 
 # --- Daten-Verzeichnisse ---
@@ -159,14 +174,14 @@ PAPERLESS_MEDIA_ROOT=${PAPERLESS_MEDIA}
 PAPERLESS_CONSUMPTION_DIR=${PAPERLESS_CONSUME}
 PAPERLESS_EXPORT_DIR=${PAPERLESS_EXPORT}
 PAPERLESS_PORT=${PAPERLESS_PORT}
-PAPERLESS_BIND_ADDR=127.0.0.1
+PAPERLESS_BIND_ADDR=0.0.0.0
 PAPERLESS_TIME_ZONE=Europe/Berlin
 PAPERLESS_OCR_LANGUAGE=deu+eng
 PAPERLESS_OCR_MODE=skip
 PAPERLESS_TIKA_ENABLED=false
 PAPERLESS_ENABLE_HTTP_REMOTE_USER=false
 PAPERLESS_ALLOWED_HOSTS=*
-PAPERLESS_CORS_ALLOWED_HOSTS=http://localhost:${PAPERLESS_PORT},http://127.0.0.1:${PAPERLESS_PORT}
+PAPERLESS_CORS_ALLOWED_HOSTS=*
 CONFEOF
 chown "${PAPERLESS_USER}:${PAPERLESS_USER}" "${PAPERLESS_DIR}/paperless.conf"
 chmod 640 "${PAPERLESS_DIR}/paperless.conf"
@@ -208,7 +223,7 @@ EnvironmentFile=${PAPERLESS_DIR}/paperless.conf
 ExecStart=${VENV_GUNICORN} \
     --workers 2 \
     --worker-class uvicorn.workers.UvicornWorker \
-    --bind 127.0.0.1:${PAPERLESS_PORT} \
+    --bind 0.0.0.0:${PAPERLESS_PORT} \
     --timeout 120 \
     paperless.asgi:application
 Restart=on-failure
