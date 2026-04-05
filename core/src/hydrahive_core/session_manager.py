@@ -55,6 +55,13 @@ class Message:
         """Format für LLM-API (OpenAI-kompatibel via litellm)."""
         return {"role": self.role.value, "content": self.content}
 
+    def as_history_message(self) -> dict:
+        """Format für Frontend-History — inkl. Metadata (Token-Usage etc.)."""
+        d = {"role": self.role.value, "content": self.content, "timestamp": self.timestamp, "agent_id": self.agent_id}
+        if self.metadata:
+            d["metadata"] = self.metadata
+        return d
+
 
 @dataclass
 class Session:
@@ -124,6 +131,11 @@ class Session:
             else:
                 result.append(m.as_llm_message())
         return result
+
+    def history_context(self, max_messages: int = 50) -> list[dict]:
+        """Frontend-History inkl. Tool-Messages und Metadata."""
+        window = list(self.messages[-max_messages:])
+        return [m.as_history_message() for m in window]
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -266,6 +278,13 @@ class SessionManager:
         if not session:
             return []
         return session.llm_context(max_messages, max_history_tokens=max_history_tokens)
+
+    def get_history(self, project_id: str, max_messages: int = 50) -> list[dict]:
+        """Frontend-History mit Metadata (Token-Usage etc.)."""
+        session = self._active.get(project_id)
+        if not session:
+            return []
+        return session.history_context(max_messages)
 
     def get_active(self, project_id: str) -> Session | None:
         return self._active.get(project_id)

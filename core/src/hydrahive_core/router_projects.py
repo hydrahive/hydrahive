@@ -357,7 +357,7 @@ def register_project_routes(
         _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
-        context = sessions.get_context(project_id, max_messages=limit)
+        context = sessions.get_history(project_id, max_messages=limit)
         session = sessions.get_active(project_id)
         return {
             "session_id": session.id if session else None,

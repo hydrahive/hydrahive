@@ -87,7 +87,7 @@ def register_agent_chat_routes(
     @auth_router.get("/agents/{agent_id}/session/history")
     def agent_session_history(agent_id: str, limit: int = 50, _a: tuple[str, str] = Depends(require_auth)):
         _check_agent_access(agent_id, _a)
-        context = agent_sessions.get_context(agent_id, max_messages=limit)
+        context = agent_sessions.get_history(agent_id, max_messages=limit)
         session = agent_sessions.get_active(agent_id)
         return {
             "session_id": session.id if session else None,

@@ -75,8 +75,14 @@ export function AgentChatPage() {
     )
       .then(d => {
         const loaded = d.messages
-          .filter(m => m.role === "user" || m.role === "assistant" || m.role === "tool")
-          .map(m => mkMsg(m.role as "user" | "assistant", m.content));
+          .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+          .map((m: any) => {
+            const msg = mkMsg(m.role as Message["role"], m.content);
+            if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
+              msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds };
+            }
+            return msg;
+          });
         if (loaded.length > 0) setMessages(loaded);
       })
       .catch(e => console.error("Failed to load agent session history", e));
