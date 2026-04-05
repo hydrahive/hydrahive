@@ -131,20 +131,38 @@ info "Richte Python-Virtualenv ein (dauert 2-5 Minuten)..."
 python3 -m venv "${PAPERLESS_DIR}/.venv"
 "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --upgrade pip wheel setuptools 2>/dev/null || true
 
-# Requirements mit Hash-Verifikation (uv-Export-Format) — Hashes strippen falls pip sie nicht versteht
+# Requirements installieren — Paperless nutzt uv-Format mit Hashes
 if [ -f "${PAPERLESS_DIR}/requirements.txt" ]; then
-    # Erst mit Hashes versuchen
-    if ! "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --require-hashes \
-        -r "${PAPERLESS_DIR}/requirements.txt" 2>/dev/null; then
-        info "Hash-Modus fehlgeschlagen — installiere ohne Hash-Verifikation..."
-        sed 's/ *\\$//; s/ *--hash=sha256:[a-f0-9]*//' "${PAPERLESS_DIR}/requirements.txt" \
-            | grep -v '^\s*#' | grep -v '^\s*$' \
-            > /tmp/paperless-requirements-nohash.txt
-        "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
-            -r /tmp/paperless-requirements-nohash.txt \
-            2>&1 | tail -5 || warn "Einige pip-Pakete konnten nicht installiert werden"
-        rm -f /tmp/paperless-requirements-nohash.txt
-    fi
+    # Hashes + Continuation Lines + Marker korrekt strippen
+    python3 -c "
+import re, sys
+lines = open('${PAPERLESS_DIR}/requirements.txt').read()
+# Continuation Lines zusammenfuegen
+lines = lines.replace(' \\\\\n', ' ')
+result = []
+for line in lines.splitlines():
+    line = line.strip()
+    if not line or line.startswith('#'):
+        continue
+    # Hashes entfernen
+    line = re.sub(r'\s*--hash=sha256:[a-f0-9]+', '', line)
+    # Environment Marker entfernen (die ; sys_platform == ... Teile)
+    line = re.sub(r'\s*;.*$', '', line)
+    line = line.strip()
+    if line:
+        result.append(line)
+with open('/tmp/paperless-reqs-clean.txt', 'w') as f:
+    f.write('\n'.join(result))
+print(f'{len(result)} Pakete extrahiert')
+" || error "Requirements-Parsing fehlgeschlagen"
+
+    # mysqlclient ausschließen (braucht MySQL-Dev-Libs, wir nutzen PostgreSQL)
+    grep -vi 'mysqlclient' /tmp/paperless-reqs-clean.txt > /tmp/paperless-reqs-final.txt
+
+    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
+        -r /tmp/paperless-reqs-final.txt \
+        2>&1 | tail -5 || warn "Einige pip-Pakete konnten nicht installiert werden"
+    rm -f /tmp/paperless-reqs-clean.txt /tmp/paperless-reqs-final.txt
 fi
 
 # Sicherstellen dass gunicorn + uvicorn installiert sind
@@ -190,17 +208,17 @@ success "paperless.conf konfiguriert"
 # --- Datenbank-Migration ---
 info "Führe Datenbankmigrationen aus..."
 cd "${PAPERLESS_DIR}/src"
-sudo -u "${PAPERLESS_USER}" \
-    PAPERLESS_SETTINGS_MODULE="paperless.settings.base" \
-    "${PAPERLESS_DIR}/.venv/bin/python" manage.py migrate --no-input --quiet 2>/dev/null \
+export PAPERLESS_CONFIGURATION_PATH="${PAPERLESS_DIR}/paperless.conf"
+sudo -u "${PAPERLESS_USER}" -E \
+    "${PAPERLESS_DIR}/.venv/bin/python" manage.py migrate --no-input 2>&1 | tail -5 \
     || warn "Migration fehlgeschlagen — wird beim ersten Start wiederholt"
 
 # Superuser nur anlegen falls noch keiner existiert
-sudo -u "${PAPERLESS_USER}" \
+sudo -u "${PAPERLESS_USER}" -E \
     DJANGO_SUPERUSER_PASSWORD="admin" \
     "${PAPERLESS_DIR}/.venv/bin/python" manage.py createsuperuser \
         --noinput --username admin --email admin@localhost 2>/dev/null \
-    || true   # tritt auf wenn User bereits existiert
+    || true
 success "Datenbank migriert"
 
 # --- systemd Services ---
@@ -220,6 +238,7 @@ User=${PAPERLESS_USER}
 Group=${PAPERLESS_USER}
 WorkingDirectory=${PAPERLESS_DIR}/src
 EnvironmentFile=${PAPERLESS_DIR}/paperless.conf
+Environment=PAPERLESS_CONFIGURATION_PATH=${PAPERLESS_DIR}/paperless.conf
 ExecStart=${VENV_GUNICORN} \
     --workers 2 \
     --worker-class uvicorn.workers.UvicornWorker \
