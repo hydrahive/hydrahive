@@ -351,7 +351,7 @@ function AgentsCrudTab() {
     }
   }
 
-  const agentList = Object.entries(agents).filter(([id]) => !id.startsWith("personal_"));
+  const agentList = Object.entries(agents);
   const TYPE_ORDER = ["boss", "worker", "specialist"];
   const agentGroups = useMemo(() => {
     const q = agentSearch.toLowerCase();
@@ -796,6 +796,7 @@ function AgentsCrudTab() {
                         <span className="font-medium text-sm truncate">{agent.config.identity}</span>
                         <span className="rounded-full bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground font-mono">{id}</span>
                         <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${colors.badge}`}>{colors.label}</span>
+                        {id.startsWith("personal_") && <span className="rounded-full bg-violet-500/15 text-violet-400 px-1.5 py-0.5 text-xs font-medium">Persönlich</span>}
                         {taskCount > 0 && <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-xs flex items-center gap-1"><Timer className="h-2.5 w-2.5" />{taskCount}</span>}
                         {rt?.status === "error" && <span className="rounded-full bg-destructive/10 text-destructive px-1.5 py-0.5 text-xs">error</span>}
                       </div>
@@ -832,7 +833,7 @@ function AgentsCrudTab() {
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {isAdmin && (
+                      {isAdmin && !id.startsWith("personal_") && (
                         <button onClick={() => handleDelete(id)} disabled={deleting === id} title={t("common.delete")}
                           className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive disabled:opacity-50">
                           <Trash2 className="h-3.5 w-3.5" />
