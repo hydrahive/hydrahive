@@ -81,6 +81,12 @@ fi
 mkdir -p "${AGH_DIR}"
 tar -xzf "/tmp/${TARBALL}" -C "${AGH_DIR}" --strip-components=1
 rm -f "/tmp/${TARBALL}"
+# Falls Binary als Ordner entpackt wurde (doppelte Verschachtelung) → korrigieren
+if [ -d "${AGH_BINARY}" ] && [ -f "${AGH_BINARY}/AdGuardHome" ]; then
+    mv "${AGH_BINARY}/AdGuardHome" "${AGH_DIR}/AdGuardHome_tmp"
+    rm -rf "${AGH_BINARY}"
+    mv "${AGH_DIR}/AdGuardHome_tmp" "${AGH_BINARY}"
+fi
 chmod 750 "${AGH_BINARY}"
 success "AdGuardHome ${LATEST_TAG} nach ${AGH_DIR} entpackt"
 
