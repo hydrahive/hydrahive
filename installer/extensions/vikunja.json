@@ -1,0 +1,13 @@
+{
+  "id": "vikunja",
+  "name": "Vikunja (Task Management)",
+  "description": "Self-hosted To-Do- und Projektmanagement-App — Kanban-Boards, Listen, Teams und Kalender in einem Single-Binary.",
+  "icon": "CheckSquare",
+  "category": "productivity",
+  "install_script": "extensions/install/vikunja.sh",
+  "uninstall_script": "extensions/uninstall/vikunja.sh",
+  "service": "vikunja",
+  "health_url": "http://127.0.0.1:3456/api/v1/info",
+  "open_url": ":3456/",
+  "installed_check": "/opt/vikunja"
+}

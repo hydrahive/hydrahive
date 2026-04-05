@@ -1,0 +1,13 @@
+{
+  "id": "bookstack",
+  "name": "BookStack (Wiki/Dokumentation)",
+  "description": "Strukturiertes Wiki mit Bücher-Kapitel-Seiten-Hierarchie — Markdown-Editor, Suche, Rollen und LDAP-Support.",
+  "icon": "BookOpen",
+  "category": "productivity",
+  "install_script": "extensions/install/bookstack.sh",
+  "uninstall_script": "extensions/uninstall/bookstack.sh",
+  "service": "nginx",
+  "health_url": "http://127.0.0.1:8500/",
+  "open_url": ":8500/",
+  "installed_check": "/opt/bookstack"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "pihole",
+  "name": "Pi-hole (DNS-Sinkhole)",
+  "description": "Netzwerkweiter Werbeblocker auf DNS-Ebene — blockiert Tracker und Malware-Domains für alle Geräte im Netzwerk.",
+  "icon": "ShieldOff",
+  "category": "network",
+  "install_script": "extensions/install/pihole.sh",
+  "uninstall_script": "extensions/uninstall/pihole.sh",
+  "service": "pihole-FTL",
+  "health_url": "http://127.0.0.1:8380/admin/",
+  "open_url": ":8380/admin/",
+  "installed_check": "/usr/local/bin/pihole"
+}
