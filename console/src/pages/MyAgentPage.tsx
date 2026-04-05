@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
-interface Message { id: string; role: "user"|"assistant"|"system"; content: string; tokenUsage?: { input: number; output: number; rounds?: number }; model?: string; isFallback?: boolean; }
+interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number }; model?: string; isFallback?: boolean; }
 
 interface AgentCfg {
   identity:        string;
@@ -220,8 +220,8 @@ export function MyAgentPage() {
       "/me/agent/session/history"
     ).then(d => {
       const loaded = d.messages
-        .filter(m => m.role === "user" || m.role === "assistant")
-        .map(m => mkMsg(m.role as "user"|"assistant", m.content));
+        .filter(m => m.role === "user" || m.role === "assistant" || m.role === "tool")
+        .map(m => mkMsg(m.role as any, m.content));
       if (loaded.length > 0) setMessages(loaded);
     }).catch(e => console.error("Failed to load agent session history", e));
     api.get<Record<string,unknown>>("/agents").then(d => {
@@ -366,7 +366,11 @@ export function MyAgentPage() {
             try {
               const evt = JSON.parse(line.slice(6));
               if (evt.text !== undefined) { setActiveTool(null); setMessages(ms => ms.map(m => m.id===asstMsg.id ? {...m,content:m.content+evt.text} : m)); }
-              else if (evt.tool_call !== undefined) setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
+              else if (evt.tool_call !== undefined) {
+                setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
+                const toolMsg = mkMsg("tool" as any, `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
+                setMessages(ms => [...ms, toolMsg]);
+              }
               else if (evt.done) {
                 const updates: Partial<Message> = {};
                 if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
@@ -611,6 +615,19 @@ export function MyAgentPage() {
                   )}
 
                   {(viewSession ? viewSession.messages : messages).map((msg) => {
+                    if (msg.role === "tool") {
+                      const [toolName, ...detailParts] = msg.content.split("|");
+                      const detail = detailParts.join("|");
+                      return (
+                        <div key={msg.id} className="flex justify-center">
+                          <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs text-primary/80 font-mono">
+                            <Terminal className="h-3 w-3 flex-shrink-0" />
+                            <span className="font-semibold">{toolName}</span>
+                            {detail && <span className="text-muted-foreground truncate max-w-[300px]">{detail}</span>}
+                          </div>
+                        </div>
+                      );
+                    }
                     if (msg.role === "system") return (
                       <div key={msg.id} className="flex justify-center">
                         <div className="flex max-w-[90%] items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

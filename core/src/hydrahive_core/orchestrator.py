@@ -829,7 +829,11 @@ class Orchestrator:
                                 ]
                                 cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
                                 for tc in msg.tool_calls:
-                                    yield f"data: {_json.dumps({'tool_call': tc.function.name})}\n\n"
+                                    _tc_args = _json.loads(tc.function.arguments or "{}")
+                                    _tc_detail = f"{tc.function.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc.function.name
+                                    yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+                                    # Tool-Call in Session speichern für Reload-Persistenz
+                                    await self._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
                                     args = _json.loads(tc.function.arguments or "{}")
                                     if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
                                         try:
@@ -994,7 +998,10 @@ class Orchestrator:
                             any_tool_error = False
                             _oauth_loaded_cats: set[str] = locals().get("_oauth_loaded_cats", set())  # type: ignore[assignment]
                             for block in tool_use_blocks:
-                                yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': block.input})}\n\n"
+                                _tc_input = block.input or {}
+                                _tc_detail = f"{block.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_input.items())})" if _tc_input else block.name
+                                yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
+                                await self._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id)
                                 # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
                                 if block.name == "request_tools":
                                     try:
@@ -1226,7 +1233,10 @@ class Orchestrator:
 
                             tool_results_text = []
                             for tc in tc_list:
-                                yield f"data: {_json.dumps({'tool_call': tc['name']})}\n\n"
+                                _tc_args = tc.get("args", {})
+                                _tc_detail = f"{tc['name']}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc['name']
+                                yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+                                await self._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
                                 tool = self._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
                                 try:
                                     tool_input = _json2.loads(_safe_args(tc["arguments"]))

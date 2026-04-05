@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 
 interface Message {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
   workers?: string[];
   tokenUsage?: { input: number; output: number; rounds?: number };
@@ -99,7 +99,7 @@ export function ChatPage() {
       .catch(e => console.error("Failed to load project config", e));
     api.sessionHistory(id)
       .then((d) => {
-        const loaded = d.messages.filter((m) => m.role === "user" || m.role === "assistant").map((m) => mkMsg(m.role as "user" | "assistant", m.content));
+        const loaded = d.messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool").map((m) => mkMsg(m.role as Message["role"], m.content));
         if (loaded.length > 0) setMessages(loaded);
       })
       .catch(e => console.error("Failed to load session history", e));
@@ -302,6 +302,9 @@ export function ChatPage() {
                 setMessages((ms) => ms.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m));
               } else if (evt.tool_call !== undefined) {
                 setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
+                // Tool-Call als eigene Message im Chat einfügen
+                const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
+                setMessages((ms) => [...ms, toolMsg]);
               } else if (evt.done) {
                 const updates: Partial<Message> = {};
                 if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
@@ -522,6 +525,19 @@ export function ChatPage() {
                 </div>
               )}
               {messages.map((msg) => {
+                if (msg.role === "tool") {
+                  const [toolName, ...detailParts] = msg.content.split("|");
+                  const detail = detailParts.join("|");
+                  return (
+                    <div key={msg.id} className="flex justify-center">
+                      <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs text-primary/80 font-mono">
+                        <Terminal className="h-3 w-3 flex-shrink-0" />
+                        <span className="font-semibold">{toolName}</span>
+                        {detail && <span className="text-muted-foreground truncate max-w-[300px]">{detail}</span>}
+                      </div>
+                    </div>
+                  );
+                }
                 if (msg.role === "system") {
                   return (
                     <div key={msg.id} className="flex justify-center">
