@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lightbulb, Copy, CheckCircle, ChevronDown, ChevronRight, Zap, Target, Layers, AlertTriangle, BookOpen, Settings2, Brain } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,17 @@ function Section({ title, icon: Icon, children, defaultOpen, id }: {
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const Chevron = open ? ChevronDown : ChevronRight;
+
+  // Öffne Section wenn via Modul-Button angescrollt wird
+  useEffect(() => {
+    if (!id) return;
+    const handler = (e: Event) => {
+      if ((e as CustomEvent).detail === id) setOpen(true);
+    };
+    window.addEventListener("prompt-guide-open", handler);
+    return () => window.removeEventListener("prompt-guide-open", handler);
+  }, [id]);
+
   return (
     <div id={id} className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
       <button onClick={() => setOpen(o => !o)}
@@ -106,7 +117,7 @@ export function PromptGuidePage() {
             { label: "HydraHive", icon: Settings2, anchor: "mod-hydrahive" },
             { label: de ? "Profi" : "Pro", icon: Brain, anchor: "mod-pro" },
           ].map(({ label, icon: Icon, anchor }) => (
-            <button key={label} onClick={() => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth" })}
+            <button key={label} onClick={() => { window.dispatchEvent(new CustomEvent("prompt-guide-open", { detail: anchor })); setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth" }), 50); }}
               className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer">
               <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="font-medium">{label}</span>
