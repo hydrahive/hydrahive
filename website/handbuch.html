@@ -6,9 +6,9 @@
   <title>HydraHive Handbuch</title>
   <style>
     :root {
-      --bg: #0a0e1a;
-      --bg2: #111827;
-      --accent: #06b6d4;
+      --bg: #0a1628;
+      --bg2: #121f33;
+      --accent: #4ade80;
       --text: #f1f5f9;
       --muted: #94a3b8;
       --card: #1e293b;
@@ -261,43 +261,47 @@
     <a href="#installation">1. Installation</a>
     <a href="#erster-login">2. Erster Login</a>
     <a href="#webkonsole">3. Webkonsole</a>
-    <a href="#agenten">4. Agenten anlegen</a>
-    <a href="#projekte">5. Projekte anlegen</a>
-    <a href="#chat">6. Chat verwenden</a>
-    <a href="#llm">7. LLM-Konfiguration</a>
-    <a href="#skills">8. Skills &amp; Skill-Pakete</a>
+    <div class="toc-section">Dashboard</div>
+    <a href="#aktivitaet">4. Aktivität (Tab)</a>
+    <a href="#api-usage">5. Usage &amp; Kosten (Tab)</a>
+    <a href="#audit">6. Audit-Log (Tab)</a>
     <div class="toc-section">Mein Agent</div>
-    <a href="#mein-agent">9. Persönlicher Agent</a>
-    <a href="#memory">10. Gedächtnis-System</a>
-    <a href="#wks">11. WKS-Zugang</a>
-    <div class="toc-section">Erweiterungen</div>
-    <a href="#git">12. Git-Tools</a>
-    <a href="#mcp">13. MCP-Server</a>
-    <a href="#webhooks">14. Webhooks</a>
+    <a href="#mein-agent">7. Persönlicher Agent</a>
+    <a href="#memory">8. Gedächtnis-System</a>
+    <a href="#wks">9. WKS-Zugang</a>
+    <a href="#whatsapp">10. Messenger (WhatsApp etc.)</a>
+    <a href="#butler">11. Butler — Automatisierung</a>
+    <div class="toc-section">Agenten</div>
+    <a href="#agenten">12. Agenten anlegen</a>
+    <a href="#skills">13. Skills</a>
+    <a href="#git">14. Git-Tools</a>
+    <a href="#mcp">15. MCP-Server</a>
+    <a href="#federation">16. A2A Federation (Tab)</a>
+    <div class="toc-section">Projekte</div>
+    <a href="#projekte">17. Projekte anlegen</a>
+    <a href="#schedules">18. Schedules (Tab)</a>
+    <a href="#webhooks">19. Webhooks</a>
+    <a href="#chat">20. Chat verwenden</a>
+    <div class="toc-section">Blueprint</div>
+    <a href="#blueprint">21. Blueprint &amp; Pipelines</a>
+    <a href="#notifications">22. Benachrichtigungen</a>
+    <div class="toc-section">Hub</div>
+    <a href="#extensions">23. Extensions &amp; Plugins</a>
+    <a href="#searxng">24. Web-Suche (SearXNG)</a>
+    <a href="#code-editor">25. Code Editor</a>
+    <a href="#vaultwarden">26. Vaultwarden</a>
+    <div class="toc-section">System</div>
+    <a href="#matrix">27. Matrix-Integration</a>
+    <a href="#gpu">28. GPU-Monitoring</a>
+    <a href="#diagnose">29. Diagnose &amp; Tests</a>
+    <a href="#update">30. System-Update</a>
+    <a href="#troubleshooting">31. Troubleshooting</a>
     <div class="toc-section">Administration</div>
-    <a href="#benutzer">15. Benutzer & Rollen</a>
-    <a href="#backup">16. Backup & Restore</a>
-    <a href="#audit">17. Audit-Log</a>
-    <a href="#matrix">18. Matrix-Integration</a>
-    <a href="#gpu">19. GPU-Monitoring</a>
-    <a href="#update">20. System-Update</a>
-    <a href="#discord">21. Discord</a>
-    <a href="#aktivitaet">22. Aktivität (Live Monitor)</a>
-    <a href="#api-usage">23. API Usage & Kosten</a>
-    <a href="#diagnose">24. Diagnose & Tests</a>
-    <a href="#troubleshooting">25. Troubleshooting</a>
-    <div class="toc-section">Messenger &amp; Automatisierung</div>
-    <a href="#whatsapp">26. WhatsApp</a>
-    <a href="#butler">27. Butler — Automatisierung</a>
-    <a href="#schedules">28. Schedules</a>
-    <div class="toc-section">Erweiterungs-Module</div>
-    <a href="#extensions">29. Erweiterungs-Manager</a>
-    <a href="#searxng">30. Web-Suche (SearXNG)</a>
-    <a href="#code-editor">31. Code Editor</a>
-    <a href="#vaultwarden">32. Vaultwarden</a>
-    <div class="toc-section">Verbund &amp; Benachrichtigungen</div>
-    <a href="#federation">33. A2A Federation</a>
-    <a href="#notifications">34. Benachrichtigungen</a>
+    <a href="#benutzer">32. Benutzer &amp; Rollen</a>
+    <a href="#backup">33. Backup &amp; Restore</a>
+    <div class="toc-section">Einstellungen</div>
+    <a href="#llm">34. LLM-Konfiguration</a>
+    <a href="#discord">35. Discord</a>
   </nav>
 </aside>
 
@@ -360,25 +364,22 @@ certbot --nginx -d mein.domain.de</code></pre>
     <p>Die Konsole ist unter <code>https://&lt;IP&gt;</code> erreichbar. Alle Bereiche sind über die linke Sidebar zugänglich:</p>
     <table>
       <tr><th>Bereich</th><th>Funktion</th><th>Zugriff</th></tr>
-      <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status</td><td>alle</td></tr>
-      <tr><td><strong>Mein Agent</strong></td><td>Persönlicher Agent: Chat, Einstellungen, Skills, WKS</td><td>alle</td></tr>
-      <tr><td><strong>Agenten</strong></td><td>Agenten anlegen, bearbeiten, Logs und Skills verwalten</td><td>alle (Schreiben: admin)</td></tr>
-      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten</td><td>alle (Schreiben: admin)</td></tr>
-      <tr><td><strong>Aktivität</strong></td><td>Live-Übersicht aller aktiven Agenten mit Notfall-Stop und Detail-Logs</td><td>alle</td></tr>
-      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose & Tests</td><td>alle</td></tr>
-      <tr><td><strong>Tools</strong></td><td>Verfügbare Tools anzeigen</td><td>alle</td></tr>
-      <tr><td><strong>Einstellungen</strong></td><td>LLM, MCP-Server, Gitea, VPN und Mail/KAS konfigurieren (Tab-basiert)</td><td>admin</td></tr>
-      <tr><td><strong>Benutzer</strong></td><td>Benutzer anlegen und verwalten</td><td>admin</td></tr>
-      <tr><td><strong>Backup</strong></td><td>Backups erstellen, herunterladen und wiederherstellen</td><td>admin</td></tr>
-      <tr><td><strong>Audit-Log</strong></td><td>Alle sicherheitsrelevanten Aktionen nachverfolgen</td><td>admin</td></tr>
-      <tr><td><strong>API Usage</strong></td><td>Token-Verbrauch und API-Kosten nach Projekt und Modell</td><td>admin</td></tr>
-      <tr><td><strong>Update</strong></td><td>System auf neuesten Stand bringen (Sidebar-Button)</td><td>admin</td></tr>
+      <tr><td><strong>Dashboard</strong></td><td>Überblick über Agenten, Projekte, System-Status — mit Tabs: Aktivität, Usage, Audit</td><td>alle</td></tr>
+      <tr><td><strong>Mein Agent</strong></td><td>Persönlicher Agent: Chat, Heartbeat, Messenger (WhatsApp/Discord/Telegram), WKS, Butler, Mein Konto</td><td>alle</td></tr>
+      <tr><td><strong>Agenten</strong></td><td>Agenten anlegen und bearbeiten — Tabs: CRUD, Tools, Plugins, Federation, Blueprint</td><td>alle (Schreiben: admin)</td></tr>
+      <tr><td><strong>Projekte</strong></td><td>Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten — Tab: Schedules</td><td>alle (Schreiben: admin)</td></tr>
+      <tr><td><strong>Blueprint</strong></td><td>Visuelle Automatisierung: Pipelines, Architect, Workflow, Scratchpad, Benachrichtigungen</td><td>alle</td></tr>
+      <tr><td><strong>Hub</strong></td><td>HydraHub, Extensions, Plugins und Skill-Pakete installieren und verwalten</td><td>alle (Installieren: admin)</td></tr>
+      <tr><td><strong>HydraBrain</strong></td><td>KI-Gedächtnis und gemeinsame Wissensdatenbank</td><td>alle</td></tr>
+      <tr><td><strong>System</strong></td><td>Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose &amp; Tests</td><td>alle</td></tr>
+      <tr><td><strong>User-Verwaltung</strong></td><td>Benutzer, Gruppen, Secrets und Berechtigungen verwalten</td><td>admin</td></tr>
+      <tr><td><strong>Settings</strong></td><td>LLM, Gitea, GitHub, VPN, Mail, Backup und Migration konfigurieren (Tab-basiert)</td><td>admin</td></tr>
     </table>
   </section>
 
-  <!-- 4. AGENTEN -->
+  <!-- 12. AGENTEN -->
   <section class="chapter" id="agenten">
-    <h2>4. Agenten anlegen</h2>
+    <h2>12. Agenten anlegen</h2>
     <p>Agenten sind KI-Persönlichkeiten die Aufgaben ausführen. Jeder Agent hat einen Typ, ein Sprachmodell und optional eine "Soul" (Persönlichkeitsbeschreibung).</p>
 
     <h3>Agent-Typen</h3>
@@ -488,9 +489,9 @@ heartbeat_tasks:
     <p>Geblockte Befehle werden mit einer Fehlermeldung abgelehnt und im Log protokolliert.</p>
   </section>
 
-  <!-- 5. PROJEKTE -->
+  <!-- 17. PROJEKTE -->
   <section class="chapter" id="projekte">
-    <h2>5. Projekte anlegen</h2>
+    <h2>17. Projekte anlegen</h2>
     <p>Ein Projekt ist ein isolierter Arbeitsbereich: eigener Linux-User, eigenes Verzeichnis, optionale Samba-Freigabe, optionaler Matrix-Room.</p>
 
     <h3>Projekt anlegen (Konsole)</h3>
@@ -542,9 +543,9 @@ chat:
   show_swarm: false    # true = Worker im Chat anzeigen</code></pre>
   </section>
 
-  <!-- 6. CHAT -->
+  <!-- 20. CHAT -->
   <section class="chapter" id="chat">
-    <h2>6. Chat verwenden</h2>
+    <h2>20. Chat verwenden</h2>
     <ol class="steps">
       <li><span class="step-num">1</span><span><strong>Projekte</strong> → <strong>Chat öffnen</strong> beim gewünschten Projekt</span></li>
       <li><span class="step-num">2</span><span>Nachricht eingeben und <code>Enter</code> drücken (oder <code>Shift+Enter</code> für Zeilenumbruch)</span></li>
@@ -579,12 +580,12 @@ chat:
     <p><strong>Bedienung:</strong> Pfeiltasten zum Navigieren, <code>Tab</code> oder <code>Enter</code> zum Auswählen, <code>Escape</code> schließt das Dropdown.</p>
   </section>
 
-  <!-- 7. LLM -->
+  <!-- 34. LLM -->
   <section class="chapter" id="llm">
-    <h2>7. LLM-Konfiguration</h2>
+    <h2>34. LLM-Konfiguration</h2>
 
     <h3>Ollama (lokal, kostenfrei)</h3>
-    <p>Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über <strong>LLM-Config</strong> → <strong>Ollama</strong> verwaltet.</p>
+    <p>Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über <strong>Settings</strong> → <strong>LLM</strong> → <strong>Ollama</strong> verwaltet.</p>
     <p>Empfohlene Modelle:</p>
     <ul>
       <li><code>llama3.2:3b</code> — schnell, wenig RAM (4 GB)</li>
@@ -595,7 +596,7 @@ chat:
     <h3>Claude Max (OAuth)</h3>
     <p>Für Claude-Modelle via Claude Max Abonnement:</p>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>LLM-Config</strong> → <strong>Claude Max</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Settings</strong> → <strong>LLM</strong> → <strong>Claude Max</strong></span></li>
       <li><span class="step-num">2</span><span>OAuth-Token einfügen (<code>sk-ant-oat01-...</code>)</span></li>
       <li><span class="step-num">3</span><span>Speichern</span></li>
     </ol>
@@ -603,19 +604,19 @@ chat:
 
     <h3>OpenAI / andere Anbieter</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>LLM-Config</strong> → <strong>Anbieter konfigurieren</strong></span></li>
+      <li><span class="step-num">1</span><span><strong>Settings</strong> → <strong>LLM</strong> → <strong>Anbieter konfigurieren</strong></span></li>
       <li><span class="step-num">2</span><span>API-Key und Modell eintragen</span></li>
     </ol>
   </section>
 
-  <!-- 8. SKILLS -->
+  <!-- 13. SKILLS -->
   <section class="chapter" id="skills">
-    <h2>8. Skills — Agenten-Wissen erweitern</h2>
+    <h2>13. Skills — Agenten-Wissen erweitern</h2>
     <p>Skills sind Markdown-Dateien die dem Agenten zusätzliches Wissen geben. Sie werden automatisch in den System-Prompt geladen.</p>
 
     <h3>Skill anlegen (Konsole)</h3>
     <ol class="steps">
-      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → <strong>Skills</strong> (Buch-Icon)</span></li>
+      <li><span class="step-num">1</span><span><strong>Agenten</strong> → Agent auswählen → Tab <strong>Tools</strong> → Bereich <strong>Skills</strong></span></li>
       <li><span class="step-num">2</span><span><strong>Neuer Skill</strong></span></li>
       <li><span class="step-num">3</span><span>Dateiname, Skill-Name, Scope, Trigger-Keywords, Priority und Inhalt ausfüllen</span></li>
     </ol>
@@ -645,8 +646,8 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
 
     <div class="note"><strong>Hot-Reload:</strong> Skills werden bei jedem Request neu eingelesen. Kein Neustart notwendig.</div>
 
-    <h3>Skill-Pakete (Blueprint Editor)</h3>
-    <p>Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Der visuelle Blueprint Editor ist unter <strong>Skill-Pakete</strong> in der Sidebar erreichbar.</p>
+    <h3>Skill-Pakete (Hub)</h3>
+    <p>Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Sie sind über <strong>Hub</strong> → Tab <strong>Skill-Pakete</strong> erreichbar und können von dort direkt einem Agenten zugewiesen werden.</p>
     <table>
       <tr><th>Knoten</th><th>Beschreibung</th></tr>
       <tr><td><strong>Skill</strong></td><td>Ein konkreter Skill aus der Skill-Liste</td></tr>
@@ -657,16 +658,28 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
     <p>Aktive Pakete werden automatisch beim Laden des Agenten-Kontexts einbezogen. Pakete liegen unter <code>/etc/hydrahive/skill_packages/</code>.</p>
   </section>
 
-  <!-- 9. PERSÖNLICHER AGENT -->
+  <!-- 7. PERSÖNLICHER AGENT -->
   <section class="chapter" id="mein-agent">
-    <h2>9. Persönlicher Agent (Mein Agent)</h2>
+    <h2>7. Persönlicher Agent (Mein Agent)</h2>
     <p>Jeder User bekommt automatisch einen persönlichen Agenten — <code>personal_&lt;username&gt;</code>. Dieser Agent läuft unabhängig von Projekten und ist direkt über <strong>Mein Agent</strong> in der Sidebar erreichbar.</p>
 
     <h3>Chat</h3>
     <p>Der Chat unter <strong>Mein Agent → Chat</strong> funktioniert wie der Projekt-Chat: Streaming, History, Slash Commands. Der Agent merkt sich den Gesprächsverlauf sessionübergreifend.</p>
 
-    <h3>Einstellungen</h3>
-    <p>Unter <strong>Mein Agent → Einstellungen</strong> kann jeder User seinen Agenten selbst konfigurieren:</p>
+    <h3>Heartbeat</h3>
+    <p>Der Heartbeat-Tab zeigt den Live-Status des persönlichen Agenten: letzte Aktivität, Intervall, aktive Aufgaben.</p>
+
+    <h3>Messenger</h3>
+    <p>Unter <strong>Mein Agent → Messenger</strong> sind alle Messenger-Integrationen als Akkordeon zusammengefasst: WhatsApp, Telegram, Discord, Matrix. Jede Plattform lässt sich direkt hier einrichten und aktivieren.</p>
+
+    <h3>WKS</h3>
+    <p>Workstation-Zugang einrichten — SSH-Verbindung zur eigenen Workstation. Details siehe <a href="#wks">Abschnitt 9</a>.</p>
+
+    <h3>Butler</h3>
+    <p>Visuelle Automatisierungsregeln für eingehende Messenger-Nachrichten. Details siehe <a href="#butler">Abschnitt 11</a>.</p>
+
+    <h3>Mein Konto</h3>
+    <p>Unter <strong>Mein Agent → Mein Konto</strong> kann jeder User seinen Agenten selbst konfigurieren:</p>
     <table>
       <tr><th>Einstellung</th><th>Beschreibung</th></tr>
       <tr><td><strong>Name / Identität</strong></td><td>Anzeigename des Agenten</td></tr>
@@ -678,12 +691,12 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
       <tr><td><strong>Tools</strong></td><td>Welche Tools der Agent nutzen darf</td></tr>
     </table>
 
-    <div class="note">Der persönliche Agent hat zusätzliche Tabs: <strong>Skills</strong> (eigenes Wissen anlegen), <strong>MCP</strong> (externe Tool-Server zuweisen) und <strong>WKS</strong> (Workstation-Zugang konfigurieren).</div>
+    <div class="note">Persönliche Agenten sind auf der <strong>Agenten</strong>-Seite sichtbar und können dort ebenfalls bearbeitet werden — genauso wie andere Agenten.</div>
   </section>
 
-  <!-- 10. MEMORY -->
+  <!-- 8. MEMORY -->
   <section class="chapter" id="memory">
-    <h2>10. Gedächtnis-System (Memory)</h2>
+    <h2>8. Gedächtnis-System (Memory)</h2>
     <p>Das Gedächtnis-System ermöglicht Agenten, Informationen persistent über Sessions hinaus zu speichern und beim nächsten Start automatisch zu laden.</p>
 
     <h3>Funktionsweise</h3>
@@ -708,9 +721,9 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.</code></pre>
 → Liefert nur relevante Abschnitte</code></pre>
   </section>
 
-  <!-- 11. WKS -->
+  <!-- 9. WKS -->
   <section class="chapter" id="wks">
-    <h2>11. WKS-Zugang (Workstation)</h2>
+    <h2>9. WKS-Zugang (Workstation)</h2>
     <p>Persönliche Agenten können via SSH auf die eigene Workstation des Users zugreifen — Dateien lesen/schreiben und Befehle ausführen.</p>
 
     <h3>WKS einrichten</h3>
@@ -736,7 +749,7 @@ sudo systemctl enable --now ssh</code></pre>
       <tr><td><code>wks_file_read</code></td><td>Datei von der WKS lesen (absoluter Pfad)</td></tr>
       <tr><td><code>wks_file_write</code></td><td>Datei auf die WKS schreiben (absoluter Pfad)</td></tr>
     </table>
-    <div class="note">WKS-Tools müssen unter <strong>Mein Agent → Einstellungen → Tools</strong> aktiviert werden.</div>
+    <div class="note">WKS-Tools müssen unter <strong>Mein Agent → Mein Konto → Tools</strong> aktiviert werden.</div>
 
     <h3>WKS-Ollama</h3>
     <p>Wenn Ollama auf der Workstation läuft und von außen erreichbar ist, erscheinen WKS-Modelle im Modell-Dropdown als <code>WKS: &lt;modellname&gt;</code>:</p>
@@ -747,13 +760,13 @@ Environment="OLLAMA_HOST=0.0.0.0:11434"' | sudo tee /etc/systemd/system/ollama.s
 sudo systemctl daemon-reload && sudo systemctl restart ollama</code></pre>
   </section>
 
-  <!-- 12. GIT -->
+  <!-- 14. GIT -->
   <section class="chapter" id="git">
-    <h2>12. Git-Tools</h2>
+    <h2>14. Git-Tools</h2>
     <p>Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits erstellen und Pull Requests öffnen.</p>
 
     <h3>Gitea konfigurieren</h3>
-    <p>Unter <strong>LLM-Config → Gitea</strong> oder direkt in <code>/etc/hydrahive/gitea_config.json</code>:</p>
+    <p>Unter <strong>Settings</strong> → <strong>Gitea</strong> oder direkt in <code>/etc/hydrahive/gitea_config.json</code>:</p>
     <pre><code>{
   "url": "http://192.168.1.100:3001",
   "token": "dein-gitea-token",
