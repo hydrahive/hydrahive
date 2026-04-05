@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lightbulb, Copy, CheckCircle, ChevronDown, ChevronRight, Zap, Target, Layers, AlertTriangle, BookOpen } from "lucide-react";
+import { Lightbulb, Copy, CheckCircle, ChevronDown, ChevronRight, Zap, Target, Layers, AlertTriangle, BookOpen, Settings2, Brain } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 /* ── Collapsible Section ──────────────────────────────────────── */
@@ -91,6 +91,26 @@ export function PromptGuidePage() {
               {de ? "So holst du das Beste aus deinem KI-Agenten heraus." : "How to get the best results from your AI agent."}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* ── Progress Tracker ── */}
+      <div className="rounded-xl border bg-card px-5 py-4">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+          {de ? "Module" : "Modules"}
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: de ? "Grundlagen" : "Basics", icon: Zap },
+            { label: de ? "Techniken" : "Techniques", icon: Target },
+            { label: "HydraHive", icon: Settings2 },
+            { label: de ? "Profi" : "Pro", icon: Brain },
+          ].map(({ label, icon: Icon }) => (
+            <div key={label} className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs">
+              <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="font-medium">{label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -274,11 +294,162 @@ export function PromptGuidePage() {
           />
         </div>
       </Section>
+
+      {/* ���─ Module 3: HydraHive-spezifisch ── */}
+      <Section title={de ? "HydraHive meistern" : "Mastering HydraHive"} icon={Settings2}>
+        <div className="space-y-5 mt-3 text-sm">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {de ? "Soul.md schreiben" : "Writing Soul.md"}
+            </p>
+            <div className="space-y-3">
+              <Tip emoji="🎭" title={de ? "Rolle klar definieren" : "Define the Role Clearly"}
+                desc={de
+                  ? "\"Du bist ein DevOps-Spezialist der ...\" — gibt der KI eine klare Identität und Expertise."
+                  : "\"You are a DevOps specialist who...\" — gives the AI a clear identity and expertise."}
+              />
+              <Tip emoji="🚧" title={de ? "Grenzen setzen" : "Set Boundaries"}
+                desc={de
+                  ? "\"Du darfst KEINE Dateien außerhalb von /projects/ ändern\" — verhindert ungewollte Aktionen."
+                  : "\"You MUST NOT modify any files outside /projects/\" — prevents unwanted actions."}
+              />
+              <Tip emoji="🗣️" title={de ? "Ton vorgeben" : "Define the Tone"}
+                desc={de
+                  ? "\"Antworte kurz und technisch, keine Smalltalk\" — steuert Stil und Länge der Antworten."
+                  : "\"Reply concisely and technically, no small talk\" — controls response style and length."}
+              />
+              <Tip emoji="🔧" title={de ? "Tools steuern" : "Control Tool Usage"}
+                desc={de
+                  ? "\"Nutze immer zuerst file_read bevor du file_write verwendest\" — legt Reihenfolge und Sorgfalt fest."
+                  : "\"Always use file_read before file_write\" — enforces order and care when accessing files."}
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {de ? "Skills richtig aufbauen" : "Building Skills Correctly"}
+            </p>
+            <div className="space-y-3">
+              <Tip emoji="⚡" title="scope: always vs. on-demand"
+                desc={de
+                  ? "always für Kern-Wissen das immer gebraucht wird, on-demand für Spezialthemen — spart Token-Budget."
+                  : "always for core knowledge needed every time, on-demand for specialty topics — saves token budget."}
+              />
+              <Tip emoji="🏷️" title={de ? "Trigger-Keywords bewusst wählen" : "Choose Trigger Keywords Deliberately"}
+                desc={de
+                  ? "Spezifische Keywords wie \"docker\", \"deployment\" statt generisches \"hilf mir\" — verhindert versehentliches Laden."
+                  : "Specific keywords like \"docker\", \"deployment\" instead of generic \"help me\" — prevents accidental loading."}
+              />
+              <Tip emoji="📊" title={de ? "Skill-Priorität nutzen" : "Use Skill Priority"}
+                desc={de
+                  ? "Niedrigere Zahl = wird zuerst geladen. Grundlagen auf 10, Spezial-Skills auf 50+."
+                  : "Lower number = loaded first. Foundation skills at 10, specialty skills at 50+."}
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {de ? "Memory effektiv nutzen" : "Using Memory Effectively"}
+            </p>
+            <div className="space-y-3">
+              <Tip emoji="✅" title={de ? "Was rein soll" : "What Belongs in Memory"}
+                desc={de
+                  ? "Entscheidungen, Kontext, Projektstatus — Dinge die beim nächsten Start relevant sind."
+                  : "Decisions, context, project status — things relevant at the next session start."}
+              />
+              <Tip emoji="❌" title={de ? "Was NICHT rein soll" : "What Does NOT Belong"}
+                desc={de
+                  ? "Code-Snippets, Debug-Infos, Log-Ausgaben — veralten schnell und fressen Token."
+                  : "Code snippets, debug info, log output — these go stale quickly and waste tokens."}
+              />
+            </div>
+            <Example
+              bad={de ? "Speichere dir den ganzen Code" : "Save the entire code for yourself"}
+              good={de
+                ? "Merke dir: Wir haben uns für PostgreSQL statt SQLite entschieden weil wir Multi-User brauchen. Migration am 2024-01-15 durchgeführt."
+                : "Remember: We chose PostgreSQL over SQLite because we need multi-user support. Migration done on 2024-01-15."}
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Execution Modes</p>
+            <div className="space-y-3">
+              <Tip emoji="🟢" title="safe"
+                desc={de ? "Standard-Modus, kein sudo — für normale Datei- und Code-Operationen." : "Default mode, no sudo — for normal file and code operations."} />
+              <Tip emoji="🟡" title="elevated"
+                desc={de ? "sudo für systemctl, chown etc. — wenn Dienste oder Berechtigungen geändert werden." : "sudo for systemctl, chown etc. — when services or permissions need changing."} />
+              <Tip emoji="🔴" title="root"
+                desc={de ? "Voller Zugriff — nur für Installer/Admin-Tasks, mit Bedacht einsetzen." : "Full access — only for installer/admin tasks, use with care."} />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Module 4: Profi-Techniken ── */}
+      <Section title={de ? "Profi-Techniken" : "Pro Techniques"} icon={Brain}>
+        <div className="space-y-5 mt-3 text-sm">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {de ? "Token-Budget sparen" : "Saving Token Budget"}
+            </p>
+            <div className="space-y-3">
+              <Tip emoji="🧹" title={de ? "/clear bei Themenwechsel" : "/clear When Switching Topics"}
+                desc={de
+                  ? "Lange Konversationen verbrauchen Budget für alten Kontext. /clear startet frisch."
+                  : "Long conversations spend budget on old context. /clear starts fresh."} />
+              <Tip emoji="📄" title={de ? "Nur nötige Zeilen lesen" : "Read Only What You Need"}
+                desc={de
+                  ? "\"Lies nur Zeile 50–100\" statt die ganze Datei — spart erheblich Token."
+                  : "\"Read only lines 50–100\" instead of the whole file — saves significant tokens."} />
+              <Tip emoji="💡" title="/compact"
+                desc={de
+                  ? "Nutzt eine KI-Zusammenfassung um den Kontext zu schrumpfen ohne das Gespräch zu verlieren."
+                  : "Uses an AI summary to shrink the context without losing the conversation thread."} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Multi-Agent</p>
+            <div className="space-y-3">
+              <Tip emoji="👑" title={de ? "Boss-Agent = Koordinator" : "Boss Agent = Coordinator"}
+                desc={de
+                  ? "Soul: \"Du delegierst Aufgaben an Worker. Fasse Ergebnisse zusammen und behalte den Überblick.\""
+                  : "Soul: \"You delegate tasks to workers. Summarize results and keep the overview.\""} />
+              <Tip emoji="⚙️" title={de ? "Worker = Spezialist" : "Worker = Specialist"}
+                desc={de
+                  ? "Soul: \"Du bist Experte für [X]. Antworte nur zu deinem Fachgebiet, kurz und präzise.\""
+                  : "Soul: \"You are an expert in [X]. Only answer within your domain, brief and precise.\""} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              {de ? "Anti-Patterns vermeiden" : "Avoid Anti-Patterns"}
+            </p>
+            <Example
+              bad={de ? "Mach alles auf einmal: analysiere, plane, implementiere, teste" : "Do everything at once: analyze, plan, implement, test"}
+              good={de
+                ? "Schritt 1: Analysiere die aktuelle Struktur. Zeig mir was du findest, dann besprechen wir den Plan."
+                : "Step 1: Analyze the current structure. Show me what you find, then we'll discuss the plan."} />
+            <Example
+              bad={de ? "Du bist der beste Programmierer der Welt" : "You are the best programmer in the world"}
+              good={de
+                ? "Du bist ein Python-Backend-Entwickler. Du nutzt FastAPI, SQLAlchemy und pytest."
+                : "You are a Python backend developer. You use FastAPI, SQLAlchemy, and pytest."} />
+            <Tip emoji="⚠️" title={de ? "\"Mach es besser\" ist kein Prompt" : "\"Make it better\" is not a prompt"}
+              desc={de
+                ? "Sag WAS besser sein soll: \"Mach die Fehlerbehandlung robuster: alle Exceptions loggen, Fallback-Wert zurückgeben.\""
+                : "Say WHAT should be better: \"Make error handling more robust: log all exceptions, return a fallback value.\""} />
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }
 
-/* ── Helper Components ────────────────────────────────────────── */
+/* ── Helper Components ─���──────────────────────────────────────── */
 
 function Rule({ n, title, desc }: { n: number; title: string; desc: string }) {
   return (
