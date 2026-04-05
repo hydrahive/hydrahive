@@ -226,27 +226,40 @@ def register_plugin_routes(
                 app_id_dexcom = "d89443d2-327c-4a6f-89e5-496bbb0317db"
 
                 # Login
-                async with httpx.AsyncClient(timeout=10) as client:
+                async with httpx.AsyncClient(timeout=15, verify=False) as client:
                     r = await client.post(f"{base}/General/LoginPublisherAccountByName", json={
                         "accountName": cfg["dexcom_username"],
                         "password": cfg["dexcom_password"],
                         "applicationId": app_id_dexcom,
                     })
                 if r.status_code != 200:
-                    raise HTTPException(502, f"Dexcom Login fehlgeschlagen (HTTP {r.status_code})")
-                session_id = r.text.strip('"')
+                    body = r.text[:300] if r.text else "(leer)"
+                    raise HTTPException(502, f"Dexcom Login fehlgeschlagen (HTTP {r.status_code}): {body}")
+                session_id = r.text.strip().strip('"')
+                if not session_id or len(session_id) < 10:
+                    raise HTTPException(502, f"Dexcom Login: ungültige Session-ID: {r.text[:100]}")
 
                 # Readings
-                async with httpx.AsyncClient(timeout=10) as client:
+                async with httpx.AsyncClient(timeout=15, verify=False) as client:
                     r = await client.post(f"{base}/Publisher/ReadPublisherLatestGlucoseValues", params={
                         "sessionId": session_id, "minutes": minutes, "maxCount": count,
                     })
                 if r.status_code != 200:
-                    raise HTTPException(502, "Dexcom Readings fehlgeschlagen")
+                    body = r.text[:300] if r.text else "(leer)"
+                    raise HTTPException(502, f"Dexcom Readings fehlgeschlagen (HTTP {r.status_code}): {body}")
+
+                # Sicheres JSON-Parsing
+                try:
+                    raw_readings = r.json()
+                except Exception:
+                    raise HTTPException(502, f"Dexcom API liefert kein JSON: {r.text[:200]}")
+
+                if not isinstance(raw_readings, list):
+                    raise HTTPException(502, f"Dexcom API: unerwartetes Format (erwartet Array): {str(raw_readings)[:200]}")
 
                 trend_arrows = {0:"?",1:"↑↑",2:"↑",3:"↗",4:"→",5:"↘",6:"↓",7:"↓↓",8:"?",9:"?"}
                 readings = []
-                for rd in r.json():
+                for rd in raw_readings:
                     ts_str = rd.get("WT", "")
                     ts_ms = int(ts_str.replace("/Date(", "").replace(")/", "")) if "Date" in ts_str else 0
                     readings.append({
