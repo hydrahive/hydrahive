@@ -67,27 +67,33 @@ curl -fSL "${DL_URL}" -o "/tmp/vikunja.zip" \
 # Prüfsumme verifizieren
 CHECKSUM_URL="https://github.com/go-vikunja/vikunja/releases/download/${LATEST_VERSION}/vikunja-${LATEST_VERSION}-linux-amd64-full.zip.sha256"
 if curl -fsSL "${CHECKSUM_URL}" -o "/tmp/vikunja.zip.sha256" 2>/dev/null; then
-    EXPECTED_HASH="$(awk '{print $1}' /tmp/vikunja.gz.sha256)"
-    ACTUAL_HASH="$(sha256sum /tmp/vikunja.gz | awk '{print $1}')"
+    EXPECTED_HASH="$(awk '{print $1}' /tmp/vikunja.zip.sha256)"
+    ACTUAL_HASH="$(sha256sum /tmp/vikunja.zip | awk '{print $1}')"
     if [ -n "${EXPECTED_HASH}" ] && [ "${EXPECTED_HASH}" != "${ACTUAL_HASH}" ]; then
-        rm -f /tmp/vikunja.gz /tmp/vikunja.gz.sha256
+        rm -f /tmp/vikunja.zip /tmp/vikunja.zip.sha256
         error "SHA256-Prüfsumme stimmt NICHT überein!"
     fi
     success "SHA256-Prüfsumme korrekt: ${ACTUAL_HASH:0:16}..."
-    rm -f /tmp/vikunja.gz.sha256
+    rm -f /tmp/vikunja.zip.sha256
 else
     warn "Checksum-Datei nicht verfügbar — überspringe Verifikation"
 fi
 
-info "Entpacke Binary..."
-gunzip -f /tmp/vikunja.gz
-# Ergebnis ist /tmp/vikunja (Binary ohne .gz)
-if [ ! -f /tmp/vikunja ] && [ -f "/tmp/${BINARY_FILENAME}" ]; then
-    mv "/tmp/${BINARY_FILENAME}" /tmp/vikunja
+info "Entpacke ZIP..."
+rm -rf /tmp/vikunja-extract
+mkdir -p /tmp/vikunja-extract
+unzip -o -q /tmp/vikunja.zip -d /tmp/vikunja-extract
+rm -f /tmp/vikunja.zip
+
+# Binary finden (kann vikunja oder Vikunja heißen)
+FOUND_BIN="$(find /tmp/vikunja-extract -name 'vikunja' -type f -executable | head -1)"
+if [ -z "${FOUND_BIN}" ]; then
+    FOUND_BIN="$(find /tmp/vikunja-extract -name 'vikunja*' -type f | head -1)"
 fi
-[ -f /tmp/vikunja ] || error "Entpacktes Binary nicht gefunden"
-mv /tmp/vikunja "${VIKUNJA_BINARY}"
+[ -n "${FOUND_BIN}" ] || error "Binary nicht im ZIP gefunden"
+mv "${FOUND_BIN}" "${VIKUNJA_BINARY}"
 chmod 755 "${VIKUNJA_BINARY}"
+rm -rf /tmp/vikunja-extract
 success "Vikunja ${LATEST_VERSION} installiert: ${VIKUNJA_BINARY}"
 
 # --- System-User ---
