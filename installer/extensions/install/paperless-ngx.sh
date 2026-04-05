@@ -158,6 +158,9 @@ chown -R "${PAPERLESS_USER}:${PAPERLESS_USER}" "${PAPERLESS_DATA}"
 chown -R "${PAPERLESS_USER}:${PAPERLESS_USER}" "${PAPERLESS_DIR}"
 success "Daten-Verzeichnisse angelegt"
 
+# Server-IP ermitteln (für PAPERLESS_URL + CORS)
+_SERVER_IP="$(hostname -I | awk '{print $1}')"
+
 # --- paperless.conf ---
 SECRET_KEY="$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 50)"
 cat > "${PAPERLESS_DIR}/paperless.conf" << CONFEOF
@@ -182,7 +185,8 @@ PAPERLESS_OCR_MODE=skip
 PAPERLESS_TIKA_ENABLED=false
 PAPERLESS_ENABLE_HTTP_REMOTE_USER=false
 PAPERLESS_ALLOWED_HOSTS=*
-PAPERLESS_CORS_ALLOWED_HOSTS=*
+PAPERLESS_URL=http://${_SERVER_IP}:${PAPERLESS_PORT}
+PAPERLESS_CORS_ALLOWED_HOSTS=http://${_SERVER_IP}:${PAPERLESS_PORT},http://localhost:${PAPERLESS_PORT},http://127.0.0.1:${PAPERLESS_PORT}
 CONFEOF
 chown "${PAPERLESS_USER}:${PAPERLESS_USER}" "${PAPERLESS_DIR}/paperless.conf"
 chmod 640 "${PAPERLESS_DIR}/paperless.conf"
