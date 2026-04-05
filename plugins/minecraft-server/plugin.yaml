@@ -12,10 +12,10 @@ config_fields:
     label: Server Host
     type: string
   - key: port
-    label: Server Port (default: 25565)
+    label: "Server Port (default: 25565)"
     type: number
   - key: rcon_port
-    label: RCON Port (default: 25575)
+    label: "RCON Port (default: 25575)"
     type: number
   - key: rcon_password
     label: RCON Password

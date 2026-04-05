@@ -12,17 +12,17 @@ config_fields:
     label: Server Host
     type: string
   - key: port
-    label: Query Port (default: 2457)
+    label: "Query Port (default: 2457)"
     type: number
   - key: server_name
-    label: Server Name (für Prozess-Suche)
+    label: "Server Name (für Prozess-Suche)"
     type: string
   - key: save_dir
-    label: Save Directory (z.B. /home/valheim/.config/unity3d/IronGate/Valheim/worlds)
+    label: "Save Directory"
     type: string
   - key: backup_dir
     label: Backup Directory
     type: string
   - key: service_name
-    label: Systemd Service Name (z.B. valheim)
+    label: "Systemd Service Name (z.B. valheim)"
     type: string

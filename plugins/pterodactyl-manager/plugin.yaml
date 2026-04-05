@@ -9,7 +9,7 @@ permissions: []
 auto_attach: false
 config_fields:
   - key: base_url
-    label: Pterodactyl Base URL (z.B. https://panel.example.com)
+    label: "Pterodactyl Base URL"
     type: string
   - key: api_key
     label: Client API Key

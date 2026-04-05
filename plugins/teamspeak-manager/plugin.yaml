@@ -12,14 +12,14 @@ config_fields:
     label: Server Host
     type: string
   - key: port
-    label: ServerQuery Port (default: 10011)
+    label: "ServerQuery Port (default: 10011)"
     type: number
   - key: password
     label: ServerQuery Password
     type: password
   - key: username
-    label: ServerQuery Username (default: serveradmin)
+    label: "ServerQuery Username (default: serveradmin)"
     type: string
   - key: server_id
-    label: Virtual Server ID (default: 1)
+    label: "Virtual Server ID (default: 1)"
     type: number
