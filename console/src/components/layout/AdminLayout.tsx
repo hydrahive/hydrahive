@@ -182,7 +182,7 @@ export function AdminLayout() {
       <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img src="/hydrahive-logo.png" alt="HydraHive" className="h-11 w-11 rounded-2xl shadow-lg shadow-black/20" />
+            <img src="/hydrahive-logo.png" alt="HydraHive" className="h-[60px] w-[60px] rounded-2xl shadow-lg shadow-black/20" />
             <div>
               <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">{t("layout.controlFabric")}</p>
               <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">HydraHive</h1>
