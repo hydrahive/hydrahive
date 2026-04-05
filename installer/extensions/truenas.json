@@ -1,0 +1,11 @@
+{
+  "id": "truenas",
+  "name": "TrueNAS",
+  "description": "TrueNAS Storage Management — Pools, Datasets, Snapshots, SMART und Alerts.",
+  "icon": "HardDrive",
+  "category": "integrations",
+  "external": true,
+  "config_hint": "API-Key unter TrueNAS WebUI → Zahnrad oben rechts → API Keys erstellen.",
+  "plugin_id": "truenas-manager",
+  "installed_check": null
+}

@@ -1,0 +1,11 @@
+{
+  "id": "threema",
+  "name": "Threema Gateway",
+  "description": "Threema Gateway — Ende-zu-Ende-verschlüsselte Nachrichten senden und Kontakte auflösen.",
+  "icon": "MessageSquare",
+  "category": "communication",
+  "external": true,
+  "config_hint": "Gateway-ID und API-Secret unter gateway.threema.ch erstellen (Basic oder End-to-End Modus).",
+  "plugin_id": "threema-gateway",
+  "installed_check": null
+}

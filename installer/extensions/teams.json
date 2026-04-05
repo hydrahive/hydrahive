@@ -1,0 +1,11 @@
+{
+  "id": "teams",
+  "name": "Microsoft Teams",
+  "description": "MS Teams Integration — Nachrichten, Channels und Chats über die Microsoft Graph API.",
+  "icon": "MessageSquare",
+  "category": "communication",
+  "external": true,
+  "config_hint": "Azure App Registration mit Graph API Berechtigungen (ChannelMessage.Send, Chat.ReadWrite) unter portal.azure.com erstellen.",
+  "plugin_id": "teams-integration",
+  "installed_check": null
+}

@@ -1,0 +1,11 @@
+{
+  "id": "slack",
+  "name": "Slack",
+  "description": "Slack Workspace Integration — Nachrichten senden, Channels und User verwalten.",
+  "icon": "MessageSquare",
+  "category": "communication",
+  "external": true,
+  "config_hint": "Bot-Token unter api.slack.com → Apps → OAuth & Permissions erstellen.",
+  "plugin_id": "slack-integration",
+  "installed_check": null
+}

@@ -125,17 +125,21 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
             installed = _is_installed(m)
             active    = _service_active(m.get("service")) if installed else False
             http_ok   = _http_ok(m.get("health_url"))     if active   else False
+            is_external = m.get("external", False)
             result.append({
                 "id":          m.get("id"),
                 "name":        m.get("name"),
                 "description": m.get("description"),
                 "icon":        m.get("icon"),
                 "category":    m.get("category", "tools"),
-                "installed":   installed,
-                "active":      active,
-                "http_ok":     http_ok,
+                "installed":   installed if not is_external else True,
+                "active":      active if not is_external else True,
+                "http_ok":     http_ok if not is_external else True,
                 "open_url":    m.get("open_url"),
                 "has_uninstall": bool(m.get("uninstall_script")),
+                "external":    is_external,
+                "config_hint": m.get("config_hint", ""),
+                "plugin_id":   m.get("plugin_id", ""),
             })
         return result
 
