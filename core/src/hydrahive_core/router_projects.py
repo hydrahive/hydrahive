@@ -274,7 +274,7 @@ def register_project_routes(
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
         # Repo-Name aus URL → Unterordner
-        repo_name = req.url.rstrip("/").rstrip(".git").split("/")[-1] or "repo"
+        repo_name = req.url.rstrip("/").removesuffix(".git").split("/")[-1] or "repo"
         target = project_dir / repo_name
 
         try:
@@ -298,7 +298,8 @@ def register_project_routes(
             raise HTTPException(500, f"Fehler: {e}")
 
     @auth_router.get("/projects/{project_id}/session")
-    def get_session(project_id: str):
+    def get_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         session = sessions.get_active(project_id)
@@ -312,14 +313,16 @@ def register_project_routes(
         }
 
     @auth_router.post("/projects/{project_id}/session/start")
-    async def start_session(project_id: str):
+    async def start_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         session = await sessions.new_session(project_id)
         return {"session_id": session.id, "started_at": session.started_at}
 
     @auth_router.post("/projects/{project_id}/session/end")
-    async def end_session(project_id: str):
+    async def end_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         session = await sessions.end_session(project_id)
@@ -328,7 +331,8 @@ def register_project_routes(
         return {"ended": True, "session_id": session.id, "message_count": len(session.messages)}
 
     @auth_router.post("/projects/{project_id}/session/message")
-    async def append_message(project_id: str, req: MessageRequest):
+    async def append_message(project_id: str, req: MessageRequest, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         try:
@@ -345,7 +349,8 @@ def register_project_routes(
         }
 
     @auth_router.get("/projects/{project_id}/session/history")
-    def session_history(project_id: str, limit: int = 50):
+    def session_history(project_id: str, limit: int = 50, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         context = sessions.get_context(project_id, max_messages=limit)
@@ -357,13 +362,15 @@ def register_project_routes(
         }
 
     @auth_router.get("/projects/{project_id}/sessions")
-    def list_sessions(project_id: str, limit: int = 20):
+    def list_sessions(project_id: str, limit: int = 20, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         return {"sessions": sessions.list_sessions(project_id, limit)}
 
     @auth_router.get("/projects/{project_id}/sessions/{session_id}")
-    def get_session(project_id: str, session_id: str):
+    def get_session_by_id(project_id: str, session_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
         session = sessions.get_session_by_id(project_id, session_id)
@@ -380,7 +387,9 @@ def register_project_routes(
         from fastapi.responses import StreamingResponse as _SR
 
         _check_project_access(auth, project_id)
-        check_message_rate(req.sender, project_id)
+        # #330: sender aus Auth, nicht aus Body
+        sender = auth[0] if auth[0] != "internal" else (req.sender or "user")
+        check_message_rate(sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, "Projekt nicht gefunden")
@@ -399,7 +408,7 @@ def register_project_routes(
                 project_id=project_id,
                 project_cfg=cfg,
                 content=req.content,
-                sender=req.sender,
+                sender=sender,
                 execution_mode=execution_mode,
             ):
                 yield chunk
@@ -425,7 +434,9 @@ def register_project_routes(
         auth: tuple[str, str] = Depends(require_auth),
     ):
         _check_project_access(auth, project_id)
-        check_message_rate(req.sender, project_id)
+        # #330: sender aus Auth
+        sender = auth[0] if auth[0] != "internal" else (req.sender or "user")
+        check_message_rate(sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
@@ -441,12 +452,12 @@ def register_project_routes(
             audit_source="projects.message",
         )
 
-        await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=req.sender)
+        await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=sender)
         response, workers = await orchestrator.handle_message(
             project_id=project_id,
             project_cfg=cfg,
             content=req.content,
-            sender=req.sender,
+            sender=sender,
             execution_mode=execution_mode,
         )
         await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)

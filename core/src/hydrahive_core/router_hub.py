@@ -313,6 +313,7 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
     def _save_clawhub_config(cfg: dict) -> None:
         CLAWHUB_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CLAWHUB_CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        CLAWHUB_CONFIG_FILE.chmod(0o600)
 
     def _sync_clawhub_token() -> None:
         """Schreibt den Token aus der HydraHive-Config in die clawhub-CLI-Config."""
@@ -327,6 +328,7 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
             "registry": "https://clawhub.ai",
             "token": token,
         }))
+        cli_config.chmod(0o600)
 
     def _find_clawhub() -> str:
         global _CLAWHUB_BIN

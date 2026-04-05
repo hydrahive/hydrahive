@@ -192,8 +192,20 @@ def register_agent_admin_routes(
         logger.info("Agent tools aktualisiert: %s -> %s", agent_id, tools)
         return {"updated": True, "agent_id": agent_id, "tools": tools}
 
+    def _check_agent_read(agent_id: str, auth: tuple) -> None:
+        """#322: Prüft ob der User den Agent lesen darf (Admin oder eigener Agent)."""
+        import re as _re
+        if not _re.match(r"^[a-z0-9_-]+$", agent_id):
+            raise HTTPException(400, "Ungültige agent_id")
+        username, role = auth
+        if role == "admin":
+            return
+        if agent_id != f"personal_{username}":
+            raise HTTPException(403, f"Keine Berechtigung für Agent '{agent_id}'")
+
     @auth_router.get("/agents/{agent_id}/workflow-blueprint")
     def get_workflow_blueprint(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_read(agent_id, _a)
         import json as _json
         wf_path = Path(agents_dir) / agent_id / "workflow_blueprint.json"
         if not wf_path.exists():
@@ -223,6 +235,7 @@ def register_agent_admin_routes(
     # ── Agent Workflow Flow (Arbeitsablauf) ──────────────────────────
     @auth_router.get("/agents/{agent_id}/workflow-flow")
     def get_workflow_flow(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_read(agent_id, _a)
         import json as _json
         wf_path = Path(agents_dir) / agent_id / "workflow_flow.json"
         if not wf_path.exists():
@@ -250,6 +263,7 @@ def register_agent_admin_routes(
 
     @auth_router.get("/agents/{agent_id}/workflow-flow/preview")
     def preview_workflow_flow(agent_id: str, _a: tuple = Depends(require_auth)):
+        _check_agent_read(agent_id, _a)
         """Zeigt den generierten Prompt-Text des Agent-Workflows."""
         from .orchestrator_context import _load_agent_workflow_prompt
         agent_dir = Path(agents_dir) / agent_id
@@ -274,6 +288,7 @@ def register_agent_admin_routes(
 
     @auth_router.get("/agents/{agent_id}/soul")
     def get_agent_soul(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        _check_agent_read(agent_id, _a)
         soul_path = Path(agents_dir) / agent_id / "soul.md"
         if not soul_path.exists():
             return {"soul": "", "exists": False}

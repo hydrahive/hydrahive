@@ -23,13 +23,10 @@ const VALID_UM_TABS: TabId[] = ["users", "groups", "secrets", "permissions"];
 export function UserManagementPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  // #308: Tab-State aus URL lesen
-  const urlTab = searchParams.get("tab") as TabId | null;
-  const [active, _setActive] = useState<TabId>(
-    urlTab && VALID_UM_TABS.includes(urlTab) ? urlTab : "users"
-  );
+  // #331: Tab immer direkt aus URL
+  const rawTab = searchParams.get("tab") as TabId | null;
+  const active: TabId = rawTab && VALID_UM_TABS.includes(rawTab) ? rawTab : "users";
   const setActive = useCallback((id: TabId) => {
-    _setActive(id);
     setSearchParams({ tab: id }, { replace: true });
   }, [setSearchParams]);
 

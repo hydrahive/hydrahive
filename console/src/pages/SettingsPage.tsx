@@ -17,14 +17,11 @@ type TabId = "overview" | "llm" | "gitea" | "github" | "vpn" | "kas" | "backup" 
 export function SettingsPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  // #286: Tab-State aus URL lesen
-  const urlTab = searchParams.get("tab") as TabId | null;
-  const [active, _setActive] = useState<TabId>(
-    urlTab && ["overview","llm","gitea","github","vpn","kas","backup","migration"].includes(urlTab)
-      ? urlTab : "overview"
-  );
+  // #331: Tab immer direkt aus URL ableiten — kein eigener State
+  const rawTab = searchParams.get("tab") as TabId | null;
+  const active: TabId = rawTab && ["overview","llm","gitea","github","vpn","kas","backup","migration"].includes(rawTab)
+    ? rawTab : "overview";
   const setActive = useCallback((id: TabId) => {
-    _setActive(id);
     setSearchParams({ tab: id }, { replace: true });
   }, [setSearchParams]);
 

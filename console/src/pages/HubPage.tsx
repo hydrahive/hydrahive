@@ -830,13 +830,10 @@ const VALID_HUB_TABS: HubTabId[] = ["hydrahub", "hub-plugins", "clawhub", "exten
 export function HubPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  // #286: Tab-State aus URL lesen
-  const urlTab = searchParams.get("tab") as HubTabId | null;
-  const [activeTab, _setActiveTab] = useState<HubTabId>(
-    urlTab && VALID_HUB_TABS.includes(urlTab) ? urlTab : "hydrahub"
-  );
+  // #331: Tab immer direkt aus URL
+  const rawTab = searchParams.get("tab") as HubTabId | null;
+  const activeTab: HubTabId = rawTab && VALID_HUB_TABS.includes(rawTab) ? rawTab : "hydrahub";
   const setActiveTab = useCallback((id: HubTabId) => {
-    _setActiveTab(id);
     setSearchParams({ tab: id }, { replace: true });
   }, [setSearchParams]);
 

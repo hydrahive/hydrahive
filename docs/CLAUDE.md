@@ -102,9 +102,9 @@ Erlaubte Pfade: `/agents/`, `/plugins/`, `/etc/hydrahive/`, `/projects/`
 
 | Methode | Pfad | Beschreibung |
 |---------|------|-------------|
-| POST | `/admin/shell` | Befehl ausführen (`{"command":"git status"}`) |
+| POST | `/admin/shell` | Befehl ausführen (`{"command":"df -h"}`) |
 
-Erlaubte Befehle: docker, podman, df, free, uptime, systemctl, journalctl, tailscale, ls, cat, grep, find, tail, head, wc, du, which
+Erlaubte Befehle: df, free, uptime, hostname, whoami, uname, systemctl, journalctl, tailscale, docker, podman, ls, cat, wc, du, head, tail, grep, find, which
 
 ### Plugins
 
