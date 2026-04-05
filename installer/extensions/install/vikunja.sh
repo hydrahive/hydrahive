@@ -34,21 +34,11 @@ apt-get update -qq
 apt-get install -y --quiet curl wget sqlite3 python3 2>/dev/null \
     | grep -E "^(Get|Entpacken|Einrichten)" || true
 
-# --- Neueste Version ermitteln ---
+# --- Neueste Version ermitteln (GitHub API) ---
 info "Ermittle neueste Vikunja-Version..."
-LATEST_VERSION="$(curl -sf 'https://dl.vikunja.io/vikunja/unstable/' \
-    | grep -oP 'vikunja-v[\d.]+(?=-linux-amd64(?:-full)?\.gz)' \
-    | grep -v 'unstable\|rc\|beta' \
-    | sort -V | tail -1 \
-    | sed 's/vikunja-//' \
-    || echo "")"
-
-# Fallback: GitHub API
-if [ -z "${LATEST_VERSION}" ]; then
-    LATEST_VERSION="$(curl -sf 'https://api.github.com/repos/go-vikunja/vikunja/releases/latest' \
-        | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','v0.24.4'))" 2>/dev/null \
-        || echo 'v0.24.4')"
-fi
+LATEST_VERSION="$(curl -sf 'https://api.github.com/repos/go-vikunja/vikunja/releases/latest' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','v2.2.2'))" 2>/dev/null \
+    || echo 'v2.2.2')"
 info "Neueste Version: ${LATEST_VERSION}"
 
 # --- Schon installiert und aktuell? ---
@@ -66,17 +56,17 @@ fi
 # --- Binary herunterladen ---
 mkdir -p "${VIKUNJA_DIR}"
 
-# Vikunja liefert ein komprimiertes Binary (gz)
-BINARY_FILENAME="vikunja-${LATEST_VERSION}-linux-amd64"
-DL_URL="${VIKUNJA_DL_BASE}/${LATEST_VERSION}/${BINARY_FILENAME}.gz"
-CHECKSUM_URL="${VIKUNJA_DL_BASE}/${LATEST_VERSION}/${BINARY_FILENAME}.gz.sha256"
+# Vikunja v2.x: GitHub Release als ZIP (enthält Binary + Frontend)
+DL_URL="https://github.com/go-vikunja/vikunja/releases/download/${LATEST_VERSION}/vikunja-${LATEST_VERSION}-linux-amd64-full.zip"
 
-info "Lade ${BINARY_FILENAME}.gz herunter..."
-curl -fSL "${DL_URL}" -o "/tmp/vikunja.gz" \
+info "Lade vikunja-${LATEST_VERSION}-linux-amd64-full.zip herunter..."
+apt-get install -y --quiet unzip 2>/dev/null | grep -E "^(Entpacken|Einrichten)" || true
+curl -fSL "${DL_URL}" -o "/tmp/vikunja.zip" \
     || error "Download fehlgeschlagen: ${DL_URL}"
 
 # Prüfsumme verifizieren
-if curl -fsSL "${CHECKSUM_URL}" -o "/tmp/vikunja.gz.sha256" 2>/dev/null; then
+CHECKSUM_URL="https://github.com/go-vikunja/vikunja/releases/download/${LATEST_VERSION}/vikunja-${LATEST_VERSION}-linux-amd64-full.zip.sha256"
+if curl -fsSL "${CHECKSUM_URL}" -o "/tmp/vikunja.zip.sha256" 2>/dev/null; then
     EXPECTED_HASH="$(awk '{print $1}' /tmp/vikunja.gz.sha256)"
     ACTUAL_HASH="$(sha256sum /tmp/vikunja.gz | awk '{print $1}')"
     if [ -n "${EXPECTED_HASH}" ] && [ "${EXPECTED_HASH}" != "${ACTUAL_HASH}" ]; then
