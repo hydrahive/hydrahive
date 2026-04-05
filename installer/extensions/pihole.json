@@ -7,7 +7,7 @@
   "install_script": "extensions/install/pihole.sh",
   "uninstall_script": "extensions/uninstall/pihole.sh",
   "service": "pihole-FTL",
-  "health_url": "http://127.0.0.1:8380/admin/",
-  "open_url": ":8380/admin/",
+  "health_url": "https://127.0.0.1:8443/admin/",
+  "open_url": ":8080/admin/",
   "installed_check": "/usr/local/bin/pihole"
 }
