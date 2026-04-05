@@ -29,7 +29,7 @@ dependencies = [
     "faiss-cpu~=1.8",
     "numpy~=1.26",
     "playwright~=1.40",
-    "edge-tts~=6.1",
+    "edge-tts>=7.0",
 ]
 
 [project.optional-dependencies]
