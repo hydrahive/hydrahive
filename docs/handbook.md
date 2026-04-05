@@ -61,6 +61,10 @@ Die A-MEM-Instanz laeuft lokal auf dem Host. Zugriff erfolgt im LAN ueber die Ho
 38. [ClawhHub — Externe Skills & Plugins](#38-clawhub--externe-skills--plugins)
 39. [Tailscale Federation](#39-tailscale-federation)
 40. [HydraBrain — 3D-Agentengraph](#40-hydrabrain--3d-agentengraph)
+41. [Extension-Plugins](#41-extension-plugins)
+42. [User Apps — Plugin-Tabs in Mein Agent](#42-user-apps--plugin-tabs-in-mein-agent)
+43. [Capabilities-Endpoint](#43-capabilities-endpoint)
+44. [Security Best Practices](#44-security-best-practices)
 
 ---
 
@@ -2055,3 +2059,128 @@ Klick auf den **Federation-Button** (Radar-Icon) → Remote-Peers werden gescann
 - **Klick auf Knoten** — Details anzeigen
 - **Labels** — Ein/Aus-Button in der Toolbar
 - **Neu laden** — Refresh-Button aktualisiert die Daten
+
+## 41. Extension-Plugins
+
+Extension-Plugins erweitern HydraHive um spezialisierte Tools für Infrastruktur, Gaming, Kollaboration und Dokumentation. Jedes Plugin wird einmal systemweit installiert und kann dann einzelnen Agenten zugewiesen werden.
+
+### Plugin-Verwaltung
+
+**Plugins zuweisen:** Agenten → Agent bearbeiten → Tab „Plugins" → gewünschte Plugins aktivieren.
+
+**Benutzerspezifische Einstellungen:** Mein Agent → Plugin-Tab → pro Plugin individuelle Zugangsdaten oder Endpunkte hinterlegen.
+
+### Infrastruktur
+
+| Plugin | Beschreibung | Config | Tools |
+|--------|-------------|--------|-------|
+| **truenas-manager** | TrueNAS Storage (REST v2.0) | `base_url`, `api_key` | `truenas_pools`, `truenas_datasets`, `truenas_alerts`, `truenas_smart_check` |
+| **proxmox-manager** | Proxmox VE VMs/Container | `base_url`, `user`, `token_name`, `token_value` | `proxmox_nodes`, `proxmox_vms`, `proxmox_vm_action`, `proxmox_resources` |
+| **portainer-manager** | Docker via Portainer | `base_url`, `api_key` | `portainer_containers`, `portainer_container_action`, `portainer_stacks`, `portainer_container_logs` |
+| **pihole-manager** | Pi-hole DNS Sinkhole | `base_url`, `api_key` | `pihole_stats`, `pihole_top_blocked`, `pihole_toggle`, `pihole_query_log` |
+| **grafana-manager** | Grafana Dashboards & Alerts | `base_url`, `api_key` | `grafana_dashboards`, `grafana_alerts`, `grafana_query`, `grafana_annotations` |
+| **heimdall-manager** | Heimdall App-Dashboard | `base_url`, `api_key` | `heimdall_apps`, `heimdall_add_app`, `heimdall_check_status` |
+
+### Gaming
+
+| Plugin | Beschreibung | Config | Tools |
+|--------|-------------|--------|-------|
+| **minecraft-server** | Minecraft RCON + Status | `host`, `port`, `rcon_port`, `rcon_password` | `minecraft_status`, `minecraft_players`, `minecraft_rcon`, `minecraft_whitelist` |
+| **valheim-server** | Valheim Dedicated Server | `host`, `port`, `service_name` | `valheim_status`, `valheim_players`, `valheim_backup`, `valheim_restart` |
+| **pterodactyl-manager** | Pterodactyl Game Panel | `base_url`, `api_key` | `pterodactyl_servers`, `pterodactyl_server_action`, `pterodactyl_console`, `pterodactyl_resources` |
+| **steamcmd-manager** | SteamCMD / LinuxGSM | `steamcmd_path`, `servers_dir` | `steamcmd_servers`, `steamcmd_install`, `steamcmd_update`, `steamcmd_status` |
+| **teamspeak-manager** | TeamSpeak ServerQuery | `host`, `port`, `password`, `username` | `teamspeak_info`, `teamspeak_channels`, `teamspeak_clients`, `teamspeak_kick` |
+
+### Produktivität & Dokumentation
+
+| Plugin | Beschreibung | Config | Tools |
+|--------|-------------|--------|-------|
+| **nextcloud-manager** | Nextcloud (CalDAV/CardDAV/WebDAV) | `base_url`, `username`, `app_password` | `nextcloud_files`, `nextcloud_calendar`, `nextcloud_contacts`, `nextcloud_status` |
+| **radicale-manager** | Radicale CalDAV/CardDAV | `base_url`, `username`, `password` | `radicale_calendars`, `radicale_events`, `radicale_contacts`, `radicale_create_event` |
+| **vikunja-manager** | Vikunja Task-Management | `base_url`, `api_token` | `vikunja_projects`, `vikunja_tasks`, `vikunja_create_task`, `vikunja_update_task` |
+| **bookstack-manager** | BookStack Wiki/Docs | `base_url`, `token_id`, `token_secret` | `bookstack_search`, `bookstack_pages`, `bookstack_create_page`, `bookstack_update_page` |
+| **monica-crm** | Monica CRM (Kontakte) | `base_url`, `api_token` | `monica_contacts`, `monica_contact_detail`, `monica_activities`, `monica_notes`, `monica_reminders`, `monica_search`, `monica_create_contact` |
+
+## 42. User Apps — Plugin-Tabs in Mein Agent
+
+Plugins mit einem `ui.tab`-Eintrag in der `plugin.yaml` erzeugen automatisch einen eigenen Tab im Bereich „Mein Agent".
+
+### Funktionsweise
+
+- **Tab-Anzeige**: Sobald ein Plugin dem persönlichen Agenten zugewiesen ist und `ui.tab` definiert hat, erscheint der Tab in „Mein Agent".
+- **Konfigurationsfelder** (`config_fields`): Definieren benutzerspezifische Einstellungen. Die Werte werden pro Nutzer unter `/etc/hydrahive/user_app_config/{username}/{plugin_id}.json` gespeichert (chmod 600).
+- **Live-Anzeige**: Manche Plugins (z. B. Dexcom Glukose-Monitor) zeigen live Daten direkt im Tab an.
+
+### Plugin-Tab aktivieren
+
+1. **Agenten** → Agent bearbeiten → Tab „Plugins" → Plugin aktivieren
+2. Der Tab erscheint in „Mein Agent"
+3. Im Tab: Config-Felder ausfüllen → Speichern
+
+### Beispiel: plugin.yaml mit UI-Tab
+
+```yaml
+id: dexcom-monitor
+ui:
+  tab:
+    label: "Glukose"
+    icon: "Heart"
+    order: 50
+  config_fields:
+    - id: dexcom_username
+      label: "Dexcom Benutzername"
+      type: text
+    - id: dexcom_password
+      label: "Dexcom Passwort"
+      type: password
+```
+
+## 43. Capabilities-Endpoint
+
+### GET /capabilities
+
+Gibt den Installations- und Konfigurationsstatus aller HydraHive-Features zurück. Das Frontend nutzt diesen Endpoint um nicht verfügbare Bereiche auszublenden (z. B. Messenger-Sektionen ohne konfigurierte Bridge).
+
+| Status | Bedeutung |
+|---|---|
+| `not_installed` | Komponente fehlt oder wurde nie eingerichtet |
+| `installed` | Vorhanden, aber noch nicht konfiguriert |
+| `configured` | Konfiguriert, aber Dienst nicht aktiv |
+| `active` | Voll funktionsfähig und erreichbar |
+
+**Geprüfte Features:** core, llm, ollama, gitea, console, agentlink, tailscale, code-server, a-mem, whatsapp-bridge, discord, vaultwarden, kas, plugins.
+
+## 44. Security Best Practices
+
+### Shell-Whitelist
+
+`shell_exec` erlaubt ausschließlich diese Befehle:
+
+```
+df, free, uptime, hostname, whoami, uname, systemctl, journalctl,
+tailscale, docker, podman, ls, cat, wc, du, head, tail, grep, find, which
+```
+
+Bewusst **nicht** enthalten: `python3`, `node`, `pip`, `npm`, `git` — diese können Code nachladen oder Systemdateien manipulieren.
+
+### Authentifizierung & Autorisierung
+
+- Alle Agent-Session-Routes prüfen Owner/Group-Zugehörigkeit.
+- Der `sender`-Wert wird aus dem Auth-Token abgeleitet — nie aus dem Request-Body.
+- `agent_id` und `plugin_id` werden per Regex validiert (Path-Traversal-Schutz).
+
+### Dateisystem & Secrets
+
+- Alle Config-Dateien mit Tokens erhalten `chmod 600`.
+- `sudoers`-Einträge ohne Wildcards — nur explizit benannte Befehle.
+- Backup/Restore extrahiert nur `agents/` und `etc/hydrahive/` — kein Überschreiben von Systempfaden.
+
+### Download-Sicherheit
+
+- `curl | bash`-Pattern entfernt — Downloads in temporäre Dateien.
+- Gitea und code-server Binaries mit SHA256-Checksums verifiziert.
+- Website-Deployments über FTPS (explizites TLS) statt Klartext-FTP.
+
+### URL-Navigation
+
+Tab-Deep-Links über `?tab=`-Parameter (z. B. `/settings?tab=llm`, `/hub?tab=extensions`, `/usermanagement?tab=secrets`).
