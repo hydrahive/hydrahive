@@ -68,6 +68,13 @@ function useUpdateStatus(isAdmin: boolean) {
         setUpdating(false);
         if (s.commit) setLastCommit(s.commit);
         if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
+        // Modal offen aber Update schon fertig (nach Reload) → Ergebnis anzeigen
+        if (localStorage.getItem("hh_update_modal") === "1" && logDone === null) {
+          const logTail: string[] = (s.log_tail || []).map(stripAnsi);
+          if (logTail.length > 0) setLogLines(logTail);
+          setLogDone(s.status === "ok");
+          if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
+        }
         else setError(null);
       }
     } catch {
