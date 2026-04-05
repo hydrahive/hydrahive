@@ -97,27 +97,40 @@ def register(api):
                 r = await client.get(f"/api/contacts/{contact_id}")
                 r.raise_for_status()
                 c = r.json().get("data", {})
+                # contactFields liegt direkt auf dem Kontakt (Array, nicht unter information)
+                cf_list = c.get("contactFields") or c.get("contact_fields") or []
+                if isinstance(cf_list, dict):
+                    cf_list = cf_list.get("data", [])
+                phones = []
+                emails = []
+                for cf in cf_list:
+                    content = cf.get("content", "")
+                    cft = cf.get("contactFieldType") or cf.get("contact_field_type") or {}
+                    cf_type = (cft.get("type") or cft.get("name") or "").lower()
+                    if "phone" in cf_type or "tel" in cf_type:
+                        phones.append({"label": cft.get("name", ""), "number": content})
+                    elif "email" in cf_type:
+                        emails.append(content)
+                # tags ist ein Array direkt auf dem Kontakt
+                tags_raw = c.get("tags") or []
+                if isinstance(tags_raw, dict):
+                    tags_raw = tags_raw.get("data", [])
+                # Karriere-Daten
                 info = c.get("information") or {}
-                phone_data = (info.get("phone_numbers") or {}).get("data") or []
-                phones = [{"label": p.get("name", ""), "number": p.get("content", "")} for p in phone_data]
-                cf_data = (info.get("contact_fields") or {}).get("data") or []
-                emails = [e.get("content", "") for e in cf_data
-                          if "email" in (e.get("contact_field_type") or {}).get("type", "").lower()]
                 career = info.get("career") or {}
                 dates = info.get("dates") or {}
                 birthdate = (dates.get("birthdate") or {}).get("date", "")
-                tags_data = (c.get("tags") or {}).get("data") or []
                 return json.dumps({
                     "id": c.get("id"),
                     "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
                     "nickname": c.get("nickname", ""),
                     "gender": c.get("gender", ""),
                     "birthday": birthdate,
-                    "company": career.get("company", ""),
-                    "job_title": career.get("job", ""),
+                    "company": career.get("company", "") or c.get("company", ""),
+                    "job_title": career.get("job", "") or c.get("job", ""),
                     "phones": phones, "emails": emails,
                     "notes": c.get("description", ""),
-                    "tags": [t.get("name", "") for t in tags_data],
+                    "tags": [t.get("name", "") for t in tags_raw if isinstance(t, dict)],
                     "last_activity": c.get("last_activity_together"),
                 })
         except Exception as e:
@@ -139,6 +152,8 @@ def register(api):
         },
     )
     async def monica_add_activity(contact_id: int = 0, summary: str = "", description: str = "", date: str = "", **ctx) -> str:
+        from datetime import date as _date
+
         config = _load_user_config(ctx.get("_username", "admin"))
         client = _get_client(config)
         if not client:
@@ -147,7 +162,14 @@ def register(api):
             return json.dumps({"error": "contact_id und summary sind Pflicht."})
         try:
             async with client:
-                body = {"summary": summary, "description": description, "happened_at": date or "", "contacts": [contact_id]}
+                # Monica API verlangt: activity_type_id, summary, happened_at, contacts
+                body = {
+                    "activity_type_id": 1,  # 1 = "Had a phone call" (Default-Typ in Monica)
+                    "summary": summary,
+                    "description": description or "",
+                    "happened_at": date if date else _date.today().isoformat(),
+                    "contacts": [contact_id],
+                }
                 r = await client.post("/api/activities", json=body)
                 r.raise_for_status()
                 act = r.json().get("data", {})
