@@ -157,7 +157,8 @@ cd "${MONICA_DIR}"
 sudo -u "${MONICA_USER}" $PHP_BIN artisan migrate --force --quiet
 sudo -u "${MONICA_USER}" $PHP_BIN artisan storage:link --quiet 2>/dev/null || true
 sudo -u "${MONICA_USER}" $PHP_BIN artisan passport:keys --force --quiet 2>/dev/null || true
-success "Datenbank migriert + Passport-Keys generiert"
+sudo -u "${MONICA_USER}" $PHP_BIN artisan passport:client --personal --name="HydraHive" --no-interaction --quiet 2>/dev/null || true
+success "Datenbank migriert + Passport-Keys + Client generiert"
 
 # --- systemd Service ---
 cat > /etc/systemd/system/monica.service << SVCEOF
