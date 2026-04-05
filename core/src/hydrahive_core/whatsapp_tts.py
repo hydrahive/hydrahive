@@ -21,6 +21,46 @@ logger = logging.getLogger(__name__)
 # de-DE-KatjaNeural, de-DE-ConradNeural, de-AT-IngridNeural, de-CH-LeniNeural
 DEFAULT_VOICE = "de-DE-KatjaNeural"
 
+_EMOJI_RE = __import__("re").compile(
+    "["
+    "\U0001F600-\U0001F64F"  # Emoticons
+    "\U0001F300-\U0001F5FF"  # Symbols & Pictographs
+    "\U0001F680-\U0001F6FF"  # Transport & Map
+    "\U0001F1E0-\U0001F1FF"  # Flags
+    "\U00002702-\U000027B0"  # Dingbats
+    "\U0000FE00-\U0000FE0F"  # Variation Selectors
+    "\U0001F900-\U0001F9FF"  # Supplemental Symbols
+    "\U00002600-\U000026FF"  # Misc Symbols
+    "\U0000200D"             # ZWJ
+    "\U00002B50-\U00002B55"  # Stars
+    "\U000023E9-\U000023F3"  # Media controls
+    "\U0000FE0F"             # Variation Selector
+    "]+", flags=__import__("re").UNICODE
+)
+
+
+def _clean_for_tts(text: str) -> str:
+    """Entfernt Markdown, Emojis und Sonderzeichen die TTS schlecht vorliest."""
+    import re
+    # Markdown Bold/Italic entfernen
+    text = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
+    text = re.sub(r'_{1,2}(.+?)_{1,2}', r'\1', text)
+    # Markdown Links [text](url) → text
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    # Code-Blöcke und Inline-Code
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # Markdown Überschriften
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Aufzählungszeichen
+    text = re.sub(r'^[\-\*•]\s+', '', text, flags=re.MULTILINE)
+    # Emojis entfernen
+    text = _EMOJI_RE.sub('', text)
+    # Doppelte Leerzeichen/Zeilenumbrüche bereinigen
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r' {2,}', ' ', text)
+    return text.strip()
+
 
 async def text_to_ogg_b64(text: str, voice: str = DEFAULT_VOICE) -> str | None:
     """
@@ -30,10 +70,12 @@ async def text_to_ogg_b64(text: str, voice: str = DEFAULT_VOICE) -> str | None:
     if not text or not text.strip():
         return None
 
-    # Zu langen Text kürzen (TTS macht bei >5000 Zeichen Probleme)
-    text = text.strip()
+    # Text für TTS bereinigen — Markdown, Emojis und Sonderzeichen entfernen
+    text = _clean_for_tts(text.strip())
+    if not text:
+        return None
     if len(text) > 4000:
-        text = text[:4000] + "…"
+        text = text[:4000]
 
     tmp_mp3 = None
     tmp_ogg = None
