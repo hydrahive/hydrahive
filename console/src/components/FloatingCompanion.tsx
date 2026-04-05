@@ -5,7 +5,6 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { api } from "@/lib/api";
 
 type Mood = "idle" | "happy" | "think" | "sleep" | "shock" | "love" | "sad";
 
@@ -79,15 +78,6 @@ const PAGE_CONTEXTS: Record<string, string> = {
   "/mcp":           "Der User konfiguriert MCP-Server.",
 };
 
-const SYSTEM_PROMPT = `Du bist ein winziger, niedlicher Begleiter in einer Web-Konsole. Du kommentierst kurz und witzig was der User gerade macht.
-Regeln:
-- Maximal 1 Satz, max 15 Wörter
-- Sei süß, supportive und ein bisschen frech
-- Nutze gelegentlich Emoticons
-- Sprich die Sprache des Users (Deutsch wenn DE, English wenn EN)
-- Kein Markdown, kein Code, nur ein kurzer Kommentar
-- Du bist ein kleines Wesen das in der Ecke des Bildschirms lebt`;
-
 export function FloatingCompanion() {
   const location = useLocation();
   const [visible, setVisible] = useState(false);
@@ -126,19 +116,18 @@ export function FloatingCompanion() {
     const context = Object.entries(PAGE_CONTEXTS).find(([p]) => path.startsWith(p))?.[1]
       || "Der User navigiert in der Console.";
 
-    // LLM-Call für Kommentar
+    // LLM-Call über eigenen Tamagotchi-Endpoint (berührt keine Session)
     const token = localStorage.getItem("hydrahive_token") || "";
-    fetch("/api/agents/personal_admin/message", {
+    const lang = document.documentElement.lang || (navigator.language?.startsWith("de") ? "de" : "en");
+    fetch("/api/agents/personal_admin/tamagotchi", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        content: `[SYSTEM: ${SYSTEM_PROMPT}]\n\nKontext: ${context}\nGib einen kurzen Kommentar.`,
-      }),
+      body: JSON.stringify({ context, lang }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.response) {
-          const text = d.response.slice(0, 80);
+        if (d?.comment) {
+          const text = d.comment.slice(0, 80);
           setBubble(text);
           setShowBubble(true);
           // Mood basierend auf Inhalt

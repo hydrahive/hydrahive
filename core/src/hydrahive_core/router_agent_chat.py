@@ -358,6 +358,50 @@ def register_agent_chat_routes(
         _set_interrupt(agent_id)
         return {"ok": True, "agent_id": agent_id}
 
+    @auth_router.post("/agents/{agent_id}/tamagotchi")
+    async def tamagotchi_comment(
+        agent_id: str,
+        body: dict = Body(...),
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        """Easter-Egg: leichter LLM-Call für den Floating Companion. Berührt keine Session."""
+        from .orchestrator import _load_claude_oauth_token
+
+        context = body.get("context", "")
+        lang = body.get("lang", "de")
+        system_prompt = (
+            "Du bist ein winziger, niedlicher Begleiter der in der Ecke eines Bildschirms lebt. "
+            "Kommentiere kurz und witzig was gerade passiert. "
+            "Regeln: Maximal 1 Satz, max 15 Wörter. Sei süß und ein bisschen frech. "
+            "Nutze gelegentlich Emoticons. Kein Markdown, kein Code. "
+            f"Antworte auf {'Deutsch' if lang == 'de' else 'English'}."
+        )
+        try:
+            oauth_token = _load_claude_oauth_token()
+            if not oauth_token:
+                return {"comment": ""}
+            import anthropic as _anthropic
+            client = _anthropic.AsyncAnthropic(
+                api_key="",
+                auth_token=oauth_token,
+                default_headers={
+                    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+                    "user-agent": "claude-cli/2.1.62",
+                    "x-app": "cli",
+                },
+            )
+            resp = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=60,
+                system=[{"type": "text", "text": system_prompt}],
+                messages=[{"role": "user", "content": context}],
+            )
+            text = (resp.content[0].text if resp.content else "").strip()[:80]
+            return {"comment": text}
+        except Exception as e:
+            logger.debug("Tamagotchi LLM call failed: %s", e)
+            return {"comment": ""}
+
     @auth_router.get("/agents/{agent_id}/logs")
     def get_agent_logs(agent_id: str, lines: int = 100, _a: tuple[str, str] = Depends(require_auth)):
         import subprocess as _sub
