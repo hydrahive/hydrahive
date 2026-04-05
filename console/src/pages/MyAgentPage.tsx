@@ -1032,7 +1032,7 @@ function UserAppTab({ appId, apps }: { appId: string; apps: any[] }) {
       </div>
 
       {/* Dexcom: Live-Werte-Anzeige */}
-      {appId === "dexcom-monitor" && config.dexcom_username && config.dexcom_password && (
+      {appId === "dexcom-monitor" && !!config.dexcom_username && !!config.dexcom_password && (
         <DexcomLivePanel />
       )}
 
