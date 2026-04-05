@@ -127,56 +127,29 @@ printf '%s\n' "${LATEST_TAG}" > "${PAPERLESS_DIR}/VERSION"
 success "Paperless-ngx ${LATEST_TAG} nach ${PAPERLESS_DIR} entpackt"
 
 # --- Python-Venv + Abhängigkeiten ---
-info "Richte Python-Virtualenv ein (dauert 2-5 Minuten)..."
+info "Richte Python-Virtualenv ein (dauert 3-8 Minuten)..."
 python3 -m venv "${PAPERLESS_DIR}/.venv"
 "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet --upgrade pip wheel setuptools 2>/dev/null || true
 
-# Requirements installieren — Paperless nutzt uv-Format mit Hashes
-if [ -f "${PAPERLESS_DIR}/requirements.txt" ]; then
-    # Hashes + Continuation Lines + Marker korrekt strippen
-    python3 -c "
-import re, sys
-lines = open('${PAPERLESS_DIR}/requirements.txt').read()
-# Continuation Lines zusammenfuegen
-lines = lines.replace(' \\\\\n', ' ')
-result = []
-for line in lines.splitlines():
-    line = line.strip()
-    if not line or line.startswith('#'):
-        continue
-    # Hashes entfernen
-    line = re.sub(r'\s*--hash=sha256:[a-f0-9]+', '', line)
-    # Environment Marker entfernen (die ; sys_platform == ... Teile)
-    line = re.sub(r'\s*;.*$', '', line)
-    line = line.strip()
-    if line:
-        result.append(line)
-with open('/tmp/paperless-reqs-clean.txt', 'w') as f:
-    f.write('\n'.join(result))
-print(f'{len(result)} Pakete extrahiert')
-" || error "Requirements-Parsing fehlgeschlagen"
-
-    # Problematische Pakete ausschließen
-    grep -vi 'mysqlclient\|psycopg_c' /tmp/paperless-reqs-clean.txt > /tmp/paperless-reqs-final.txt
-    # .whl Dateinamen durch Paketnamen ersetzen (pip kann keine lokalen wheel-Pfade aus requirements)
-    sed -i 's/psycopg_c.*/psycopg[c]/' /tmp/paperless-reqs-final.txt
-    # Lokale .whl Referenzen entfernen
-    grep -v '\.whl' /tmp/paperless-reqs-final.txt > /tmp/paperless-reqs-final2.txt
-    mv /tmp/paperless-reqs-final2.txt /tmp/paperless-reqs-final.txt
-
-    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
-        -r /tmp/paperless-reqs-final.txt \
-        2>&1 | tail -10 || warn "Einige pip-Pakete konnten nicht installiert werden"
-    rm -f /tmp/paperless-reqs-clean.txt /tmp/paperless-reqs-final.txt
-
-    # Sicherstellen dass die Kern-Pakete installiert sind
-    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
-        django gunicorn uvicorn psycopg[binary] celery redis channels channels-redis \
-        2>/dev/null || warn "Einige Kern-Pakete konnten nicht installiert werden"
+# Paperless-ngx direkt als editable Package installieren (löst alle Dependencies korrekt auf)
+if [ -f "${PAPERLESS_DIR}/pyproject.toml" ]; then
+    info "Installiere via pyproject.toml (pip resolver)..."
+    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet -e "${PAPERLESS_DIR}[all]" \
+        2>&1 | tail -5 || {
+        # Fallback ohne [all] extras
+        warn "Install mit [all] fehlgeschlagen — versuche ohne Extras..."
+        "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet -e "${PAPERLESS_DIR}" \
+            2>&1 | tail -5 || warn "pip install fehlgeschlagen"
+    }
+elif [ -f "${PAPERLESS_DIR}/setup.py" ]; then
+    "${PAPERLESS_DIR}/.venv/bin/pip" install --quiet -e "${PAPERLESS_DIR}" \
+        2>&1 | tail -5 || warn "pip install fehlgeschlagen"
 fi
 
-# Sicherstellen dass gunicorn + uvicorn installiert sind
-"${PAPERLESS_DIR}/.venv/bin/pip" install --quiet gunicorn uvicorn 2>/dev/null || true
+# Kern-Pakete sicherstellen (falls pyproject.toml nicht alles abdeckt)
+"${PAPERLESS_DIR}/.venv/bin/pip" install --quiet \
+    gunicorn uvicorn "psycopg[binary]" \
+    2>/dev/null || true
 success "Python-Venv bereit"
 
 # --- Daten-Verzeichnisse ---
@@ -335,7 +308,8 @@ chmod 640 "${HH_CONF}"
 
 echo ""
 info "=== Paperless-ngx installiert ==="
-info "URL:           http://127.0.0.1:${PAPERLESS_PORT}"
+_SERVER_IP_FINAL="$(hostname -I | awk '{print $1}')"
+info "URL:           http://${_SERVER_IP_FINAL}:${PAPERLESS_PORT}"
 info "Login:         admin / admin  (bitte sofort ändern!)"
 info "Eingangskorb:  ${PAPERLESS_CONSUME}"
 info "Dienste:       paperless-webserver / -consumer / -scheduler"
