@@ -560,10 +560,12 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        history = self._sessions.get_context(
+        _raw_history = self._sessions.get_context(
             project_id, max_messages=10,
             max_history_tokens=_history_token_budget(boss_cfg.llm.model),
         )
+        # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
+        history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
         # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
         use_meta_only = "request_tools" in (boss_cfg.tools or [])
@@ -741,10 +743,12 @@ class Orchestrator:
         worker_ctx = _build_worker_context(project_cfg, self._discovery)
         if worker_ctx:
             system_prompt = system_prompt + "\n\n" + worker_ctx
-        history       = self._sessions.get_context(
+        _raw_history   = self._sessions.get_context(
             project_id, max_messages=10,
             max_history_tokens=_history_token_budget(boss_cfg.llm.model),
         )
+        # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
+        history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages      = [{"role": "system", "content": system_prompt}] + history
         # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
         _use_meta = "request_tools" in (boss_cfg.tools or [])
