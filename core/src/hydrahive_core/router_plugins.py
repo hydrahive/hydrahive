@@ -205,3 +205,73 @@ def register_plugin_routes(
                 raise HTTPException(404, f"User-App '{app_id}' nicht gefunden")
             _save_user_app_config(username, app_id, body)
             return {"saved": True, "app_id": app_id}
+
+        @auth_router.get("/me/user-apps/dexcom-monitor/glucose")
+        async def get_dexcom_glucose(minutes: int = 30, count: int = 6, auth: tuple = Depends(require_auth)):
+            """Dexcom Glukosewerte direkt abrufen (ohne Agent-Message)."""
+            username, _ = auth
+            cfg = _load_user_app_config(username, "dexcom-monitor")
+            if not cfg.get("dexcom_username") or not cfg.get("dexcom_password"):
+                raise HTTPException(400, "Dexcom nicht konfiguriert")
+
+            try:
+                import httpx
+
+                region = cfg.get("dexcom_region", "eu")
+                dexcom_base = {
+                    "us": "https://share2.dexcom.com/ShareWebServices/Services",
+                    "eu": "https://shareous1.dexcom.com/ShareWebServices/Services",
+                }
+                base = dexcom_base.get(region, dexcom_base["eu"])
+                app_id_dexcom = "d89443d2-327c-4a6f-89e5-496bbb0317db"
+
+                # Login
+                async with httpx.AsyncClient(timeout=10) as client:
+                    r = await client.post(f"{base}/General/LoginPublisherAccountByName", json={
+                        "accountName": cfg["dexcom_username"],
+                        "password": cfg["dexcom_password"],
+                        "applicationId": app_id_dexcom,
+                    })
+                if r.status_code != 200:
+                    raise HTTPException(502, f"Dexcom Login fehlgeschlagen (HTTP {r.status_code})")
+                session_id = r.text.strip('"')
+
+                # Readings
+                async with httpx.AsyncClient(timeout=10) as client:
+                    r = await client.post(f"{base}/Publisher/ReadPublisherLatestGlucoseValues", params={
+                        "sessionId": session_id, "minutes": minutes, "maxCount": count,
+                    })
+                if r.status_code != 200:
+                    raise HTTPException(502, "Dexcom Readings fehlgeschlagen")
+
+                trend_arrows = {0:"?",1:"↑↑",2:"↑",3:"↗",4:"→",5:"↘",6:"↓",7:"↓↓",8:"?",9:"?"}
+                readings = []
+                for rd in r.json():
+                    ts_str = rd.get("WT", "")
+                    ts_ms = int(ts_str.replace("/Date(", "").replace(")/", "")) if "Date" in ts_str else 0
+                    readings.append({
+                        "value": rd.get("Value", 0),
+                        "trend": rd.get("Trend", 0),
+                        "trend_arrow": trend_arrows.get(rd.get("Trend", 0), "?"),
+                        "timestamp": ts_ms // 1000 if ts_ms else 0,
+                    })
+
+                if not readings:
+                    return {"current": None, "readings": [], "alert_thresholds": {"low": cfg.get("alert_low", 70), "high": cfg.get("alert_high", 250)}}
+
+                current = readings[0]
+                alert_low = cfg.get("alert_low", 70)
+                alert_high = cfg.get("alert_high", 250)
+                status = "normal"
+                if current["value"] < alert_low: status = "NIEDRIG"
+                elif current["value"] > alert_high: status = "HOCH"
+
+                return {
+                    "current": {"value": current["value"], "unit": "mg/dL", "trend": current["trend_arrow"], "status": status},
+                    "readings": readings,
+                    "alert_thresholds": {"low": alert_low, "high": alert_high},
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(502, f"Dexcom API Fehler: {e}")

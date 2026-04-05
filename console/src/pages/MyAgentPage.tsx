@@ -1031,6 +1031,11 @@ function UserAppTab({ appId, apps }: { appId: string; apps: any[] }) {
         <span className="text-xs text-muted-foreground">v{app.version}</span>
       </div>
 
+      {/* Dexcom: Live-Werte-Anzeige */}
+      {appId === "dexcom-monitor" && config.dexcom_username && config.dexcom_password && (
+        <DexcomLivePanel />
+      )}
+
       {app.config_fields?.length > 0 ? (
         <div className="space-y-3">
           {app.config_fields.map((field: any) => (
@@ -1070,6 +1075,140 @@ function UserAppTab({ appId, apps }: { appId: string; apps: any[] }) {
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">Diese App hat keine Konfigurationsoptionen.</p>
+      )}
+    </div>
+  );
+}
+
+/* ── Dexcom Live-Panel ───────────────────────────────────────── */
+
+interface GlucoseReading {
+  value: number;
+  trend_arrow: string;
+  timestamp: number;
+}
+
+function DexcomLivePanel() {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [data, setData] = useState<{
+    current: { value: number; unit: string; trend: string; status: string };
+    readings: GlucoseReading[];
+    alert_thresholds: { low: number; high: number };
+  } | null>(null);
+
+  async function fetchGlucose() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api.get<{
+        current: { value: number; unit: string; trend: string; status: string } | null;
+        readings: GlucoseReading[];
+        alert_thresholds: { low: number; high: number };
+      }>("/me/user-apps/dexcom-monitor/glucose?minutes=60&count=12");
+      if (result.current) {
+        setData(result);
+      } else {
+        setError("Keine Glukosewerte verfügbar — Sensor aktiv?");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Abrufen");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function glucoseColor(value: number, low: number, high: number): string {
+    if (value < low) return "text-red-500";
+    if (value > high) return "text-amber-500";
+    return "text-green-500";
+  }
+
+  function timeAgo(ts: number): string {
+    if (!ts) return "?";
+    const diff = Math.floor(Date.now() / 1000 - ts);
+    if (diff < 60) return "gerade eben";
+    if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min`;
+    return `vor ${Math.floor(diff / 3600)} Std`;
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          {t("dexcom.liveTitle", { defaultValue: "Aktuelle Glukosewerte" })}
+        </h3>
+        <button
+          onClick={fetchGlucose}
+          disabled={loading}
+          className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-40"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+          {loading ? t("dexcom.loading", { defaultValue: "Lade..." }) : t("dexcom.refresh", { defaultValue: "Werte abrufen" })}
+        </button>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-500 bg-red-500/10 rounded-lg p-3">{error}</div>
+      )}
+
+      {data && (
+        <>
+          {/* Aktueller Wert — groß */}
+          <div className="flex items-center gap-4">
+            <div className={cn("text-5xl font-bold tabular-nums", glucoseColor(data.current.value, data.alert_thresholds.low, data.alert_thresholds.high))}>
+              {data.current.value}
+            </div>
+            <div className="space-y-1">
+              <div className="text-2xl">{data.current.trend}</div>
+              <div className="text-xs text-muted-foreground">{data.current.unit}</div>
+              <div className={cn(
+                "text-xs font-semibold px-2 py-0.5 rounded-full inline-block",
+                data.current.status === "normal"
+                  ? "bg-green-500/10 text-green-500"
+                  : "bg-red-500/10 text-red-500"
+              )}>
+                {data.current.status === "normal" ? "Im Zielbereich" : data.current.status}
+              </div>
+            </div>
+          </div>
+
+          {/* Letzte Messungen */}
+          {data.readings.length > 1 && (
+            <div className="space-y-1">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                {t("dexcom.history", { defaultValue: "Verlauf" })}
+              </h4>
+              <div className="flex gap-2 flex-wrap">
+                {data.readings.map((r, i) => (
+                  <div key={i} className={cn(
+                    "rounded-lg border px-3 py-2 text-center min-w-[4.5rem]",
+                    i === 0 ? "border-primary bg-primary/5" : "bg-muted/30"
+                  )}>
+                    <div className={cn("text-lg font-bold tabular-nums", glucoseColor(r.value, data.alert_thresholds.low, data.alert_thresholds.high))}>
+                      {r.value}
+                    </div>
+                    <div className="text-sm">{r.trend_arrow}</div>
+                    <div className="text-[10px] text-muted-foreground">{timeAgo(r.timestamp)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Schwellwerte */}
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span>Hypo: &lt;{data.alert_thresholds.low} mg/dL</span>
+            <span>Hyper: &gt;{data.alert_thresholds.high} mg/dL</span>
+          </div>
+        </>
+      )}
+
+      {!data && !error && !loading && (
+        <p className="text-sm text-muted-foreground">
+          {t("dexcom.clickToLoad", { defaultValue: "Klicke auf 'Werte abrufen' um die aktuellen Glukosewerte von Dexcom zu laden." })}
+        </p>
       )}
     </div>
   );
