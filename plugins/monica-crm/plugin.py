@@ -97,21 +97,27 @@ def register(api):
                 r = await client.get(f"/api/contacts/{contact_id}")
                 r.raise_for_status()
                 c = r.json().get("data", {})
-                phones = [{"label": p.get("name", ""), "number": p.get("content", "")}
-                          for p in c.get("information", {}).get("phone_numbers", {}).get("data", [])]
-                emails = [e.get("content", "")
-                          for e in c.get("information", {}).get("contact_fields", {}).get("data", [])
-                          if "email" in e.get("contact_field_type", {}).get("type", "").lower()]
+                info = c.get("information") or {}
+                phone_data = (info.get("phone_numbers") or {}).get("data") or []
+                phones = [{"label": p.get("name", ""), "number": p.get("content", "")} for p in phone_data]
+                cf_data = (info.get("contact_fields") or {}).get("data") or []
+                emails = [e.get("content", "") for e in cf_data
+                          if "email" in (e.get("contact_field_type") or {}).get("type", "").lower()]
+                career = info.get("career") or {}
+                dates = info.get("dates") or {}
+                birthdate = (dates.get("birthdate") or {}).get("date", "")
+                tags_data = (c.get("tags") or {}).get("data") or []
                 return json.dumps({
                     "id": c.get("id"),
                     "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
                     "nickname": c.get("nickname", ""),
-                    "birthday": c.get("information", {}).get("dates", {}).get("birthdate", {}).get("date", ""),
-                    "company": c.get("information", {}).get("career", {}).get("company", ""),
-                    "job_title": c.get("information", {}).get("career", {}).get("title", ""),
+                    "gender": c.get("gender", ""),
+                    "birthday": birthdate,
+                    "company": career.get("company", ""),
+                    "job_title": career.get("job", ""),
                     "phones": phones, "emails": emails,
                     "notes": c.get("description", ""),
-                    "tags": [t.get("name", "") for t in c.get("tags", {}).get("data", [])],
+                    "tags": [t.get("name", "") for t in tags_data],
                     "last_activity": c.get("last_activity_together"),
                 })
         except Exception as e:
