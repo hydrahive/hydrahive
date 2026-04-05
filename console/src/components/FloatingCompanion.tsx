@@ -7,17 +7,62 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 
-const COMPANION_FACES = {
-  idle:    "(◕ᴗ◕)",
-  happy:   "(✿◠‿◠)",
-  think:   "(◑_◑)",
-  sleep:   "(ᴗ˳ᴗ)ᶻᶻ",
-  shock:   "(◉_◉)",
-  love:    "(♥‿♥)",
-  sad:     "(◞‸◟)",
-};
+type Mood = "idle" | "happy" | "think" | "sleep" | "shock" | "love" | "sad";
 
-type Mood = keyof typeof COMPANION_FACES;
+/** Animated SVG blob creature — changes expression based on mood */
+function BlobCreature({ mood, size = 48 }: { mood: Mood; size?: number }) {
+  const eyes: Record<Mood, string> = {
+    idle:  "M16 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm16 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z",
+    happy: "M14.5 18.5q1.5-2 3 0m13-0q1.5-2 3 0",
+    think: "M16 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm16-1a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
+    sleep: "M14 18h4m12 0h4",
+    shock: "M16 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm16 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+    love:  "M14 18l2-2 2 2-2 2Zm12 0l2-2 2 2-2 2Z",
+    sad:   "M16 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm16 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z",
+  };
+  const mouth: Record<Mood, string> = {
+    idle:  "M20 26q4 3 8 0",
+    happy: "M18 25q6 6 12 0",
+    think: "M21 27h6",
+    sleep: "M20 26q4 2 8 0",
+    shock: "M22 27a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z",
+    love:  "M18 25q6 6 12 0",
+    sad:   "M20 28q4-3 8 0",
+  };
+  const bodyColor = mood === "sleep" ? "#6366f1" : mood === "sad" ? "#8b5cf6" : "#a78bfa";
+  const cheekOpacity = mood === "happy" || mood === "love" ? 0.4 : 0;
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Body — wobbly blob */}
+      <ellipse cx="24" cy="26" rx="18" ry="16" fill={bodyColor} opacity="0.9">
+        <animate attributeName="ry" values="16;17;16" dur="2s" repeatCount="indefinite" />
+        <animate attributeName="rx" values="18;17.5;18" dur="2s" repeatCount="indefinite" />
+      </ellipse>
+      {/* Cheeks */}
+      <circle cx="12" cy="24" r="3" fill="#f472b6" opacity={cheekOpacity} />
+      <circle cx="36" cy="24" r="3" fill="#f472b6" opacity={cheekOpacity} />
+      {/* Eyes */}
+      <path d={eyes[mood]} fill="white" stroke="white" strokeWidth="0.5" />
+      {/* Mouth */}
+      <path d={mouth[mood]} stroke="white" strokeWidth="1.5" strokeLinecap="round" fill={mood === "shock" ? "white" : "none"} />
+      {/* Zzz for sleep */}
+      {mood === "sleep" && (
+        <text x="36" y="12" fontSize="8" fill="white" opacity="0.6" fontFamily="monospace">
+          <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2s" repeatCount="indefinite" />
+          z
+        </text>
+      )}
+      {/* Sparkle for love */}
+      {mood === "love" && (
+        <>
+          <text x="4" y="10" fontSize="8" fill="#f472b6">✦</text>
+          <text x="38" y="8" fontSize="6" fill="#f472b6">✦</text>
+        </>
+      )}
+    </svg>
+  );
+}
 
 // Kontext-Prompts je nach Seite
 const PAGE_CONTEXTS: Record<string, string> = {
@@ -116,20 +161,19 @@ export function FloatingCompanion() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 pointer-events-none select-none">
+    <div className="fixed bottom-4 right-20 z-50 flex flex-col items-end gap-2 pointer-events-none select-none">
       {/* Sprechblase */}
       {showBubble && bubble && (
         <div className="pointer-events-auto max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300">
           {bubble}
         </div>
       )}
-      {/* Companion */}
+      {/* Companion — animated SVG blob */}
       <div
-        className="pointer-events-auto cursor-default text-2xl transition-all duration-500 hover:scale-110"
+        className="pointer-events-auto cursor-default transition-all duration-500 hover:scale-110"
         style={{ animation: mood === "sleep" ? "none" : "companion-bob 3s ease-in-out infinite" }}
         title="👋"
         onClick={() => {
-          // Klick weckt auf
           if (mood === "sleep") {
             setMood("happy");
             setBubble("*gähn* ... bin wach!");
@@ -138,7 +182,7 @@ export function FloatingCompanion() {
           }
         }}
       >
-        <span className="drop-shadow-md">{COMPANION_FACES[mood]}</span>
+        <BlobCreature mood={mood} size={48} />
       </div>
       <style>{`
         @keyframes companion-bob {
