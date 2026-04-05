@@ -768,6 +768,7 @@ def register_core_misc_routes(
         "systemctl", "journalctl", "tailscale", "docker", "podman",
         "ls", "cat", "wc",
         "du", "head", "tail", "grep", "find", "which",
+        "python3", "pip",
     }
     BLOCKED_SHELL_PATTERNS = {"rm -rf", "mkfs", "dd if=", ":(){ :|:&", "shutdown", "reboot", "halt", "init 0"}
 
