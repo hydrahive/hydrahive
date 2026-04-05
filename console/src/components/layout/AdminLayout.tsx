@@ -76,58 +76,75 @@ function useUpdateStatus(isAdmin: boolean) {
 
     try {
       await api.updateTrigger();
-
-      // SSE-Stream für Live-Log
-      const token = localStorage.getItem("hydrahive_token") || "";
-      const res = await fetch("/api/admin/update/stream", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok || !res.body) {
-        setLogLines(l => [...l, `Fehler: HTTP ${res.status}`]);
-        setLogDone(false);
-        setUpdating(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const parts = buf.split("\n\n");
-          buf = parts.pop() || "";
-          for (const part of parts) {
-            const line = part.replace(/^data: /, "").trim();
-            if (!line) continue;
-            try {
-              const d = JSON.parse(line);
-              if (d.line !== undefined) setLogLines(l => [...l.slice(-499), d.line]);
-              if (d.done) {
-                setLogDone(d.ok);
-                setUpdating(false);
-                if (d.status?.commit) setLastCommit(d.status.commit);
-                if (!d.ok) setError(d.status?.error || "Update fehlgeschlagen");
-                else setError(null);
-                setUpdateAvailable(false);
-              }
-            } catch { /* ignore parse errors */ }
-          }
-        }
-      } finally {
-        reader.cancel().catch(() => {});
-      }
-      // Stream ended without done event
-      setLogDone(prev => prev ?? false);
-      setUpdating(false);
     } catch (e: unknown) {
       setUpdating(false);
       setLogDone(false);
       setError(e instanceof Error ? e.message : "Fehler");
       setLogLines(l => [...l, `[ERROR] ${e instanceof Error ? e.message : "Unbekannter Fehler"}`]);
+      return;
     }
+
+    // Polling-basiertes Log-Tailing (überlebt Core-Restart)
+    let seenLines = 0;
+    let finished = false;
+    let retries = 0;
+    const MAX_RETRIES = 90; // ~3 Minuten bei 2s Intervall
+
+    const poll = setInterval(async () => {
+      if (finished) { clearInterval(poll); return; }
+      const token = localStorage.getItem("hydrahive_token") || "";
+      try {
+        const res = await fetch("/api/admin/update/status", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          // Core ist noch weg (Restart) — weiter warten
+          retries++;
+          if (retries > MAX_RETRIES) {
+            finished = true;
+            clearInterval(poll);
+            setLogLines(l => [...l, "[TIMEOUT] Update dauert zu lange oder Core nicht erreichbar"]);
+            setLogDone(false);
+            setUpdating(false);
+          }
+          return;
+        }
+        retries = 0; // Reset bei Erfolg
+        const data = await res.json();
+        const logTail: string[] = data.log_tail || [];
+
+        // Neue Zeilen anzeigen
+        if (logTail.length > seenLines) {
+          const newLines = logTail.slice(seenLines);
+          setLogLines(l => [...l, ...newLines].slice(-500));
+          seenLines = logTail.length;
+        }
+
+        // Status prüfen
+        const st = data.status || "";
+        if (st === "ok" || st === "error") {
+          finished = true;
+          clearInterval(poll);
+          setLogDone(st === "ok");
+          setUpdating(false);
+          if (data.commit) setLastCommit(data.commit);
+          if (st === "error") setError(data.error || "Update fehlgeschlagen");
+          else { setError(null); setUpdateAvailable(false); }
+        }
+      } catch {
+        // Netzwerk-Fehler (Core restartet gerade) — weiter warten
+        retries++;
+        if (retries <= 5) {
+          setLogLines(l => [...l, "⏳ Core startet neu..."]);
+        }
+        if (retries > MAX_RETRIES) {
+          finished = true;
+          clearInterval(poll);
+          setLogDone(false);
+          setUpdating(false);
+        }
+      }
+    }, 2000);
   }, []);
 
   const closeLog = useCallback(() => {

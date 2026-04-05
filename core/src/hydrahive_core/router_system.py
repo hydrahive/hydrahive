@@ -435,7 +435,7 @@ def register_system_routes(
         status = _load_update_status()
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()
-            status["log_tail"] = lines[-20:]
+            status["log_tail"] = lines[-200:]
         except Exception as e:
             logger.debug("Failed to read update log: %s", e)
             status["log_tail"] = []
