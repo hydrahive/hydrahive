@@ -1,42 +1,90 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard } from "lucide-react";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { ActivityPage } from "@/pages/ActivityPage";
 import { UsagePage } from "@/pages/UsagePage";
 import { AuditPage } from "@/pages/AuditPage";
 
-type DashboardTab = "overview" | "activity" | "usage" | "audit";
+type BuiltinTab = "overview" | "activity" | "usage" | "audit";
 
-const TAB_DEFS: { id: DashboardTab; labelKey: string; icon: React.ElementType }[] = [
+interface CustomTab {
+  id: string;
+  label: string;
+  icon: string;
+  type: "markdown" | "links" | "iframe";
+  content?: string;
+  url?: string;
+}
+
+interface DashboardConfig {
+  custom_tabs: CustomTab[];
+  overview_widgets: { hidden: string[]; order: string[] };
+}
+
+const BUILTIN_TABS: { id: BuiltinTab; labelKey: string; icon: React.ElementType }[] = [
   { id: "overview",  labelKey: "dashboard.tabOverview",  icon: LayoutDashboard },
   { id: "activity",  labelKey: "dashboard.tabActivity",  icon: Activity },
   { id: "usage",     labelKey: "dashboard.tabUsage",     icon: BarChart2 },
   { id: "audit",     labelKey: "dashboard.tabAudit",     icon: ShieldCheck },
 ];
 
+const TAB_ICON_MAP: Record<string, React.ElementType> = {
+  FileText, Link2, MonitorPlay, Globe, LayoutDashboard, Activity, BarChart2, ShieldCheck,
+  Bot, FolderKanban, Cpu, Radar, Workflow,
+};
+
 export function DashboardPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const rawTab = searchParams.get("tab") ?? "overview";
-  const activeTab: DashboardTab = (["overview", "activity", "usage", "audit"] as const).includes(rawTab as DashboardTab)
-    ? (rawTab as DashboardTab)
-    : "overview";
+  const [config, setConfig] = useState<DashboardConfig>({ custom_tabs: [], overview_widgets: { hidden: [], order: [] } });
+  const [editTab, setEditTab] = useState<CustomTab | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
 
-  function switchTab(tab: DashboardTab) {
-    if (tab === "overview") {
-      setSearchParams({}, { replace: true });
-    } else {
-      setSearchParams({ tab }, { replace: true });
-    }
+  // Config laden
+  useEffect(() => {
+    api.get<DashboardConfig>("/dashboard/config").then(setConfig).catch(() => {});
+  }, []);
+
+  const rawTab = searchParams.get("tab") ?? "overview";
+  const builtinIds = BUILTIN_TABS.map(t => t.id) as string[];
+  const activeTab = builtinIds.includes(rawTab) || config.custom_tabs.some(ct => ct.id === rawTab) ? rawTab : "overview";
+
+  function switchTab(tab: string) {
+    if (tab === "overview") setSearchParams({}, { replace: true });
+    else setSearchParams({ tab }, { replace: true });
   }
 
-  const TabContent = activeTab === "activity" ? ActivityPage
+  async function saveConfig(newConfig: DashboardConfig) {
+    setConfig(newConfig);
+    await api.put("/dashboard/config", newConfig).catch(() => {});
+  }
+
+  function addOrUpdateTab(tab: CustomTab) {
+    const existing = config.custom_tabs.findIndex(ct => ct.id === tab.id);
+    const tabs = [...config.custom_tabs];
+    if (existing >= 0) tabs[existing] = tab;
+    else tabs.push(tab);
+    saveConfig({ ...config, custom_tabs: tabs });
+    setShowEditor(false);
+    setEditTab(null);
+    switchTab(tab.id);
+  }
+
+  function deleteTab(tabId: string) {
+    saveConfig({ ...config, custom_tabs: config.custom_tabs.filter(ct => ct.id !== tabId) });
+    if (activeTab === tabId) switchTab("overview");
+  }
+
+  const BuiltinContent = activeTab === "activity" ? ActivityPage
     : activeTab === "usage" ? UsagePage
     : activeTab === "audit" ? AuditPage
     : null;
+
+  const customTab = config.custom_tabs.find(ct => ct.id === activeTab);
 
   return (
     <div className="flex flex-col h-full">
@@ -52,7 +100,7 @@ export function DashboardPage() {
           </p>
         )}
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
-          {TAB_DEFS.map(tab => (
+          {BUILTIN_TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => switchTab(tab.id)}
@@ -67,11 +115,158 @@ export function DashboardPage() {
               {t(tab.labelKey, { defaultValue: tab.id.charAt(0).toUpperCase() + tab.id.slice(1) })}
             </button>
           ))}
+          {config.custom_tabs.map(ct => {
+            const Icon = TAB_ICON_MAP[ct.icon] || FileText;
+            return (
+              <button
+                key={ct.id}
+                onClick={() => switchTab(ct.id)}
+                className={cn(
+                  "group flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px",
+                  activeTab === ct.id
+                    ? "border-primary text-foreground bg-background"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <Icon size={14} />
+                {ct.label}
+                <span
+                  onClick={e => { e.stopPropagation(); setEditTab(ct); setShowEditor(true); }}
+                  className="hidden group-hover:inline-flex ml-1 text-muted-foreground/50 hover:text-primary"
+                >
+                  <Pencil size={10} />
+                </span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => { setEditTab(null); setShowEditor(true); }}
+            className="flex items-center gap-1 px-3 py-2.5 text-sm text-muted-foreground hover:text-primary transition-colors border-b-2 border-transparent -mb-px"
+            title={t("dashboard.addTab", { defaultValue: "Tab hinzufügen" })}
+          >
+            <Plus size={14} />
+          </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
-        {TabContent ? <TabContent /> : <DashboardOverview />}
+        {BuiltinContent ? <BuiltinContent />
+          : customTab ? <CustomTabContent tab={customTab} />
+          : <DashboardOverview />}
+      </div>
+
+      {/* Tab-Editor Modal */}
+      {showEditor && (
+        <TabEditorModal
+          tab={editTab}
+          onSave={addOrUpdateTab}
+          onDelete={editTab ? () => { deleteTab(editTab.id); setShowEditor(false); setEditTab(null); } : undefined}
+          onClose={() => { setShowEditor(false); setEditTab(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Custom Tab Content ─────────────────────────────────────────── */
+
+function CustomTabContent({ tab }: { tab: CustomTab }) {
+  if (tab.type === "iframe" && tab.url) {
+    return (
+      <div className="h-full">
+        <iframe src={tab.url} className="w-full h-full border-0" title={tab.label} sandbox="allow-scripts allow-same-origin allow-forms" />
+      </div>
+    );
+  }
+  return (
+    <div className="p-6 max-w-4xl prose prose-sm dark:prose-invert">
+      <ReactMarkdown>{tab.content || "*Noch kein Inhalt.*"}</ReactMarkdown>
+    </div>
+  );
+}
+
+/* ── Tab Editor Modal ───────────────────────────────────────────── */
+
+function TabEditorModal({ tab, onSave, onDelete, onClose }: {
+  tab: CustomTab | null;
+  onSave: (tab: CustomTab) => void;
+  onDelete?: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [label, setLabel] = useState(tab?.label || "");
+  const [icon, setIcon] = useState(tab?.icon || "FileText");
+  const [type, setType] = useState<CustomTab["type"]>(tab?.type || "markdown");
+  const [content, setContent] = useState(tab?.content || "");
+  const [url, setUrl] = useState(tab?.url || "");
+
+  function save() {
+    const id = tab?.id || label.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").slice(0, 30) || `tab-${Date.now()}`;
+    onSave({ id, label: label || "Neuer Tab", icon, type, content, url });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-card border rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">{tab ? t("dashboard.editTab", { defaultValue: "Tab bearbeiten" }) : t("dashboard.addTab", { defaultValue: "Neuer Tab" })}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">{t("dashboard.tabName", { defaultValue: "Name" })}</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Mein Tab"
+              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">{t("dashboard.tabIcon", { defaultValue: "Icon" })}</label>
+            <select value={icon} onChange={e => setIcon(e.target.value)}
+              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm">
+              {Object.keys(TAB_ICON_MAP).map(k => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">{t("dashboard.tabType", { defaultValue: "Typ" })}</label>
+            <div className="flex gap-2 mt-1">
+              {(["markdown", "iframe"] as const).map(tp => (
+                <button key={tp} onClick={() => setType(tp)}
+                  className={cn("flex-1 px-3 py-2 text-xs rounded-lg border transition-colors",
+                    type === tp ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted")}>
+                  {tp === "markdown" ? "Markdown / Notizen" : "iFrame (URL)"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {type === "markdown" ? (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("dashboard.tabContent", { defaultValue: "Inhalt (Markdown)" })}</label>
+              <textarea value={content} onChange={e => setContent(e.target.value)} rows={8} placeholder="## Meine Notizen\n\n- Link 1\n- Link 2"
+                className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">{t("dashboard.tabUrl", { defaultValue: "URL" })}</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://grafana.local/d/..."
+                className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between pt-2">
+          {onDelete ? (
+            <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-2 text-xs text-red-500 hover:bg-red-500/10 rounded-lg transition-colors">
+              <Trash2 size={14} /> {t("common.delete", { defaultValue: "Löschen" })}
+            </button>
+          ) : <div />}
+          <button onClick={save}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
+            <Save size={14} /> {t("common.save", { defaultValue: "Speichern" })}
+          </button>
+        </div>
       </div>
     </div>
   );

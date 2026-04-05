@@ -761,6 +761,51 @@ def register_core_misc_routes(
         resolved.unlink()
         return {"ok": True, "path": str(resolved)}
 
+    # ── Dashboard-Config (#274) ──────────────────────────────────────
+
+    _DASHBOARD_DIR = Path("/etc/hydrahive/dashboard")
+
+    @auth_router.get("/dashboard/config")
+    def get_dashboard_config(_a: tuple[str, str] = Depends(require_auth)):
+        import json as _json
+        username, _ = _a
+        cfg_path = _DASHBOARD_DIR / f"{username}.json"
+        if not cfg_path.exists():
+            return {"custom_tabs": [], "overview_widgets": {"hidden": [], "order": []}}
+        try:
+            return _json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"custom_tabs": [], "overview_widgets": {"hidden": [], "order": []}}
+
+    @auth_router.put("/dashboard/config")
+    def save_dashboard_config(body: dict, _a: tuple[str, str] = Depends(require_auth)):
+        import json as _json
+        username, _ = _a
+        _DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
+        cfg_path = _DASHBOARD_DIR / f"{username}.json"
+        # Validierung: nur erlaubte Keys
+        safe = {
+            "custom_tabs": body.get("custom_tabs", [])[:20],  # max 20 Tabs
+            "overview_widgets": body.get("overview_widgets", {}),
+        }
+        # Tabs validieren
+        for tab in safe["custom_tabs"]:
+            if not isinstance(tab, dict):
+                continue
+            tab["id"] = str(tab.get("id", ""))[:30]
+            tab["label"] = str(tab.get("label", ""))[:50]
+            tab["icon"] = str(tab.get("icon", "FileText"))[:30]
+            tab["type"] = str(tab.get("type", "markdown"))[:20]
+            if tab["type"] == "iframe":
+                tab["url"] = str(tab.get("url", ""))[:500]
+                tab.pop("content", None)
+            else:
+                tab["content"] = str(tab.get("content", ""))[:50000]
+                tab.pop("url", None)
+        cfg_path.write_text(_json.dumps(safe, indent=2, ensure_ascii=False), encoding="utf-8")
+        cfg_path.chmod(0o600)
+        return {"saved": True}
+
     # ── Eingeschränkte Shell (#129) ───────────────────────────────────
 
     ALLOWED_SHELL_COMMANDS = {
