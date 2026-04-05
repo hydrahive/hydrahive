@@ -19,13 +19,20 @@ source "$CONF"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WEBSITE="$REPO/website"
-PASS_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$FTP_PASS")
-FTP="ftp://${FTP_USER}:${PASS_ENC}@${FTP_HOST}/hydrahive.org"
+# #296: FTPS statt Klartext-FTP, Credentials nicht in URL/Prozessliste
+# All-Inkl KAS unterstützt FTPS (Explicit TLS)
+NETRC_TMP=$(mktemp)
+chmod 600 "$NETRC_TMP"
+echo "machine ${FTP_HOST} login ${FTP_USER} password ${FTP_PASS}" > "$NETRC_TMP"
+trap "rm -f '$NETRC_TMP'" EXIT
 
-echo "==> Deploye Website nach hydrahive.org..."
+echo "==> Deploye Website nach hydrahive.org (FTPS)..."
 for f in index.html index.htm handbuch.html api.html technical.html development.html datenschutz.html impressum.html; do
   if [ -f "$WEBSITE/$f" ]; then
-    curl -s --ftp-pasv -T "$WEBSITE/$f" "${FTP}/$f" && echo "  ✓ $f"
+    curl -s --ftp-ssl-reqd --ftp-pasv \
+      --netrc-file "$NETRC_TMP" \
+      -T "$WEBSITE/$f" "ftp://${FTP_HOST}/hydrahive.org/$f" \
+      && echo "  ✓ $f" || echo "  ✗ $f (Fehler)"
   fi
 done
 echo "==> Fertig: https://hydrahive.org"

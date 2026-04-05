@@ -1,8 +1,19 @@
+# #295: Installer-Module explizit statt Glob, Tailscale dedupliziert
 Defaults:hydrahive !requiretty
-hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/*.sh
+
+# Console-Installation (nur die konkreten Module)
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/07_console.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/08_ollama.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/10_gitea.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/11_agentlink.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/12_vpn.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/13_whatsapp_bridge.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/15_codeserver.sh
+hydrahive ALL=(root) NOPASSWD: /bin/bash /opt/hydrahive/installer/modules/17_vaultwarden.sh
+
+# WhatsApp Bridge Restart
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-whatsapp-bridge
-hydrahive ALL=(root) NOPASSWD: /usr/bin/systemctl restart hydrahive-whatsapp-bridge
-hydrahive ALL=(root) NOPASSWD: /usr/bin/tailscale up *
+
+# Tailscale
+hydrahive ALL=(root) NOPASSWD: /usr/bin/tailscale up --authkey *
 hydrahive ALL=(root) NOPASSWD: /usr/bin/tailscale down
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/tailscale up *
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/tailscale down

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
@@ -139,6 +140,7 @@ function MessengerSection({ title, icon: Icon, defaultOpen, children }: {
 
 export function MyAgentPage() {
   const { t } = useTranslation();
+  const { capabilities } = useCapabilities();
 
   const SLASH_COMMANDS = [
     { cmd: "/help",     desc: t("slashCommands.help") },
@@ -931,18 +933,25 @@ export function MyAgentPage() {
       {tab === "messenger" && (
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <h2 className="text-lg font-semibold">Messenger</h2>
-          <MessengerSection title="WhatsApp" icon={Phone}>
-            <WhatsAppTab />
-          </MessengerSection>
-          <MessengerSection title="Discord" icon={MessageSquare}>
-            <DiscordTab />
-          </MessengerSection>
+          {/* #233: Messenger nur anzeigen wenn Feature installiert/konfiguriert */}
+          {(!capabilities["whatsapp-bridge"] || capabilities["whatsapp-bridge"].installed) && (
+            <MessengerSection title="WhatsApp" icon={Phone}>
+              <WhatsAppTab />
+            </MessengerSection>
+          )}
+          {(!capabilities["discord"] || capabilities["discord"].configured) && (
+            <MessengerSection title="Discord" icon={MessageSquare}>
+              <DiscordTab />
+            </MessengerSection>
+          )}
           <MessengerSection title="Telegram" icon={Send}>
             <TelegramTab />
           </MessengerSection>
-          <MessengerSection title="Mail" icon={Mail}>
-            <MailTab />
-          </MessengerSection>
+          {(!capabilities["kas"] || capabilities["kas"].configured) && (
+            <MessengerSection title="Mail" icon={Mail}>
+              <MailTab />
+            </MessengerSection>
+          )}
         </div>
       )}
 

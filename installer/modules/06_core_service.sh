@@ -29,15 +29,41 @@ if [ ! -d "/home/${HYDRAHIVE_USER}" ]; then
 fi
 
 # --- Passwordless sudo für Extension-Manager (sudo -n braucht NOPASSWD) ---
+# #295: sudoers auf minimale Befehle einschränken — keine Wildcards wo vermeidbar
 cat > /etc/sudoers.d/hydrahive << SUDOEOF
-hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-core, /bin/systemctl stop hydrahive-core, /bin/systemctl start hydrahive-core
-hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd, /bin/systemctl reload nginx
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd *, /usr/sbin/userdel *
-hydrahive ALL=(root) NOPASSWD: /bin/chown * /projects/*, /bin/chmod * /projects/*, /bin/mkdir -p /projects/*
-hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd *, /usr/bin/smbcontrol *
+# Service-Management (nur hydrahive-* Services + nginx/smbd reload)
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-core
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl stop hydrahive-core
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl start hydrahive-core
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl restart hydrahive-*
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl stop hydrahive-*
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl start hydrahive-*
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd
+hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload nginx
+
+# Projekt-Isolation (nur /projects/ Pfad, kein Path-Traversal)
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd --system --no-create-home -d /projects/* -s /usr/sbin/nologin *
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/userdel --remove *
+hydrahive ALL=(root) NOPASSWD: /bin/chown -R hydrahive\:hydrahive /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chmod 750 /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/mkdir -p /projects/*
+
+# Samba (nur reload + Passwort-Operationen)
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -a *
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -x *
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol smbd reload-config
+
+# Debugging (nur hydrahive-* Unit-Logs, nicht alle)
+hydrahive ALL=(root) NOPASSWD: /bin/journalctl -u hydrahive-*
+hydrahive ALL=(root) NOPASSWD: /bin/journalctl -u nginx*
+
+# Port-Freigabe
 hydrahive ALL=(root) NOPASSWD: /usr/bin/fuser -k 8765/tcp
-hydrahive ALL=(root) NOPASSWD: /bin/journalctl *
-Defaults:hydrahive !requiretty
+
+# UFW Status (readonly)
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/ufw status numbered
+
+Defaults\:hydrahive !requiretty
 SUDOEOF
 chmod 440 /etc/sudoers.d/hydrahive
 

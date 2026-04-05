@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { CapabilitiesProvider } from "@/hooks/useCapabilities";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const AdminLayout       = lazy(() => import("@/components/layout/AdminLayout").then((m) => ({ default: m.AdminLayout })));
@@ -91,7 +92,7 @@ export default function App() {
           <Route path="/login"      element={<LoginPage />} />
           <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="/onboarding" element={<ProtectedRoute><OnboardingWizardPage /></ProtectedRoute>} />
-          <Route path="/" element={<ProtectedRoute><OnboardingGuard><AdminLayout /></OnboardingGuard></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><CapabilitiesProvider><OnboardingGuard><AdminLayout /></OnboardingGuard></CapabilitiesProvider></ProtectedRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
             <Route path="agents"            element={<AgentsPage />} />
