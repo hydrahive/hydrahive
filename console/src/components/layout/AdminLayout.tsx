@@ -111,12 +111,15 @@ function useUpdateStatus(isAdmin: boolean) {
         retries = 0;
         const data = await res.json();
         const logTail: string[] = (data.log_tail || []).map(stripAnsi);
+        const logTotal: number = data.log_total || logTail.length;
 
-        // Neue Zeilen anzeigen
-        if (logTail.length > seenLines) {
-          const newLines = logTail.slice(seenLines);
+        // Neue Zeilen anzeigen (logTotal = absolute Zeilenanzahl im Log)
+        if (logTotal > seenLines) {
+          // Berechne wie viele neue Zeilen seit dem letzten Poll dazugekommen sind
+          const newCount = logTotal - seenLines;
+          const newLines = logTail.slice(Math.max(0, logTail.length - newCount));
           setLogLines(l => [...l, ...newLines].slice(-500));
-          seenLines = logTail.length;
+          seenLines = logTotal;
         }
 
         // Status prüfen

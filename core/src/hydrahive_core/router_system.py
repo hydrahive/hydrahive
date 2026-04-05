@@ -391,8 +391,9 @@ def register_system_routes(
         # WhatsApp Bridge
         wa_installed = Path("/opt/hydrahive/whatsapp-bridge").exists()
         features.append(_feature("whatsapp-bridge", installed=wa_installed, configured=wa_installed, active=_svc_active("hydrahive-whatsapp-bridge")))
-        # Discord
-        features.append(_feature("discord", installed=True, configured=any(Path("/etc/hydrahive/agent_tokens").glob("*_discord.json")), active=True))
+        # Discord — active nur wenn mindestens ein Bot-Token konfiguriert ist
+        discord_configured = any(Path("/etc/hydrahive/agent_tokens").glob("*_discord.json"))
+        features.append(_feature("discord", installed=True, configured=discord_configured, active=discord_configured))
         # Vaultwarden
         vw_installed = Path("/usr/local/bin/vaultwarden").exists()
         features.append(_feature("vaultwarden", installed=vw_installed, configured=vw_installed, active=_svc_active("vaultwarden")))
@@ -436,9 +437,11 @@ def register_system_routes(
         try:
             lines = Path(log_file).read_text(errors="replace").splitlines()
             status["log_tail"] = lines[-200:]
+            status["log_total"] = len(lines)
         except Exception as e:
             logger.debug("Failed to read update log: %s", e)
             status["log_tail"] = []
+            status["log_total"] = 0
         return status
 
     @admin_router.get("/admin/runtime/status")
