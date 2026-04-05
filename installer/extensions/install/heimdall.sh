@@ -107,7 +107,7 @@ APP_NAME=Heimdall
 APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
-APP_URL=http://127.0.0.1:${HEIMDALL_PORT}
+APP_URL=http://SERVER_IP_PLACEHOLDER:${HEIMDALL_PORT}
 DB_CONNECTION=sqlite
 DB_DATABASE=${HEIMDALL_DIR}/database/app.sqlite
 LOG_CHANNEL=daily
@@ -116,8 +116,9 @@ SESSION_DRIVER=file
 QUEUE_CONNECTION=sync
 ENVEOF
 fi
-# APP_URL aktualisieren
-sed -i "s|^APP_URL=.*|APP_URL=http://127.0.0.1:${HEIMDALL_PORT}|" "${HEIMDALL_DIR}/.env"
+# APP_URL auf tatsächliche Server-IP setzen
+_SERVER_IP=$(hostname -I | awk '{print $1}')
+sed -i "s|^APP_URL=.*|APP_URL=http://${_SERVER_IP}:${HEIMDALL_PORT}|" "${HEIMDALL_DIR}/.env"
 sed -i "s|^APP_ENV=.*|APP_ENV=production|" "${HEIMDALL_DIR}/.env"
 
 # --- App-Key generieren ---
