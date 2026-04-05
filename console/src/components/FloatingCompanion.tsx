@@ -80,7 +80,7 @@ const PAGE_CONTEXTS: Record<string, string> = {
 
 export function FloatingCompanion() {
   const location = useLocation();
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => localStorage.getItem("hh_companion") === "1");
   const [bubble, setBubble] = useState("");
   const [mood, setMood] = useState<Mood>("idle");
   const [showBubble, setShowBubble] = useState(false);
