@@ -1,0 +1,13 @@
+{
+  "id": "sonarr",
+  "name": "Sonarr",
+  "description": "Automatische Serien-Verwaltung — verfolgt, lädt und organisiert TV-Serien aus Usenet und Torrents.",
+  "icon": "MonitorPlay",
+  "category": "media",
+  "install_script": "extensions/install/sonarr.sh",
+  "uninstall_script": "extensions/uninstall/sonarr.sh",
+  "service": "sonarr",
+  "health_url": "http://127.0.0.1:8989/",
+  "open_url": ":8989/",
+  "installed_check": "/opt/sonarr"
+}

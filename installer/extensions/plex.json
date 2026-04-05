@@ -1,0 +1,13 @@
+{
+  "id": "plex",
+  "name": "Plex Media Server",
+  "description": "Plex Media Server — streamt Filme, Serien und Musik aus dem Heimnetz auf alle Geräte.",
+  "icon": "Tv",
+  "category": "media",
+  "install_script": "extensions/install/plex.sh",
+  "uninstall_script": "extensions/uninstall/plex.sh",
+  "service": "plexmediaserver",
+  "health_url": "http://127.0.0.1:32400/web",
+  "open_url": ":32400/web",
+  "installed_check": "/usr/lib/plexmediaserver"
+}

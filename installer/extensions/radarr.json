@@ -1,0 +1,13 @@
+{
+  "id": "radarr",
+  "name": "Radarr",
+  "description": "Automatische Film-Verwaltung — findet, lädt und organisiert Filme über Usenet und Torrents.",
+  "icon": "Film",
+  "category": "media",
+  "install_script": "extensions/install/radarr.sh",
+  "uninstall_script": "extensions/uninstall/radarr.sh",
+  "service": "radarr",
+  "health_url": "http://127.0.0.1:7878/",
+  "open_url": ":7878/",
+  "installed_check": "/opt/radarr"
+}

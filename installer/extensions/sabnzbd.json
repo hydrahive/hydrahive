@@ -1,0 +1,13 @@
+{
+  "id": "sabnzbd",
+  "name": "SABnzbd",
+  "description": "Usenet-Downloader mit Web-Oberfläche — automatisches Entpacken, Repair und Postprocessing.",
+  "icon": "Download",
+  "category": "media",
+  "install_script": "extensions/install/sabnzbd.sh",
+  "uninstall_script": "extensions/uninstall/sabnzbd.sh",
+  "service": "sabnzbd",
+  "health_url": "http://127.0.0.1:8280/",
+  "open_url": ":8280/",
+  "installed_check": "/usr/bin/sabnzbdplus"
+}
