@@ -428,6 +428,7 @@ def register_system_routes(
 
     @admin_router.get("/admin/update/status")
     def get_update_status():
+        """Update-Status + Log-Tail für Polling-Clients."""
         log_file = "/var/log/hydrahive-update.log"
         if not Path(log_file).exists():
             log_file = "/var/log/hydrahive-update.log"
