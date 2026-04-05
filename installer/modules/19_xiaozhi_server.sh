@@ -27,9 +27,9 @@ fi
 # --- Verzeichnisse anlegen ---
 mkdir -p "${XIAOZHI_DIR}/data" "${XIAOZHI_DIR}/models"
 
-# --- Konfiguration schreiben (nur wenn nicht vorhanden) ---
+# --- Konfiguration schreiben (immer aktualisieren für Upgrade-Sicherheit) ---
 CONFIG_FILE="${XIAOZHI_DIR}/data/.config.yaml"
-if [[ ! -f "${CONFIG_FILE}" ]]; then
+if true; then
     info "Erstelle .config.yaml..."
     cat > "${CONFIG_FILE}" << YAML
 server:
@@ -109,7 +109,7 @@ fi
 success "XiaoZhi ESP32 Server bereit"
 info "  WebSocket: ws://${SERVER_HOST}:8000/xiaozhi/v1/"
 info "  OTA:       http://${SERVER_HOST}:8003/xiaozhi/ota/"
-info "  LLM:       http://${HYDRAHIVE_HOST}:${HYDRAHIVE_PORT}/api/v1"
+info "  LLM:       http://${HYDRAHIVE_HOST}:${HYDRAHIVE_PORT}/v1"
 info ""
 info "ESP32-Firmware muss auf diesen OTA-Endpunkt zeigen:"
 info "  CONFIG_OTA_URL=\"http://${SERVER_HOST}:8003/xiaozhi/ota/\""

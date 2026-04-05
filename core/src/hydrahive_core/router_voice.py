@@ -31,14 +31,29 @@ TTS_PORT = 10200
 
 
 def _load_voice_config() -> dict:
+    cfg = {"stt_host": STT_HOST, "stt_port": STT_PORT,
+           "tts_host": TTS_HOST, "tts_port": TTS_PORT,
+           "default_agent": "personal_admin"}
     if VOICE_CONFIG_FILE.exists():
         try:
-            return json.loads(VOICE_CONFIG_FILE.read_text(encoding="utf-8"))
+            raw = json.loads(VOICE_CONFIG_FILE.read_text(encoding="utf-8"))
+            cfg.update(raw)
         except Exception:
             pass
-    return {"stt_host": STT_HOST, "stt_port": STT_PORT,
-            "tts_host": TTS_HOST, "tts_port": TTS_PORT,
-            "default_agent": "personal_admin"}
+    # #318: Installer schreibt stt_url/tts_url — daraus host/port ableiten
+    for prefix in ("stt", "tts"):
+        url_key = f"{prefix}_url"
+        if url_key in cfg and isinstance(cfg[url_key], str):
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(cfg[url_key])
+                if parsed.hostname:
+                    cfg[f"{prefix}_host"] = parsed.hostname
+                if parsed.port:
+                    cfg[f"{prefix}_port"] = parsed.port
+            except Exception:
+                pass
+    return cfg
 
 
 # ── Wyoming Protocol Helpers ─────────────────────────────────────────
