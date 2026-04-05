@@ -55,19 +55,19 @@ def register_system_routes(
     app_version: str,
     logger: logging.Logger,
 ) -> None:
-    def _resolve_update_source() -> tuple[str, str]:
+    def _resolve_update_source() -> tuple[str, str, dict]:
         default_url = "https://github.com/hydrahive/hydrahive.git"
         default_source = "github/hydrahive"
         if not Path("/etc/hydrahive/use_local_gitea").exists():
-            return default_url, default_source
+            return default_url, default_source, {}
         p = Path(gitea_config_file)
         if not p.exists():
-            return default_url, default_source
+            return default_url, default_source, {}
         try:
             cfg = json.loads(p.read_text())
         except Exception as e:
             logger.debug("Failed to parse gitea config: %s", e)
-            return default_url, default_source
+            return default_url, default_source, {}
         base_url = str(cfg.get("url", "")).strip().rstrip("/")
         org = str(cfg.get("org", "hydrahive")).strip() or "hydrahive"
         repo = str(cfg.get("repo", org)).strip() or org
