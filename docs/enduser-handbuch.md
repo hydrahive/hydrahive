@@ -8,31 +8,26 @@ Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkons
 
 1. [Erster Login](#1-erster-login)
 2. [Die Webkonsole — Übersicht](#2-die-webkonsole--übersicht)
-3. [Mein Agent — Dein persönlicher KI-Assistent](#3-mein-agent--dein-persönlicher-ki-assistent)
-4. [LLM-Modell wechseln](#4-llm-modell-wechseln)
-5. [Agenten verwalten](#5-agenten-verwalten)
-6. [Einem Agenten Tools zuweisen](#6-einem-agenten-tools-zuweisen)
+3. [Dashboard — Übersicht, Aktivität, Usage, Audit](#3-dashboard--übersicht-aktivität-usage-audit)
+4. [Mein Agent — Dein persönlicher KI-Assistent](#4-mein-agent--dein-persönlicher-ki-assistent)
+5. [Messenger-Integrationen einrichten](#5-messenger-integrationen-einrichten)
+6. [Agenten verwalten (Admin)](#6-agenten-verwalten-admin)
 7. [Projekte anlegen und nutzen](#7-projekte-anlegen-und-nutzen)
-8. [HydraHub — Agenten und Plugins installieren](#8-hydrahub--agenten-und-plugins-installieren)
+8. [Hub — Extensions, Plugins, Skill-Pakete](#8-hub--extensions-plugins-skill-pakete)
 9. [ClawhHub — Skills aus der Community](#9-clawhub--skills-aus-der-community)
-10. [Plugins verwalten](#10-plugins-verwalten)
-11. [Skills — Agenten-Wissen erweitern](#11-skills--agenten-wissen-erweitern)
-12. [Federation — Mehrere Server verbinden](#12-federation--mehrere-server-verbinden)
-13. [Tailscale einrichten](#13-tailscale-einrichten)
-14. [HydraBrain — 3D-Ansicht](#14-hydrabrain--3d-ansicht)
-15. [Blueprint — Visueller Agent-Builder](#15-blueprint--visueller-agent-builder)
-16. [Scratchpad — Ideen skizzieren](#16-scratchpad--ideen-skizzieren)
-17. [Einstellungen — LLM Provider](#17-einstellungen--llm-provider)
-18. [Einstellungen — MCP Server](#18-einstellungen--mcp-server)
-19. [Einstellungen — VPN](#19-einstellungen--vpn)
-20. [Einstellungen — Mail](#20-einstellungen--mail)
-21. [Einstellungen — Benutzer & Rollen](#21-einstellungen--benutzer--rollen)
-22. [Einstellungen — Backup & Restore](#22-einstellungen--backup--restore)
-23. [Einstellungen — Erweiterungen](#23-einstellungen--erweiterungen)
-24. [Einstellungen — System-Update](#24-einstellungen--system-update)
-25. [Aktivität — Live-Monitor](#25-aktivität--live-monitor)
-26. [Usage — Token-Verbrauch](#26-usage--token-verbrauch)
-27. [Häufige Fragen](#27-häufige-fragen)
+10. [Federation — Mehrere Server verbinden](#10-federation--mehrere-server-verbinden)
+11. [Tailscale einrichten](#11-tailscale-einrichten)
+12. [HydraBrain — 3D-Ansicht](#12-hydrabrain--3d-ansicht)
+13. [Blueprint — Visueller Agent-Builder](#13-blueprint--visueller-agent-builder)
+14. [Scratchpad — Ideen skizzieren](#14-scratchpad--ideen-skizzieren)
+15. [Einstellungen — LLM Provider](#15-einstellungen--llm-provider)
+16. [Einstellungen — MCP Server](#16-einstellungen--mcp-server)
+17. [Einstellungen — VPN](#17-einstellungen--vpn)
+18. [Einstellungen — Mail](#18-einstellungen--mail)
+19. [Einstellungen — Benutzer & Rollen](#19-einstellungen--benutzer--rollen)
+20. [Einstellungen — Backup & Restore](#20-einstellungen--backup--restore)
+21. [Einstellungen — System-Update](#21-einstellungen--system-update)
+22. [Häufige Fragen](#22-häufige-fragen)
 
 ---
 
@@ -50,29 +45,51 @@ Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkons
 
 ## 2. Die Webkonsole — Übersicht
 
-Nach dem Login siehst du die Webkonsole. Links ist die **Sidebar** mit allen Bereichen:
+Nach dem Login siehst du die Webkonsole. Links ist die **Sidebar** mit allen Bereichen. Die Navigation ist flach aufgebaut — 10 Einträge ohne aufklappbare Gruppen:
 
 | Symbol | Bereich | Was du dort tust |
 |--------|---------|-----------------|
-| 🏠 | **Dashboard** | Übersicht: Agenten-Status, System-Auslastung |
+| 🏠 | **Dashboard** | Tabs: Übersicht, Aktivität, Usage, Audit |
 | 🤖 | **Mein Agent** | Chatten mit deinem persönlichen KI-Assistenten |
-| 👥 | **Agenten** | Alle Agenten anzeigen, erstellen, bearbeiten |
-| 📁 | **Projekte** | Projektbasiertes Arbeiten mit Agenten-Teams |
-| 📊 | **Aktivität** | Live-Ansicht: Welcher Agent arbeitet gerade? |
-| 💰 | **Usage** | Token-Verbrauch und Kosten pro Agent |
-| ⏰ | **Zeitpläne** | Automatische Aufgaben planen |
-| 🔍 | **Suche** | Globale Suche über alle Agenten und Projekte |
-| 🧩 | **Erweiterungen** | Optionale Dienste installieren |
-| 🔌 | **Plugins** | Plugin-System verwalten |
-| 🏪 | **HydraHub** | Agenten, Plugins und Skills installieren |
+| 👥 | **Agenten** | Alle Agenten anzeigen, erstellen, bearbeiten (Admin) |
+| 📁 | **Projekte** | Tabs: Projekte, Schedules |
 | 🧠 | **HydraBrain** | 3D-Visualisierung aller Agenten |
-| 🌐 | **Federation** | Server miteinander verbinden |
 | 📐 | **Blueprint** | Visueller Agent-Builder und Scratchpad |
-| ⚙️ | **Einstellungen** | LLM, VPN, Mail, Backup, Users |
+| 🏪 | **Hub** | Tabs: Extensions, Plugins, Skill-Pakete |
+| 🌐 | **Federation** | Server miteinander verbinden |
+| ⚙️ | **Einstellungen** | LLM, MCP, VPN, Mail, Backup, Users |
+| 🔍 | **Suche** | Globale Suche über alle Agenten und Projekte |
+
+> **Tipp für reguläre Benutzer:** Als normaler Benutzer arbeitest du hauptsächlich mit **Dashboard**, **Mein Agent** und **Projekte**. Konfigurationsaufgaben (Tools, Plugins, MCP-Server) erledigt der Admin in der **Agenten**-Seite.
 
 ---
 
-## 3. Mein Agent — Dein persönlicher KI-Assistent
+## 3. Dashboard — Übersicht, Aktivität, Usage, Audit
+
+Das Dashboard ist die Startseite nach dem Login. Es hat vier Tabs:
+
+| Tab | Inhalt |
+|-----|--------|
+| **Übersicht** | Agenten-Status, System-Auslastung, Quick-Links |
+| **Aktivität** | Live-Ansicht: Welcher Agent arbeitet gerade, mit Logs |
+| **Usage** | Token-Verbrauch und Kosten pro Agent und Modell |
+| **Audit** | Protokoll aller Admin-Aktionen |
+
+### Aktivität beobachten
+1. Klicke in der Sidebar auf **Dashboard**
+2. Wechsle zum Tab **Aktivität**
+3. Du siehst alle Agenten als Karten mit Status, aktueller Aufgabe und Laufzeit
+
+### Token-Verbrauch einsehen
+1. Klicke auf **Dashboard** → Tab **Usage**
+2. Du siehst den Verbrauch pro Agent und Modell, aufgeschlüsselt nach:
+   - **Input-Tokens** — Was du dem Agent schickst
+   - **Output-Tokens** — Was der Agent antwortet
+   - **Cache-Hits** — Wiederverwendete Daten (günstiger)
+
+---
+
+## 4. Mein Agent — Dein persönlicher KI-Assistent
 
 Jeder Benutzer hat einen eigenen KI-Agenten. So chattest du mit ihm:
 
@@ -101,35 +118,56 @@ Unter dem Chatfeld siehst du Buttons für Schnellbefehle:
 1. Tippe `/clear` ins Chatfeld und drücke **Enter**
 2. Der Chat-Verlauf wird gelöscht und der Agent startet frisch
 
-### Einstellungen deines Agents
-1. Klicke oben auf den Tab **Settings**
-2. Hier kannst du ändern:
-   - **Modell** — welches KI-Modell der Agent nutzt (z.B. Claude, GPT, Ollama)
-   - **Temperatur** — wie kreativ der Agent antwortet (0 = präzise, 1 = kreativ)
-   - **Name** — wie dein Agent heißt
+### Tabs in "Mein Agent"
+
+Die Seite **Mein Agent** hat folgende Tabs:
+
+| Tab | Inhalt |
+|-----|--------|
+| **Chat** | Chat-Fenster mit deinem persönlichen Agenten |
+| **Heartbeat** | Status-Anzeige und Verbindungsprüfung |
+| **Messenger** | Messenger-Integrationen (Discord, WhatsApp, Telegram, Mail) |
+| **WKS** | Workspace-Einstellungen |
+| **Butler** | Automatisierte Aufgaben deines Agenten |
+| **Mein Konto** | Dein Benutzerkonto und Passwort ändern |
+
+> **Hinweis:** Die Tabs **Settings**, **Skills** und **MCP** sind in der "Mein Agent"-Seite nicht mehr vorhanden. Diese Konfigurationen werden vom Admin in der **Agenten**-Seite verwaltet.
 
 ---
 
-## 4. LLM-Modell wechseln
+## 5. Messenger-Integrationen einrichten
 
-Dein Agent braucht ein KI-Modell zum Arbeiten. So wechselst du es:
+Unter **Mein Agent → Messenger** kannst du deinen persönlichen Agenten mit verschiedenen Messenger-Diensten verbinden. Die Integrationen sind als aufklappbare Sektionen (Accordion) organisiert.
 
-1. Klicke in der Sidebar auf **Mein Agent**
-2. Klicke oben auf den Tab **Settings**
-3. Unter **Modell** siehst du ein Dropdown
-4. Wähle ein Modell aus:
-   - **claude-sonnet-4-6** — Schnell und gut (Anthropic)
-   - **claude-opus-4-6** — Leistungsstärker, langsamer (Anthropic)
-   - **claude-haiku-4-5** — Am schnellsten, güntigsten (Anthropic)
-   - **gpt-4o** — OpenAI Modell
-   - **ollama/...** — Lokale Modelle auf deinem Server
-5. Klicke **Speichern**
+### Discord einrichten
+1. Klicke auf **Mein Agent** → Tab **Messenger**
+2. Klappe die Sektion **Discord** auf
+3. Trage deinen Discord Bot Token ein
+4. Klicke **Speichern**
 
-> **Wichtig:** Für Claude-Modelle muss unter Einstellungen → LLM ein Anthropic-Provider eingerichtet sein. Für Ollama muss Ollama auf dem Server laufen.
+### WhatsApp einrichten
+1. Klicke auf **Mein Agent** → Tab **Messenger**
+2. Klappe die Sektion **WhatsApp** auf
+3. Folge den Anweisungen zum Verbinden deiner Nummer
+4. Klicke **Speichern**
+
+### Telegram einrichten
+1. Klicke auf **Mein Agent** → Tab **Messenger**
+2. Klappe die Sektion **Telegram** auf
+3. Trage den Bot Token ein (erhältst du vom BotFather auf Telegram)
+4. Klicke **Speichern**
+
+### Mail einrichten
+1. Klicke auf **Mein Agent** → Tab **Messenger**
+2. Klappe die Sektion **Mail** auf
+3. Trage deine E-Mail-Adresse ein
+4. Klicke **Speichern**
+
+> **Hinweis:** Damit Mail-Versand funktioniert, muss der Admin erst unter **Einstellungen → Mail** den SMTP-Server eingerichtet haben.
 
 ---
 
-## 5. Agenten verwalten
+## 6. Agenten verwalten (Admin)
 
 Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.
 
@@ -167,11 +205,9 @@ Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.
 
 ---
 
-## 6. Einem Agenten Tools zuweisen
+> **Hinweis für reguläre Benutzer:** Die Tool- und Plugin-Konfiguration wird vom Admin in der **Agenten**-Seite erledigt. Als normaler Benutzer kannst du diese Seite zwar einsehen, änderst aber nichts selbst — wende dich bei Bedarf an deinen Admin.
 
-Tools sind Fähigkeiten die ein Agent nutzen kann — Dateien lesen, im Web suchen, Shell-Befehle ausführen usw.
-
-### Tools über die Agenten-Seite zuweisen
+### Tools einem Agenten zuweisen (Admin)
 1. Klicke auf **Agenten**
 2. Klicke auf den gewünschten Agenten
 3. Klicke auf **Bearbeiten**
@@ -196,78 +232,98 @@ Tools sind Fähigkeiten die ein Agent nutzen kann — Dateien lesen, im Web such
 | `git_status` | Git-Status prüfen |
 | `git_clone` | Git-Repository klonen (braucht `shell_exec`) |
 
-### Plugin-Tools zuweisen
-Plugin-Tools werden nicht einzeln zugewiesen sondern als ganzes Plugin:
-1. Klicke in der Sidebar auf **Plugins**
-2. Klicke auf das gewünschte Plugin
-3. Im Detail-Fenster rechts: Setze ein **Häkchen** beim gewünschten Agenten
-4. Alle Tools des Plugins sind jetzt für diesen Agenten verfügbar
+### Plugin-Tools zuweisen (Admin)
+Plugin-Tools werden nicht einzeln zugewiesen sondern als ganzes Plugin. Der Admin weist Plugins in der **Agenten**-Seite zu:
+1. Klicke auf **Agenten** → gewünschten Agenten → **Bearbeiten**
+2. Scrolle zu **Plugins**
+3. Wähle die Plugins die der Agent nutzen soll
+4. Klicke **Speichern**
 
 ---
 
 ## 7. Projekte anlegen und nutzen
 
-Projekte sind Arbeitsräume in denen Agenten-Teams zusammenarbeiten.
+Die **Projekte**-Seite hat zwei Tabs: **Projekte** und **Schedules**.
 
 ### Neues Projekt erstellen
 1. Klicke in der Sidebar auf **Projekte**
-2. Klicke auf **+ Neues Projekt**
+2. Du bist im Tab **Projekte** — klicke auf **+ Neues Projekt**
 3. Gib dem Projekt einen **Namen** und eine **Beschreibung**
 4. Wähle den **Boss-Agenten** (der die Arbeit koordiniert)
 5. Wähle **Worker-Agenten** (die die Arbeit erledigen)
 6. Klicke **Erstellen**
 
 ### Im Projekt chatten
-1. Klicke auf **Projekte**
+1. Klicke auf **Projekte** → Tab **Projekte**
 2. Klicke auf das gewünschte Projekt
 3. Du siehst das Chat-Fenster des Projekts
 4. Schreibe deine Nachricht und drücke **Enter**
 5. Der Boss-Agent koordiniert die Arbeit und delegiert an Worker
 
+### Zeitpläne (Schedules)
+1. Klicke auf **Projekte** → Tab **Schedules**
+2. Hier kannst du automatische Aufgaben planen
+3. Klicke auf **+ Neuer Zeitplan**
+4. Wähle den Agenten, die Uhrzeit und den Auftrag
+5. Klicke **Speichern**
+
 ---
 
-## 8. HydraHub — Agenten und Plugins installieren
+## 8. Hub — Extensions, Plugins, Skill-Pakete
 
-Der HydraHub ist der eingebaute App-Store von HydraHive.
+Der **Hub** ist der eingebaute App-Store von HydraHive. Er hat drei Tabs:
 
-### Agenten aus dem Hub installieren
-1. Klicke in der Sidebar auf **HydraHub**
-2. Du bist im Tab **Agenten** — hier siehst du vorgefertigte Agenten
-3. Nutze die **Suche** oben oder die **Kategorien** links zum Filtern
-4. Klicke auf einen Agenten der dich interessiert
-5. Ein Detail-Fenster öffnet sich rechts
-6. Optional: Ändere die **Agent-ID**
-7. Klicke **Installieren**
-8. Der Agent ist sofort verfügbar — kein Neustart nötig
+| Tab | Inhalt |
+|-----|--------|
+| **Extensions** | Optionale Dienste installieren (SearXNG, Code-Server usw.) |
+| **Plugins** | Plugin-Pakete herunterladen und aktivieren |
+| **Skill-Pakete** | Skill-Sammlungen aus der Community installieren |
 
-### Agenten deinstallieren
-1. Klicke im HydraHub auf einen installierten Agenten
-2. Im Detail-Fenster klicke auf **Deinstallieren**
-3. Bestätige mit **Ja**
+### Extension installieren
+1. Klicke in der Sidebar auf **Hub**
+2. Du bist im Tab **Extensions**
+3. Du siehst verfügbare Erweiterungen (z.B. SearXNG, Code-Server, Tailscale)
+4. Klicke bei der gewünschten Erweiterung auf **Installieren**
+5. Die Installation läuft — du siehst den Fortschritt
+6. Nach der Installation ist die Erweiterung aktiv
+
+### Verfügbare Extensions
+
+| Extension | Was sie tut |
+|-----------|-----------|
+| **SearXNG** | Private Suchmaschine — Agenten können das Web durchsuchen |
+| **Code-Server** | VS Code im Browser — Code direkt bearbeiten |
+| **Tailscale** | VPN für sichere Server-Verbindungen |
+| **Vaultwarden** | Passwort-Manager |
 
 ### Plugins aus dem Hub installieren
-1. Klicke auf **HydraHub**
-2. Wechsle zum Tab **Plugins**
-3. Klicke bei einem Plugin auf **Installieren**
-4. Das Plugin wird heruntergeladen und aktiviert
-5. Weise es danach unter **Plugins** einem Agenten zu (siehe Kapitel 10)
+1. Klicke auf **Hub** → Tab **Plugins**
+2. Klicke bei einem Plugin auf **Installieren**
+3. Das Plugin wird heruntergeladen und aktiviert
+4. Der Admin weist es danach in der **Agenten**-Seite einem Agenten zu
+
+### Skill-Pakete installieren
+1. Klicke auf **Hub** → Tab **Skill-Pakete**
+2. Wähle ein Skill-Paket das dich interessiert
+3. Wähle den **Ziel-Agenten**
+4. Klicke **Installieren**
 
 ---
 
 ## 9. ClawhHub — Skills aus der Community
 
-ClawhHub ist eine öffentliche Datenbank mit tausenden KI-Skills.
+ClawhHub ist eine öffentliche Datenbank mit tausenden KI-Skills. Die ClawhHub-Inhalte sind über den **Hub** erreichbar.
 
 ### ClawhHub Token einrichten (einmalig)
 1. Erstelle einen Account auf [clawhub.ai](https://clawhub.ai)
 2. Gehe auf clawhub.ai zu **Settings** → **API Token** erstellen
 3. Kopiere den Token
-4. In HydraHive: Klicke auf **HydraHub** → Tab **ClawhHub**
+4. In HydraHive: Klicke auf **Hub** → Tab **Skill-Pakete**
 5. Ganz oben siehst du das Feld **ClawhHub API Token**
 6. Füge deinen Token ein und klicke **Speichern**
 
 ### Skills suchen und installieren
-1. Klicke auf **HydraHub** → Tab **ClawhHub** → Sub-Tab **Skills**
+1. Klicke auf **Hub** → Tab **Skill-Pakete**
 2. Gib einen Suchbegriff ein (z.B. "python", "security", "git")
 3. Klicke auf **Suchen**
 4. Klicke auf einen Skill der dich interessiert
@@ -275,66 +331,14 @@ ClawhHub ist eine öffentliche Datenbank mit tausenden KI-Skills.
 6. Klicke **In Agent installieren**
 7. Der Skill ist sofort aktiv
 
-### Plugins browsen
-1. Klicke auf **HydraHub** → Tab **ClawhHub** → Sub-Tab **Plugins**
+### Plugins aus ClawhHub browsen
+1. Klicke auf **Hub** → Tab **Plugins**
 2. Wähle den Typ: **Code Plugins**, **Bundle Plugins** oder **Skill Packages**
 3. Du siehst eine Übersicht — aktuell nur zum Anschauen (Import kommt in Zukunft)
 
 ---
 
-## 10. Plugins verwalten
-
-Plugins erweitern deine Agenten um neue Fähigkeiten (Tools).
-
-### Plugins anzeigen
-1. Klicke in der Sidebar auf **Plugins**
-2. Du siehst alle installierten Plugins als Karten
-3. Grünes Power-Symbol = aktiv, graues = deaktiviert
-
-### Plugin einem Agenten zuweisen
-1. Klicke auf **Plugins**
-2. Klicke auf das Plugin das du zuweisen willst
-3. Ein Detail-Fenster öffnet sich rechts
-4. Unter **Agent-Zuweisung** siehst du alle Agenten als Checkboxen
-5. **Setze ein Häkchen** bei jedem Agenten der das Plugin nutzen soll
-6. Die Tools des Plugins sind sofort verfügbar — kein Neustart nötig
-
-### Plugin aktivieren / deaktivieren
-1. Klicke auf **Plugins**
-2. Klicke auf das **Power-Symbol** (Ein/Aus) oben rechts auf der Plugin-Karte
-3. Grünes Power-Icon = aktiv, graues PowerOff-Icon = deaktiviert
-
-### Plugin deinstallieren
-1. Klicke auf **Plugins**
-2. Klicke auf das Plugin
-3. Im Detail-Fenster unten rechts: Klicke auf das rote **Papierkorb-Symbol**
-4. Bestätige die Sicherheitsabfrage
-
----
-
-## 11. Skills — Agenten-Wissen erweitern
-
-Skills sind Wissens-Dateien die einem Agenten beibringen wie er bestimmte Aufgaben erledigt.
-
-### Skills eines Agenten anzeigen
-1. Klicke auf **Agenten**
-2. Klicke auf einen Agenten
-3. Klicke auf den Tab **Skills**
-4. Du siehst alle Skills des Agenten
-
-### Skill aus ClawhHub installieren
-Siehe Kapitel 9 — "Skills suchen und installieren"
-
-### Eigenen Skill erstellen
-1. Klicke auf **Agenten** → wähle einen Agenten → Tab **Skills**
-2. Klicke auf **+ Neuer Skill**
-3. Gib dem Skill einen **Namen**
-4. Schreibe den Skill-Inhalt (Anweisungen für den Agenten)
-5. Klicke **Speichern**
-
----
-
-## 12. Federation — Mehrere Server verbinden
+## 10. Federation — Mehrere Server verbinden
 
 Federation verbindet mehrere HydraHive-Server miteinander. Agenten auf verschiedenen Servern können dann zusammenarbeiten.
 
@@ -362,7 +366,7 @@ Federation verbindet mehrere HydraHive-Server miteinander. Agenten auf verschied
 
 ---
 
-## 13. Tailscale einrichten
+## 11. Tailscale einrichten
 
 Tailscale verbindet deine Server sicher über das Internet — verschlüsselt, ohne Port-Forwarding.
 
@@ -421,7 +425,7 @@ Tailscale verbindet deine Server sicher über das Internet — verschlüsselt, o
 
 ---
 
-## 14. HydraBrain — 3D-Ansicht
+## 12. HydraBrain — 3D-Ansicht
 
 HydraBrain zeigt eine interaktive 3D-Karte aller Agenten, Tools und Verbindungen.
 
@@ -463,7 +467,7 @@ HydraBrain zeigt eine interaktive 3D-Karte aller Agenten, Tools und Verbindungen
 
 ---
 
-## 15. Blueprint — Visueller Agent-Builder
+## 13. Blueprint — Visueller Agent-Builder
 
 Im Blueprint-Bereich baust du Agenten visuell zusammen — als Graph mit Kästchen und Verbindungen.
 
@@ -504,7 +508,7 @@ Das Agent-Kästchen hat 6 farbige Andockpunkte:
 
 ---
 
-## 16. Scratchpad — Ideen skizzieren
+## 14. Scratchpad — Ideen skizzieren
 
 Das Scratchpad ist ein freies Whiteboard zum Brainstormen.
 
@@ -538,7 +542,7 @@ Das Scratchpad ist ein freies Whiteboard zum Brainstormen.
 
 ---
 
-## 17. Einstellungen — LLM Provider
+## 15. Einstellungen — LLM Provider
 
 Hier konfigurierst du welche KI-Modelle verfügbar sind.
 
@@ -564,7 +568,7 @@ Hier konfigurierst du welche KI-Modelle verfügbar sind.
 
 ---
 
-## 18. Einstellungen — MCP Server
+## 16. Einstellungen — MCP Server
 
 MCP Server erweitern HydraHive um externe Tools (z.B. Datenbanken, APIs).
 
@@ -585,15 +589,15 @@ MCP Server erweitern HydraHive um externe Tools (z.B. Datenbanken, APIs).
 
 ---
 
-## 19. Einstellungen — VPN
+## 17. Einstellungen — VPN
 
 Unter VPN konfigurierst du Tailscale für sichere Server-Verbindungen.
 
-> **Hinweis:** Die Tailscale-Einrichtung erfolgt über die **Federation**-Seite (siehe Kapitel 13). Unter Einstellungen → VPN siehst du nur den Status.
+> **Hinweis:** Die Tailscale-Einrichtung erfolgt über die **Federation**-Seite (siehe Kapitel 11). Unter Einstellungen → VPN siehst du nur den Status.
 
 ---
 
-## 20. Einstellungen — Mail
+## 18. Einstellungen — Mail
 
 Hier konfigurierst du E-Mail-Versand für Agenten.
 
@@ -608,7 +612,7 @@ Hier konfigurierst du E-Mail-Versand für Agenten.
 
 ---
 
-## 21. Einstellungen — Benutzer & Rollen
+## 19. Einstellungen — Benutzer & Rollen
 
 ### Neuen Benutzer erstellen
 1. Klicke auf **Einstellungen** → **Users**
@@ -635,7 +639,7 @@ Hier konfigurierst du E-Mail-Versand für Agenten.
 
 ---
 
-## 22. Einstellungen — Backup & Restore
+## 20. Einstellungen — Backup & Restore
 
 ### Backup erstellen
 1. Klicke auf **Einstellungen** → **Backup**
@@ -660,29 +664,7 @@ Hier konfigurierst du E-Mail-Versand für Agenten.
 
 ---
 
-## 23. Einstellungen — Erweiterungen
-
-Erweiterungen sind optionale Dienste die du mit einem Klick installieren kannst.
-
-### Erweiterung installieren
-1. Klicke auf **Einstellungen** → **Erweiterungen**
-2. Du siehst verfügbare Erweiterungen (z.B. SearXNG, Code-Server, Tailscale)
-3. Klicke bei der gewünschten Erweiterung auf **Installieren**
-4. Die Installation läuft — du siehst den Fortschritt
-5. Nach der Installation ist die Erweiterung aktiv
-
-### Verfügbare Erweiterungen
-
-| Erweiterung | Was sie tut |
-|-------------|-----------|
-| **SearXNG** | Private Suchmaschine — Agenten können das Web durchsuchen |
-| **Code-Server** | VS Code im Browser — Code direkt bearbeiten |
-| **Tailscale** | VPN für sichere Server-Verbindungen |
-| **Vaultwarden** | Passwort-Manager |
-
----
-
-## 24. Einstellungen — System-Update
+## 21. Einstellungen — System-Update
 
 ### Update durchführen
 1. Klicke auf **Einstellungen** → **System**
@@ -693,31 +675,7 @@ Erweiterungen sind optionale Dienste die du mit einem Klick installieren kannst.
 
 ---
 
-## 25. Aktivität — Live-Monitor
-
-### Agenten-Aktivität beobachten
-1. Klicke in der Sidebar auf **Aktivität**
-2. Du siehst alle Agenten als Karten
-3. Jede Karte zeigt:
-   - **Status** — Was der Agent gerade tut
-   - **Aktuelle Aufgabe** — Die letzte Aktion
-   - **Laufzeit** — Wie lange der Agent schon arbeitet
-
----
-
-## 26. Usage — Token-Verbrauch
-
-### Kosten einsehen
-1. Klicke in der Sidebar auf **Usage**
-2. Du siehst den Token-Verbrauch pro Agent und Modell
-3. Aufgeschlüsselt nach:
-   - **Input-Tokens** — Was du dem Agent schickst
-   - **Output-Tokens** — Was der Agent antwortet
-   - **Cache-Hits** — Wiederverwendete Daten (günstiger)
-
----
-
-## 27. Häufige Fragen
+## 22. Häufige Fragen
 
 ### "Mein Agent antwortet nicht"
 1. Prüfe ob der Agent läuft: **Agenten** → ist der Status grün?
@@ -730,9 +688,8 @@ Erweiterungen sind optionale Dienste die du mit einem Klick installieren kannst.
 3. Für Anthropic: Klicke auf **Mit Anthropic verbinden**
 
 ### "Plugin-Tools tauchen beim Agenten nicht auf"
-1. Gehe auf **Plugins** in der Sidebar
-2. Klicke auf das Plugin
-3. Prüfe ob der Agent bei **Agent-Zuweisung** angehakt ist
+1. Frage deinen Admin — Plugin-Zuweisung erfolgt in der **Agenten**-Seite
+2. Der Admin prüft dort ob das Plugin dem richtigen Agenten zugewiesen ist
 
 ### "Tailscale verbindet nicht"
 1. Prüfe ob du den richtigen Key nutzt:

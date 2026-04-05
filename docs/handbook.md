@@ -125,47 +125,37 @@ Das angezeigte Passwort ist der initiale Login. Nach dem ersten Login empfiehlt 
 
 ## 3. Die Webkonsole
 
-Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die linke Sidebar erreichbar:
+Die Konsole ist unter `https://<IP>` erreichbar. Alle Bereiche sind über die linke Sidebar erreichbar — 10 Menüpunkte, flach ohne aufklappbare Gruppen:
 
 | Bereich | Funktion | Zugriff |
 |---|---|---|
-| **Dashboard** | Überblick über Agenten, Projekte, System-Status | alle |
-| **Mein Agent** | Persönlicher Agent: Chat, Einstellungen, Skills, WKS | alle |
-| **Agenten** | Agenten anlegen, bearbeiten, Logs und Skills verwalten | alle (Schreiben: admin) |
-| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten | alle (Schreiben: admin) |
-| **Aktivität** | Live-Übersicht aller aktiven Agenten mit Notfall-Stop und Detail-Logs | alle |
-| **System** | Service-Status, Laufzeit-Informationen, GPU-Auslastung, Diagnose & Tests | alle |
-| **Tools** | Verfügbare Tools anzeigen | alle |
-| **Einstellungen** | Zentrale Konfiguration mit 10 Tabs: LLM, MCP, Gitea, GitHub, VPN, Mail/KAS, Users, Backup, Migration, Plugins | admin |
-| **Audit-Log** | Alle sicherheitsrelevanten Aktionen nachverfolgen | admin |
-| **API Usage** | Token-Verbrauch und API-Kosten nach Projekt und Modell | admin |
-| **Update** | Sidebar-Button: System auf neuesten Stand bringen | admin |
-| **Butler** | Visuelle Automatisierungsregeln für Messenger — Blueprint-Editor | admin |
-| **Schedules** | Zeitgesteuerte Agenten-Aufgaben (Cron + Einmalig) | admin |
-| **Erweiterungen** | Optionale Komponenten installieren/deinstallieren | admin |
-| **Code Editor** | VS Code im Browser (code-server) | admin |
-| **Web-Suche** | SearXNG Metasuchmaschine direkt in der Console | alle |
-| **Federation** | A2A Peer-zu-Peer Agenten-Vernetzung | admin |
-| **Benachrichtigungen** | Echtzeit-Systembenachrichtigungen via SSE | alle |
+| **Dashboard** | Überblick über Agenten, Projekte, System-Status — Tabs: Status, Aktivität, Usage, Audit | alle |
+| **Mein Agent** | Persönlicher Agent: Chat, Heartbeat, Messenger, WKS, Butler, Mein Konto | alle |
+| **Agenten** | Agenten anlegen und bearbeiten — Tabs: Agenten, Tools, Plugins, Federation, Blueprint | alle (Schreiben: admin) |
+| **Projekte** | Projekte anlegen, Chat öffnen, Webhooks und Samba-Zugangsdaten — Tabs: Projekte, Schedules | alle (Schreiben: admin) |
+| **Blueprint** | Automation, Pipelines, Architect, Workflow, Scratchpad, Benachrichtigungen | admin |
+| **Hub** | HydraHub, Hub-Plugins, ClawhHub, Extensions, Plugins, Skill-Pakete | admin |
+| **HydraBrain** | Interaktive 3D-Visualisierung aller Agenten und Verbindungen | admin |
+| **System** | Doctor, GPU-Monitoring, Monitoring | alle |
+| **User-Verwaltung** | Benutzer, Gruppen, Secrets, Berechtigungen | admin |
+| **Settings** | Zentrale Konfiguration — Tabs: Übersicht (ConfigHub), LLM, Gitea, GitHub, VPN, Mail/KAS, Backup, Migration | admin |
 
-### Konsolidierte Einstellungen
+### Die Seite Settings
 
-Die Seite **Einstellungen** (`/settings`) fasst die Admin-Konfiguration in 10 Tabs zusammen:
+Die Seite **Settings** (`/settings`) fasst die Admin-Konfiguration in mehreren Tabs zusammen:
 
 | Tab | Inhalt |
 |---|---|
+| **Übersicht** | ConfigHub — Gesamtübersicht aller Konfigurationsparameter |
 | **LLM** | Sprachmodell-Konfiguration (Ollama, Claude OAuth, OpenAI, Fallback-Modelle) |
-| **MCP** | Externe MCP-Server verwalten |
 | **Gitea** | Gitea-URL, Token, Organisation |
 | **GitHub** | GitHub-Token und Repository-Anbindung |
 | **VPN** | Tailscale-Verbindung konfigurieren |
 | **Mail / KAS** | E-Mail und All-Inkl KAS-Anbindung |
-| **Users** | Benutzer anlegen und verwalten |
 | **Backup** | Backups erstellen, herunterladen, wiederherstellen |
 | **Migration** | Daten-Import/Export zwischen Instanzen |
-| **Plugins** | Plugin-Verwaltung und Zuweisung |
 
-Die alten URLs `/llm`, `/mcp`, `/gitea`, `/vpn`, `/users` und `/backup` leiten automatisch auf `/settings` um.
+> **Hinweis:** Benutzer, Gruppen und Secrets werden jetzt unter **User-Verwaltung** verwaltet (nicht mehr unter Settings). MCP-Server und Plugins sind unter **Agenten** bzw. **Hub** zu finden.
 
 ### Konfigurationsmatrix — Wo wird was konfiguriert?
 
@@ -173,21 +163,22 @@ Nicht alle Einstellungen liegen auf der Settings-Seite. Diese Übersicht zeigt, 
 
 | Bereich | UI-Pfad | Config-Datei | Zweck |
 |---|---|---|---|
-| LLM-Provider | Einstellungen → LLM | `/etc/hydrahive/llm_config.json` | API-Keys, Modell-Auswahl, OAuth |
-| MCP-Server | Einstellungen → MCP | `/etc/hydrahive/mcp_servers.json` | Externe Tool-Server |
-| Gitea | Einstellungen → Gitea | `/etc/hydrahive/gitea_config.json` | Git-Server-Anbindung |
-| GitHub | Einstellungen → GitHub | `/etc/hydrahive/github_token` | GitHub-Token |
-| VPN | Einstellungen → VPN | `/etc/hydrahive/vpn.json` | Tailscale-Konfiguration |
-| Mail / KAS | Einstellungen → Mail/KAS | `/etc/hydrahive/kas.json` | E-Mail und KAS-API |
-| Benutzer | Einstellungen → Users | `/etc/hydrahive/users.json` | Accounts und Rollen |
-| Discord | Mein Agent → Discord | `/etc/hydrahive/users.json` (pro User) | Persönlicher Discord-Bot |
-| WhatsApp | Mein Agent → WhatsApp | `/etc/hydrahive/whatsapp_bridge_secret` | WhatsApp-Bridge |
-| A2A Federation | Federation | `/etc/hydrahive/a2a_peers.json` | Peer-Verbindungen |
+| LLM-Provider | Settings → LLM | `/etc/hydrahive/llm_config.json` | API-Keys, Modell-Auswahl, OAuth |
+| MCP-Server | Agenten → MCP (Tab) | `/etc/hydrahive/mcp_servers.json` | Externe Tool-Server |
+| Gitea | Settings → Gitea | `/etc/hydrahive/gitea_config.json` | Git-Server-Anbindung |
+| GitHub | Settings → GitHub | `/etc/hydrahive/github_token` | GitHub-Token |
+| VPN | Settings → VPN | `/etc/hydrahive/vpn.json` | Tailscale-Konfiguration |
+| Mail / KAS | Settings → Mail/KAS | `/etc/hydrahive/kas.json` | E-Mail und KAS-API |
+| Benutzer | User-Verwaltung → Benutzer | `/etc/hydrahive/users.json` | Accounts und Rollen |
+| Secrets | User-Verwaltung → Secrets | `/etc/hydrahive/users.json` | Persönliche Secrets |
+| Discord | Mein Agent → Messenger → Discord | `/etc/hydrahive/users.json` (pro User) | Persönlicher Discord-Bot |
+| WhatsApp | Mein Agent → Messenger → WhatsApp | `/etc/hydrahive/whatsapp_bridge_secret` | WhatsApp-Bridge |
+| A2A Federation | Agenten → Federation (Tab) | `/etc/hydrahive/a2a_peers.json` | Peer-Verbindungen |
 | AgentLink | — (nur Datei) | `/etc/hydrahive/agentlink.json` | Handoff-API-Konfiguration |
-| Claude OAuth | Einstellungen → LLM | `/etc/hydrahive/claude_oauth_token` | Claude Max Token |
+| Claude OAuth | Settings → LLM | `/etc/hydrahive/claude_oauth_token` | Claude Max Token |
 | JWT-Secret | — (automatisch) | `/etc/hydrahive/jwt_secret` | Auth-Token-Signierung |
-| Schedules | Schedules | `/etc/hydrahive/schedules.json` | Zeitgesteuerte Tasks |
-| Butler-Regeln | Butler | `/etc/hydrahive/butler/` | Automatisierungs-Pipelines |
+| Schedules | Projekte → Schedules (Tab) | `/etc/hydrahive/schedules.json` | Zeitgesteuerte Tasks |
+| Butler-Regeln | Blueprint → Automation oder Mein Agent → Butler | `/etc/hydrahive/butler/` | Automatisierungs-Pipelines |
 
 ### Mehrsprachigkeit (DE/EN)
 
@@ -209,15 +200,20 @@ Agenten sind KI-Persönlichkeiten die Aufgaben ausführen. Jeder Agent hat einen
 
 ### Agent anlegen (Konsole)
 
-1. **Agenten** → **Neuer Agent**
+1. **Agenten** → Tab **Agenten** → **Neuer Agent**
 2. Felder ausfüllen:
    - **Agent-ID:** Eindeutiger Bezeichner (z.B. `steuer-agent`)
    - **Anzeigename:** Wird im Chat angezeigt (z.B. `Steuerbert`)
    - **Typ:** `boss`, `specialist` oder `worker`
    - **LLM-Modell:** Verfügbares Modell (z.B. `llama3.1:8b`)
-   - **Tools:** Welche Fähigkeiten der Agent hat (Checkboxen)
+   - **Tools:** Welche Fähigkeiten der Agent hat — Auswahl über gruppierten ToolGroupSelector (Checkboxen)
+   - **MCP-Server:** Checkbox-Liste der verfügbaren MCP-Server
+   - **Plugins:** Checkbox-Liste der installierten Plugins
+   - **Erlaubte Agenten:** Checkbox-Liste für Agenten-Delegation
    - **Soul:** Freier Markdown-Text der die Persönlichkeit beschreibt
 3. **Agent anlegen** klicken
+
+> **Hinweis:** Persönliche Agenten (`personal_*`) sind jetzt in der Agenten-Liste sichtbar und bearbeitbar — können jedoch nicht gelöscht werden.
 
 ### Agent-Konfiguration (Datei)
 
@@ -358,7 +354,7 @@ sources:
     description: "Semantische Suche für Unreal-Kontext"
 ```
 
-**Konfiguration in der Konsole:** **Agenten** → Agent bearbeiten → Abschnitt **„Quellen & Suchmaschinen"**
+**Konfiguration in der Konsole:** **Agenten** → Tab **Agenten** → Agent bearbeiten → Abschnitt **„Quellen & Suchmaschinen"**
 
 Jede Quelle hat drei Felder:
 
@@ -504,7 +500,7 @@ Im Chat stehen Schnellbefehle zur Verfügung. Tippe `/` um die verfügbaren Befe
 
 ### Ollama (lokal, kostenfrei)
 
-Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über **LLM-Config** → **Ollama** verwaltet.
+Standardmäßig läuft Ollama lokal auf Port 11434. Modelle werden über **Settings** → Tab **LLM** → Abschnitt **Ollama** verwaltet.
 
 Empfohlene Modelle:
 - `llama3.2:3b` — schnell, wenig VRAM (4 GB)
@@ -516,7 +512,7 @@ Empfohlene Modelle:
 
 Für Claude-Modelle via Claude Max Abonnement:
 
-1. **LLM-Config** → **Claude Max**
+1. **Settings** → Tab **LLM** → Abschnitt **Claude Max**
 2. OAuth-Token einfügen (`sk-ant-oat01-...`)
 3. Speichern
 
@@ -524,7 +520,7 @@ Der Token-Status wird mit Ablauf-Datum angezeigt. oat01-Tokens gelten ~30 Tage.
 
 ### OpenAI / andere Anbieter
 
-1. **LLM-Config** → **Anbieter konfigurieren**
+1. **Settings** → Tab **LLM** → Abschnitt **Anbieter konfigurieren**
 2. API-Key und Modell eintragen
 
 ### Fallback-Modelle
@@ -547,7 +543,7 @@ Skills sind Markdown-Dateien die dem Agenten zusätzliches Wissen geben. Sie wer
 
 ### Skill anlegen (Konsole)
 
-1. **Agenten** → Agent auswählen → **Skills** (Buch-Icon)
+1. **Agenten** → Tab **Agenten** → Agent auswählen → **Skills** (Buch-Icon)
 2. **Neuer Skill**
 3. Felder ausfüllen:
    - **Dateiname:** Dateiname ohne `.md` (z.B. `steuerrecht`)
@@ -584,7 +580,7 @@ Ermäßigter Satz: 7% für Lebensmittel, Bücher, ÖPNV.
 
 Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Der visuelle Blueprint Editor ermöglicht das Zusammenstellen und Verknüpfen von Skills — ähnlich wie im Butler-Editor.
 
-**Erreichbar unter:** **Skill-Pakete** in der Sidebar.
+**Erreichbar unter:** **Hub** → Tab **Skill-Pakete**.
 
 **Knoten-Typen:**
 
@@ -596,7 +592,7 @@ Skill-Pakete bündeln mehrere Skills zu wiederverwendbaren Gruppen. Der visuelle
 | **Ausgabe** | Abschlussknoten — definiert den Endpunkt des Pakets |
 
 **Paket anlegen:**
-1. **Skill-Pakete** → **+ Neues Paket**
+1. **Hub** → Tab **Skill-Pakete** → **+ Neues Paket**
 2. Knoten aus der Palette auf die Canvas ziehen
 3. Knoten verbinden
 4. Name vergeben → **Speichern**
@@ -639,9 +635,9 @@ Jeder User bekommt automatisch einen persönlichen Agenten — `personal_<userna
 
 Der Chat unter **Mein Agent → Chat** funktioniert wie der Projekt-Chat: Streaming, Chat-History, Slash Commands. Der Agent merkt sich den Gesprächsverlauf sessionübergreifend.
 
-### Einstellungen
+### Mein Konto
 
-Unter **Mein Agent → Einstellungen** kann jeder User seinen Agenten selbst konfigurieren:
+Unter **Mein Agent → Mein Konto** kann jeder User seinen Agenten selbst konfigurieren:
 
 | Einstellung | Beschreibung |
 |---|---|
@@ -654,17 +650,24 @@ Unter **Mein Agent → Einstellungen** kann jeder User seinen Agenten selbst kon
 | **Tools** | Welche Tools der Agent nutzen darf |
 | **Agenten-Delegation** | Welche anderen Agenten beauftragt werden dürfen |
 
-### Skills-Tab
+### Messenger
 
-Eigene Skills anlegen — genau wie bei regulären Agenten.
+Unter **Mein Agent → Messenger** werden alle Kommunikationskanäle als Akkordeon-Abschnitte verwaltet:
 
-### MCP-Tab
+- **WhatsApp** — WhatsApp-Bridge konfigurieren und verknüpfen
+- **Discord** — Discord-Bot-Token und Server-Einstellungen
+- **Telegram** — Telegram-Bot einrichten
+- **Mail** — E-Mail-Einstellungen
 
-Externe MCP-Server zuweisen. Die verfügbaren Server werden vom Admin unter **MCP-Server** konfiguriert.
+Die früheren separaten Tabs "Plattformen" und "Integrationen" entfallen — alle Kanäle sind in diesem einzelnen Tab zusammengefasst.
 
 ### WKS-Tab
 
 Workstation-Zugang konfigurieren — siehe [Kapitel 11](#11-wks-zugang-workstation).
+
+### Butler-Tab
+
+Automatisierungsregeln für Messenger-Nachrichten — visuelle Blueprint-Flows. Siehe [Kapitel 30](#30-butler--visuelle-automatisierungsregeln).
 
 ---
 
@@ -765,7 +768,7 @@ Im WKS-Tab → **Verbindung testen** — zeigt verfügbare Ollama-Modelle auf de
 | `wks_file_read` | Datei von der WKS lesen (absoluter Pfad) |
 | `wks_file_write` | Datei auf die WKS schreiben (absoluter Pfad) |
 
-Diese Tools müssen in **Mein Agent → Einstellungen → Tools** aktiviert werden.
+Diese Tools müssen in **Mein Agent → Mein Konto → Tools** aktiviert werden.
 
 ### WKS-Ollama
 
@@ -789,7 +792,7 @@ Agenten können direkt mit Gitea interagieren — Git-Status prüfen, Commits er
 
 ### Gitea konfigurieren
 
-1. **LLM-Config** → **Gitea** (oder direkt in `/etc/hydrahive/gitea_config.json`)
+1. **Settings** → Tab **Gitea** (oder direkt in `/etc/hydrahive/gitea_config.json`)
 2. Gitea-URL, Token, Organisation eintragen
 
 ```json
@@ -836,7 +839,7 @@ Beispiel: Server-ID `amem` → Tools heißen `mcp_amem_add_note`, `mcp_amem_sear
 
 ### MCP-Server konfigurieren (Admin)
 
-1. **Einstellungen** → Tab **MCP**
+1. **Agenten** → Tab **MCP**
 2. **Neuer MCP-Server**
 3. Felder ausfüllen: ID, Name, Transport (`streamableHttp` oder `sse`), URL
 
@@ -861,7 +864,7 @@ mcp_servers:
   - amem
 ```
 
-Oder in **Mein Agent → MCP-Tab** → Server aktivieren.
+Oder in **Agenten** → Agent bearbeiten → MCP-Checkbox-Liste → Server aktivieren.
 
 ### A-MEM — Shared Memory MCP
 
@@ -904,7 +907,7 @@ Tailscale baut ein Mesh-VPN auf Basis von WireGuard auf. Jedes Gerät im Tailnet
 
 ### Einrichten
 
-1. **Einstellungen** → Tab **VPN** öffnen
+1. **Settings** → Tab **VPN** öffnen
 2. Tailscale-Auth-Key eintragen (aus dem Tailscale-Dashboard oder von Headscale generiert)
 3. Optional: **Headscale-URL** eintragen für selbst-gehosteten Coordinator
 4. **Verbinden** klicken
@@ -947,7 +950,7 @@ chmod +x /usr/local/bin/headscale
 headscale preauthkeys create --user hydrahive --expiration 24h
 ```
 
-Die Headscale-URL (z.B. `https://headscale.mein-server.de`) und den generierten Auth-Key dann in **Einstellungen → VPN** eintragen.
+Die Headscale-URL (z.B. `https://headscale.mein-server.de`) und den generierten Auth-Key dann in **Settings → VPN** eintragen.
 
 ### Typischer Anwendungsfall
 
@@ -999,11 +1002,11 @@ assert f"sha256={expected}" == request.headers["X-HydraHive-Signature"]
 
 ## 16. Benutzer und Rollen
 
-Unter **Benutzer** (Admin only) werden weitere Accounts verwaltet. HydraHive kennt zwei Rollen:
+Unter **User-Verwaltung** (Admin only) werden Benutzer, Gruppen, Secrets und Berechtigungen verwaltet. HydraHive kennt zwei Rollen:
 
 | Rolle | Rechte |
 |---|---|
-| **admin** | Vollzugriff: Agenten/Projekte anlegen und löschen, LLM-Config, MCP-Server, Backup, Benutzerverwaltung, System-Update |
+| **admin** | Vollzugriff: Agenten/Projekte anlegen und löschen, Settings (LLM, MCP, VPN usw.), Backup, User-Verwaltung, System-Update |
 | **user** | Lesezugriff + Chat: Agenten und Projekte sehen und nutzen, eigenen Agenten konfigurieren, keine Systemkonfiguration |
 
 - **Neuer Benutzer:** Benutzername, Passwort und Rolle (`admin` oder `user`) wählen
@@ -1016,7 +1019,7 @@ Beim Anlegen eines Users wird automatisch ein persönlicher Agent `personal_<use
 
 ## 17. Backup & Restore
 
-Unter **Backup** (Admin only) können vollständige System-Backups erstellt und verwaltet werden.
+Unter **Settings → Backup** (Admin only) können vollständige System-Backups erstellt und verwaltet werden.
 
 ### Was wird gesichert?
 
@@ -1029,7 +1032,7 @@ Ein Backup enthält als `tar.gz`:
 
 ### Backup erstellen
 
-1. **Backup** → **Backup erstellen**
+1. **Settings** → Tab **Backup** → **Backup erstellen**
 2. Das Backup erscheint sofort in der Liste mit Zeitstempel und Dateigröße
 
 Backups liegen auf dem Server unter `/opt/hydrahive/backups/`.
@@ -1070,7 +1073,7 @@ curl https://<ip>/api/admin/backups \
 
 ## 18. Audit-Log
 
-Das Audit-Log protokolliert alle sicherheitsrelevanten Aktionen:
+Das Audit-Log ist unter **Dashboard → Tab Audit** erreichbar (Admin only). Es protokolliert alle sicherheitsrelevanten Aktionen:
 
 - Logins (erfolgreich und fehlgeschlagen)
 - Benutzer anlegen/löschen
@@ -1107,7 +1110,7 @@ Wenn ein Projekt einen Matrix-Room hat, lauscht der Boss-Agent dort automatisch.
 
 ## 20. GPU-Monitoring
 
-Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt die **System**-Seite eine GPU-Auslastungsanzeige.
+Wenn eine NVIDIA-Grafikkarte im Server verfügbar ist, zeigt **System** → Tab **GPU** eine GPU-Auslastungsanzeige.
 
 ### Angezeigte Werte
 
@@ -1228,7 +1231,7 @@ HydraHive unterstützt Discord als Kommunikationskanal. Agenten können Discord-
 
 ### Einrichten
 
-1. **Mein Agent** → Tab **Plattformen** → Discord
+1. **Mein Agent** → Tab **Messenger** → Akkordeon-Abschnitt **Discord** aufklappen
 2. Bot-Token eingeben (aus dem Discord Developer Portal)
 3. Guild-ID und Kanal-IDs eingeben → **Verbinden**
 
@@ -1242,7 +1245,7 @@ Bot-Token und Guild-ID findest du im [Discord Developer Portal](https://discord.
 
 ### Discord-Tools für Agenten
 
-Über die Tool-Auswahl (**Mein Agent → Einstellungen → Erlaubte Tools**) kannst du dem Agenten weitere Discord-Werkzeuge freischalten:
+Über die Tool-Auswahl (**Mein Agent → Mein Konto → Erlaubte Tools**) kannst du dem Agenten weitere Discord-Werkzeuge freischalten:
 
 | Tool | Beschreibung |
 |---|---|
@@ -1299,7 +1302,7 @@ Discord gilt als „untrusted" Eingangskanal — Nachrichten werden wie externe 
 
 ## 24. Aktivitäts-Übersicht
 
-Die Seite **Aktivität** zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status.
+Der Tab **Aktivität** im Dashboard zeigt in Echtzeit alle aktiven Agenten und deren aktuellen Status. Erreichbar unter **Dashboard → Tab Aktivität**.
 
 ### Funktionen
 
@@ -1318,7 +1321,7 @@ Die Seite aktualisiert sich automatisch alle paar Sekunden.
 
 ## 25. API Usage & Kostenübersicht
 
-Die Seite **API Usage** (`/admin/usage`) zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten.
+Der Tab **Usage** im Dashboard zeigt Token-Verbrauch und geschätzte API-Kosten aller Agenten. Erreichbar unter **Dashboard → Tab Usage**.
 
 ### Übersicht
 
@@ -1344,7 +1347,7 @@ Die Seite enthält außerdem eine **Preisreferenz-Tabelle** ($/1M Tokens) für a
 
 ## 26. Diagnose & Tests
 
-Unter **System** → **Diagnose** gibt es zwei Werkzeuge zur Selbst-Diagnose:
+Unter **System** (Sidebar) gibt es drei Tabs zur Systemdiagnose: **Doctor**, **GPU** und **Monitoring**. Die Diagnose-Werkzeuge sind im Tab **Doctor** zu finden:
 
 ### Doctor
 
@@ -1389,7 +1392,7 @@ sudo journalctl -u hydrahive-core -n 100 --no-pager
 
 1. **Agenten** → Agent auswählen → Logs-Icon prüfen
 2. Heartbeat-Status in der Agent-Liste prüfen (orange = Warnung)
-3. LLM-Verbindung prüfen: **LLM-Config** → Status
+3. LLM-Verbindung prüfen: **Settings** → Tab **LLM** → Status
 
 ### WKS-Verbindung schlägt fehl
 
@@ -1413,7 +1416,7 @@ Der Matrix-Watchdog startet den Bot automatisch neu. Bei dauerhaftem Fehler: `su
 
 ### OAuth-Token abgelaufen
 
-**LLM-Config** → **Claude Max** → Token-Status prüfen. Neuen Token über `claude setup` holen und eintragen.
+**Settings** → Tab **LLM** → Abschnitt **Claude Max** → Token-Status prüfen. Neuen Token über `claude setup` holen und eintragen.
 
 ### Login funktioniert nicht (429 Too Many Requests)
 
@@ -1452,7 +1455,7 @@ Die Erweiterungsverwaltung ermöglicht das nachträgliche Installieren optionale
 
 ### Erreichbar unter
 
-**Erweiterungen** in der linken Sidebar (nur Admin).
+**Hub** → Tab **Extensions** (nur Admin).
 
 ### Verfügbare Erweiterungen
 
@@ -1488,7 +1491,7 @@ Mit Schedules können Agenten zu festen Zeiten oder in regelmäßigen Abständen
 
 ### Erreichbar unter
 
-**Schedules** in der linken Sidebar.
+**Projekte** → Tab **Schedules**.
 
 ### Schedule anlegen
 
@@ -1521,7 +1524,7 @@ Beispiele:
 
 | | Heartbeat | Schedule |
 |---|---|---|
-| Konfiguriert in | Agent-Einstellungen | Schedules-Seite |
+| Konfiguriert in | Agent-Einstellungen | Projekte → Tab Schedules |
 | Trigger | Zeitintervall | Cron / Einmalig |
 | Nachricht | fest im Agent | frei wählbar |
 | Zweck | Monitoring, Watchdog | Aufgaben, Reports |
@@ -1534,7 +1537,7 @@ Butler ist ein Blueprint-Editor für Messenger-Automatisierung. Regeln werden vi
 
 ### Erreichbar unter
 
-**Butler** in der linken Sidebar oder über **Mein Agent** → Tab **Butler**.
+**Blueprint** → Tab **Automation** (für globale Flows) oder **Mein Agent** → Tab **Butler** (für persönliche Flows).
 
 ### Konzept
 
@@ -1602,7 +1605,7 @@ SearXNG ist eine selbst-gehostete Metasuchmaschine die mehrere Suchmaschinen gle
 
 ### Voraussetzung
 
-SearXNG muss über den **Erweiterungs-Manager** installiert sein.
+SearXNG muss über **Hub** → Tab **Extensions** installiert sein.
 
 ### Nutzung durch Agenten
 
@@ -1616,7 +1619,7 @@ Agent: Suche nach aktuellen Nachrichten zu Python 3.13
 
 ### Direktzugriff
 
-Die SearXNG-Oberfläche ist unter **Web-Suche** in der Sidebar erreichbar (eingebettet via iframe).
+Die SearXNG-Oberfläche ist unter **System** → Tab **Monitoring** oder direkt als eigene Seite erreichbar (eingebettet via iframe).
 
 ### Konfiguration
 
@@ -1630,11 +1633,11 @@ code-server bringt VS Code vollständig in den Browser — inklusive Extensions,
 
 ### Voraussetzung
 
-code-server muss über den **Erweiterungs-Manager** installiert sein.
+code-server muss über **Hub** → Tab **Extensions** installiert sein.
 
 ### Erreichbar unter
 
-**Code Editor** in der linken Sidebar.
+**Hub** → Tab **Extensions** → Code Editor öffnen (oder direkt über den eingebetteten Link).
 
 ### Funktionsumfang
 
@@ -1656,7 +1659,7 @@ HydraHive unterstützt das FastA2A-Protokoll für Agent-zu-Agent-Kommunikation z
 
 ### Erreichbar unter
 
-**Federation** in der linken Sidebar (nur Admin).
+**Agenten** → Tab **Federation** (nur Admin).
 
 ### Funktionsweise
 
@@ -1668,7 +1671,7 @@ Jeder Agent hat eine maschinenlesbare Beschreibungsdatei die seine Fähigkeiten,
 
 ### Peer einrichten
 
-1. **Federation** → **Peers** → **+ Peer hinzufügen**
+1. **Agenten** → Tab **Federation** → **Peers** → **+ Peer hinzufügen**
 2. URL der anderen HydraHive-Instanz eingeben
 3. Agent-Karten des Peers werden automatisch geladen
 4. Agenten können jetzt via `ask_agent` peer-übergreifend kommunizieren
@@ -1708,7 +1711,7 @@ Vaultwarden ist ein selbst-gehosteter Passwort-Manager (kompatibel mit dem Bitwa
 
 ### Voraussetzung
 
-Vaultwarden muss über den **Erweiterungs-Manager** installiert sein. Die Installation baut Vaultwarden aus dem Rust-Source-Code — das dauert beim ersten Mal ca. 5–10 Minuten.
+Vaultwarden muss über **Hub** → Tab **Extensions** installiert sein. Die Installation baut Vaultwarden aus dem Rust-Source-Code — das dauert beim ersten Mal ca. 5–10 Minuten.
 
 ### Erreichbar unter
 
@@ -1819,7 +1822,7 @@ cat /etc/hydrahive/users.json
 
 ## 36. HydraHub — Agenten & Plugins installieren
 
-**HydraHub** ist der integrierte Paketmanager von HydraHive. Erreichbar unter **HydraHub** in der Sidebar (nur Admin).
+**HydraHub** ist der integrierte Paketmanager von HydraHive. Erreichbar unter **Hub** → Tab **HydraHub** (nur Admin).
 
 Der HydraHub hat drei Tabs:
 
@@ -1827,7 +1830,7 @@ Der HydraHub hat drei Tabs:
 
 Kuratierte Agenten-Templates die mit einem Klick installiert werden können. Jeder Agent besteht aus einer `agent.yaml` (Konfiguration) und `soul.md` (Persönlichkeit/Anweisungen).
 
-1. **HydraHub** → Tab **Agenten**
+1. **Hub** → Tab **HydraHub** → Unter-Tab **Agenten**
 2. Agent auswählen → Detail-Drawer öffnet sich
 3. Optional: eigene Agent-ID vergeben
 4. **Installieren** klicken
@@ -1839,10 +1842,10 @@ Installierte Agenten können über den **Deinstallieren**-Button im Detail-Drawe
 
 HydraHive-Plugins die neue Tools für Agenten bereitstellen. Jedes Plugin besteht aus `plugin.yaml` (Manifest) und `plugin.py` (Code).
 
-1. **HydraHub** → Tab **Plugins**
+1. **Hub** → Tab **HydraHub** → Unter-Tab **Plugins**
 2. Plugin auswählen → **Installieren**
 3. Plugin wird nach `/plugins/` installiert und sofort geladen
-4. Unter **Plugins** in der Sidebar dem gewünschten Agent zuweisen
+4. Unter **Hub** → Tab **Plugins** dem gewünschten Agent zuweisen
 
 ### ClawhHub
 
@@ -1913,7 +1916,7 @@ def register(api):
 
 ### Plugin-Verwaltung
 
-**Plugins** in der Sidebar → Übersicht aller installierten Plugins.
+**Hub** → Tab **Plugins** → Übersicht aller installierten Plugins.
 
 - **Aktivieren/Deaktivieren** — per Power-Button auf der Plugin-Karte
 - **Agent-Zuweisung** — Plugin-Detail öffnen → Agenten per Checkbox zuweisen
@@ -1950,11 +1953,11 @@ Plugin-Tools bekommen automatisch das Präfix `plg_{plugin_id}_{tool_name}`. Bei
 
 1. Account auf [clawhub.ai](https://clawhub.ai) erstellen
 2. Unter Settings → API Token erstellen
-3. **HydraHub** → **ClawhHub** Tab → Token eintragen
+3. **Hub** → Tab **ClawhHub** → Token eintragen
 
 ### Skills installieren
 
-1. **ClawhHub** Tab → **Skills** → Suche eingeben (z.B. "python", "security")
+1. **Hub** → Tab **ClawhHub** → Unter-Tab **Skills** → Suche eingeben (z.B. "python", "security")
 2. Skill auswählen → Detail-Drawer öffnet sich
 3. **Ziel-Agent** auswählen (in welchen Agent der Skill installiert wird)
 4. **In Agent installieren** klicken
@@ -1964,7 +1967,7 @@ ClawhHub-Skills werden automatisch vom ClawhHub-Format ins HydraHive-Format konv
 
 ### Plugins browsen
 
-Unter dem **Plugins** Sub-Tab können OpenClaw Code Plugins und Bundle Plugins durchsucht werden. Diese sind aktuell Read-Only — für die direkte Nutzung in HydraHive ist das Plugin-System (Kapitel 37) vorgesehen.
+Unter dem **Plugins** Unter-Tab können OpenClaw Code Plugins und Bundle Plugins durchsucht werden. Diese sind aktuell Read-Only — für die direkte Nutzung in HydraHive ist das Plugin-System (Kapitel 37) vorgesehen.
 
 ---
 
@@ -1982,7 +1985,7 @@ Tailscale ermöglicht die sichere Vernetzung mehrerer HydraHive-Instanzen über 
 #### Schritt 1: API Key
 
 1. [Tailscale Admin](https://login.tailscale.com/admin/settings/keys) → **Generate access token**
-2. **Federation** → Tailscale-Sektion → API Key eintragen → **Speichern**
+2. **Agenten** → Tab **Federation** → Tailscale-Sektion → API Key eintragen → **Speichern**
 
 #### Schritt 2: Server verbinden
 
@@ -2023,7 +2026,7 @@ Tailscale ermöglicht die sichere Vernetzung mehrerer HydraHive-Instanzen über 
 
 ### Aufrufen
 
-**HydraBrain** in der Sidebar (nur Admin). Benötigt WebGL (Hardware-Beschleunigung im Browser).
+**HydraBrain** in der Sidebar (nur Admin) — eigener Menüpunkt. Benötigt WebGL (Hardware-Beschleunigung im Browser).
 
 ### Ansicht
 
