@@ -43,15 +43,15 @@ function useUpdateStatus(isAdmin: boolean) {
   const [lastCommit, setLastCommit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Live-Log Modal State — bei Reload wiederherstellen
-  const [showLog, setShowLog] = useState(() => localStorage.getItem("hh_update_modal") === "1");
+  const [showLog, setShowLog] = useState(false); // nie aus localStorage restaurieren — verhindert hängendes Modal
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logDone, setLogDone] = useState<boolean | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Persist modal state
+  // localStorage aufräumen falls noch von alter Version gesetzt
   useEffect(() => {
-    localStorage.setItem("hh_update_modal", showLog ? "1" : "0");
-  }, [showLog]);
+    localStorage.removeItem("hh_update_modal");
+  }, []);
 
   const check = useCallback(async () => {
     if (!isAdmin) return;
@@ -60,21 +60,11 @@ function useUpdateStatus(isAdmin: boolean) {
       setUpdateAvailable(Boolean(s.available));
       if (s.status === "running") {
         setUpdating(true);
-        // Falls Modal offen sein sollte (nach Reload), Polling starten
-        if (localStorage.getItem("hh_update_modal") === "1" && !pollRef.current) {
-          startPolling();
-        }
+        // Falls Polling schon aktiv (User hat Update getriggert), weiterlaufen lassen
       } else {
         setUpdating(false);
         if (s.commit) setLastCommit(s.commit);
         if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
-        // Modal offen aber Update schon fertig (nach Reload) → Ergebnis anzeigen
-        if (localStorage.getItem("hh_update_modal") === "1" && logDone === null) {
-          const logTail: string[] = (s.log_tail || []).map(stripAnsi);
-          if (logTail.length > 0) setLogLines(logTail);
-          setLogDone(s.status === "ok");
-          if (s.status === "error") setError(s.error || "Update fehlgeschlagen");
-        }
         else setError(null);
       }
     } catch {
