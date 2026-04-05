@@ -187,6 +187,7 @@
     "tabAudit": "Audit",
     "title": "Operations-Dashboard fuer den laufenden HydraHive-Stack",
     "subtitle": "Diese Flaeche zeigt jetzt nicht nur Basiszahlen, sondern die fuer den Betrieb wichtigsten Signale: Core-Zustand, Update-Lage, GPU/Runtime, Heartbeats und letzte Audit-Aktivitaet.",
+    "easterHint": "Psst... ein kleines Wesen wartet darauf, dich zu begleiten. Finde die Version. Klopfe fuenfmal. Es wird kommen.",
     "coreReachable": "Core erreichbar",
     "coreDisturbed": "Core gestoert",
     "dashboardLabel": "Dashboard jetzt als Operations-Flaeche",

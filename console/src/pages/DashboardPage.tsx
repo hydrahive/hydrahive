@@ -46,6 +46,11 @@ export function DashboardPage() {
           <h1 className="text-lg font-semibold text-foreground">{t("nav.dashboard")}</h1>
         </div>
         <p className="text-xs text-muted-foreground mb-4">{t("dashboard.subtitle")}</p>
+        {localStorage.getItem("hh_companion") !== "1" && (
+          <p className="text-[10px] text-muted-foreground/40 italic mb-2">
+            {t("dashboard.easterHint", { defaultValue: "Psst... ein kleines Wesen wartet darauf, dich zu begleiten. Finde die Version. Klopfe fünfmal. Es wird kommen." })}
+          </p>
+        )}
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           {TAB_DEFS.map(tab => (
             <button
