@@ -294,7 +294,8 @@ export function ChatPage() {
     }
 
     const userMsg = mkMsg("user", content);
-    const assistantMsg = mkMsg("assistant", "");
+    let currentAssistantMsg = mkMsg("assistant", "");
+    let hadToolsSinceLastText = false;
     setMessages((ms) => [...ms, userMsg]);
     setSending(true);
     setElapsed(0);
@@ -315,8 +316,8 @@ export function ChatPage() {
         throw new Error(e.detail || `HTTP ${res.status}`);
       }
 
-      setMessages((ms) => [...ms, assistantMsg]);
-      setStreamingMsgId(assistantMsg.id);
+      setMessages((ms) => [...ms, currentAssistantMsg]);
+      setStreamingMsgId(currentAssistantMsg.id);
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -334,12 +335,19 @@ export function ChatPage() {
               const evt = JSON.parse(line.slice(6));
               if (evt.text !== undefined) {
                 setActiveTool(null);
-                setMessages((ms) => ms.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m));
+                // #337: Nach Tool-Calls neue Assistant-Message starten
+                if (hadToolsSinceLastText) {
+                  currentAssistantMsg = mkMsg("assistant", "");
+                  setMessages((ms) => [...ms, currentAssistantMsg]);
+                  setStreamingMsgId(currentAssistantMsg.id);
+                  hadToolsSinceLastText = false;
+                }
+                setMessages((ms) => ms.map((m) => m.id === currentAssistantMsg.id ? { ...m, content: m.content + evt.text } : m));
               } else if (evt.tool_call !== undefined) {
                 setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
-                // Tool-Call als eigene Message im Chat einfügen
                 const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
                 setMessages((ms) => [...ms, toolMsg]);
+                hadToolsSinceLastText = true;
               } else if (evt.done) {
                 const updates: Partial<Message> = {};
                 if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
@@ -348,7 +356,7 @@ export function ChatPage() {
                   Object.assign(updates, { model: evt.model, isFallback: true });
                 if (Object.keys(updates).length > 0)
                   setMessages((ms) => ms.map((m) =>
-                    m.id === assistantMsg.id ? { ...m, ...updates } : m
+                    m.id === currentAssistantMsg.id ? { ...m, ...updates } : m
                   ));
                 break outer;
               } else if (evt.error) {
@@ -366,7 +374,7 @@ export function ChatPage() {
         // User aborted — keep partial response, no error
       } else {
         setError(e instanceof Error ? e.message : t("common.error"));
-        setMessages((ms) => ms.filter((m) => m.id !== userMsg.id && m.id !== assistantMsg.id));
+        setMessages((ms) => ms.filter((m) => m.id !== userMsg.id && m.id !== currentAssistantMsg.id));
         setInput(content);
       }
     } finally {

@@ -240,7 +240,8 @@ export function AgentChatPage() {
     }
 
     const userMsg      = mkMsg("user", content);
-    const assistantMsg = mkMsg("assistant", "");
+    let currentAsst = mkMsg("assistant", "");
+    let hadToolCalls = false;
     setMessages(ms => [...ms, userMsg]);
     setSending(true);
     setElapsed(0);
@@ -261,7 +262,7 @@ export function AgentChatPage() {
         throw new Error(e.detail || `HTTP ${res.status}`);
       }
 
-      setMessages(ms => [...ms, assistantMsg]);
+      setMessages(ms => [...ms, currentAsst]);
       const reader  = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer    = "";
@@ -278,12 +279,14 @@ export function AgentChatPage() {
             try {
               const evt = JSON.parse(line.slice(6));
               if (evt.text !== undefined) {
+                if (hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); hadToolCalls = false; }
                 setMessages(ms => ms.map(m =>
-                  m.id === assistantMsg.id ? { ...m, content: m.content + evt.text } : m
+                  m.id === currentAsst.id ? { ...m, content: m.content + evt.text } : m
                 ));
               } else if (evt.tool_call !== undefined) {
                 const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
                 setMessages(ms => [...ms, toolMsg]);
+                hadToolCalls = true;
               } else if (evt.done) {
                 const updates: Partial<Message> = {};
                 if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
@@ -291,7 +294,7 @@ export function AgentChatPage() {
                 if (evt.is_fallback)
                   Object.assign(updates, { model: evt.model, isFallback: true });
                 if (Object.keys(updates).length > 0)
-                  setMessages(ms => ms.map(m => m.id === assistantMsg.id ? { ...m, ...updates } : m));
+                  setMessages(ms => ms.map(m => m.id === currentAsst.id ? { ...m, ...updates } : m));
                 break outer;
               } else if (evt.error) {
                 if (evt.session_reset) setMessages([]);
@@ -308,7 +311,7 @@ export function AgentChatPage() {
         // User aborted — keep partial response, no error
       } else {
         setError(e instanceof Error ? e.message : t("common.error"));
-        setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== assistantMsg.id));
+        setMessages(ms => ms.filter(m => m.id !== userMsg.id && m.id !== currentAsst.id));
         setInput(content);
       }
     } finally {
