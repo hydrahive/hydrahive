@@ -616,14 +616,24 @@ export function MyAgentPage() {
 
                   {(viewSession ? viewSession.messages : messages).map((msg) => {
                     if (msg.role === "tool") {
-                      const [toolName, ...detailParts] = msg.content.split("|");
-                      const detail = detailParts.join("|");
+                      const allMsgs = viewSession ? viewSession.messages : messages;
+                      const msgIdx = allMsgs.indexOf(msg);
+                      if (msgIdx > 0 && allMsgs[msgIdx - 1]?.role === "tool") return null;
+                      const toolGroup: typeof allMsgs = [msg];
+                      for (let i = msgIdx + 1; i < allMsgs.length && allMsgs[i].role === "tool"; i++) toolGroup.push(allMsgs[i]);
                       return (
                         <div key={msg.id} className="flex justify-center">
-                          <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs text-primary/80 font-mono">
-                            <Terminal className="h-3 w-3 flex-shrink-0" />
-                            <span className="font-semibold">{toolName}</span>
-                            {detail && <span className="text-muted-foreground truncate max-w-[300px]">{detail}</span>}
+                          <div className="flex flex-wrap gap-1.5 max-w-[90%] justify-center">
+                            {toolGroup.map(tm => {
+                              const [toolName, ...dp] = tm.content.split("|");
+                              return (
+                                <span key={tm.id} title={dp.join("|") || toolName}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
+                                  <Terminal className="h-2.5 w-2.5" />
+                                  {toolName}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       );

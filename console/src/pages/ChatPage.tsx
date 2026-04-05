@@ -526,14 +526,30 @@ export function ChatPage() {
               )}
               {messages.map((msg) => {
                 if (msg.role === "tool") {
-                  const [toolName, ...detailParts] = msg.content.split("|");
-                  const detail = detailParts.join("|");
+                  // Mehrere aufeinanderfolgende Tool-Calls gruppieren
+                  const msgIdx = messages.indexOf(msg);
+                  const prevMsg = msgIdx > 0 ? messages[msgIdx - 1] : null;
+                  // Wenn der vorherige auch ein Tool war, wurde er schon in der Gruppe gerendert
+                  if (prevMsg?.role === "tool") return null;
+                  // Alle folgenden Tools sammeln
+                  const toolGroup: typeof messages = [msg];
+                  for (let i = msgIdx + 1; i < messages.length && messages[i].role === "tool"; i++) {
+                    toolGroup.push(messages[i]);
+                  }
                   return (
                     <div key={msg.id} className="flex justify-center">
-                      <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs text-primary/80 font-mono">
-                        <Terminal className="h-3 w-3 flex-shrink-0" />
-                        <span className="font-semibold">{toolName}</span>
-                        {detail && <span className="text-muted-foreground truncate max-w-[300px]">{detail}</span>}
+                      <div className="flex flex-wrap gap-1.5 max-w-[85%] justify-center">
+                        {toolGroup.map(tm => {
+                          const [toolName, ...detailParts] = tm.content.split("|");
+                          const detail = detailParts.join("|");
+                          return (
+                            <span key={tm.id} title={detail || toolName}
+                              className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
+                              <Terminal className="h-2.5 w-2.5" />
+                              {toolName}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   );

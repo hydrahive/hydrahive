@@ -935,9 +935,11 @@ class Orchestrator:
                         repeated_tool_signature_count = 0
                         _oauth_file_read_cache: dict[str, str] = {}  # path → first result (dedup)
                         for _round in range(boss_cfg.max_tool_rounds):
+                            _round_text = ""
                             async with client.messages.stream(**kwargs) as stream:
                                 async for text in stream.text_stream:
                                     full_response += text
+                                    _round_text   += text
                                     streamed_any   = True
                                     yield f"data: {_json.dumps({'text': text})}\n\n"
                                 final_msg = await stream.get_final_message()
@@ -951,6 +953,9 @@ class Orchestrator:
                             tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
                             if not tool_use_blocks:
                                 break
+                            # Zwischentext persistent speichern (vor Tool-Ausführung)
+                            if _round_text.strip():
+                                await self._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
                             _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
                             signature = tuple(
                                 f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
@@ -1230,6 +1235,8 @@ class Orchestrator:
                             # litellm Ollama-Transformation die mit tool_call-History crasht
                             if round_text:
                                 loop_messages.append({"role": "assistant", "content": round_text})
+                                # Zwischentext persistent in Session speichern
+                                await self._sessions.append(project_id, MessageRole.ASSISTANT, round_text, agent_id=boss_id)
 
                             tool_results_text = []
                             for tc in tc_list:
