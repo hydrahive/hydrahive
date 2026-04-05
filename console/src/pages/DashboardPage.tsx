@@ -152,7 +152,7 @@ export function DashboardPage() {
       <div className="flex-1 overflow-auto">
         {BuiltinContent ? <BuiltinContent />
           : customTab ? <CustomTabContent tab={customTab} />
-          : <DashboardOverview />}
+          : <DashboardOverview config={config} onConfigChange={saveConfig} />}
       </div>
 
       {/* Tab-Editor Modal */}
@@ -272,7 +272,28 @@ function TabEditorModal({ tab, onSave, onDelete, onClose }: {
   );
 }
 
-function DashboardOverview() {
+const WIDGET_DEFS = [
+  { id: "status",     label: "Core-Status",    icon: "Radar" },
+  { id: "metrics",    label: "Metriken",       icon: "BarChart2" },
+  { id: "agents",     label: "Agenten",        icon: "Bot" },
+  { id: "heartbeat",  label: "Heartbeats",     icon: "Activity" },
+  { id: "gpu",        label: "GPU",            icon: "Cpu" },
+  { id: "update",     label: "Update-Status",  icon: "RefreshCw" },
+  { id: "audit",      label: "Audit-Log",      icon: "ShieldCheck" },
+];
+
+function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig; onConfigChange: (c: DashboardConfig) => void }) {
+  const [showWidgetSettings, setShowWidgetSettings] = useState(false);
+  const hidden = new Set(config.overview_widgets?.hidden || []);
+
+  function toggleWidget(id: string) {
+    const newHidden = hidden.has(id)
+      ? [...config.overview_widgets.hidden].filter(h => h !== id)
+      : [...(config.overview_widgets.hidden || []), id];
+    onConfigChange({ ...config, overview_widgets: { ...config.overview_widgets, hidden: newHidden } });
+  }
+
+  function isVisible(id: string) { return !hidden.has(id); }
   const { t } = useTranslation();
   const [status, setStatus] = useState<Record<string, any> | null>(null);
   const [healthy, setHealthy] = useState<boolean | null>(null);
@@ -534,8 +555,35 @@ function DashboardOverview() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="hero-panel">
+    <div className="space-y-6 relative">
+      {/* Widget-Settings Button */}
+      <button
+        onClick={() => setShowWidgetSettings(s => !s)}
+        className="absolute top-4 right-4 z-10 rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title={t("dashboard.widgetSettings", { defaultValue: "Widgets ein-/ausblenden" })}
+      >
+        <Layers3 size={16} />
+      </button>
+
+      {/* Widget Toggle Panel */}
+      {showWidgetSettings && (
+        <div className="mx-4 rounded-xl border bg-card p-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("dashboard.widgetSettings", { defaultValue: "Widgets ein-/ausblenden" })}</p>
+          <div className="flex flex-wrap gap-2">
+            {WIDGET_DEFS.map(w => (
+              <button key={w.id} onClick={() => toggleWidget(w.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border transition-colors",
+                  isVisible(w.id) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground line-through opacity-50"
+                )}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isVisible("status") && <section className="hero-panel">
         <div className="relative z-10 shell-grid">
           <div className="space-y-5 lg:col-span-8">
             <div className="flex flex-wrap items-center gap-3">
@@ -596,9 +644,9 @@ function DashboardOverview() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+      {isVisible("agents") && <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <div className="section-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -656,9 +704,9 @@ function DashboardOverview() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {isVisible("metrics") && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map(({ icon: Icon, label, value, meta, state }) => (
           <div key={label} className="metric-card">
             <div className="flex items-center justify-between gap-3">
@@ -673,9 +721,9 @@ function DashboardOverview() {
             <p className="metric-meta">{meta}</p>
           </div>
         ))}
-      </section>
+      </section>}
 
-      <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+      {isVisible("heartbeat") && <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="section-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -733,9 +781,9 @@ function DashboardOverview() {
             {update?.error && <div className="rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-red-100">{update.error}</div>}
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.15fr_1fr_1fr]">
+      {isVisible("gpu") && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.15fr_1fr_1fr]">
         <div className="section-card">
           <div className="flex items-center gap-2">
             <Cpu className="h-4 w-4 text-primary" />
@@ -807,9 +855,9 @@ function DashboardOverview() {
             )}
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+      {isVisible("update") && <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="section-card">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
@@ -862,7 +910,7 @@ function DashboardOverview() {
             )}
           </div>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
