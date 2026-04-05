@@ -22,6 +22,7 @@ rm -f /etc/hydrahive/paperless-ngx.json
 
 # System-User entfernen
 userdel paperless 2>/dev/null || true
+groupdel paprss 2>/dev/null || true
 
 # Daten und Datenbank NICHT löschen — Dokumente sind zu wertvoll
 warn "Daten in /var/lib/paperless-ngx wurden NICHT gelöscht (Dokumente, OCR-Dateien)."

@@ -65,7 +65,12 @@ success "PHP ${PHP_VERSION} erkannt, Socket: ${PHP_FPM_SOCK}"
 
 # --- System-User ---
 if ! id "${HEIMDALL_USER}" &>/dev/null; then
-    useradd -r -s /bin/false -d "${HEIMDALL_DIR}" "${HEIMDALL_USER}"
+    # Gruppe existiert evtl. noch von vorherigem Install
+    if getent group "${HEIMDALL_USER}" &>/dev/null; then
+        useradd -r -s /bin/false -d "${HEIMDALL_DIR}" -g "${HEIMDALL_USER}" "${HEIMDALL_USER}"
+    else
+        useradd -r -s /bin/false -d "${HEIMDALL_DIR}" "${HEIMDALL_USER}"
+    fi
     success "System-User '${HEIMDALL_USER}' angelegt"
 fi
 # www-data muss heimdall-Gruppe kennen für PHP-FPM

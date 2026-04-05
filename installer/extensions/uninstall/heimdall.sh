@@ -37,5 +37,6 @@ rm -f /etc/hydrahive/heimdall.json
 
 # System-User entfernen
 userdel heimdall 2>/dev/null || true
+groupdel heimdall 2>/dev/null || true
 
 success "Heimdall deinstalliert"

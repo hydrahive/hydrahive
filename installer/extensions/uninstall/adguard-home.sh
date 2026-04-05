@@ -19,6 +19,7 @@ rm -f /etc/hydrahive/adguard-home.json
 
 # System-User entfernen
 userdel adguardhome 2>/dev/null || true
+groupdel agarhom 2>/dev/null || true
 
 # Laufzeitdaten NICHT löschen — Blocklist-Stats, eigene Regeln etc.
 warn "Daten in /var/lib/adguard-home wurden NICHT gelöscht (Query-Logs, Blocklists, Statistiken)."

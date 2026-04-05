@@ -89,7 +89,11 @@ success "PostgreSQL bereit"
 
 # --- System-User ---
 if ! id "${PAPERLESS_USER}" &>/dev/null; then
-    useradd -r -s /bin/false -d "${PAPERLESS_DATA}" -m "${PAPERLESS_USER}"
+    if getent group "${PAPERLESS_USER}" &>/dev/null; then
+        useradd -r -s /bin/false -d "${PAPERLESS_DATA}" -m -g "${PAPERLESS_USER}" "${PAPERLESS_USER}"
+    else
+        useradd -r -s /bin/false -d "${PAPERLESS_DATA}" -m "${PAPERLESS_USER}"
+    fi
     success "System-User '${PAPERLESS_USER}' angelegt"
 fi
 

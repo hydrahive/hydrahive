@@ -86,7 +86,11 @@ success "AdGuardHome ${LATEST_TAG} nach ${AGH_DIR} entpackt"
 
 # --- System-User ---
 if ! id "${AGH_USER}" &>/dev/null; then
-    useradd -r -s /bin/false -d "${AGH_DATA_DIR}" -m "${AGH_USER}"
+    if getent group "${AGH_USER}" &>/dev/null; then
+        useradd -r -s /bin/false -d "${AGH_DATA_DIR}" -m -g "${AGH_USER}" "${AGH_USER}"
+    else
+        useradd -r -s /bin/false -d "${AGH_DATA_DIR}" -m "${AGH_USER}"
+    fi
     success "System-User '${AGH_USER}' angelegt"
 fi
 
