@@ -174,7 +174,7 @@ def register(api):
             return "Update NICHT gestartet. Setze confirm=true um das Update wirklich auszuführen.\n\nHinweis: Der Server wird während des Updates kurz nicht erreichbar sein."
 
         try:
-            # Update via systemd-Service starten (kein systemctl bash nötig)
+            # Update via systemd-Service starten (kein sudo bash nötig)
             r = subprocess.run(
                 ["systemctl", "start", "hydrahive-update.service"],
                 capture_output=True, text=True, timeout=30,

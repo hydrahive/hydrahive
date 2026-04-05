@@ -61,16 +61,33 @@ def register(api):
         },
     )
     def git_clone(url: str, target: str, branch: str = "", depth: int = 0, **_) -> str:
+        # Sicherheit: target muss unter /projects/ liegen (Path Traversal verhindern)
+        abs_target = os.path.realpath(os.path.abspath(target))
+        if not abs_target.startswith("/projects/"):
+            return f"❌ Sicherheitsfehler: Zielverzeichnis muss unter /projects/ liegen (angegeben: {target})"
+
+        # Token-URLs maskieren im Fehlerlog (z.B. https://TOKEN@github.com)
+        safe_url = url
+        if "@" in url:
+            try:
+                from urllib.parse import urlparse, urlunparse
+                p = urlparse(url)
+                safe_url = urlunparse(p._replace(netloc=p.hostname or ""))
+            except Exception:
+                safe_url = "<url-maskiert>"
+
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch, "--single-branch"]
         if depth and depth > 0:
             cmd += ["--depth", str(depth)]
-        cmd += [url, target]
+        cmd += [url, abs_target]
         rc, out, err = _run(cmd, timeout=300)
         if rc != 0:
-            return f"Clone fehlgeschlagen: {err}"
-        return f"Repository geklont nach {target}\n{out}\n{err}".strip()
+            # Token nicht in Fehlermeldung ausgeben
+            err_safe = err.replace(url, safe_url) if url != safe_url else err
+            return f"Clone fehlgeschlagen: {err_safe}"
+        return f"Repository geklont nach {abs_target}\n{out}".strip()
 
     @api.tool(
         tool_id="git_pull",
