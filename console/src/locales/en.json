@@ -416,6 +416,7 @@
     "tabTools": "Tools",
     "tabFederation": "Federation",
     "tabBlueprint": "Blueprint",
+    "tabServers": "Remote Servers",
     "title": "Agent management with runtime, skill and log focus",
     "subtitle": "This area organizes agent profiles, heartbeats, direct chats, skills and logs into a clearer operational view. The functions remain the same, but the interface now separates analysis, configuration and runtime more clearly.",
     "loaded": "{{count}} agent loaded",

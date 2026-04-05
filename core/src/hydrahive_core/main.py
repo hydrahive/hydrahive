@@ -68,6 +68,7 @@ from .router_invites import register_invite_routes
 from .router_github import register_github_routes
 from .router_plugins import register_plugin_routes
 from .router_tailscale import register_tailscale_routes
+from .router_servers import register_server_routes
 from .plugin_manager import plugin_manager
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
 from .group_service import GroupService
@@ -1430,6 +1431,11 @@ register_github_routes(admin_router, require_admin=require_admin)
 register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
 register_plugin_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, agents_dir=AGENTS_DIR)
 register_tailscale_routes(admin_router, require_admin=require_admin)
+register_server_routes(
+    auth_router, admin_router,
+    require_auth=require_auth,
+    require_admin=require_admin,
+)
 register_pipeline_routes(
     admin_router,
     require_admin=require_admin,

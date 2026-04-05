@@ -950,7 +950,7 @@ function AgentsCrudTab() {
 
 // ── Tab shell ─────────────────────────────────────────────────────────────────
 
-type AgentsTabId = "agents" | "tools" | "plugins" | "federation" | "blueprint";
+type AgentsTabId = "agents" | "tools" | "plugins" | "federation" | "blueprint" | "servers";
 
 const AGENTS_TABS: { id: AgentsTabId; labelKey: string; icon: React.ElementType }[] = [
   { id: "agents",     labelKey: "agents.tabAgents",     icon: Bot },
@@ -958,6 +958,7 @@ const AGENTS_TABS: { id: AgentsTabId; labelKey: string; icon: React.ElementType 
   { id: "plugins",    labelKey: "agents.tabPlugins",    icon: Puzzle },
   { id: "federation", labelKey: "agents.tabFederation", icon: Globe },
   { id: "blueprint",  labelKey: "agents.tabBlueprint",  icon: Workflow },
+  { id: "servers",    labelKey: "agents.tabServers",    icon: ServerIcon },
 ];
 
 export function AgentsPage() {
@@ -992,6 +993,207 @@ export function AgentsPage() {
         {activeTab === "plugins"    && <PluginsPage />}
         {activeTab === "federation" && <A2APage />}
         {activeTab === "blueprint"  && <AgentBlueprintTab />}
+        {activeTab === "servers"    && <ServersTab />}
+      </div>
+    </div>
+  );
+}
+
+/* ── Remote-Server Verwaltung (#342) ─────────────────────────── */
+
+interface RemoteServer {
+  id: string; name: string; ip: string; ssh_user: string; ssh_port: number;
+  description: string; has_ssh_key?: boolean;
+}
+
+function ServersTab() {
+  const { t } = useTranslation();
+  const [servers, setServers] = useState<RemoteServer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<RemoteServer | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [pubKey, setPubKey] = useState<string>("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const d = await api.get<{ servers: RemoteServer[] }>("/admin/servers");
+      setServers(d.servers);
+    } catch {}
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function addServer(srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string }) {
+    try {
+      const d = await api.post<{ created: boolean; server_id: string; public_key: string }>("/admin/servers", srv);
+      setPubKey(d.public_key || "");
+      setShowAdd(false);
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+
+  async function updateServer(id: string, srv: Partial<RemoteServer>) {
+    try {
+      await api.put(`/admin/servers/${id}`, srv);
+      setEditing(null);
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+
+  async function deleteServer(id: string) {
+    if (!confirm(t("common.confirmDelete", { defaultValue: "Wirklich löschen?" }))) return;
+    try {
+      await api.delete(`/admin/servers/${id}`);
+      load();
+    } catch (e: any) { alert(e.message); }
+  }
+
+  async function testServer(id: string) {
+    setTestResult(prev => ({ ...prev, [id]: { ok: false, msg: "Teste..." } }));
+    try {
+      const d = await api.get<{ ok: boolean; error?: string; output?: string }>(`/admin/servers/${id}/test`);
+      setTestResult(prev => ({ ...prev, [id]: { ok: d.ok, msg: d.ok ? "Verbunden!" : (d.error || "Fehler") } }));
+    } catch (e: any) {
+      setTestResult(prev => ({ ...prev, [id]: { ok: false, msg: e.message } }));
+    }
+  }
+
+  async function showPubKey(id: string) {
+    try {
+      const d = await api.get<{ public_key: string }>(`/admin/servers/${id}/pubkey`);
+      setPubKey(d.public_key);
+    } catch { setPubKey("Kein Key vorhanden"); }
+  }
+
+  return (
+    <div className="p-6 max-w-4xl space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">{t("agents.serversTitle", { defaultValue: "Remote-Server" })}</h2>
+          <p className="text-xs text-muted-foreground">{t("agents.serversDesc", { defaultValue: "SSH-Ziele registrieren und Agents zuweisen" })}</p>
+        </div>
+        <button onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          <Plus size={14} /> {t("common.new", { defaultValue: "Neu" })}
+        </button>
+      </div>
+
+      {/* Public Key Anzeige */}
+      {pubKey && (
+        <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold">{t("agents.serverPubKey", { defaultValue: "Public Key — auf dem Ziel-Server in ~/.ssh/authorized_keys eintragen:" })}</p>
+            <button onClick={() => { navigator.clipboard.writeText(pubKey); }} className="text-xs text-primary hover:underline">Kopieren</button>
+          </div>
+          <pre className="text-xs bg-black/30 rounded-lg p-3 font-mono break-all select-all">{pubKey}</pre>
+          <button onClick={() => setPubKey("")} className="text-xs text-muted-foreground hover:text-foreground">Schließen</button>
+        </div>
+      )}
+
+      {loading ? <p className="text-sm text-muted-foreground">Lade...</p> : servers.length === 0 ? (
+        <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+          {t("agents.serversEmpty", { defaultValue: "Noch keine Server registriert. Klicke auf \"Neu\" um einen SSH-Zielserver hinzuzufügen." })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {servers.map(srv => (
+            <div key={srv.id} className="rounded-xl border bg-card p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{srv.name} <span className="text-muted-foreground font-mono text-xs">({srv.ssh_user}@{srv.ip}:{srv.ssh_port})</span></p>
+                  {srv.description && <p className="text-xs text-muted-foreground mt-0.5">{srv.description}</p>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${srv.has_ssh_key ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500"}`}>
+                    {srv.has_ssh_key ? "Key vorhanden" : "Kein Key"}
+                  </span>
+                  <button onClick={() => showPubKey(srv.id)} className="text-xs text-primary hover:underline">Key</button>
+                  <button onClick={() => testServer(srv.id)} className="text-xs text-primary hover:underline">Test</button>
+                  <button onClick={() => setEditing(srv)} className="text-muted-foreground hover:text-foreground"><Pencil size={14} /></button>
+                  <button onClick={() => deleteServer(srv.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={14} /></button>
+                </div>
+              </div>
+              {testResult[srv.id] && (
+                <p className={`text-xs mt-2 ${testResult[srv.id].ok ? "text-green-500" : "text-red-500"}`}>
+                  {testResult[srv.id].msg}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      {(showAdd || editing) && (
+        <ServerEditModal
+          server={editing}
+          onSave={(srv) => editing ? updateServer(editing.id, srv) : addServer(srv)}
+          onClose={() => { setShowAdd(false); setEditing(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ServerEditModal({ server, onSave, onClose }: {
+  server: RemoteServer | null;
+  onSave: (srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string }) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(server?.name || "");
+  const [ip, setIp] = useState(server?.ip || "");
+  const [sshUser, setSshUser] = useState(server?.ssh_user || "root");
+  const [sshPort, setSshPort] = useState(server?.ssh_port || 22);
+  const [desc, setDesc] = useState(server?.description || "");
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-card border rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">{server ? "Server bearbeiten" : "Neuer Server"}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Mein Home-Server"
+              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">IP / Hostname</label>
+              <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.100"
+                className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">SSH-User</label>
+                <input value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root"
+                  className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Port</label>
+                <input type="number" value={sshPort} onChange={e => setSshPort(Number(e.target.value))}
+                  className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Beschreibung</label>
+            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Home-Lab Ubuntu Server"
+              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div className="flex justify-end pt-2">
+          <button onClick={() => onSave({ name, ip, ssh_user: sshUser, ssh_port: sshPort, description: desc })}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
+            <Save size={14} /> {server ? "Speichern" : "Server anlegen + Key generieren"}
+          </button>
+        </div>
       </div>
     </div>
   );

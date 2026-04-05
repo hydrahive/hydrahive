@@ -416,6 +416,7 @@
     "tabTools": "Tools",
     "tabFederation": "Federation",
     "tabBlueprint": "Blueprint",
+    "tabServers": "Remote-Server",
     "title": "Agentenverwaltung mit Runtime-, Skill- und Log-Fokus",
     "subtitle": "Diese Flaeche ordnet Agentprofile, Heartbeats, direkte Chats, Skills und Logs in eine klarere Betriebsansicht. Die Funktionen bleiben gleich, aber die Oberflaeche trennt Analyse, Konfiguration und Laufzeit jetzt sauberer.",
     "loaded": "{{count}} Agent geladen",
