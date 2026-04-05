@@ -229,9 +229,10 @@ def register(api):
                 from hydrahive_core.whatsapp_agent import bridge_send
                 emoji = "🔴" if alert_type == "NIEDRIG" else "🟡"
                 msg = f"{emoji} Glukose-Alarm: {value} mg/dL ({alert_type}) {trend}\n\nBitte prüfen!"
+                agent_id = f"personal_{username}"
                 for number in notify_numbers:
-                    jid = f"{number}@c.us" if "@" not in number else number
-                    await bridge_send("personal_admin", jid, msg)
+                    jid = f"{number}@s.whatsapp.net" if "@" not in number else number
+                    await bridge_send(agent_id, jid, msg)
                     alerts_sent.append(number)
             except Exception as e:
                 logger.error("WhatsApp Alert fehlgeschlagen: %s", e)

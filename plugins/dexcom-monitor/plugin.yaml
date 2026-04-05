@@ -14,43 +14,43 @@ ui:
     order: 50
   config_fields:
     - id: dexcom_username
-      label: "Dexcom Benutzername"
+      label: "Dexcom Share Benutzername"
       type: text
-      hint: "Dein Dexcom Share Benutzername (oder E-Mail)"
+      hint: "Dein Dexcom Share Benutzername — findest du in der Dexcom App unter Einstellungen → Teilen → Follower einladen. Wenn du noch kein Share-Konto hast: Dexcom App öffnen → Verbindungen → Teilen aktivieren."
     - id: dexcom_password
-      label: "Dexcom Passwort"
+      label: "Dexcom Share Passwort"
       type: password
-      hint: "Dexcom Share Passwort"
+      hint: "Das Passwort deines Dexcom Share Kontos (dasselbe wie in der Dexcom App / clarity.dexcom.eu)."
     - id: dexcom_region
       label: "Region"
       type: text
       default: "eu"
-      hint: "eu (Europa) oder us (USA)"
+      hint: "'eu' für Europa/Deutschland (clarity.dexcom.eu) oder 'us' für USA (clarity.dexcom.com). Falsche Region = Login schlägt fehl."
     - id: alert_low
       label: "Hypo-Alarm unter (mg/dL)"
       type: number
       default: 70
-      hint: "WhatsApp-Alert wenn Glukose unter diesem Wert"
+      hint: "WhatsApp-Alert wenn Glukose unter diesem Wert fällt. Standard: 70 mg/dL (3.9 mmol/L)."
     - id: alert_high
       label: "Hyper-Alarm über (mg/dL)"
       type: number
       default: 250
-      hint: "WhatsApp-Alert wenn Glukose über diesem Wert"
+      hint: "WhatsApp-Alert wenn Glukose über diesem Wert steigt. Standard: 250 mg/dL (13.9 mmol/L)."
     - id: notify_numbers
       label: "WhatsApp-Nummern für Alarm"
       type: text
-      hint: "Kommagetrennt, z.B. 491701234567,491709876543"
+      hint: "Kommagetrennt mit Ländervorwahl ohne +, z.B. 491701234567,491709876543. Die Nummern müssen über die HydraHive WhatsApp-Bridge erreichbar sein."
     - id: check_interval_min
       label: "Prüf-Intervall (Minuten)"
       type: number
       default: 5
-      hint: "Wie oft Glukosewerte abgefragt werden"
+      hint: "Wie oft Glukosewerte abgefragt werden. Dexcom aktualisiert alle 5 Minuten — kürzere Intervalle bringen keinen Vorteil."
     - id: cooldown_min
       label: "Alarm-Cooldown (Minuten)"
       type: number
       default: 15
-      hint: "Mindestabstand zwischen zwei Alarmen"
+      hint: "Mindestabstand zwischen zwei Alarmen. Verhindert Spam bei dauerhaft kritischen Werten."
     - id: enabled
       label: "Monitoring aktiv"
       type: toggle
-      hint: "Glukose-Überwachung ein/ausschalten"
+      hint: "Glukose-Überwachung ein/ausschalten. Wenn aktiv, werden Werte im eingestellten Intervall geprüft."
