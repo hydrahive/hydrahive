@@ -73,13 +73,13 @@ def register_system_routes(
         repo = str(cfg.get("repo", org)).strip() or org
         token = str(cfg.get("token", "")).strip()
         if not base_url:
-            return default_url, default_source
+            return default_url, default_source, {}
+        # #1: Token NICHT in URL einbetten — als Extra-Env für Credential-Helper
+        env = {}
         if token:
-            if base_url.startswith("http://"):
-                base_url = base_url.replace("http://", f"http://{org}:{token}@")
-            elif base_url.startswith("https://"):
-                base_url = base_url.replace("https://", f"https://{org}:{token}@")
-        return f"{base_url}/{org}/{repo}.git", f"{org}/{repo}"
+            env["GIT_TOKEN"] = token
+            env["GIT_USER"] = org
+        return f"{base_url}/{org}/{repo}.git", f"{org}/{repo}", env
 
     def _get_remote_head() -> dict[str, str]:
         now = datetime.now(timezone.utc)
@@ -92,17 +92,27 @@ def register_system_routes(
                 "error": str(_UPDATE_HEAD_CACHE["error"]),
             }
 
-        remote_url, remote_source = _resolve_update_source()
+        remote_url, remote_source, git_env = _resolve_update_source()
         remote_commit = ""
         remote_commit_full = ""
         error = ""
         try:
+            import os as _os
+            run_env = {**_os.environ}
+            # Token via Credential-Helper statt in URL — kein Leak in Prozessliste
+            if git_env.get("GIT_TOKEN"):
+                cred_helper = f"!f() {{ echo username={git_env['GIT_USER']}; echo password={git_env['GIT_TOKEN']}; }}; f"
+                run_env["GIT_ASKPASS"] = "/bin/true"
+                run_env["GIT_CONFIG_COUNT"] = "1"
+                run_env["GIT_CONFIG_KEY_0"] = "credential.helper"
+                run_env["GIT_CONFIG_VALUE_0"] = cred_helper
             proc = subprocess.run(
                 ["git", "ls-remote", "--heads", remote_url, "main"],
                 capture_output=True,
                 text=True,
                 timeout=10,
                 check=False,
+                env=run_env,
             )
             if proc.returncode == 0:
                 line = (proc.stdout or "").strip().splitlines()[0] if (proc.stdout or "").strip() else ""
