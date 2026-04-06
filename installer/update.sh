@@ -112,14 +112,32 @@ main() {
         "${TMPDIR_BASE}/core/" "${HYDRAHIVE_DIR}/core/"
     success "Core-Dateien aktualisiert"
 
-    # --- 2b. System-Agenten aktualisieren (agent.yaml + soul.md; Memory bleibt) ---
+    # --- 2a. Scripts aktualisieren ---
+    if [ -d "${TMPDIR_BASE}/scripts" ]; then
+        rsync -a "${TMPDIR_BASE}/scripts/" "${HYDRAHIVE_DIR}/scripts/"
+    fi
+
+    # --- 2b. System-Agenten aktualisieren (soul.md direkt, agent.yaml per Merge) ---
+    # #310: agent.yaml wird GEMERGT statt überschrieben — Runtime-Einstellungen
+    # (execution_modes, custom tools, temperature etc.) bleiben erhalten.
+    # Nur soul.md wird direkt kopiert (Persönlichkeit gehört zum Repo).
     if [ -d "${TMPDIR_BASE}/agents" ]; then
         for _src in "${TMPDIR_BASE}/agents"/*/; do
             _id="$(basename "${_src}")"
             _dst="/agents/${_id}"
             mkdir -p "${_dst}/memory"
-            [ -f "${_src}/agent.yaml" ] && cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
-            [ -f "${_src}/soul.md"    ] && cp "${_src}/soul.md"    "${_dst}/soul.md"
+            # soul.md: immer aus Repo übernehmen (Persönlichkeit)
+            [ -f "${_src}/soul.md" ] && cp "${_src}/soul.md" "${_dst}/soul.md"
+            # agent.yaml: intelligent mergen (neue Tools addieren, Runtime-Config behalten)
+            if [ -f "${_src}/agent.yaml" ]; then
+                if [ -f "${_dst}/agent.yaml" ]; then
+                    ${VENV}/bin/python3 "${HYDRAHIVE_DIR}/scripts/merge_agent_config.py" \
+                        "${_src}/agent.yaml" "${_dst}/agent.yaml" 2>/dev/null \
+                        || cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
+                else
+                    cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
+                fi
+            fi
         done
         chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
         info "System-Agenten aktualisiert"
