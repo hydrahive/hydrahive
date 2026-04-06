@@ -172,7 +172,8 @@ def register_invite_routes(
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(500, f"User-Anlage fehlgeschlagen: {e}")
+            logger.error("User-Anlage via Einladung fehlgeschlagen: %s", e)
+            raise HTTPException(500, "User-Anlage fehlgeschlagen")
 
         # Token als verwendet markieren
         invites[token]["used"] = True

@@ -40,7 +40,8 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
     ):
         """Export als verschlüsseltes Archiv erstellen und zum Download anbieten."""
         if not EXPORT_SCRIPT.exists():
-            raise HTTPException(500, f"Export-Skript nicht gefunden: {EXPORT_SCRIPT}")
+            logger.error("Export-Skript nicht gefunden: %s", EXPORT_SCRIPT)
+            raise HTTPException(500, "Export-Skript nicht gefunden")
 
         with tempfile.NamedTemporaryFile(suffix=".tar.gz.enc", delete=False) as tmp:
             tmp_path = tmp.name
@@ -59,12 +60,14 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
         except asyncio.TimeoutError:
             raise HTTPException(504, "Export-Timeout (>5 min)")
         except Exception as e:
-            raise HTTPException(500, f"Export fehlgeschlagen: {e}")
+            logger.error("Export fehlgeschlagen: %s", e)
+            raise HTTPException(500, "Export fehlgeschlagen")
 
         if proc.returncode != 0:
             err = stderr.decode(errors="replace").strip()
+            logger.error("Export-Skript fehlgeschlagen (rc=%d): %s", proc.returncode, err)
             Path(tmp_path).unlink(missing_ok=True)
-            raise HTTPException(500, f"Export fehlgeschlagen: {err}")
+            raise HTTPException(500, "Export fehlgeschlagen")
 
         if not Path(tmp_path).exists():
             raise HTTPException(500, "Export-Archiv wurde nicht erstellt")
@@ -87,7 +90,8 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
     ):
         """Verschlüsseltes Export-Archiv hochladen und einspielen."""
         if not IMPORT_SCRIPT.exists():
-            raise HTTPException(500, f"Import-Skript nicht gefunden: {IMPORT_SCRIPT}")
+            logger.error("Import-Skript nicht gefunden: %s", IMPORT_SCRIPT)
+            raise HTTPException(500, "Import-Skript nicht gefunden")
 
         with tempfile.NamedTemporaryFile(suffix=".tar.gz.enc", delete=False) as tmp:
             tmp_path = tmp.name
@@ -107,7 +111,8 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
             raise HTTPException(504, "Import-Timeout (>5 min)")
         except Exception as e:
             Path(tmp_path).unlink(missing_ok=True)
-            raise HTTPException(500, f"Import fehlgeschlagen: {e}")
+            logger.error("Import fehlgeschlagen: %s", e)
+            raise HTTPException(500, "Import fehlgeschlagen")
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
@@ -115,7 +120,8 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
         err = stderr.decode(errors="replace").strip()
 
         if proc.returncode != 0:
-            raise HTTPException(500, f"Import fehlgeschlagen: {err or out}")
+            logger.error("Import-Skript fehlgeschlagen (rc=%d): %s", proc.returncode, err or out)
+            raise HTTPException(500, "Import fehlgeschlagen")
 
         audit_log("migration.import", details={"filename": file.filename})
         logger.info("Migration-Import abgeschlossen: %s", file.filename)
@@ -133,7 +139,8 @@ def register_migration_routes(admin_router: APIRouter, *, require_admin, audit_l
         global _transfer_running
 
         if not TRANSFER_SCRIPT.exists():
-            raise HTTPException(500, f"Transfer-Skript nicht gefunden: {TRANSFER_SCRIPT}")
+            logger.error("Transfer-Skript nicht gefunden: %s", TRANSFER_SCRIPT)
+            raise HTTPException(500, "Transfer-Skript nicht gefunden")
 
         with _transfer_lock:
             if _transfer_running:

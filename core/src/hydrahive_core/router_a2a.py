@@ -191,7 +191,7 @@ def register_a2a_routes(
             )
         except Exception as e:
             logger.error("a2a_receive: Orchestrator-Fehler: %s", e)
-            raise HTTPException(500, f"Fehler beim Ausführen des Tasks: {e}")
+            raise HTTPException(500, "Interner Fehler bei der Task-Ausführung")
 
         # handle_message gibt (text, workers) Tupel oder String zurück
         if isinstance(response, (list, tuple)):

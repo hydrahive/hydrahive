@@ -162,7 +162,8 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
             raise HTTPException(400, "Kein install_script definiert")
         script_path = INSTALLER_DIR / script_rel
         if not script_path.exists():
-            raise HTTPException(500, f"Script nicht gefunden: {script_path} — bitte Update durchführen")
+            logger.error("Install-Script nicht gefunden: %s", script_path)
+            raise HTTPException(500, "Installer-Script nicht gefunden — bitte Update durchführen")
         return StreamingResponse(
             _stream_script(script_path),
             media_type="text/event-stream",
@@ -181,7 +182,8 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
             raise HTTPException(400, "Kein uninstall_script definiert")
         script_path = INSTALLER_DIR / script_rel
         if not script_path.exists():
-            raise HTTPException(500, f"Script nicht gefunden: {script_path} — bitte Update durchführen")
+            logger.error("Uninstall-Script nicht gefunden: %s", script_path)
+            raise HTTPException(500, "Uninstaller-Script nicht gefunden — bitte Update durchführen")
         return StreamingResponse(
             _stream_script(script_path),
             media_type="text/event-stream",

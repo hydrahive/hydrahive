@@ -214,7 +214,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         try:
             hub_cfg = yaml.safe_load(agent_yaml_raw) or {}
         except Exception as e:
-            raise HTTPException(500, f"agent.yaml ungültig: {e}")
+            logger.error("Hub agent.yaml parse Fehler: %s", e)
+            raise HTTPException(500, "agent.yaml ungültig")
 
         agent_id = req.agent_id_override or hub_cfg.get("agent_id") or req.id
         import re
@@ -458,7 +459,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
                 # npm schreibt Nutzinfos auf stderr → echten Fehler suchen
                 error_lines = [l for l in combined.splitlines() if "npm error" in l and "notice" not in l]
                 err_msg = " | ".join(error_lines[-3:]) or combined[-300:]
-                raise HTTPException(500, f"npm install fehlgeschlagen: {err_msg}")
+                logger.error("npm install fehlgeschlagen: %s", err_msg)
+                raise HTTPException(500, "npm install fehlgeschlagen")
             global _CLAWHUB_BIN
             _CLAWHUB_BIN = None  # Cache zurücksetzen damit _find_clawhub neu sucht
             return {"ok": True, "output": combined[-400:]}

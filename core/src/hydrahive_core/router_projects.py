@@ -289,8 +289,8 @@ def register_project_routes(
                 cwd=str(project_dir),
             )
             if result.returncode != 0:
-                err = result.stderr.strip()[-500:]
-                raise HTTPException(500, f"Git clone fehlgeschlagen: {err}")
+                logger.error("Git clone fehlgeschlagen für %s: %s", req.url, result.stderr.strip()[-500:])
+                raise HTTPException(500, "Git clone fehlgeschlagen")
             # Berechtigungen setzen
             _sp.run(["chown", "-R", "hydrahive:hydrahive", str(target)], check=False, capture_output=True)
             return {"ok": True, "project_id": project_id, "cloned_to": str(target), "branch": req.branch}
@@ -299,7 +299,8 @@ def register_project_routes(
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(500, f"Fehler: {e}")
+            logger.error("Git clone Exception für %s: %s", project_id, e)
+            raise HTTPException(500, "Interner Fehler beim Klonen")
 
     @auth_router.get("/projects/{project_id}/session")
     def get_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):

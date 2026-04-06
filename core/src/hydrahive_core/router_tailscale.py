@@ -344,7 +344,8 @@ def register_tailscale_routes(
                 capture_output=True, text=True, timeout=30,
             )
             if result.returncode != 0:
-                raise HTTPException(500, f"tailscale up fehlgeschlagen: {result.stderr.strip()[-300:]}")
+                logger.error("tailscale up fehlgeschlagen: %s", result.stderr.strip()[-300:])
+                raise HTTPException(500, "Tailscale-Verbindung fehlgeschlagen")
             # Status abfragen
             await asyncio.sleep(2)
             r2 = await asyncio.to_thread(lambda: subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5))
@@ -364,7 +365,8 @@ def register_tailscale_routes(
                 capture_output=True, text=True, timeout=15,
             )
             if result.returncode != 0:
-                raise HTTPException(500, f"tailscale down fehlgeschlagen: {result.stderr.strip()}")
+                logger.error("tailscale down fehlgeschlagen: %s", result.stderr.strip())
+                raise HTTPException(500, "Tailscale-Trennung fehlgeschlagen")
             return {"ok": True}
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "Timeout beim Trennen")

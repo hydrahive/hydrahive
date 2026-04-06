@@ -159,7 +159,8 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
 
         rc, out, err = _run(cmd, timeout=30)
         if rc != 0:
-            raise HTTPException(500, f"tailscale up fehlgeschlagen: {err or out}")
+            logger.error("tailscale up fehlgeschlagen: %s", err or out)
+            raise HTTPException(500, "VPN-Verbindung fehlgeschlagen")
 
         tailscale_ip = _get_tailscale_ip()
         if tailscale_ip:
@@ -172,7 +173,8 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
     async def vpn_down(_=require_admin):
         rc, out, err = _run(["sudo", "tailscale", "down"])
         if rc != 0:
-            raise HTTPException(500, f"tailscale down fehlgeschlagen: {err or out}")
+            logger.error("tailscale down fehlgeschlagen: %s", err or out)
+            raise HTTPException(500, "VPN-Trennung fehlgeschlagen")
         cfg = _load_vpn_config()
         cfg["configured"] = False
         cfg["tailscale_ip"] = ""
@@ -207,7 +209,8 @@ def register_vpn_routes(admin_router: APIRouter, require_admin) -> None:
             timeout=10,
         )
         if rc != 0:
-            raise HTTPException(500, f"Headscale Auth-Key Fehler: {err or out}")
+            logger.error("Headscale Auth-Key Fehler: %s", err or out)
+            raise HTTPException(500, "Headscale Auth-Key konnte nicht erstellt werden")
 
         # Letzte Zeile enthält den Key
         key = out.strip().splitlines()[-1].strip()

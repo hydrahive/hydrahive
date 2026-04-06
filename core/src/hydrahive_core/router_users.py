@@ -610,7 +610,8 @@ def register_user_routes(
                 _yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8"
             )
         except Exception as e:
-            raise HTTPException(500, f"Fehler beim Speichern: {e}")
+            logger.error("Heartbeat-Config speichern fehlgeschlagen für %s: %s", agent_id, e)
+            raise HTTPException(500, "Fehler beim Speichern der Konfiguration")
         load_agent_config_direct(agent_dir)
         logger.info("Heartbeat konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}

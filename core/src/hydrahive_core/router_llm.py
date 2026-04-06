@@ -598,7 +598,8 @@ def register_llm_routes(
         try:
             result = _sub.run(["ollama", "pull", model], capture_output=True, text=True, timeout=600)
             if result.returncode != 0:
-                raise HTTPException(500, f"ollama pull fehlgeschlagen: {result.stderr[:200]}")
+                logger.error("ollama pull fehlgeschlagen für %s: %s", model, result.stderr[:200])
+                raise HTTPException(500, "ollama pull fehlgeschlagen")
             logger.info("Ollama-Modell geladen: %s", model)
             return {"pulled": True, "model": model}
         except FileNotFoundError:
@@ -660,7 +661,8 @@ def register_llm_routes(
                 llm_env_path.write_text("\n".join(lines) + "\n")
                 llm_env_path.chmod(0o600)
             except Exception as e:
-                raise HTTPException(500, f"llm_env schreiben fehlgeschlagen: {e}")
+                logger.error("llm_env schreiben fehlgeschlagen: %s", e)
+                raise HTTPException(500, "Konfiguration konnte nicht gespeichert werden")
 
         audit_log("llm.embedding_config", target=model)
         logger.info("Embedding-Modell gesetzt: %s", model)

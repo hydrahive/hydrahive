@@ -354,7 +354,8 @@ def register_core_misc_routes(
                 raw["llm"].pop("fallback_models", None)
             yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
         except Exception as e:
-            raise HTTPException(500, f"Fehler beim Speichern: {e}")
+            logger.error("Fallback-Models speichern fehlgeschlagen für %s: %s", agent_id, e)
+            raise HTTPException(500, "Fehler beim Speichern der Konfiguration")
         return {"ok": True, "agent_id": agent_id, "fallback_models": req.fallback_models}
 
     @admin_router.get("/logs/core")
@@ -441,7 +442,8 @@ def register_core_misc_routes(
                 log_lines = [l for l in log_lines if grep_lower in l.lower()]
             return {"lines": log_lines, "count": len(log_lines)}
         except Exception as e:
-            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+            logger.error("Core-Log-Abfrage fehlgeschlagen: %s", e)
+            raise HTTPException(500, "Log-Abfrage fehlgeschlagen")
 
     @admin_router.get("/logs/nginx")
     def get_nginx_logs(lines: int = 100, error: bool = False):
@@ -456,7 +458,8 @@ def register_core_misc_routes(
             log_lines = r.stdout.strip().splitlines()
             return {"lines": log_lines, "count": len(log_lines), "file": log_file}
         except Exception as e:
-            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+            logger.error("Nginx-Log-Abfrage fehlgeschlagen: %s", e)
+            raise HTTPException(500, "Log-Abfrage fehlgeschlagen")
 
     @admin_router.get("/agents/{agent_id}/logs")
     def get_agent_logs(agent_id: str, lines: int = 100):
@@ -471,7 +474,8 @@ def register_core_misc_routes(
             filtered = [l for l in all_lines if agent_id in l][-lines:]
             return {"agent_id": agent_id, "lines": filtered, "count": len(filtered)}
         except Exception as e:
-            raise HTTPException(500, f"Log-Abfrage fehlgeschlagen: {e}")
+            logger.error("Agent-Log-Abfrage fehlgeschlagen für %s: %s", agent_id, e)
+            raise HTTPException(500, "Log-Abfrage fehlgeschlagen")
 
     @admin_router.get("/admin/system/info")
     def system_info():
@@ -583,7 +587,8 @@ def register_core_misc_routes(
                 capture_output=True, text=True, timeout=30,
             )
             if r.returncode != 0:
-                raise HTTPException(500, f"Restart fehlgeschlagen: {r.stderr.strip()}")
+                logger.error("Service-Restart fehlgeschlagen für %s: %s", name, r.stderr.strip())
+                raise HTTPException(500, "Service-Restart fehlgeschlagen")
             return {"ok": True, "service": name}
         except subprocess.TimeoutExpired:
             raise HTTPException(504, "Restart Timeout")
@@ -624,7 +629,8 @@ def register_core_misc_routes(
             raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
             return {"agent_id": agent_id, "config": raw}
         except Exception as e:
-            raise HTTPException(500, f"Config-Fehler: {e}")
+            logger.error("Agent-Config Lesefehler für %s: %s", agent_id, e)
+            raise HTTPException(500, "Konfiguration konnte nicht geladen werden")
 
     @admin_router.put("/agents/{agent_id}/config/full")
     def update_agent_full_config(agent_id: str, body: dict):
@@ -730,7 +736,8 @@ def register_core_misc_routes(
         try:
             return {"path": str(resolved), "content": resolved.read_text(encoding="utf-8", errors="replace")}
         except Exception as e:
-            raise HTTPException(500, f"Lesefehler: {e}")
+            logger.error("Datei-Lesefehler %s: %s", resolved, e)
+            raise HTTPException(500, "Datei konnte nicht gelesen werden")
 
     @admin_router.put("/admin/files/write")
     def write_file(body: dict):
@@ -749,7 +756,8 @@ def register_core_misc_routes(
             subprocess.run(["chown", "hydrahive:hydrahive", str(resolved)], check=False, capture_output=True)
             return {"ok": True, "path": str(resolved)}
         except Exception as e:
-            raise HTTPException(500, f"Schreibfehler: {e}")
+            logger.error("Datei-Schreibfehler %s: %s", resolved, e)
+            raise HTTPException(500, "Datei konnte nicht geschrieben werden")
 
     @admin_router.delete("/admin/files/delete")
     def delete_file(path: str):

@@ -617,7 +617,7 @@ class Orchestrator:
                     "Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
                 ), []
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
-            return f"[Fehler] LLM nicht erreichbar: {e}", []
+            return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
 
         # 7. Tool-Calls verarbeiten (Agentic Loop mit max. 5 Runden)
         final_response = response.choices[0].message.content or ""
@@ -1425,7 +1425,8 @@ class Orchestrator:
                     )
                     return final.choices[0].message.content or "", workers_used
                 except Exception as e:
-                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}", workers_used
+                    logger.error("Tool-Loop Finalisierung fehlgeschlagen: %s", e)
+                    return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
 
             # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
             if _round == max_rounds - 1:
@@ -1447,7 +1448,8 @@ class Orchestrator:
                     )
                     return final.choices[0].message.content or "", workers_used
                 except Exception as e:
-                    return f"[Fehler] Konnte keine Antwort erzeugen: {e}", workers_used
+                    logger.error("Tool-Loop max_rounds Finalisierung fehlgeschlagen: %s", e)
+                    return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
 
             # Assistant-Message mit Tool-Calls in History aufnehmen
             current_messages.append({
@@ -1569,7 +1571,7 @@ class Orchestrator:
                 response = await self._llm_call(boss_cfg, current_messages, litellm_tools)
             except Exception as e:
                 logger.error("LLM-Fehler in Tool-Loop: %s", e)
-                return f"[Fehler] LLM nicht erreichbar: {e}", workers_used
+                return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", workers_used
 
         return response.choices[0].message.content or "", workers_used
 

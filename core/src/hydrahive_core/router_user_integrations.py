@@ -560,7 +560,8 @@ def register_user_integration_routes(
                 timeout=5,
             )
             if result.returncode != 0:
-                raise HTTPException(500, f"ssh-keygen Fehler: {result.stderr}")
+                logger.error("ssh-keygen Fehler: %s", result.stderr)
+                raise HTTPException(500, "SSH-Key konnte nicht gelesen werden")
             return {"public_key": result.stdout.strip()}
         except FileNotFoundError:
             raise HTTPException(500, "ssh-keygen nicht gefunden")
@@ -598,7 +599,8 @@ def register_user_integration_routes(
                 _os.unlink(tmp_path)
             except Exception:
                 pass
-            raise HTTPException(500, f"Key-Generierung fehlgeschlagen: {e}")
+            logger.error("WKS Key-Generierung fehlgeschlagen: %s", e)
+            raise HTTPException(500, "Key-Generierung fehlgeschlagen")
 
     @auth_router.post("/me/wks/test-ssh")
     async def test_wks_ssh(auth: tuple = Depends(require_auth)):
@@ -748,7 +750,8 @@ def register_user_integration_routes(
             roles = await client.list_roles()
             return {"roles": roles}
         except Exception as e:
-            raise HTTPException(500, str(e))
+            logger.error("Discord roles Fehler: %s", e)
+            raise HTTPException(500, "Discord-Rollen konnten nicht abgerufen werden")
 
     @auth_router.put("/me/discord", status_code=200)
     async def update_my_discord(req: DiscordConfigRequest, auth: tuple = Depends(require_auth)):
@@ -939,7 +942,8 @@ def register_user_integration_routes(
                 return Response(content=audio_bytes, media_type="audio/ogg")
             return Response(content=b"", status_code=500)
         except Exception as e:
-            raise HTTPException(500, f"TTS Preview fehlgeschlagen: {e}")
+            logger.error("TTS Preview fehlgeschlagen: %s", e)
+            raise HTTPException(500, "TTS Preview fehlgeschlagen")
 
     @auth_router.get("/me/whatsapp/voices")
     def list_whatsapp_voices(auth: tuple = Depends(require_auth)):

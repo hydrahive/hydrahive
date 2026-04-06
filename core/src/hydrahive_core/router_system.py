@@ -197,7 +197,8 @@ def register_system_routes(
             check=False,
         )
         if proc.returncode != 0:
-            raise HTTPException(500, f"Network-Profil konnte nicht angewendet werden: {(proc.stderr or proc.stdout).strip()[:300]}")
+            logger.error("Network-Profil Fehler: %s", (proc.stderr or proc.stdout).strip()[:300])
+            raise HTTPException(500, "Network-Profil konnte nicht angewendet werden")
 
         write_network_profile(profile)
         return {"updated": True, "profile": profile, "status": network_profile_status()}
@@ -344,7 +345,8 @@ def register_system_routes(
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:
-            raise HTTPException(500, f"timedatectl Fehler: {result.stderr.strip()}")
+            logger.error("timedatectl Fehler: %s", result.stderr.strip())
+            raise HTTPException(500, "Zeitzone konnte nicht gesetzt werden")
         return {"updated": True, "timezone": tz}
 
     @auth_router.get("/capabilities")

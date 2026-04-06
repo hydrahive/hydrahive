@@ -217,7 +217,8 @@ def register_project_lifecycle_routes(
         username = cfg.effective_system_user()
         error, new_password = provisioner.reset_samba_password(username)
         if error:
-            raise HTTPException(500, error)
+            logger.error("Samba-Passwort-Reset fehlgeschlagen für %s: %s", username, error)
+            raise HTTPException(500, "Samba-Passwort konnte nicht zurückgesetzt werden")
         return {'project_id': project_id, 'username': username, 'password': new_password}
 
     @admin_router.post("/projects/{project_id}/fix-permissions")
@@ -240,4 +241,5 @@ def register_project_lifecycle_routes(
                 capture_output=True, check=True, timeout=60))
             return {"ok": True, "project_id": project_id}
         except Exception as e:
-            raise HTTPException(500, f"Berechtigungen konnten nicht gesetzt werden: {e}")
+            logger.error("Berechtigungen setzen fehlgeschlagen für %s: %s", project_id, e)
+            raise HTTPException(500, "Berechtigungen konnten nicht gesetzt werden")
