@@ -56,9 +56,7 @@ def _context_window_for_model(model: str) -> int:
     return 8_000  # Fallback für lokale/unbekannte Modelle
 
 
-def _estimate_tokens(text: str) -> int:
-    """Token-Schätzung: chars / 3.2 (genauer als chars / 4, ~10% Überschätzung als Sicherheit)."""
-    return max(1, int(len(text) / 3.2))
+from .token_estimation import estimate_tokens as _estimate_tokens
 
 
 def _history_token_budget(model: str, system_prompt_tokens: int = 0) -> int:

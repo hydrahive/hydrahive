@@ -121,7 +121,8 @@ class Session:
         # Token-Budget: von hinten nach vorne füllen, älteste entfernen wenn Budget voll
         if max_history_tokens is not None and max_history_tokens > 0:
             while len(window) > 2:
-                estimated = sum(len(m.content) for m in window) // 3  # chars/3 ≈ Tokens (konservativer)
+                from .token_estimation import estimate_tokens as _et
+                estimated = sum(_et(m.content) for m in window)
                 if estimated <= max_history_tokens:
                     break
                 window.pop(0)  # älteste Nachricht entfernen
@@ -375,8 +376,8 @@ class SessionManager:
         session = self._active.get(project_id)
         if not session:
             return 0
-        total_chars = sum(len(m.content) for m in session.messages)
-        return total_chars // 4
+        from .token_estimation import estimate_tokens
+        return sum(estimate_tokens(m.content) for m in session.messages)
 
     async def resume_session(self, project_id: str, session_id: str) -> "Session | None":
         """Lädt eine historische Session und setzt sie als aktive Session."""
