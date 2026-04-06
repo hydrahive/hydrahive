@@ -354,6 +354,7 @@ def register_agent_chat_routes(
         _a: tuple[str, str] = Depends(require_auth),
     ):
         """Bricht einen laufenden ask_agent-Request ab (#34)."""
+        _check_agent_access(agent_id, _a)  # #307
         from .tool_registry import set_interrupt as _set_interrupt
         _set_interrupt(agent_id)
         return {"ok": True, "agent_id": agent_id}
@@ -365,6 +366,7 @@ def register_agent_chat_routes(
         _a: tuple[str, str] = Depends(require_auth),
     ):
         """Easter-Egg: leichter LLM-Call für den Floating Companion. Berührt keine Session."""
+        _check_agent_access(agent_id, _a)  # #307
         from .orchestrator import _load_claude_oauth_token
 
         context = body.get("context", "")
