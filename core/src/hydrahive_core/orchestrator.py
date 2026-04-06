@@ -893,7 +893,7 @@ class Orchestrator:
                             api_key="",
                             auth_token=oauth_token,
                             default_headers={
-                                "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
+                                "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
                                 "user-agent":     "claude-cli/2.1.62",
                                 "x-app":          "cli",
                             },
@@ -925,7 +925,23 @@ class Orchestrator:
                             {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
                         ]
                         if system_msg:
-                            oauth_system.append({"type": "text", "text": system_msg})
+                            # #351: cache_control auf System-Prompt — größter Cache-Gewinn
+                            oauth_system.append({"type": "text", "text": system_msg,
+                                                 "cache_control": {"type": "ephemeral"}})
+
+                        # #351: Ältere History-Messages cachen (max 3 Breakpoints, Anthropic-Limit)
+                        _cache_cutoff = max(0, len(filtered) - 4)
+                        _hcc = 0
+                        for _idx, _fm in enumerate(filtered):
+                            if _hcc >= 3:
+                                break
+                            if _idx < _cache_cutoff and _fm.get("role") in ("user", "assistant"):
+                                _ct = _fm.get("content", "")
+                                if isinstance(_ct, str) and _ct:
+                                    filtered[_idx] = {**_fm, "content": [
+                                        {"type": "text", "text": _ct, "cache_control": {"type": "ephemeral"}}
+                                    ]}
+                                    _hcc += 1
 
                         kwargs: dict = {
                             "model":      model,
