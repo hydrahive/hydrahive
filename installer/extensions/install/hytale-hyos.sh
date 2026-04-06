@@ -162,16 +162,30 @@ if ! command -v node &>/dev/null; then
     warn "Node.js nicht installiert — HyOS Dashboard braucht Node.js 18+"
     info "Installiere via: curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs"
 else
-    # HyOS bauen
-    cd "${HYOS_DIR}/src"
-    if [ -f "package.json" ]; then
-        npm ci --prefer-offline 2>&1 | tail -3 || npm install 2>&1 | tail -3
-        npm run build 2>&1 | tail -5 || warn "HyOS Build fehlgeschlagen"
+    # HyOS bauen — Dashboard liegt unter server-manager/hyos-server-manager/next/
+    HYOS_NEXT="${HYOS_DIR}/src/server-manager/hyos-server-manager/next"
+    if [ -f "${HYOS_NEXT}/package.json" ]; then
+        cd "${HYOS_NEXT}"
+        npm install 2>&1 | tail -5
+        # ssh2/dockerode sind nicht Turbopack-kompatibel → serverExternalPackages setzen
+        cat > next.config.ts << 'NCEOF'
+import type { NextConfig } from "next";
+const nextConfig: NextConfig = {
+  output: "standalone",
+  serverExternalPackages: ["ssh2", "dockerode", "docker-modem"],
+  experimental: { proxyClientMaxBodySize: "500mb" },
+};
+export default nextConfig;
+NCEOF
+        npx next build 2>&1 | tail -10 || warn "HyOS Build fehlgeschlagen"
         success "HyOS Dashboard gebaut"
+    else
+        warn "HyOS package.json nicht gefunden unter ${HYOS_NEXT}"
     fi
 fi
 
 # --- systemd Service: HyOS Dashboard ---
+HYOS_NEXT_DIR="${HYOS_DIR}/src/server-manager/hyos-server-manager/next"
 cat > /etc/systemd/system/hyos-dashboard.service << EOF
 [Unit]
 Description=HyOS Hytale Server Dashboard
@@ -180,8 +194,8 @@ After=network.target hytale-server.service
 [Service]
 Type=simple
 User=${HYTALE_USER}
-WorkingDirectory=${HYOS_DIR}/src
-ExecStart=/usr/bin/node node_modules/.bin/next start -p ${HYOS_PORT}
+WorkingDirectory=${HYOS_NEXT_DIR}
+ExecStart=/usr/bin/node node_modules/.bin/next start -H 0.0.0.0 -p ${HYOS_PORT}
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
