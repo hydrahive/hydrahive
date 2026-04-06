@@ -47,11 +47,23 @@ apt-get install -y -qq \
     2>&1 | tail -3
 success "Build-Dependencies installiert"
 
-# --- MySQL Setup ---
-info "Konfiguriere MySQL..."
-if ! systemctl is-active mysql &>/dev/null; then
-    systemctl start mysql
+# --- MySQL/MariaDB Setup ---
+info "Konfiguriere Datenbank..."
+MYSQL_CMD="mysql"
+if systemctl is-active mariadb &>/dev/null; then
+    info "MariaDB läuft bereits"
+elif systemctl start mysql 2>/dev/null; then
     systemctl enable mysql 2>/dev/null || true
+    info "MySQL gestartet"
+elif systemctl is-active mariadb &>/dev/null || systemctl start mariadb 2>/dev/null; then
+    systemctl enable mariadb 2>/dev/null || true
+    info "MariaDB gestartet (MySQL nicht verfügbar)"
+else
+    warn "MySQL frozen oder nicht startbar — installiere MariaDB als Alternative..."
+    apt-get install -y -qq mariadb-server 2>&1 | tail -3
+    systemctl start mariadb
+    systemctl enable mariadb 2>/dev/null || true
+    success "MariaDB installiert + gestartet"
 fi
 
 # DB-User + Datenbanken erstellen (idempotent)
