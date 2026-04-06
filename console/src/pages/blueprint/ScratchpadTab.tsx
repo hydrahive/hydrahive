@@ -109,10 +109,10 @@ function ScratchpadInner() {
       await api.put("/admin/files/write", { path: `${SCRATCHPADS_DIR}/${padName}.json`, content: data });
       // Auch localStorage für Offline-Fallback
       try { localStorage.setItem("hydrahive_scratchpad", data); } catch {}
-      setToast("Gespeichert");
+      setToast(t("common.saved"));
       setTimeout(() => setToast(null), 2000);
       loadPadList();
-    } catch (e: any) { setToast("Fehler: " + e.message); }
+    } catch (e: any) { setToast(t("common.error") + ": " + e.message); }
     finally { setSaving(false); }
   }
 
@@ -173,7 +173,7 @@ function ScratchpadInner() {
           loadPadList();
           setToast(`"${name}" gelöscht`);
           setTimeout(() => setToast(null), 2000);
-        } catch (e: any) { setToast("Fehler: " + e.message); }
+        } catch (e: any) { setToast(t("common.error") + ": " + e.message); }
       },
     });
   }

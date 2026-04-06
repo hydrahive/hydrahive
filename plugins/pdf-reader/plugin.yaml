@@ -7,4 +7,5 @@ type: tool
 runtime: python
 permissions:
   - filesystem.read
+  - system.exec
 auto_attach: false

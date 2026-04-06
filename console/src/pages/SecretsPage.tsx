@@ -49,7 +49,7 @@ export function SecretsPage() {
       await api.put(`/admin/agent-secrets/${newName.trim()}`, { value: newValue.trim() });
       setNewName("");
       setNewValue("");
-      showToast("Secret gespeichert");
+      showToast(t("secrets.saved"));
       await load();
     } finally {
       setSaving(false);

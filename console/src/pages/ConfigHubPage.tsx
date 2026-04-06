@@ -118,10 +118,10 @@ function LlmSection() {
       const cfg = await api.get<{ providers: Record<string, LlmProvider> }>("/llm/config");
       setProviders(cfg.providers ?? {});
       setAnthropicKey(""); setOpenaiKey("");
-      setMsg("Gespeichert");
+      setMsg(t("common.saved"));
       setTimeout(() => setMsg(""), 3000);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Fehler");
+      setMsg(e instanceof Error ? e.message : t("common.error"));
     } finally { setSaving(false); }
   }
 
@@ -204,7 +204,7 @@ function PlatformsSection() {
       load();
       setMsg("Discord gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(""); }
   }
 
@@ -216,7 +216,7 @@ function PlatformsSection() {
       load();
       setMsg("Telegram gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(""); }
   }
 
@@ -227,7 +227,7 @@ function PlatformsSection() {
       load();
       setMsg("WhatsApp-Verbindung gestartet — QR-Code auf der My Agent Seite scannen");
       setTimeout(() => setMsg(""), 5000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(""); }
   }
 
@@ -347,7 +347,7 @@ function GitSection() {
       setGhStatus(s as { configured: boolean });
       setMsg("GitHub Token gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(""); }
   }
 
@@ -360,7 +360,7 @@ function GitSection() {
       setGiteaCfg(c);
       setMsg("Gitea gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(""); }
   }
 
@@ -443,7 +443,7 @@ function KasSection() {
       setCfg(r as any);
       setMsg("KAS gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -542,9 +542,9 @@ function AgentLinkSection() {
     try {
       await api.put("/admin/agentlink/config", { base_url: baseUrl, ws_url: wsUrl, enabled });
       load();
-      setMsg("Gespeichert");
+      setMsg(t("common.saved"));
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 
@@ -653,7 +653,7 @@ function SystemTimeSection() {
       load();
       setMsg("Zeitzone gesetzt — wirkt sofort");
       setTimeout(() => setMsg(""), 4000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
   }
 

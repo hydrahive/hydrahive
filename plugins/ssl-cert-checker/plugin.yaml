@@ -5,5 +5,6 @@ description: SSL-Zertifikate prüfen und vor Ablauf warnen. Lokal und extern.
 author: HydraHive
 type: tool
 runtime: python
-permissions: []
+permissions:
+  - network
 auto_attach: false

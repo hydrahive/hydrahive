@@ -94,7 +94,7 @@ export function GroupsPage() {
     try {
       await api.put(`/admin/groups/${selected}`, editData);
       await load();
-      setMsg("Gespeichert");
+      setMsg(t("common.saved"));
       setTimeout(() => setMsg(""), 3000);
     } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(false); }

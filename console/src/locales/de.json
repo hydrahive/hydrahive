@@ -35,7 +35,8 @@
     "setup": "Setup",
     "usermanagement": "Usermanagement",
     "secrets": "Secrets",
-    "more": "Mehr"
+    "more": "Mehr",
+    "mcp": "MCP"
   },
   "usage": {
     "title": "API Usage",
@@ -276,7 +277,8 @@
     "plugins": "Plugin-System verwalten",
     "setup": "Zentrale Konfiguration — alles an einem Ort",
     "usermanagement": "Benutzer, Gruppen & Berechtigungen",
-    "secrets": "API-Keys & Tokens für Agenten"
+    "secrets": "API-Keys & Tokens für Agenten",
+    "mcp": "MCP-Server"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -407,7 +409,8 @@
     "noMatrixRoom": "keine Matrix-Room-ID",
     "updateErrorFallback": "Der letzte Update-Lauf hat einen Fehler gemeldet.",
     "gpuHotDetail": "{{name}} liegt über dem normalen Temperaturfenster.",
-    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signale"
+    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signale",
+    "coreLabel": "Core"
   },
   "agents": {
     "infoTitle": "Agenten verwalten",
@@ -795,13 +798,22 @@
     "messageCount": "{{count}} Nachricht",
     "messageCountPlural": "{{count}} Nachrichten",
     "waitingAgent": "Wartet auf Agent",
-    "waitingDispatch": "Wartet auf Worker"
+    "waitingDispatch": "Wartet auf Worker",
+    "currentModel": "Aktuelles Modell",
+    "noBossAgent": "Kein Boss-Agent gesetzt",
+    "noHistory": "Keine Verlauf vorhanden",
+    "noRetryMessage": "Keine Nachricht zum Wiederholen",
+    "saveError": "Fehler beim Speichern",
+    "savedMemory": "Erinnerung gespeichert",
+    "temperatureLabel": "Temperatur",
+    "unknownCommand": "Unbekannter Befehl"
   },
   "agentChat": {
     "emptyChat": "Direkter Chat mit {{name}}.",
     "slashTip": "Tippe",
     "slashTip2": "für verfügbare Commands.",
-    "messagePlaceholder": "Nachricht… (Enter zum Senden, Shift+Enter für Zeilenumbruch, / für Commands)"
+    "messagePlaceholder": "Nachricht… (Enter zum Senden, Shift+Enter für Zeilenumbruch, / für Commands)",
+    "notConfigured": "Kein Agent konfiguriert"
   },
   "myAgent": {
     "chatTab": "Chat",
@@ -1159,7 +1171,8 @@
     "running": "Läuft",
     "stopped": "Gestoppt",
     "active": "Aktiv",
-    "inactive": "Inaktiv"
+    "inactive": "Inaktiv",
+    "apply": "Anwenden"
   },
   "confirm": {
     "titleDelete": "Löschen",
@@ -1220,7 +1233,8 @@
       "restarts": "Neustarts",
       "logs": "Logs (live)",
       "noLogs": "Keine Log-Einträge"
-    }
+    },
+    "reconnecting": "Verbinde neu..."
   },
   "searchPage": {
     "loading": "Lade SearXNG-Status…",
@@ -1287,7 +1301,8 @@
     "close": "Schließen",
     "statusActive": "Aktiv",
     "statusStopped": "Gestoppt",
-    "statusNotInstalled": "Nicht installiert"
+    "statusNotInstalled": "Nicht installiert",
+    "allCategories": "Alle Kategorien"
   },
   "codeEditor": {
     "title": "Code Editor",
@@ -1415,7 +1430,9 @@
     "search": "Web-Suche über SearXNG — datenschutzfreundliche Metasuche über mehrere Suchmaschinen.",
     "secrets": "Sichere Speicherung von API-Keys und Tokens für Agenten-Tools. Nur von Admins einsehbar.",
     "secretsName": "Eindeutiger Name (z.B. GITHUB_TOKEN, SLACK_WEBHOOK)",
-    "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich"
+    "secretsValue": "Der geheime Wert — wird verschlüsselt gespeichert und ist nur für Agenten-Tools zugänglich",
+    "hub": "Plugin-Hub durchsuchen und installieren",
+    "projects": "Deine Projekte verwalten"
   },
   "plugins": {
     "installed": "{{count}} Plugin(s) installiert",
@@ -1459,5 +1476,56 @@
     "helpMessage": "Der Auftrag den der Agent bekommt — schreib es wie eine Anweisung an einen Mitarbeiter",
     "helpCron": "Zeitplan im Cron-Format. Beispiele: '0 8 * * *' = täglich um 8:00, '*/30 * * * *' = alle 30 Minuten, '0 9 * * 1' = Montags um 9:00",
     "helpInterval": "Alternative zum Cron: Intervall in Sekunden (z.B. 1800 = alle 30 Minuten)"
-  }
+  },
+  "dexcom": {
+    "clickToLoad": "Klicken zum Laden",
+    "history": "Verlauf",
+    "liveTitle": "Live-Daten",
+    "loading": "Lädt...",
+    "refresh": "Aktualisieren"
+  },
+  "federation": {
+    "guideTitle": "Einrichtungsanleitung",
+    "infoText": "Verbinde dein HydraHive mit anderen Instanzen.",
+    "infoTitle": "Federation",
+    "step1": "Schritt 1: Endpunkt konfigurieren",
+    "step2": "Schritt 2: Secret setzen",
+    "step3": "Schritt 3: Peers hinzufügen",
+    "step4": "Schritt 4: Verbindung testen",
+    "step5": "Schritt 5: Aktivieren"
+  },
+  "action": "Aktion",
+  "agent_id": "Agent-ID",
+  "allowed_agents": "Erlaubte Agenten",
+  "content": "Inhalt",
+  "cron": "Cron",
+  "enabled": "Aktiviert",
+  "fallback_models": "Fallback-Modelle",
+  "filename": "Dateiname",
+  "heartbeat_interval": "Heartbeat-Intervall",
+  "heartbeat_on_failure": "Heartbeat bei Fehler",
+  "heartbeat_timeout": "Heartbeat-Timeout",
+  "id": "ID",
+  "identity": "Identität",
+  "limit": "Limit",
+  "max_tokens": "Max. Tokens",
+  "max_tool_rounds": "Max. Tool-Runden",
+  "mcp_servers": "MCP-Server",
+  "message": "Nachricht",
+  "model": "Modell",
+  "name": "Name",
+  "priority": "Priorität",
+  "project": "Projekt",
+  "project_id": "Projekt-ID",
+  "scope": "Scope",
+  "skill": "Fähigkeit",
+  "soul": "Soul",
+  "sources": "Quellen",
+  "tab": "Tab",
+  "temperature": "Temperatur",
+  "timezone": "Zeitzone",
+  "type": "Typ",
+  "user": "User",
+  "version": "Version",
+  "Gespeichert": "Gespeichert"
 }

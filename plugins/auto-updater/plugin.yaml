@@ -7,4 +7,5 @@ type: tool
 runtime: python
 permissions:
   - system.exec
+  - network
 auto_attach: false

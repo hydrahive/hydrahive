@@ -35,7 +35,8 @@
     "setup": "Setup",
     "usermanagement": "User Management",
     "secrets": "Secrets",
-    "more": "More"
+    "more": "More",
+    "mcp": "MCP"
   },
   "usage": {
     "title": "API Usage",
@@ -276,7 +277,8 @@
     "plugins": "Manage plugin system",
     "setup": "Central configuration — everything in one place",
     "usermanagement": "Users, groups & permissions",
-    "secrets": "API keys & tokens for agents"
+    "secrets": "API keys & tokens for agents",
+    "mcp": "MCP servers"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -407,7 +409,8 @@
     "noMatrixRoom": "no Matrix room ID",
     "updateErrorFallback": "The last update run reported an error.",
     "gpuHotDetail": "{{name}} is above the normal temperature range.",
-    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signals"
+    "observerSummaryInline": "{{hb}} Heartbeats · {{sessions}} Sessions · {{signals}} Signals",
+    "coreLabel": "Core"
   },
   "agents": {
     "infoTitle": "Manage Agents",
@@ -795,13 +798,22 @@
     "messageCount": "{{count}} message",
     "messageCountPlural": "{{count}} messages",
     "waitingAgent": "Waiting for agent",
-    "waitingDispatch": "Waiting for worker"
+    "waitingDispatch": "Waiting for worker",
+    "currentModel": "Current model",
+    "noBossAgent": "No boss agent set",
+    "noHistory": "No history available",
+    "noRetryMessage": "No message to retry",
+    "saveError": "Error saving",
+    "savedMemory": "Memory saved",
+    "temperatureLabel": "Temperature",
+    "unknownCommand": "Unknown command"
   },
   "agentChat": {
     "emptyChat": "Direct chat with {{name}}.",
     "slashTip": "Type",
     "slashTip2": "for available commands.",
-    "messagePlaceholder": "Message… (Enter to send, Shift+Enter for newline, / for commands)"
+    "messagePlaceholder": "Message… (Enter to send, Shift+Enter for newline, / for commands)",
+    "notConfigured": "No agent configured"
   },
   "myAgent": {
     "chatTab": "Chat",
@@ -1159,7 +1171,8 @@
     "running": "Running",
     "stopped": "Stopped",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "apply": "Apply"
   },
   "confirm": {
     "titleDelete": "Delete",
@@ -1220,7 +1233,8 @@
       "restarts": "Restarts",
       "logs": "Logs (live)",
       "noLogs": "No log entries"
-    }
+    },
+    "reconnecting": "Reconnecting..."
   },
   "searchPage": {
     "loading": "Loading SearXNG status…",
@@ -1287,7 +1301,8 @@
     "close": "Close",
     "statusActive": "Active",
     "statusStopped": "Stopped",
-    "statusNotInstalled": "Not installed"
+    "statusNotInstalled": "Not installed",
+    "allCategories": "All categories"
   },
   "codeEditor": {
     "title": "Code Editor",
@@ -1415,7 +1430,9 @@
     "search": "Web search via SearXNG — privacy-friendly metasearch across multiple search engines.",
     "secrets": "Secure storage for API keys and tokens used by agent tools. Only visible to admins.",
     "secretsName": "Unique name (e.g. GITHUB_TOKEN, SLACK_WEBHOOK)",
-    "secretsValue": "The secret value — stored encrypted and only accessible by agent tools"
+    "secretsValue": "The secret value — stored encrypted and only accessible by agent tools",
+    "hub": "Browse and install plugins",
+    "projects": "Manage your projects"
   },
   "plugins": {
     "installed": "{{count}} plugin(s) installed",
@@ -1459,5 +1476,56 @@
     "helpMessage": "The instruction your agent receives — write it like you'd brief a colleague",
     "helpCron": "Schedule in cron format. Examples: '0 8 * * *' = daily at 8:00, '*/30 * * * *' = every 30 minutes, '0 9 * * 1' = Mondays at 9:00",
     "helpInterval": "Alternative to cron: interval in seconds (e.g. 1800 = every 30 minutes)"
-  }
+  },
+  "dexcom": {
+    "clickToLoad": "Click to load",
+    "history": "History",
+    "liveTitle": "Live data",
+    "loading": "Loading...",
+    "refresh": "Refresh"
+  },
+  "federation": {
+    "guideTitle": "Setup guide",
+    "infoText": "Connect your HydraHive with other instances.",
+    "infoTitle": "Federation",
+    "step1": "Step 1: Configure endpoint",
+    "step2": "Step 2: Set secret",
+    "step3": "Step 3: Add peers",
+    "step4": "Step 4: Test connection",
+    "step5": "Step 5: Activate"
+  },
+  "action": "Action",
+  "agent_id": "Agent ID",
+  "allowed_agents": "Allowed agents",
+  "content": "Content",
+  "cron": "Cron",
+  "enabled": "Enabled",
+  "fallback_models": "Fallback models",
+  "filename": "Filename",
+  "heartbeat_interval": "Heartbeat interval",
+  "heartbeat_on_failure": "Heartbeat on failure",
+  "heartbeat_timeout": "Heartbeat timeout",
+  "id": "ID",
+  "identity": "Identity",
+  "limit": "Limit",
+  "max_tokens": "Max tokens",
+  "max_tool_rounds": "Max tool rounds",
+  "mcp_servers": "MCP servers",
+  "message": "Message",
+  "model": "Model",
+  "name": "Name",
+  "priority": "Priority",
+  "project": "Project",
+  "project_id": "Project ID",
+  "scope": "Scope",
+  "skill": "Skill",
+  "soul": "Soul",
+  "sources": "Sources",
+  "tab": "Tab",
+  "temperature": "Temperature",
+  "timezone": "Timezone",
+  "type": "Type",
+  "user": "User",
+  "version": "Version",
+  "Gespeichert": "Saved"
 }

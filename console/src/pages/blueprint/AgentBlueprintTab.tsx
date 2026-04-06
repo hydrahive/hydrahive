@@ -1010,10 +1010,10 @@ function AgentBlueprintInner({ agents }: { agents: AgentEntry[] }) {
   async function createAgent() {
     // Agent-Node finden
     const agentNode = nodes.find(n => n.type === "agentprofile");
-    if (!agentNode) { setToast("Kein Agent-Node gefunden"); return; }
+    if (!agentNode) { setToast(t("blueprint.noAgentNode")); return; }
     const cfg = (agentNode.data as any).config || {};
     const agentId = cfg.agentId?.trim();
-    if (!agentId) { setToast("Agent-ID fehlt"); return; }
+    if (!agentId) { setToast(t("blueprint.missingAgentId")); return; }
     const identity = (agentNode.data as any).label?.trim() || agentId;
 
     // Verbundene Nodes sammeln
