@@ -1,0 +1,13 @@
+{
+  "id": "trinitycore-335",
+  "name": "TrinityCore 3.3.5a (WotLK)",
+  "description": "World of Warcraft WotLK 3.3.5a Server — TrinityCore Open-Source MMO Framework. Kompiliert aus Source, inkl. MySQL Datenbanken.",
+  "icon": "Swords",
+  "category": "gaming",
+  "install_script": "extensions/install/trinitycore-335.sh",
+  "uninstall_script": "extensions/uninstall/trinitycore-335.sh",
+  "service": "trinitycore-335-world",
+  "health_url": null,
+  "open_url": null,
+  "installed_check": "/opt/trinitycore-335/server/bin/worldserver"
+}

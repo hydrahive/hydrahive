@@ -1,0 +1,13 @@
+{
+  "id": "trinitycore-master",
+  "name": "TrinityCore Master (Retail/Dragonflight)",
+  "description": "World of Warcraft Retail Server — TrinityCore Master Branch. Kompiliert aus Source, inkl. MySQL Datenbanken.",
+  "icon": "Swords",
+  "category": "gaming",
+  "install_script": "extensions/install/trinitycore-master.sh",
+  "uninstall_script": "extensions/uninstall/trinitycore-master.sh",
+  "service": "trinitycore-master-world",
+  "health_url": null,
+  "open_url": null,
+  "installed_check": "/opt/trinitycore-master/server/bin/worldserver"
+}
