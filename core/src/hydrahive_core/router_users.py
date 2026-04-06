@@ -501,7 +501,7 @@ def register_user_routes(
     ):
         username, _role = auth
         agent_id = f"personal_{username}"
-        context = agent_sessions.get_context(agent_id, max_messages=limit)
+        context = agent_sessions.get_history(agent_id, max_messages=limit)
         session = agent_sessions.get_active(agent_id)
         return {
             "session_id": session.id if session else None,
