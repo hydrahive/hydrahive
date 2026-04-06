@@ -1,15 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+
+const plugins: any[] = [react()];
+// Bundle-Analyse: npm run analyze → öffnet stats.html
+if (process.env.ANALYZE) {
+  try {
+    const { visualizer } = require("rollup-plugin-visualizer");
+    plugins.push(visualizer({ open: true, gzipSize: true, filename: "stats.html" }));
+  } catch { /* rollup-plugin-visualizer nicht installiert — ignorieren */ }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins,
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   build: {
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("react-markdown")) return "markdown";
+          if (id.includes("react-force-graph") || id.includes("three") || id.includes("3d-force-graph")) return "react-force-graph-3d";
+          if (id.includes("emoji-picker-react")) return "emoji-picker-react";
+          if (id.includes("@xyflow")) return "xyflow";
+          if (id.includes("react-markdown") || id.includes("remark") || id.includes("rehype")) return "markdown";
           if (id.includes("react-router-dom") || id.includes("@remix-run")) return "router";
           if (id.includes("react-dom") || id.includes("/react/")) return "react-vendor";
           if (id.includes("lucide-react")) return "icons";

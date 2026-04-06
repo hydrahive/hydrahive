@@ -629,7 +629,7 @@ class AgentDiscordClient(DiscordAgentClient):
                     if _aid:
                         _agent_id = _aid
         except Exception as _be:
-            logger.debug("Butler check Discord: %s", _be)
+            logger.warning("Butler check Discord fehlgeschlagen: %s", _be)
 
         # Antwort sammeln und senden
         response_parts: list[str] = []
