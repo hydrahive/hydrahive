@@ -474,15 +474,19 @@ class SessionManager:
         return d
 
     def _persist(self, session: Session) -> None:
+        """Atomic Write: tmp-Datei schreiben, dann rename (#358)."""
         path = self._session_dir(session.project_id) / f"{session.id}.json"
+        tmp = path.with_suffix(".json.tmp")
         try:
-            path.write_text(
+            tmp.write_text(
                 json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            path.chmod(0o600)
+            tmp.chmod(0o600)
+            tmp.replace(path)  # atomic auf POSIX
         except OSError as e:
             logger.warning("Session konnte nicht gespeichert werden: %s", e)
+            tmp.unlink(missing_ok=True)
 
     def _load_latest(self, project_dir: Path) -> Session | None:
         sessions_dir = project_dir / self.SESSIONS_SUBDIR

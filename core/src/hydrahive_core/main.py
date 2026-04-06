@@ -732,9 +732,12 @@ def audit_log(
     }
 
     try:
+        import fcntl
         _ensure_audit_log_path()
         with AUDIT_LOG_FILE.open("a", encoding="utf-8") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except OSError as e:
         logger.warning("Audit-Log Schreibfehler: %s", e)
 

@@ -216,16 +216,15 @@ else
   info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
 fi
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
-info "Login:         admin / ${CONSOLE_PASS}"
+info "Login:         admin / ********  (siehe /etc/hydrahive/admin_credentials)"
 info "Credentials:   /etc/hydrahive/admin_credentials"
 info "Agenten-Dir:   /agents"
 info "AgentLink:     http://127.0.0.1:${AGENTLINK_PORT:-8010}/docs"
 if systemctl is-active --quiet gitea 2>/dev/null; then
   SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
-  info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / ${GITEA_ADMIN_PASS:-siehe /etc/hydrahive/gitea_config.json})"
+  info "Gitea:         http://${SERVER_IP_OUT}:3002  (admin / siehe /etc/hydrahive/admin_credentials)"
 fi
 if systemctl is-active --quiet hydrahive-codeserver 2>/dev/null; then
   SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
-  _CS_PASS=$(grep '^codeserver_password=' /etc/hydrahive/admin_credentials 2>/dev/null | cut -d= -f2- || echo "siehe /etc/hydrahive/admin_credentials")
-  info "Code Editor:   https://${SERVER_IP_OUT}/code/  (Passwort: ${_CS_PASS})"
+  info "Code Editor:   https://${SERVER_IP_OUT}/code/  (Passwort: siehe /etc/hydrahive/admin_credentials)"
 fi
