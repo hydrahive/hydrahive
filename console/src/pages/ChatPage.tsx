@@ -455,9 +455,9 @@ export function ChatPage() {
         </div>
       </section>
 
-      <section className="section-card flex-1 min-h-0 overflow-visible p-0">
-        <div className="grid h-full gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
-          <div className="relative flex h-full flex-col border-b lg:border-b-0 lg:border-r overflow-hidden">
+      <section className="section-card flex-1 min-h-0 overflow-hidden p-0">
+        <div className="grid h-full min-h-0 gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
+          <div className="relative flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r overflow-hidden">
             <div className="border-b bg-muted/20 px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
