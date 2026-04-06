@@ -416,7 +416,7 @@ export function ChatPage() {
   }, [bossModel.model, showSwarm, t]);
 
   return (
-    <div className="flex flex-col gap-6" style={{ height: "calc(100vh - 5rem)" }}>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden gap-6">
       <section className="hero-panel flex-shrink-0">
         <div className="relative z-10 shell-grid">
           <div className="space-y-5 lg:col-span-8">

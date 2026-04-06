@@ -550,10 +550,16 @@ export function AdminLayout() {
           </div>
         </div>
 
-        {/* Content — Extra Padding unten auf Mobile für Bottom-Nav */}
-        <div className="px-3 py-3 pb-20 sm:px-4 sm:py-4 md:px-6 md:py-6 lg:flex-1 lg:overflow-y-auto lg:px-8 lg:py-8 lg:pb-8">
-          <Outlet />
-        </div>
+        {/* Content — Chat-Routen bekommen vollen Platz ohne Padding */}
+        {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
+          <div className="lg:flex-1 lg:overflow-hidden pb-14 lg:pb-0">
+            <Outlet />
+          </div>
+        ) : (
+          <div className="px-3 py-3 pb-20 sm:px-4 sm:py-4 md:px-6 md:py-6 lg:flex-1 lg:overflow-y-auto lg:px-8 lg:py-8 lg:pb-8">
+            <Outlet />
+          </div>
+        )}
       </main>
 
       {/* Bottom-Navigation — auf Mobile und Tablet (< lg), Desktop hat die Sidebar */}
