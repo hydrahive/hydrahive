@@ -416,8 +416,8 @@ export function ChatPage() {
   }, [bossModel.model, showSwarm, t]);
 
   return (
-    <div className="space-y-6">
-      <section className="hero-panel">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden gap-6">
+      <section className="hero-panel flex-shrink-0">
         <div className="relative z-10 shell-grid">
           <div className="space-y-5 lg:col-span-8">
             <div className="flex flex-wrap items-center gap-3">
@@ -455,9 +455,9 @@ export function ChatPage() {
         </div>
       </section>
 
-      <section className="section-card min-h-[65vh] overflow-visible p-0">
-        <div className="grid min-h-[65vh] gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
-          <div className="relative flex min-h-[65vh] flex-col border-b lg:border-b-0 lg:border-r">
+      <section className="section-card flex-1 min-h-0 overflow-visible p-0">
+        <div className="grid h-full gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
+          <div className="relative flex h-full flex-col border-b lg:border-b-0 lg:border-r overflow-hidden">
             <div className="border-b bg-muted/20 px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -695,7 +695,7 @@ export function ChatPage() {
 
             {error && <div className="border-t bg-destructive/10 px-5 py-3 text-xs text-destructive">{error}</div>}
 
-            <div className="border-t px-3 py-3 sm:px-5 sm:py-4 relative">
+            <div className="border-t px-3 py-3 sm:px-5 sm:py-4 relative flex-shrink-0">
               {showSuggest && suggestions.length > 0 && (
                 <div className="absolute bottom-full left-3 right-3 sm:left-5 sm:right-5 z-10 mb-2 overflow-hidden rounded-2xl border bg-card shadow-lg">
                   {suggestions.map((s, i) => (
