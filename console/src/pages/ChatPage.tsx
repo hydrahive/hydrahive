@@ -416,44 +416,27 @@ export function ChatPage() {
   }, [bossModel.model, showSwarm, t]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden gap-6">
-      <section className="hero-panel flex-shrink-0">
-        <div className="relative z-10 shell-grid">
-          <div className="space-y-5 lg:col-span-8">
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={() => navigate("/projects")} className="inline-flex items-center gap-2 rounded-2xl border bg-background/60 px-4 py-2 text-sm transition hover:bg-background">
-                <ArrowLeft className="h-4 w-4" />
-                {t("chat.backToProjects")}
-              </button>
-              <span className="status-pill status-pill-ok"><Radar className="h-3.5 w-3.5" />{t("chat.projectChatActive")}</span>
-            </div>
-            <div>
-              <h1 className="shell-title">{projectName}</h1>
-              <p className="shell-copy mt-3 max-w-2xl">
-                {t("chat.chatSubtitle")}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {statusPills.map((pill) => (
-                <span key={pill.label} className={pill.tone === "ok" ? "status-pill status-pill-ok" : "status-pill"}>{pill.label}</span>
-              ))}
-              {id && <span className="status-pill font-mono">{id}</span>}
-            </div>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold truncate">{projectName}</h1>
           </div>
-          <div className="lg:col-span-4">
-            <div className="app-panel app-panel-muted p-5">
-              <div className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-primary" />{t("chat.chatControl")}</div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => setShowSwarm((s) => !s)} className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm transition ${showSwarm ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}>
-                  <Network className="h-4 w-4" />
-                  {showSwarm ? t("chat.hideSwarm") : t("chat.showSwarm")}
-                </button>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">{t("chat.slashHint")}</p>
-            </div>
-          </div>
+          <span className="status-pill status-pill-ok text-xs"><Radar className="h-3 w-3" />{t("chat.projectChatActive")}</span>
+          {statusPills.map((pill) => (
+            <span key={pill.label} className={`status-pill text-xs ${pill.tone === "ok" ? "status-pill-ok" : ""}`}>{pill.label}</span>
+          ))}
         </div>
-      </section>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setShowSwarm((s) => !s)} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition ${showSwarm ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}>
+            <Network className="h-3.5 w-3.5" />
+            {showSwarm ? t("chat.hideSwarm") : t("chat.showSwarm")}
+          </button>
+        </div>
+      </div>
 
       <section className="section-card flex-1 min-h-0 overflow-hidden p-0">
         <div className="grid h-full min-h-0 gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">

@@ -501,7 +501,7 @@ export function AdminLayout() {
         </div>
       )}
 
-      <main className="relative min-w-0 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden">
+      <main className="relative min-w-0 flex h-screen flex-col overflow-hidden">
         {/* Header */}
         <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-3 backdrop-blur md:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3">
@@ -552,7 +552,7 @@ export function AdminLayout() {
 
         {/* Content — Chat-Routen bekommen vollen Platz ohne Padding */}
         {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
-          <div className="lg:flex-1 lg:overflow-hidden pb-14 lg:pb-0">
+          <div className="flex-1 min-h-0 overflow-hidden pb-14 lg:pb-0">
             <Outlet />
           </div>
         ) : (
