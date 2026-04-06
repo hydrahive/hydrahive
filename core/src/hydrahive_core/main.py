@@ -1384,6 +1384,15 @@ register_mcp_routes(
     audit_log=audit_log,
 )
 
+# ================================================================== MCP Server (#128 OpenClaw Bridge)
+from .mcp_server import register_mcp_server_routes
+register_mcp_server_routes(
+    app,
+    discovery=discovery,
+    runtime=runtime,
+    orchestrator=agent_orchestrator,
+    require_auth=require_auth,
+)
 
 # ================================================================== Backup & Restore
 
