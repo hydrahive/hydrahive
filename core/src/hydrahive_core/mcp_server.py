@@ -181,7 +181,7 @@ async def _execute_mcp_tool(
 
     if tool_name == "hydrahive_list_agents":
         agents = []
-        for agent_id, cfg in discovery.agents().items():
+        for agent_id, cfg in discovery.agents.items():
             status = runtime.status_all().get(agent_id, {})
             agents.append({
                 "id": agent_id,
