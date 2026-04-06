@@ -38,7 +38,7 @@ export function ReposPage() {
   async function load() {
     try {
       const [reposData, agentsData] = await Promise.all([
-        api.get<{ repos: Repo[] }>("/admin/repos"),
+        api.get<{ repos: Repo[] }>("/repos"),
         api.agents() as Promise<Record<string, AgentEntry>>,
       ]);
       setRepos(reposData.repos);
@@ -73,9 +73,9 @@ export function ReposPage() {
     setSaveErr("");
     try {
       if (editId) {
-        await api.put(`/admin/repos/${editId}`, form);
+        await api.put(`/repos/${editId}`, form);
       } else {
-        await api.post("/admin/repos", form);
+        await api.post("/repos", form);
       }
       setShowForm(false);
       setEditId(null);
@@ -89,7 +89,7 @@ export function ReposPage() {
 
   async function handleDelete(id: string) {
     if (!confirm(`Repo "${id}" wirklich löschen?`)) return;
-    await api.delete(`/admin/repos/${id}`);
+    await api.delete(`/repos/${id}`);
     await load();
   }
 
@@ -97,7 +97,7 @@ export function ReposPage() {
     setTesting(id);
     try {
       const r = await api.post<{ ok: boolean; repo_name?: string; error?: string; default_branch?: string }>(
-        `/admin/repos/${id}/test`, {}
+        `/repos/${id}/test`, {}
       );
       setTestResult(prev => ({
         ...prev,
