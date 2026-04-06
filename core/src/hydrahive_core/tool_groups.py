@@ -103,6 +103,15 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
             "remote_agent",
         }),
     ),
+    # Root / Unrestricted — immer laden wenn Agent diese Tools hat
+    (
+        ("sudo", "root", "apt ", "install ", "systemctl", "chmod", "chown",
+         "mount", "fdisk", "mkfs", "iptables", "ufw", "push", "office",
+         "paket", "package", "update", "upgrade"),
+        frozenset({
+            "shell_exec", "read_system_file", "write_system_file", "project_shell",
+        }),
+    ),
 ]
 
 

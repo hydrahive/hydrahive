@@ -4914,6 +4914,12 @@ TOOL_GROUPS: dict[str, dict] = {
         "icon": "key",
         "tools": ["get_secret"],
     },
+    "root": {
+        "label": "⚠ Root (voller Systemzugang)",
+        "icon": "shield-off",
+        "tools": ["shell_exec", "read_system_file", "write_system_file", "project_shell"],
+        "unrestricted": True,
+    },
 }
 
 

@@ -564,6 +564,7 @@ function AgentsCrudTab() {
               <ToolGroupSelector
                 selectedTools={form.tools}
                 onChange={(tools) => setForm(f => ({ ...f, tools }))}
+                onUnrestrictedChange={(enabled) => setForm(f => ({ ...f, execution_mode_default: enabled ? "unrestricted" : "elevated" }))}
               />
             </div>
 

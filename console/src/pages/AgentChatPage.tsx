@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ShieldOff } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
@@ -50,8 +50,7 @@ export function AgentChatPage() {
   const [showHistory,  setShowHistory]  = useState(false);
   const [sessions,     setSessions]     = useState<SessionPreview[]>([]);
   const [viewSession,  setViewSession]  = useState<{ id: string; messages: Message[]; startedAt: string } | null>(null);
-  const [unrestricted, setUnrestricted] = useState(false);
-  const isAdmin = (localStorage.getItem("hydrahive_role") || "") === "admin";
+  const [unrestricted] = useState(false);
 
   const bottomRef       = useRef<HTMLDivElement>(null);
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
@@ -597,13 +596,6 @@ export function AgentChatPage() {
             }} className="rounded" />
             Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
           </label>
-          {isAdmin && (
-            <label className={`flex items-center gap-1.5 text-xs cursor-pointer select-none ${unrestricted ? "text-red-500 font-semibold" : "text-muted-foreground"}`}>
-              <input type="checkbox" checked={unrestricted} onChange={e => setUnrestricted(e.target.checked)} className="rounded" />
-              <ShieldOff className="h-3 w-3" />
-              Unrestricted
-            </label>
-          )}
         </div>
         <div className="flex gap-2 items-end">
           <textarea ref={textareaRef} value={input}

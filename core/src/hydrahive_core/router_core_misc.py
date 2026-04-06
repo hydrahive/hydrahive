@@ -410,7 +410,10 @@ def register_core_misc_routes(
         for gid, g in TOOL_GROUPS.items():
             tools = [t for t in g["tools"] if t in all_ids]
             grouped_ids.update(tools)
-            groups.append({"id": gid, "label": g["label"], "icon": g["icon"], "tools": tools})
+            entry: dict = {"id": gid, "label": g["label"], "icon": g["icon"], "tools": tools}
+            if g.get("unrestricted"):
+                entry["unrestricted"] = True
+            groups.append(entry)
         # Ungroupierte Tools als "Sonstige"
         ungrouped = sorted(all_ids - grouped_ids)
         if ungrouped:

@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import {
   Globe, Brain, Folder, Terminal, GitBranch, Server,
   Bot, Monitor, Mail, MessageCircle, BookOpen, Key,
-  Puzzle, ChevronDown, ChevronRight, Wrench,
+  Puzzle, ChevronDown, ChevronRight, Wrench, ShieldOff,
 } from "lucide-react";
 
 /* ── Types ── */
@@ -12,11 +12,13 @@ interface ToolGroup {
   label: string;
   icon: string;
   tools: string[];
+  unrestricted?: boolean;
 }
 
 export interface ToolGroupSelectorProps {
   selectedTools: string[];
   onChange: (tools: string[]) => void;
+  onUnrestrictedChange?: (enabled: boolean) => void;
 }
 
 /* ── Icon map ── */
@@ -37,6 +39,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   "book-open": BookOpen,
   key: Key,
   puzzle: Puzzle,
+  "shield-off": ShieldOff,
+  shieldoff: ShieldOff,
 };
 
 function GroupIcon({ name, className }: { name: string; className?: string }) {
@@ -72,7 +76,7 @@ function IndeterminateCheckbox({
 }
 
 /* ── Main component ── */
-export function ToolGroupSelector({ selectedTools, onChange }: ToolGroupSelectorProps) {
+export function ToolGroupSelector({ selectedTools, onChange, onUnrestrictedChange }: ToolGroupSelectorProps) {
   const [groups, setGroups] = useState<ToolGroup[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -102,13 +106,15 @@ export function ToolGroupSelector({ selectedTools, onChange }: ToolGroupSelector
       if (allSelected) {
         // Deselect all in group
         onChange(selectedTools.filter((t) => !group.tools.includes(t)));
+        if (group.unrestricted && onUnrestrictedChange) onUnrestrictedChange(false);
       } else {
         // Select all in group
         const missing = group.tools.filter((t) => !selectedTools.includes(t));
         onChange([...selectedTools, ...missing]);
+        if (group.unrestricted && onUnrestrictedChange) onUnrestrictedChange(true);
       }
     },
-    [selectedTools, onChange],
+    [selectedTools, onChange, onUnrestrictedChange],
   );
 
   const toggleTool = useCallback(
@@ -154,7 +160,7 @@ export function ToolGroupSelector({ selectedTools, onChange }: ToolGroupSelector
           <div key={group.id}>
             {/* Group row */}
             <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-muted cursor-pointer select-none"
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors cursor-pointer select-none ${group.unrestricted && allSelected ? "bg-red-500/10 hover:bg-red-500/20 border border-red-500/30" : "hover:bg-muted"}`}
               onClick={() => toggleExpand(group.id)}
             >
               <IndeterminateCheckbox
@@ -167,7 +173,7 @@ export function ToolGroupSelector({ selectedTools, onChange }: ToolGroupSelector
                 className="h-4 w-4 rounded accent-primary flex-shrink-0"
               />
               <GroupIcon name={group.icon} className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="flex-1 text-sm font-medium text-foreground truncate">
+              <span className={`flex-1 text-sm font-medium truncate ${group.unrestricted && allSelected ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
                 {group.label}
               </span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">
