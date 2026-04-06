@@ -3667,6 +3667,85 @@ class WksShellExecTool(BaseTool):
             return {"error": str(e)}
 
 
+class ServerShellTool(BaseTool):
+    """Führt einen Shell-Befehl auf einem registrierten Remote-Server aus (via SSH)."""
+
+    @property
+    def id(self) -> str:   return "server_shell"
+    @property
+    def name(self) -> str: return "Remote-Server Shell"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt einen Shell-Befehl auf einem registrierten Remote-Server aus (SSH). "
+            "Nutze server_id um den Zielserver auszuwählen. "
+            "Verfügbare Server werden dem Agenten zugewiesen."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers (aus Server-Verwaltung)"},
+                "command":   {"type": "string", "description": "Der auszuführende Shell-Befehl"},
+                "cwd":       {"type": "string", "description": "Arbeitsverzeichnis (optional)"},
+            },
+            "required": ["server_id", "command"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", command: str = "", cwd: str = "", **kwargs) -> dict:
+        import asyncio, shlex
+        from .router_servers import get_server_for_agent
+
+        if not server_id or not command:
+            return {"error": "server_id und command sind Pflicht"}
+
+        srv = get_server_for_agent(agent_id, server_id)
+        if not srv:
+            # Auch project_id als Agent-ID versuchen (Projekt-Agents)
+            srv = get_server_for_agent(project_id, server_id)
+        if not srv:
+            return {"error": f"Server '{server_id}' nicht zugewiesen oder nicht gefunden. Verfügbare Server per /agents/{agent_id}/servers abfragen."}
+
+        if not srv.get("ssh_key_path"):
+            return {"error": f"Kein SSH-Key für Server '{server_id}' vorhanden"}
+
+        blocked = _check_shell_blocklist(command)
+        if blocked:
+            logger.warning("server_shell BLOCKED [%s→%s]: %s — %s", agent_id, server_id, command[:120], blocked)
+            return {"error": f"Befehl blockiert: {blocked}", "blocked": True}
+
+        def _run():
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                hostname=srv["ip"],
+                port=srv.get("ssh_port", 22),
+                username=srv["ssh_user"],
+                key_filename=srv["ssh_key_path"],
+                timeout=10,
+            )
+            full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
+            _, stdout, stderr = client.exec_command(full_cmd, timeout=60)
+            out       = stdout.read().decode("utf-8", errors="replace")
+            err       = stderr.read().decode("utf-8", errors="replace")
+            exit_code = stdout.channel.recv_exit_status()
+            client.close()
+            return {
+                "server": server_id,
+                "stdout": out[-10000:] if len(out) > 10000 else out,
+                "stderr": err[-5000:] if len(err) > 5000 else err,
+                "exit_code": exit_code,
+            }
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler ({server_id}): {e}"}
+
+
 class WksFileReadTool(BaseTool):
     """Liest eine Datei von der Workstation des Users (via SFTP)."""
 
@@ -4606,6 +4685,7 @@ registry.register(GitPushTool())
 registry.register(GitMergeTool())
 registry.register(GitCreatePRTool())
 registry.register(WksShellExecTool())
+registry.register(ServerShellTool())
 registry.register(WksFileReadTool())
 registry.register(WksFileWriteTool())
 registry.register(SendMailTool())

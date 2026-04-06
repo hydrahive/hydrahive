@@ -1126,6 +1126,11 @@ function ServersTab() {
         </div>
       )}
 
+      {/* Agent-Server-Zuweisung */}
+      {servers.length > 0 && (
+        <AgentServerAssignment servers={servers} />
+      )}
+
       {/* Add/Edit Modal */}
       {(showAdd || editing) && (
         <ServerEditModal
@@ -1134,6 +1139,90 @@ function ServersTab() {
           onClose={() => { setShowAdd(false); setEditing(null); }}
         />
       )}
+    </div>
+  );
+}
+
+function AgentServerAssignment({ servers }: { servers: RemoteServer[] }) {
+  const { t } = useTranslation();
+  const [agents, setAgents] = useState<{ id: string; identity: string }[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<Record<string, any>>("/agents").then(d => {
+      const list = Object.entries(d).map(([id, a]: [string, any]) => ({
+        id, identity: a.config?.identity || id,
+      }));
+      setAgents(list);
+      // Zuweisungen laden
+      Promise.all(list.map(a =>
+        api.get<{ servers: { id: string }[] }>(`/agents/${a.id}/servers`)
+          .then(d => ({ agentId: a.id, serverIds: d.servers.map(s => s.id) }))
+          .catch(() => ({ agentId: a.id, serverIds: [] as string[] }))
+      )).then(results => {
+        const map: Record<string, string[]> = {};
+        for (const r of results) map[r.agentId] = r.serverIds;
+        setAssignments(map);
+      });
+    }).catch(() => {});
+  }, []);
+
+  async function toggle(agentId: string, serverId: string) {
+    setSaving(agentId);
+    const current = assignments[agentId] || [];
+    const newList = current.includes(serverId)
+      ? current.filter(s => s !== serverId)
+      : [...current, serverId];
+    try {
+      await api.put(`/agents/${agentId}/servers`, { server_ids: newList });
+      setAssignments(prev => ({ ...prev, [agentId]: newList }));
+    } catch {}
+    setSaving(null);
+  }
+
+  if (agents.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+        {t("agents.serverAssignment", { defaultValue: "Agent → Server Zuweisung" })}
+      </h3>
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30">
+              <th className="text-left px-4 py-2 font-medium text-muted-foreground">Agent</th>
+              {servers.map(s => (
+                <th key={s.id} className="text-center px-3 py-2 font-medium text-muted-foreground text-xs">{s.name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map(agent => (
+              <tr key={agent.id} className="border-b last:border-0 hover:bg-muted/20">
+                <td className="px-4 py-2 font-medium">{agent.identity} <span className="text-xs text-muted-foreground">({agent.id})</span></td>
+                {servers.map(srv => {
+                  const assigned = (assignments[agent.id] || []).includes(srv.id);
+                  return (
+                    <td key={srv.id} className="text-center px-3 py-2">
+                      <button
+                        onClick={() => toggle(agent.id, srv.id)}
+                        disabled={saving === agent.id}
+                        className={`w-6 h-6 rounded-md border-2 transition-colors ${
+                          assigned ? "bg-primary border-primary text-primary-foreground" : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {assigned && "✓"}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
