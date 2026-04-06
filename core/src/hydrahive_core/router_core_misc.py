@@ -38,6 +38,7 @@ class IncomingMessage(BaseModel):
     content: str
     sender: str = "user"
     execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None
+    images: list[dict] | None = None  # [{"data": "base64...", "media_type": "image/png"}]
 
 
 _JOURNAL_TIMESTAMP_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)\b")

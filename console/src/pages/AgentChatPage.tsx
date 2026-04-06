@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ImagePlus } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
@@ -51,6 +51,8 @@ export function AgentChatPage() {
   const [sessions,     setSessions]     = useState<SessionPreview[]>([]);
   const [viewSession,  setViewSession]  = useState<{ id: string; messages: Message[]; startedAt: string } | null>(null);
   const [unrestricted] = useState(false);
+  const [pendingImages, setPendingImages] = useState<{data: string; media_type: string; preview: string}[]>([]);
+  const fileInputRef    = useRef<HTMLInputElement>(null);
 
   const bottomRef       = useRef<HTMLDivElement>(null);
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
@@ -241,9 +243,14 @@ export function AgentChatPage() {
     }
 
     const userMsg      = mkMsg("user", content);
+    // Bilder als Preview im User-Message anzeigen
+    if (pendingImages.length > 0) {
+      (userMsg as any)._images = pendingImages.map(i => i.preview);
+    }
     let currentAsst = mkMsg("assistant", "");
     let hadToolCalls = false;
     setMessages(ms => [...ms, userMsg]);
+    setPendingImages([]);
     setSending(true);
     setElapsed(0);
     const controller = new AbortController();
@@ -255,7 +262,11 @@ export function AgentChatPage() {
       const res = await fetch(`/api/agents/${id}/message/stream`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ content, ...(unrestricted ? { execution_mode: "unrestricted" } : {}) }),
+        body:    JSON.stringify({
+          content,
+          ...(unrestricted ? { execution_mode: "unrestricted" } : {}),
+          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
+        }),
         signal:  controller.signal,
       });
       if (!res.ok) {
@@ -481,10 +492,20 @@ export function AgentChatPage() {
                     ? "bg-primary text-primary-foreground"
                     : "bg-card border prose prose-sm max-w-none dark:prose-invert"
                 }`}>
-                  {msg.role === "user"
-                    ? <span className="whitespace-pre-wrap">{msg.content}</span>
-                    : <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  }
+                  {msg.role === "user" ? (
+                    <>
+                      {(msg as any)._images && (
+                        <div className="flex gap-1 mb-1 flex-wrap">
+                          {(msg as any)._images.map((src: string, i: number) => (
+                            <img key={i} src={src} alt="" className="h-20 rounded-md" />
+                          ))}
+                        </div>
+                      )}
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    </>
+                  ) : (
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  )}
                   {msg.role === "assistant" && (msg.tokenUsage || msg.isFallback) && (
                     <div className="flex gap-1 px-1 pt-1 flex-wrap">
                       {msg.isFallback && (
@@ -603,6 +624,20 @@ export function AgentChatPage() {
             Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
           </label>
         </div>
+        {/* Bild-Preview (#414) */}
+        {pendingImages.length > 0 && (
+          <div className="flex gap-2 mb-2 flex-wrap">
+            {pendingImages.map((img, i) => (
+              <div key={i} className="relative group">
+                <img src={img.preview} alt="" className="h-16 w-16 object-cover rounded-lg border" />
+                <button onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                  X
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2 items-end">
           <textarea ref={textareaRef} value={input}
             onChange={e => setInput(e.target.value)}
@@ -612,6 +647,26 @@ export function AgentChatPage() {
             rows={1}
             className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => {
+              const files = Array.from(e.target.files || []);
+              files.forEach(f => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64 = (reader.result as string).split(",")[1];
+                  const media_type = f.type || "image/png";
+                  const preview = reader.result as string;
+                  setPendingImages(prev => [...prev, { data: base64, media_type, preview }]);
+                };
+                reader.readAsDataURL(f);
+              });
+              e.target.value = "";
+            }} />
+          <button onClick={() => fileInputRef.current?.click()} type="button"
+            className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
+            aria-label="Bild hochladen">
+            <ImagePlus className={`h-4 w-4 ${pendingImages.length > 0 ? "text-primary" : "text-muted-foreground"}`} />
+          </button>
           <button onClick={() => setShowEmoji(v => !v)} type="button"
             className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
             aria-label="Toggle emoji picker">
