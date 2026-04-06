@@ -35,20 +35,22 @@ fi
 mkdir -p "${HYTALE_DIR}" "${HYOS_DIR}"
 
 # --- Java 25 (Adoptium Temurin) ---
-if ! java -version 2>&1 | grep -q "25"; then
-    info "Installiere Java 25 (Adoptium Temurin)..."
-    # Adoptium GPG Key + Repo
-    if [ ! -f /etc/apt/keyrings/adoptium.asc ]; then
-        mkdir -p /etc/apt/keyrings
-        curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
-            | gpg --batch --yes --dearmor -o /etc/apt/keyrings/adoptium.asc 2>/dev/null \
-            || error "Adoptium GPG-Key Import fehlgeschlagen"
-    fi
-    echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \
+if ! java -version 2>&1 | grep -q "25\|21"; then
+    info "Installiere Java (Adoptium Temurin)..."
+    mkdir -p /etc/apt/keyrings
+    # GPG Key immer frisch holen (dearmor → .gpg binär)
+    curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+        -o /tmp/adoptium-key.asc \
+        || error "Adoptium GPG-Key Download fehlgeschlagen"
+    gpg --batch --yes --dearmor -o /etc/apt/keyrings/adoptium.gpg /tmp/adoptium-key.asc 2>/dev/null \
+        || error "Adoptium GPG-Key Dearmor fehlgeschlagen"
+    rm -f /tmp/adoptium-key.asc
+    chmod 644 /etc/apt/keyrings/adoptium.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \
         > /etc/apt/sources.list.d/adoptium.list
-    apt-get update -qq
-    apt-get install -y -qq temurin-25-jre || {
-        warn "temurin-25-jre nicht verfügbar, versuche temurin-21-jre als Fallback..."
+    apt-get update -qq 2>&1 | grep -v "^W:" || true
+    apt-get install -y -qq temurin-25-jre 2>/dev/null || {
+        warn "temurin-25-jre nicht verfügbar, versuche temurin-21-jre..."
         apt-get install -y -qq temurin-21-jre || error "Java Installation fehlgeschlagen"
     }
     success "Java installiert: $(java -version 2>&1 | head -1)"
