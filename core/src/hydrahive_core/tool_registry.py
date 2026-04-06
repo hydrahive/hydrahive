@@ -3713,10 +3713,8 @@ class ServerShellTool(BaseTool):
         if not srv.get("ssh_key_path"):
             return {"error": f"Kein SSH-Key für Server '{server_id}' vorhanden"}
 
-        blocked = _check_shell_blocklist(command)
-        if blocked:
-            logger.warning("server_shell BLOCKED [%s→%s]: %s — %s", agent_id, server_id, command[:120], blocked)
-            return {"error": f"Befehl blockiert: {blocked}", "blocked": True}
+        # Server-Shell hat KEINE Blocklist — der Admin hat bewusst SSH-Zugang gegeben
+        # Die Blocklist ist nur für lokale shell_exec (schützt den HydraHive-Server selbst)
 
         def _run():
             import paramiko
