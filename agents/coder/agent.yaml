@@ -11,7 +11,7 @@ llm:
   max_tokens: 16384
 
 execution_modes:
-  default: safe
+  default: unrestricted
   safe:
     permissions:
     - filesystem.read
@@ -20,6 +20,8 @@ execution_modes:
     - memory.read
     - memory.write
     - agents.ask
+  unrestricted:
+    permissions: []
 
 max_tool_rounds: 30
 
@@ -36,9 +38,13 @@ tools:
 - file_search
 - fix_permissions
 - list_directory
-# Shell
+# Shell + Root
 - project_shell
 - shell_exec
+- read_system_file
+- write_system_file
+# Vision
+- analyze_image
 # Git
 - git_status
 - git_diff
