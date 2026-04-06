@@ -3338,8 +3338,10 @@ class GitPushTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Pusht den aktuellen Branch auf Gitea. "
-            "Normalerweise nach git_commit aufrufen. "
+            "Pusht auf Gitea/Git Remote. "
+            "Standard: aktuellen Branch pushen (nach git_commit). "
+            "Für große Repos: commit_ref + path nutzen um einen Commit-Hash direkt zu pushen "
+            "OHNE Checkout (z.B. git_push(commit_ref='abc123', path='/projects/x/repo', target_branch='main')). "
             "create_pr=True erstellt automatisch einen Pull Request nach main."
         )
 
@@ -3366,6 +3368,18 @@ class GitPushTool(BaseTool):
                 },
                 "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
                 "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
+                "commit_ref": {
+                    "type":        "string",
+                    "description": "Commit-Hash direkt pushen (ohne Checkout). Für große Repos wo git checkout timeoutet.",
+                },
+                "target_branch": {
+                    "type":        "string",
+                    "description": "Ziel-Branch auf dem Remote (Standard: main). Nur mit commit_ref.",
+                },
+                "path": {
+                    "type":        "string",
+                    "description": "Lokaler Pfad zum Git-Repo (statt Workspace). Für Repos die schon lokal existieren.",
+                },
             },
             "required": [],
         }
@@ -3376,11 +3390,59 @@ class GitPushTool(BaseTool):
     ) -> dict:
         pid = kwargs.get("project_id") or project_id
         repo_ref = kwargs.get("repo", "")
+        commit_ref = kwargs.get("commit_ref", "")
+        target_branch = kwargs.get("target_branch", "main")
+        local_path = kwargs.get("path", "")
         from .gitea import GiteaClient, get_gitea_client, _load_config, resolve_git_target
         cfg = _load_config()
 
+        # Direkter Push: commit_ref → refs/heads/target_branch (kein Checkout nötig)
+        if commit_ref and local_path:
+            ws = Path(local_path)
+            if not (ws / ".git").exists():
+                return {"error": f"Kein Git-Repo unter {local_path}"}
+            _, err, rc = await GiteaClient._git(
+                ["push", "origin", f"{commit_ref}:refs/heads/{target_branch}"],
+                str(ws), token=cfg.get("token", ""),
+            )
+            if rc != 0:
+                return {"error": f"git push fehlgeschlagen: {err[:300]}", "commit_ref": commit_ref}
+            return {
+                "pushed": True, "commit_ref": commit_ref,
+                "target_branch": target_branch, "path": local_path,
+            }
+
         try:
             target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
+        except Exception as e:
+            return {"error": str(e)}
+
+        # Direkter Push mit commit_ref über Workspace (ohne Checkout)
+        if commit_ref:
+            try:
+                ws = await GiteaClient.git_workspace(
+                    target["workspace_key"],
+                    owner=target["owner"],
+                    repo=target["repo"],
+                )
+            except Exception as e:
+                return {"error": str(e)}
+            remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
+            await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
+            _, err, rc = await GiteaClient._git(
+                ["push", "origin", f"{commit_ref}:refs/heads/{target_branch}"],
+                ws, token=cfg.get("token", ""),
+            )
+            if rc != 0:
+                return {"error": f"git push fehlgeschlagen: {err[:300]}", "commit_ref": commit_ref}
+            return {
+                "pushed": True, "commit_ref": commit_ref,
+                "target_branch": target_branch,
+                "repo": target["repo"], "owner": target["owner"],
+            }
+
+        # Standard-Flow: Workspace auschecken + Branch pushen
+        try:
             ws = await GiteaClient.git_workspace(
                 target["workspace_key"],
                 owner=target["owner"],
