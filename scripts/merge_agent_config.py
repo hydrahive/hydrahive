@@ -47,14 +47,20 @@ def merge_config(template: dict, runtime: dict) -> dict:
             runtime.get("tools", []),
         )
 
-    # LLM: model + fallback_models vom Template, rest von Runtime
-    if "llm" in template:
-        t_llm = template["llm"]
+    # LLM: Runtime gewinnt komplett (Admin hat Model + Temperature konfiguriert)
+    # Nur neue fallback_models aus Template addieren
+    if "llm" in template and "llm" in runtime:
         r_llm = result.get("llm", {})
-        r_llm["model"] = t_llm.get("model", r_llm.get("model"))
+        t_llm = template["llm"]
+        # fallback_models: neue aus Template addieren
         if "fallback_models" in t_llm:
-            r_llm["fallback_models"] = t_llm["fallback_models"]
+            existing = set(r_llm.get("fallback_models", []))
+            for fm in t_llm["fallback_models"]:
+                if fm not in existing:
+                    r_llm.setdefault("fallback_models", []).append(fm)
         result["llm"] = r_llm
+    elif "llm" in template and "llm" not in runtime:
+        result["llm"] = template["llm"]
 
     # execution_modes: Runtime gewinnt komplett (Admin hat die konfiguriert)
     # → nicht anfassen wenn Runtime sie hat

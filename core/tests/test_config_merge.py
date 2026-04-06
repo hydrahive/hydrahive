@@ -44,7 +44,7 @@ def test_merge_keeps_runtime_temperature(merge_module):
     template = {"llm": {"model": "claude-sonnet-4-6", "temperature": 0.2}}
     runtime = {"llm": {"model": "old-model", "temperature": 0.8, "max_tokens": 8192}}
     result = merge_module.merge_config(template, runtime)
-    assert result["llm"]["model"] == "claude-sonnet-4-6"  # template wins
+    assert result["llm"]["model"] == "old-model"  # runtime wins now!
     assert result["llm"]["temperature"] == 0.8  # runtime wins
     assert result["llm"]["max_tokens"] == 8192  # runtime wins
 
