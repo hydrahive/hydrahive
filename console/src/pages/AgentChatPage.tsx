@@ -340,7 +340,7 @@ export function AgentChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
         <button onClick={() => navigate("/agents")}
