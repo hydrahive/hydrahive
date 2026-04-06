@@ -91,7 +91,9 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None,
     changed = False
     defaults = default_personal_agent_execution_modes(is_admin=is_admin)
     execution_modes = agent_data.setdefault("execution_modes", {})
-    if execution_modes.get("default") != defaults["default"]:
+    # Default NICHT überschreiben wenn Admin ihn auf root/unrestricted gesetzt hat
+    current_default = execution_modes.get("default", "")
+    if current_default not in ("root", "unrestricted") and current_default != defaults["default"]:
         execution_modes["default"] = defaults["default"]
         changed = True
 
