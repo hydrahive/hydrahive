@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
-interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number }; model?: string; isFallback?: boolean; }
+interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number; cache_write?: number; cache_read?: number }; model?: string; isFallback?: boolean; }
 
 interface AgentCfg {
   identity:        string;
@@ -226,7 +226,7 @@ export function MyAgentPage() {
         .map((m: any) => {
           const msg = mkMsg(m.role as any, m.content);
           if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
-            msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds };
+            msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds, cache_write: m.metadata.cache_write_tokens || 0, cache_read: m.metadata.cache_read_tokens || 0 };
           }
           return msg;
         });
@@ -705,6 +705,12 @@ export function MyAgentPage() {
                                   ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
                                   {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
                                     <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
+                                  )}
+                                  {(msg.tokenUsage.cache_read ?? 0) > 0 && (
+                                    <span className="text-green-500">· {msg.tokenUsage.cache_read!.toLocaleString()} cached</span>
+                                  )}
+                                  {(msg.tokenUsage.cache_write ?? 0) > 0 && (
+                                    <span className="text-blue-400">· {msg.tokenUsage.cache_write!.toLocaleString()} cache-write</span>
                                   )}
                                 </span>
                               )}

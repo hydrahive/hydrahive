@@ -11,7 +11,7 @@ interface Message {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   workers?: string[];
-  tokenUsage?: { input: number; output: number; rounds?: number };
+  tokenUsage?: { input: number; output: number; rounds?: number; cache_write?: number; cache_read?: number };
   model?: string;
   isFallback?: boolean;
 }
@@ -104,7 +104,7 @@ export function ChatPage() {
           .map((m: any) => {
             const msg = mkMsg(m.role as Message["role"], m.content);
             if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
-              msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds };
+              msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds, cache_write: m.metadata.cache_write_tokens || 0, cache_read: m.metadata.cache_read_tokens || 0 };
             }
             if (m.metadata?.model) msg.model = m.metadata.model;
             return msg;
@@ -124,7 +124,7 @@ export function ChatPage() {
           .map((m: any) => {
             const msg = mkMsg(m.role as Message["role"], m.content);
             if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
-              msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds };
+              msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds, cache_write: m.metadata.cache_write_tokens || 0, cache_read: m.metadata.cache_read_tokens || 0 };
             }
             return msg;
           });
@@ -645,6 +645,12 @@ export function ChatPage() {
                               ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
                               {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
                                 <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
+                              )}
+                              {(msg.tokenUsage.cache_read ?? 0) > 0 && (
+                                <span className="text-green-500">· {msg.tokenUsage.cache_read!.toLocaleString()} cached</span>
+                              )}
+                              {(msg.tokenUsage.cache_write ?? 0) > 0 && (
+                                <span className="text-blue-400">· {msg.tokenUsage.cache_write!.toLocaleString()} cache-write</span>
                               )}
                             </span>
                           )}
