@@ -75,23 +75,23 @@ if [ ! -f "${HYTALE_DIR}/hytale-downloader-linux-${ARCH}" ]; then
     success "Hytale Downloader installiert"
 fi
 
-# Server-Dateien herunterladen
+# Server-Dateien: Hytale braucht OAuth-Auth für den Download.
+# Der Downloader ist interaktiv — kann nicht in einem Script laufen.
+# User muss den Download manuell starten.
 if [ ! -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
-    info "Lade Hytale Server-Dateien herunter (kann dauern)..."
-    cd "${HYTALE_DIR}"
-    ./hytale-downloader-linux-${ARCH} 2>&1 | tail -5 || warn "Downloader Exit-Code != 0"
-    # Entpacken falls ZIP
-    ARCHIVE=$(ls -t *.zip 2>/dev/null | head -1)
-    if [ -n "${ARCHIVE}" ]; then
-        unzip -o "${ARCHIVE}" 2>/dev/null || true
-        success "Server-Dateien entpackt"
-    fi
-fi
-
-if [ -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
-    success "Hytale Server bereit: ${HYTALE_DIR}/Server/HytaleServer.jar"
+    warn "Hytale Server-Dateien müssen manuell heruntergeladen werden!"
+    info ""
+    info "  1. SSH auf diesen Server: ssh user@$(hostname -I | awk '{print $1}')"
+    info "  2. sudo -u ${HYTALE_USER} bash"
+    info "  3. cd ${HYTALE_DIR}"
+    info "  4. ./hytale-downloader-linux-${ARCH}"
+    info "  5. OAuth-Login durchführen (Code auf https://accounts.hytale.com/device)"
+    info "  6. Archiv entpacken: unzip *.zip"
+    info "  7. sudo systemctl start hytale-server"
+    info ""
+    info "Der Downloader braucht einen Hytale-Account mit Server-Lizenz."
 else
-    warn "HytaleServer.jar nicht gefunden — manueller Download nötig"
+    success "Hytale Server bereit: ${HYTALE_DIR}/Server/HytaleServer.jar"
 fi
 
 chown -R "${HYTALE_USER}:${HYTALE_USER}" "${HYTALE_DIR}"
@@ -180,19 +180,21 @@ systemctl enable hyos-dashboard 2>/dev/null || true
 success "systemd Service: hyos-dashboard"
 
 # --- Starten ---
-if [ -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
-    systemctl start hytale-server 2>/dev/null || warn "Hytale Server Start fehlgeschlagen (Auth nötig?)"
-fi
-systemctl start hyos-dashboard 2>/dev/null || warn "HyOS Dashboard Start fehlgeschlagen"
-
 chown -R "${HYTALE_USER}:${HYTALE_USER}" "${HYTALE_DIR}" "${HYOS_DIR}"
 
-info ""
-success "=== Installation abgeschlossen ==="
-info "Hytale Server: Port ${HYTALE_PORT}/udp"
-info "HyOS Dashboard: http://localhost:${HYOS_PORT}"
-info ""
-info "WICHTIG: Nach erstem Start muss der Server authentifiziert werden:"
-info "  1. journalctl -u hytale-server -f"
-info "  2. Im Log erscheint: /auth login device"
-info "  3. Code auf https://accounts.hytale.com/device eingeben"
+if [ -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
+    systemctl start hytale-server 2>/dev/null || warn "Hytale Server Start fehlgeschlagen"
+    systemctl start hyos-dashboard 2>/dev/null || warn "HyOS Dashboard Start fehlgeschlagen"
+    info ""
+    success "=== Installation abgeschlossen ==="
+    info "Hytale Server: Port ${HYTALE_PORT}/udp"
+    info "HyOS Dashboard: http://localhost:${HYOS_PORT}"
+else
+    systemctl start hyos-dashboard 2>/dev/null || true
+    info ""
+    success "=== Grundinstallation abgeschlossen ==="
+    info "Java, Downloader und HyOS Dashboard sind installiert."
+    info "HyOS Dashboard: http://localhost:${HYOS_PORT}"
+    info ""
+    warn "Hytale Server-Dateien fehlen noch — siehe Anleitung oben."
+fi
