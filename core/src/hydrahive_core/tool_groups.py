@@ -79,6 +79,16 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
             "wks_file_write", "wks_shell_exec",
         }),
     ),
+    # Remote Server (Claude Code Mode)
+    (
+        ("server", "remote", "ssh", "deploy", "nginx", "apache",
+         "install ", "konfigur", "administr", "wartung", "backup",
+         "zertifikat", "certbot", "firewall", "ufw", "iptables"),
+        frozenset({
+            "server_shell", "server_file_read", "server_file_write",
+            "server_file_list", "server_file_search", "server_file_patch",
+        }),
+    ),
     # Skills
     (
         ("skill", "fähigkeit", "lern", "wissen speich", "prozedur"),

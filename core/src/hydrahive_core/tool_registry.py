@@ -4882,6 +4882,11 @@ TOOL_GROUPS: dict[str, dict] = {
         "icon": "monitor",
         "tools": ["read_system_file", "write_system_file", "wks_shell_exec", "wks_file_read", "wks_file_write"],
     },
+    "remote_server": {
+        "label": "Remote-Server (SSH)",
+        "icon": "server",
+        "tools": ["server_shell", "server_file_read", "server_file_write", "server_file_list", "server_file_search", "server_file_patch"],
+    },
     "communication": {
         "label": "Kommunikation",
         "icon": "mail",
