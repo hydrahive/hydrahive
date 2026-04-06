@@ -824,7 +824,7 @@ class Orchestrator:
                                 else:
                                     repeated_signature_count = 0
                                 last_signature = signature
-                                if repeated_signature_count >= 3:
+                                if repeated_signature_count >= 4:  # #359: 3→4, weniger aggressiv
                                     final = await self._finalize_tool_loop_response(
                                         boss_cfg,
                                         cur_messages,
@@ -996,7 +996,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 3:
+                            if repeated_tool_signature_count >= 4:  # #359: weniger aggressiv
                                 kwargs_final = dict(kwargs)
                                 kwargs_final.pop("tools", None)
                                 kwargs_final["messages"] = filtered + [
@@ -1227,7 +1227,7 @@ class Orchestrator:
                             else:
                                 repeated_tool_signature_count = 0
                             last_tool_signature = signature
-                            if repeated_tool_signature_count >= 3:
+                            if repeated_tool_signature_count >= 4:  # #359: weniger aggressiv
                                 loop_messages.append({
                                     "role": "user",
                                     "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",

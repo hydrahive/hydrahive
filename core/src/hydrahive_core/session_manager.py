@@ -192,9 +192,8 @@ class SessionManager:
         self._locks: dict[str, asyncio.Lock] = {}   # project_id → Lock
 
     def _get_lock(self, project_id: str) -> asyncio.Lock:
-        if project_id not in self._locks:
-            self._locks[project_id] = asyncio.Lock()
-        return self._locks[project_id]
+        """Thread-safe Lock pro Projekt (#354)."""
+        return self._locks.setdefault(project_id, asyncio.Lock())
 
     # ------------------------------------------------------------------ public
 

@@ -1053,7 +1053,7 @@ def _create_personal_agent(username: str, group: str = "standard") -> str:
         llm_raw = json.loads(Path("/etc/hydrahive/llm_config.json").read_text())
         providers = llm_raw.get("providers", {})
         if providers.get("claude_max", {}).get("enabled"):
-            model = "claude-haiku-4-5-20251001"
+            model = "claude-sonnet-4-6"
         elif providers.get("openai", {}).get("enabled"):
             model = "gpt-4o-mini"
         elif providers.get("ollama", {}).get("enabled"):
