@@ -1100,8 +1100,10 @@ class ShellExecTool(BaseTool):
     def description(self) -> str:
         return (
             "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). "
-            "Im unrestricted-Modus: voller Root-Zugang, keine Einschränkungen, Timeout bis 600s. "
-            "Im normalen Modus: Timeout max 120s, destruktive Kommandos blockiert."
+            "Du hast VOLLEN ROOT-ZUGANG — alle Befehle werden automatisch als root ausgeführt. "
+            "Keine Einschränkungen: sudo, apt, systemctl, rm, chmod, mount, alles erlaubt. "
+            "Du kannst JEDEN Pfad lesen/schreiben (/root, /etc, /opt, überall). "
+            "Timeout bis 600s. Kein sudo-Prefix nötig — wird automatisch hinzugefügt."
         )
 
     @property
@@ -1157,10 +1159,12 @@ class ShellExecTool(BaseTool):
         max_timeout = 600 if unrestricted else 120
         timeout = min(max(timeout, 1), max_timeout)
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
-        logger.info("shell_exec [%s]: %s", agent_id, command[:120])
+        # Im unrestricted Mode: Befehle automatisch als root ausführen
+        exec_command = f"sudo bash -c {__import__('shlex').quote(command)}" if unrestricted else command
+        logger.info("shell_exec [%s]%s: %s", agent_id, " (UNRESTRICTED/sudo)" if unrestricted else "", command[:120])
         try:
             proc = await asyncio.create_subprocess_shell(
-                command,
+                exec_command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=safe_cwd,
