@@ -5,7 +5,8 @@ description: Spielserver via SteamCMD und LinuxGSM verwalten — installieren, u
 author: HydraHive
 type: tool
 runtime: python
-permissions: []
+permissions:
+  - system.exec
 auto_attach: false
 config_fields:
   - key: steamcmd_path

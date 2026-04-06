@@ -5,7 +5,8 @@ description: Valheim Dedicated Server überwachen und verwalten — Status, Spie
 author: HydraHive
 type: tool
 runtime: python
-permissions: []
+permissions:
+  - system.exec
 auto_attach: false
 config_fields:
   - key: host
