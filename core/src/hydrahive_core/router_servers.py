@@ -171,14 +171,18 @@ def register_server_routes(
         if not p.exists():
             raise HTTPException(404, f"Server '{server_id}' nicht gefunden")
         srv = json.loads(p.read_text())
+        # Server-eigenen Key oder WKS-Key des Users als Fallback
         key_path = SERVERS_KEYS_DIR / server_id
-        if not key_path.exists():
+        wks_key = Path("/etc/hydrahive/wks_keys/admin")
+        if not key_path.exists() and not wks_key.exists():
             return {"ok": False, "error": "Kein SSH-Key vorhanden"}
+        use_key = str(key_path) if key_path.exists() else str(wks_key)
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ssh", "-i", str(key_path),
+                "ssh", "-i", use_key,
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=yes",
                 "-p", str(srv.get("ssh_port", 22)),
                 f"{srv['ssh_user']}@{srv['ip']}",
                 "echo ok",
