@@ -90,6 +90,37 @@ def register_agent_admin_routes(
     logger,
     load_agent_config_direct,
 ) -> None:
+    @admin_router.get("/agent-templates")
+    def list_agent_templates(_a: tuple = Depends(require_admin)):
+        """Verfügbare Agent-Vorlagen aus installer/default-agents/."""
+        import yaml as _yaml
+        templates_dir = Path("/opt/hydrahive/installer/default-agents")
+        if not templates_dir.exists():
+            return {"templates": []}
+        templates = []
+        for agent_dir in sorted(templates_dir.iterdir()):
+            yaml_path = agent_dir / "agent.yaml"
+            if not yaml_path.exists():
+                continue
+            try:
+                cfg = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+                soul = ""
+                soul_path = agent_dir / "soul.md"
+                if soul_path.exists():
+                    soul = soul_path.read_text(encoding="utf-8").strip()[:500]
+                templates.append({
+                    "id": cfg.get("id", agent_dir.name),
+                    "identity": cfg.get("identity", agent_dir.name),
+                    "type": cfg.get("type", "specialist"),
+                    "model": cfg.get("llm", {}).get("model", ""),
+                    "tools": cfg.get("tools", []),
+                    "soul_preview": soul[:200] + "..." if len(soul) > 200 else soul,
+                    "description": soul.split("\n")[0] if soul else "",
+                })
+            except Exception as e:
+                logger.debug("Template %s parse error: %s", agent_dir.name, e)
+        return {"templates": templates}
+
     @admin_router.post("/agents", status_code=201)
     async def create_agent(req: CreateAgentRequest, _a: tuple = Depends(require_admin)):
         import asyncio as _asyncio

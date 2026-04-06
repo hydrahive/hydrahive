@@ -133,6 +133,8 @@ function AgentsCrudTab() {
   const logBottomRef = useRef<HTMLDivElement>(null);
   const logIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [confirmState, setConfirmState] = useState<{action: () => void; title: string; message: string} | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<{id:string;identity:string;type:string;model:string;tools:string[];description:string}[]>([]);
 
   async function load() {
     try {
@@ -214,6 +216,30 @@ function AgentsCrudTab() {
     setEditId(null);
     setSaveErr("");
     setAgentPlugins([]);
+    setShowForm(true);
+  }
+
+  async function openTemplates() {
+    try {
+      const d = await api.get<{templates: typeof templates}>("/agent-templates");
+      setTemplates(d.templates);
+    } catch (e) { console.error("Failed to load templates", e); }
+    setShowTemplates(true);
+  }
+
+  function applyTemplate(t: typeof templates[0]) {
+    setForm({
+      ...EMPTY_FORM,
+      id: "",
+      type: t.type,
+      identity: t.identity,
+      model: t.model || EMPTY_FORM.model,
+      tools: [...t.tools],
+    });
+    setEditId(null);
+    setSaveErr("");
+    setAgentPlugins([]);
+    setShowTemplates(false);
     setShowForm(true);
   }
 
@@ -753,7 +779,10 @@ function AgentsCrudTab() {
         <div className="section-card py-14 text-center">
           <Bot className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-4 text-sm text-muted-foreground">{t("agents.noRuntime")}</p>
-          {isAdmin && <button onClick={openNew} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"><Plus className="h-4 w-4" />{t("agents.newAgent")}</button>}
+          {isAdmin && <div className="mt-4 flex gap-2">
+            <button onClick={openNew} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"><Plus className="h-4 w-4" />{t("agents.newAgent")}</button>
+            <button onClick={openTemplates} className="inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm transition hover:bg-accent">Vorlage verwenden</button>
+          </div>}
         </div>
       )}
 
@@ -959,6 +988,38 @@ function AgentsCrudTab() {
       onCancel={() => setConfirmState(null)}
       variant="danger"
     />
+
+    {/* Template-Modal (#369) */}
+    {showTemplates && (
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowTemplates(false)}>
+        <div className="bg-background rounded-2xl border shadow-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <h3 className="text-lg font-semibold mb-4">Agent aus Vorlage erstellen</h3>
+          {templates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Keine Vorlagen verfügbar.</p>
+          ) : (
+            <div className="space-y-2">
+              {templates.map(t => (
+                <button key={t.id} onClick={() => applyTemplate(t)}
+                  className="w-full text-left rounded-xl border p-3 hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm">{t.identity}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t.type}</span>
+                  </div>
+                  {t.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>}
+                  <div className="flex gap-1 mt-1.5 flex-wrap">
+                    {t.tools.slice(0, 5).map(tool => (
+                      <span key={tool} className="text-[10px] font-mono px-1 py-0.5 rounded bg-muted/50 text-muted-foreground">{tool}</span>
+                    ))}
+                    {t.tools.length > 5 && <span className="text-[10px] text-muted-foreground">+{t.tools.length - 5}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setShowTemplates(false)} className="mt-4 w-full rounded-xl border py-2 text-sm hover:bg-muted">Abbrechen</button>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
