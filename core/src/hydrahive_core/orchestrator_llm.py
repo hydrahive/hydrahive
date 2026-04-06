@@ -806,13 +806,18 @@ async def _llm_call_single(
 
     resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True, timeout=300))
 
-    # Cache-Usage loggen (Anthropic Prompt Caching)
+    # Cache-Usage loggen (#351: Anthropic + OpenAI Prompt Caching)
     try:
         u = getattr(resp, "usage", None)
         if u:
+            # Anthropic: cache_creation_input_tokens / cache_read_input_tokens
             cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
             cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
             input_tok   = getattr(u, "prompt_tokens", 0) or 0
+            # OpenAI: prompt_tokens_details.cached_tokens
+            details = getattr(u, "prompt_tokens_details", None)
+            if details and not cache_read:
+                cache_read = getattr(details, "cached_tokens", 0) or 0
             if cache_write or cache_read:
                 logger.info(
                     "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",

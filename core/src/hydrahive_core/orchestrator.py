@@ -42,6 +42,7 @@ from .orchestrator_llm import (
     _openai_codex_call,
     _llm_call_single as _llm_call_single_fn,
     _llm_call as _llm_call_fn,
+    _apply_cache_control,
     check_llm_provider_available,
 )
 from .orchestrator_context import (
@@ -1130,7 +1131,9 @@ class Orchestrator:
                         # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
                         import json as _json2
                         model, api_base = self._resolve_model(_model_name, boss_cfg.llm.ollama_base_url)
-                        loop_messages = list(messages)
+                        # #351: Prompt Caching — cache_control auf System-Prompt + stabile History
+                        _is_anthropic = model.startswith(("anthropic/", "claude-"))
+                        loop_messages = _apply_cache_control(list(messages), _is_anthropic)
                         last_tool_signature: tuple[str, ...] | None = None
                         repeated_tool_signature_count = 0
                         _tools_disabled = False  # wird gesetzt wenn Modell keine Tools unterstützt
@@ -1142,6 +1145,7 @@ class Orchestrator:
                                 "temperature": boss_cfg.llm.temperature,
                                 "max_tokens":  boss_cfg.llm.max_tokens,
                                 "stream":      True,
+                                "stream_options": {"include_usage": True},  # #351: Cache-Usage im Stream
                             }
                             if api_base:
                                 kwargs["api_base"] = api_base
