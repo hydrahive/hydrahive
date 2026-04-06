@@ -116,11 +116,16 @@ def register_server_routes(
         key_path = SERVERS_KEYS_DIR / sid
         SERVERS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
         if req.use_wks_key:
-            # WKS-Key des Admin-Users kopieren/verlinken
+            # WKS-Key des eingeloggten Users kopieren
             wks_keys_dir = Path("/etc/hydrahive/wks_keys")
             wks_key = None
-            if wks_keys_dir.exists():
-                for f in wks_keys_dir.iterdir():
+            # Versuche: Username aus Auth, dann "admin", dann erster vorhandener Key
+            for candidate in [req.id.split("-")[-1] if "-" in (req.id or "") else "", "admin"]:
+                if candidate and (wks_keys_dir / candidate).exists():
+                    wks_key = wks_keys_dir / candidate
+                    break
+            if not wks_key and wks_keys_dir.exists():
+                for f in sorted(wks_keys_dir.iterdir()):
                     if f.is_file() and not f.name.endswith(".pub"):
                         wks_key = f
                         break
