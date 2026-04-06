@@ -109,7 +109,7 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
          "mount", "fdisk", "mkfs", "iptables", "ufw", "push", "office",
          "paket", "package", "update", "upgrade"),
         frozenset({
-            "shell_exec", "read_system_file", "write_system_file", "project_shell",
+            "shell_exec", "read_system_file", "write_system_file",
         }),
     ),
 ]
