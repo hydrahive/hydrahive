@@ -75,23 +75,41 @@ if [ ! -f "${HYTALE_DIR}/hytale-downloader-linux-${ARCH}" ]; then
     success "Hytale Downloader installiert"
 fi
 
-# Server-Dateien: Hytale braucht OAuth-Auth für den Download.
-# Der Downloader ist interaktiv — kann nicht in einem Script laufen.
-# User muss den Download manuell starten.
+# Server-Dateien: Hytale Downloader nutzt OAuth Device-Flow.
+# Er gibt einen Link + Code aus → User klickt den Link im Browser,
+# authentifiziert sich → Downloader fährt automatisch fort.
+# Kein User-Input im Terminal nötig!
 if [ ! -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
-    warn "Hytale Server-Dateien müssen manuell heruntergeladen werden!"
+    info "Starte Hytale Server-Download (OAuth-Authentifizierung nötig)..."
     info ""
-    info "  1. SSH auf diesen Server: ssh user@$(hostname -I | awk '{print $1}')"
-    info "  2. sudo -u ${HYTALE_USER} bash"
-    info "  3. cd ${HYTALE_DIR}"
-    info "  4. ./hytale-downloader-linux-${ARCH}"
-    info "  5. OAuth-Login durchführen (Code auf https://accounts.hytale.com/device)"
-    info "  6. Archiv entpacken: unzip *.zip"
-    info "  7. sudo systemctl start hytale-server"
+    info "═══════════════════════════════════════════════════════════════"
+    info "  WICHTIG: Gleich erscheint ein Link + Code."
+    info "  Öffne den Link im Browser, melde dich mit deinem"
+    info "  Hytale-Account an und gib den Code ein."
+    info "  Der Download startet dann automatisch!"
+    info "═══════════════════════════════════════════════════════════════"
     info ""
-    info "Der Downloader braucht einen Hytale-Account mit Server-Lizenz."
-else
+    cd "${HYTALE_DIR}"
+    # Timeout 15min — genug Zeit für OAuth-Login
+    timeout 900 sudo -u "${HYTALE_USER}" ./hytale-downloader-linux-${ARCH} 2>&1 || {
+        warn "Downloader beendet (Timeout oder Fehler)"
+        warn "Falls Auth fehlgeschlagen: Extension nochmal installieren"
+    }
+    # Entpacken falls ZIP heruntergeladen wurde
+    ARCHIVE=$(ls -t "${HYTALE_DIR}"/*.zip 2>/dev/null | grep -v "hytale-downloader" | head -1)
+    if [ -n "${ARCHIVE}" ]; then
+        info "Entpacke ${ARCHIVE}..."
+        cd "${HYTALE_DIR}"
+        unzip -o "${ARCHIVE}" 2>/dev/null || true
+        success "Server-Dateien entpackt"
+    fi
+fi
+
+if [ -f "${HYTALE_DIR}/Server/HytaleServer.jar" ]; then
     success "Hytale Server bereit: ${HYTALE_DIR}/Server/HytaleServer.jar"
+else
+    warn "Server-Dateien nicht gefunden — Auth war möglicherweise nicht erfolgreich."
+    warn "Extension nochmal installieren um den Download zu wiederholen."
 fi
 
 chown -R "${HYTALE_USER}:${HYTALE_USER}" "${HYTALE_DIR}"
