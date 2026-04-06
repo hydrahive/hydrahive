@@ -112,6 +112,14 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
             "shell_exec", "read_system_file", "write_system_file",
         }),
     ),
+    # Vision / Bildanalyse
+    (
+        ("bild", "image", "screenshot", "foto", "photo", "png", "jpg", "webp",
+         "analysier", "zeig", "ocr", "vision", "upload"),
+        frozenset({
+            "analyze_image",
+        }),
+    ),
 ]
 
 

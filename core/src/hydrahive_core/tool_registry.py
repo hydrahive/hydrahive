@@ -4847,6 +4847,130 @@ class WriteScratchpadTool(BaseTool):
         return {"saved": True, "name": safe, "total_nodes": len(nodes)}
 
 
+class AnalyzeImageTool(BaseTool):
+    """Analysiert Bilder (PNG, JPG, WebP, GIF) via Claude Vision API."""
+
+    @property
+    def id(self) -> str:   return "analyze_image"
+    @property
+    def name(self) -> str: return "Bild analysieren"
+    @property
+    def description(self) -> str:
+        return (
+            "Analysiert ein oder mehrere Bilder aus dem Dateisystem via Claude Vision. "
+            "Unterstützt PNG, JPG, WebP, GIF. Liest die Datei(en), kodiert sie als base64 "
+            "und schickt sie an die Vision-API. Gibt die Analyse als Text zurück. "
+            "Für Screenshots, Diagramme, Fotos, Code-Screenshots etc."
+        )
+
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["system.read"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type":        "array",
+                    "items":       {"type": "string"},
+                    "description": "Liste von Dateipfaden zu den Bildern (absolut oder relativ zu /projects/)",
+                },
+                "question": {
+                    "type":        "string",
+                    "description": "Was soll analysiert werden? Z.B. 'Was zeigt dieses Bild?', 'Extrahiere den Text', 'Beschreibe die UI'",
+                },
+            },
+            "required": ["paths"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        paths: list[str], question: str = "Analysiere dieses Bild detailliert. Beschreibe was du siehst.",
+        **kwargs,
+    ) -> dict:
+        import base64
+
+        MIME_MAP = {
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".webp": "image/webp", ".gif": "image/gif",
+        }
+        MAX_IMAGES = 12
+        MAX_SIZE = 10 * 1024 * 1024  # 10 MB pro Bild
+
+        # Bilder laden
+        image_blocks = []
+        errors = []
+        for raw_path in paths[:MAX_IMAGES]:
+            p = Path(raw_path)
+            if not p.is_absolute():
+                for base in [PROJECTS_ROOT / project_id, Path("/opt/hydrahive"), Path("/tmp")]:
+                    candidate = base / raw_path
+                    if candidate.exists():
+                        p = candidate
+                        break
+            if not p.exists():
+                errors.append(f"Nicht gefunden: {raw_path}")
+                continue
+            suffix = p.suffix.lower()
+            mime = MIME_MAP.get(suffix)
+            if not mime:
+                errors.append(f"Kein Bildformat: {raw_path} ({suffix})")
+                continue
+            if p.stat().st_size > MAX_SIZE:
+                errors.append(f"Zu groß (>10MB): {raw_path}")
+                continue
+
+            data = base64.standard_b64encode(p.read_bytes()).decode("ascii")
+            image_blocks.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": mime, "data": data},
+            })
+
+        if not image_blocks:
+            return {"error": "Keine gültigen Bilder gefunden", "details": errors}
+
+        # Claude Vision API Call über OAuth
+        from .orchestrator_llm import _load_claude_oauth_token
+        token = _load_claude_oauth_token()
+        if not token:
+            return {"error": "Kein Claude OAuth Token verfügbar — Vision-Analyse nicht möglich"}
+
+        try:
+            import anthropic as _anthropic
+            client = _anthropic.AsyncAnthropic(
+                api_key="",
+                auth_token=token,
+                timeout=120.0,
+                default_headers={
+                    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,prompt-caching-2024-07-31",
+                    "user-agent":     "claude-cli/2.1.62",
+                    "x-app":          "cli",
+                },
+            )
+
+            content = image_blocks + [{"type": "text", "text": question}]
+            resp = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=4096,
+                messages=[{"role": "user", "content": content}],
+            )
+
+            analysis = resp.content[0].text if resp.content else ""
+            return {
+                "analysis": analysis,
+                "images_analyzed": len(image_blocks),
+                "errors": errors if errors else None,
+                "model": "claude-haiku-4-5",
+                "tokens": {"input": resp.usage.input_tokens, "output": resp.usage.output_tokens},
+            }
+
+        except Exception as e:
+            logger.error("analyze_image Fehler: %s", e)
+            return {"error": f"Vision-API Fehler: {e}", "details": errors}
+
+
 # ============================================================= Tool-Gruppen
 
 TOOL_GROUPS: dict[str, dict] = {
@@ -4888,7 +5012,7 @@ TOOL_GROUPS: dict[str, dict] = {
     "system": {
         "label": "System & WKS",
         "icon": "monitor",
-        "tools": ["read_system_file", "write_system_file", "wks_shell_exec", "wks_file_read", "wks_file_write"],
+        "tools": ["read_system_file", "write_system_file", "analyze_image", "wks_shell_exec", "wks_file_read", "wks_file_write"],
     },
     "remote_server": {
         "label": "Remote-Server (SSH)",
@@ -5058,6 +5182,7 @@ class GetSecretTool(BaseTool):
 
 registry.register(ListDirectoryTool())
 registry.register(GetSecretTool())
+registry.register(AnalyzeImageTool())
 
 
 # ============================================================= Admin Tools (Danger)
