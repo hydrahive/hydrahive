@@ -472,6 +472,71 @@ def register_system_routes(
             },
         }
 
+    @admin_router.post("/admin/agents/{agent_id}/health-check")
+    async def agent_health_check(agent_id: str):
+        """LLM-Ping: prüft ob Agent antworten kann (#366)."""
+        cfg = discovery.get(agent_id)
+        if not cfg:
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        from .orchestrator_llm import _llm_call as _lc
+        try:
+            resp = await asyncio.wait_for(
+                _lc(cfg, [{"role": "user", "content": "Antworte nur mit OK."}], None),
+                timeout=15.0,
+            )
+            text = resp.choices[0].message.content or ""
+            return {"agent_id": agent_id, "healthy": True, "response": text[:50], "model": cfg.llm.model}
+        except asyncio.TimeoutError:
+            return {"agent_id": agent_id, "healthy": False, "error": "Timeout (15s)"}
+        except Exception as e:
+            return {"agent_id": agent_id, "healthy": False, "error": str(e)[:100]}
+
+    @admin_router.get("/admin/agents/{agent_id}/debug")
+    def get_agent_debug(agent_id: str):
+        """Debug-Info für einen Agent: Config, Tools, System-Prompt-Größe, letzte Session (#371)."""
+        cfg = discovery.get(agent_id)
+        if not cfg:
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        from .token_estimation import estimate_tokens
+        # System-Prompt Größe schätzen
+        sys_prompt_size = 0
+        if cfg.agent_dir:
+            soul_path = cfg.agent_dir / (cfg.soul or "soul.md")
+            if soul_path.exists():
+                sys_prompt_size += estimate_tokens(soul_path.read_text(encoding="utf-8"))
+            memory_dir = cfg.agent_dir / "memory"
+            if memory_dir.exists():
+                for f in memory_dir.glob("*.md"):
+                    sys_prompt_size += estimate_tokens(f.read_text(encoding="utf-8"))
+        # Letzte Session-Stats
+        from .orchestrator_context import _context_window_for_model, _history_token_budget, _RESERVE_TOKENS_FLOOR
+        ctx_window = _context_window_for_model(cfg.llm.model)
+        hist_budget = _history_token_budget(cfg.llm.model, system_prompt_tokens=sys_prompt_size)
+        # Aktive Session
+        session = sessions.get_active(agent_id) or (hasattr(runtime, '_agent_sessions') and None)
+        session_msgs = len(session.messages) if session else 0
+        return {
+            "agent_id": agent_id,
+            "identity": cfg.identity,
+            "model": cfg.llm.model,
+            "type": cfg.type,
+            "execution_mode": cfg.execution_modes.default if cfg.execution_modes else "legacy",
+            "tools": cfg.tools,
+            "tools_count": len(cfg.tools),
+            "token_budget": {
+                "context_window": ctx_window,
+                "system_prompt_estimate": sys_prompt_size,
+                "reserve_floor": _RESERVE_TOKENS_FLOOR,
+                "history_budget": hist_budget,
+                "available_for_response": ctx_window - sys_prompt_size - hist_budget - _RESERVE_TOKENS_FLOOR,
+            },
+            "session": {
+                "active": session is not None,
+                "messages": session_msgs,
+            },
+            "status": runtime.status_all().get(agent_id, {}),
+        }
+
     @admin_router.post("/admin/update/trigger")
     async def trigger_update():
         async def _run_and_notify():

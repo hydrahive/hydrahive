@@ -82,6 +82,13 @@ async def _execute_tool(
     effective_pid = args.pop("project_id", None) or project_id
     if tool is None:
         return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}
+
+    # #364: Tool-Result Cache für idempotente Read-Tools
+    cache_result = _tool_cache_get(tool_name, args)
+    if cache_result is not None:
+        logger.debug("Tool cache hit: %s", tool_name)
+        return cache_result
+
     agent_permissions = list(boss_cfg.effective_permissions(execution_mode) or [])
     # Only pass _agent_permissions and _execution_mode if the tool's execute method accepts **kwargs
     import inspect
@@ -91,9 +98,52 @@ async def _execute_tool(
     if has_kwargs:
         extra["_agent_permissions"] = agent_permissions
         extra["_execution_mode"] = execution_mode or boss_cfg.effective_execution_mode(execution_mode)
-    return await tool.execute(
+    result = await tool.execute(
         agent_id=boss_cfg.id,
         project_id=effective_pid,
         **extra,
         **args,
     )
+
+    # Cache nur idempotente Read-Tools
+    _tool_cache_put(tool_name, args, result)
+    return result
+
+
+# ---- Tool-Result Cache (#364) ----
+import time as _time
+import hashlib as _hashlib
+
+_CACHEABLE_TOOLS = frozenset({"file_read", "read_system_file", "list_directory", "git_status", "git_diff"})
+_tool_result_cache: dict[str, tuple[float, dict]] = {}
+_TOOL_CACHE_TTL = 30  # 30 Sekunden — kurz genug dass Änderungen sichtbar werden
+_TOOL_CACHE_MAX = 200
+
+
+def _tool_cache_key(tool_name: str, args: dict) -> str:
+    import json
+    raw = f"{tool_name}:{json.dumps(args, sort_keys=True)}"
+    return _hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
+def _tool_cache_get(tool_name: str, args: dict):
+    if tool_name not in _CACHEABLE_TOOLS:
+        return None
+    key = _tool_cache_key(tool_name, args)
+    entry = _tool_result_cache.get(key)
+    if entry and (_time.time() - entry[0]) < _TOOL_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _tool_cache_put(tool_name: str, args: dict, result: dict):
+    if tool_name not in _CACHEABLE_TOOLS:
+        return
+    if isinstance(result, dict) and result.get("error"):
+        return  # Fehler nicht cachen
+    key = _tool_cache_key(tool_name, args)
+    _tool_result_cache[key] = (_time.time(), result)
+    # Eviction
+    if len(_tool_result_cache) > _TOOL_CACHE_MAX:
+        oldest = min(_tool_result_cache, key=lambda k: _tool_result_cache[k][0])
+        del _tool_result_cache[oldest]
