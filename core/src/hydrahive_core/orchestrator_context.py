@@ -209,6 +209,25 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
 
+    # #350: Session-Continuity — letzte Session nach /clear automatisch injizieren
+    if boss_cfg.agent_dir:
+        last_session_path = boss_cfg.agent_dir / "memory" / "_last_session.md"
+        if last_session_path.exists():
+            import os
+            # Nur injizieren wenn < 24h alt (stale prevention)
+            age_hours = (time.time() - os.path.getmtime(last_session_path)) / 3600
+            if age_hours < 24:
+                last_text = last_session_path.read_text(encoding="utf-8").strip()
+                if last_text:
+                    if len(last_text) > 3000:
+                        last_text = last_text[:3000] + "\n…[gekürzt]"
+                    parts.append(
+                        "## Letzte Session (vor Clear)\n\n"
+                        "Dieser Kontext stammt aus der vorherigen Session. "
+                        "Nutze ihn als Hintergrund falls der User darauf Bezug nimmt.\n\n"
+                        + last_text
+                    )
+
     # Agenten-Quellen — URLs/Suchmaschinen die diesem Agenten zugewiesen sind
     if getattr(boss_cfg, "sources", None):
         src_lines = []
@@ -553,34 +572,31 @@ async def _compact_if_needed(
     project_id: str,
     boss_cfg,
     *,
-    keep_last: int = 6,
+    keep_last: int = 10,
 ) -> None:
     """
-    Mehrstufige Context-Kompaktierung (#47).
+    Mehrstufige Context-Kompaktierung (#47, #349 OpenClaw-Qualität).
 
-    Stufe 1 — Rolling Summary:
+    Stufe 1 — Rolling Summary (strukturiert):
       Wenn estimated_tokens > token_threshold: die ältesten Nachrichten (alles
       außer den letzten keep_last) werden per LLM zusammengefasst.
-      Eine bereits vorhandene Summary-Message wird dabei als Vorwissen
-      in den neuen Zusammenfassungs-Prompt eingebaut (Rolling-Kette).
+      Format: Goal / Constraints / Progress (Done/InProgress/Blocked)
 
     Stufe 2 — Meta-Summary:
-      Wenn nach Stufe 1 die Session immer noch > token_threshold ist
-      (z. B. keep_last-Nachrichten selbst sehr groß), wird die neue Summary
-      nochmal auf max 300 Token verdichtet.
+      Wenn nach Stufe 1 die Session immer noch > token_threshold ist,
+      wird die Summary auf max 300 Wörter verdichtet.
 
-    Threshold ist model-aware:
-      Claude/GPT-4/Gemini/Mistral-Large → 4000 estimated (~20k real)
-      Lokale/kleine Modelle             → 1000 estimated (~5k real)
+    Threshold (#349): erhöht auf 15k estimated (~40k real, wie OpenClaw).
+    keep_last: 10 Messages (vorher 6).
     """
     from .orchestrator_llm import _llm_with_retry
     from .session_manager import MessageRole
 
     model = boss_cfg.llm.model.lower()
     if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5")):
-        token_threshold = 4_000
+        token_threshold = 15_000  # #349: 15k estimated ≈ 40k real (OpenClaw: softThresholdTokens=40000)
     else:
-        token_threshold = 1_000
+        token_threshold = 4_000
 
     # openai-codex/ ist ein Custom-Provider — litellm kennt ihn nicht.
     # Für Kompaktierung auf Claude Haiku fallbacken.
@@ -612,6 +628,17 @@ async def _compact_if_needed(
         for m in to_summarize
     )
 
+    # #349: Strukturierte Summary im OpenClaw-Format
+    _structured_format = (
+        "Erstelle eine strukturierte Zusammenfassung in diesem Format:\n\n"
+        "## Ziel\nWas ist das übergeordnete Ziel der Konversation?\n\n"
+        "## Kontext & Entscheidungen\nWichtige Fakten, Constraints, getroffene Entscheidungen.\n\n"
+        "## Fortschritt\n### Erledigt\n- [x] Was wurde abgeschlossen?\n\n"
+        "### In Arbeit\n- [ ] Woran wird gerade gearbeitet?\n\n"
+        "### Blockiert\n- **Problem**: Was blockiert und warum?\n\n"
+        "Antworte NUR mit der Zusammenfassung, keine Einleitung oder Erklärung."
+    )
+
     if existing_summary:
         user_content = (
             f"BISHERIGE ZUSAMMENFASSUNG:\n{existing_summary}\n\n"
@@ -619,16 +646,15 @@ async def _compact_if_needed(
         )
         system_instruction = (
             "Du bekommst eine bisherige Zusammenfassung plus neue Nachrichten. "
-            "Erstelle eine aktualisierte, vollständige Zusammenfassung. "
-            "Behalte alle wichtigen Fakten, Entscheidungen und offenen Aufgaben. "
-            "Antworte nur mit der Zusammenfassung, keine Einleitung."
+            "Aktualisiere die Zusammenfassung — behalte alles Wichtige, "
+            "verschiebe erledigte Punkte nach 'Erledigt'.\n\n"
+            + _structured_format
         )
     else:
         user_content = history_lines
         system_instruction = (
-            "Fasse die folgende Konversation prägnant zusammen. "
-            "Behalte alle wichtigen Fakten, Entscheidungen und Aufgaben. "
-            "Antworte nur mit der Zusammenfassung, keine Einleitung."
+            "Fasse die folgende Konversation zusammen.\n\n"
+            + _structured_format
         )
 
     summary_prompt = [
@@ -640,7 +666,7 @@ async def _compact_if_needed(
         resp = await _llm_with_retry(lambda: litellm.acompletion(
             model=compact_model,
             messages=summary_prompt,
-            max_tokens=700,
+            max_tokens=1200,
             drop_params=True,
         ))
         summary = resp.choices[0].message.content or ""
@@ -685,9 +711,9 @@ async def _compact_if_needed(
     except Exception as e:
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
         current_tokens = sessions.estimated_tokens(project_id)
-        if current_tokens > 15_000:
+        if current_tokens > 40_000:
             logger.error(
-                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 15k)",
+                "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 40k)",
                 project_id, current_tokens,
             )
             await sessions.new_session(project_id)
