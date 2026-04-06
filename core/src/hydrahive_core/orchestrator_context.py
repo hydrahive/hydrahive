@@ -565,6 +565,56 @@ def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], lis
     return allowed, list(combined_blocked)
 
 
+def _pre_compact_memory_flush(boss_cfg, session, compact_model: str) -> None:
+    """Schreibt Kernfakten der Session ins Memory BEVOR kompaktiert wird.
+
+    So gehen wichtige Informationen nicht verloren auch wenn die
+    Compaction-Summary zu kurz ist oder der Agent /clear macht.
+    """
+    from .session_manager import MessageRole
+    from datetime import datetime, timezone
+
+    memory_dir = boss_cfg.agent_dir / "memory"
+    memory_dir.mkdir(exist_ok=True)
+
+    # Letzte User-Messages extrahieren (max 10)
+    user_msgs = []
+    for m in reversed(session.messages):
+        if m.role == MessageRole.USER and m.content.strip():
+            user_msgs.append(m.content[:200])
+            if len(user_msgs) >= 10:
+                break
+    user_msgs.reverse()
+
+    # Letzte Assistant-Messages (Kernentscheidungen)
+    asst_msgs = []
+    for m in reversed(session.messages):
+        if m.role == MessageRole.ASSISTANT and m.content.strip() and len(m.content) > 50:
+            asst_msgs.append(m.content[:300])
+            if len(asst_msgs) >= 5:
+                break
+    asst_msgs.reverse()
+
+    if not user_msgs:
+        return
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    content = f"# Pre-Compact Snapshot ({now})\n\n"
+    content += "## Letzte Aufgaben\n"
+    for msg in user_msgs:
+        content += f"- {msg}\n"
+    content += "\n## Letzte Antworten (Zusammenfassung)\n"
+    for msg in asst_msgs:
+        first_line = msg.split("\n")[0]
+        content += f"- {first_line}\n"
+
+    # In Memory schreiben (überschreibt vorherigen Snapshot)
+    snapshot_path = memory_dir / "_pre_compact_snapshot.md"
+    snapshot_path.write_text(content, encoding="utf-8")
+    snapshot_path.chmod(0o600)
+    logger.info("Pre-compact memory snapshot geschrieben für %s", boss_cfg.id)
+
+
 async def _compact_if_needed(
     sessions,
     project_id: str,
@@ -612,6 +662,13 @@ async def _compact_if_needed(
     session = sessions.get_active(project_id)
     if not session or len(session.messages) < 4:
         return
+
+    # Pre-Compact Memory Flush: Kontext ins Memory schreiben bevor er kompaktiert wird
+    if boss_cfg.agent_dir:
+        try:
+            _pre_compact_memory_flush(boss_cfg, session, compact_model)
+        except Exception as e:
+            logger.debug("Pre-compact memory flush failed: %s", e)
 
     # Vorhandene Summary-Message (Stufe-1-Kette) extrahieren
     existing_summary = ""
