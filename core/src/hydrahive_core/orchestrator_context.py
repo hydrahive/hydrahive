@@ -206,6 +206,30 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             + "\n".join(src_lines)
         )
 
+    # Zugewiesene Git-Repos — Credentials + Workflow-Info für Git-Tools
+    try:
+        from .repo_config import repos_for_agent
+        agent_repos = repos_for_agent(boss_cfg.id)
+        if agent_repos:
+            repo_lines = []
+            for repo in agent_repos:
+                clone_url = repo.url
+                if repo.token and "github.com" in repo.url:
+                    clone_url = repo.url.replace("https://", f"https://{repo.token}@")
+                repo_lines.append(
+                    f"- **{repo.name}** ({repo.provider}): {repo.url}\n"
+                    f"  Clone-URL (mit Token): `{clone_url}.git`\n"
+                    f"  Branch: `{repo.branch}` | Token: vorhanden"
+                )
+            parts.append(
+                "## Zugewiesene Git-Repos\n\n"
+                "Diese Repos sind dir zugewiesen. Nutze die Clone-URL mit Token für git push/pull.\n"
+                "Bei Anweisungen wie 'push' oder 'commit' nutze IMMER diese Repos — nicht nachfragen!\n\n"
+                + "\n".join(repo_lines)
+            )
+    except Exception as e:
+        logger.debug("Repo-Injection übersprungen: %s", e)
+
     # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
     _handbook_path = Path("/etc/hydrahive/system_handbook.md")
     if _handbook_path.exists():

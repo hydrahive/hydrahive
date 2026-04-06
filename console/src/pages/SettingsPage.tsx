@@ -10,16 +10,17 @@ import { VpnPage } from "@/pages/VpnPage";
 import { KasConfigPage } from "@/pages/KasConfigPage";
 import { BackupPage } from "@/pages/BackupPage";
 import { MigrationPage } from "@/pages/MigrationPage";
+import { ReposPage } from "@/pages/ReposPage";
 import { useTranslation } from "react-i18next";
 
-type TabId = "overview" | "llm" | "gitea" | "github" | "vpn" | "kas" | "backup" | "migration";
+type TabId = "overview" | "llm" | "gitea" | "github" | "repos" | "vpn" | "kas" | "backup" | "migration";
 
 export function SettingsPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   // #331: Tab immer direkt aus URL ableiten — kein eigener State
   const rawTab = searchParams.get("tab") as TabId | null;
-  const active: TabId = rawTab && ["overview","llm","gitea","github","vpn","kas","backup","migration"].includes(rawTab)
+  const active: TabId = rawTab && ["overview","llm","gitea","github","repos","vpn","kas","backup","migration"].includes(rawTab)
     ? rawTab : "overview";
   const setActive = useCallback((id: TabId) => {
     setSearchParams({ tab: id }, { replace: true });
@@ -30,6 +31,7 @@ export function SettingsPage() {
     { id: "llm",       label: t("settings.tabLlm", { defaultValue: "LLM" }),            icon: Cpu,              component: LlmConfigPage },
     { id: "gitea",     label: t("settings.tabGitea", { defaultValue: "Gitea" }),         icon: GitBranch,        component: GiteaConfigPage },
     { id: "github",    label: t("settings.tabGithub", { defaultValue: "GitHub" }),       icon: Github,           component: GitHubConfigPage },
+    { id: "repos",     label: "Repos",                                                    icon: GitBranch,        component: ReposPage },
     { id: "vpn",       label: t("settings.tabVpn", { defaultValue: "VPN" }),             icon: Network,          component: VpnPage },
     { id: "kas",       label: t("settings.tabKas"),                                       icon: Mail,             component: KasConfigPage },
     { id: "backup",    label: t("settings.tabBackup", { defaultValue: "Backup" }),       icon: Archive,          component: BackupPage },
