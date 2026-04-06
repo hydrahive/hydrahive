@@ -37,7 +37,7 @@ class AgentLlmPatchRequest(BaseModel):
 class IncomingMessage(BaseModel):
     content: str
     sender: str = "user"
-    execution_mode: Literal["safe", "elevated", "root"] | None = None
+    execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None
 
 
 _JOURNAL_TIMESTAMP_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)\b")

@@ -20,6 +20,7 @@ class CreateAgentRequest(BaseModel):
     allowed_agents: list[str] = Field(default_factory=list)
     sources: list[dict] = Field(default_factory=list)
     max_tool_rounds: int | None = None
+    execution_mode_default: str = "elevated"
     heartbeat_interval: str = "30s"
     heartbeat_timeout: str = "90s"
     heartbeat_on_failure: str = "restart"
@@ -58,6 +59,8 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         agent_data["soul"] = "./soul.md"
     if req.max_tool_rounds is not None:
         agent_data["max_tool_rounds"] = req.max_tool_rounds
+    if req.execution_mode_default in ("safe", "elevated", "root", "unrestricted"):
+        agent_data.setdefault("execution_modes", {})["default"] = req.execution_mode_default
     return agent_data
 
 

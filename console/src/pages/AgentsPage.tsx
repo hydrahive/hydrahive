@@ -42,6 +42,7 @@ const EMPTY_FORM = {
   allowed_agents: [] as string[],
   sources: [] as { name: string; url: string; description: string }[],
   max_tool_rounds: null as number | null,
+  execution_mode_default: "elevated" as string,
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
   heartbeat_on_failure: "restart",
@@ -240,6 +241,7 @@ function AgentsCrudTab() {
       allowed_agents: cfg?.allowed_agents ?? [],
       sources: cfg?.sources ?? [],
       max_tool_rounds: cfg?.max_tool_rounds ?? null,
+      execution_mode_default: cfg?.execution_modes?.default ?? "elevated",
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
       heartbeat_on_failure: cfg?.heartbeat?.on_failure ?? "restart",
@@ -573,6 +575,18 @@ function AgentsCrudTab() {
                   onChange={(e) => set("max_tool_rounds", e.target.value === "" ? null : parseInt(e.target.value))}
                   min={1} max={50} placeholder="Standard (6)"
                 />
+              </Field>
+              <Field label="Execution Mode" hint="Standard-Modus für diesen Agenten. Unrestricted = voller Root-Zugang, keine Blocklists.">
+                <select
+                  value={form.execution_mode_default}
+                  onChange={(e) => set("execution_mode_default", e.target.value)}
+                  className={`w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${form.execution_mode_default === "unrestricted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
+                >
+                  <option value="safe">Safe</option>
+                  <option value="elevated">Elevated</option>
+                  <option value="root">Root</option>
+                  <option value="unrestricted">⚠ Unrestricted (voller Zugang)</option>
+                </select>
               </Field>
             </div>
 

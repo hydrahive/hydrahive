@@ -1099,8 +1099,9 @@ class ShellExecTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). Timeout max 120s. "
-            "VERBOTEN: rm -rf, dd, mkfs, fdisk, Schreiben nach /opt/hydrahive/, systemctl stop hydrahive."
+            "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). "
+            "Im unrestricted-Modus: voller Root-Zugang, keine Einschränkungen, Timeout bis 600s. "
+            "Im normalen Modus: Timeout max 120s, destruktive Kommandos blockiert."
         )
 
     @property
@@ -1131,25 +1132,30 @@ class ShellExecTool(BaseTool):
     async def execute(
         self, agent_id: str, project_id: str,
         command: str, timeout: int = 30, cwd: str = "/tmp",
+        **kwargs,
     ) -> dict:
         import asyncio
 
-        blocked = _check_shell_blocklist(command)
-        if blocked:
-            logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
-            return {
-                "error":     f"Befehl blockiert: {blocked}",
-                "command":   command,
-                "exit_code": -1,
-                "blocked":   True,
-            }
+        unrestricted = kwargs.get("_execution_mode") == "unrestricted"
 
-        cwd_error = _validate_shell_cwd(cwd)
-        if cwd_error:
-            logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
-            return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
+        if not unrestricted:
+            blocked = _check_shell_blocklist(command)
+            if blocked:
+                logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
+                return {
+                    "error":     f"Befehl blockiert: {blocked}",
+                    "command":   command,
+                    "exit_code": -1,
+                    "blocked":   True,
+                }
 
-        timeout = min(max(timeout, 1), 120)
+            cwd_error = _validate_shell_cwd(cwd)
+            if cwd_error:
+                logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
+                return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
+
+        max_timeout = 600 if unrestricted else 120
+        timeout = min(max(timeout, 1), max_timeout)
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
         logger.info("shell_exec [%s]: %s", agent_id, command[:120])
         try:

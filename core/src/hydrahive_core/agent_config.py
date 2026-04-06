@@ -68,10 +68,11 @@ class ExecutionModesConfig(BaseModel):
     """
     model_config = {"extra": "ignore"}
 
-    default: Literal["safe", "elevated", "root"] = "safe"
+    default: Literal["safe", "elevated", "root", "unrestricted"] = "safe"
     safe: ExecutionModeProfile = Field(default_factory=ExecutionModeProfile)
     elevated: ExecutionModeProfile | None = None
     root: ExecutionModeProfile | None = None
+    unrestricted: ExecutionModeProfile | None = None
 
 
 class AgentSource(BaseModel):
@@ -113,8 +114,8 @@ class AgentConfig(BaseModel):
 
     def effective_execution_mode(
         self,
-        execution_mode: Literal["safe", "elevated", "root"] | None = None,
-    ) -> Literal["safe", "elevated", "root"] | None:
+        execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
+    ) -> Literal["safe", "elevated", "root", "unrestricted"] | None:
         """Aktiven Modus bestimmen, ohne Legacy-Agenten zu beeinflussen."""
         if self.execution_modes is None:
             return None
@@ -122,14 +123,18 @@ class AgentConfig(BaseModel):
 
     def effective_permissions(
         self,
-        execution_mode: Literal["safe", "elevated", "root"] | None = None,
+        execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
     ) -> list[str] | None:
         """Permissions fuer den aktiven Modus.
 
         None bedeutet Legacy-Verhalten: keine technische Permission-Filterung.
+        'unrestricted' gibt immer None zurück — kein Tool wird gefiltert.
         """
         mode = self.effective_execution_mode(execution_mode)
         if mode is None or self.execution_modes is None:
+            return None
+        # unrestricted = alles erlaubt, kein Filter
+        if mode == "unrestricted":
             return None
         profile = getattr(self.execution_modes, mode, None)
         if profile is None:

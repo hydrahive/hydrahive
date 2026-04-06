@@ -83,6 +83,7 @@ def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
         },
         "elevated": {"permissions": elevated_perms},
         "root": {"permissions": root_perms},
+        "unrestricted": {"permissions": []},
     }
 
 
@@ -94,7 +95,7 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None,
         execution_modes["default"] = defaults["default"]
         changed = True
 
-    for mode_name in ("safe", "elevated", "root"):
+    for mode_name in ("safe", "elevated", "root", "unrestricted"):
         profile = execution_modes.setdefault(mode_name, {})
         permissions = list(profile.get("permissions") or [])
         for permission in defaults[mode_name]["permissions"]:

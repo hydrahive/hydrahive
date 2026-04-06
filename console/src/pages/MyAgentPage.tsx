@@ -22,10 +22,11 @@ interface AgentCfg {
   allowed_agents?: string[];
   mcp_servers?:    string[];
   execution_modes?: {
-    default?: "safe" | "elevated" | "root";
+    default?: "safe" | "elevated" | "root" | "unrestricted";
     safe?: { permissions?: string[] };
     elevated?: { permissions?: string[] };
     root?: { permissions?: string[] };
+    unrestricted?: { permissions?: string[] };
   };
   soul?:           string;
 }
@@ -101,6 +102,7 @@ function modeSummary(cfg?: AgentCfg["execution_modes"]) {
     safe: cfg?.safe?.permissions?.length ?? 0,
     elevated: cfg?.elevated?.permissions?.length ?? 0,
     root: cfg?.root?.permissions?.length ?? 0,
+    unrestricted: "∞",
   };
   return { defaultMode, counts };
 }

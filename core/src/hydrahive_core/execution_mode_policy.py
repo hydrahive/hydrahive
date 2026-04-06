@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import HTTPException
 
-ExecutionMode = Literal["safe", "elevated", "root"]
+ExecutionMode = Literal["safe", "elevated", "root", "unrestricted"]
 
 
 def resolve_request_execution_mode(
@@ -27,8 +27,8 @@ def resolve_request_execution_mode(
         return None
 
     mode: ExecutionMode = requested_mode
-    if mode in {"elevated", "root"}:
-        # Persönliche Agenten: user darf elevated, nur root erfordert admin
+    if mode in {"elevated", "root", "unrestricted"}:
+        # Persönliche Agenten: user darf elevated, nur root/unrestricted erfordert admin
         if personal_agent and mode == "elevated" and role in {"user", "admin"}:
             pass
         elif role != "admin":
