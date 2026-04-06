@@ -44,18 +44,37 @@ _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "mistral":   32_000,
 }
 _MAX_HISTORY_SHARE = 0.30  # max 30% des Kontextfensters für History (OpenClaw-Stil)
+_RESERVE_TOKENS_FLOOR = 20_000  # Immer 20k frei für Response (OpenClaw: reserveTokensFloor)
 
 
-def _history_token_budget(model: str) -> int:
-    """Maximale Token-Anzahl für die Message-History (30% des Modell-Kontextfensters).
-
-    Gibt einen konservativen Wert für unbekannte Modelle zurück (8k × 30% = 2400 Tokens).
-    """
+def _context_window_for_model(model: str) -> int:
+    """Context-Window-Größe für ein Modell."""
     model_lower = (model or "").lower()
     for key, ctx_tokens in _MODEL_CONTEXT_TOKENS.items():
         if key in model_lower:
-            return int(ctx_tokens * _MAX_HISTORY_SHARE)
-    return int(8_000 * _MAX_HISTORY_SHARE)  # Fallback für lokale/unbekannte Modelle
+            return ctx_tokens
+    return 8_000  # Fallback für lokale/unbekannte Modelle
+
+
+def _estimate_tokens(text: str) -> int:
+    """Token-Schätzung: chars / 3.2 (genauer als chars / 4, ~10% Überschätzung als Sicherheit)."""
+    return max(1, int(len(text) / 3.2))
+
+
+def _history_token_budget(model: str, system_prompt_tokens: int = 0) -> int:
+    """Maximale Token-Anzahl für die Message-History.
+
+    OpenClaw-Formel:
+      verfügbar = context_window - system_prompt - reserveTokensFloor
+      history_budget = verfügbar × maxHistoryShare
+
+    System-Prompt wird abgezogen damit History nicht verdrängt wird.
+    """
+    ctx = _context_window_for_model(model)
+    available = ctx - system_prompt_tokens - _RESERVE_TOKENS_FLOOR
+    if available < 2000:
+        available = 2000  # Minimum damit Agent überhaupt antworten kann
+    return int(available * _MAX_HISTORY_SHARE)
 
 
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:

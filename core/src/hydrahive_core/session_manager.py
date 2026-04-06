@@ -87,42 +87,54 @@ class Session:
 
     def llm_context(
         self,
-        max_messages: int = 50,
-        prune_tool_results: int = 3,
-        max_tool_result_chars: int = 1500,
+        max_messages: int | None = None,
+        prune_tool_results: int = 5,
+        max_tool_result_chars: int = 4000,
         max_history_tokens: int | None = None,
     ) -> list[dict]:
         """
-        Letzten N Nachrichten als LLM-Format. (#78 Session-Pruning, #29 maxHistoryShare)
-        - Kompaktierungs-Summary (System-Message an pos[0]) immer erhalten
-        - Tool-Results älter als prune_tool_results → Platzhalter
-        - Alle Tool-Results werden auf max_tool_result_chars gekürzt
-        - max_history_tokens: Token-Budget für History (30% des Kontextfensters)
-          → älteste Nachrichten werden entfernt bis Budget eingehalten
+        Messages für LLM-Call. Token-Budget ist der primäre Begrenzer (#348).
+
+        OpenClaw-Strategie: Kein hartes Message-Limit. Stattdessen:
+        1. Alle Messages laden (neueste zuerst)
+        2. Token-Budget füllen bis voll
+        3. Tool-Results nach Alter prunen (letzte N vollständig, ältere gekürzt)
+
+        - max_messages: Safety-Cap (default None = nur Token-Budget begrenzt)
+        - max_history_tokens: Token-Budget (primärer Begrenzer)
+        - prune_tool_results: Letzte N Tool-Results behalten (default 5)
+        - max_tool_result_chars: Tool-Result-Limit (default 4000, vorher 1500)
         """
         # Kompaktierungs-Summary immer als erste Nachricht erhalten
-        summary_msgs = []
+        summary_msgs: list = []
         rest = self.messages
         if self.messages and self.messages[0].role == MessageRole.SYSTEM:
             summary_msgs = [self.messages[0]]
             rest = self.messages[1:]
 
-        window = list(rest[-(max_messages - len(summary_msgs)):])
+        # Safety-Cap: wenn max_messages gesetzt, als obere Grenze nutzen
+        if max_messages is not None and max_messages > 0:
+            window = list(rest[-max_messages:])
+        else:
+            window = list(rest)  # Alle Messages — Token-Budget entscheidet
 
-        # Token-Budget: älteste Nachrichten entfernen bis Budget eingehalten (chars // 4 ≈ Tokens)
+        # Token-Budget: von hinten nach vorne füllen, älteste entfernen wenn Budget voll
         if max_history_tokens is not None and max_history_tokens > 0:
             while len(window) > 2:
-                estimated = sum(len(m.content) for m in window) // 4
+                estimated = sum(len(m.content) for m in window) // 3  # chars/3 ≈ Tokens (konservativer)
                 if estimated <= max_history_tokens:
                     break
                 window.pop(0)  # älteste Nachricht entfernen
 
+        # Tool-Results prunen: letzte N vollständig, ältere gekürzt
         cutoff = max(0, len(window) - prune_tool_results)
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
-                if i < cutoff and len(m.content) > 200:
-                    result.append({"role": m.role.value, "content": "[Tool-Result gekürzt — zu weit zurück im Kontext]"})
+                if i < cutoff and len(m.content) > 300:
+                    # Ältere Tool-Results: kurze Summary statt Placeholder
+                    preview = m.content[:300] + f"\n…[{len(m.content)} Zeichen, gekürzt]"
+                    result.append({"role": m.role.value, "content": preview})
                 elif len(m.content) > max_tool_result_chars:
                     truncated = m.content[:max_tool_result_chars] + f"\n…[gekürzt, {len(m.content)} Zeichen total]"
                     result.append({"role": m.role.value, "content": truncated})
@@ -270,10 +282,10 @@ class SessionManager:
     def get_context(
         self,
         project_id: str,
-        max_messages: int = 50,
+        max_messages: int | None = None,
         max_history_tokens: int | None = None,
     ) -> list[dict]:
-        """LLM-Context der aktiven Session (für Boss-Agent in #8)."""
+        """LLM-Context der aktiven Session (#348: Token-basiert statt max_messages)."""
         session = self._active.get(project_id)
         if not session:
             return []

@@ -50,6 +50,7 @@ from .orchestrator_context import (
     _repo_review_guidance,
     _compact_if_needed as _compact_if_needed_fn,
     _history_token_budget,
+    _estimate_tokens,
     get_skill_tool_constraints,
 )
 from .orchestrator_tools import (
@@ -560,9 +561,13 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
+        # #348: Token-basierte History statt max_messages=10
+        # System-Prompt-Größe abziehen damit History nicht verdrängt wird (OpenClaw-Strategie)
+        _sys_prompt_tokens = _estimate_tokens(system_prompt)
+        _hist_budget = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens)
         _raw_history = self._sessions.get_context(
-            project_id, max_messages=10,
-            max_history_tokens=_history_token_budget(boss_cfg.llm.model),
+            project_id,
+            max_history_tokens=_hist_budget,
         )
         # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
         history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
@@ -581,15 +586,15 @@ class Orchestrator:
         litellm_tools = litellm_tools or None
 
         import json as _json
-        sys_tokens   = len(system_prompt) // 4
+        sys_tokens   = _sys_prompt_tokens
         hist_tokens  = sum(
-            len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
+            _estimate_tokens(m.get("content", "") if isinstance(m.get("content"), str) else "")
             for m in history
         )
-        tool_tokens  = len(_json.dumps(litellm_tools or [])) // 4
+        tool_tokens  = _estimate_tokens(_json.dumps(litellm_tools or []))
         logger.info(
-            "token-budget proj=%s sys≈%d hist≈%d (%d msgs) tools≈%d total≈%d",
-            project_id, sys_tokens, hist_tokens, len(history), tool_tokens,
+            "token-budget proj=%s sys≈%d hist≈%d/%d (%d msgs) tools≈%d total≈%d",
+            project_id, sys_tokens, hist_tokens, _hist_budget, len(history), tool_tokens,
             sys_tokens + hist_tokens + tool_tokens,
         )
 
@@ -743,9 +748,12 @@ class Orchestrator:
         worker_ctx = _build_worker_context(project_cfg, self._discovery)
         if worker_ctx:
             system_prompt = system_prompt + "\n\n" + worker_ctx
+        # #348: Token-basierte History statt max_messages=10 (OpenClaw-Strategie)
+        _sys_prompt_tokens_s = _estimate_tokens(system_prompt)
+        _hist_budget_s = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens_s)
         _raw_history   = self._sessions.get_context(
-            project_id, max_messages=10,
-            max_history_tokens=_history_token_budget(boss_cfg.llm.model),
+            project_id,
+            max_history_tokens=_hist_budget_s,
         )
         # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
         history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
@@ -764,15 +772,15 @@ class Orchestrator:
         litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
 
         import json as _json
-        sys_tokens_s  = len(system_prompt) // 4
+        sys_tokens_s  = _sys_prompt_tokens_s
         hist_tokens_s = sum(
-            len(m.get("content", "") if isinstance(m.get("content"), str) else "") // 4
+            _estimate_tokens(m.get("content", "") if isinstance(m.get("content"), str) else "")
             for m in history
         )
-        tool_tokens_s = len(_json.dumps(litellm_tools or [])) // 4
+        tool_tokens_s = _estimate_tokens(_json.dumps(litellm_tools or []))
         logger.info(
-            "token-budget [stream] proj=%s sys≈%d hist≈%d (%d msgs) tools≈%d total≈%d",
-            project_id, sys_tokens_s, hist_tokens_s, len(history), tool_tokens_s,
+            "token-budget [stream] proj=%s sys≈%d hist≈%d/%d (%d msgs) tools≈%d total≈%d",
+            project_id, sys_tokens_s, hist_tokens_s, _hist_budget_s, len(history), tool_tokens_s,
             sys_tokens_s + hist_tokens_s + tool_tokens_s,
         )
 
