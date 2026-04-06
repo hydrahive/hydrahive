@@ -96,12 +96,12 @@ main() {
         chmod +x "${_ASKPASS_SCRIPT}"
         # URL mit Username-Platzhalter für ASKPASS
         local _AUTH_URL="${CLONE_URL/https:\/\//https:\/\/hydrahive@}"
-        GIT_ASKPASS="${_ASKPASS_SCRIPT}" git clone --depth 1 --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
-            || { rm -f "${_ASKPASS_SCRIPT}"; error "git clone fehlgeschlagen"; }
+        GIT_ASKPASS="${_ASKPASS_SCRIPT}" timeout 300 git clone --depth 1 --single-branch --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
+            || { rm -f "${_ASKPASS_SCRIPT}"; error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"; }
         rm -f "${_ASKPASS_SCRIPT}"
     else
-        git clone --depth 1 --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
-            || error "git clone fehlgeschlagen"
+        timeout 300 git clone --depth 1 --single-branch --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
+            || error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"
     fi
     success "Repo geklont"
 
