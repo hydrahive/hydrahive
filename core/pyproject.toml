@@ -30,6 +30,7 @@ dependencies = [
     "numpy~=1.26",
     "playwright~=1.40",
     "edge-tts>=7.0",
+    "paramiko~=3.4",
 ]
 
 [project.optional-dependencies]
