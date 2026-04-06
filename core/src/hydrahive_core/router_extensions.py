@@ -122,6 +122,7 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
         manifests = _load_manifests()
         result = []
         for m in manifests:
+          try:
             installed = _is_installed(m)
             active    = _service_active(m.get("service")) if installed else False
             http_ok   = _http_ok(m.get("health_url"))     if active   else False
@@ -141,6 +142,9 @@ def register_extension_routes(admin_router: APIRouter, *, require_admin) -> None
                 "config_hint": m.get("config_hint", ""),
                 "plugin_id":   m.get("plugin_id", ""),
             })
+          except Exception as e:
+            logger.warning("Extension %s Fehler: %s", m.get("id", "?"), e)
+            continue
         return result
 
     @admin_router.post("/admin/extensions/{ext_id}/install")
