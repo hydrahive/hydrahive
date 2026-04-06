@@ -590,11 +590,15 @@ async def _compact_if_needed(
     from .orchestrator_llm import _llm_with_retry
     from .session_manager import MessageRole
 
-    model = boss_cfg.llm.model.lower()
-    if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5")):
-        token_threshold = 15_000  # #349: 15k estimated ≈ 40k real (OpenClaw: softThresholdTokens=40000)
+    # Agent-spezifischer Override oder Model-basierter Default
+    if getattr(boss_cfg, "compaction_threshold", None):
+        token_threshold = boss_cfg.compaction_threshold
     else:
-        token_threshold = 4_000
+        model = boss_cfg.llm.model.lower()
+        if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5")):
+            token_threshold = 40_000  # 40k estimated ≈ 100k real — Claude hat 200k, viel Spielraum
+        else:
+            token_threshold = 8_000
 
     # openai-codex/ ist ein Custom-Provider — litellm kennt ihn nicht.
     # Für Kompaktierung auf Claude Haiku fallbacken.
@@ -709,7 +713,7 @@ async def _compact_if_needed(
     except Exception as e:
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)
         current_tokens = sessions.estimated_tokens(project_id)
-        if current_tokens > 40_000:
+        if current_tokens > 80_000:  # Emergency Reset nur bei wirklichem Overflow
             logger.error(
                 "Context-Notfall-Reset (Projekt: %s, ~%d geschätzte Tokens > 40k)",
                 project_id, current_tokens,

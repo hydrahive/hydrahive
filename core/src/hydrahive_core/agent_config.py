@@ -99,6 +99,7 @@ class AgentConfig(BaseModel):
     mcp_servers:     list[str] = Field(default_factory=list)
     sources:         list[AgentSource] = Field(default_factory=list)
     max_tool_rounds: int       = 20
+    compaction_threshold: int | None = None  # Override für Compaction-Threshold (estimated Tokens). None = global default.
     heartbeat: HeartbeatRaw = Field(default_factory=HeartbeatRaw)
     heartbeat_tasks: list[HeartbeatTask] = Field(default_factory=list)
     execution_modes: ExecutionModesConfig | None = None
