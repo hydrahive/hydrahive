@@ -40,6 +40,7 @@ class ServerRequest(BaseModel):
     ssh_user: str = "root"
     ssh_port: int = 22
     description: str = ""
+    use_wks_key: bool = False
 
 
 def _load_servers() -> list[dict]:
@@ -111,10 +112,31 @@ def register_server_routes(
         }
         _save_server(srv)
 
-        # SSH-Key generieren
+        # SSH-Key: bestehenden WKS-Key verlinken oder neuen generieren
         key_path = SERVERS_KEYS_DIR / sid
         SERVERS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
-        if not key_path.exists():
+        if req.use_wks_key:
+            # WKS-Key des Admin-Users kopieren/verlinken
+            wks_keys_dir = Path("/etc/hydrahive/wks_keys")
+            wks_key = None
+            if wks_keys_dir.exists():
+                for f in wks_keys_dir.iterdir():
+                    if f.is_file() and not f.name.endswith(".pub"):
+                        wks_key = f
+                        break
+            if wks_key and wks_key.exists():
+                import shutil
+                shutil.copy2(str(wks_key), str(key_path))
+                pub = Path(f"{wks_key}.pub")
+                if pub.exists():
+                    shutil.copy2(str(pub), f"{key_path}.pub")
+                key_path.chmod(0o600)
+                logger.info("Server '%s': WKS-Key kopiert von %s", sid, wks_key)
+            else:
+                logger.warning("Kein WKS-Key gefunden — generiere neuen Key")
+                req.use_wks_key = False  # Fallback
+
+        if not req.use_wks_key and not key_path.exists():
             subprocess.run(
                 ["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"hydrahive-server-{sid}"],
                 capture_output=True, timeout=10,

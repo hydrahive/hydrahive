@@ -1026,7 +1026,7 @@ function ServersTab() {
 
   useEffect(() => { load(); }, []);
 
-  async function addServer(srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string }) {
+  async function addServer(srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string; use_wks_key?: boolean }) {
     try {
       const d = await api.post<{ created: boolean; server_id: string; public_key: string }>("/admin/servers", srv);
       setPubKey(d.public_key || "");
@@ -1229,7 +1229,7 @@ function AgentServerAssignment({ servers }: { servers: RemoteServer[] }) {
 
 function ServerEditModal({ server, onSave, onClose }: {
   server: RemoteServer | null;
-  onSave: (srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string }) => void;
+  onSave: (srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string; use_wks_key?: boolean }) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -1238,6 +1238,7 @@ function ServerEditModal({ server, onSave, onClose }: {
   const [sshUser, setSshUser] = useState(server?.ssh_user || "root");
   const [sshPort, setSshPort] = useState(server?.ssh_port || 22);
   const [desc, setDesc] = useState(server?.description || "");
+  const [useWksKey, setUseWksKey] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
@@ -1276,11 +1277,20 @@ function ServerEditModal({ server, onSave, onClose }: {
             <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Home-Lab Ubuntu Server"
               className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
           </div>
+          {!server && (
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg border bg-muted/30 px-3 py-2">
+              <input type="checkbox" checked={useWksKey} onChange={e => setUseWksKey(e.target.checked)} className="rounded" />
+              <div>
+                <span className="text-sm font-medium">Bestehenden WKS-Key verwenden</span>
+                <p className="text-xs text-muted-foreground">Nutzt den SSH-Key aus "Mein Agent → WKS" statt einen neuen zu generieren. Sinnvoll wenn der Key dort schon auf dem Ziel-Server eingerichtet ist.</p>
+              </div>
+            </label>
+          )}
         </div>
         <div className="flex justify-end pt-2">
-          <button onClick={() => onSave({ name, ip, ssh_user: sshUser, ssh_port: sshPort, description: desc })}
+          <button onClick={() => onSave({ name, ip, ssh_user: sshUser, ssh_port: sshPort, description: desc, use_wks_key: useWksKey })}
             className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
-            <Save size={14} /> {server ? "Speichern" : "Server anlegen + Key generieren"}
+            <Save size={14} /> {server ? "Speichern" : useWksKey ? "Server anlegen (WKS-Key)" : "Server anlegen + Key generieren"}
           </button>
         </div>
       </div>
