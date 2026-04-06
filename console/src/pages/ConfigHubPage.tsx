@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CheckCircle, XCircle, ChevronDown, ChevronRight, Cpu, Key,
@@ -59,7 +58,6 @@ function Section({ title, icon: Icon, configured, defaultOpen, badge, children }
 /* ── Save Button ─────────────────────────────────────────────── */
 
 function SaveBtn({ saving, disabled, onClick }: { saving: boolean; disabled?: boolean; onClick: () => void }) {
-  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -67,7 +65,7 @@ function SaveBtn({ saving, disabled, onClick }: { saving: boolean; disabled?: bo
       className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
     >
       {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-      {saving ? t("common.saving") : t("common.save")}
+      {saving ? "Speichere..." : "Speichern"}
     </button>
   );
 }
@@ -118,10 +116,10 @@ function LlmSection() {
       const cfg = await api.get<{ providers: Record<string, LlmProvider> }>("/llm/config");
       setProviders(cfg.providers ?? {});
       setAnthropicKey(""); setOpenaiKey("");
-      setMsg(t("common.saved"));
+      setMsg("Gespeichert");
       setTimeout(() => setMsg(""), 3000);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : t("common.error"));
+      setMsg(e instanceof Error ? e.message : "Fehler");
     } finally { setSaving(false); }
   }
 
@@ -204,7 +202,7 @@ function PlatformsSection() {
       load();
       setMsg("Discord gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(""); }
   }
 
@@ -216,7 +214,7 @@ function PlatformsSection() {
       load();
       setMsg("Telegram gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(""); }
   }
 
@@ -227,7 +225,7 @@ function PlatformsSection() {
       load();
       setMsg("WhatsApp-Verbindung gestartet — QR-Code auf der My Agent Seite scannen");
       setTimeout(() => setMsg(""), 5000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(""); }
   }
 
@@ -347,7 +345,7 @@ function GitSection() {
       setGhStatus(s as { configured: boolean });
       setMsg("GitHub Token gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(""); }
   }
 
@@ -360,7 +358,7 @@ function GitSection() {
       setGiteaCfg(c);
       setMsg("Gitea gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(""); }
   }
 
@@ -443,7 +441,7 @@ function KasSection() {
       setCfg(r as any);
       setMsg("KAS gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(false); }
   }
 
@@ -542,9 +540,9 @@ function AgentLinkSection() {
     try {
       await api.put("/admin/agentlink/config", { base_url: baseUrl, ws_url: wsUrl, enabled });
       load();
-      setMsg(t("common.saved"));
+      setMsg("Gespeichert");
       setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(false); }
   }
 
@@ -653,7 +651,7 @@ function SystemTimeSection() {
       load();
       setMsg("Zeitzone gesetzt — wirkt sofort");
       setTimeout(() => setMsg(""), 4000);
-    } catch (e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
     finally { setSaving(false); }
   }
 
