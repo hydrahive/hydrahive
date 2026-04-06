@@ -3748,6 +3748,264 @@ class ServerShellTool(BaseTool):
             return {"error": f"SSH-Fehler ({server_id}): {e}"}
 
 
+def _get_server_ssh(agent_id: str, project_id: str, server_id: str):
+    """Helper: Server-Config + paramiko-Client für Server-Tools."""
+    from .router_servers import get_server_for_agent
+    srv = get_server_for_agent(agent_id, server_id) or get_server_for_agent(project_id, server_id)
+    if not srv:
+        return None, None, f"Server '{server_id}' nicht zugewiesen"
+    if not srv.get("ssh_key_path"):
+        return None, None, f"Kein SSH-Key für Server '{server_id}'"
+    import paramiko
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname=srv["ip"], port=srv.get("ssh_port", 22),
+        username=srv["ssh_user"], key_filename=srv["ssh_key_path"], timeout=10,
+    )
+    return srv, client, None
+
+
+class ServerFileReadTool(BaseTool):
+    """Liest eine Datei von einem registrierten Remote-Server (SFTP)."""
+
+    @property
+    def id(self) -> str: return "server_file_read"
+    @property
+    def name(self) -> str: return "Remote-Server Datei lesen"
+    @property
+    def description(self) -> str:
+        return "Liest eine Datei von einem Remote-Server via SFTP. Linux- und Windows-Pfade. Nutze server_id für den Zielserver."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers"},
+                "path": {"type": "string", "description": "Absoluter Pfad zur Datei (Linux: /etc/... oder Windows: C:/...)"},
+                "offset": {"type": "integer", "description": "Ab Zeile (optional, default 0)"},
+                "limit": {"type": "integer", "description": "Max Zeilen (optional, default 500)"},
+            },
+            "required": ["server_id", "path"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", offset: int = 0, limit: int = 500, **kwargs) -> dict:
+        import asyncio, io
+        def _run():
+            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
+            if err: return {"error": err}
+            try:
+                sftp = client.open_sftp()
+                buf = io.BytesIO()
+                sftp.getfo(path, buf)
+                content = buf.getvalue().decode("utf-8", errors="replace")
+                lines = content.splitlines()
+                total = len(lines)
+                selected = lines[offset:offset + limit]
+                sftp.close(); client.close()
+                return {"content": "\n".join(selected), "path": path, "total_lines": total, "offset": offset, "lines_returned": len(selected)}
+            except Exception as e:
+                client.close()
+                return {"error": str(e)}
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler: {e}"}
+
+
+class ServerFileWriteTool(BaseTool):
+    """Schreibt eine Datei auf einen Remote-Server (SFTP)."""
+
+    @property
+    def id(self) -> str: return "server_file_write"
+    @property
+    def name(self) -> str: return "Remote-Server Datei schreiben"
+    @property
+    def description(self) -> str:
+        return "Schreibt/überschreibt eine Datei auf einem Remote-Server via SFTP."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers"},
+                "path": {"type": "string", "description": "Absoluter Pfad (Linux oder Windows)"},
+                "content": {"type": "string", "description": "Dateiinhalt"},
+            },
+            "required": ["server_id", "path", "content"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", content: str = "", **kwargs) -> dict:
+        import asyncio, io
+        def _run():
+            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
+            if err: return {"error": err}
+            try:
+                sftp = client.open_sftp()
+                buf = io.BytesIO(content.encode("utf-8"))
+                sftp.putfo(buf, path)
+                sftp.close(); client.close()
+                return {"written": True, "path": path, "bytes": len(content.encode("utf-8"))}
+            except Exception as e:
+                client.close()
+                return {"error": str(e)}
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler: {e}"}
+
+
+class ServerFileListTool(BaseTool):
+    """Listet Dateien/Verzeichnisse auf einem Remote-Server."""
+
+    @property
+    def id(self) -> str: return "server_file_list"
+    @property
+    def name(self) -> str: return "Remote-Server Verzeichnis listen"
+    @property
+    def description(self) -> str:
+        return "Listet Dateien und Verzeichnisse auf einem Remote-Server via SFTP."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers"},
+                "path": {"type": "string", "description": "Verzeichnispfad (default: Home-Dir)"},
+            },
+            "required": ["server_id"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = ".", **kwargs) -> dict:
+        import asyncio
+        def _run():
+            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
+            if err: return {"error": err}
+            try:
+                sftp = client.open_sftp()
+                entries = []
+                for attr in sftp.listdir_attr(path):
+                    import stat
+                    is_dir = stat.S_ISDIR(attr.st_mode) if attr.st_mode else False
+                    entries.append({
+                        "name": attr.filename,
+                        "type": "dir" if is_dir else "file",
+                        "size": attr.st_size,
+                    })
+                sftp.close(); client.close()
+                return {"path": path, "entries": entries, "count": len(entries)}
+            except Exception as e:
+                client.close()
+                return {"error": str(e)}
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler: {e}"}
+
+
+class ServerFileSearchTool(BaseTool):
+    """Sucht in Dateien auf einem Remote-Server (grep)."""
+
+    @property
+    def id(self) -> str: return "server_file_search"
+    @property
+    def name(self) -> str: return "Remote-Server Dateisuche"
+    @property
+    def description(self) -> str:
+        return "Sucht nach Text in Dateien auf einem Remote-Server (grep/findstr). Nutzt SSH shell."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers"},
+                "pattern": {"type": "string", "description": "Suchbegriff oder Regex"},
+                "path": {"type": "string", "description": "Verzeichnis oder Datei zum Durchsuchen"},
+                "file_pattern": {"type": "string", "description": "Dateiname-Filter (z.B. *.py, *.conf)"},
+            },
+            "required": ["server_id", "pattern", "path"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", pattern: str = "", path: str = ".", file_pattern: str = "", **kwargs) -> dict:
+        import asyncio, shlex
+        def _run():
+            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
+            if err: return {"error": err}
+            try:
+                if file_pattern:
+                    cmd = f"grep -rn {shlex.quote(pattern)} {shlex.quote(path)} --include={shlex.quote(file_pattern)} 2>/dev/null | head -50"
+                else:
+                    cmd = f"grep -rn {shlex.quote(pattern)} {shlex.quote(path)} 2>/dev/null | head -50"
+                _, stdout, stderr = client.exec_command(cmd, timeout=30)
+                out = stdout.read().decode("utf-8", errors="replace")
+                client.close()
+                lines = [l for l in out.strip().splitlines() if l]
+                return {"matches": lines, "count": len(lines), "pattern": pattern, "path": path}
+            except Exception as e:
+                client.close()
+                return {"error": str(e)}
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler: {e}"}
+
+
+class ServerFilePatchTool(BaseTool):
+    """Suchen & Ersetzen in einer Datei auf einem Remote-Server."""
+
+    @property
+    def id(self) -> str: return "server_file_patch"
+    @property
+    def name(self) -> str: return "Remote-Server Datei patchen"
+    @property
+    def description(self) -> str:
+        return "Sucht einen String in einer Datei auf dem Remote-Server und ersetzt ihn. Wie file_patch, aber remote."
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des Zielservers"},
+                "path": {"type": "string", "description": "Absoluter Pfad zur Datei"},
+                "search": {"type": "string", "description": "Text der gesucht wird"},
+                "replace": {"type": "string", "description": "Text der eingesetzt wird"},
+            },
+            "required": ["server_id", "path", "search", "replace"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", search: str = "", replace: str = "", **kwargs) -> dict:
+        import asyncio, io
+        if not search:
+            return {"error": "search darf nicht leer sein"}
+        def _run():
+            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
+            if err: return {"error": err}
+            try:
+                sftp = client.open_sftp()
+                buf = io.BytesIO()
+                sftp.getfo(path, buf)
+                content = buf.getvalue().decode("utf-8", errors="replace")
+                if search not in content:
+                    sftp.close(); client.close()
+                    return {"error": f"String nicht gefunden in {path}", "patched": False}
+                new_content = content.replace(search, replace, 1)
+                sftp.putfo(io.BytesIO(new_content.encode("utf-8")), path)
+                sftp.close(); client.close()
+                return {"patched": True, "path": path, "replacements": 1}
+            except Exception as e:
+                client.close()
+                return {"error": str(e)}
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _run)
+        except Exception as e:
+            return {"error": f"SSH-Fehler: {e}"}
+
+
 class WksFileReadTool(BaseTool):
     """Liest eine Datei von der Workstation des Users (via SFTP)."""
 
@@ -4693,6 +4951,11 @@ registry.register(GitMergeTool())
 registry.register(GitCreatePRTool())
 registry.register(WksShellExecTool())
 registry.register(ServerShellTool())
+registry.register(ServerFileReadTool())
+registry.register(ServerFileWriteTool())
+registry.register(ServerFileListTool())
+registry.register(ServerFileSearchTool())
+registry.register(ServerFilePatchTool())
 registry.register(WksFileReadTool())
 registry.register(WksFileWriteTool())
 registry.register(SendMailTool())
