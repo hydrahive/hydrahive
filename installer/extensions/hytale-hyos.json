@@ -1,0 +1,13 @@
+{
+  "id": "hytale-hyos",
+  "name": "Hytale Server + HyOS Dashboard",
+  "description": "Hytale Dedicated Game Server mit HyOS Web-Dashboard — Mod-Management, Live-Konsole, automatische Updates.",
+  "icon": "Gamepad2",
+  "category": "gaming",
+  "install_script": "extensions/install/hytale-hyos.sh",
+  "uninstall_script": "extensions/uninstall/hytale-hyos.sh",
+  "service": "hytale-server",
+  "health_url": "http://127.0.0.1:3100",
+  "open_url": ":3100",
+  "installed_check": "/opt/hytale"
+}
