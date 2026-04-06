@@ -2691,7 +2691,11 @@ class FixPermissionsTool(BaseTool):
     def name(self) -> str: return "Dateiberechtigungen reparieren"
     @property
     def description(self) -> str:
-        return "Setzt Dateiberechtigungen für das aktuelle Projekt sodass alle Dateien lesbar und schreibbar sind. Nutze dieses Tool wenn du 'Permission denied' bei einer Datei bekommst."
+        return ("Repariert Dateiberechtigungen für das aktuelle Projekt. "
+                "Setzt Ownership auf hydrahive:hydrahive und Gruppe-Schreibrechte. "
+                "Räumt auch git index.lock auf. "
+                "Nutze dieses Tool bei 'Permission denied', nach Samba-Uploads, "
+                "oder wenn git add/commit/push fehlschlägt.")
 
     @property
     def parameters(self) -> dict:
@@ -2703,13 +2707,22 @@ class FixPermissionsTool(BaseTool):
         if not proj_dir.is_dir():
             return {"error": f"Projektverzeichnis /projects/{project_id} nicht gefunden"}
         try:
+            # Ownership: alles dem hydrahive User/Gruppe zuweisen (löst Samba + git Probleme)
             await asyncio.to_thread(lambda: subprocess.run(
-                ["sudo", "chgrp", "-R", "hydrahive", str(proj_dir)],
-                capture_output=True, check=True, timeout=60))
+                ["sudo", "chown", "-R", "hydrahive:hydrahive", str(proj_dir)],
+                capture_output=True, check=True, timeout=120))
+            # Gruppe-Schreibrechte setzen
             await asyncio.to_thread(lambda: subprocess.run(
                 ["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
-                capture_output=True, check=True, timeout=60))
-            return {"ok": True, "project_id": project_id, "message": "Berechtigungen korrigiert"}
+                capture_output=True, check=True, timeout=120))
+            # Git index.lock aufräumen falls vorhanden
+            git_lock = proj_dir / ".git" / "index.lock"
+            if git_lock.exists():
+                git_lock.unlink(missing_ok=True)
+            # Auch in Unterverzeichnissen nach .git suchen (Submodules, verschachtelte Repos)
+            for sub_lock in proj_dir.rglob(".git/index.lock"):
+                sub_lock.unlink(missing_ok=True)
+            return {"ok": True, "project_id": project_id, "message": "Ownership + Berechtigungen korrigiert, git index.lock aufgeräumt"}
         except Exception as e:
             return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
 
