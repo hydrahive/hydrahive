@@ -3617,7 +3617,9 @@ class WksShellExecTool(BaseTool):
     def description(self) -> str:
         return (
             "Führt einen Shell-Befehl auf der eigenen Workstation des Users aus (SSH). "
-            "Nur für persönliche Agenten mit konfigurierter WKS verfügbar."
+            "Funktioniert mit Linux UND Windows WKS. "
+            "Windows: nutze cmd/PowerShell-Befehle (dir, type, Get-Content etc.). "
+            "Linux: nutze bash-Befehle (ls, cat etc.)."
         )
 
     @property
@@ -3755,7 +3757,12 @@ class WksFileReadTool(BaseTool):
     def name(self) -> str: return "WKS Datei lesen"
     @property
     def description(self) -> str:
-        return "Liest eine Datei von der eigenen Workstation des Users via SFTP."
+        return (
+            "Liest eine Datei von der eigenen Workstation des Users via SFTP. "
+            "Funktioniert mit Linux UND Windows WKS. "
+            "Windows-Pfade: C:/Users/Name/Desktop/datei.txt (Schrägstriche oder Backslashes). "
+            "Linux-Pfade: /home/user/datei.txt"
+        )
 
     @property
     def permissions_required(self) -> list[str]:
@@ -3766,7 +3773,7 @@ class WksFileReadTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Absoluter Pfad zur Datei auf der WKS"},
+                "path": {"type": "string", "description": "Absoluter Pfad zur Datei (Linux: /home/... oder Windows: C:/Users/...)"},
             },
             "required": ["path"],
         }
@@ -3801,7 +3808,7 @@ class WksFileWriteTool(BaseTool):
     def name(self) -> str: return "WKS Datei schreiben"
     @property
     def description(self) -> str:
-        return "Schreibt/überschreibt eine Datei auf der eigenen Workstation des Users via SFTP."
+        return "Schreibt/überschreibt eine Datei auf der eigenen Workstation des Users via SFTP. Funktioniert mit Linux UND Windows (C:/Users/... Pfade)."
 
     @property
     def permissions_required(self) -> list[str]:
