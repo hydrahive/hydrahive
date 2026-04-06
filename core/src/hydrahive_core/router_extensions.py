@@ -82,7 +82,10 @@ def _is_installed(manifest: dict) -> bool:
     check = manifest.get("installed_check")
     if not check:
         return False
-    return Path(check).exists()
+    try:
+        return Path(check).exists()
+    except (PermissionError, OSError):
+        return False
 
 
 async def _stream_script(script_path: Path):
