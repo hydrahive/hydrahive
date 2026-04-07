@@ -26,6 +26,7 @@ import re
 ALWAYS_TOOLS: frozenset[str] = frozenset({
     "file_read",
     "file_write",
+    "file_undo",
     "read_memory",
     "write_memory",
     "web_search",

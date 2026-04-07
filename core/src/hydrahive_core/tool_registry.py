@@ -425,6 +425,10 @@ class FileWriteTool(BaseTool):
     _read_state: dict[str, set[str]] = {}  # agent_id → {resolved_path, ...}
     _MAX_READ_STATE_PER_AGENT = 500  # LRU-Cap pro Agent
 
+    # #426: Checkpoint-Stack pro Agent (max 50)
+    _checkpoints: dict[str, list[tuple[str, str]]] = {}  # agent_id → [(path, old_content), ...]
+    _MAX_CHECKPOINTS = 50
+
     @classmethod
     def mark_read(cls, agent_id: str, path: str) -> None:
         """Wird von FileReadTool aufgerufen wenn eine Datei gelesen wird."""
@@ -503,6 +507,18 @@ class FileWriteTool(BaseTool):
 
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # #426: Checkpoint vor Overwrite speichern
+            if safe_path.exists() and mode == "overwrite":
+                try:
+                    old_content = safe_path.read_text(encoding="utf-8", errors="replace")
+                    stack = self._checkpoints.setdefault(agent_id, [])
+                    stack.append((str(safe_path), old_content))
+                    if len(stack) > self._MAX_CHECKPOINTS:
+                        stack[:] = stack[-self._MAX_CHECKPOINTS:]
+                except OSError:
+                    pass  # Checkpoint fehlgeschlagen → trotzdem schreiben
+
             write_mode = "a" if mode == "append" else "w"
             with safe_path.open(write_mode, encoding="utf-8") as handle:
                 handle.write(content)
@@ -513,6 +529,45 @@ class FileWriteTool(BaseTool):
             return {"written": True, "path": str(safe_path), "bytes": len(content.encode())}
         except OSError as e:
             return {"error": f"Schreibfehler: {e}", "path": str(safe_path)}
+
+
+class FileUndoTool(BaseTool):
+    """#426: Letzte Datei-Änderung rückgängig machen (Checkpoint-System)."""
+
+    @property
+    def id(self) -> str:   return "file_undo"
+    @property
+    def name(self) -> str: return "Datei-Undo"
+    @property
+    def description(self) -> str:
+        return (
+            "Macht die letzte file_write-Änderung rückgängig (Undo). "
+            "Stellt den vorherigen Dateiinhalt aus dem Checkpoint-Stack wieder her. "
+            "Kann mehrfach aufgerufen werden um mehrere Änderungen rückgängig zu machen (max 50)."
+        )
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["filesystem.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        stack = FileWriteTool._checkpoints.get(agent_id, [])
+        if not stack:
+            return {"error": "Kein Checkpoint vorhanden — nichts zum Rückgängigmachen"}
+        path, old_content = stack.pop()
+        try:
+            Path(path).write_text(old_content, encoding="utf-8")
+            logger.info("file_undo: %s restored %s (%d checkpoints remaining)", agent_id, path, len(stack))
+            return {"restored": True, "path": path, "bytes": len(old_content.encode()), "remaining_checkpoints": len(stack)}
+        except OSError as e:
+            return {"error": f"Undo fehlgeschlagen: {e}", "path": path}
 
 
 class ListDirectoryTool(BaseTool):
@@ -1894,6 +1949,99 @@ class WriteMemoryTool(BaseTool):
             "category":   category,
             "action":     dedup_action,
         }
+
+
+# ============================================================= Shared Memory (#435)
+
+import json as _json_shared
+
+def _shared_memory_path(project_id: str) -> Path:
+    return settings.projects_dir / project_id / ".shared_memory.json"
+
+def _load_shared_memory(project_id: str) -> dict:
+    p = _shared_memory_path(project_id)
+    try:
+        return _json_shared.loads(p.read_text()) if p.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+def _save_shared_memory(project_id: str, data: dict) -> None:
+    p = _shared_memory_path(project_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_json_shared.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+class SharedMemoryReadTool(BaseTool):
+    """#435: Liest einen Wert aus dem geteilten Projekt-Memory (alle Agenten können lesen)."""
+
+    @property
+    def id(self) -> str:   return "shared_memory_read"
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Shared Memory lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest einen Wert aus dem geteilten Projekt-Memory. "
+            "Alle Agenten im Projekt können lesen und schreiben. "
+            "Ohne key: gibt alle Keys zurück. Mit key: gibt den Wert zurück."
+        )
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Key zum Lesen (leer = alle Keys auflisten)"},
+            },
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, key: str = "", **kwargs) -> dict:
+        data = _load_shared_memory(project_id)
+        if not key:
+            return {"keys": list(data.keys()), "count": len(data)}
+        val = data.get(key)
+        if val is None:
+            return {"error": f"Key '{key}' nicht gefunden", "available_keys": list(data.keys())[:20]}
+        return {"key": key, "value": val}
+
+
+class SharedMemoryWriteTool(BaseTool):
+    """#435: Schreibt einen Wert in das geteilte Projekt-Memory."""
+
+    @property
+    def id(self) -> str:   return "shared_memory_write"
+    @property
+    def name(self) -> str: return "Shared Memory schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Schreibt einen Key-Value-Eintrag in das geteilte Projekt-Memory. "
+            "Alle Agenten im Projekt können darauf zugreifen. "
+            "Nutze Namespaces wie 'agent_name/key' um Kollisionen zu vermeiden."
+        )
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "key":   {"type": "string", "description": "Key (z.B. 'coder/last_file' oder 'status')"},
+                "value": {"type": "string", "description": "Wert zum Speichern"},
+            },
+            "required": ["key", "value"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, key: str = "", value: str = "", **kwargs) -> dict:
+        if not key:
+            return {"error": "key ist erforderlich"}
+        data = _load_shared_memory(project_id)
+        data[key] = value
+        _save_shared_memory(project_id, data)
+        logger.info("shared_memory_write: %s setzte '%s' (Projekt: %s)", agent_id, key, project_id)
+        return {"written": True, "key": key, "total_keys": len(data)}
 
 
 # ============================================================= Self-Learning Skills (#7)
@@ -5243,6 +5391,7 @@ registry = ToolRegistry()
 registry.register(DispatchTaskTool())
 registry.register(FileReadTool())
 registry.register(FileWriteTool())
+registry.register(FileUndoTool())
 registry.register(WebSearchTool())
 registry.register(HttpRequestTool())
 registry.register(SpawnAgentTool())
@@ -5254,6 +5403,8 @@ registry.register(ReadSystemFileTool())
 registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
+registry.register(SharedMemoryReadTool())
+registry.register(SharedMemoryWriteTool())
 registry.register(ReadScratchpadTool())
 registry.register(WriteScratchpadTool())
 registry.register(CreateSkillTool())
