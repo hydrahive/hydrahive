@@ -18,11 +18,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from .settings import settings
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-GROUPS_FILE = Path("/etc/hydrahive/groups.json")
+GROUPS_FILE = settings.groups_config
 
 # Default-Gruppen die beim ersten Start erstellt werden
 _DEFAULT_GROUPS: dict[str, dict[str, Any]] = {

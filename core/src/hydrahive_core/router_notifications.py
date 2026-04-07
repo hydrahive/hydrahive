@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from .settings import settings
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -23,7 +24,7 @@ from .notification_service import notification_service
 
 logger = logging.getLogger(__name__)
 
-_NOTIF_ROUTES_FILE = Path("/etc/hydrahive/notification_routes.json")
+_NOTIF_ROUTES_FILE = settings.notification_routes_config
 
 
 def _load_notif_routes() -> dict:

@@ -13,13 +13,14 @@ import json
 import logging
 import subprocess
 from pathlib import Path
+from .settings import settings
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-VPN_CONFIG = Path("/etc/hydrahive/vpn.json")
+VPN_CONFIG = settings.vpn_config
 
 
 # ── Config-Helpers ─────────────────────────────────────────────────────────────

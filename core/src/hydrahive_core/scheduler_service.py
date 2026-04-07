@@ -17,11 +17,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from .settings import settings
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
-SCHEDULES_FILE = Path("/etc/hydrahive/schedules.json")
+SCHEDULES_FILE = settings.schedules_config
 
 
 # ---------------------------------------------------------------------------
