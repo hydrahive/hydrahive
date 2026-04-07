@@ -651,6 +651,10 @@ async def _compact_if_needed(
         else:
             token_threshold = 8_000
 
+    # #416: Full-Compaction bei 80% des Context-Windows
+    ctx_window = _context_window_for_model(boss_cfg.llm.model)
+    full_compaction_threshold = int(ctx_window * 0.80)
+
     # openai-codex/ ist ein Custom-Provider — litellm kennt ihn nicht.
     # Für Kompaktierung auf Claude Haiku fallbacken.
     compact_model = boss_cfg.llm.model
@@ -762,6 +766,30 @@ async def _compact_if_needed(
                     "Context kompaktiert Stufe-2 (Projekt: %s, ~%d Tokens nach Meta-Summary)",
                     project_id, sessions.estimated_tokens(project_id),
                 )
+
+        # Stufe 3 (#416): Full-Compaction bei 80% Context-Window
+        # Aggressiver: keep_last auf 4 reduzieren, alle Tool-Results entfernen
+        current = sessions.estimated_tokens(project_id)
+        if current >= full_compaction_threshold:
+            logger.warning(
+                "Full-Compaction triggered (Projekt: %s, ~%d Tokens >= 80%% von %d)",
+                project_id, current, ctx_window,
+            )
+            # Tool-Messages aus den behaltenen Nachrichten entfernen
+            session = sessions.get_active(project_id)
+            if session:
+                cleaned = [
+                    m for m in session.messages
+                    if m.role != MessageRole.TOOL
+                ]
+                session.messages = cleaned
+                sessions._persist(session)
+            # Nochmal kompaktieren mit weniger keep_last
+            await sessions.compact(project_id, summary, keep_last=4)
+            logger.info(
+                "Full-Compaction abgeschlossen (Projekt: %s, ~%d Tokens)",
+                project_id, sessions.estimated_tokens(project_id),
+            )
 
         # Memory Flush: Summary in Memory-Datei schreiben
         # damit zukünftige Sessions relevante Fakten via BM25 finden

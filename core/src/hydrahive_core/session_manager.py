@@ -127,14 +127,14 @@ class Session:
                     break
                 window.pop(0)  # älteste Nachricht entfernen
 
-        # Tool-Results prunen: letzte N vollständig, ältere gekürzt
+        # Tool-Results prunen: letzte N vollständig, ältere micro-compacted (#416)
         cutoff = max(0, len(window) - prune_tool_results)
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
-                if i < cutoff and len(m.content) > 300:
-                    # Ältere Tool-Results: kurze Summary statt Placeholder
-                    preview = m.content[:300] + f"\n…[{len(m.content)} Zeichen, gekürzt]"
+                if i < cutoff and len(m.content) > 100:
+                    # Micro-Compaction: ältere Tool-Results → 100 Chars Preview
+                    preview = m.content[:100] + f"\n…[{len(m.content)} Zeichen, micro-compacted]"
                     result.append({"role": m.role.value, "content": preview})
                 elif len(m.content) > max_tool_result_chars:
                     truncated = m.content[:max_tool_result_chars] + f"\n…[gekürzt, {len(m.content)} Zeichen total]"
