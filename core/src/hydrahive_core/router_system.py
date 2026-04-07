@@ -350,6 +350,80 @@ def register_system_routes(
             raise HTTPException(500, "Zeitzone konnte nicht gesetzt werden")
         return {"updated": True, "timezone": tz}
 
+    # ── OAuth Usage / Rate Limits ─────────────────────────────────
+
+    @auth_router.get("/admin/system/oauth-usage")
+    async def get_oauth_usage():
+        """OAuth Rate-Limit-Status aus den letzten API-Response-Headers.
+
+        Gibt 5h-Session-Limit, 7d-Weekly-Limit, Overage-Status zurück.
+        Daten stammen aus dem letzten Anthropic API-Call (Header-basiert, kein extra Request).
+        """
+        from .orchestrator_llm import get_oauth_rate_limits
+
+        limits = get_oauth_rate_limits()
+        if not limits:
+            return {"available": False, "message": "Noch kein OAuth-Call ausgeführt — Daten verfügbar nach dem ersten Chat."}
+
+        # Menschenlesbare Aufbereitung
+        result: dict = {"available": True, "raw": limits}
+
+        for window, label in [("5h", "Session (5h)"), ("7d", "Woche (7d)")]:
+            util = limits.get(f"{window}_utilization")
+            reset = limits.get(f"{window}_reset")
+            if util is not None:
+                result[window] = {
+                    "label": label,
+                    "utilization_pct": round(util * 100, 1),
+                    "reset": reset,
+                }
+
+        # Overage
+        overage_util = limits.get("overage_utilization")
+        if overage_util is not None:
+            result["overage"] = {
+                "label": "Zusätzliche Nutzung",
+                "utilization_pct": round(overage_util * 100, 1),
+                "status": limits.get("overage_status"),
+                "reset": limits.get("overage_reset"),
+                "disabled_reason": limits.get("overage_disabled_reason"),
+            }
+
+        result["status"] = limits.get("status", "unknown")
+        result["updated_at"] = limits.get("updated_at")
+        return result
+
+    @auth_router.get("/admin/system/oauth-usage/fetch")
+    async def fetch_oauth_usage():
+        """Frische Usage-Daten direkt von der Anthropic API abrufen.
+
+        Ruft POST /api/oauth/usage auf (wie Claude Web/CLI).
+        Benötigt gültigen OAuth-Token.
+        """
+        import httpx
+        from .orchestrator_llm import _load_claude_oauth_token
+
+        token = _load_claude_oauth_token()
+        if not token:
+            raise HTTPException(404, "Kein OAuth-Token verfügbar")
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    "https://api.anthropic.com/api/oauth/usage",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "anthropic-beta": "oauth-2025-04-20",
+                        "user-agent": "claude-cli/2.1.62",
+                        "x-app": "cli",
+                    },
+                )
+                if resp.status_code != 200:
+                    return {"error": f"API-Fehler: {resp.status_code}", "body": resp.text[:500]}
+                return {"available": True, "utilization": resp.json()}
+        except Exception as e:
+            raise HTTPException(502, f"Anthropic API nicht erreichbar: {e}")
+
     @auth_router.get("/capabilities")
     def get_capabilities():
         """#309: Feature-Status-Registry — zeigt welche Features installiert/konfiguriert/aktiv sind."""

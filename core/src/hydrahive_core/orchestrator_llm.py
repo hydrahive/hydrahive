@@ -83,6 +83,70 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
     return result
 
 
+# ---------------------------------------------------------------- OAuth Rate Limits
+
+# Globaler State: letzte bekannte Rate-Limit-Werte aus Anthropic Response-Headers
+_oauth_rate_limits: dict = {}
+
+
+def _extract_rate_limit_headers(headers) -> None:
+    """Anthropic Rate-Limit Headers parsen und in globalem State speichern.
+
+    Headers (anthropic-ratelimit-unified-*):
+    - 5h-utilization, 5h-reset, 5h-surpassed-threshold
+    - 7d-utilization, 7d-reset, 7d-surpassed-threshold
+    - overage-utilization, overage-reset, overage-status
+    - status, representative-claim, fallback
+    """
+    from datetime import datetime, timezone as _tz
+
+    prefix = "anthropic-ratelimit-unified-"
+    data: dict = {"updated_at": datetime.now(_tz.utc).isoformat()}
+
+    for key in ("status", "representative-claim", "fallback", "reset"):
+        val = headers.get(f"{prefix}{key}")
+        if val:
+            data[key.replace("-", "_")] = val
+
+    for window in ("5h", "7d"):
+        util = headers.get(f"{prefix}{window}-utilization")
+        reset = headers.get(f"{prefix}{window}-reset")
+        threshold = headers.get(f"{prefix}{window}-surpassed-threshold")
+        if util is not None:
+            try:
+                data[f"{window}_utilization"] = float(util)
+            except ValueError:
+                pass
+        if reset:
+            data[f"{window}_reset"] = reset
+        if threshold:
+            data[f"{window}_surpassed_threshold"] = threshold
+
+    # Overage / Extra Usage
+    for key in ("overage-status", "overage-reset", "overage-utilization",
+                "overage-disabled-reason", "overage-surpassed-threshold"):
+        val = headers.get(f"{prefix}{key}")
+        if val:
+            k = key.replace("-", "_")
+            if "utilization" in key:
+                try:
+                    data[k] = float(val)
+                except ValueError:
+                    data[k] = val
+            else:
+                data[k] = val
+
+    if len(data) > 1:  # mehr als nur updated_at
+        global _oauth_rate_limits
+        _oauth_rate_limits = data
+        logger.debug("OAuth rate limits updated: %s", data)
+
+
+def get_oauth_rate_limits() -> dict:
+    """Aktuelle OAuth Rate-Limit-Daten abrufen (für API-Endpoint)."""
+    return dict(_oauth_rate_limits)
+
+
 # ---------------------------------------------------------------- Failover
 
 _FAILOVER_SIGNALS = [
@@ -574,7 +638,11 @@ async def _anthropic_oauth_call(
             for t in tools
         ]
 
-    resp = await _llm_with_retry(lambda: client.messages.create(**kwargs))
+    raw_resp = await _llm_with_retry(lambda: client.messages.with_raw_response.create(**kwargs))
+    resp = raw_resp.parse()
+
+    # OAuth Rate-Limit Headers auslesen → globaler State
+    _extract_rate_limit_headers(raw_resp.headers)
 
     # Cache-Usage loggen (zeigt ob Prompt Caching aktiv ist)
     if hasattr(resp, "usage") and resp.usage:

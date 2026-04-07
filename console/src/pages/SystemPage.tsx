@@ -445,6 +445,80 @@ function TestsPanel() {
   );
 }
 
+function OAuthUsageCard({ data }: { data: Record<string,unknown> | null }) {
+  if (!data || !data.available) return null;
+  const ou = data;
+  const windows = [
+    { key: "5h", label: "Session (5h)", icon: "🕐" },
+    { key: "7d", label: "Woche (7d)", icon: "📅" },
+  ];
+  const formatReset = (val: unknown) => {
+    if (!val) return "";
+    try {
+      const d = new Date(Number(val) * 1000);
+      if (isNaN(d.getTime())) return "";
+      const diff = d.getTime() - Date.now();
+      if (diff <= 0) return "jetzt";
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    } catch { return ""; }
+  };
+  const status = String(ou.status || "unknown");
+  return (
+    <div className="bg-card border rounded-lg p-4">
+      <h2 className="text-sm font-medium flex items-center gap-2 mb-3">
+        <Activity className="h-4 w-4 text-muted-foreground" /> Claude OAuth — Nutzungslimits
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
+          status === "allowed" ? "bg-green-500/20 text-green-500" :
+          status === "allowed_warning" ? "bg-orange-500/20 text-orange-500" :
+          "bg-destructive/20 text-destructive"
+        }`}>{status}</span>
+      </h2>
+      <div className="space-y-3">
+        {windows.map(w => {
+          const d = ou[w.key] as {utilization_pct: number; reset?: string} | undefined;
+          if (!d) return null;
+          const pct = d.utilization_pct ?? 0;
+          const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+          const resetStr = formatReset(d.reset);
+          return (
+            <div key={w.key} className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span>{w.icon} {w.label}</span>
+                <span className="text-muted-foreground">
+                  {pct}% verwendet
+                  {resetStr && <span className="ml-2">· Reset in {resetStr}</span>}
+                </span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, pct)}%` }} />
+              </div>
+            </div>
+          );
+        })}
+        {ou.overage ? (
+          <div className="space-y-1 pt-1 border-t">
+            <div className="flex justify-between text-xs">
+              <span>💳 Zusätzliche Nutzung</span>
+              <span className="text-muted-foreground">
+                {(ou.overage as {utilization_pct: number}).utilization_pct}%
+                {(ou.overage as {status?: string}).status && ` (${(ou.overage as {status: string}).status})`}
+              </span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all bg-purple-500" style={{ width: `${Math.min(100, (ou.overage as {utilization_pct: number}).utilization_pct)}%` }} />
+            </div>
+          </div>
+        ) : null}
+        <div className="text-[10px] text-muted-foreground text-right">
+          Aktualisiert: {ou.updated_at ? new Date(String(ou.updated_at)).toLocaleTimeString("de-DE") : "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SystemPage() {
   const { t } = useTranslation();
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
@@ -455,16 +529,19 @@ export function SystemPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [restartConfirm, setRestartConfirm] = useState(false);
   const [restarting,     setRestarting]     = useState(false);
+  const [oauthUsage, setOauthUsage] = useState<Record<string,unknown> | null>(null);
 
   async function load() {
-    const [h, s, g, r] = await Promise.allSettled([
+    const [h, s, g, r, ou] = await Promise.allSettled([
       api.health(), api.status(), api.gpuInfo(),
       api.get("/admin/resources"),
+      api.oauthUsage(),
     ]);
     setHealthy(h.status === "fulfilled");
     if (s.status === "fulfilled") setStatus(s.value as SystemStatus);
     if (g.status === "fulfilled") setGpu(g.value);
     if (r.status === "fulfilled") setResources(r.value as ResourceData);
+    if (ou.status === "fulfilled") setOauthUsage(ou.value as Record<string,unknown>);
     setLoading(false);
     setRefreshing(false);
   }
@@ -591,6 +668,9 @@ export function SystemPage() {
           </div>
         </div>
       )}
+
+      {/* OAuth Usage / Rate Limits */}
+      <OAuthUsageCard data={oauthUsage} />
 
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-card border rounded-lg p-4 space-y-1">
