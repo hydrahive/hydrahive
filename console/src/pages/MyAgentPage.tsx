@@ -14,7 +14,13 @@ import { sseStream } from "@/lib/sseStream";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
-interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number; cache_write?: number; cache_read?: number }; model?: string; isFallback?: boolean; }
+interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number; cache_write?: number; cache_read?: number }; model?: string; isFallback?: boolean; ts?: string; }
+
+function MsgTime({ iso }: { iso?: string }) {
+  if (!iso) return null;
+  try { const d = new Date(iso); return <span className="text-[10px] text-muted-foreground/50">{d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>; }
+  catch { return null; }
+}
 
 interface AgentCfg {
   identity:        string;
@@ -118,7 +124,7 @@ const KNOWN_MODELS = [
 
 let _cnt = 0;
 const mkMsg = (role: Message["role"], content: string): Message =>
-  ({ id: `m${++_cnt}`, role, content });
+  ({ id: `m${++_cnt}`, role, content, ts: new Date().toISOString() });
 
 // ── MessengerSection ──────────────────────────────────────────────────────────
 
@@ -673,7 +679,9 @@ export function MyAgentPage() {
                     );
 
                     return (
-                      <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                      <div className={`mb-0.5 px-12 ${msg.role === "user" ? "text-right" : "text-left"}`}><MsgTime iso={msg.ts} /></div>
+                      <div className={`flex gap-3 w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                         {msg.role === "assistant" && (
                           <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
                             <Bot className="h-4 w-4 text-primary" />
@@ -743,6 +751,7 @@ export function MyAgentPage() {
                           </div>
                         )}
                       </div>
+                      </div>
                     );
                   })}
 
@@ -785,6 +794,7 @@ export function MyAgentPage() {
                 )}
 
                 <div className="border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px] flex-shrink-0 min-w-0">
+                  <div className="text-right mb-1"><span className="text-[10px] text-muted-foreground/40">{new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span></div>
                   <div className="relative min-w-0">
                     {showSuggest && suggestions.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">
