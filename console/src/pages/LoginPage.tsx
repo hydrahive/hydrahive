@@ -20,9 +20,7 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-xl bg-primary mx-auto flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-xl">O</span>
-          </div>
+          <img src="/hydrahive-logo.png" alt="HydraHive" className="w-16 h-16 mx-auto" />
           <h1 className="text-2xl font-semibold">HydraHive Console</h1>
           <p className="text-sm text-muted-foreground">{t("login.subtitle")}</p>
         </div>
