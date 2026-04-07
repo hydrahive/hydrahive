@@ -166,6 +166,17 @@ main() {
         || error "pip install fehlgeschlagen"
     success "Python-Dependencies aktualisiert"
 
+    # --- 3a. Playwright Browser installieren (idempotent, skip wenn vorhanden) ---
+    if ! "${VENV}/bin/python3" -c "from playwright.sync_api import sync_playwright" 2>/dev/null; then
+        info "Playwright nicht gefunden — überspringe Browser-Installation"
+    elif [ ! -d "${HYDRAHIVE_DIR}/venv/lib/python3.12/site-packages/playwright/driver/package/.local-browsers" ] && \
+         [ -z "$(find /root/.cache/ms-playwright /home/*/.cache/ms-playwright "${HYDRAHIVE_DIR}/.playwright" 2>/dev/null -name 'chromium-*' -type d | head -1)" ]; then
+        info "Installiere Playwright Chromium..."
+        PLAYWRIGHT_BROWSERS_PATH="${HYDRAHIVE_DIR}/playwright-browsers" \
+            "${VENV}/bin/playwright" install chromium --with-deps 2>&1 | tail -3 || warn "Playwright install fehlgeschlagen"
+        success "Playwright Chromium installiert"
+    fi
+
     # --- 3b. System-Dependencies nachrüsten (idempotent) ---
     for pkg in ffmpeg jq tree; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then

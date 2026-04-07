@@ -54,6 +54,14 @@ async def _ensure_browser():
                 "source /opt/hydrahive/venv/bin/activate && "
                 "playwright install chromium --with-deps"
             )
+        # PLAYWRIGHT_BROWSERS_PATH setzen falls nicht in Umgebung
+        import os
+        if not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+            for candidate in ["/opt/hydrahive/playwright-browsers", os.path.expanduser("~/.cache/ms-playwright")]:
+                if os.path.isdir(candidate):
+                    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = candidate
+                    logger.info("PLAYWRIGHT_BROWSERS_PATH=%s", candidate)
+                    break
         if _playwright is None:
             _playwright = await async_playwright().start()
         _browser = await _playwright.chromium.launch(
