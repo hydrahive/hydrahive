@@ -134,6 +134,9 @@ async def handle_message_stream(
         sys_tokens_s + hist_tokens_s + tool_tokens_s,
     )
 
+    # #433 + #445: Context-Info als SSE-Event für Frontend
+    yield f"data: {_json.dumps({'_context_info': {'system_tokens': sys_tokens_s, 'history_tokens': hist_tokens_s, 'tool_tokens': tool_tokens_s, 'history_messages': len(history), 'history_budget': _hist_budget_s}})}\n\n"
+
     models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
 
     _provider_err = check_llm_provider_available(models_to_try, ollama_base_url=boss_cfg.llm.ollama_base_url)

@@ -3465,6 +3465,75 @@ class GitDiffTool(BaseTool):
         }
 
 
+class GitWorktreeTool(BaseTool):
+    """#450: Git Worktree Isolation — riskante Operationen in temporärem Branch."""
+
+    @property
+    def id(self) -> str:   return "git_worktree"
+    @property
+    def name(self) -> str: return "Git Worktree (Isolation)"
+    @property
+    def description(self) -> str:
+        return (
+            "Erstellt einen temporären Git Worktree für riskante Operationen. "
+            "Arbeitet auf einem eigenen Branch — bei Erfolg mergen, bei Fehler cleanup. "
+            "action: 'create' (neuen Worktree erstellen), 'merge' (Worktree mergen), "
+            "'cleanup' (Worktree löschen ohne merge)."
+        )
+    @property
+    def permissions_required(self) -> list[str]:
+        return ["git.write"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "action":  {"type": "string", "enum": ["create", "merge", "cleanup"], "description": "create/merge/cleanup"},
+                "branch":  {"type": "string", "description": "Branch-Name für den Worktree (bei create)"},
+                "repo":    {"type": "string", "description": "Optionales Ziel-Repo"},
+            },
+            "required": ["action"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, action: str = "create", branch: str = "", **kwargs) -> dict:
+        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
+        repo_ref = kwargs.get("repo", "")
+        try:
+            target = await resolve_git_target(get_gitea_client(), project_id=project_id, repo=repo_ref)
+            ws = await GiteaClient.git_workspace(target["workspace_key"], owner=target["owner"], repo=target["repo"])
+        except Exception as e:
+            return {"error": str(e)}
+
+        if action == "create":
+            branch = branch or f"worktree/{agent_id}/{int(__import__('time').time())}"
+            wt_path = ws.parent / f".worktree-{branch.replace('/', '-')}"
+            stdout, stderr, rc = await GiteaClient._git(["worktree", "add", str(wt_path), "-b", branch], ws)
+            if rc != 0:
+                return {"error": f"Worktree erstellen fehlgeschlagen: {stderr}", "exit_code": rc}
+            return {"created": True, "branch": branch, "worktree_path": str(wt_path)}
+
+        elif action == "merge":
+            if not branch:
+                return {"error": "branch ist für merge erforderlich"}
+            stdout, stderr, rc = await GiteaClient._git(["merge", branch], ws)
+            if rc != 0:
+                return {"error": f"Merge fehlgeschlagen: {stderr}", "exit_code": rc}
+            # Cleanup nach Merge
+            await GiteaClient._git(["worktree", "prune"], ws)
+            await GiteaClient._git(["branch", "-d", branch], ws)
+            return {"merged": True, "branch": branch}
+
+        elif action == "cleanup":
+            if not branch:
+                return {"error": "branch ist für cleanup erforderlich"}
+            await GiteaClient._git(["worktree", "prune"], ws)
+            await GiteaClient._git(["branch", "-D", branch], ws)
+            return {"cleaned": True, "branch": branch}
+
+        return {"error": f"Unbekannte action: {action}"}
+
+
 class GitCommitTool(BaseTool):
     """
     Erstellt einen Git-Commit aus Dateiinhalten im Projekt-Workspace.
@@ -5444,6 +5513,7 @@ registry.register(GiteaCreateIssueTool())
 registry.register(GiteaCommentIssueTool())
 registry.register(GiteaUpdateIssueTool())
 registry.register(GitDiffTool())
+registry.register(GitWorktreeTool())
 registry.register(GitCommitTool())
 registry.register(GitPushTool())
 registry.register(GitMergeTool())

@@ -160,6 +160,63 @@ def register_agent_chat_routes(
             "messages": [_msg(m) for m in session.messages],
         }
 
+    # #424: Session Export/Import (Teleportation)
+    @auth_router.get("/agents/{agent_id}/sessions/{session_id}/export")
+    def agent_export_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        """Session als JSON exportieren — für Transfer zwischen Instanzen."""
+        _check_agent_access(agent_id, _a)
+        session = agent_sessions.get_session_by_id(agent_id, session_id)
+        if not session:
+            raise HTTPException(404, "Session nicht gefunden")
+        import base64, json
+        data = json.dumps(session.to_dict(), ensure_ascii=False)
+        return {"session_b64": base64.b64encode(data.encode()).decode(), "agent_id": agent_id, "message_count": len(session.messages)}
+
+    @auth_router.post("/agents/{agent_id}/sessions/import")
+    async def agent_import_session(agent_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
+        """Session aus base64-Export importieren."""
+        _check_agent_access(agent_id, _a)
+        import base64, json
+        from ..hydrahive_core.session_manager import Session
+        try:
+            raw = json.loads(base64.b64decode(body["session_b64"]))
+            session = Session.from_dict(raw)
+            session.project_id = agent_id  # Re-scope auf diesen Agent
+            await agent_sessions.replace_messages(agent_id, session.messages)
+            return {"imported": True, "message_count": len(session.messages)}
+        except Exception as e:
+            raise HTTPException(400, f"Import fehlgeschlagen: {e}")
+
+    # #448: Session Search — Volltext über alle Sessions
+    @auth_router.get("/agents/{agent_id}/sessions/search")
+    def agent_search_sessions(agent_id: str, q: str = "", _a: tuple[str, str] = Depends(require_auth)):
+        """Volltextsuche über alle Sessions eines Agenten."""
+        _check_agent_access(agent_id, _a)
+        if not q or len(q) < 2:
+            raise HTTPException(400, "Suchbegriff mindestens 2 Zeichen")
+        results = []
+        q_lower = q.lower()
+        for session_info in agent_sessions.list_sessions(agent_id, limit=50):
+            session = agent_sessions.get_session_by_id(agent_id, session_info["id"])
+            if not session:
+                continue
+            matches = []
+            for m in session.messages:
+                if q_lower in m.content.lower():
+                    matches.append({
+                        "role": m.role.value if hasattr(m.role, "value") else m.role,
+                        "content": m.content[:200],
+                        "timestamp": m.timestamp,
+                    })
+            if matches:
+                results.append({
+                    "session_id": session.id,
+                    "started_at": session.started_at,
+                    "match_count": len(matches),
+                    "matches": matches[:5],  # Max 5 Treffer pro Session
+                })
+        return {"query": q, "results": results, "total_matches": sum(r["match_count"] for r in results)}
+
     @auth_router.delete("/agents/{agent_id}/session")
     async def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
         _check_agent_access(agent_id, _a)

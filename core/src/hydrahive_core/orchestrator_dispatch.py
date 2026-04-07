@@ -67,6 +67,32 @@ def _validate_dag(dispatches: list[dict]) -> str | None:
     return None
 
 
+# #434: Auto-Worker-Selection Strategien
+def _select_worker_auto(orch, project_cfg, task: str) -> str | None:
+    """Wählt automatisch den besten Worker für einen Task (capability-match via Identity-Keywords)."""
+    workers = project_cfg.agents.workers
+    if not workers:
+        return None
+    # Keyword-Matching: Task-Text gegen Worker-Identity
+    best_worker = None
+    best_score = 0
+    task_lower = task.lower()
+    for wid in workers:
+        cfg = orch._discovery.get(wid)
+        if not cfg:
+            continue
+        identity = (cfg.identity or "").lower()
+        # Simpels Scoring: Anzahl überlappender Wörter
+        task_words = set(task_lower.split())
+        identity_words = set(identity.split())
+        score = len(task_words & identity_words)
+        if score > best_score:
+            best_score = score
+            best_worker = wid
+    # Fallback: round-robin (erster Worker)
+    return best_worker or workers[0]
+
+
 async def _dispatch_dag(
     orch,
     project_cfg: ProjectConfig,
@@ -78,6 +104,14 @@ async def _dispatch_dag(
     richtigen Reihenfolge ausgeführt. Tasks ohne Abhängigkeiten laufen parallel.
     Cascade Failure: fehlgeschlagene Tasks blockieren alle Abhängigen.
     """
+    # #434: Auto-Worker-Selection wenn worker_id="auto"
+    for d in dispatches:
+        if d["worker_id"] == "auto":
+            auto_worker = _select_worker_auto(orch, project_cfg, d["task"])
+            if auto_worker:
+                d["worker_id"] = auto_worker
+                logger.info("Auto-assigned worker '%s' für Task: %s", auto_worker, d["task"][:60])
+
     allowed_workers = set(project_cfg.agents.workers)
     has_deps = any(d.get("depends_on") for d in dispatches)
 

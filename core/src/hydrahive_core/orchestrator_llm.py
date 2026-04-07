@@ -808,6 +808,19 @@ async def _openai_codex_call(
 
 # ---------------------------------------------------------------- LLM Call Chain
 
+def check_model_access(model_name: str, agent_cfg=None) -> str | None:
+    """#444: Prüft ob das Modell laut LLM-Config erlaubt ist. Gibt Fehlermeldung oder None zurück."""
+    from .router_llm import _cached_json_load
+    cfg = _cached_json_load(str(settings.llm_config), {"providers": {}})
+    blocked = cfg.get("blocked_models", [])
+    if blocked:
+        model_lower = model_name.lower()
+        for pattern in blocked:
+            if pattern.lower() in model_lower:
+                return f"Modell '{model_name}' ist blockiert (Config: blocked_models)"
+    return None
+
+
 async def _llm_call_single(
     model_name: str,
     agent_cfg,
@@ -815,6 +828,10 @@ async def _llm_call_single(
     tools:      list[dict] | None,
 ):
     """Ein einzelnes Modell aufrufen — ohne Failover-Logik."""
+    # #444: Model-Gating Check
+    gate_err = check_model_access(model_name, agent_cfg)
+    if gate_err:
+        raise Exception(gate_err)
     # OpenAI Codex (ChatGPT Plus OAuth)
     if model_name.startswith("openai-codex/"):
         codex_token = _load_openai_codex_token()

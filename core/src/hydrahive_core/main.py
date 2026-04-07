@@ -218,6 +218,11 @@ hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifesp
 async def lifespan(app: FastAPI):
     global provisioner, JWT_SECRET, hb_scheduler, _INTERNAL_SECRET
     logger.info("HydraHive Core startet...")
+
+    # #443: Idempotente Migrations beim Start
+    from .migrations import run_migrations
+    run_migrations()
+
     discovery.start()
     projects.start()
     sessions.start()

@@ -71,6 +71,22 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     return tuple(signature)
 
 
+# #440: Permission Suggestions bei Tool-Denial
+_TOOL_SUGGESTIONS = {
+    "shell_exec":        "Execution-Mode auf 'elevated' oder 'root' setzen",
+    "file_write":        "Permission 'filesystem.write' hinzufügen",
+    "file_read":         "Permission 'filesystem.read' hinzufügen",
+    "git_push":          "Permission 'git.write' hinzufügen",
+    "git_commit":        "Permission 'git.write' hinzufügen",
+    "write_system_file": "Execution-Mode auf 'root' oder 'unrestricted' setzen",
+    "read_system_file":  "Permission 'system.read' hinzufügen",
+}
+
+def _tool_denied_error(tool_name: str) -> dict:
+    suggestion = _TOOL_SUGGESTIONS.get(tool_name, f"Tool '{tool_name}' in Agent-Config erlauben")
+    return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt", "suggestion": suggestion}
+
+
 async def _execute_tool(
     tool,
     *,
@@ -84,7 +100,7 @@ async def _execute_tool(
     args = dict(tool_input or {})
     effective_pid = args.pop("project_id", None) or project_id
     if tool is None:
-        return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}
+        return _tool_denied_error(tool_name)
 
     # #364: Tool-Result Cache für idempotente Read-Tools
     cache_result = _tool_cache_get(tool_name, args)
@@ -226,7 +242,7 @@ async def execute_tool_call(
     # Reguläres Tool
     tool = orch._resolve_allowed_tool(boss_cfg, tool_name, execution_mode, user_text=user_text)
     if tool is None:
-        return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}, True
+        return _tool_denied_error(tool_name), True
 
     # file_read Deduplication
     if file_read_cache is not None and tool_name == "file_read":
