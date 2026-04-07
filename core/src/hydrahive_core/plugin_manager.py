@@ -167,18 +167,24 @@ class PluginManager:
         if event in self._hooks:
             self._hooks[event] = [f for f in self._hooks[event] if f is not fn]
 
-    async def emit(self, event: str, **kwargs: Any) -> None:
-        """Event emittieren — alle registrierten Hooks werden aufgerufen."""
+    async def emit(self, event: str, **kwargs: Any) -> dict | None:
+        """Event emittieren — alle registrierten Hooks werden aufgerufen.
+        #421: Hooks können {"block": True, "reason": "..."} zurückgeben um zu blockieren."""
         hooks = self._hooks.get(event, [])
         if not hooks:
-            return
+            return None
         for fn in hooks:
             try:
                 result = fn(**kwargs)
                 if asyncio.iscoroutine(result):
-                    await result
+                    result = await result
+                # #421: Blockierender Hook
+                if isinstance(result, dict) and result.get("block"):
+                    logger.info("Hook '%s' blockiert: %s", event, result.get("reason", ""))
+                    return result
             except Exception as e:
                 logger.warning("Plugin-Hook '%s' Fehler: %s", event, e)
+        return None
 
     # ── Initialisierung ─────────────────────────────────────────────────
 

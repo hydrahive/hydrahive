@@ -332,7 +332,11 @@ class Orchestrator:
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):
         from .plugin_manager import plugin_manager as _pm
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
-        await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
+        # #421: Blockierende Pre-Hooks
+        hook_result = await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
+        if isinstance(hook_result, dict) and hook_result.get("block"):
+            self._runtime.set_activity(boss_cfg.id, "Denkt…")
+            return {"error": f"Tool blockiert: {hook_result.get('reason', 'Pre-Hook')}", "blocked": True}
         try:
             result = await _execute_tool_fn(
                 tool, boss_cfg=boss_cfg, project_id=project_id,

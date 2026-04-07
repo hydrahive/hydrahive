@@ -120,10 +120,18 @@ class TestLlmWithRetry:
         assert mock.call_count == 1  # kein Retry
 
     async def test_kein_retry_bei_quota_fehler(self):
-        mock = AsyncMock(side_effect=Exception("rate_limit exceeded"))
-        with pytest.raises(Exception, match="rate_limit"):
+        # #423: Quota/Billing → kein Retry. Rate-Limit → wird jetzt retried.
+        mock = AsyncMock(side_effect=Exception("quota exceeded"))
+        with pytest.raises(Exception, match="quota"):
             await _llm_with_retry(mock)
         assert mock.call_count == 1
+
+    async def test_rate_limit_wird_retried(self):
+        # #423: 429/rate_limit → retry mit Backoff
+        mock = AsyncMock(side_effect=Exception("rate_limit exceeded"))
+        with pytest.raises(Exception, match="rate_limit"):
+            await _llm_with_retry(mock, max_attempts=2, base_delay=0.01)
+        assert mock.call_count == 2  # 1 initial + 1 retry
 
     async def test_retry_bei_allgemeinem_fehler(self):
         # 2x scheitern, 3. Versuch erfolgreich

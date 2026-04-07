@@ -104,16 +104,38 @@ def _should_failover(exc: Exception) -> bool:
     return any(s in err for s in _FAILOVER_SIGNALS)
 
 
-async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float = 1.0):
+# #423: Preemptiver Rate-Limit Cooldown (shouldWait)
+_rate_limit_cooldown: dict[str, float] = {}  # provider → resume_timestamp
+
+def _should_wait(provider: str = "default") -> float:
+    """Gibt verbleibende Wartezeit in Sekunden zurück (0 = kein Cooldown)."""
+    import time as _t
+    resume = _rate_limit_cooldown.get(provider, 0)
+    remaining = resume - _t.time()
+    return max(0.0, remaining)
+
+def _set_cooldown(provider: str = "default", seconds: float = 5.0) -> None:
+    import time as _t
+    _rate_limit_cooldown[provider] = _t.time() + seconds
+
+
+async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float = 1.0):
     """
-    Retry-Wrapper für LLM-Calls.
-    - 429 Rate-Limit: sofort retry mit Backoff
+    Retry-Wrapper für LLM-Calls (#423: shouldWait + Exponential Backoff).
+    - 429 Rate-Limit: retry mit Backoff (Cooldown setzen)
     - 5xx Server-Fehler: retry
     - 401/403 Auth: kein Retry
+    - Quota/Billing: kein Retry (→ Failover)
     - Timeout: retry
-    Exponential Backoff mit 10% Jitter, max 30s.
+    Exponential Backoff mit 10% Jitter, max 60s.
     """
     import random as _random
+
+    # #423: Preemptiver Wait wenn Cooldown aktiv
+    wait = _should_wait()
+    if wait > 0:
+        logger.info("Rate-Limit Cooldown aktiv — warte %.1fs", wait)
+        await asyncio.sleep(wait)
 
     last_exc = None
     for attempt in range(max_attempts):
@@ -127,16 +149,31 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 3, base_delay: float
             if any(x in err_str for x in ["401", "403", "unauthorized", "forbidden", "authentication"]):
                 raise
 
-            # Quota/Rate-Limit erschöpft → kein Retry, sofort an Aufrufer weitergeben (Failover)
-            if any(x in err_str for x in ["rate_limit", "rate limit", "429", "quota", "credit", "billing", "payment"]):
+            # Quota/Billing erschöpft → kein Retry, Failover
+            if any(x in err_str for x in ["quota", "credit", "billing", "payment"]):
                 raise
+
+            # 429 Rate-Limit → retry mit Backoff + Cooldown setzen
+            is_rate_limit = any(x in err_str for x in ["rate_limit", "rate limit", "429"])
+            if is_rate_limit:
+                delay = min(base_delay * (2 ** attempt), 60.0)
+                delay *= (1 + _random.uniform(-0.1, 0.1))
+                _set_cooldown(seconds=delay)
+                logger.warning(
+                    "Rate-Limit (Versuch %d/%d): %s — retry in %.1fs",
+                    attempt + 1, max_attempts, str(e)[:80], delay,
+                )
+                if attempt == max_attempts - 1:
+                    raise
+                await asyncio.sleep(delay)
+                continue
 
             # Letzter Versuch → aufgeben
             if attempt == max_attempts - 1:
                 raise
 
-            # Backoff berechnen: 1s, 2s, 4s... max 30s + Jitter
-            delay = min(base_delay * (2 ** attempt), 30.0)
+            # Backoff berechnen: 1s, 2s, 4s... max 60s + Jitter
+            delay = min(base_delay * (2 ** attempt), 60.0)
             delay *= (1 + _random.uniform(-0.1, 0.1))  # 10% Jitter
 
             logger.warning(
