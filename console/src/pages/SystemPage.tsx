@@ -446,7 +446,15 @@ function TestsPanel() {
 }
 
 function OAuthUsageCard({ data }: { data: Record<string,unknown> | null }) {
-  if (!data || !data.available) return null;
+  if (!data) return null;
+  if (!data.available) return (
+    <div className="bg-card border rounded-lg p-4">
+      <h2 className="text-sm font-medium flex items-center gap-2 mb-2">
+        <Activity className="h-4 w-4 text-muted-foreground" /> Claude OAuth — Nutzungslimits
+      </h2>
+      <p className="text-xs text-muted-foreground">{String(data.message || "Warte auf ersten Chat mit Claude-Agent...")}</p>
+    </div>
+  );
   const ou = data;
   const windows = [
     { key: "5h", label: "Session (5h)", icon: "🕐" },
