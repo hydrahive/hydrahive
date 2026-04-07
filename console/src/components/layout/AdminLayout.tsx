@@ -275,15 +275,9 @@ export function AdminLayout() {
       <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img src="/hydrahive-logo.png" alt="HydraHive" className="h-[66px] w-[66px] rounded-2xl shadow-lg shadow-black/20" />
-            <div>
-              <p className="text-[0.7rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">{t("layout.controlFabric")}</p>
-              <h1 className="text-lg font-semibold text-[hsl(var(--sidebar-foreground))]">HydraHive</h1>
-              <a href="https://hydrahive.org" target="_blank" rel="noopener noreferrer"
-                className="text-[0.65rem] text-cyan-400/70 hover:text-cyan-300 transition-colors tracking-wide">
-                hydrahive.org
-              </a>
-            </div>
+            <img src="/hydrahive-logo.png" alt="HydraHive"
+              className="h-[120px] w-[120px] rounded-2xl"
+              style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
           </div>
           <button
             type="button"
