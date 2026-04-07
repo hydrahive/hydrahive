@@ -828,6 +828,7 @@ async def _compact_if_needed(
     boss_cfg,
     *,
     keep_last: int = 10,
+    keep_last_rounds: int = 3,
 ) -> None:
     """
     Mehrstufige Context-Kompaktierung (#47, #349 OpenClaw-Qualität).
@@ -888,8 +889,16 @@ async def _compact_if_needed(
         existing_summary = msgs[0].content
         msgs = msgs[1:]
 
-    # Nachrichten die kompaktiert werden (alles außer den letzten keep_last)
-    to_summarize = msgs[:-keep_last] if len(msgs) > keep_last else msgs[:]
+    # #477: Round-basiert splitten — immer an Round-Grenzen schneiden
+    from .session_manager import group_messages_by_api_round
+    rounds = group_messages_by_api_round(msgs)
+    if len(rounds) > keep_last_rounds:
+        kept_rounds = rounds[-keep_last_rounds:]
+        to_summarize_rounds = rounds[:-keep_last_rounds]
+        to_summarize = [m for rnd in to_summarize_rounds for m in rnd]
+    else:
+        # Nicht genug Rounds → flat Fallback
+        to_summarize = msgs[:-keep_last] if len(msgs) > keep_last else msgs[:]
     if not to_summarize and not existing_summary:
         return
 
@@ -946,10 +955,10 @@ async def _compact_if_needed(
         if not summary:
             return
 
-        await sessions.compact(project_id, summary, keep_last=keep_last)
+        await sessions.compact(project_id, summary, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
         logger.info(
-            "Context kompaktiert Stufe-1 (Projekt: %s, ~%d Tokens nach Kompaktierung)",
-            project_id, sessions.estimated_tokens(project_id),
+            "Context kompaktiert Stufe-1 (Projekt: %s, ~%d Tokens nach Kompaktierung, %d Rounds behalten)",
+            project_id, sessions.estimated_tokens(project_id), keep_last_rounds,
         )
 
         # Stufe 2: wenn immer noch zu groß, Summary selbst verdichten
@@ -969,7 +978,7 @@ async def _compact_if_needed(
             ))
             meta = resp2.choices[0].message.content or ""
             if meta:
-                await sessions.compact(project_id, meta, keep_last=keep_last)
+                await sessions.compact(project_id, meta, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
                 summary = meta
                 logger.info(
                     "Context kompaktiert Stufe-2 (Projekt: %s, ~%d Tokens nach Meta-Summary)",
@@ -993,8 +1002,8 @@ async def _compact_if_needed(
                 ]
                 session.messages = cleaned
                 sessions._persist(session)
-            # Nochmal kompaktieren mit weniger keep_last
-            await sessions.compact(project_id, summary, keep_last=4)
+            # Nochmal kompaktieren mit weniger keep_last (1 Round in Notfall)
+            await sessions.compact(project_id, summary, keep_last=4, keep_last_rounds=1)
             logger.info(
                 "Full-Compaction abgeschlossen (Projekt: %s, ~%d Tokens)",
                 project_id, sessions.estimated_tokens(project_id),

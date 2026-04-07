@@ -32,6 +32,7 @@ class Message:
     role:      MessageRole
     content:   str
     timestamp: str                  # ISO-8601
+    msg_id:    str | None = None    # Unique ID pro Message (#477)
     agent_id:  str | None = None    # welcher Agent hat das produziert
     metadata:  dict = field(default_factory=dict)
 
@@ -47,17 +48,31 @@ class Message:
             role=role,
             content=content,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            msg_id=uuid.uuid4().hex[:8],
             agent_id=agent_id,
             metadata=metadata,
         )
 
     def as_llm_message(self) -> dict:
-        """Format für LLM-API (OpenAI-kompatibel via litellm)."""
-        return {"role": self.role.value, "content": self.content}
+        """Format für LLM-API (OpenAI-kompatibel via litellm).
+
+        Prefixed den Content mit Timestamp damit das LLM echtes
+        Zeitgefühl bekommt (#477).
+        """
+        try:
+            dt = datetime.fromisoformat(self.timestamp)
+            prefix = f"[{dt.strftime('%H:%M:%S')}] "
+        except (ValueError, TypeError):
+            prefix = ""
+        return {"role": self.role.value, "content": prefix + self.content}
 
     def as_history_message(self) -> dict:
         """Format für Frontend-History — inkl. Metadata (Token-Usage etc.)."""
-        d = {"role": self.role.value, "content": self.content, "timestamp": self.timestamp, "agent_id": self.agent_id}
+        d = {
+            "role": self.role.value, "content": self.content,
+            "timestamp": self.timestamp, "agent_id": self.agent_id,
+            "msg_id": self.msg_id,
+        }
         if self.metadata:
             d["metadata"] = self.metadata
         return d
@@ -179,6 +194,7 @@ class Session:
                 role=MessageRole(m["role"]),
                 content=m["content"],
                 timestamp=m["timestamp"],
+                msg_id=m.get("msg_id"),
                 agent_id=m.get("agent_id"),
                 metadata=m.get("metadata", {}),
             )
@@ -191,6 +207,44 @@ class Session:
             ended_at=data.get("ended_at"),
             messages=messages,
         )
+
+
+def group_messages_by_api_round(messages: list[Message]) -> list[list[Message]]:
+    """Gruppiert Messages nach API-Round Boundaries (#477).
+
+    Angelehnt an Claude Code grouping.ts. Eine Gruppe = ein kompletter
+    User-Turn: [user, assistant, tool, tool, assistant, ...] — alles was
+    zwischen zwei USER-Messages passiert gehört zusammen.
+
+    SYSTEM-Messages am Anfang (Zusammenfassung) werden in eine eigene
+    Gruppe gepackt und bei Compaction separat behandelt.
+
+    Garantiert: Tool-Results werden nie von ihrem auslösenden Assistant
+    getrennt, weil der ganze Tool-Loop in einer Gruppe bleibt.
+    """
+    if not messages:
+        return []
+
+    groups: list[list[Message]] = []
+    current: list[Message] = []
+
+    for msg in messages:
+        # SYSTEM am Anfang (Compaction-Summary) → eigene Gruppe
+        if msg.role == MessageRole.SYSTEM and not current and not groups:
+            groups.append([msg])
+            continue
+
+        # USER startet immer eine neue Gruppe
+        if msg.role == MessageRole.USER and current:
+            groups.append(current)
+            current = [msg]
+        else:
+            current.append(msg)
+
+    if current:
+        groups.append(current)
+
+    return groups
 
 
 class SessionManager:
@@ -459,16 +513,45 @@ class SessionManager:
         except Exception:
             return None
 
-    async def compact(self, project_id: str, summary: str, keep_last: int = 10) -> None:
+    async def compact(
+        self,
+        project_id: str,
+        summary: str,
+        keep_last: int = 10,
+        keep_last_rounds: int | None = None,
+    ) -> None:
         """
-        Context-Kompaktierung (#74): ersetzt alte Nachrichten durch eine Summary-Message.
-        Die letzten keep_last Nachrichten bleiben erhalten.
+        Context-Kompaktierung (#74, #477 Round-Grouping).
+
+        Wenn keep_last_rounds gesetzt: schneidet an API-Round-Grenzen
+        (keine verwaisten tool_results). Fallback auf flat keep_last
+        für Legacy-Calls oder wenn Grouping nicht genug Rounds hat.
         """
         async with self._get_lock(project_id):
             session = self._active.get(project_id)
             if not session or len(session.messages) <= keep_last:
                 return
-            tail = session.messages[-keep_last:]
+
+            if keep_last_rounds is not None:
+                # #477: Round-basierte Compaction
+                # System-Summary am Anfang separat behandeln
+                msgs = session.messages
+                system_prefix: list[Message] = []
+                if msgs and msgs[0].role == MessageRole.SYSTEM and msgs[0].content.startswith("[Zusammenfassung"):
+                    system_prefix = [msgs[0]]
+                    msgs = msgs[1:]
+
+                rounds = group_messages_by_api_round(msgs)
+                if len(rounds) > keep_last_rounds:
+                    # Letzte N Rounds behalten, Rest kompaktieren
+                    kept_rounds = rounds[-keep_last_rounds:]
+                    tail = [m for rnd in kept_rounds for m in rnd]
+                else:
+                    # Nicht genug Rounds → flat Fallback
+                    tail = session.messages[-keep_last:]
+            else:
+                tail = session.messages[-keep_last:]
+
             summary_msg = Message.create(
                 role=MessageRole.SYSTEM,
                 content=f"[Zusammenfassung früherer Konversation]\n{summary}",
@@ -476,8 +559,9 @@ class SessionManager:
             session.messages = [summary_msg] + tail
             self._persist(session)
             logger.info(
-                "Session %s kompaktiert: Summary + %d Nachrichten behalten",
-                session.id[:8], keep_last,
+                "Session %s kompaktiert: Summary + %d Nachrichten (%s Rounds) behalten",
+                session.id[:8], len(tail),
+                keep_last_rounds if keep_last_rounds else "flat",
             )
 
     # ----------------------------------------------------------------- private
