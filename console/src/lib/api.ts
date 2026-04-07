@@ -220,6 +220,7 @@ export const api = {
   voiceStatus:    () => api.get<{installed:boolean;stt:{host:string;port:number;available:boolean};tts:{host:string;port:number;available:boolean};default_agent:string}>("/voice/status"),
   voiceText:      (text: string, agent_id?: string) => api.post<{text:string;agent_id:string}>("/voice", { text, agent_id }),
   voiceTts:       async (text: string) => { const token = getToken(); const res = await fetch("/api/voice/tts", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) }); if (!res.ok) { if (res.status === 401 && token && token === getToken()) notifyAuthExpired("/voice/tts"); throw new Error(`TTS error: ${res.status}`); } return res.blob(); },
+  voiceStt:       async (audioBlob: Blob) => { const token = getToken(); const fd = new FormData(); fd.append("audio", audioBlob, "recording.wav"); const res = await fetch("/api/voice/stt", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd }); if (!res.ok) { if (res.status === 401 && token && token === getToken()) notifyAuthExpired("/voice/stt"); throw new Error(`STT error: ${res.status}`); } return res.json() as Promise<{text: string}>; },
   // A2A Federation (#50)
   a2aPeers:       () => api.get<A2APeersResponse>("/admin/a2a/peers"),
   a2aSetSecret:   (secret: string) => api.put<{ok:boolean}>("/admin/a2a/secret", { secret }),

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2, RefreshCw, RotateCcw, Plus, ImagePlus } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
+import VoiceChatButton from "@/components/VoiceChatButton";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useTranslation } from "react-i18next";
@@ -844,6 +845,7 @@ export function ChatPage() {
                     aria-label="Bild hochladen">
                     <ImagePlus className={`h-4 w-4 ${pendingImages.length > 0 ? "text-primary" : "text-muted-foreground"}`} />
                   </button>
+                  <VoiceChatButton onTranscript={(t) => setInput(prev => prev ? prev + " " + t : t)} disabled={sending} />
                   {sending ? (
                     <button onClick={stop} className="flex h-[44px] w-[44px] flex-shrink-0 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90 sm:h-[52px] sm:w-[52px] sm:rounded-2xl" aria-label="Stop generation">
                       <Square className="h-4 w-4" />

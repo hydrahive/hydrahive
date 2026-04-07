@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ImagePlus } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
+import VoiceChatButton from "@/components/VoiceChatButton";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 import { sseStream } from "@/lib/sseStream";
@@ -677,6 +678,7 @@ export function AgentChatPage() {
             aria-label="Bild hochladen">
             <ImagePlus className={`h-4 w-4 ${pendingImages.length > 0 ? "text-primary" : "text-muted-foreground"}`} />
           </button>
+          <VoiceChatButton onTranscript={(t) => setInput(prev => prev ? prev + " " + t : t)} disabled={sending} />
           <button onClick={() => setShowEmoji(v => !v)} type="button"
             className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
             aria-label="Toggle emoji picker">

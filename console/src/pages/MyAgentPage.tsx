@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
+import VoiceChatButton from "@/components/VoiceChatButton";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -909,6 +910,7 @@ export function MyAgentPage() {
                           aria-label="Bild hochladen">
                           <ImagePlus className={`h-3.5 w-3.5 ${pendingImages.length > 0 ? "text-primary" : ""}`} /><span className="hidden sm:inline">Bild</span>
                         </button>
+                        <VoiceChatButton onTranscript={(t) => setInput(prev => prev ? prev + " " + t : t)} disabled={sending || !!viewSession} className="!p-1 !rounded-lg" />
                       </div>
                       {/* Input + Send */}
                       <div className="flex items-end gap-1.5 sm:gap-2 min-w-0">
