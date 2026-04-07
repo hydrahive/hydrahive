@@ -421,13 +421,19 @@ class FileReadTool(BaseTool):
 class FileWriteTool(BaseTool):
     """Schreibt eine Datei ins Projekt-Verzeichnis. (#19, #54, #428 Read-Before-Edit)"""
 
-    # #428: Tracking welche Dateien pro Agent gelesen wurden
+    # #428 + #432: Tracking welche Dateien pro Agent gelesen wurden (LRU-Eviction)
     _read_state: dict[str, set[str]] = {}  # agent_id → {resolved_path, ...}
+    _MAX_READ_STATE_PER_AGENT = 500  # LRU-Cap pro Agent
 
     @classmethod
     def mark_read(cls, agent_id: str, path: str) -> None:
         """Wird von FileReadTool aufgerufen wenn eine Datei gelesen wird."""
-        cls._read_state.setdefault(agent_id, set()).add(path)
+        paths = cls._read_state.setdefault(agent_id, set())
+        paths.add(path)
+        # #432: LRU-Eviction — bei Overflow älteste Hälfte entfernen
+        if len(paths) > cls._MAX_READ_STATE_PER_AGENT:
+            to_keep = list(paths)[cls._MAX_READ_STATE_PER_AGENT // 2:]
+            cls._read_state[agent_id] = set(to_keep)
 
     @property
     def id(self) -> str:   return "file_write"
@@ -3238,13 +3244,47 @@ class GitDiffTool(BaseTool):
             )
         except Exception as e:
             return {"error": str(e)}
+        # #422: Shortstat-Probe vor Full-Diff (Memory-Schutz)
+        stat_args = ["diff", "--shortstat"]
+        if staged:
+            stat_args.append("--cached")
+        if path:
+            stat_args += ["--", path]
+        stat_out, _, _ = await GiteaClient._git(stat_args, ws)
+
+        # Parse shortstat: "3 files changed, 120 insertions(+), 45 deletions(-)"
+        import re
+        files_changed = 0
+        lines_changed = 0
+        m_files = re.search(r"(\d+) file", stat_out)
+        m_ins = re.search(r"(\d+) insertion", stat_out)
+        m_del = re.search(r"(\d+) deletion", stat_out)
+        if m_files:
+            files_changed = int(m_files.group(1))
+        if m_ins:
+            lines_changed += int(m_ins.group(1))
+        if m_del:
+            lines_changed += int(m_del.group(1))
+
+        # Bei riesigen Diffs: nur Summary statt Full-Diff
+        if files_changed > 50 or lines_changed > 10000:
+            return {
+                "project_id": pid,
+                "repo":      target["repo"],
+                "owner":     target["owner"],
+                "full_name": target["full_name"],
+                "diff":      f"[Diff zu groß für Full-Output: {files_changed} Dateien, {lines_changed} Zeilen]\n{stat_out.strip()}",
+                "shortstat": stat_out.strip(),
+                "truncated": True,
+                "exit_code": 0,
+            }
+
         args = ["diff"]
         if staged:
             args.append("--cached")
         if path:
             args += ["--", path]
         stdout, stderr, rc = await GiteaClient._git(args, ws)
-        # Diff auf 10000 Zeichen begrenzen
         diff = stdout[:10000]
         return {
             "project_id": pid,
@@ -3252,6 +3292,7 @@ class GitDiffTool(BaseTool):
             "owner":     target["owner"],
             "full_name": target["full_name"],
             "diff":      diff,
+            "shortstat": stat_out.strip(),
             "truncated": len(stdout) > 10000,
             "exit_code": rc,
         }

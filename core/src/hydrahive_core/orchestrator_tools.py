@@ -101,12 +101,22 @@ async def _execute_tool(
     if has_kwargs:
         extra["_agent_permissions"] = agent_permissions
         extra["_execution_mode"] = execution_mode or boss_cfg.effective_execution_mode(execution_mode)
-    result = await tool.execute(
-        agent_id=boss_cfg.id,
-        project_id=effective_pid,
-        **extra,
-        **args,
-    )
+    # #431: Tool-Timeout (Default 120s, konfigurierbar)
+    import asyncio as _aio
+    _TOOL_TIMEOUT = 120  # Default: 2 Minuten
+    try:
+        result = await _aio.wait_for(
+            tool.execute(
+                agent_id=boss_cfg.id,
+                project_id=effective_pid,
+                **extra,
+                **args,
+            ),
+            timeout=_TOOL_TIMEOUT,
+        )
+    except _aio.TimeoutError:
+        logger.error("Tool '%s' Timeout nach %ds", tool_name, _TOOL_TIMEOUT)
+        return {"error": f"Tool '{tool_name}' hat nach {_TOOL_TIMEOUT}s nicht geantwortet (Timeout)"}
 
     # Cache nur idempotente Read-Tools
     _tool_cache_put(tool_name, args, result)
@@ -162,11 +172,31 @@ def format_tool_detail(tool_name: str, tool_input: dict) -> str:
     return tool_name
 
 
+import re as _re
+
+# #453: Prompt-Injection-Muster die in Tool-Outputs neutralisiert werden
+_INJECTION_PATTERNS = [
+    (_re.compile(r'ignore\s+all\s+previous\s+instructions?', _re.I), '[FILTERED]'),
+    (_re.compile(r'forget\s+everything\s+(?:above|before)', _re.I), '[FILTERED]'),
+    (_re.compile(r'you\s+are\s+now\s+(?:a|an)\s+', _re.I), '[FILTERED]'),
+    (_re.compile(r'new\s+instructions?:\s*', _re.I), '[FILTERED]'),
+    (_re.compile(r'system\s*:\s*you\s+(?:are|must|should)', _re.I), '[FILTERED]'),
+    (_re.compile(r'<\s*(?:system|instructions?|prompt)\s*>', _re.I), '[FILTERED-TAG]'),
+]
+
+
+def _sanitize_tool_output(text: str) -> str:
+    """#453: Neutralisiert bekannte Prompt-Injection-Muster in Tool-Outputs."""
+    for pattern, replacement in _INJECTION_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def format_tool_result(result, *, ensure_str: bool = True) -> str:
-    """Ergebnis eines Tool-Calls einheitlich als truncated String formatieren."""
+    """Ergebnis eines Tool-Calls einheitlich als truncated + sanitized String formatieren."""
     if isinstance(result, str):
-        return _truncate_tool_result(result)
-    return _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
+        return _sanitize_tool_output(_truncate_tool_result(result))
+    return _sanitize_tool_output(_truncate_tool_result(_json.dumps(result, ensure_ascii=False)))
 
 
 async def execute_tool_call(

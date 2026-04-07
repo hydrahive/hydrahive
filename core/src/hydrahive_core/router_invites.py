@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 INVITES_FILE = str(settings.invites_config)
 INVITE_TTL_SECONDS = 7 * 24 * 3600  # 7 Tage
 
+# #458: Lock gegen Race Conditions bei concurrent Invite-Operationen
+import asyncio as _aio
+_invites_lock = _aio.Lock()
+
 
 # ── Persistenz ────────────────────────────────────────────────────────────────
 
@@ -145,6 +149,10 @@ def register_invite_routes(
     @public_router.post("/invites/{token}/accept", status_code=201)
     async def accept_invite(token: str, req: AcceptInviteRequest):
         """Kein Auth — legt User an und markiert Token als verwendet."""
+        async with _invites_lock:  # #458: Race Condition verhindern
+            return await _accept_invite_locked(token, req)
+
+    async def _accept_invite_locked(token: str, req: AcceptInviteRequest):
         invites = _load_invites()
         inv = invites.get(token)
         if not inv:

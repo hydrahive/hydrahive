@@ -283,6 +283,12 @@ def register_core_misc_routes(
         if users:
             user = users.get(req.username)
             if user and verify_password(req.password, user.get("password_hash", "")):
+                # #454: Auto-Rehash von Legacy pbkdf2 → pbkdf2b
+                from .auth_utils import needs_rehash, hash_password
+                if needs_rehash(user.get("password_hash", "")):
+                    user["password_hash"] = hash_password(req.password)
+                    save_users(users)
+                    logger.info("Legacy-Hash für '%s' auf pbkdf2b migriert", req.username)
                 role  = user.get("role", "user")
                 group = user.get("group", "standard")
                 token = make_jwt(req.username, role, group)

@@ -11,8 +11,23 @@ from __future__ import annotations
 
 import re
 from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import Any
 
 _GROUP_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
+
+
+# #457: Pydantic Models statt raw dict für Input-Validierung
+class CreateGroupRequest(BaseModel):
+    id: str = Field(..., min_length=1, max_length=31, pattern=r"^[a-z][a-z0-9_-]*$")
+    label: str = Field("", max_length=100)
+    description: str = Field("", max_length=500)
+    permissions: dict[str, Any] = Field(default_factory=dict)
+
+class UpdateGroupRequest(BaseModel):
+    label: str | None = Field(None, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    permissions: dict[str, Any] | None = None
 
 
 def register_group_routes(
@@ -31,21 +46,18 @@ def register_group_routes(
         return {"groups": groups}
 
     @admin_router.post("/admin/groups", status_code=201)
-    def create_group(body: dict = Body(...), _a=Depends(require_admin)):
-        """Neue Gruppe erstellen."""
-        group_id = body.get("id", "").strip().lower()
-        if not group_id or not _GROUP_ID_RE.fullmatch(group_id):
-            raise HTTPException(400, "Ungültige Gruppen-ID (a-z, 0-9, _, -, max 31 Zeichen)")
+    def create_group(req: CreateGroupRequest, _a=Depends(require_admin)):
+        """Neue Gruppe erstellen (#457: Pydantic-Validierung)."""
         try:
-            group = group_service.create_group(group_id, body)
-            return {"created": True, "id": group_id, "group": group}
+            group = group_service.create_group(req.id, req.model_dump())
+            return {"created": True, "id": req.id, "group": group}
         except ValueError as e:
             raise HTTPException(409, str(e))
 
     @admin_router.put("/admin/groups/{group_id}")
-    def update_group(group_id: str, body: dict = Body(...), _a=Depends(require_admin)):
-        """Gruppe bearbeiten (Permissions, Label, Description)."""
-        result = group_service.update_group(group_id, body)
+    def update_group(group_id: str, req: UpdateGroupRequest, _a=Depends(require_admin)):
+        """Gruppe bearbeiten (#457: Pydantic-Validierung)."""
+        result = group_service.update_group(group_id, req.model_dump(exclude_none=True))
         if result is None:
             raise HTTPException(404, f"Gruppe '{group_id}' nicht gefunden")
         return {"updated": True, "id": group_id, "group": result}

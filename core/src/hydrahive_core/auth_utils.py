@@ -22,16 +22,22 @@ def verify_password(password: str, stored: str) -> bool:
     """
     Verifiziert ein Passwort gegen einen gespeicherten Hash.
     Unterstützt pbkdf2b (korrekt) und pbkdf2 (Legacy) Format.
+    #454: Legacy-Format hat .encode() statt bytes.fromhex() — Bug ist symmetrisch
+    (Hash wurde mit .encode() erzeugt → Verify muss auch .encode() nutzen).
     """
     try:
         scheme, salt_str, h = stored.split(":", 2)
         if scheme == "pbkdf2b":
-            # Korrekt: salt als echte Bytes
             salt = bytes.fromhex(salt_str)
         else:
-            # Legacy pbkdf2: salt war ASCII-kodierter Hex-String
+            # Legacy pbkdf2: Bug-kompatibel — .encode() weil so gespeichert
             salt = salt_str.encode()
         check = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
         return check.hex() == h
     except Exception:
         return False
+
+
+def needs_rehash(stored: str) -> bool:
+    """True wenn der Hash im Legacy-Format ist und migriert werden sollte (#454)."""
+    return stored.startswith("pbkdf2:")
