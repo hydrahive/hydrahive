@@ -29,49 +29,56 @@ logger = logging.getLogger(__name__)
 def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]:
     """
     Fügt Anthropic Prompt Caching Cache-Breakpoints ein (max 4 erlaubt).
-    - System-Message:        letzter Block → cache_control (größter Gewinn)
-    - Ältere History:        alles außer den letzten 4 Nachrichten → cache_control
+    Strategie (4 Breakpoints):
+    1. System-Message (letzter Block) — größter Gewinn
+    2. Erste User-Message (Kontext-Anfang)
+    3. Mittlere History-Message (bei langen Conversations)
+    4. Vorletzte Message (nahe am aktuellen Turn)
     Für nicht-Anthropic-Modelle werden die Messages unverändert zurückgegeben.
     """
     if not is_anthropic:
         return messages
 
-    non_sys = [m for m in messages if m.get("role") != "system"]
-    cache_cutoff = max(0, len(non_sys) - 4)   # Index ab dem NICHT gecacht wird
-    non_sys_i = 0
-    result = []
+    result = list(messages)
+    _MAX_CACHE = 4
+    used = 0
 
-    for m in messages:
-        role    = m.get("role", "")
-        content = m.get("content", "")
+    def _tag_cache(msg: dict) -> dict:
+        """Setzt cache_control auf den letzten Content-Block einer Message."""
+        content = msg.get("content", "")
+        if isinstance(content, str) and content:
+            return {**msg, "content": [{"type": "text", "text": content,
+                                        "cache_control": {"type": "ephemeral"}}]}
+        elif isinstance(content, list) and content:
+            new_c = list(content)
+            if not new_c[-1].get("cache_control"):
+                new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
+            return {**msg, "content": new_c}
+        return msg
 
-        if role == "system":
-            if isinstance(content, str):
-                result.append({
-                    "role": "system",
-                    "content": [{"type": "text", "text": content,
-                                 "cache_control": {"type": "ephemeral"}}],
-                })
-            elif isinstance(content, list) and content:
-                new_c = list(content)
-                if not new_c[-1].get("cache_control"):
-                    new_c[-1] = {**new_c[-1], "cache_control": {"type": "ephemeral"}}
-                result.append({**m, "content": new_c})
-            else:
-                result.append(m)
+    # Breakpoint 1: System-Message
+    for i, m in enumerate(result):
+        if m.get("role") == "system" and used < _MAX_CACHE:
+            result[i] = _tag_cache(m)
+            used += 1
+            break
 
-        elif role in ("user", "assistant") and non_sys_i < cache_cutoff and isinstance(content, str) and content:
-            result.append({
-                **m,
-                "content": [{"type": "text", "text": content,
-                             "cache_control": {"type": "ephemeral"}}],
-            })
-            non_sys_i += 1
+    # Breakpoints 2-4: strategische History-Positionen
+    non_sys_indices = [i for i, m in enumerate(result) if m.get("role") in ("user", "assistant")]
+    if non_sys_indices and used < _MAX_CACHE:
+        # Positionen: Anfang, Mitte, vorletzter
+        targets = set()
+        targets.add(non_sys_indices[0])  # erste User/Assistant Message
+        if len(non_sys_indices) >= 4:
+            targets.add(non_sys_indices[len(non_sys_indices) // 2])  # Mitte
+        if len(non_sys_indices) >= 2:
+            targets.add(non_sys_indices[-2])  # vorletzte
 
-        else:
-            result.append(m)
-            if role in ("user", "assistant"):
-                non_sys_i += 1
+        for idx in sorted(targets):
+            if used >= _MAX_CACHE:
+                break
+            result[idx] = _tag_cache(result[idx])
+            used += 1
 
     return result
 
