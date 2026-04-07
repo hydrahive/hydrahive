@@ -643,7 +643,9 @@ export function ChatPage() {
                           </div>
                         ) : (
                           <>
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            <ReactMarkdown components={{ img: ({ src, alt }) => src?.startsWith("data:image") ? (
+                              <img src={src} alt={alt || ""} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity my-2" onClick={() => setLightboxSrc(src)} />
+                            ) : <img src={src} alt={alt || ""} /> }}>{msg.content}</ReactMarkdown>
                             {streamingMsgId === msg.id && activeTool && (activeTool.name === "ask_agent" || activeTool.name === "dispatch_task") ? (
                               <div className="mt-2 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
                                 <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />

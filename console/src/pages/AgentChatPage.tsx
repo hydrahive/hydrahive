@@ -524,7 +524,9 @@ export function AgentChatPage() {
                       <span className="whitespace-pre-wrap">{msg.content}</span>
                     </>
                   ) : (
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown components={{ img: ({ src, alt }) => src?.startsWith("data:image") ? (
+                      <img src={src} alt={alt || ""} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity my-2" onClick={() => setLightboxSrc(src)} />
+                    ) : <img src={src} alt={alt || ""} /> }}>{msg.content}</ReactMarkdown>
                   )}
                   {msg.role === "assistant" && (msg.tokenUsage || msg.isFallback) && (
                     <div className="flex gap-1 px-1 pt-1 flex-wrap">

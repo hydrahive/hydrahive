@@ -720,7 +720,9 @@ export function MyAgentPage() {
                                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
                                   </div>
                                 : <>
-                                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    <ReactMarkdown components={{ img: ({ src, alt }) => src?.startsWith("data:image") ? (
+                                      <img src={src} alt={alt || ""} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity my-2" onClick={() => setLightboxSrc(src)} />
+                                    ) : <img src={src} alt={alt || ""} /> }}>{msg.content}</ReactMarkdown>
                                     {streamingMsgId === msg.id
                                       ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" />
                                       : doneMsgId === msg.id && <span className="ml-1 inline-block align-text-bottom text-xs text-green-500">✓</span>
