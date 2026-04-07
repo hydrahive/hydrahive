@@ -21,7 +21,10 @@ from .orchestrator_context import (
     _history_token_budget,
     _estimate_tokens,
 )
-from .orchestrator_tools import _truncate_tool_result
+from .orchestrator_tools import (
+    _truncate_tool_result, check_repeated_signature, execute_tool_call,
+    format_tool_detail, format_tool_result, handle_request_tools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -254,12 +257,10 @@ async def _stream_codex(
         if not getattr(msg, "tool_calls", None):
             break
         signature = _tool_call_signature_fn(msg.tool_calls)
-        if signature and signature == last_signature:
-            repeated_signature_count += 1
-        else:
-            repeated_signature_count = 0
-        last_signature = signature
-        if repeated_signature_count >= 4:
+        last_signature, repeated_signature_count, should_abort = check_repeated_signature(
+            signature, last_signature, repeated_signature_count, threshold=4,
+        )
+        if should_abort:
             final = await orch._finalize_tool_loop_response(
                 boss_cfg, cur_messages,
                 reason="wiederholte Tool-Signatur",
@@ -276,26 +277,15 @@ async def _stream_codex(
         cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
         for tc in msg.tool_calls:
             _tc_args = _json.loads(tc.function.arguments or "{}")
-            _tc_detail = f"{tc.function.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc.function.name
+            _tc_detail = format_tool_detail(tc.function.name, _tc_args)
             yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
             await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
-            args = _json.loads(tc.function.arguments or "{}")
-            if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                try:
-                    result = await orch._execute_mcp_tool(boss_cfg, tc.function.name, args)
-                except Exception as te:
-                    result = {"error": str(te)}
-            else:
-                tool = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
-                try:
-                    result = await orch._execute_tool(
-                        tool, boss_cfg=boss_cfg, project_id=project_id,
-                        tool_name=tc.function.name, tool_input=args,
-                        execution_mode=execution_mode,
-                    )
-                except Exception as te:
-                    result = {"error": str(te)}
-            result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result)
+            result, _ = await execute_tool_call(
+                orch, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=tc.function.name, tool_input=_tc_args,
+                execution_mode=execution_mode, user_text=content,
+            )
+            result_str = format_tool_result(result)
             cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
         next_resp = await orch._openai_codex_call(
             boss_cfg, cur_messages, litellm_tools, codex_token, model_name,
@@ -425,12 +415,10 @@ async def _stream_anthropic_oauth(
             for block in tool_use_blocks
             if block.name not in _LOOP_EXCLUDE_OAUTH
         )
-        if signature and signature == last_tool_signature:
-            repeated_tool_signature_count += 1
-        else:
-            repeated_tool_signature_count = 0
-        last_tool_signature = signature
-        if repeated_tool_signature_count >= 4:
+        last_tool_signature, repeated_tool_signature_count, should_abort = check_repeated_signature(
+            signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
+        )
+        if should_abort:
             kwargs_final = dict(kwargs)
             kwargs_final.pop("tools", None)
             kwargs_final["messages"] = filtered + [
@@ -465,72 +453,45 @@ async def _stream_anthropic_oauth(
         any_tool_error = False
         for block in tool_use_blocks:
             _tc_input = block.input or {}
-            _tc_detail = f"{block.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_input.items())})" if _tc_input else block.name
+            _tc_detail = format_tool_detail(block.name, _tc_input)
             yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
             await orch._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id)
             # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
             if block.name == "request_tools":
                 try:
-                    categories = (block.input or {}).get("categories", [])
-                    new_cats = [c for c in categories if c not in _oauth_loaded_cats]
-                    added_count = 0
-                    if new_cats:
-                        new_schemas = orch._category_tools_schema(boss_cfg, execution_mode, new_cats)
-                        existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
-                        new_tool_defs = [
-                            {
-                                "name": s["function"]["name"],
-                                "description": s["function"].get("description", ""),
-                                "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
-                            }
-                            for s in new_schemas
-                            if s["function"]["name"] not in existing_names
-                        ]
-                        if new_tool_defs:
-                            kwargs.setdefault("tools", [])
-                            kwargs["tools"].extend(new_tool_defs)
-                            added_count = len(new_tool_defs)
-                        _oauth_loaded_cats.update(new_cats)
-                    result = {"ok": True, "categories": categories, "tools_added": added_count,
-                              "note": "Tools geladen — direkt verwendbar."}
+                    categories = (_tc_input).get("categories", [])
+                    # OAuth braucht Anthropic-Format für kwargs["tools"]
+                    _rt_litellm_tools = []  # Dummy für handle_request_tools
+                    _, result = handle_request_tools(
+                        orch, boss_cfg, execution_mode, categories,
+                        _oauth_loaded_cats, _rt_litellm_tools,
+                    )
+                    # Schemas in Anthropic-Format in kwargs["tools"] einfügen
+                    existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
+                    new_tool_defs = [
+                        {
+                            "name": s["function"]["name"],
+                            "description": s["function"].get("description", ""),
+                            "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
+                        }
+                        for s in _rt_litellm_tools
+                        if s["function"]["name"] not in existing_names
+                    ]
+                    if new_tool_defs:
+                        kwargs.setdefault("tools", [])
+                        kwargs["tools"].extend(new_tool_defs)
                 except Exception as te:
                     result = {"error": f"request_tools: {te}"}
-            elif block.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                try:
-                    result = await orch._execute_mcp_tool(boss_cfg, block.name, block.input or {})
-                except Exception as te:
-                    result = {"error": str(te)}
             else:
-                tool = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
-                if tool:
-                    try:
-                        # file_read Deduplication
-                        if block.name == "file_read":
-                            _rpath = (block.input or {}).get("path", "")
-                            if _rpath and _rpath in _oauth_file_read_cache:
-                                result = _oauth_file_read_cache[_rpath]
-                                logger.debug("file_read dedup (oauth): '%s'", _rpath)
-                            else:
-                                result = await orch._execute_tool(
-                                    tool, boss_cfg=boss_cfg, project_id=project_id,
-                                    tool_name=block.name, tool_input=block.input,
-                                    execution_mode=execution_mode,
-                                )
-                                if _rpath:
-                                    _oauth_file_read_cache[_rpath] = result
-                        else:
-                            result = await orch._execute_tool(
-                                tool, boss_cfg=boss_cfg, project_id=project_id,
-                                tool_name=block.name, tool_input=block.input,
-                                execution_mode=execution_mode,
-                            )
-                    except Exception as te:
-                        result = {"error": str(te)}
-                else:
-                    result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
-            if isinstance(result, dict) and "error" in result:
-                any_tool_error = True
-            result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
+                result, is_error = await execute_tool_call(
+                    orch, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=block.name, tool_input=_tc_input,
+                    execution_mode=execution_mode, user_text=content,
+                    file_read_cache=_oauth_file_read_cache,
+                )
+                if is_error:
+                    any_tool_error = True
+            result_str = format_tool_result(result)
             tool_results.append({
                 "type":        "tool_result",
                 "tool_use_id": block.id,
@@ -651,12 +612,10 @@ async def _stream_litellm(
             for tc in tc_list
             if tc['name'] not in _LOOP_EXCLUDE_LITELLM
         )
-        if signature and signature == last_tool_signature:
-            repeated_tool_signature_count += 1
-        else:
-            repeated_tool_signature_count = 0
-        last_tool_signature = signature
-        if repeated_tool_signature_count >= 4:
+        last_tool_signature, repeated_tool_signature_count, should_abort = check_repeated_signature(
+            signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
+        )
+        if should_abort:
             loop_messages.append({
                 "role": "user",
                 "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
@@ -696,23 +655,17 @@ async def _stream_litellm(
 
         tool_results_text = []
         for tc in tc_list:
-            _tc_args = tc.get("args", {})
-            _tc_detail = f"{tc['name']}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc['name']
-            yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+            tool_input = _json.loads(_safe_args(tc["arguments"]))
+            _tc_detail = format_tool_detail(tc["name"], tool_input)
+            yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': tool_input, 'tool_detail': _tc_detail})}\n\n"
             await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
-            tool = orch._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
-            try:
-                tool_input = _json.loads(_safe_args(tc["arguments"]))
-                result = await orch._execute_tool(
-                    tool, boss_cfg=boss_cfg, project_id=project_id,
-                    tool_name=tc["name"], tool_input=tool_input,
-                    execution_mode=execution_mode,
-                )
-            except Exception as te:
-                result = f"Tool-Fehler: {te}"
-            tool_results_text.append(
-                f"[Tool: {tc['name']}]\n{_json.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)}"
+            result, _ = await execute_tool_call(
+                orch, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=tc["name"], tool_input=tool_input,
+                execution_mode=execution_mode,
             )
+            result_str = format_tool_result(result)
+            tool_results_text.append(f"[Tool: {tc['name']}]\n{result_str}")
 
         loop_messages.append({
             "role":    "user",

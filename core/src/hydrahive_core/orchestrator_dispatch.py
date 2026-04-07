@@ -11,7 +11,11 @@ import logging
 
 from .agent_config import AgentConfig
 from .project_config import ProjectConfig
-from .orchestrator_tools import DispatchResult, _truncate_tool_result
+from .orchestrator_tools import (
+    DispatchResult, _truncate_tool_result,
+    check_repeated_signature, execute_tool_call, format_tool_result,
+    handle_request_tools,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,13 +199,11 @@ async def _tool_loop(
             return response.choices[0].message.content or "", workers_used
 
         signature = _tool_call_signature_fn(tool_calls)
-        if signature and signature == last_signature:
-            repeated_signature_count += 1
-        else:
-            repeated_signature_count = 0
-        last_signature = signature
+        last_signature, repeated_signature_count, should_abort = check_repeated_signature(
+            signature, last_signature, repeated_signature_count, threshold=2,
+        )
 
-        if repeated_signature_count >= 2:
+        if should_abort:
             logger.warning(
                 "Tool-Loop: wiederholte Tool-Signatur erkannt (%s) — erzwinge Abschluss",
                 ", ".join(signature[:3])[:180],
@@ -265,25 +267,13 @@ async def _tool_loop(
         # On-Demand Tool-Kategorien nachladen
         for tc in request_tool_tcs:
             try:
-                args       = json.loads(tc.function.arguments)
+                args = json.loads(tc.function.arguments)
                 categories = args.get("categories", [])
-                new_cats   = [c for c in categories if c not in _loaded_categories]
-                if new_cats:
-                    new_schemas = orch._category_tools_schema(boss_cfg, execution_mode, new_cats)
-                    existing    = {t["function"]["name"] for t in litellm_tools}
-                    added = [s for s in new_schemas if s["function"]["name"] not in existing]
-                    litellm_tools.extend(added)
-                    _loaded_categories.update(new_cats)
-                    logger.info(
-                        "request_tools: +%d Tools (Kategorien: %s, Agent: %s)",
-                        len(added), new_cats, boss_cfg.id,
-                    )
-                tool_results[tc.id] = json.dumps({
-                    "ok": True,
-                    "categories": categories,
-                    "tools_added": len([c for c in categories if c not in (_loaded_categories - set(new_cats))]),
-                    "note": "Du kannst die geladenen Tools jetzt direkt verwenden.",
-                }, ensure_ascii=False)
+                _, result_dict = handle_request_tools(
+                    orch, boss_cfg, execution_mode, categories,
+                    _loaded_categories, litellm_tools,
+                )
+                tool_results[tc.id] = json.dumps(result_dict, ensure_ascii=False)
             except Exception as e:
                 tool_results[tc.id] = f"[Fehler] request_tools: {e}"
 
@@ -303,50 +293,15 @@ async def _tool_loop(
 
         for tc in other_tcs:
             args = json.loads(tc.function.arguments)
-
-            # MCP-Tool? (Prefix mcp_{server_id}_)
-            if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                try:
-                    result = await orch._execute_mcp_tool(boss_cfg, tc.function.name, args)
-                    tool_results[tc.id] = _truncate_tool_result(
-                        result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
-                    )
-                except Exception as e:
-                    logger.error("MCP-Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
-                    tool_results[tc.id] = f"[Fehler] {e}"
-                continue
-
-            tool = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
-            if tool is None:
-                tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
-                continue
-            try:
-                # file_read Deduplication: gleiche Datei nicht mehrfach lesen
-                if tc.function.name == "file_read":
-                    _read_path = args.get("path", "")
-                    if _read_path and _read_path in _file_read_cache:
-                        tool_results[tc.id] = _file_read_cache[_read_path]
-                        logger.debug("file_read dedup: '%s' bereits gelesen", _read_path)
-                        continue
-
-                result = await orch._execute_tool(
-                    tool,
-                    boss_cfg=boss_cfg,
-                    project_id=project_id,
-                    tool_name=tc.function.name,
-                    tool_input=args,
-                    execution_mode=execution_mode,
-                )
-                result_str = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
-                tool_results[tc.id] = result_str
-                # Cache befüllen
-                if tc.function.name == "file_read":
-                    _read_path = args.get("path", "")
-                    if _read_path:
-                        _file_read_cache[_read_path] = result_str
-            except Exception as e:
-                logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
-                tool_results[tc.id] = f"[Fehler] {e}"
+            result, is_error = await execute_tool_call(
+                orch, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=tc.function.name, tool_input=args,
+                execution_mode=execution_mode,
+                file_read_cache=_file_read_cache,
+            )
+            if is_error:
+                logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))
+            tool_results[tc.id] = format_tool_result(result)
 
         # Tool-Results in Messages einbauen
         for tc in tool_calls:

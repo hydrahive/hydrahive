@@ -6,9 +6,11 @@ Standalone-Hilfsfunktionen für Tool-Ausführung:
 - _truncate_tool_result: Tool-Output kürzen (typ-abhängig)
 - _tool_call_signature: Fingerprint eines Tool-Call-Sets (Loop-Erkennung)
 - _execute_tool: Einzelnes Tool ausführen
+- Shared helpers: format_tool_detail, execute_tool_call, handle_request_tools
 """
 from __future__ import annotations
 
+import json as _json
 import logging
 from dataclasses import dataclass
 
@@ -147,3 +149,125 @@ def _tool_cache_put(tool_name: str, args: dict, result: dict):
     if len(_tool_result_cache) > _TOOL_CACHE_MAX:
         oldest = min(_tool_result_cache, key=lambda k: _tool_result_cache[k][0])
         del _tool_result_cache[oldest]
+
+
+# ---- Shared Tool-Loop Helpers (#389) ----
+
+def format_tool_detail(tool_name: str, tool_input: dict) -> str:
+    """Einheitliche Formatierung eines Tool-Aufrufs für Display/Logging."""
+    if tool_input:
+        args_str = ", ".join(f"{k}={repr(v)[:50]}" for k, v in tool_input.items())
+        return f"{tool_name}({args_str})"
+    return tool_name
+
+
+def format_tool_result(result, *, ensure_str: bool = True) -> str:
+    """Ergebnis eines Tool-Calls einheitlich als truncated String formatieren."""
+    if isinstance(result, str):
+        return _truncate_tool_result(result)
+    return _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
+
+
+async def execute_tool_call(
+    orch,
+    *,
+    boss_cfg,
+    project_id: str,
+    tool_name: str,
+    tool_input: dict,
+    execution_mode: str | None = None,
+    user_text: str = "",
+    file_read_cache: dict[str, str] | None = None,
+) -> tuple[object, bool]:
+    """
+    Einheitlicher Tool-Execution-Pfad für alle 4 Loops.
+    Handles: MCP-Tools, reguläre Tools, file_read-Dedup.
+    Returns: (result, is_error)
+    """
+    # MCP-Tool?
+    if tool_name.startswith("mcp_") and boss_cfg.mcp_servers:
+        try:
+            result = await orch._execute_mcp_tool(boss_cfg, tool_name, tool_input)
+            return result, False
+        except Exception as te:
+            return {"error": str(te)}, True
+
+    # Reguläres Tool
+    tool = orch._resolve_allowed_tool(boss_cfg, tool_name, execution_mode, user_text=user_text)
+    if tool is None:
+        return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"}, True
+
+    # file_read Deduplication
+    if file_read_cache is not None and tool_name == "file_read":
+        _rpath = tool_input.get("path", "")
+        if _rpath and _rpath in file_read_cache:
+            logger.debug("file_read dedup: '%s'", _rpath)
+            return file_read_cache[_rpath], False
+
+    try:
+        result = await orch._execute_tool(
+            tool,
+            boss_cfg=boss_cfg,
+            project_id=project_id,
+            tool_name=tool_name,
+            tool_input=tool_input,
+            execution_mode=execution_mode,
+        )
+        # Cache befüllen
+        if file_read_cache is not None and tool_name == "file_read":
+            _rpath = tool_input.get("path", "")
+            if _rpath:
+                file_read_cache[_rpath] = result
+        return result, False
+    except Exception as te:
+        return {"error": str(te)}, True
+
+
+def check_repeated_signature(
+    signature: tuple[str, ...],
+    last_signature: tuple[str, ...] | None,
+    repeated_count: int,
+    threshold: int = 4,
+) -> tuple[tuple[str, ...] | None, int, bool]:
+    """
+    Prüft ob eine Tool-Signatur wiederholt wurde.
+    Returns: (new_last_signature, new_count, should_abort)
+    """
+    if signature and signature == last_signature:
+        repeated_count += 1
+    else:
+        repeated_count = 0
+    return signature, repeated_count, repeated_count >= threshold
+
+
+def handle_request_tools(
+    orch,
+    boss_cfg,
+    execution_mode: str | None,
+    categories: list[str],
+    loaded_categories: set[str],
+    current_tools: list[dict],
+) -> tuple[int, dict]:
+    """
+    On-Demand Tool-Kategorien nachladen.
+    Returns: (added_count, result_dict)
+    """
+    new_cats = [c for c in categories if c not in loaded_categories]
+    added_count = 0
+    if new_cats:
+        new_schemas = orch._category_tools_schema(boss_cfg, execution_mode, new_cats)
+        existing = {t.get("function", {}).get("name") or t.get("name", "") for t in current_tools}
+        added = [s for s in new_schemas if s["function"]["name"] not in existing]
+        current_tools.extend(added)
+        added_count = len(added)
+        loaded_categories.update(new_cats)
+        logger.info(
+            "request_tools: +%d Tools (Kategorien: %s, Agent: %s)",
+            added_count, new_cats, boss_cfg.id,
+        )
+    return added_count, {
+        "ok": True,
+        "categories": categories,
+        "tools_added": added_count,
+        "note": "Tools geladen — direkt verwendbar.",
+    }
