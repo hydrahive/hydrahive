@@ -839,25 +839,44 @@ class HttpRequestTool(BaseTool):
         timeout: int = 15,
     ) -> dict:
         import aiohttp
+        from urllib.parse import urlparse
 
-        logger.info("http_request: %s -> %s %s", agent_id, method, url)
+        # #429: Preapproved Hosts — interne Services immer erlaubt
+        _PREAPPROVED_HOSTS = {
+            "127.0.0.1", "localhost",
+            "192.168.178.181", "192.168.178.5", "192.168.178.220",  # HydraHive Instanzen
+            "192.168.178.102", "192.168.178.203",  # AgentLink, Gitea
+        }
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        is_preapproved = host in _PREAPPROVED_HOSTS or host.endswith(".local")
+
+        logger.info("http_request: %s -> %s %s%s", agent_id, method, url,
+                     " (preapproved)" if is_preapproved else "")
         try:
             async with aiohttp.ClientSession() as session:
                 kwargs: dict = {
                     "timeout": aiohttp.ClientTimeout(total=timeout),
                     "headers": headers or {},
+                    "allow_redirects": True,  # #429: Redirect-Handling
+                    "max_redirects": 5,
                 }
                 if json_body is not None:
                     kwargs["json"] = json_body
 
                 async with session.request(method, url, **kwargs) as resp:
+                    # #429: Redirect-Info melden
+                    redirected = str(resp.url) != url
                     try:
                         body = await resp.json(content_type=None)
                         body_type = "json"
                     except Exception:
                         body = await resp.text()
                         body_type = "text"
-                    return {"status": resp.status, "body": body, "body_type": body_type}
+                    result = {"status": resp.status, "body": body, "body_type": body_type}
+                    if redirected:
+                        result["redirected_to"] = str(resp.url)
+                    return result
         except aiohttp.ClientError as e:
             return {"error": f"HTTP-Fehler: {e}"}
         except Exception as e:
