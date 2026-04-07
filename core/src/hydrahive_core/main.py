@@ -89,6 +89,24 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+
+# #449: PII-Stripping Filter für Logs
+import re as _re_log
+_PII_PATTERNS = [
+    (_re_log.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '[IP]'),          # IPv4
+    (_re_log.compile(r'\b(?:Bearer|token)\s+[A-Za-z0-9._-]{20,}\b', _re_log.I), '[TOKEN]'),  # Bearer tokens
+    (_re_log.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'), '[EMAIL]'),    # E-Mail
+    (_re_log.compile(r'(?:password|passwd|secret|api_key)\s*[=:]\s*\S+', _re_log.I), '[REDACTED]'),
+]
+
+class _PIIFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            for pattern, replacement in _PII_PATTERNS:
+                record.msg = pattern.sub(replacement, record.msg)
+        return True
+
+logging.getLogger().addFilter(_PIIFilter())
 logger = logging.getLogger(__name__)
 
 # Optionales Sentry Error-Tracking — nur aktiv wenn SENTRY_DSN gesetzt
