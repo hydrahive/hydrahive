@@ -210,6 +210,15 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
         return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
     except Exception as e:
         logger.error("Worker '%s' LLM-Fehler: %s", worker_id, e)
+        # #362: Fehlgeschlagene Dispatches notifyen
+        try:
+            from .tool_registry import _notify
+            _notify(dispatch.get("call_id", ""), "agent_error",
+                    f"Worker-Dispatch fehlgeschlagen: {worker_id}",
+                    f"Task: {task[:80]}\nFehler: {e}",
+                    link=f"/agents")
+        except Exception:
+            pass
         return DispatchResult(
             worker_id=worker_id, task=task, result="",
             success=False, error=str(e), task_id=task_id,

@@ -371,11 +371,9 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
 
 
 def _load_llm_config() -> dict:
-    import json as _json
-    try:
-        return _json.loads(settings.llm_config.read_text())
-    except (OSError, ValueError):
-        return {"providers": {}}
+    # #391: Nutze mtime-cached Loader aus router_llm
+    from .router_llm import _cached_json_load
+    return _cached_json_load(str(settings.llm_config), {"providers": {}})
 
 
 # ---------------------------------------------------------------- Model-Resolution

@@ -648,8 +648,8 @@ class AgentDiscordClient(DiscordAgentClient):
                     data = _json.loads(chunk[6:]) if chunk.startswith("data: ") else {}
                     if "text" in data:
                         response_parts.append(data["text"])
-                except Exception:
-                    pass
+                except (ValueError, KeyError):
+                    pass  # SSE-Chunks ohne JSON sind normal
         except Exception as e:
             logger.error("Orchestrator-Fehler für Discord-Agent %s: %s", self.agent_id, e)
             response_parts = [f"Fehler: {e}"]

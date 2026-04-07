@@ -20,14 +20,31 @@ class LlmProviderConfig(BaseModel):
 
 _oauth_pending: dict[str, dict] = {}
 
+# #391: mtime-basierter Config-Cache
+_config_cache: dict[str, tuple[float, dict]] = {}  # path → (mtime, data)
+
+
+def _cached_json_load(path: str, default: dict | None = None) -> dict:
+    """Lädt JSON mit mtime-Check — nur re-read wenn Datei geändert (#391)."""
+    import json as _json
+    p = Path(path)
+    try:
+        mtime = p.stat().st_mtime
+    except OSError:
+        return default or {}
+    cached = _config_cache.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        data = _json.loads(p.read_text())
+        _config_cache[path] = (mtime, data)
+        return data
+    except (OSError, ValueError):
+        return default or {}
+
 
 def _load_llm_config() -> dict:
-    import json as _json
-
-    try:
-        return _json.loads(Path(LLM_CONFIG_FILE).read_text())
-    except (OSError, ValueError):
-        return {"providers": {}}
+    return _cached_json_load(LLM_CONFIG_FILE, {"providers": {}})
 
 
 def _save_llm_config(config: dict) -> None:

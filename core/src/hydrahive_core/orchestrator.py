@@ -35,7 +35,6 @@ from .tool_registry import ToolRegistry, registry as default_registry
 from . import tool_registry as _tool_reg
 
 # Sub-Module importieren und für Backward-Compat re-exportieren
-import litellm
 from .orchestrator_llm import (
     _should_failover,
     _llm_with_retry,
