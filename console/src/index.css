@@ -232,3 +232,15 @@
     word-break: break-all;
   }
 }
+
+/* HydraHive Logo Glow Animation (Login + Branding) */
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 40px rgba(74, 222, 128, 0.3));
+  }
+  50% {
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 55px rgba(74, 222, 128, 0.5));
+  }
+}
