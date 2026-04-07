@@ -17,9 +17,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-GITHUB_TOKEN_FILE = Path("/etc/hydrahive/github_token")
+GITHUB_TOKEN_FILE = settings.github_token_file
 GITHUB_API = "https://api.github.com"
 
 

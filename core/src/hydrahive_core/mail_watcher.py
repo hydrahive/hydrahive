@@ -15,10 +15,12 @@ import logging
 from email.header import decode_header, make_header
 from pathlib import Path
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-_KAS_PATH      = Path("/etc/hydrahive/kas.json")
-_SEEN_IDS_PATH = Path("/etc/hydrahive/mail_seen_ids.json")
+_KAS_PATH      = settings.kas_config
+_SEEN_IDS_PATH = settings.mail_seen_ids
 _MAX_SEEN      = 2000  # Maximale Anzahl gespeicherter IDs
 
 

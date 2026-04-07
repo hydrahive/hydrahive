@@ -6,6 +6,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from .settings import settings
+
 
 _BACKUP_NAME_RE = r"^hydrahive-backup-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.tar\.gz$"
 
@@ -129,11 +131,11 @@ def register_backup_restore_routes(
             src_etc = tmp_path / "etc-hydrahive"
             if src_etc.exists():
                 for file_path in src_etc.iterdir():
-                    _sh.copy2(file_path, Path("/etc/hydrahive") / file_path.name)
+                    _sh.copy2(file_path, settings.etc_dir / file_path.name)
 
             src_agents = tmp_path / "agents"
             if src_agents.exists():
-                _sh.copytree(src_agents, Path("/agents"), dirs_exist_ok=True)
+                _sh.copytree(src_agents, settings.agents_dir, dirs_exist_ok=True)
 
             src_projects = tmp_path / "projects"
             if src_projects.exists():

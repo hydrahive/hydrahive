@@ -20,9 +20,11 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-VOICE_CONFIG_FILE = Path("/etc/hydrahive/voice.json")
+VOICE_CONFIG_FILE = settings.voice_config
 
 STT_HOST = "127.0.0.1"
 STT_PORT = 10300
@@ -323,7 +325,7 @@ def register_voice_routes(
         tts_port = cfg.get("tts_port", TTS_PORT)
 
         result = {
-            "installed": Path("/opt/hydrahive-voice").exists(),
+            "installed": settings.voice_install_dir.exists(),
             "stt": {"host": stt_host, "port": stt_port, "available": False},
             "tts": {"host": tts_host, "port": tts_port, "available": False},
             "default_agent": cfg.get("default_agent", "personal_admin"),

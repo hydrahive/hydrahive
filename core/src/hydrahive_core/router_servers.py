@@ -24,11 +24,13 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-SERVERS_DIR = Path("/etc/hydrahive/servers")
-SERVERS_KEYS_DIR = Path("/etc/hydrahive/server_keys")
-AGENT_SERVERS_FILE = Path("/etc/hydrahive/agent_servers.json")
+SERVERS_DIR = settings.servers_dir
+SERVERS_KEYS_DIR = settings.server_keys_dir
+AGENT_SERVERS_FILE = settings.agent_servers_config
 
 _SAFE_ID = re.compile(r"^[a-z0-9_-]+$")
 
@@ -117,7 +119,7 @@ def register_server_routes(
         SERVERS_KEYS_DIR.mkdir(parents=True, exist_ok=True)
         if req.use_wks_key:
             # WKS-Key des eingeloggten Users kopieren
-            wks_keys_dir = Path("/etc/hydrahive/wks_keys")
+            wks_keys_dir = settings.wks_keys_dir
             wks_key = None
             # Versuche: Username aus Auth, dann "admin", dann erster vorhandener Key
             for candidate in [req.id.split("-")[-1] if "-" in (req.id or "") else "", "admin"]:
@@ -200,7 +202,7 @@ def register_server_routes(
         srv = json.loads(p.read_text())
         # Server-eigenen Key oder WKS-Key des Users als Fallback
         key_path = SERVERS_KEYS_DIR / server_id
-        wks_key = Path("/etc/hydrahive/wks_keys/admin")
+        wks_key = settings.wks_keys_dir / "admin"
         if not key_path.exists() and not wks_key.exists():
             return {"ok": False, "error": "Kein SSH-Key vorhanden"}
         use_key = str(key_path) if key_path.exists() else str(wks_key)

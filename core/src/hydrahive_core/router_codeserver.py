@@ -14,12 +14,14 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 CODESERVER_PORT  = 8766
-CODESERVER_DIR   = Path("/opt/hydrahive/.config/code-server")
-INSTALL_SCRIPT   = Path("/opt/hydrahive/installer/modules/15_codeserver.sh")
-CREDENTIALS_FILE = Path("/etc/hydrahive/admin_credentials")
+CODESERVER_DIR   = settings.opt_dir / ".config" / "code-server"
+INSTALL_SCRIPT   = settings.installer_dir / "modules" / "15_codeserver.sh"
+CREDENTIALS_FILE = settings.admin_credentials
 
 
 def _safe_exists(p: Path) -> bool:

@@ -16,6 +16,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from .agent_config import AgentConfig, load_agent_config
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class AgentDiscovery:
     Thread-safe über ein Lock.
     """
 
-    def __init__(self, agents_dir: str | Path = "/agents"):
-        self._dir = Path(agents_dir)
+    def __init__(self, agents_dir: str | Path = ""):
+        self._dir = Path(agents_dir) if agents_dir else settings.agents_dir
         self._agents: dict[str, AgentConfig] = {}
         self._lock = threading.Lock()
         self._observer: Observer | None = None

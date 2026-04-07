@@ -21,9 +21,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .agent_config import AgentConfig
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR = Path("/etc/hydrahive/agent_tokens")
+TOKEN_DIR = settings.agent_tokens_dir
 
 
 def load_discord_config(agent_id: str) -> dict | None:

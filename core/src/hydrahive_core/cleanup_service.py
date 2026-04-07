@@ -28,9 +28,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-_CONFIG_FILE = Path("/etc/hydrahive/cleanup.json")
+_CONFIG_FILE = settings.cleanup_config
 _DEFAULT_CFG: dict[str, Any] = {
     "transcript_days": 30,
     "backup_keep": 10,
@@ -205,9 +207,9 @@ class CleanupService:
         self._task: asyncio.Task | None = None
         self._warned_yellow = False
         self._warned_red    = False
-        self._agents_dir    = "/agents"
-        self._projects_dir  = "/projects"
-        self._backups_dir   = "/opt/hydrahive/backups"
+        self._agents_dir    = str(settings.agents_dir)
+        self._projects_dir  = str(settings.projects_dir)
+        self._backups_dir   = str(settings.backups_dir)
         self._load_users_fn = None
         self._notify_fn     = None
         self._last_result: dict | None = None

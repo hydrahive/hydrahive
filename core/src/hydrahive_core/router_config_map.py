@@ -12,6 +12,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 # Statische Surface-Definitionen
@@ -22,7 +24,7 @@ _SURFACES: list[dict] = [
         "description": "API-Keys und Modelle für Claude, OpenAI, Ollama etc.",
         "icon": "cpu",
         "ui_path": "/settings?tab=llm",
-        "config_file": "/etc/hydrahive/llm_config.json",
+        "config_file": str(settings.llm_config),
         "owner": "admin",
     },
     {
@@ -31,7 +33,7 @@ _SURFACES: list[dict] = [
         "description": "URL, Token und Organisation für den lokalen Gitea-Server.",
         "icon": "git-branch",
         "ui_path": "/settings?tab=gitea",
-        "config_file": "/etc/hydrahive/gitea_config.json",
+        "config_file": str(settings.gitea_config),
         "owner": "admin",
     },
     {
@@ -40,7 +42,7 @@ _SURFACES: list[dict] = [
         "description": "GitHub Personal Access Token für Repos und Issues.",
         "icon": "github",
         "ui_path": "/settings?tab=github",
-        "config_file": "/etc/hydrahive/github_token",
+        "config_file": str(settings.github_token_file),
         "owner": "admin",
     },
     {
@@ -49,7 +51,7 @@ _SURFACES: list[dict] = [
         "description": "Zentrale Repo-Verwaltung mit Credentials und Agent-Zuweisung.",
         "icon": "git-branch",
         "ui_path": "/settings?tab=repos",
-        "config_file": "/etc/hydrahive/repos.json",
+        "config_file": str(settings.repos_config),
         "owner": "admin",
     },
     {
@@ -58,7 +60,7 @@ _SURFACES: list[dict] = [
         "description": "Tailscale-Netzwerk für sichere Verbindungen zwischen Servern.",
         "icon": "network",
         "ui_path": "/settings?tab=vpn",
-        "config_file": "/etc/hydrahive/tailscale.json",
+        "config_file": str(settings.tailscale_config),
         "owner": "admin",
     },
     {
@@ -67,7 +69,7 @@ _SURFACES: list[dict] = [
         "description": "All-Inkl KAS-Zugangsdaten für E-Mail und Domain-Verwaltung.",
         "icon": "mail",
         "ui_path": "/settings?tab=kas",
-        "config_file": "/etc/hydrahive/kas.json",
+        "config_file": str(settings.kas_config),
         "owner": "admin",
     },
     {
@@ -76,7 +78,7 @@ _SURFACES: list[dict] = [
         "description": "Model Context Protocol Server für erweiterte Tool-Integration.",
         "icon": "plug",
         "ui_path": "/mcp",
-        "config_file": "/etc/hydrahive/mcp_servers.json",
+        "config_file": str(settings.mcp_servers_config),
         "owner": "admin",
     },
     {
@@ -85,7 +87,7 @@ _SURFACES: list[dict] = [
         "description": "State/Handoff-API für Agent-Kommunikation.",
         "icon": "link",
         "ui_path": "/settings?tab=overview",
-        "config_file": "/etc/hydrahive/agentlink.json",
+        "config_file": str(settings.agentlink_config),
         "owner": "admin",
     },
     {
@@ -94,7 +96,7 @@ _SURFACES: list[dict] = [
         "description": "Webhook-Routing und Automatisierungen.",
         "icon": "webhook",
         "ui_path": "/butler",
-        "config_file": "/etc/hydrahive/butler_webhooks.json",
+        "config_file": str(settings.butler_webhooks_config),
         "owner": "admin",
     },
     {
@@ -103,7 +105,7 @@ _SURFACES: list[dict] = [
         "description": "API-Keys und Passwörter für Agent-Tools (get_secret).",
         "icon": "key",
         "ui_path": "/secrets",
-        "config_file": "/etc/hydrahive/agent_secrets.json",
+        "config_file": str(settings.agent_secrets_config),
         "owner": "admin",
     },
     {
@@ -112,7 +114,7 @@ _SURFACES: list[dict] = [
         "description": "User-Accounts, Rollen und Gruppenzugehörigkeiten.",
         "icon": "users",
         "ui_path": "/users",
-        "config_file": "/etc/hydrahive/users.json",
+        "config_file": str(settings.users_config),
         "owner": "admin",
     },
     {
@@ -121,7 +123,7 @@ _SURFACES: list[dict] = [
         "description": "Spracherkennung und Text-to-Speech Konfiguration.",
         "icon": "mic",
         "ui_path": "/settings?tab=overview",
-        "config_file": "/etc/hydrahive/voice.json",
+        "config_file": str(settings.voice_config),
         "owner": "admin",
     },
     {
@@ -130,7 +132,7 @@ _SURFACES: list[dict] = [
         "description": "SSH-Ziele für Agent-Server-Management.",
         "icon": "server",
         "ui_path": "/agents",
-        "config_file": "/etc/hydrahive/agent_servers.json",
+        "config_file": str(settings.agent_servers_config),
         "owner": "admin",
     },
     {
@@ -139,7 +141,7 @@ _SURFACES: list[dict] = [
         "description": "Agent-to-Agent Peers für Server-übergreifende Kommunikation.",
         "icon": "globe",
         "ui_path": "/settings?tab=overview",
-        "config_file": "/etc/hydrahive/a2a_peers.json",
+        "config_file": str(settings.a2a_peers_config),
         "owner": "admin",
     },
     {
@@ -148,7 +150,7 @@ _SURFACES: list[dict] = [
         "description": "Routing-Regeln für Agent-Benachrichtigungen.",
         "icon": "bell",
         "ui_path": "/settings?tab=overview",
-        "config_file": "/etc/hydrahive/notification_routes.json",
+        "config_file": str(settings.notification_routes_config),
         "owner": "admin",
     },
 ]

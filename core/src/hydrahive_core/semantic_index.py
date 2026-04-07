@@ -35,7 +35,9 @@ except ImportError:
 
 # ── Embedding-Modell-Konfiguration ────────────────────────────────────────────
 
-_LLM_CFG_PATH = Path("/etc/hydrahive/llm_config.json")
+from .settings import settings
+
+_LLM_CFG_PATH = settings.llm_config
 _DEFAULT_MODEL = "text-embedding-3-small"
 
 def _get_embedding_model() -> str:

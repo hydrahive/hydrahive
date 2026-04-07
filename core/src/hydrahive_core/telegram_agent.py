@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .orchestrator import Orchestrator
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR = Path("/etc/hydrahive/agent_tokens")
+TOKEN_DIR = settings.agent_tokens_dir
 
 # Laufende Bot-Instanzen: agent_id → asyncio.Task
 _bot_tasks: dict[str, asyncio.Task] = {}

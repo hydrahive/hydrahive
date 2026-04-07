@@ -42,12 +42,14 @@ async def _curl_get(url: str, timeout: int = 20) -> tuple[int, bytes]:
     """Async-Wrapper: führt _curl_get_sync in asyncio.to_thread aus."""
     return await asyncio.to_thread(_curl_get_sync, url, timeout)
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 SEARXNG_URL      = "http://127.0.0.1:8888"
 SEARXNG_CONF     = Path("/etc/searxng/settings.yml")
 SEARXNG_DIR      = Path("/opt/searxng")
-INSTALL_SCRIPT   = Path("/opt/hydrahive/installer/modules/14_searxng.sh")
+INSTALL_SCRIPT   = settings.searxng_install_script
 
 
 class SearchTestRequest(BaseModel):

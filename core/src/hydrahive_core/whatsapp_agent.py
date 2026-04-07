@@ -13,9 +13,11 @@ import json
 import logging
 from pathlib import Path
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-TOKEN_DIR  = Path("/etc/hydrahive/agent_tokens")
+TOKEN_DIR  = settings.agent_tokens_dir
 BRIDGE_URL = "http://127.0.0.1:8767"
 
 

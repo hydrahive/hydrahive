@@ -12,7 +12,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-_SECRETS_PATH = Path("/etc/hydrahive/agent_secrets.json")
+from .settings import settings
+
+_SECRETS_PATH = settings.agent_secrets_config
 
 
 def _load() -> dict[str, str]:

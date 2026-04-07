@@ -13,9 +13,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-REPOS_FILE = Path("/etc/hydrahive/repos.json")
+REPOS_FILE = settings.repos_config
 
 
 class RepoConfig(BaseModel):

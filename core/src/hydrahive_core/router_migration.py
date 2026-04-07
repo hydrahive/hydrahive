@@ -19,9 +19,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-SCRIPTS_DIR = Path("/opt/hydrahive/scripts")
+SCRIPTS_DIR = settings.scripts_dir
 EXPORT_SCRIPT  = SCRIPTS_DIR / "hydrahive-export.sh"
 IMPORT_SCRIPT  = SCRIPTS_DIR / "hydrahive-import.sh"
 TRANSFER_SCRIPT = SCRIPTS_DIR / "hydrahive-transfer.sh"

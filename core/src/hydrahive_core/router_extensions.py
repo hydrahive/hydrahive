@@ -17,11 +17,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 _EXT_ID_RE = re.compile(r'^[a-z0-9_-]+$')
 
-INSTALLER_DIR   = Path("/opt/hydrahive/installer")
+INSTALLER_DIR   = settings.installer_dir
 MANIFESTS_DIR   = INSTALLER_DIR / "extensions"
 MANIFEST_ORDER  = ["searxng", "codeserver", "gitea", "ollama", "whatsapp", "headscale"]
 

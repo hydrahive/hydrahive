@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .plugin_manager import plugin_manager
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ def register_plugin_routes(
         from pathlib import Path as _P
         from fastapi import Body as _Body
 
-        _USER_APP_CFG_DIR = _P("/etc/hydrahive/user_app_config")
+        _USER_APP_CFG_DIR = settings.user_app_cfg_dir
 
         def _load_user_app_config(username: str, app_id: str) -> dict:
             path = _USER_APP_CFG_DIR / username / f"{app_id}.json"

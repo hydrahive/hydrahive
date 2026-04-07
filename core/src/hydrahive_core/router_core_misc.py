@@ -10,9 +10,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+
+from .settings import settings
 
 _bearer = HTTPBearer(auto_error=False)
-from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
@@ -208,9 +210,9 @@ def register_core_misc_routes(
         import json
         from pathlib import Path as _Path
         users = load_users()
-        kas_ok  = _Path("/etc/hydrahive/kas.json").exists()
-        llm_ok  = _Path("/etc/hydrahive/llm_config.json").exists() or _Path("/etc/hydrahive/llm_env").exists()
-        wizard_done = _Path("/etc/hydrahive/setup_wizard_done").exists()
+        kas_ok  = settings.kas_config.exists()
+        llm_ok  = settings.llm_config.exists() or settings.llm_env.exists()
+        wizard_done = settings.setup_wizard_done.exists()
         return {
             "needs_setup":   len(users) == 0,
             "wizard_done":   wizard_done or (kas_ok and llm_ok),
@@ -218,13 +220,12 @@ def register_core_misc_routes(
             "llm_configured": llm_ok,
         }
 
-    _KAS_PATH = "/etc/hydrahive/kas.json"
+    _KAS_PATH = settings.kas_config
 
     @admin_router.get("/admin/kas")
     def get_kas():
         import json
-        from pathlib import Path as _Path
-        p = _Path(_KAS_PATH)
+        p = _KAS_PATH
         if not p.exists():
             return {"configured": False}
         try:
@@ -237,8 +238,7 @@ def register_core_misc_routes(
     @admin_router.put("/admin/kas")
     def put_kas(req: KasConfigRequest):
         import json
-        from pathlib import Path as _Path
-        p = _Path(_KAS_PATH)
+        p = _KAS_PATH
         p.parent.mkdir(parents=True, exist_ok=True)
         data = req.model_dump()
         p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
@@ -247,8 +247,7 @@ def register_core_misc_routes(
 
     @admin_router.post("/admin/wizard/complete")
     def wizard_complete():
-        from pathlib import Path as _Path
-        _Path("/etc/hydrahive/setup_wizard_done").touch()
+        settings.setup_wizard_done.touch()
         return {"done": True}
 
     @public_router.post("/setup", status_code=201)
@@ -310,8 +309,9 @@ def register_core_misc_routes(
         try:
             payload = jose_jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
             jti = payload.get("jti")
+            exp = payload.get("exp", 0)
             if jti:
-                _token_blacklist.add(jti)
+                _token_blacklist[jti] = float(exp)
         except (JWTError, Exception):
             pass  # Abgelaufene Token trotzdem als "logout" akzeptieren
         return {"logged_out": True}
@@ -708,7 +708,7 @@ def register_core_misc_routes(
         """Gesamte Server-Konfiguration als JSON exportieren."""
         import json as _json
         config = {}
-        config_dir = Path("/etc/hydrahive")
+        config_dir = settings.etc_dir
         if config_dir.exists():
             for f in sorted(config_dir.glob("*.json")):
                 try:
@@ -793,7 +793,7 @@ def register_core_misc_routes(
 
     # ── Dashboard-Config (#274) ──────────────────────────────────────
 
-    _DASHBOARD_DIR = Path("/etc/hydrahive/dashboard")
+    _DASHBOARD_DIR = settings.dashboard_dir
 
     @auth_router.get("/dashboard/config")
     def get_dashboard_config(_a: tuple[str, str] = Depends(require_auth)):

@@ -20,8 +20,10 @@ class HydraHiveSettings(BaseSettings):
     etc_dir: Path = Path("/etc/hydrahive")
     opt_dir: Path = Path("/opt/hydrahive")
     agents_dir: Path = Path("/agents")
+    projects_dir: Path = Path("/projects")
 
-    # Konfig-Dateien
+    # ── Konfig-Dateien (etc_dir) ──────────────────────────────────────────
+
     @property
     def llm_config(self) -> Path:
         return self.etc_dir / "llm_config.json"
@@ -99,6 +101,116 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "kas.json"
 
     @property
+    def admin_credentials(self) -> Path:
+        return self.etc_dir / "admin_credentials"
+
+    @property
+    def claude_oauth_token(self) -> Path:
+        return self.etc_dir / "claude_oauth_token"
+
+    @property
+    def openai_codex_token(self) -> Path:
+        return self.etc_dir / "openai_codex_token.json"
+
+    @property
+    def llm_env(self) -> Path:
+        return self.etc_dir / "llm_env"
+
+    @property
+    def jwt_secret_file(self) -> Path:
+        return self.etc_dir / "jwt_secret"
+
+    @property
+    def internal_secret_file(self) -> Path:
+        return self.etc_dir / "internal_secret"
+
+    @property
+    def network_profile_file(self) -> Path:
+        return self.etc_dir / "network_profile"
+
+    @property
+    def setup_wizard_done(self) -> Path:
+        return self.etc_dir / "setup_wizard_done"
+
+    @property
+    def dashboard_dir(self) -> Path:
+        return self.etc_dir / "dashboard"
+
+    @property
+    def servers_dir(self) -> Path:
+        return self.etc_dir / "servers"
+
+    @property
+    def server_keys_dir(self) -> Path:
+        return self.etc_dir / "server_keys"
+
+    @property
+    def agent_servers_config(self) -> Path:
+        return self.etc_dir / "agent_servers.json"
+
+    @property
+    def wks_keys_dir(self) -> Path:
+        return self.etc_dir / "wks_keys"
+
+    @property
+    def use_local_gitea_file(self) -> Path:
+        return self.etc_dir / "use_local_gitea"
+
+    @property
+    def amem_config(self) -> Path:
+        return self.etc_dir / "amem_config.json"
+
+    @property
+    def cleanup_config(self) -> Path:
+        return self.etc_dir / "cleanup.json"
+
+    @property
+    def mail_seen_ids(self) -> Path:
+        return self.etc_dir / "mail_seen_ids.json"
+
+    @property
+    def butler_dir(self) -> Path:
+        return self.etc_dir / "butler"
+
+    @property
+    def clawhub_config(self) -> Path:
+        return self.etc_dir / "clawhub.json"
+
+    @property
+    def invites_config(self) -> Path:
+        return self.etc_dir / "invites.json"
+
+    @property
+    def pipelines_dir(self) -> Path:
+        return self.etc_dir / "pipelines"
+
+    @property
+    def plugin_state(self) -> Path:
+        return self.etc_dir / "plugin_state.json"
+
+    @property
+    def samba_credentials(self) -> Path:
+        return self.etc_dir / "samba_credentials"
+
+    @property
+    def skill_packages_dir(self) -> Path:
+        return self.etc_dir / "skill_packages"
+
+    @property
+    def system_handbook(self) -> Path:
+        return self.etc_dir / "system_handbook.md"
+
+    @property
+    def matrix_server_name_file(self) -> Path:
+        return self.etc_dir / "matrix_server_name"
+
+    @property
+    def matrix_registration_token(self) -> Path:
+        return self.etc_dir / "matrix_registration_token"
+
+    # ── opt_dir Pfade ─────────────────────────────────────────────────────
+
+    @property
     def scripts_dir(self) -> Path:
         return self.opt_dir / "scripts"
 
@@ -110,9 +222,26 @@ class HydraHiveSettings(BaseSettings):
     def searxng_install_script(self) -> Path:
         return self.installer_dir / "modules" / "14_searxng.sh"
 
-    # Sonstige Settings
+    @property
+    def backups_dir(self) -> Path:
+        return self.opt_dir / "backups"
+
+    @property
+    def network_profile_script(self) -> Path:
+        return self.opt_dir / "apply-network-profile.sh"
+
+    @property
+    def whatsapp_bridge_dir(self) -> Path:
+        return self.opt_dir / "whatsapp-bridge"
+
+    @property
+    def voice_install_dir(self) -> Path:
+        return Path("/opt/hydrahive-voice")
+
+    # ── Sonstige Settings ─────────────────────────────────────────────────
+
     matrix_server_name: str = ""
-    console_url: str = "http://192.168.178.181"
+    console_url: str = ""
     openai_api_key: str = "hydrahive"
     search_alpha: float = 0.5
     embedding_model: str = ""

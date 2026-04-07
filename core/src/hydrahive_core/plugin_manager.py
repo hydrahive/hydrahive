@@ -41,9 +41,11 @@ from typing import Any, Callable
 
 import yaml
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-PLUGIN_STATE_FILE = Path("/etc/hydrahive/plugin_state.json")
+PLUGIN_STATE_FILE = settings.plugin_state
 PLUGINS_DIR       = Path("/plugins")
 
 

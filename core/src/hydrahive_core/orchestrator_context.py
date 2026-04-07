@@ -20,6 +20,7 @@ import litellm
 from .learning_memory import build_learning_prompt_snippet
 from .memory_search import search_memory, update_index as update_memory_index
 from .semantic_index import score_texts
+from .settings import settings
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt, Skill
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ def _history_token_budget(model: str, system_prompt_tokens: int = 0) -> int:
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
-    handbook = Path("/etc/hydrahive/system_handbook.md")
+    handbook = settings.system_handbook
     if handbook.exists():
         parts.append(f"handbook:{handbook.stat().st_mtime:.0f}")
     soul = agent_dir / "soul.md"
@@ -267,7 +268,7 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         logger.debug("Repo-Injection übersprungen: %s", e)
 
     # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
-    _handbook_path = Path("/etc/hydrahive/system_handbook.md")
+    _handbook_path = settings.system_handbook
     if _handbook_path.exists():
         _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
         if _handbook_text:

@@ -22,18 +22,19 @@ from pathlib import Path
 import aiohttp
 
 from .project_config import ProjectConfig
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
 CONDUWUIT_URL    = "http://127.0.0.1:6167"
 SAMBA_CONF       = "/etc/samba/smb.conf"
 SAMBA_INCLUDES   = "/etc/samba/hydrahive-shares.conf"
-SAMBA_CREDS_FILE = "/etc/hydrahive/samba_credentials"
+SAMBA_CREDS_FILE = str(settings.samba_credentials)
 
 # Registration-Token Pfade (in Reihenfolge: hydrahive-eigene Datei zuerst)
 _REG_TOKEN_PATHS = [
-    "/etc/hydrahive/matrix_registration_token",  # hydrahive-lesbar
-    "/etc/conduwuit/conduwuit.toml",             # Fallback (octopos-Gruppe)
+    str(settings.matrix_registration_token),  # hydrahive-lesbar
+    "/etc/conduwuit/conduwuit.toml",          # Fallback (octopos-Gruppe)
 ]
 
 
@@ -48,7 +49,7 @@ def _read_matrix_reg_token() -> str:
         except OSError:
             continue
     return ""
-PROJECTS_DIR     = "/projects"
+PROJECTS_DIR     = str(settings.projects_dir)
 
 
 @dataclass
@@ -463,7 +464,7 @@ class Provisioner:
 
         # Deterministic Password (wie in matrix_agent.py)
         import hashlib as _hashlib
-        secret_file = _Path("/etc/hydrahive/internal_secret")
+        secret_file = settings.internal_secret_file
         secret = secret_file.read_text().strip() if secret_file.exists() else "hydrahive"
         password = _hashlib.sha256(f"{agent_id}:{secret}".encode()).hexdigest()[:32]
 
@@ -773,7 +774,9 @@ class Provisioner:
             return f"Matrix-Room {room_id} Fehler beim Schließen: {e}"
 
 
-def load_admin_token(cred_file: str = "/etc/hydrahive/admin_credentials") -> str:
+def load_admin_token(cred_file: str = "") -> str:
+    if not cred_file:
+        cred_file = str(settings.admin_credentials)
     """Admin-Token aus /etc/hydrahive/admin_credentials lesen."""
     try:
         for line in Path(cred_file).read_text().splitlines():

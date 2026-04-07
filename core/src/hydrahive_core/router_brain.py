@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .settings import settings
+
 
 def register_brain_routes(auth_router, *, discovery, runtime, projects):
 
@@ -22,7 +24,7 @@ def register_brain_routes(auth_router, *, discovery, runtime, projects):
         running = runtime.status_all()
 
         # ── LLM-Provider aus llm_config.json ─────────────────────────────
-        llm_cfg_path = Path("/etc/hydrahive/llm_config.json")
+        llm_cfg_path = settings.llm_config
         llm_providers: dict[str, str] = {}  # model → provider label
         if llm_cfg_path.exists():
             try:

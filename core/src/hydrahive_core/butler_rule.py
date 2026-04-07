@@ -14,7 +14,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-BUTLER_DIR = Path("/etc/hydrahive/butler")
+from .settings import settings
+
+BUTLER_DIR = settings.butler_dir
 
 
 class ButlerFlow(BaseModel):

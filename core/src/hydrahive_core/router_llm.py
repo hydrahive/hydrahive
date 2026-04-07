@@ -7,7 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-LLM_CONFIG_FILE = "/etc/hydrahive/llm_config.json"
+from .settings import settings
+
+LLM_CONFIG_FILE = str(settings.llm_config)
 
 
 class LlmProviderConfig(BaseModel):
@@ -125,7 +127,7 @@ def register_llm_routes(
         if not token.startswith("sk-ant-oat01-"):
             raise HTTPException(400, "Ungültiger Claude OAuth Token — erwartet sk-ant-oat01-...")
 
-        token_file = Path("/etc/hydrahive/claude_oauth_token")
+        token_file = settings.claude_oauth_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(token, encoding="utf-8")
         token_file.chmod(0o600)
@@ -148,7 +150,7 @@ def register_llm_routes(
             "openai": "OPENAI_API_KEY",
         }
         env_var = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
-        env_file = Path("/etc/hydrahive/llm_env")
+        env_file = settings.llm_env
         lines = []
         if env_file.exists():
             lines = [line for line in env_file.read_text().splitlines() if not line.startswith(f"{env_var}=")]
@@ -179,7 +181,7 @@ def register_llm_routes(
         )
         if not has_anthropic:
             try:
-                _env = Path("/etc/hydrahive/llm_env").read_text()
+                _env = settings.llm_env.read_text()
                 has_anthropic = "ANTHROPIC_API_KEY" in _env and "=" in _env
             except OSError:
                 pass
@@ -192,7 +194,7 @@ def register_llm_routes(
             for model in ["gpt-4o-mini", "gpt-4o"]:
                 models.append({"id": model, "label": model, "provider": "openai"})
 
-        codex_file = Path("/etc/hydrahive/openai_codex_token.json")
+        codex_file = settings.openai_codex_token
         if codex_file.exists():
             try:
                 import json as _json
@@ -267,7 +269,7 @@ def register_llm_routes(
             "refresh_token": body.get("refresh_token", ""),
             "account_id": account_id,
         }
-        token_file = Path("/etc/hydrahive/openai_codex_token.json")
+        token_file = settings.openai_codex_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(_json.dumps(data, indent=2), encoding="utf-8")
         token_file.chmod(0o600)
@@ -279,7 +281,7 @@ def register_llm_routes(
     def get_openai_codex_status():
         import json as _json
 
-        token_file = Path("/etc/hydrahive/openai_codex_token.json")
+        token_file = settings.openai_codex_token
         if not token_file.exists() or token_file.stat().st_size == 0:
             return {"configured": False, "account_id": None}
         try:
@@ -371,7 +373,7 @@ def register_llm_routes(
             raise HTTPException(400, f"Kein gültiger Anthropic Token in Response: {str(token_data)[:200]}")
 
         import time as _time
-        token_file = Path("/etc/hydrahive/claude_oauth_token")
+        token_file = settings.claude_oauth_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(
             _json.dumps({
@@ -471,7 +473,7 @@ def register_llm_routes(
         if not account_id:
             raise HTTPException(400, "account_id konnte nicht aus Token extrahiert werden")
 
-        token_file = Path("/etc/hydrahive/openai_codex_token.json")
+        token_file = settings.openai_codex_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(
             _json.dumps(
@@ -509,7 +511,7 @@ def register_llm_routes(
             }
 
         # Priorität 2: Console-OAuth-Token
-        token_file = Path("/etc/hydrahive/claude_oauth_token")
+        token_file = settings.claude_oauth_token
         if not token_file.exists() or token_file.stat().st_size == 0:
             return {"configured": False, "token_age_days": None, "warning": None}
 
@@ -616,7 +618,7 @@ def register_llm_routes(
 
         # Voyage AI Key aus llm_env lesen
         voyage_key_set = False
-        llm_env = Path("/etc/hydrahive/llm_env")
+        llm_env = settings.llm_env
         if llm_env.exists():
             try:
                 for line in llm_env.read_text().splitlines():
@@ -647,7 +649,7 @@ def register_llm_routes(
 
         # Voyage API Key in llm_env speichern/aktualisieren
         if voyage_key:
-            llm_env_path = Path("/etc/hydrahive/llm_env")
+            llm_env_path = settings.llm_env
             lines: list[str] = []
             if llm_env_path.exists():
                 try:

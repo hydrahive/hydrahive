@@ -29,6 +29,8 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 HUB_INDEX_URL = "https://raw.githubusercontent.com/hydrahive/hub/main/index.json"
@@ -331,7 +333,7 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
 
     # ── ClawhHub ────────────────────────────────────────────────────────────────
 
-    CLAWHUB_CONFIG_FILE = Path("/etc/hydrahive/clawhub.json")
+    CLAWHUB_CONFIG_FILE = settings.clawhub_config
 
     def _load_clawhub_config() -> dict:
         try:

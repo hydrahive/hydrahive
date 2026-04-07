@@ -32,9 +32,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-A2A_CONFIG = Path("/etc/hydrahive/a2a_peers.json")
+A2A_CONFIG = settings.a2a_peers_config
 _APP_VERSION = "0.1.0"
 
 

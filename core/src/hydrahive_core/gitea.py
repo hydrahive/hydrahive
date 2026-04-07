@@ -22,10 +22,11 @@ from urllib.parse import quote
 
 import aiohttp
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-_GITEA_CONFIG_PATHS = [Path("/etc/hydrahive/gitea_config.json"), Path("/etc/hydrahive/gitea_config.json")]
-GITEA_CONFIG_FILE = next((p for p in _GITEA_CONFIG_PATHS if p.exists()), _GITEA_CONFIG_PATHS[0])
+GITEA_CONFIG_FILE = settings.gitea_config
 
 _DEFAULT_CONFIG = {
     "url":   "http://127.0.0.1:3001",

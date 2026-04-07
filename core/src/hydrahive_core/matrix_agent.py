@@ -31,20 +31,12 @@ from nio import (
 )
 
 from .agent_config import AgentConfig
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
 CONDUWUIT_URL   = "http://127.0.0.1:6167"
-def _token_dir_exists(p: Path) -> bool:
-    try:
-        return p.exists()
-    except OSError:
-        return False
-
-TOKEN_DIR       = next(
-    (p for p in [Path("/etc/hydrahive/agent_tokens"), Path("/etc/hydrahive/agent_tokens")] if _token_dir_exists(p)),
-    Path("/etc/hydrahive/agent_tokens"),
-)
+TOKEN_DIR       = settings.agent_tokens_dir
 SYNC_TIMEOUT_MS = 30_000    # 30s Long-Poll
 
 
@@ -375,7 +367,7 @@ class MatrixAgent(ABC):
         """Deterministisches Passwort aus Agent-ID + internem Secret (identisch zu provisioner.py)."""
         import hashlib
         from pathlib import Path as _Path
-        secret_file = _Path("/etc/hydrahive/internal_secret")
+        secret_file = settings.internal_secret_file
         secret = secret_file.read_text().strip() if secret_file.exists() else "hydrahive"
         return hashlib.sha256(f"{self.config.id}:{secret}".encode()).hexdigest()[:32]
 
@@ -397,7 +389,7 @@ class MatrixAgent(ABC):
     @staticmethod
     def _read_registration_token() -> str:
         for path in [
-            "/etc/hydrahive/matrix_registration_token",
+            str(settings.matrix_registration_token),
             "/etc/conduwuit/conduwuit.toml",
         ]:
             try:

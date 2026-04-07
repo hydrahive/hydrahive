@@ -7,7 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-SKILL_PACKAGES_DIR = Path("/etc/hydrahive/skill_packages")
+from .settings import settings
+
+SKILL_PACKAGES_DIR = settings.skill_packages_dir
 
 
 class SkillPackage(BaseModel):

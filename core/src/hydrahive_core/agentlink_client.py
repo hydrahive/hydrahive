@@ -15,9 +15,11 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path("/etc/hydrahive/agentlink.json")
+_CONFIG_PATH = settings.agentlink_config
 _config_cache: dict | None = None
 
 

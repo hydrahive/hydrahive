@@ -23,9 +23,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-INVITES_FILE = "/etc/hydrahive/invites.json"
+INVITES_FILE = str(settings.invites_config)
 INVITE_TTL_SECONDS = 7 * 24 * 3600  # 7 Tage
 
 

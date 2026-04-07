@@ -19,10 +19,11 @@ import re
 from pathlib import Path
 
 from .butler_rule import ButlerFlow, load_flows
+from .settings import settings
 
 logger = logging.getLogger(__name__)
 
-AGENTS_DIR = Path("/agents")
+AGENTS_DIR = settings.agents_dir
 
 
 def get_agent_display_name(agent_id: str) -> str:
@@ -368,7 +369,7 @@ async def _act_send_email(params: dict, event: ButlerEvent) -> None:
     import smtplib
     from email.mime.text import MIMEText
 
-    kas_path = Path("/etc/hydrahive/kas.json")
+    kas_path = settings.kas_config
     if not kas_path.exists():
         logger.warning("Butler send_email: /etc/hydrahive/kas.json fehlt")
         return

@@ -23,9 +23,11 @@ from pydantic import BaseModel
 
 from .butler_executor import ButlerEvent, check_flows, execute_generic_actions
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-HOOKS_CONFIG = Path("/etc/hydrahive/butler_webhooks.json")
+HOOKS_CONFIG = settings.butler_webhooks_config
 
 
 # ── Config helpers ─────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from .settings import settings
+
 
 class CreateAgentRequest(BaseModel):
     id: str
@@ -94,7 +96,7 @@ def register_agent_admin_routes(
     def list_agent_templates(_a: tuple = Depends(require_admin)):
         """Verfügbare Agent-Vorlagen aus installer/default-agents/."""
         import yaml as _yaml
-        templates_dir = Path("/opt/hydrahive/installer/default-agents")
+        templates_dir = settings.installer_dir / "default-agents"
         if not templates_dir.exists():
             return {"templates": []}
         templates = []

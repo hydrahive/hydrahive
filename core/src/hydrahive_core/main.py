@@ -83,6 +83,7 @@ from .router_users import (
     upgrade_personal_agent_data,
 )
 from .session_manager import MessageRole, SessionManager
+from .settings import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,11 +108,11 @@ if _SENTRY_DSN:
     except ImportError:
         logger.warning("SENTRY_DSN gesetzt aber sentry-sdk nicht installiert — pip install sentry-sdk[fastapi]")
 
-AGENTS_DIR   = "/agents"
-PROJECTS_DIR = "/projects"
+AGENTS_DIR   = str(settings.agents_dir)
+PROJECTS_DIR = str(settings.projects_dir)
 
-CRED_FILE        = "/etc/hydrahive/admin_credentials"
-MCP_SERVERS_FILE = "/etc/hydrahive/mcp_servers.json"
+CRED_FILE        = str(settings.admin_credentials)
+MCP_SERVERS_FILE = str(settings.mcp_servers_config)
 JWT_SECRET   = ""    # wird im Lifespan aus Datei geladen oder generiert
 JWT_ALG      = "HS256"
 JWT_EXPIRE_H = 24    # Token-Gültigkeit in Stunden
@@ -345,6 +346,26 @@ async def lifespan(app: FastAPI):
         _rate_limit_cleanup_loop(), name="rate-limit-cleanup"
     )
 
+    # Token-Blacklist Cleanup — abgelaufene JTIs alle 5 Minuten entfernen
+    async def _token_blacklist_cleanup_loop():
+        while True:
+            try:
+                await asyncio.sleep(300)
+                now = datetime.now(timezone.utc).timestamp()
+                expired = [jti for jti, exp in _token_blacklist.items() if exp < now]
+                for jti in expired:
+                    _token_blacklist.pop(jti, None)
+                if expired:
+                    logger.debug("Token-Blacklist cleanup: %d abgelaufene JTIs entfernt", len(expired))
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("Token-Blacklist cleanup Fehler: %s", e)
+
+    token_blacklist_task = asyncio.create_task(
+        _token_blacklist_cleanup_loop(), name="token-blacklist-cleanup"
+    )
+
     # Gitea-Verbindung prüfen (best-effort, blockiert nicht den Start)
     try:
         from .gitea import get_gitea_client
@@ -391,7 +412,7 @@ async def lifespan(app: FastAPI):
     _cs.start(
         agents_dir=AGENTS_DIR,
         projects_dir=PROJECTS_DIR,
-        backups_dir="/opt/hydrahive/backups",
+        backups_dir=str(settings.backups_dir),
         load_users_fn=_load_users,
         notify_fn=_disk_notify,
     )
@@ -417,6 +438,7 @@ async def lifespan(app: FastAPI):
     browser_cleanup_task.cancel()
     cleanup_task.cancel()
     rate_limit_cleanup_task.cancel()
+    token_blacklist_task.cancel()
     if agentlink_ws_task:
         agentlink_ws_task.cancel()
     logger.info("HydraHive Core faehrt herunter...")
@@ -428,7 +450,7 @@ async def lifespan(app: FastAPI):
 
 def _read_server_name(
     toml_path: str = "/etc/conduwuit/conduwuit.toml",
-    config_path: str = "/etc/hydrahive/matrix_server_name",
+    config_path: str = str(settings.matrix_server_name_file),
 ) -> str:
     env_server_name = os.environ.get("HYDRAHIVE_MATRIX_SERVER_NAME", "").strip()
     if env_server_name:
@@ -455,13 +477,14 @@ def _read_server_name(
     fallback = "hydrahive"
     logger.warning(
         "Matrix server_name nicht konfiguriert, verwende Fallback '%s'. "
-        "Setze HYDRAHIVE_MATRIX_SERVER_NAME oder /etc/hydrahive/matrix_server_name fuer nicht-default Installationen.",
+        "Setze HYDRAHIVE_MATRIX_SERVER_NAME oder %s fuer nicht-default Installationen.",
         fallback,
+        settings.matrix_server_name_file,
     )
     return fallback
 
 
-def _load_or_create_jwt_secret(secret_file: str = "/etc/hydrahive/jwt_secret") -> str:
+def _load_or_create_jwt_secret(secret_file: str = str(settings.jwt_secret_file)) -> str:
     """JWT-Secret aus Datei laden oder einmalig generieren und speichern."""
     path = Path(secret_file)
     if path.exists():
@@ -476,7 +499,7 @@ def _load_or_create_jwt_secret(secret_file: str = "/etc/hydrahive/jwt_secret") -
     return secret
 
 
-def _load_or_create_internal_secret(secret_file: str = "/etc/hydrahive/internal_secret") -> str:
+def _load_or_create_internal_secret(secret_file: str = str(settings.internal_secret_file)) -> str:
     """Internal-Secret aus Datei laden oder einmalig generieren und persistieren."""
     path = Path(secret_file)
     if path.exists():
@@ -505,7 +528,8 @@ def _read_admin_password() -> str:
 
 
 # In-Memory Token-Blacklist (revoked JTIs)
-_token_blacklist: set[str] = set()
+# Einträge: (jti, exp_timestamp) — werden per Cleanup-Task nach Ablauf entfernt
+_token_blacklist: dict[str, float] = {}
 
 
 def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str:
@@ -532,7 +556,7 @@ def _verify_jwt(token: str) -> tuple[str, str]:
         payload = jose_jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         jti = payload.get("jti")
         if jti and jti in _token_blacklist:
-            raise HTTPException(401, "Token wurde revoked (Logout)")
+            raise HTTPException(401, "Token revoked (Logout)")
         return payload["sub"], payload.get("role", "user")
     except HTTPException:
         raise
@@ -808,7 +832,7 @@ register_agent_chat_routes(
 
 # ================================================================== User-Verwaltung
 
-USERS_FILE = Path("/etc/hydrahive/users.json")
+USERS_FILE = settings.users_config
 
 
 def _load_users() -> dict:
@@ -1061,7 +1085,7 @@ def _create_personal_agent(username: str, group: str = "standard") -> str:
 
     model = "claude-haiku-4-5-20251001"
     try:
-        llm_raw = json.loads(Path("/etc/hydrahive/llm_config.json").read_text())
+        llm_raw = json.loads(settings.llm_config.read_text())
         providers = llm_raw.get("providers", {})
         if providers.get("claude_max", {}).get("enabled"):
             model = "claude-sonnet-4-6"
@@ -1217,7 +1241,7 @@ register_invite_routes(
 )
 
 
-WKS_KEYS_DIR = Path("/etc/hydrahive/wks_keys")
+WKS_KEYS_DIR = settings.wks_keys_dir
 
 
 internal_router = APIRouter(prefix="/internal", tags=["internal"])
@@ -1407,11 +1431,11 @@ register_mcp_server_routes(
 
 # ================================================================== Backup & Restore
 
-BACKUP_DIR = Path("/opt/hydrahive/backups")
+BACKUP_DIR = settings.backups_dir
 _BACKUP_SOURCES = [
-    ("/etc/hydrahive",  "etc-hydrahive"),
-    ("/agents",       "agents"),
-    ("/projects",     "projects"),
+    (str(settings.etc_dir),      "etc-hydrahive"),
+    (str(settings.agents_dir),   "agents"),
+    (str(settings.projects_dir), "projects"),
 ]
 
 register_backup_restore_routes(
@@ -1485,8 +1509,8 @@ register_openai_compat_routes(
 
 # ================================================================== Status
 
-NETWORK_PROFILE_FILE = Path("/etc/hydrahive/network_profile")
-NETWORK_PROFILE_SCRIPT = "/opt/hydrahive/apply-network-profile.sh"
+NETWORK_PROFILE_FILE = settings.network_profile_file
+NETWORK_PROFILE_SCRIPT = str(settings.network_profile_script)
 NETWORK_PROFILES: dict[str, dict[str, list[int] | bool]] = {
     "full": {
         "tcp_ports": [],
@@ -1659,7 +1683,7 @@ def _network_profile_status() -> dict:
     }
 
 
-GITEA_CONFIG_FILE = "/etc/hydrahive/gitea_config.json"
+GITEA_CONFIG_FILE = str(settings.gitea_config)
 
 
 def get_gitea_config():

@@ -22,9 +22,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-PIPELINES_DIR = Path("/etc/hydrahive/pipelines")
+PIPELINES_DIR = settings.pipelines_dir
 
 
 # ── Persistenz ────────────────────────────────────────────────────────────────

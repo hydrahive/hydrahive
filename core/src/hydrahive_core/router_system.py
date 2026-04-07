@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from .router_core_misc import collect_core_journal_report
+from .settings import settings
 
 
 class NetworkProfileRequest(BaseModel):
@@ -58,7 +59,7 @@ def register_system_routes(
     def _resolve_update_source() -> tuple[str, str, dict]:
         default_url = "https://github.com/hydrahive/hydrahive.git"
         default_source = "github/hydrahive"
-        if not Path("/etc/hydrahive/use_local_gitea").exists():
+        if not settings.use_local_gitea_file.exists():
             return default_url, default_source, {}
         p = Path(gitea_config_file)
         if not p.exists():
@@ -263,7 +264,7 @@ def register_system_routes(
 
     # ── AgentLink Config ─────────────────────────────────────────────
 
-    _AGENTLINK_CFG = Path("/etc/hydrahive/agentlink.json")
+    _AGENTLINK_CFG = settings.agentlink_config
 
     @admin_router.get("/admin/agentlink/config")
     def get_agentlink_config():
@@ -376,7 +377,7 @@ def register_system_routes(
         # Core
         features.append(_feature("core", installed=True, configured=True, active=_svc_active("hydrahive-core")))
         # LLM
-        llm_cfg = Path("/etc/hydrahive/llm_config.json").exists() or Path("/etc/hydrahive/llm_env").exists()
+        llm_cfg = settings.llm_config.exists() or settings.llm_env.exists()
         features.append(_feature("llm", installed=True, configured=llm_cfg, active=llm_cfg))
         # Ollama
         ollama_installed = shutil.which("ollama") is not None
@@ -386,31 +387,31 @@ def register_system_routes(
         gitea_cfg = Path(gitea_config_file).exists()
         features.append(_feature("gitea", installed=gitea_installed, configured=gitea_cfg, active=_svc_active("gitea")))
         # Console
-        features.append(_feature("console", installed=Path("/opt/hydrahive/console/index.html").exists(), configured=True, active=True))
+        features.append(_feature("console", installed=(settings.opt_dir / "console" / "index.html").exists(), configured=True, active=True))
         # AgentLink
-        al_installed = Path("/opt/hydrahive/agentlink").exists() or Path("/etc/hydrahive/agentlink.json").exists()
+        al_installed = (settings.opt_dir / "agentlink").exists() or settings.agentlink_config.exists()
         features.append(_feature("agentlink", installed=al_installed, configured=al_installed, active=_svc_active("hydrahive-agentlink")))
         # VPN/Tailscale
         ts_installed = shutil.which("tailscale") is not None
-        ts_cfg = Path("/etc/hydrahive/tailscale.json").exists()
+        ts_cfg = settings.tailscale_config.exists()
         features.append(_feature("tailscale", installed=ts_installed, configured=ts_cfg, active=_svc_active("tailscaled")))
         # code-server
         cs_installed = Path("/opt/codeserver/bin/code-server").exists()
         features.append(_feature("code-server", installed=cs_installed, configured=cs_installed, active=_svc_active("code-server")))
         # A-MEM
-        amem_cfg = Path("/etc/hydrahive/amem_config.json").exists()
+        amem_cfg = settings.amem_config.exists()
         features.append(_feature("a-mem", installed=amem_cfg, configured=amem_cfg, active=_svc_active("hydrahive-amem")))
         # WhatsApp Bridge
-        wa_installed = Path("/opt/hydrahive/whatsapp-bridge").exists()
+        wa_installed = settings.whatsapp_bridge_dir.exists()
         features.append(_feature("whatsapp-bridge", installed=wa_installed, configured=wa_installed, active=_svc_active("hydrahive-whatsapp-bridge")))
         # Discord — active nur wenn mindestens ein Bot-Token konfiguriert ist
-        discord_configured = any(Path("/etc/hydrahive/agent_tokens").glob("*_discord.json"))
+        discord_configured = any(settings.agent_tokens_dir.glob("*_discord.json"))
         features.append(_feature("discord", installed=True, configured=discord_configured, active=discord_configured))
         # Vaultwarden
         vw_installed = Path("/usr/local/bin/vaultwarden").exists()
         features.append(_feature("vaultwarden", installed=vw_installed, configured=vw_installed, active=_svc_active("vaultwarden")))
         # KAS (Mail)
-        features.append(_feature("kas", installed=True, configured=Path("/etc/hydrahive/kas.json").exists()))
+        features.append(_feature("kas", installed=True, configured=settings.kas_config.exists()))
         # Plugins
         plugins_dir = Path("/plugins")
         features.append(_feature("plugins", installed=plugins_dir.exists(), configured=plugins_dir.exists(),
@@ -668,7 +669,7 @@ def register_system_routes(
         token = cfg.get("token", "")
         # Passwort aus /etc/hydrahive/admin_credentials (console_password=...)
         password = ""
-        cred_file = Path("/etc/hydrahive/admin_credentials")
+        cred_file = settings.admin_credentials
         if cred_file.exists():
             for line in cred_file.read_text(encoding="utf-8").splitlines():
                 if line.startswith("console_password="):

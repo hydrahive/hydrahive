@@ -13,14 +13,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 
 def _find_install_dir() -> Path:
-    for candidate in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
-        if candidate.exists():
-            return candidate
-    return Path("/opt/hydrahive")
+    return settings.opt_dir
 
 
 def register_doctor_routes(admin_router: APIRouter, *, require_admin) -> None:
@@ -183,10 +182,10 @@ def _check_configs() -> list[dict]:
     """Prüft wichtige Konfigurationsdateien."""
     results = []
     configs = [
-        ([Path("/etc/hydrahive/llm_config.json"), Path("/etc/hydrahive/llm_config.json")],                       "LLM-Konfiguration"),
-        ([Path("/etc/hydrahive/users.json"), Path("/etc/hydrahive/users.json")],                                 "Benutzer-Datenbank"),
+        ([settings.llm_config, settings.llm_config],                       "LLM-Konfiguration"),
+        ([settings.users_config, settings.users_config],                                 "Benutzer-Datenbank"),
         ([Path("/etc/nginx/sites-enabled/hydrahive-console"), Path("/etc/nginx/sites-enabled/hydrahive-console")], "Nginx-Konfiguration"),
-        ([Path("/opt/hydrahive/venv"), Path("/opt/hydrahive/venv")],                                             "Python-Virtualenv"),
+        ([settings.opt_dir / "venv", settings.opt_dir / "venv"],                                             "Python-Virtualenv"),
     ]
     for paths, label in configs:
         existing = next((p for p in paths if p.exists()), None)
@@ -198,7 +197,7 @@ def _check_configs() -> list[dict]:
         ))
 
     # VPN-Konfig optional
-    vpn = Path("/etc/hydrahive/vpn.json")
+    vpn = settings.vpn_config
     if vpn.exists():
         try:
             data = json.loads(vpn.read_text())
@@ -238,11 +237,7 @@ def _check_disk() -> list[dict]:
     try:
         import shutil
         # Prüfe hydrahive zuerst, dann hydrahive als Fallback
-        check_path = "/opt/hydrahive"
-        for candidate in ["/opt/hydrahive", "/opt/hydrahive"]:
-            if Path(candidate).exists():
-                check_path = candidate
-                break
+        check_path = str(settings.opt_dir)
         total, used, free = shutil.disk_usage(check_path)
         free_gb = free / (1024 ** 3)
         used_pct = int(used / total * 100)
@@ -307,7 +302,7 @@ def _check_nginx_a2a() -> list[dict]:
 
 async def _fix_nginx() -> dict:
     """Führt 16_nginx_update.sh aus — injiziert fehlende nginx-Regeln idempotent."""
-    script = Path("/opt/hydrahive/installer/modules/16_nginx_update.sh")
+    script = settings.installer_dir / "modules" / "16_nginx_update.sh"
     if not script.exists():
         return {"ok": False, "error": "Fix-Script nicht gefunden — bitte zuerst ein Update ausführen"}
 
@@ -351,7 +346,7 @@ async def _fix_install_chromium() -> dict:
 async def _fix_repair_whatsapp() -> dict:
     """Reinstalliert WhatsApp Bridge ohne Datenverlust (Sessions + Config bleiben)."""
     import shlex
-    script = Path("/opt/hydrahive/installer/modules/13_whatsapp_bridge.sh")
+    script = settings.installer_dir / "modules" / "13_whatsapp_bridge.sh"
     if not script.exists():
         return {"ok": False, "error": "Installer-Modul nicht gefunden — bitte Update durchführen"}
 
@@ -360,7 +355,7 @@ async def _fix_repair_whatsapp() -> dict:
             ["sudo", "-n", "/bin/bash", str(script)],
             capture_output=True, text=True, timeout=300,
             env={**__import__("os").environ, "DEBIAN_FRONTEND": "noninteractive",
-                 "HYDRAHIVE_DIR": "/opt/hydrahive"},
+                 "HYDRAHIVE_DIR": str(settings.opt_dir)},
         )
 
     r = await asyncio.to_thread(_run)
@@ -372,7 +367,7 @@ async def _fix_repair_whatsapp() -> dict:
 def _agentlink_url() -> str:
     """Liest AgentLink base_url aus /etc/hydrahive/agentlink.json (Default: http://localhost:8000)."""
     try:
-        cfg = json.loads(Path("/etc/hydrahive/agentlink.json").read_text())
+        cfg = json.loads(settings.agentlink_config.read_text())
         return cfg.get("base_url", "http://localhost:8000").rstrip("/")
     except (OSError, json.JSONDecodeError):
         return "http://localhost:8000"
@@ -504,12 +499,12 @@ def _check_llm_config() -> list[dict]:
     active = []
 
     # Claude Max OAuth Token
-    claude_token = Path("/etc/hydrahive/claude_oauth_token")
+    claude_token = settings.claude_oauth_token
     if claude_token.exists() and claude_token.read_text(encoding="utf-8").strip():
         active.append("Claude Max (OAuth)")
 
     # OpenAI Codex OAuth Token
-    codex_token = Path("/etc/hydrahive/openai_codex_token.json")
+    codex_token = settings.openai_codex_token
     if codex_token.exists():
         try:
             data = json.loads(codex_token.read_text(encoding="utf-8"))
@@ -519,7 +514,7 @@ def _check_llm_config() -> list[dict]:
             pass
 
     # llm_config.json: Provider mit API-Key
-    config_path = Path("/etc/hydrahive/llm_config.json")
+    config_path = settings.llm_config
     if config_path.exists():
         try:
             raw = config_path.read_text(encoding="utf-8").strip()

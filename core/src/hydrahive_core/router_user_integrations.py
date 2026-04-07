@@ -9,6 +9,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, validator
 
+from .settings import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ class MailConfigRequest(BaseModel):
 def _kas_config() -> dict:
     """Liest /etc/hydrahive/kas.json falls vorhanden."""
     import json
-    p = Path("/etc/hydrahive/kas.json")
+    p = settings.kas_config
     if p.exists():
         try:
             return json.loads(p.read_text())
@@ -443,7 +445,7 @@ def register_user_integration_routes(
         samba_user = f"proj_personal_{username}"
         samba_pw = None
         try:
-            r = _sp.run(["sudo", "grep", f"^{samba_user}:", "/etc/hydrahive/samba_credentials"],
+            r = _sp.run(["sudo", "grep", f"^{samba_user}:", str(settings.samba_credentials)],
                         capture_output=True, text=True, timeout=5)
             if r.returncode == 0 and ":" in r.stdout.strip():
                 samba_pw = r.stdout.strip().split(":", 1)[1]
@@ -458,7 +460,7 @@ def register_user_integration_routes(
                 s_user = f"proj_{pid}"
                 s_pw = None
                 try:
-                    r = _sp.run(["sudo", "grep", f"^{s_user}:", "/etc/hydrahive/samba_credentials"],
+                    r = _sp.run(["sudo", "grep", f"^{s_user}:", str(settings.samba_credentials)],
                                 capture_output=True, text=True, timeout=3)
                     if r.returncode == 0 and ":" in r.stdout.strip():
                         s_pw = r.stdout.strip().split(":", 1)[1]

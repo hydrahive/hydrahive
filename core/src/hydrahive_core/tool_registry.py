@@ -16,10 +16,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-PROJECTS_ROOT = Path("/projects")
-AGENTS_ROOT   = Path("/agents")
+PROJECTS_ROOT = settings.projects_dir
+AGENTS_ROOT   = settings.agents_dir
 
 # Wird von main.py im Lifespan gesetzt; ermöglicht interne Core-Calls ohne IP-Bypass
 _internal_secret: str = ""
@@ -79,8 +81,8 @@ _projects_registry: Any = None
 _get_provisioner: Any = None
 _load_users_fn: Any = None
 _audit_log_fn: Any = None
-_admin_agents_dir: str = "/agents"
-_admin_projects_dir: str = "/projects"
+_admin_agents_dir: str = str(settings.agents_dir)
+_admin_projects_dir: str = str(settings.projects_dir)
 _admin_runtime: Any = None
 
 
@@ -810,10 +812,10 @@ def _handoff_dir(project_id: str):
     Persönliche Agenten (personal_*) und direkte Agent-Chats: /agents/{id}/
     """
     from pathlib import Path as _P
-    project_path = _P("/projects") / project_id
+    project_path = settings.projects_dir / project_id
     if project_path.exists():
         return project_path
-    agent_path = _P("/agents") / project_id
+    agent_path = settings.agents_dir / project_id
     if agent_path.exists():
         return agent_path
     return project_path  # Fallback — wird ggf. angelegt
@@ -1059,7 +1061,7 @@ def _check_shell_blocklist(command: str) -> str | None:
 
 
 # Erlaubte CWD-Präfixe für shell_exec (verhindert Ausführung aus Systempfaden)
-_ALLOWED_CWD_PREFIXES = ("/tmp", "/projects", "/home", "/agents", "/var/tmp")
+_ALLOWED_CWD_PREFIXES = ("/tmp", str(settings.projects_dir), "/home", str(settings.agents_dir), "/var/tmp")
 
 
 def _validate_shell_cwd(cwd: str) -> str | None:
@@ -1499,12 +1501,10 @@ class ReadSystemFileTool(BaseTool):
         limit = min(limit, 1000)
         p = Path(path)
         if not p.is_absolute():
-            for base in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
-                if base.exists():
-                    p = base / path
-                    break
+            if settings.opt_dir.exists():
+                p = settings.opt_dir / path
             else:
-                p = Path("/opt/hydrahive") / path
+                p = settings.opt_dir / path
         logger.info("read_system_file [%s]: %s (offset=%d limit=%d)", agent_id, p, offset, limit)
         if not p.exists():
             return {"error": f"Datei nicht gefunden: {p}"}
@@ -1572,12 +1572,10 @@ class WriteSystemFileTool(BaseTool):
     ) -> dict:
         p = Path(path)
         if not p.is_absolute():
-            for base in [Path("/opt/hydrahive"), Path("/opt/hydrahive")]:
-                if base.exists():
-                    p = base / path
-                    break
+            if settings.opt_dir.exists():
+                p = settings.opt_dir / path
             else:
-                p = Path("/opt/hydrahive") / path
+                p = settings.opt_dir / path
         logger.info("write_system_file [%s]: %s (%s, %d bytes)", agent_id, p, mode, len(content))
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -2260,7 +2258,7 @@ class DelegateAgentTool(BaseTool):
 
         # Handoff im /agents-Verzeichnis des Ziel-Agenten ablegen
         # (agent_id hier = aufrufender Agent, target = Ziel-Agent)
-        handoff_base = _Path("/agents") / target
+        handoff_base = settings.agents_dir / target
         handoff_base.mkdir(parents=True, exist_ok=True)
 
         entry = _wh(
@@ -3651,12 +3649,7 @@ def _get_wks_config(project_id: str) -> dict | None:
     """WKS-Config des Users laden, der zum project_id gehört.
     Persönliche Agenten heißen personal_<username> → username extrahieren."""
     import json as _j
-    for uf in [Path("/etc/hydrahive/users.json"), Path("/etc/hydrahive/users.json")]:
-        if uf.exists():
-            USERS_FILE = uf
-            break
-    else:
-        USERS_FILE = Path("/etc/hydrahive/users.json")
+    USERS_FILE = settings.users_config
     if not project_id.startswith("personal_"):
         return None
     username = project_id[len("personal_"):]
@@ -4657,7 +4650,7 @@ class RemoteAgentTool(BaseTool):
     Peers werden in /etc/hydrahive/a2a_peers.json konfiguriert.
     """
 
-    A2A_CONFIG = Path("/etc/hydrahive/a2a_peers.json")
+    A2A_CONFIG = settings.a2a_peers_config
 
     @property
     def id(self) -> str:   return "remote_agent"
@@ -4770,7 +4763,7 @@ class RemoteAgentTool(BaseTool):
 
 # ── Scratchpad Tools ─────────────────────────────────────────────────────────
 
-SCRATCHPADS_DIR = Path("/etc/hydrahive/scratchpads")
+SCRATCHPADS_DIR = settings.etc_dir / "scratchpads"
 
 
 class ReadScratchpadTool(BaseTool):
@@ -4980,7 +4973,7 @@ class AnalyzeImageTool(BaseTool):
         for raw_path in paths[:MAX_IMAGES]:
             p = Path(raw_path)
             if not p.is_absolute():
-                for base in [PROJECTS_ROOT / project_id, Path("/opt/hydrahive"), Path("/tmp")]:
+                for base in [PROJECTS_ROOT / project_id, settings.opt_dir, Path("/tmp")]:
                     candidate = base / raw_path
                     if candidate.exists():
                         p = candidate
@@ -5203,7 +5196,7 @@ class GetSecretTool(BaseTool):
     /etc/hydrahive/agent_secrets.json gespeichert (chmod 600).
     """
 
-    _SECRETS_PATH = Path("/etc/hydrahive/agent_secrets.json")
+    _SECRETS_PATH = settings.agent_secrets_config
 
     @property
     def id(self) -> str:   return "get_secret"

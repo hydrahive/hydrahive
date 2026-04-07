@@ -27,6 +27,7 @@ from .agent_discovery import AgentDiscovery
 from .agent_runtime import AgentRuntime
 from .project_config import ProjectConfig
 from .session_manager import MessageRole, SessionManager
+from .settings import settings
 from .tool_registry import ToolRegistry, registry as default_registry
 from . import tool_registry as _tool_reg
 
@@ -216,13 +217,13 @@ class Orchestrator:
         runtime:          AgentRuntime,
         sessions:         SessionManager,
         tool_reg:         ToolRegistry | None = None,
-        mcp_servers_file: str = "/etc/hydrahive/mcp_servers.json",
+        mcp_servers_file: str = "",
     ) -> None:
         self._discovery         = discovery
         self._runtime           = runtime
         self._sessions          = sessions
         self._reg               = tool_reg or default_registry
-        self._mcp_servers_file  = mcp_servers_file
+        self._mcp_servers_file  = mcp_servers_file or str(settings.mcp_servers_config)
         self._project_queues: dict[str, asyncio.Queue]  = {}
         self._queue_tasks:    dict[str, asyncio.Task]   = {}
         self._queue_last_used: dict[str, float]         = {}

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import litellm
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,7 +154,7 @@ def _load_claude_oauth_token() -> str:
         return env_key
 
     # Priorität 2: Console-OAuth-Token (kurzlebig, mit Refresh)
-    token_file = Path("/etc/hydrahive/claude_oauth_token")
+    token_file = settings.claude_oauth_token
     try:
         raw = token_file.read_text(encoding="utf-8").strip()
     except OSError:
@@ -236,7 +238,7 @@ def _refresh_claude_token(refresh_token: str, token_file: Path) -> str:
 def _load_openai_codex_token() -> dict | None:
     """Laedt OpenAI Codex OAuth Token (ChatGPT Plus/Pro)."""
     import json as _json
-    token_file = Path("/etc/hydrahive/openai_codex_token.json")
+    token_file = settings.openai_codex_token
     try:
         data = _json.loads(token_file.read_text(encoding="utf-8"))
         if data.get("access_token") and data.get("account_id"):
@@ -327,7 +329,7 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
 def _load_llm_config() -> dict:
     import json as _json
     try:
-        return _json.loads(Path("/etc/hydrahive/llm_config.json").read_text())
+        return _json.loads(settings.llm_config.read_text())
     except (OSError, ValueError):
         return {"providers": {}}
 
@@ -356,7 +358,7 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
                 # 2. Erste WKS-Config aus users.json (für WKS-Ollama Fallback)
                 import json as _j
                 from pathlib import Path as _P
-                users = _j.loads(_P("/etc/hydrahive/users.json").read_text())
+                users = _j.loads(settings.users_config.read_text())
                 for u in users.values():
                     wks = u.get("wks", {})
                     if wks.get("ip"):
