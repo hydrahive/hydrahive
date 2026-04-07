@@ -474,16 +474,23 @@ class SessionManager:
         return d
 
     def _persist(self, session: Session) -> None:
-        """Atomic Write: tmp-Datei schreiben, dann rename (#358)."""
+        """Atomic Write mit WAL: WAL-append → tmp-write → rename (#358, #393)."""
         path = self._session_dir(session.project_id) / f"{session.id}.json"
+        wal_path = path.with_suffix(".wal")
         tmp = path.with_suffix(".json.tmp")
         try:
-            tmp.write_text(
-                json.dumps(session.to_dict(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            data = json.dumps(session.to_dict(), ensure_ascii=False, indent=2)
+            # #393: WAL — letzten State vor Write sichern (Crash-Recovery)
+            try:
+                with wal_path.open("a", encoding="utf-8") as wal:
+                    wal.write(f"{datetime.now(timezone.utc).isoformat()}|{len(session.messages)}\n")
+            except OSError:
+                pass  # WAL-Fehler ist nicht fatal
+            tmp.write_text(data, encoding="utf-8")
             tmp.chmod(0o600)
             tmp.replace(path)  # atomic auf POSIX
+            # WAL nach erfolgreichem Write löschen
+            wal_path.unlink(missing_ok=True)
         except OSError as e:
             logger.warning("Session konnte nicht gespeichert werden: %s", e)
             tmp.unlink(missing_ok=True)
