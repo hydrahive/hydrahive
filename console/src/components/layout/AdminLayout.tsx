@@ -273,16 +273,14 @@ export function AdminLayout() {
   const sidebar = (
     <aside className="app-sidebar">
       <div className="border-b border-[hsl(var(--sidebar-border))] px-5 py-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center relative">
             <img src="/hydrahive-logo.png" alt="HydraHive"
               className="h-[120px] w-[120px] rounded-2xl"
               style={{ animation: "pulse-glow 3s ease-in-out infinite" }} />
-          </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
+            className="absolute right-0 top-0 rounded-xl p-2 text-[hsl(var(--sidebar-muted))] hover:bg-white/10 hover:text-[hsl(var(--sidebar-foreground))] lg:hidden"
             aria-label="Close menu"
           >
             <X className="h-5 w-5" />
