@@ -372,6 +372,7 @@ def register_llm_routes(
         if not access_token or not access_token.startswith("sk-ant-oat01-"):
             raise HTTPException(400, f"Kein gültiger Anthropic Token in Response: {str(token_data)[:200]}")
 
+        import json as _json
         import time as _time
         token_file = settings.claude_oauth_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
