@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_dispatch_calls(tool_calls: list) -> list[dict]:
-    """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls."""
+    """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls (#415: +task_id, +depends_on)."""
     dispatches = []
     for tc in tool_calls:
         if tc.function.name != "dispatch_task":
@@ -29,44 +29,154 @@ def _parse_dispatch_calls(tool_calls: list) -> list[dict]:
         try:
             args = json.loads(tc.function.arguments)
             dispatches.append({
-                "call_id":   tc.id,
-                "worker_id": args["worker_id"],
-                "task":      args["task"],
-                "context":   args.get("context", ""),
+                "call_id":    tc.id,
+                "worker_id":  args["worker_id"],
+                "task":       args["task"],
+                "context":    args.get("context", ""),
+                "task_id":    args.get("task_id", tc.id),  # Fallback: LLM call_id
+                "depends_on": args.get("depends_on", []),
             })
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning("Ungültiger dispatch_task-Aufruf: %s", e)
     return dispatches
 
 
-async def _dispatch_parallel(
+def _validate_dag(dispatches: list[dict]) -> str | None:
+    """Prüft DAG auf Zyklen und unbekannte Referenzen. Gibt Fehlermeldung oder None zurück."""
+    known_ids = {d["task_id"] for d in dispatches}
+    for d in dispatches:
+        for dep in d["depends_on"]:
+            if dep not in known_ids:
+                return f"Task '{d['task_id']}' referenziert unbekannte Abhängigkeit '{dep}'"
+    # Zyklenerkennung (DFS)
+    WHITE, GREY, BLACK = 0, 1, 2
+    color: dict[str, int] = {d["task_id"]: WHITE for d in dispatches}
+    adj: dict[str, list[str]] = {d["task_id"]: list(d["depends_on"]) for d in dispatches}
+    def _dfs(node: str) -> bool:
+        color[node] = GREY
+        for dep in adj.get(node, []):
+            if color.get(dep) == GREY:
+                return True  # Zyklus
+            if color.get(dep) == WHITE and _dfs(dep):
+                return True
+        color[node] = BLACK
+        return False
+    for tid in known_ids:
+        if color[tid] == WHITE and _dfs(tid):
+            return f"Zyklische Abhängigkeit erkannt bei Task '{tid}'"
+    return None
+
+
+async def _dispatch_dag(
     orch,
     project_cfg: ProjectConfig,
     dispatches: list[dict],
     context: str,
 ) -> list[DispatchResult]:
     """
-    Alle Tasks parallel ausführen (AG2: paralleles Dispatching für Swarm).
-    Nur Agenten die dem Projekt zugewiesen sind dürfen gespawnt werden (AG5).
+    DAG-aware Task-Dispatch (#415): Tasks mit Abhängigkeiten werden in der
+    richtigen Reihenfolge ausgeführt. Tasks ohne Abhängigkeiten laufen parallel.
+    Cascade Failure: fehlgeschlagene Tasks blockieren alle Abhängigen.
     """
     allowed_workers = set(project_cfg.agents.workers)
-    tasks = []
-    for d in dispatches:
-        if d["worker_id"] not in allowed_workers:
-            logger.warning(
-                "dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"]
-            )
-            async def _rejected(d=d) -> DispatchResult:
-                return DispatchResult(
-                    worker_id=d["worker_id"], task=d["task"],
-                    result="", success=False,
-                    error="Agent nicht dem Projekt zugewiesen",
-                )
-            tasks.append(_rejected())
-            continue
-        tasks.append(_run_worker_task(orch, d))
+    has_deps = any(d.get("depends_on") for d in dispatches)
 
-    return list(await asyncio.gather(*tasks, return_exceptions=False))
+    # Kein DAG → alter Pfad (flat parallel)
+    if not has_deps:
+        tasks = []
+        for d in dispatches:
+            if d["worker_id"] not in allowed_workers:
+                logger.warning("dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"])
+                async def _rejected(d=d) -> DispatchResult:
+                    return DispatchResult(worker_id=d["worker_id"], task=d["task"],
+                                         result="", success=False, error="Agent nicht dem Projekt zugewiesen",
+                                         task_id=d.get("task_id"))
+                tasks.append(_rejected())
+                continue
+            tasks.append(_run_worker_task(orch, d))
+        return list(await asyncio.gather(*tasks, return_exceptions=False))
+
+    # DAG-Validierung
+    err = _validate_dag(dispatches)
+    if err:
+        logger.error("DAG-Validierung fehlgeschlagen: %s", err)
+        return [DispatchResult(worker_id=d["worker_id"], task=d["task"], result="",
+                               success=False, error=f"DAG-Fehler: {err}", task_id=d.get("task_id"))
+                for d in dispatches]
+
+    # DAG-Execution Loop
+    task_map = {d["task_id"]: d for d in dispatches}
+    completed: dict[str, DispatchResult] = {}
+    failed_ids: set[str] = set()
+    results: list[DispatchResult] = []
+
+    logger.info("DAG-Dispatch: %d Tasks, Dependencies: %s",
+                len(dispatches),
+                {d["task_id"]: d["depends_on"] for d in dispatches if d["depends_on"]})
+
+    max_waves = len(dispatches) + 1  # Safety gegen Endlosloop
+    for _wave in range(max_waves):
+        # Finde Tasks die bereit sind (alle Deps completed + nicht selbst fertig/failed)
+        ready = []
+        for d in dispatches:
+            tid = d["task_id"]
+            if tid in completed or tid in failed_ids:
+                continue
+            deps = d["depends_on"]
+            # Cascade: wenn eine Dep fehlgeschlagen ist → dieser Task auch
+            failed_deps = [dep for dep in deps if dep in failed_ids]
+            if failed_deps:
+                res = DispatchResult(
+                    worker_id=d["worker_id"], task=d["task"], result="",
+                    success=False, error=f"Cascade Failure: Abhängigkeit(en) {failed_deps} fehlgeschlagen",
+                    task_id=tid,
+                )
+                failed_ids.add(tid)
+                results.append(res)
+                continue
+            # Alle Deps müssen completed sein
+            if all(dep in completed for dep in deps):
+                ready.append(d)
+
+        if not ready:
+            break  # Alles erledigt oder Deadlock
+
+        # Ready-Tasks parallel ausführen
+        wave_tasks = []
+        for d in ready:
+            if d["worker_id"] not in allowed_workers:
+                async def _rejected(d=d) -> DispatchResult:
+                    return DispatchResult(worker_id=d["worker_id"], task=d["task"],
+                                         result="", success=False, error="Agent nicht dem Projekt zugewiesen",
+                                         task_id=d.get("task_id"))
+                wave_tasks.append(_rejected())
+            else:
+                # Dependency-Ergebnisse als Kontext mitgeben
+                dep_context = d.get("context", "")
+                for dep_id in d["depends_on"]:
+                    dep_res = completed.get(dep_id)
+                    if dep_res and dep_res.result:
+                        dep_context += f"\n\n[Ergebnis von {dep_id}]: {dep_res.result[:2000]}"
+                d_with_ctx = {**d, "context": dep_context.strip()}
+                wave_tasks.append(_run_worker_task(orch, d_with_ctx))
+
+        wave_results = await asyncio.gather(*wave_tasks, return_exceptions=False)
+        logger.info("DAG Wave %d: %d Tasks (%s)",
+                    _wave + 1, len(wave_results),
+                    ", ".join(d["task_id"] for d in ready))
+
+        for res in wave_results:
+            res.task_id = res.task_id or next((d["task_id"] for d in ready if d["worker_id"] == res.worker_id), None)
+            if res.success:
+                completed[res.task_id] = res
+            else:
+                failed_ids.add(res.task_id)
+            results.append(res)
+
+    return results
+
+# Alias für Abwärtskompatibilität (orchestrator.py importiert diesen Namen)
+_dispatch_parallel = _dispatch_dag
 
 
 async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
@@ -74,12 +184,14 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
     worker_id = dispatch["worker_id"]
     task      = dispatch["task"]
     context   = dispatch.get("context", "")
+    task_id   = dispatch.get("task_id")
 
     worker_cfg = orch._discovery.get(worker_id)
     if not worker_cfg:
         return DispatchResult(
             worker_id=worker_id, task=task, result="",
-            success=False, error=f"Agent '{worker_id}' nicht in Discovery"
+            success=False, error=f"Agent '{worker_id}' nicht in Discovery",
+            task_id=task_id,
         )
 
     logger.info("Dispatche Task an %s: %s", worker_id, task[:60])
@@ -95,12 +207,12 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
     try:
         response = await orch._llm_call(worker_cfg, messages, tools=None)
         result = response.choices[0].message.content or ""
-        return DispatchResult(worker_id=worker_id, task=task, result=result)
+        return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
     except Exception as e:
         logger.error("Worker '%s' LLM-Fehler: %s", worker_id, e)
         return DispatchResult(
             worker_id=worker_id, task=task, result="",
-            success=False, error=str(e)
+            success=False, error=str(e), task_id=task_id,
         )
 
 
@@ -130,7 +242,8 @@ async def _synthesize(
     for result in results:
         call_id = next(
             (tc.id for tc in tool_calls
-             if json.loads(tc.function.arguments).get("worker_id") == result.worker_id),
+             if json.loads(tc.function.arguments).get("task_id") == result.task_id
+             or json.loads(tc.function.arguments).get("worker_id") == result.worker_id),
             "unknown"
         )
         content = result.result if result.success else f"[Fehler] {result.error}"
@@ -279,9 +392,11 @@ async def _tool_loop(
 
         if dispatch_tcs:
             dispatches = _parse_dispatch_calls(dispatch_tcs)
-            results = await _dispatch_parallel(orch, project_cfg, dispatches, context="")
+            results = await _dispatch_dag(orch, project_cfg, dispatches, context="")
+            # #415: task_id-basiertes Mapping (Fallback: worker_id)
+            call_id_by_task_id = {d["task_id"]: d["call_id"] for d in dispatches}
             for res in results:
-                call_id = next(
+                call_id = call_id_by_task_id.get(res.task_id) or next(
                     (tc.id for tc in dispatch_tcs
                      if json.loads(tc.function.arguments).get("worker_id") == res.worker_id),
                     "unknown"

@@ -24,6 +24,7 @@ class DispatchResult:
     result:    str
     success:   bool = True
     error:     str | None = None
+    task_id:   str | None = None  # #415: DAG Task Scheduler
 
 
 def _truncate_tool_result(result_str: str) -> str:

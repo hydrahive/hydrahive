@@ -293,7 +293,9 @@ class DispatchTaskTool(BaseTool):
         return (
             "Delegiert einen spezifischen Task an einen Worker-Agenten. "
             "Nutze dies wenn du eine Aufgabe an einen spezialisierten Agenten "
-            "weitergeben willst. Der Worker erledigt den Task und gibt das Ergebnis zurueck."
+            "weitergeben willst. Der Worker erledigt den Task und gibt das Ergebnis zurueck. "
+            "Mit task_id und depends_on kannst du Abhängigkeiten zwischen Tasks definieren — "
+            "ein Task startet erst wenn alle Tasks in depends_on abgeschlossen sind."
         )
 
     @property
@@ -312,6 +314,15 @@ class DispatchTaskTool(BaseTool):
                 "context": {
                     "type":        "string",
                     "description": "Optionaler Kontext den der Worker fuer den Task braucht",
+                },
+                "task_id": {
+                    "type":        "string",
+                    "description": "Eindeutige ID für diesen Task (damit andere Tasks mit depends_on darauf verweisen können)",
+                },
+                "depends_on": {
+                    "type":  "array",
+                    "items": {"type": "string"},
+                    "description": "Liste von task_ids die abgeschlossen sein müssen bevor dieser Task startet",
                 },
             },
             "required": ["worker_id", "task"],
