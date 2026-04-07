@@ -9,7 +9,7 @@ import { useLocation } from "react-router-dom";
 type Mood = "idle" | "happy" | "think" | "sleep" | "shock" | "love" | "sad";
 
 /** Animated SVG blob creature — changes expression based on mood */
-function BlobCreature({ mood, size = 48 }: { mood: Mood; size?: number }) {
+export function BlobCreature({ mood, size = 48 }: { mood: Mood; size?: number }) {
   const eyes: Record<Mood, string> = {
     idle:  "M16 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm16 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z",
     happy: "M14.5 18.5q1.5-2 3 0m13-0q1.5-2 3 0",

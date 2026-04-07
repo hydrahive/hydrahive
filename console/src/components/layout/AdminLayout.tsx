@@ -2,7 +2,7 @@ import React from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SupportWidget } from "@/components/SupportWidget";
-import { FloatingCompanion, useCompanionActivation } from "@/components/FloatingCompanion";
+import { FloatingCompanion, useCompanionActivation, BlobCreature } from "@/components/FloatingCompanion";
 import {
   LayoutDashboard,
   Bot,
@@ -231,6 +231,13 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const companionTap = useCompanionActivation();
+  const [companionActive, setCompanionActive] = useState(() => localStorage.getItem("hh_companion") === "1");
+  useEffect(() => {
+    const handler = () => setCompanionActive(localStorage.getItem("hh_companion") === "1");
+    window.addEventListener("storage", handler);
+    window.addEventListener("hh-companion-toggle", handler);
+    return () => { window.removeEventListener("storage", handler); window.removeEventListener("hh-companion-toggle", handler); };
+  }, []);
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
@@ -304,9 +311,15 @@ export function AdminLayout() {
               <h2 className="text-lg font-semibold leading-tight">{t("layout.assistantName")}</h2>
               <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.assistantSubtitle")}</p>
             </div>
-            <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
-              {t("layout.assistantStatus")}
-            </span>
+            {companionActive ? (
+              <span className="flex items-center justify-center rounded-full bg-emerald-400/15 p-1" title={t("layout.assistantStatus")}>
+                <BlobCreature mood="idle" size={28} />
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                {t("layout.assistantStatus")}
+              </span>
+            )}
           </div>
           <button
             type="button"
