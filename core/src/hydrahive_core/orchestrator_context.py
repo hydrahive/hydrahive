@@ -772,6 +772,56 @@ def _pre_compact_memory_flush(boss_cfg, session, compact_model: str) -> None:
     logger.info("Pre-compact memory snapshot geschrieben für %s", boss_cfg.id)
 
 
+def _extract_edited_files(messages, *, max_files: int = 5) -> list[str]:
+    """#467: Extrahiere Pfade der zuletzt bearbeiteten Files aus Tool-Messages."""
+    import re
+    from .session_manager import MessageRole
+    paths: list[str] = []
+    seen: set[str] = set()
+    # Rückwärts durchgehen → neueste zuerst
+    for m in reversed(messages):
+        if m.role != MessageRole.TOOL:
+            continue
+        content = m.content
+        # file_write|/path/to/file oder file_edit|/path/to/file
+        if content.startswith(("file_write|", "file_edit|")):
+            # Format: "tool_name|detail text"
+            detail = content.split("|", 1)[1] if "|" in content else ""
+            # Pfad ist typischerweise das erste Wort oder in der Detail-Zeile
+            match = re.search(r"(/[\w./_-]+)", detail)
+            if match and match.group(1) not in seen:
+                seen.add(match.group(1))
+                paths.append(match.group(1))
+        if len(paths) >= max_files:
+            break
+    return paths
+
+
+def _build_reinject_context(file_paths: list[str], *, max_chars_per_file: int = 2000, total_budget: int = 8000) -> str:
+    """#467: Liest die zuletzt bearbeiteten Files und baut einen Reinject-Block."""
+    snippets: list[str] = []
+    total = 0
+    for fp in file_paths:
+        p = Path(fp)
+        if not p.is_file():
+            continue
+        try:
+            content = p.read_text(errors="replace")[:max_chars_per_file]
+            entry = f"### {fp}\n```\n{content}\n```"
+            if total + len(entry) > total_budget:
+                break
+            snippets.append(entry)
+            total += len(entry)
+        except Exception:
+            continue
+    if not snippets:
+        return ""
+    return (
+        "[Kontext-Reinjektion nach Kompaktierung — zuletzt bearbeitete Dateien]\n\n"
+        + "\n\n".join(snippets)
+    )
+
+
 async def _compact_if_needed(
     sessions,
     project_id: str,
@@ -842,6 +892,9 @@ async def _compact_if_needed(
     to_summarize = msgs[:-keep_last] if len(msgs) > keep_last else msgs[:]
     if not to_summarize and not existing_summary:
         return
+
+    # #467: File-Pfade VOR Compaction extrahieren (Messages werden gleich entfernt)
+    _edited_files = _extract_edited_files(session.messages)
 
     history_lines = "\n".join(
         f"{m.role.value.upper()}: {m.content[:1500]}"
@@ -951,6 +1004,22 @@ async def _compact_if_needed(
         # damit zukünftige Sessions relevante Fakten via BM25 finden
         if boss_cfg.agent_dir:
             _flush_summary_to_memory(boss_cfg.agent_dir, summary)
+
+        # #467: Post-Compact Reinjektion — zuletzt bearbeitete Files wieder einfügen
+        if _edited_files:
+            reinject = _build_reinject_context(_edited_files)
+            if reinject:
+                session = sessions.get_active(project_id)
+                if session:
+                    from .session_manager import Message as _Msg
+                    reinject_msg = _Msg.create(role=MessageRole.SYSTEM, content=reinject)
+                    # Nach Summary (Index 0), vor den behaltenen Messages einfügen
+                    session.messages.insert(1, reinject_msg)
+                    sessions._persist(session)
+                    logger.info(
+                        "Post-compact reinject: %d Files reinjiziert (Projekt: %s)",
+                        len(_edited_files), project_id,
+                    )
 
     except Exception as e:
         logger.warning("Context-Kompaktierung fehlgeschlagen: %s", e)

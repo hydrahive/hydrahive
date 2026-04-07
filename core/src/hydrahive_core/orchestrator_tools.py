@@ -57,24 +57,45 @@ class DispatchResult:
 
 def _truncate_tool_result(result_str: str) -> str:
     """
-    Safety-Cap für Tool-Ergebnisse bei Speicherung in der Session (#352).
+    Safety-Cap für Tool-Ergebnisse bei Speicherung in der Session (#352, #470).
 
     Eigentliche Kürzung passiert erst in session_manager.llm_context() beim
     Zusammenbauen der History — dort wird nach Alter differenziert (letzte 5
     Tool-Results: 4k chars, ältere: 300 chars Preview).
 
-    Hier nur ein großzügiger Safety-Cap (32k) gegen Out-of-Memory bei extrem
-    großen Tool-Outputs (z.B. `find /` oder riesige Repo-Trees).
+    Ab 16k: Volltext auf Disk speichern, Model bekommt Preview + Pfad (#470).
+    Ab 32k: zusätzlich Head+Tail-Abschnitt.
     """
+    disk_threshold = 16000
     limit = 32000
-    if len(result_str) > limit:
-        head = limit * 3 // 4
-        tail = limit // 4
-        return (
-            result_str[:head]
-            + f"\n\n...[gekürzt: {len(result_str)} Zeichen total, zeige Anfang + Ende]\n\n"
-            + result_str[-tail:]
-        )
+
+    # #470: Große Outputs auf Disk persistieren
+    if len(result_str) > disk_threshold:
+        import uuid
+        from pathlib import Path
+        storage_dir = Path("/tmp/hydrahive-tool-results")
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        result_id = uuid.uuid4().hex[:12]
+        result_path = storage_dir / f"{result_id}.txt"
+        try:
+            result_path.write_text(result_str, encoding="utf-8")
+            logger.debug("Tool result persisted: %s (%d chars)", result_path, len(result_str))
+        except Exception as e:
+            logger.warning("Tool result persist failed: %s", e)
+            result_path = None
+
+        if len(result_str) > limit:
+            preview = result_str[:4000]
+            tail_preview = result_str[-1000:]
+            disk_note = f"\n[Volltext auf Disk: {result_path}]" if result_path else ""
+            return (
+                preview
+                + f"\n\n...[gekürzt: {len(result_str)} Zeichen total]{disk_note}\n\n...Ende:\n"
+                + tail_preview
+            )
+        # 16k-32k: vollständig behalten aber Disk-Backup haben
+        return result_str
+
     return result_str
 
 
