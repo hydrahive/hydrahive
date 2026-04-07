@@ -300,6 +300,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   const [gpu, setGpu] = useState<GpuInfo | null>(null);
   const [heartbeatTasks, setHeartbeatTasks] = useState<HeartbeatTaskStatus[]>([]);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [oauthUsage, setOauthUsage] = useState<Record<string,unknown> | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [projectMap, setProjectMap] = useState<Record<string, any>>({});
   const [agentMap, setAgentMap] = useState<Record<string, any>>({});
@@ -318,9 +319,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       api.auditLogs({ limit: 5 }),
       api.projects(),
       api.agents(),
+      api.oauthUsage(),
     ]).then((results) => {
       if (!alive) return;
-      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes] = results;
+      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes, oauthRes] = results;
       setHealthy(healthRes.status === "fulfilled");
       if (statusRes.status === "fulfilled") setStatus(statusRes.value);
       if (gpuRes.status === "fulfilled") setGpu(gpuRes.value);
@@ -329,6 +331,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       if (auditRes.status === "fulfilled") setAudit(auditRes.value.logs);
       if (projectsRes.status === "fulfilled") setProjectMap(projectsRes.value as Record<string, any>);
       if (agentsRes.status === "fulfilled") setAgentMap(agentsRes.value as Record<string, any>);
+      if (oauthRes.status === "fulfilled") setOauthUsage(oauthRes.value as Record<string, unknown>);
       setLastUpdated(new Date());
       setIsRefreshing(false);
     });
@@ -645,6 +648,42 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           </div>
         </div>
       </section>}
+
+      {/* OAuth Usage — kompakt */}
+      {oauthUsage && (oauthUsage.available || oauthUsage.message) ? (
+        <section className="section-card">
+          <div className="flex items-center gap-3">
+            <Activity className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium">Claude OAuth</span>
+            {!oauthUsage.available ? (
+              <span className="text-xs text-muted-foreground ml-auto">{String(oauthUsage.message)}</span>
+            ) : (
+              <div className="flex items-center gap-4 ml-auto">
+                {["5h", "7d"].map(w => {
+                  const d = oauthUsage[w] as { utilization_pct: number; label: string; reset?: string } | undefined;
+                  if (!d) return null;
+                  const pct = d.utilization_pct ?? 0;
+                  const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+                  return (
+                    <div key={w} className="flex items-center gap-2 min-w-[140px]">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">{d.label}</span>
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden min-w-[60px]">
+                        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  oauthUsage.status === "allowed" ? "bg-green-500/15 text-green-500" :
+                  oauthUsage.status === "allowed_warning" ? "bg-orange-500/15 text-orange-500" :
+                  "bg-destructive/15 text-destructive"
+                }`}>{String(oauthUsage.status || "")}</span>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {isVisible("agents") && <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <div className="section-card">

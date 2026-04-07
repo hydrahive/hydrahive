@@ -7,6 +7,7 @@ Chat-API. Unterstützt Anthropic OAuth, OpenAI Codex und litellm.
 
 import json as _json
 import logging
+import os
 from typing import Any
 
 from .agent_config import AgentConfig
@@ -184,7 +185,12 @@ async def handle_message_stream(
 
                 # --- Claude Max OAuth ---
                 _is_claude    = _model_name.startswith(("claude-", "anthropic/"))
-                oauth_token   = _load_claude_oauth_token() if _is_claude else ""
+                if _is_claude:
+                    # Terminal-Token (sk-ant-oat01-) auch über OAuth-Pfad für Rate-Limit Headers
+                    _env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+                    oauth_token = _env_key if _env_key.startswith("sk-ant-oat01-") else _load_claude_oauth_token()
+                else:
+                    oauth_token = ""
 
                 if oauth_token:
                     async for chunk in _stream_anthropic_oauth(
@@ -448,6 +454,14 @@ async def _stream_anthropic_oauth(
                 streamed_any   = True
                 yield f"data: {_json.dumps({'text': text})}\n\n"
             final_msg = await stream.get_final_message()
+            # Rate-Limit Headers aus dem Stream-Response parsen
+            try:
+                _http_resp = getattr(stream, "_raw_response", None) or getattr(stream, "response", None)
+                if _http_resp and hasattr(_http_resp, "headers"):
+                    from .orchestrator_llm import _extract_rate_limit_headers
+                    _extract_rate_limit_headers(_http_resp.headers)
+            except Exception:
+                pass
         _usage["rounds"] += 1
         if hasattr(final_msg, "usage"):
             _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)

@@ -917,13 +917,13 @@ async def _llm_call_single(
         if codex_token:
             return await _openai_codex_call(agent_cfg, messages, tools, codex_token, model_name)
 
-    # Claude: Terminal-Token (ANTHROPIC_API_KEY) → litellm, Console-OAuth → OAuth-Call
+    # Claude: Terminal-Token oder Console-OAuth → immer über OAuth-Pfad (für Rate-Limit Headers)
     is_claude = model_name.startswith(("claude-", "anthropic/"))
     if is_claude:
         env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         if env_key and env_key.startswith("sk-ant-oat01-"):
-            # Langlebiger Terminal-Token → über litellm als api_key (kein OAuth-Pfad)
-            pass
+            # Langlebiger Terminal-Token → über OAuth-Pfad (nicht litellm) für Rate-Limit Headers
+            return await _anthropic_oauth_call(agent_cfg, messages, tools, env_key, model_name)
         else:
             oauth_token = _load_claude_oauth_token()
             if oauth_token:
