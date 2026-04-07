@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown } from "lucide-react";
+import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
@@ -177,6 +177,8 @@ export function MyAgentPage() {
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [doneMsgId,      setDoneMsgId]      = useState<string | null>(null);
 
+  const [pendingImages, setPendingImages] = useState<{data: string; media_type: string; preview: string}[]>([]);
+  const fileInputRef    = useRef<HTMLInputElement>(null);
   const bottomRef       = useRef<HTMLDivElement>(null);
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
   const abortRef        = useRef<AbortController | null>(null);
@@ -343,7 +345,7 @@ export function MyAgentPage() {
       setCoachChecking(false);
     }
 
-    const userMsg = mkMsg("user", content);
+    const userMsg = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) } as any;
     let curAsst = mkMsg("assistant", "");
     let hadTools = false;
     setMessages(ms => [...ms, userMsg]);
@@ -357,9 +359,13 @@ export function MyAgentPage() {
       const res = await fetch("/api/me/agent/message/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
+        }),
         signal: controller.signal,
       });
+      setPendingImages([]);
       if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail||`HTTP ${res.status}`); }
       setMessages(ms => [...ms, curAsst]);
       setStreamingMsgId(curAsst.id);
@@ -677,7 +683,16 @@ export function MyAgentPage() {
                               : "border border-border/60 bg-background/90 prose prose-sm max-w-none dark:prose-invert"
                           }`}>
                             {msg.role === "user"
-                              ? <span className="whitespace-pre-wrap">{msg.content}</span>
+                              ? <>
+                                  {(msg as any)._images && (msg as any)._images.length > 0 && (
+                                    <div className="flex gap-1 mb-1 flex-wrap">
+                                      {(msg as any)._images.map((src: string, i: number) => (
+                                        <img key={i} src={src} alt="" className="h-20 rounded-md" />
+                                      ))}
+                                    </div>
+                                  )}
+                                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                                </>
                               : streamingMsgId === msg.id && !msg.content
                                 ? <div className="flex h-5 items-center gap-1">
                                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
@@ -830,6 +845,20 @@ export function MyAgentPage() {
                           </div>
                         </div>
                       )}
+                      {/* Image previews */}
+                      {pendingImages.length > 0 && (
+                        <div className="flex gap-2 mb-2 flex-wrap">
+                          {pendingImages.map((img, i) => (
+                            <div key={i} className="relative group">
+                              <img src={img.preview} alt="" className="h-16 w-16 object-cover rounded-lg border" />
+                              <button onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
+                                className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                                X
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {/* Toolbar: Coach + Emoji */}
                       <div className="flex items-center gap-1 sm:gap-2 mb-1 flex-wrap">
                         <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
@@ -844,6 +873,26 @@ export function MyAgentPage() {
                         <button onClick={() => setShowEmoji(v => !v)} type="button"
                           className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition">
                           <Smile className="h-3.5 w-3.5" /><span className="hidden sm:inline">Emoji</span>
+                        </button>
+                        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+                          onChange={e => {
+                            const files = Array.from(e.target.files || []);
+                            files.forEach(f => {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const base64 = (reader.result as string).split(",")[1];
+                                const media_type = f.type || "image/png";
+                                const preview = reader.result as string;
+                                setPendingImages(prev => [...prev, { data: base64, media_type, preview }]);
+                              };
+                              reader.readAsDataURL(f);
+                            });
+                            e.target.value = "";
+                          }} />
+                        <button onClick={() => fileInputRef.current?.click()} type="button"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition"
+                          aria-label="Bild hochladen">
+                          <ImagePlus className={`h-3.5 w-3.5 ${pendingImages.length > 0 ? "text-primary" : ""}`} /><span className="hidden sm:inline">Bild</span>
                         </button>
                       </div>
                       {/* Input + Send */}
