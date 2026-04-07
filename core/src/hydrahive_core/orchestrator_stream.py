@@ -71,10 +71,18 @@ async def handle_message_stream(
     _refresh = content.strip().startswith("!refresh")
     if _refresh:
         content = content.strip()[8:].strip()
-    system_prompt = await orch._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+    # Cache-Optimierung: Split in static (cacheable) + dynamic (query-abhängig)
+    from .orchestrator_context import _build_system_prompt_split
+    try:
+        _static_prompt, _dynamic_prompt = await _build_system_prompt_split(boss_cfg, content, invalidate=_refresh)
+    except Exception:
+        # Fallback auf alten Pfad
+        _static_prompt = await orch._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+        _dynamic_prompt = ""
     worker_ctx = _build_worker_context(project_cfg, orch._discovery)
     if worker_ctx:
-        system_prompt = system_prompt + "\n\n" + worker_ctx
+        _static_prompt = _static_prompt + "\n\n" + worker_ctx
+    system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt
     # #348: Token-basierte History statt max_messages=10 (OpenClaw-Strategie)
     _sys_prompt_tokens_s = _estimate_tokens(system_prompt)
     _hist_budget_s = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens_s)
@@ -152,6 +160,7 @@ async def handle_message_stream(
                         orch, boss_cfg, boss_id, project_id, content,
                         messages, litellm_tools, oauth_token, _model_name,
                         execution_mode, _usage,
+                        static_prompt=_static_prompt, dynamic_prompt=_dynamic_prompt,
                     ):
                         if isinstance(chunk, dict):
                             full_response = chunk.get("_full_response", full_response)
@@ -304,6 +313,7 @@ async def _stream_anthropic_oauth(
     orch, boss_cfg, boss_id, project_id, content,
     messages, litellm_tools, oauth_token, model_name,
     execution_mode, _usage,
+    static_prompt: str = "", dynamic_prompt: str = "",
 ):
     """Anthropic SDK Streaming mit OAuth."""
     import anthropic as _anthropic
@@ -344,7 +354,14 @@ async def _stream_anthropic_oauth(
     oauth_system = [
         {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
     ]
-    if system_msg:
+    # Cache-Optimierung: Static-Block mit cache_control, Dynamic-Block ohne
+    if static_prompt:
+        oauth_system.append({"type": "text", "text": static_prompt,
+                             "cache_control": {"type": "ephemeral"}})
+    if dynamic_prompt:
+        oauth_system.append({"type": "text", "text": dynamic_prompt})
+    elif system_msg and not static_prompt:
+        # Fallback: alter Pfad
         oauth_system.append({"type": "text", "text": system_msg,
                              "cache_control": {"type": "ephemeral"}})
 

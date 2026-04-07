@@ -123,8 +123,13 @@ def _context_mode(user_text: str) -> str:
     return "full" if any(t in text for t in full_triggers) else "normal"
 
 
-async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = False) -> str:
-    """Baut den System-Prompt — mit Python-Cache (5 Min TTL, hash-basiert)."""
+async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = False) -> str | tuple[str, str]:
+    """Baut den System-Prompt — mit Python-Cache (5 Min TTL, hash-basiert).
+
+    Gibt einen String zurück (für Kompatibilität) ODER ein Tupel (static, dynamic)
+    wenn split_for_cache=True intern genutzt wird. Der Aufrufer in orchestrator_stream.py
+    kann das Tupel nutzen um cache_control nur auf den statischen Teil zu setzen.
+    """
     mode = _context_mode(user_text)
 
     if not invalidate and boss_cfg.agent_dir:
@@ -308,12 +313,163 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
     logger.debug("context-mode=%s agent=%s", mode, boss_cfg.id)
     prompt = "\n\n".join(parts)
 
-    # In Python-Cache speichern
+    # In Python-Cache speichern (nur den vollen Prompt — für Non-Anthropic-Pfade)
     if boss_cfg.agent_dir:
         h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
         _PROMPT_CACHE[boss_cfg.id] = (prompt, time.time(), h)
 
     return prompt
+
+
+# Cache für den statischen Prompt-Anteil (ändert sich nur bei File-Changes)
+_STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
+
+
+async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bool = False) -> tuple[str, str]:
+    """
+    Wie _build_system_prompt, aber gibt (static_prefix, dynamic_suffix) zurück.
+    Der static_prefix ist cacheable (soul, handbook, repos, blueprint, workflow).
+    Der dynamic_suffix ist query-abhängig (BM25 Memory, semantic Skills, repo-guidance).
+    Anthropic cache_control wird nur auf static_prefix gesetzt → Cache-Hits!
+    """
+    mode = _context_mode(user_text)
+    loop = asyncio.get_event_loop()
+
+    # --- Statischer Teil (cacheable) ---
+    static_parts = [f"Du bist {boss_cfg.identity}."]
+
+    # Static-Cache prüfen
+    static_cached = None
+    if not invalidate and boss_cfg.agent_dir:
+        cached = _STATIC_PROMPT_CACHE.get(boss_cfg.id)
+        if cached:
+            prompt_s, ts, h = cached
+            if (time.time() - ts) < _PROMPT_CACHE_TTL:
+                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+                if current_h == h:
+                    static_cached = prompt_s
+
+    if static_cached is None:
+        # startup.md
+        if boss_cfg.agent_dir:
+            startup_path = boss_cfg.agent_dir / "startup.md"
+            if startup_path.exists():
+                startup_text = startup_path.read_text(encoding="utf-8").strip()
+                if startup_text:
+                    static_parts.append(
+                        f"## ERSTER START — ONBOARDING\n\n"
+                        f"**WICHTIG: Diese Anweisung hat höchste Priorität.**\n\n"
+                        f"{startup_text}"
+                    )
+
+        # Soul
+        if boss_cfg.soul and boss_cfg.agent_dir:
+            soul_path = boss_cfg.agent_dir / boss_cfg.soul
+            if soul_path.exists():
+                static_parts.append(soul_path.read_text(encoding="utf-8").strip())
+
+        # INDEX.md + Learning-Snippets (stabil zwischen Queries)
+        if boss_cfg.agent_dir:
+            memory_dir = boss_cfg.agent_dir / "memory"
+            if memory_dir.exists():
+                index_path = memory_dir / "INDEX.md"
+                if index_path.exists():
+                    index_text = index_path.read_text(encoding="utf-8").strip()
+                    if index_text:
+                        if len(index_text) > 1500:
+                            index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
+                        static_parts.append(f"## Persistentes Gedächtnis\n\n### Index\n{index_text}")
+                learning_snippet = build_learning_prompt_snippet(
+                    boss_cfg.agent_dir,
+                    **({"max_entries": 8, "max_chars": 3000} if mode == "full"
+                       else {"max_entries": 3, "max_chars": 1500}),
+                )
+                if learning_snippet:
+                    static_parts.append(learning_snippet)
+
+        # Sources
+        if getattr(boss_cfg, "sources", None):
+            src_lines = [f"- **{s.name}**: {s.url}" + (f" — {s.description}" if s.description else "") for s in boss_cfg.sources]
+            static_parts.append("## Zugewiesene Quellen\n\n" + "\n".join(src_lines))
+
+        # Git-Repos
+        try:
+            from .repo_config import repos_for_agent
+            agent_repos = repos_for_agent(boss_cfg.id)
+            if agent_repos:
+                repo_lines = []
+                for repo in agent_repos:
+                    clone_url = repo.url
+                    if repo.token and "github.com" in repo.url:
+                        clone_url = repo.url.replace("https://", f"https://{repo.token}@")
+                    repo_lines.append(f"- **{repo.name}** ({repo.provider}): Clone `{clone_url}.git` Branch `{repo.branch}`")
+                static_parts.append("## Zugewiesene Git-Repos\n\n" + "\n".join(repo_lines))
+        except Exception:
+            pass
+
+        # Handbook
+        _handbook_path = settings.system_handbook
+        if _handbook_path.exists():
+            _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
+            if _handbook_text:
+                static_parts.append(_handbook_text)
+
+        # Blueprint + Workflow
+        if boss_cfg.agent_dir:
+            blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
+            if blueprint_ctx:
+                static_parts.append(blueprint_ctx)
+            agent_wf = _load_agent_workflow_prompt(boss_cfg.agent_dir)
+            if agent_wf:
+                static_parts.append(agent_wf)
+
+        static_cached = "\n\n".join(static_parts)
+        if boss_cfg.agent_dir:
+            h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+            _STATIC_PROMPT_CACHE[boss_cfg.id] = (static_cached, time.time(), h)
+
+    # --- Dynamischer Teil (query-abhängig, NICHT cached) ---
+    dynamic_parts = []
+
+    if boss_cfg.agent_dir:
+        # BM25 Memory Search
+        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        k = 8 if mode == "full" else 4
+        snippets = await loop.run_in_executor(
+            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
+        )
+        if snippets:
+            dynamic_parts.append("### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets))
+
+        # Semantic Skills
+        all_skills = load_skills(boss_cfg.agent_dir)
+        if all_skills:
+            skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
+            raw_scores = await loop.run_in_executor(None, score_texts, skill_texts, user_text)
+            semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)} if raw_scores else {}
+            active_skills = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
+            if active_skills:
+                dynamic_parts.append(skills_to_system_prompt(active_skills, token_budget=8000))
+
+    repo_guidance = _repo_review_guidance(boss_cfg, user_text)
+    if repo_guidance:
+        dynamic_parts.append(repo_guidance)
+
+    # Session-Continuity
+    if boss_cfg.agent_dir:
+        last_session_path = boss_cfg.agent_dir / "memory" / "_last_session.md"
+        if last_session_path.exists():
+            import os
+            age_hours = (time.time() - os.path.getmtime(last_session_path)) / 3600
+            if age_hours < 24:
+                last_text = last_session_path.read_text(encoding="utf-8").strip()
+                if last_text:
+                    if len(last_text) > 3000:
+                        last_text = last_text[:3000] + "\n…[gekürzt]"
+                    dynamic_parts.append("## Letzte Session\n\n" + last_text)
+
+    dynamic_suffix = "\n\n".join(dynamic_parts) if dynamic_parts else ""
+    return static_cached, dynamic_suffix
 
 
 def _load_agent_blueprint_context(agent_dir) -> str:
