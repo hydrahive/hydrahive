@@ -504,8 +504,13 @@ def _read_admin_password() -> str:
     return ""
 
 
+# In-Memory Token-Blacklist (revoked JTIs)
+_token_blacklist: set[str] = set()
+
+
 def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str:
     """JWT-Token für den angegebenen User erstellen."""
+    import uuid
     from jose import jwt as jose_jwt
     payload = {
         "sub":   username,
@@ -513,6 +518,7 @@ def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str
         "group": group,
         "exp":   datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_H),
         "iat":   datetime.now(timezone.utc),
+        "jti":   str(uuid.uuid4()),
     }
     return jose_jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
@@ -524,7 +530,12 @@ def _verify_jwt(token: str) -> tuple[str, str]:
     from jose import JWTError, jwt as jose_jwt
     try:
         payload = jose_jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        jti = payload.get("jti")
+        if jti and jti in _token_blacklist:
+            raise HTTPException(401, "Token wurde revoked (Logout)")
         return payload["sub"], payload.get("role", "user")
+    except HTTPException:
+        raise
     except (JWTError, KeyError):
         raise HTTPException(401, "Ungültiger oder abgelaufener Token")
 

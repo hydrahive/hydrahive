@@ -298,6 +298,21 @@ def register_core_misc_routes(
         logger.info("Login erfolgreich (admin_credentials): %s", req.username)
         return {"access_token": token, "token_type": "bearer", "role": "admin", "group": "admin", "username": req.username, "permissions": {"pages": ["*"], "tools": ["*"], "plugins": ["*"], "agents": ["*"]}}
 
+    @auth_router.post("/auth/logout")
+    def logout(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)):
+        """Token revoken — JTI wird in Blacklist eingetragen."""
+        if not creds:
+            raise HTTPException(401, "Kein Token")
+        from jose import JWTError, jwt as jose_jwt
+        try:
+            payload = jose_jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
+            jti = payload.get("jti")
+            if jti:
+                _token_blacklist.add(jti)
+        except (JWTError, Exception):
+            pass  # Abgelaufene Token trotzdem als "logout" akzeptieren
+        return {"logged_out": True}
+
     @auth_router.get("/auth/me")
     def whoami(auth: tuple[str, str] = Depends(require_auth)):
         username, role = auth
