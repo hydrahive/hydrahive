@@ -22,6 +22,7 @@ class LlmConfig(BaseModel):
     model: str
     temperature: float = 0.7
     max_tokens: int = 4096
+    thinking_budget: int = 0          # Extended Thinking Token-Budget (0 = deaktiviert)
     fallback_models: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None   # WKS-Ollama: z.B. "http://192.168.1.101:11434"
 

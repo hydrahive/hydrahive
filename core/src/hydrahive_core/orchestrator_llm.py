@@ -553,6 +553,17 @@ async def _anthropic_oauth_call(
         "temperature": agent_cfg.llm.temperature,
         "system":      oauth_system,
     }
+
+    # Extended Thinking (#477): wenn thinking_budget > 0 und Modell es unterstützt
+    _thinking_budget = getattr(agent_cfg.llm, "thinking_budget", 0) or 0
+    if _thinking_budget > 0 and any(x in model for x in ("claude-3-7", "claude-sonnet-4", "claude-opus-4")):
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": _thinking_budget}
+        # Anthropic: max_tokens muss > thinking budget sein
+        kwargs["max_tokens"] = max(kwargs["max_tokens"], _thinking_budget + 4096)
+        # Temperature muss 1 sein bei Extended Thinking
+        kwargs["temperature"] = 1
+        logger.info("Extended Thinking aktiviert: budget=%d model=%s", _thinking_budget, model)
+
     if tools:
         kwargs["tools"] = [
             {
@@ -861,6 +872,14 @@ async def _llm_call_single(
     }
     if api_base:
         kwargs["api_base"] = api_base
+
+    # Extended Thinking via litellm (für API-Key-basierte Calls)
+    _thinking_budget = getattr(agent_cfg.llm, "thinking_budget", 0) or 0
+    if _thinking_budget > 0 and is_anthropic:
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": _thinking_budget}
+        kwargs["max_tokens"] = max(kwargs["max_tokens"], _thinking_budget + 4096)
+        kwargs["temperature"] = 1
+
     if tools:
         kwargs["tools"]       = tools
         kwargs["tool_choice"] = "auto"

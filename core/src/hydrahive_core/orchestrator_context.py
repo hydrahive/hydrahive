@@ -143,7 +143,13 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
                     return prompt
         logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
 
-    parts = [f"Du bist {boss_cfg.identity}."]
+    # Datum + Uhrzeit im System-Prompt — LLM hat sonst kein Zeitgefühl
+    from datetime import datetime, timezone as _tz
+    _now = datetime.now(_tz.utc)
+    parts = [
+        f"Du bist {boss_cfg.identity}.",
+        f"Aktuelles Datum: {_now.strftime('%A, %d. %B %Y')}. Uhrzeit: {_now.strftime('%H:%M')} UTC.",
+    ]
 
     # startup.md — Erster Start / Onboarding
     # VOR soul.md injiziert damit Onboarding-Instruktionen die normale Persönlichkeit überschreiben.
