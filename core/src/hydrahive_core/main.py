@@ -208,6 +208,7 @@ async def lifespan(app: FastAPI):
 
     # JWT-Secret laden oder generieren
     JWT_SECRET = _load_or_create_jwt_secret()
+    _check_secret_age()  # #379: Warnung bei >90 Tage
     logger.info("JWT-Secret geladen")
 
     # Internal-Secret laden oder generieren (persistiert → überlebt Restarts)
@@ -498,6 +499,19 @@ def _load_or_create_jwt_secret(secret_file: str = str(settings.jwt_secret_file))
     logger.info("Neues JWT-Secret generiert: %s", secret_file)
     return secret
 
+def _check_secret_age(secret_file: str = str(settings.jwt_secret_file)) -> None:
+    """#379: Warnung wenn JWT-Secret älter als 90 Tage."""
+    import time
+    path = Path(secret_file)
+    if not path.exists():
+        return
+    age_days = (time.time() - path.stat().st_mtime) / 86400
+    if age_days > 90:
+        logger.warning(
+            "JWT-Secret ist %.0f Tage alt (>90) — Rotation empfohlen: "
+            "Datei %s löschen und Core neustarten", age_days, secret_file,
+        )
+
 
 def _load_or_create_internal_secret(secret_file: str = str(settings.internal_secret_file)) -> str:
     """Internal-Secret aus Datei laden oder einmalig generieren und persistieren."""
@@ -693,6 +707,21 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
+
+
+# #365: Request-ID Middleware für Distributed Tracing
+import uuid as _uuid
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class _RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(_uuid.uuid4())[:8]
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+app.add_middleware(_RequestIDMiddleware)
 
 
 # ================================================================== Auth (#56)
