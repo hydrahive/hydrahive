@@ -1,0 +1,13 @@
+{
+  "id": "minecraft",
+  "name": "Minecraft Server (Java Edition)",
+  "description": "Minecraft Java Edition Server — Paper/Spigot High-Performance Fork. Läuft als systemd Service, unterstützt Plugins via RCON-API.",
+  "icon": "Pickaxe",
+  "category": "gaming",
+  "install_script": "extensions/install/minecraft.sh",
+  "uninstall_script": "extensions/uninstall/minecraft.sh",
+  "service": "minecraft",
+  "health_url": null,
+  "open_url": null,
+  "installed_check": "/opt/minecraft/server.jar"
+}

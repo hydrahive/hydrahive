@@ -1,0 +1,13 @@
+{
+  "id": "valheim",
+  "name": "Valheim Dedicated Server",
+  "description": "Valheim Dedicated Server via SteamCMD. Automatisches Update beim Start, konfigurierbare Welt und Passwort.",
+  "icon": "Sword",
+  "category": "gaming",
+  "install_script": "extensions/install/valheim.sh",
+  "uninstall_script": "extensions/uninstall/valheim.sh",
+  "service": "valheim",
+  "health_url": null,
+  "open_url": null,
+  "installed_check": "/opt/valheim/valheim_server.x86_64"
+}
