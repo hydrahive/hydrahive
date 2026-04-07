@@ -1302,9 +1302,28 @@ class ShellExecTool(BaseTool):
         max_timeout = 600 if unrestricted else 120
         timeout = min(max(timeout, 1), max_timeout)
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
-        # Im unrestricted Mode: Befehle automatisch als root ausführen
-        exec_command = f"sudo bash -c {__import__('shlex').quote(command)}" if unrestricted else command
-        logger.info("shell_exec [%s]%s: %s", agent_id, " (UNRESTRICTED/sudo)" if unrestricted else "", command[:120])
+
+        # #439: Bubblewrap Sandbox im safe Mode (wenn bwrap verfügbar)
+        import shutil
+        _use_sandbox = not unrestricted and shutil.which("bwrap") is not None
+        if _use_sandbox and kwargs.get("_execution_mode") == "safe":
+            _quoted = __import__('shlex').quote(command)
+            exec_command = (
+                f"bwrap --ro-bind / / "
+                f"--bind {__import__('shlex').quote(safe_cwd)} {__import__('shlex').quote(safe_cwd)} "
+                f"--bind /tmp /tmp "
+                f"--dev /dev --proc /proc "
+                f"--unshare-net "
+                f"--die-with-parent "
+                f"-- bash -c {_quoted}"
+            )
+            logger.info("shell_exec [%s] (SANDBOX/bwrap): %s", agent_id, command[:120])
+        elif unrestricted:
+            exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
+            logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
+        else:
+            exec_command = command
+            logger.info("shell_exec [%s]: %s", agent_id, command[:120])
         try:
             proc = await asyncio.create_subprocess_shell(
                 exec_command,
@@ -2061,6 +2080,106 @@ class SharedMemoryWriteTool(BaseTool):
         _save_shared_memory(project_id, data)
         logger.info("shared_memory_write: %s setzte '%s' (Projekt: %s)", agent_id, key, project_id)
         return {"written": True, "key": key, "total_keys": len(data)}
+
+
+# ============================================================= User-Scope Memory (#442)
+
+_USER_MEMORY_TYPES = {"user", "feedback", "project", "reference"}
+
+
+def _user_memory_dir(username: str) -> Path:
+    d = settings.etc_dir / "user_memory" / username
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+class UserMemoryReadTool(BaseTool):
+    """#442: Liest aus dem User-übergreifenden Gedächtnis (nicht Agent-spezifisch)."""
+
+    @property
+    def id(self) -> str:   return "user_memory_read"
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def name(self) -> str: return "User-Memory lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest aus dem User-übergreifenden Gedächtnis. "
+            "Dieses Memory ist für ALLE Agenten des Users zugänglich. "
+            "Ohne filename: listet alle Dateien. Mit filename: gibt Inhalt zurück. "
+            "Memory-Typen: user (Profil), feedback (Arbeitsweise), project (laufende Arbeit), reference (externe Quellen)."
+        )
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string", "description": "Dateiname (ohne .md) oder leer für Listing"},
+            },
+            "required": [],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, filename: str = "", **kwargs) -> dict:
+        # Username aus agent_id oder project_id ableiten
+        username = project_id.removeprefix("personal_") if project_id.startswith("personal_") else "admin"
+        mem_dir = _user_memory_dir(username)
+        if not filename:
+            files = sorted(f.name for f in mem_dir.glob("*.md"))
+            return {"files": files, "count": len(files), "scope": "user", "username": username}
+        safe = _safe_memory_filename(filename)
+        p = mem_dir / safe
+        if not p.exists():
+            return {"error": f"Datei '{safe}' nicht gefunden", "available": sorted(f.name for f in mem_dir.glob("*.md"))[:20]}
+        return {"filename": safe, "content": p.read_text(encoding="utf-8"), "scope": "user"}
+
+
+class UserMemoryWriteTool(BaseTool):
+    """#442: Schreibt ins User-übergreifende Gedächtnis mit Typ-Klassifikation."""
+
+    @property
+    def id(self) -> str:   return "user_memory_write"
+    @property
+    def name(self) -> str: return "User-Memory schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Schreibt ins User-übergreifende Gedächtnis. "
+            "Typ bestimmt die Kategorie: user (Profil/Rolle), feedback (Arbeitsweise), "
+            "project (laufende Arbeit), reference (externe Quellen). "
+            "YAML-Frontmatter mit name, type, description wird automatisch eingefügt."
+        )
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "filename":    {"type": "string", "description": "Dateiname (ohne .md)"},
+                "content":     {"type": "string", "description": "Inhalt der Memory-Datei"},
+                "memory_type": {"type": "string", "enum": ["user", "feedback", "project", "reference"], "description": "Typ der Erinnerung"},
+                "description": {"type": "string", "description": "Kurzbeschreibung (für Relevanz-Ranking)"},
+            },
+            "required": ["filename", "content", "memory_type"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, filename: str = "",
+                      content: str = "", memory_type: str = "project", description: str = "", **kwargs) -> dict:
+        if not filename or not content:
+            return {"error": "filename und content sind erforderlich"}
+        if memory_type not in _USER_MEMORY_TYPES:
+            memory_type = "project"
+        username = project_id.removeprefix("personal_") if project_id.startswith("personal_") else "admin"
+        mem_dir = _user_memory_dir(username)
+        safe = _safe_memory_filename(filename)
+        # YAML-Frontmatter
+        frontmatter = f"---\nname: {filename}\ntype: {memory_type}\ndescription: {description or filename}\n---\n\n"
+        p = mem_dir / safe
+        p.write_text(frontmatter + content, encoding="utf-8")
+        p.chmod(0o600)
+        logger.info("user_memory_write: %s → %s [%s] (user: %s)", agent_id, safe, memory_type, username)
+        return {"written": True, "filename": safe, "type": memory_type, "scope": "user", "username": username}
 
 
 # ============================================================= Self-Learning Skills (#7)
@@ -5493,6 +5612,8 @@ registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
 registry.register(SharedMemoryReadTool())
 registry.register(SharedMemoryWriteTool())
+registry.register(UserMemoryReadTool())
+registry.register(UserMemoryWriteTool())
 registry.register(ReadScratchpadTool())
 registry.register(WriteScratchpadTool())
 registry.register(CreateSkillTool())
@@ -5543,6 +5664,59 @@ registry.register(DiscordListRolesTool())
 registry.register(DiscordDeleteMessageTool())
 registry.register(DiscordPinMessageTool())
 registry.register(RemoteAgentTool())
+
+
+# #427: Agent Teams Tool
+class ManageTeamTool(BaseTool):
+    """#427: Multi-Agent Team Koordination."""
+
+    @property
+    def id(self) -> str:   return "manage_team"
+    @property
+    def name(self) -> str: return "Team verwalten"
+    @property
+    def description(self) -> str:
+        return (
+            "Erstellt und verwaltet Agent-Teams für koordinierte Multi-Agent-Arbeit. "
+            "Aktionen: create (Team erstellen + Mitglieder hinzufügen), "
+            "status (Team-Status anzeigen), broadcast (Nachricht an alle), "
+            "list (alle Teams auflisten)."
+        )
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "action":  {"type": "string", "enum": ["create", "status", "broadcast", "list"], "description": "Aktion"},
+                "team":    {"type": "string", "description": "Team-Name"},
+                "members": {"type": "array", "items": {"type": "object", "properties": {"agent_id": {"type": "string"}, "role": {"type": "string"}}}, "description": "Mitglieder (für create)"},
+                "message": {"type": "string", "description": "Broadcast-Nachricht"},
+            },
+            "required": ["action"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, action: str = "list", **kwargs) -> dict:
+        from .agent_teams import get_or_create_team, list_teams, get_team
+        if action == "list":
+            return {"teams": list_teams()}
+        team_name = kwargs.get("team", project_id)
+        if action == "create":
+            team = get_or_create_team(team_name)
+            for m in kwargs.get("members", []):
+                team.add_member(m.get("agent_id", ""), role=m.get("role", "worker"))
+            return team.summary()
+        if action == "status":
+            team = get_team(team_name)
+            return team.summary() if team else {"error": f"Team '{team_name}' nicht gefunden"}
+        if action == "broadcast":
+            team = get_team(team_name)
+            if not team:
+                return {"error": f"Team '{team_name}' nicht gefunden"}
+            team.broadcast(kwargs.get("message", ""), sender=agent_id)
+            return {"broadcast": True, "recipients": len(team.members)}
+        return {"error": f"Unbekannte Aktion: {action}"}
+
+registry.register(ManageTeamTool())
 
 
 # ============================================================= VaultwardenTool (#54)
