@@ -7,6 +7,7 @@ Chat-API. Unterstützt Anthropic OAuth, OpenAI Codex und litellm.
 
 import json as _json
 import logging
+from typing import Any
 
 from .agent_config import AgentConfig
 from .session_manager import MessageRole
@@ -27,6 +28,17 @@ from .orchestrator_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_tool_image(result: Any, tool_name: str) -> str | None:
+    """Wenn ein Tool-Result ein image_base64-Feld enthält, SSE-Event-JSON zurückgeben."""
+    if isinstance(result, dict) and "image_base64" in result:
+        fmt = result.get("format", "png")
+        return _json.dumps({
+            "tool_image": f"data:image/{fmt};base64,{result['image_base64']}",
+            "tool_name": tool_name,
+        })
+    return None
 
 
 async def handle_message_stream(
@@ -313,6 +325,10 @@ async def _stream_codex(
                 tool_name=tc.function.name, tool_input=_tc_args,
                 execution_mode=execution_mode, user_text=content,
             )
+            # #414: Bild-Event senden bevor Result formatiert wird
+            _img_evt = _extract_tool_image(result, tc.function.name)
+            if _img_evt:
+                yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
         next_resp = await orch._openai_codex_call(
@@ -527,6 +543,10 @@ async def _stream_anthropic_oauth(
                 )
                 if is_error:
                     any_tool_error = True
+                # #414: Bild-Event senden
+                _img_evt = _extract_tool_image(result, block.name)
+                if _img_evt:
+                    yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             tool_results.append({
                 "type":        "tool_result",
@@ -700,6 +720,10 @@ async def _stream_litellm(
                 tool_name=tc["name"], tool_input=tool_input,
                 execution_mode=execution_mode,
             )
+            # #414: Bild-Event senden
+            _img_evt = _extract_tool_image(result, tc["name"])
+            if _img_evt:
+                yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             tool_results_text.append(f"[Tool: {tc['name']}]\n{result_str}")
 

@@ -212,6 +212,11 @@ def format_tool_result(result, *, ensure_str: bool = True) -> str:
     """Ergebnis eines Tool-Calls einheitlich als truncated + sanitized String formatieren."""
     if isinstance(result, str):
         return _sanitize_tool_output(_truncate_tool_result(result))
+    # #414: image_base64 nicht in die LLM-History serialisieren (spart Tokens)
+    if isinstance(result, dict) and "image_base64" in result:
+        summary = {k: v for k, v in result.items() if k != "image_base64"}
+        summary["image"] = f"[screenshot {result.get('format', 'png')}, {result.get('size_bytes', '?')} bytes — an Frontend gestreamt]"
+        return _sanitize_tool_output(_json.dumps(summary, ensure_ascii=False))
     return _sanitize_tool_output(_truncate_tool_result(_json.dumps(result, ensure_ascii=False)))
 
 

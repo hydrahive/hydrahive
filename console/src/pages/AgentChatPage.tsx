@@ -295,6 +295,10 @@ export function AgentChatPage() {
                 setMessages(ms => ms.map(m =>
                   m.id === currentAsst.id ? { ...m, content: m.content + evt.text } : m
                 ));
+              } else if (evt.tool_image !== undefined) {
+                // #414: Bild aus Tool-Result (z.B. browser_screenshot)
+                const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
+                setMessages(ms => [...ms, imgMsg]);
               } else if (evt.tool_call !== undefined) {
                 const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
                 setMessages(ms => [...ms, toolMsg]);
@@ -451,20 +455,33 @@ export function AgentChatPage() {
             if (msgIdx > 0 && allMsgs[msgIdx - 1]?.role === "tool") return null;
             const toolGroup: typeof allMsgs = [msg];
             for (let i = msgIdx + 1; i < allMsgs.length && allMsgs[i].role === "tool"; i++) toolGroup.push(allMsgs[i]);
+            const badges = toolGroup.filter(tm => !tm.content.startsWith("__IMG__"));
+            const images = toolGroup.filter(tm => tm.content.startsWith("__IMG__"));
             return (
-              <div key={msg.id} className="flex justify-center">
-                <div className="flex flex-wrap gap-1.5 max-w-[85%] justify-center">
-                  {toolGroup.map(tm => {
-                    const [toolName, ...dp] = tm.content.split("|");
-                    return (
-                      <span key={tm.id} title={dp.join("|") || toolName}
-                        className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
-                        <Terminal className="h-2.5 w-2.5" />
-                        {toolName}
-                      </span>
-                    );
-                  })}
-                </div>
+              <div key={msg.id} className="flex flex-col items-center gap-2">
+                {badges.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 max-w-[85%] justify-center">
+                    {badges.map(tm => {
+                      const [toolName, ...dp] = tm.content.split("|");
+                      return (
+                        <span key={tm.id} title={dp.join("|") || toolName}
+                          className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
+                          <Terminal className="h-2.5 w-2.5" />
+                          {toolName}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                {images.map(tm => {
+                  const [label, ...srcParts] = tm.content.replace("__IMG__", "").split("|");
+                  return (
+                    <div key={tm.id} className="max-w-[75%] rounded-lg border bg-card p-2">
+                      <img src={srcParts.join("|")} alt={label} className="rounded-md max-h-[400px] w-auto" />
+                      <div className="text-[10px] text-muted-foreground mt-1 text-center font-mono">{label}</div>
+                    </div>
+                  );
+                })}
               </div>
             );
           }
