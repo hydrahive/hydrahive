@@ -43,6 +43,7 @@ class ProjectIncomingMessage(BaseModel):
     content: str
     sender: str = "user"
     execution_mode: str | None = None
+    images: list[dict] | None = None  # #414: Vision-Support
 
 
 class GitCloneRequest(BaseModel):
@@ -408,11 +409,24 @@ def register_project_routes(
             audit_source="projects.message.stream",
         )
 
+        # #414: Images als Content-Blocks für Vision
+        _user_content = req.content
+        _images = getattr(req, "images", None) or []
+        if _images:
+            _content_blocks = []
+            for img in _images[:5]:
+                _content_blocks.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": img.get("media_type", "image/png"), "data": img["data"]},
+                })
+            _content_blocks.append({"type": "text", "text": req.content or "Was siehst du auf diesem Bild?"})
+            _user_content = _content_blocks
+
         async def event_stream():
             async for chunk in orchestrator.handle_message_stream(
                 project_id=project_id,
                 project_cfg=cfg,
-                content=req.content,
+                content=_user_content,
                 sender=sender,
                 execution_mode=execution_mode,
             ):

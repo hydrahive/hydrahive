@@ -474,11 +474,24 @@ def register_user_routes(
             agents=_PA(boss=agent_id, workers=[]),
         )
 
+        # #414: Images als Content-Blocks für Vision
+        _user_content = req.content
+        _images = getattr(req, "images", None) or []
+        if _images:
+            _content_blocks = []
+            for img in _images[:5]:
+                _content_blocks.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": img.get("media_type", "image/png"), "data": img["data"]},
+                })
+            _content_blocks.append({"type": "text", "text": req.content or "Was siehst du auf diesem Bild?"})
+            _user_content = _content_blocks
+
         async def event_stream():
             async for chunk in agent_orchestrator.handle_message_stream(
                 project_id=agent_id,
                 project_cfg=virtual_cfg,
-                content=req.content,
+                content=_user_content,
                 sender=req.sender,
                 execution_mode=execution_mode,
             ):

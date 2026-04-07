@@ -834,7 +834,7 @@ export function ChatPage() {
                       e.target.value = "";
                     }} />
                   <button onClick={() => fileInputRef.current?.click()} type="button"
-                    className="hidden sm:flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
+                    className="flex p-2 border rounded-md bg-background hover:bg-muted transition-colors flex-shrink-0"
                     aria-label="Bild hochladen">
                     <ImagePlus className={`h-4 w-4 ${pendingImages.length > 0 ? "text-primary" : "text-muted-foreground"}`} />
                   </button>

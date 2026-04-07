@@ -60,9 +60,19 @@ async def handle_message_stream(
     # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
     _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0}
 
+    # #414: Image-Blocks extrahieren — Text für Session, volle Blocks für LLM
+    _vision_blocks = None  # list[dict] wenn Images dabei sind
+    _text_content = content
+    if isinstance(content, list):
+        _vision_blocks = content
+        _text_content = next((b.get("text", "") for b in content if b.get("type") == "text"), "")
+
     # Session + System-Prompt aufbauen
     user_msg_saved = False
-    await orch._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
+    _save_content = _text_content if isinstance(_text_content, str) else str(_text_content)
+    if _vision_blocks:
+        _save_content = f"[Bild-Nachricht] {_save_content}"
+    await orch._sessions.append(project_id, MessageRole.USER, _save_content, agent_id=sender)
     user_msg_saved = True
 
     # Context-Kompaktierung vor dem LLM-Aufruf
@@ -92,10 +102,16 @@ async def handle_message_stream(
     )
     # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
     history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
+    # #414: Letzte User-Message mit Vision-Blocks ersetzen
+    if _vision_blocks and history:
+        for i in range(len(history) - 1, -1, -1):
+            if history[i].get("role") == "user":
+                history[i] = {"role": "user", "content": _vision_blocks}
+                break
     messages      = [{"role": "system", "content": system_prompt}] + history
     # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
     _use_meta = "request_tools" in (boss_cfg.tools or [])
-    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=_use_meta)
+    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content, meta_only=_use_meta)
     litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
     _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
     if _mcp_s:
