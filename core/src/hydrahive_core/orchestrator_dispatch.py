@@ -291,7 +291,39 @@ async def _tool_loop(
                 if res.worker_id not in workers_used:
                     workers_used.append(res.worker_id)
 
+        # #418: parallel-safe Tools via asyncio.gather, Rest sequentiell
+        parallel_tcs = []
+        sequential_tcs = []
         for tc in other_tcs:
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
+            if tool_obj and getattr(tool_obj, "parallel_safe", False):
+                parallel_tcs.append(tc)
+            else:
+                sequential_tcs.append(tc)
+
+        # Parallel-safe Tools gleichzeitig ausführen
+        if parallel_tcs:
+            async def _run_parallel(tc):
+                args = json.loads(tc.function.arguments)
+                result, is_error = await execute_tool_call(
+                    orch, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=tc.function.name, tool_input=args,
+                    execution_mode=execution_mode,
+                    file_read_cache=_file_read_cache,
+                )
+                if is_error:
+                    logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))
+                return tc.id, format_tool_result(result)
+
+            parallel_results = await asyncio.gather(*[_run_parallel(tc) for tc in parallel_tcs])
+            for tc_id, formatted in parallel_results:
+                tool_results[tc_id] = formatted
+            if len(parallel_tcs) > 1:
+                logger.info("Parallel-Execution: %d Tools gleichzeitig (%s)",
+                            len(parallel_tcs), ", ".join(tc.function.name for tc in parallel_tcs))
+
+        # Nicht-parallele Tools sequentiell
+        for tc in sequential_tcs:
             args = json.loads(tc.function.arguments)
             result, is_error = await execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,

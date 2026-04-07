@@ -84,7 +84,16 @@ function ProjectCard({ proj }: { proj: UsageProject }) {
           </span>
           <span className="text-muted-foreground">{t("usage.sessions")}</span>
           <span className="tabular-nums text-right">{proj.sessions_with_usage}</span>
+          <span className="text-muted-foreground">Hit-Rate</span>
+          <span className={cn("tabular-nums text-right font-medium", proj.cache_hit_rate >= 30 ? "text-green-600 dark:text-green-400" : "text-red-500")}>
+            {proj.cache_hit_rate.toFixed(0)}%
+          </span>
         </div>
+        {proj.cache_hit_rate > 0 && proj.cache_hit_rate < 30 && (
+          <div className="mt-2 rounded-lg bg-red-100 dark:bg-red-950/30 px-2.5 py-1.5 text-xs text-red-700 dark:text-red-400">
+            ⚠ Cache Hit-Rate niedrig — System-Prompt vermutlich nicht stabil
+          </div>
+        )}
         <div className="text-right text-muted-foreground text-xs mt-1">{open ? "▲" : "▼"}</div>
       </button>
 
@@ -141,10 +150,7 @@ export function UsagePage() {
   useEffect(() => { load(); }, []);
 
   const gt = data?.grand_total;
-  const totalTok = (gt?.input ?? 0) + (gt?.output ?? 0);
-  const cacheRatio = totalTok > 0
-    ? Math.round(((gt?.cache_read ?? 0) / (totalTok + (gt?.cache_read ?? 0))) * 100)
-    : 0;
+  const cacheRatio = Math.round(gt?.cache_hit_rate ?? 0);
 
   return (
     <div className="p-6 space-y-6 max-w-5xl">

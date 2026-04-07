@@ -180,6 +180,22 @@ class BaseTool(ABC):
         return []
 
     @property
+    def parallel_safe(self) -> bool:
+        """True wenn das Tool parallel mit anderen ausgeführt werden kann (#418).
+        Read-only Tools ohne Seiteneffekte sollten True zurückgeben."""
+        return False
+
+    @property
+    def is_read_only(self) -> bool:
+        """True wenn das Tool nur liest und nichts verändert (#419)."""
+        return False
+
+    @property
+    def is_destructive(self) -> bool:
+        """True wenn das Tool Daten unwiderruflich löschen/überschreiben kann (#419)."""
+        return False
+
+    @property
     @abstractmethod
     def parameters(self) -> dict:
         """
@@ -315,6 +331,10 @@ class FileReadTool(BaseTool):
     @property
     def id(self) -> str:   return "file_read"
     @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
     def name(self) -> str: return "Datei lesen"
     @property
     def description(self) -> str:
@@ -376,6 +396,8 @@ class FileReadTool(BaseTool):
                 "file_read: %s liest %s offset=%d limit=%d (Projekt: %s)",
                 agent_id, safe_path, offset, limit, project_id,
             )
+            # #428: Read-Before-Edit State tracken
+            FileWriteTool.mark_read(agent_id, str(safe_path))
             result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
             if has_more:
                 result["has_more"] = True
@@ -386,10 +408,20 @@ class FileReadTool(BaseTool):
 
 
 class FileWriteTool(BaseTool):
-    """Schreibt eine Datei ins Projekt-Verzeichnis. (#19, #54)"""
+    """Schreibt eine Datei ins Projekt-Verzeichnis. (#19, #54, #428 Read-Before-Edit)"""
+
+    # #428: Tracking welche Dateien pro Agent gelesen wurden
+    _read_state: dict[str, set[str]] = {}  # agent_id → {resolved_path, ...}
+
+    @classmethod
+    def mark_read(cls, agent_id: str, path: str) -> None:
+        """Wird von FileReadTool aufgerufen wenn eine Datei gelesen wird."""
+        cls._read_state.setdefault(agent_id, set()).add(path)
 
     @property
     def id(self) -> str:   return "file_write"
+    @property
+    def is_destructive(self) -> bool: return True
     @property
     def name(self) -> str: return "Datei schreiben"
     @property
@@ -440,6 +472,18 @@ class FileWriteTool(BaseTool):
         except PathSafetyError as e:
             return {"error": str(e), "allowed": False}
 
+        # #428: Read-Before-Edit — Datei muss vorher gelesen worden sein (außer bei neuen Dateien)
+        if safe_path.exists() and mode == "overwrite":
+            read_files = self._read_state.get(agent_id, set())
+            if str(safe_path) not in read_files:
+                return {
+                    "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit file_read gelesen. "
+                             "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
+                             "dann erst überschreiben.",
+                    "path": str(safe_path),
+                    "hint": "file_read zuerst aufrufen",
+                }
+
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)
             write_mode = "a" if mode == "append" else "w"
@@ -459,6 +503,10 @@ class ListDirectoryTool(BaseTool):
 
     @property
     def id(self) -> str:   return "list_directory"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
     @property
     def name(self) -> str: return "Verzeichnis auflisten"
     @property
@@ -1097,6 +1145,8 @@ class ShellExecTool(BaseTool):
     @property
     def id(self) -> str:   return "shell_exec"
     @property
+    def is_destructive(self) -> bool: return True
+    @property
     def name(self) -> str: return "Shell-Befehl ausführen"
     @property
     def description(self) -> str:
@@ -1460,6 +1510,10 @@ class ReadSystemFileTool(BaseTool):
     @property
     def id(self) -> str:   return "read_system_file"
     @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
     def name(self) -> str: return "Systemdatei lesen"
     @property
     def description(self) -> str:
@@ -1514,6 +1568,8 @@ class ReadSystemFileTool(BaseTool):
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
             total = len(lines)
             sliced = lines[offset:offset + limit]
+            # #428: Read-Before-Edit State tracken
+            FileWriteTool.mark_read(agent_id, str(p))
             return {
                 "content":      "\n".join(sliced),
                 "path":         str(p),
@@ -1530,6 +1586,8 @@ class WriteSystemFileTool(BaseTool):
 
     @property
     def id(self) -> str:   return "write_system_file"
+    @property
+    def is_destructive(self) -> bool: return True
     @property
     def name(self) -> str: return "Systemdatei schreiben"
     @property
@@ -2285,6 +2343,10 @@ class GitStatusTool(BaseTool):
 
     @property
     def id(self) -> str:   return "git_status"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
     @property
     def name(self) -> str: return "Git Status"
     @property
@@ -3112,6 +3174,10 @@ class GitDiffTool(BaseTool):
 
     @property
     def id(self) -> str:   return "git_diff"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
     @property
     def name(self) -> str: return "Git Diff"
     @property

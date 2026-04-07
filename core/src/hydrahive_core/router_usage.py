@@ -105,6 +105,10 @@ def register_usage_routes(
                         stats["total_cache_write"], stats["total_cache_read"],
                     )["total"]
 
+                # #417: Cache Hit-Rate pro Projekt
+                total_billable = stats["total_input"] + stats["total_cache_write"] + stats["total_cache_read"]
+                cache_hit_rate = round(stats["total_cache_read"] / total_billable * 100, 1) if total_billable > 0 else 0.0
+
                 projects_out.append({
                     "project_id":           proj_id,
                     "total_input":          stats["total_input"],
@@ -113,6 +117,7 @@ def register_usage_routes(
                     "total_cache_write":    stats["total_cache_write"],
                     "sessions_with_usage":  stats["sessions_with_usage"],
                     "total_cost":           round(proj_total_cost, 6),
+                    "cache_hit_rate":       cache_hit_rate,
                     "model_breakdown":      cost_by_model,
                 })
 
@@ -123,6 +128,8 @@ def register_usage_routes(
                 grand_total["cost"]        += proj_total_cost
 
         grand_total["cost"] = round(grand_total["cost"], 6)
+        gt_billable = grand_total["input"] + grand_total["cache_write"] + grand_total["cache_read"]
+        grand_total["cache_hit_rate"] = round(grand_total["cache_read"] / gt_billable * 100, 1) if gt_billable > 0 else 0.0
 
         return {
             "projects":    projects_out,

@@ -579,11 +579,12 @@ export interface UsageProject {
   total_cache_write:   number;
   sessions_with_usage: number;
   total_cost:          number;
+  cache_hit_rate:      number;
   model_breakdown:     Record<string, UsageModelBreakdown>;
 }
 export interface UsageStats {
   projects:    UsageProject[];
-  grand_total: { input: number; output: number; cache_read: number; cache_write: number; cost: number };
+  grand_total: { input: number; output: number; cache_read: number; cache_write: number; cost: number; cache_hit_rate: number };
   pricing_ref: Record<string, { input: number; output: number; cache_write: number; cache_read: number }>;
 }
 
