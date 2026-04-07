@@ -12,9 +12,37 @@ from __future__ import annotations
 
 import json as _json
 import logging
-from dataclasses import dataclass
+import time
+from collections import defaultdict
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# #465: Denial Tracking — verhindert Agent-Endlosschleifen bei geblockten Tools
+# ---------------------------------------------------------------------------
+_DENIAL_THRESHOLD = 3          # Nach N Denials → härtere Fehlermeldung
+_DENIAL_WINDOW    = 300        # Nur Denials der letzten 5 Minuten zählen
+_denial_state: dict[str, list[float]] = defaultdict(list)  # agent_id:tool → timestamps
+
+
+def _record_denial(agent_id: str, tool_name: str) -> int:
+    """Denial tracken, Returns: Anzahl Denials im Window."""
+    key = f"{agent_id}:{tool_name}"
+    now = time.monotonic()
+    _denial_state[key] = [t for t in _denial_state[key] if now - t < _DENIAL_WINDOW]
+    _denial_state[key].append(now)
+    count = len(_denial_state[key])
+    if count >= _DENIAL_THRESHOLD:
+        logger.warning("Denial threshold reached: agent=%s tool=%s count=%d", agent_id, tool_name, count)
+    return count
+
+
+def _record_success(agent_id: str, tool_name: str) -> None:
+    """Bei Erfolg Denial-Counter für dieses Tool resetten."""
+    key = f"{agent_id}:{tool_name}"
+    _denial_state.pop(key, None)
 
 
 @dataclass
@@ -82,9 +110,16 @@ _TOOL_SUGGESTIONS = {
     "read_system_file":  "Permission 'system.read' hinzufügen",
 }
 
-def _tool_denied_error(tool_name: str) -> dict:
+def _tool_denied_error(tool_name: str, *, denial_count: int = 0) -> dict:
     suggestion = _TOOL_SUGGESTIONS.get(tool_name, f"Tool '{tool_name}' in Agent-Config erlauben")
-    return {"error": f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt", "suggestion": suggestion}
+    msg = f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"
+    if denial_count >= _DENIAL_THRESHOLD:
+        msg += (
+            f" (bereits {denial_count}x verweigert). "
+            "STOPP: Dieses Tool ist für dich nicht verfügbar. "
+            "Verwende ein anderes Tool oder teile dem User mit, dass du diese Aktion nicht ausführen kannst."
+        )
+    return {"error": msg, "suggestion": suggestion}
 
 
 async def _execute_tool(
@@ -247,7 +282,9 @@ async def execute_tool_call(
     # Reguläres Tool
     tool = orch._resolve_allowed_tool(boss_cfg, tool_name, execution_mode, user_text=user_text)
     if tool is None:
-        return _tool_denied_error(tool_name), True
+        # #465: Denial tracken
+        count = _record_denial(boss_cfg.id, tool_name)
+        return _tool_denied_error(tool_name, denial_count=count), True
 
     # file_read Deduplication
     if file_read_cache is not None and tool_name == "file_read":
@@ -265,6 +302,8 @@ async def execute_tool_call(
             tool_input=tool_input,
             execution_mode=execution_mode,
         )
+        # #465: Erfolg → Denial-Counter resetten
+        _record_success(boss_cfg.id, tool_name)
         # Cache befüllen
         if file_read_cache is not None and tool_name == "file_read":
             _rpath = tool_input.get("path", "")

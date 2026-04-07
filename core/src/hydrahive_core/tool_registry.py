@@ -1148,6 +1148,21 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"`",                          "Backticks verboten"),
     # CWD-Manipulation zu Systempfaden
     (r"\bcd\s+(/etc|/opt/(hydrahive|hydrahive)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
+    # #480: Dangerous Environment Variables (Code Injection, TLS Bypass, Proxy Redirect)
+    (r"\bLD_PRELOAD=",              "LD_PRELOAD verboten (Code Injection)"),
+    (r"\bLD_LIBRARY_PATH=",         "LD_LIBRARY_PATH verboten (Code Injection)"),
+    (r"\bDYLD_",                    "DYLD_* verboten (macOS Code Injection)"),
+    (r"\bNODE_OPTIONS=",            "NODE_OPTIONS verboten (Code Injection)"),
+    (r"\bGOFLAGS=",                "GOFLAGS verboten (Build Injection)"),
+    (r"\bRUSTFLAGS=",              "RUSTFLAGS verboten (Build Injection)"),
+    (r"\bNODE_TLS_REJECT_UNAUTHORIZED=", "NODE_TLS_REJECT_UNAUTHORIZED verboten (TLS Bypass)"),
+    (r"\bHTTP_PROXY=",             "HTTP_PROXY verboten (Traffic Redirect)"),
+    (r"\bHTTPS_PROXY=",            "HTTPS_PROXY verboten (Traffic Redirect)"),
+    (r"\bhttp_proxy=",             "http_proxy verboten (Traffic Redirect)"),
+    (r"\bhttps_proxy=",            "https_proxy verboten (Traffic Redirect)"),
+    (r"\bPYTHONSTARTUP=",         "PYTHONSTARTUP verboten (Code Injection)"),
+    (r"\bPERL5OPT=",              "PERL5OPT verboten (Code Injection)"),
+    (r"\bRUBYOPT=",               "RUBYOPT verboten (Code Injection)"),
 ]
 
 # Shell-Wrapper-Programme: erste Token prüfen, ob -c folgt

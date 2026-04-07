@@ -128,13 +128,27 @@ class Session:
                 window.pop(0)  # älteste Nachricht entfernen
 
         # Tool-Results prunen: letzte N vollständig, ältere micro-compacted (#416)
+        # #468: Time-Based Micro-Compaction — Tool-Results >30min aggressiver kürzen
+        _TIME_DECAY_MINUTES = 30
         cutoff = max(0, len(window) - prune_tool_results)
+        now = datetime.now(timezone.utc)
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
+                # Alter der Message berechnen
+                try:
+                    msg_time = datetime.fromisoformat(m.timestamp)
+                    age_minutes = (now - msg_time).total_seconds() / 60
+                except (ValueError, TypeError):
+                    age_minutes = 0
+
                 if i < cutoff and len(m.content) > 100:
-                    # Micro-Compaction: ältere Tool-Results → 100 Chars Preview
+                    # Positions-basierte Micro-Compaction: ältere Tool-Results → 100 Chars Preview
                     preview = m.content[:100] + f"\n…[{len(m.content)} Zeichen, micro-compacted]"
+                    result.append({"role": m.role.value, "content": preview})
+                elif age_minutes > _TIME_DECAY_MINUTES and len(m.content) > 200:
+                    # #468: Zeit-basierte Decay — >30min alte Tool-Results → 200 Chars
+                    preview = m.content[:200] + f"\n…[{len(m.content)} Zeichen, {int(age_minutes)}min alt — time-decayed]"
                     result.append({"role": m.role.value, "content": preview})
                 elif len(m.content) > max_tool_result_chars:
                     truncated = m.content[:max_tool_result_chars] + f"\n…[gekürzt, {len(m.content)} Zeichen total]"
