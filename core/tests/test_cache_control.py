@@ -64,39 +64,40 @@ class TestSystemMessage:
         result = _apply_cache_control(msgs, is_anthropic=True)
         assert not result[0]["content"][0].get("cache_control")
 
-    def test_system_leerer_content_wird_zu_liste(self):
-        # Auch leerer String wird zu content-Liste umgewandelt
+    def test_system_leerer_content_bleibt_unveraendert(self):
+        # Leerer String: kein Cache-Tag, content bleibt wie es ist
         msgs = [{"role": "system", "content": ""}]
         result = _apply_cache_control(msgs, is_anthropic=True)
-        assert isinstance(result[0]["content"], list)
+        # _tag_cache gibt msg unverändert zurück bei leerem content
+        assert not _has_cache(result[0])
 
 
 class TestHistoryCache:
-    def test_letzte_4_nachrichten_kein_cache(self):
+    def test_strategische_breakpoints_bei_wenigen_msgs(self):
+        # 4 User-Msgs: erste bekommt Cache (Breakpoint 2: erste User-Message)
         msgs = [_sys("s")] + [_user(f"u{i}") for i in range(4)]
         result = _apply_cache_control(msgs, is_anthropic=True)
         non_sys = [m for m in result if m.get("role") != "system"]
-        for m in non_sys:
-            assert not _has_cache(m)
+        cached = [m for m in non_sys if _has_cache(m)]
+        assert len(cached) >= 1  # mindestens erste User-Message
 
-    def test_alte_nachrichten_bekommen_cache(self):
-        # 6 User-Nachrichten → die ersten 2 sollten cache bekommen
+    def test_strategische_breakpoints_bei_vielen_msgs(self):
+        # 6 User-Nachrichten → Breakpoints: erste, Mitte, vorletzte
         msgs = [_sys("s")] + [_user(f"u{i}") for i in range(6)]
         result = _apply_cache_control(msgs, is_anthropic=True)
         non_sys = [m for m in result if m.get("role") != "system"]
+        cached = [m for m in non_sys if _has_cache(m)]
+        # 3 strategische Positionen: Anfang, Mitte, vorletzte
+        assert len(cached) == 3
+        # Erste User-Message hat Cache
         assert _has_cache(non_sys[0])
-        assert _has_cache(non_sys[1])
-        # Letzte 4 kein Cache
-        for m in non_sys[-4:]:
-            assert not _has_cache(m)
 
-    def test_max_4_cache_breakpoints_in_history(self):
-        # 10 Nachrichten → max 6 dürfen cache bekommen (cutoff bei len-4)
+    def test_max_4_cache_breakpoints_gesamt(self):
+        # 10 Nachrichten → max 4 Cache-Breakpoints insgesamt (1 System + 3 History)
         msgs = [_sys("s")] + [_user(f"u{i}") for i in range(10)]
         result = _apply_cache_control(msgs, is_anthropic=True)
-        non_sys = [m for m in result if m.get("role") != "system"]
-        cached = [m for m in non_sys if _has_cache(m)]
-        assert len(cached) == 6   # 10 - 4 = 6
+        all_cached = [m for m in result if _has_cache(m)]
+        assert len(all_cached) <= 4  # Anthropic-Limit
 
     def test_leere_content_kein_cache(self):
         msgs = [_sys("s"), {"role": "user", "content": ""}]

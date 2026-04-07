@@ -78,12 +78,13 @@ class TestResolveModel:
         assert base is None
 
     def test_ollama_slash_wird_zu_ollama_chat(self):
-        model, base = _resolve_model("ollama/llama3")
+        # ollama_base_url explizit setzen um WKS-Lookup zu umgehen
+        model, base = _resolve_model("ollama/llama3", ollama_base_url="http://localhost:11434")
         assert model == "ollama_chat/llama3"
         assert base == "http://localhost:11434"
 
     def test_unbekannter_name_wird_ollama_chat(self):
-        model, base = _resolve_model("llama3.2")
+        model, base = _resolve_model("llama3.2", ollama_base_url="http://localhost:11434")
         assert model == "ollama_chat/llama3.2"
         assert base == "http://localhost:11434"
 
