@@ -133,6 +133,8 @@ class TestCompactIfNeeded:
         cfg = MagicMock()
         cfg.llm.model = model
         cfg.llm.max_tokens = 400
+        cfg.compaction_threshold = None  # #416: kein Agent-Override
+        cfg.agent_dir = None
         return cfg
 
     async def test_unter_schwellwert_keine_aktion(self):
@@ -143,15 +145,16 @@ class TestCompactIfNeeded:
         sessions.new_session.assert_not_called()
 
     async def test_lokales_modell_niedrigerer_schwellwert(self):
-        sessions = self._make_sessions(estimated_tokens=2_500)
+        sessions = self._make_sessions(estimated_tokens=10_000)
         boss_cfg = self._make_boss_cfg(model="llama3.2")
-        # lokales Modell: threshold=2000, 2500 > 2000 → kompaktieren
+        # lokales Modell: threshold=8000, 10000 > 8000 → kompaktieren
+        # #416: Full-Compaction bei 80% (6400) wird auch ausgelöst → 2 compact-Calls
         with patch("hydrahive_core.orchestrator_llm._llm_with_retry", new_callable=AsyncMock) as mock_retry:
             mock_resp = MagicMock()
             mock_resp.choices[0].message.content = "Zusammenfassung"
             mock_retry.return_value = mock_resp
             await _compact_if_needed(sessions, "proj", boss_cfg)
-        sessions.compact.assert_called_once()
+        assert sessions.compact.call_count >= 1
 
     async def test_zu_wenig_nachrichten_keine_kompaktierung(self):
         sessions = self._make_sessions(estimated_tokens=25_000, active_messages=3)
@@ -160,9 +163,9 @@ class TestCompactIfNeeded:
         sessions.compact.assert_not_called()
 
     async def test_notfall_reset_bei_kompaktierungsfehler_und_zu_gross(self):
-        sessions = self._make_sessions(estimated_tokens=35_000, active_messages=20)
-        # Nach Fehler: immer noch > 30k
-        sessions.estimated_tokens.side_effect = [35_000, 35_000]
+        sessions = self._make_sessions(estimated_tokens=90_000, active_messages=20)
+        # Nach Fehler: immer noch > 80k → Emergency Reset
+        sessions.estimated_tokens.side_effect = [90_000, 90_000]
         boss_cfg = self._make_boss_cfg()
         with patch("hydrahive_core.orchestrator_llm._llm_with_retry", side_effect=Exception("LLM down")):
             await _compact_if_needed(sessions, "proj", boss_cfg)

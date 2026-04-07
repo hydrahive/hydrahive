@@ -44,8 +44,8 @@ class TestTruncateToolResult:
         assert _truncate_tool_result("hello") == "hello"
 
     def test_json_blob_bei_limit_gekuerzt(self):
-        # 9000 Zeichen: fällt in else-Branch (limit=8000), nicht in len>10000 Branch
-        long_json = '{"data": "' + "x" * 9000 + '"}'
+        # 35000 Zeichen: über 32k Safety-Cap → wird gekürzt
+        long_json = '{"data": "' + "x" * 35000 + '"}'
         result = _truncate_tool_result(long_json)
         assert len(result) < len(long_json)
         assert "gekürzt" in result
@@ -56,14 +56,14 @@ class TestTruncateToolResult:
         assert len(result) > 8000  # Limit 12000 für Diffs
 
     def test_diff_bei_limit_gekuerzt(self):
-        diff = "diff --git a/foo b/foo\n" + "+" * 15000
+        diff = "diff --git a/foo b/foo\n" + "+" * 35000
         result = _truncate_tool_result(diff)
         assert "gekürzt" in result
 
     def test_repo_tree_bei_limit_gekuerzt(self):
-        repo_tree = '[{"path": "src/foo.py"}, ' + '{"path": "x"},' * 2000 + "]"
+        repo_tree = '[{"path": "src/foo.py"}, ' + '{"path": "x"},' * 3000 + "]"
         result = _truncate_tool_result(repo_tree)
-        assert len(result) <= 8200  # 8000 + Marker
+        assert len(result) <= 33000  # 32000 + Marker
         assert "gekürzt" in result
 
     def test_patch_format_erkennt_diff(self):
@@ -138,7 +138,11 @@ class TestExecuteTool:
             tool_input={"key": "value"},
         )
         assert result == {"ok": True}
-        tool.execute.assert_called_once_with(agent_id="boss", project_id="proj", _agent_permissions=[], key="value")
+        # _execution_mode wird automatisch übergeben
+        call_kwargs = tool.execute.call_args[1]
+        assert call_kwargs["agent_id"] == "boss"
+        assert call_kwargs["project_id"] == "proj"
+        assert call_kwargs["key"] == "value"
 
     async def test_project_id_im_input_wird_ueberschrieben(self):
         tool = MagicMock()

@@ -45,6 +45,7 @@ def _make_agent_cfg(
     cfg.llm.max_tokens = 1024
     cfg.llm.ollama_base_url = None
     cfg.max_tool_rounds = 5
+    cfg.compaction_threshold = None  # #416: kein Agent-Override
     return cfg
 
 

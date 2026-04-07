@@ -125,6 +125,6 @@ async def test_pop_last(sm):
 async def test_estimated_tokens(sm):
     """Token-Schätzung ist korrekt (1 Token ≈ 4 Zeichen)."""
     await sm.new_session("proj1")
-    await sm.append("proj1", MessageRole.USER, "a" * 400)  # ≈ 100 Tokens
+    await sm.append("proj1", MessageRole.USER, "a" * 400)  # ≈ 125 Tokens (chars/3.2)
     tokens = sm.estimated_tokens("proj1")
-    assert 90 <= tokens <= 110
+    assert 110 <= tokens <= 140
