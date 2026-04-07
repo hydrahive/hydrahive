@@ -58,6 +58,7 @@ export function ChatPage() {
   const [viewSession, setViewSession] = useState<SessionFull | null>(null);
 
   const [pendingImages, setPendingImages] = useState<{data: string; media_type: string; preview: string}[]>([]);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -591,9 +592,10 @@ export function ChatPage() {
                       )}
                       {images.map(tm => {
                         const [label, ...srcParts] = tm.content.replace("__IMG__", "").split("|");
+                        const src = srcParts.join("|");
                         return (
                           <div key={tm.id} className="max-w-[75%] rounded-lg border bg-card p-2">
-                            <img src={srcParts.join("|")} alt={label} className="rounded-md max-h-[400px] w-auto" />
+                            <img src={src} alt={label} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setLightboxSrc(src)} />
                             <div className="text-[10px] text-muted-foreground mt-1 text-center font-mono">{label}</div>
                           </div>
                         );
@@ -933,6 +935,11 @@ export function ChatPage() {
           </aside>
         </div>
       </section>
+      {lightboxSrc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer" onClick={() => setLightboxSrc(null)}>
+          <img src={lightboxSrc} alt="Fullscreen" className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl" />
+        </div>
+      )}
     </div>
   );
 }
