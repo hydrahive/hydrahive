@@ -5,6 +5,7 @@ import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
+import { sseStream } from "@/lib/sseStream";
 
 interface Message {
   id:         string;
@@ -259,70 +260,44 @@ export function AgentChatPage() {
     elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
 
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
-      const res = await fetch(`/api/agents/${id}/message/stream`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
+      setMessages(ms => [...ms, currentAsst]);
+
+      await sseStream({
+        url: `/api/agents/${id}/message/stream`,
+        body: {
           content,
           ...(unrestricted ? { execution_mode: "unrestricted" } : {}),
           ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
-        }),
-        signal:  controller.signal,
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(e.detail || `HTTP ${res.status}`);
-      }
-
-      setMessages(ms => [...ms, currentAsst]);
-      const reader  = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer    = "";
-
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          for (const line of part.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const evt = JSON.parse(line.slice(6));
-              if (evt.text !== undefined) {
-                if (hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); hadToolCalls = false; }
-                setMessages(ms => ms.map(m =>
-                  m.id === currentAsst.id ? { ...m, content: m.content + evt.text } : m
-                ));
-              } else if (evt.tool_image !== undefined) {
-                // #414: Bild aus Tool-Result (z.B. browser_screenshot)
-                const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
-                setMessages(ms => [...ms, imgMsg]);
-              } else if (evt.tool_call !== undefined) {
-                const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
-                setMessages(ms => [...ms, toolMsg]);
-                hadToolCalls = true;
-              } else if (evt.done) {
-                const updates: Partial<Message> = {};
-                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
-                  updates.tokenUsage = evt.usage;
-                if (evt.is_fallback)
-                  Object.assign(updates, { model: evt.model, isFallback: true });
-                if (Object.keys(updates).length > 0)
-                  setMessages(ms => ms.map(m => m.id === currentAsst.id ? { ...m, ...updates } : m));
-                break outer;
-              } else if (evt.error) {
-                if (evt.session_reset) setMessages([]);
-                throw new Error(evt.error);
-              }
-            } catch (parseErr) {
-              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") throw parseErr;
-            }
+        },
+        signal: controller.signal,
+        onConnectionLost: () => setError(t("common.connectionLost", { defaultValue: "Verbindung verloren — bitte nochmal senden" })),
+        onEvent: (evt) => {
+          if (evt.type === "text") {
+            if (hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); hadToolCalls = false; }
+            setMessages(ms => ms.map(m =>
+              m.id === currentAsst.id ? { ...m, content: m.content + evt.text } : m
+            ));
+          } else if (evt.type === "tool_image") {
+            const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
+            setMessages(ms => [...ms, imgMsg]);
+          } else if (evt.type === "tool_call") {
+            const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
+            setMessages(ms => [...ms, toolMsg]);
+            hadToolCalls = true;
+          } else if (evt.type === "done") {
+            const updates: Partial<Message> = {};
+            if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+              updates.tokenUsage = evt.usage;
+            if (evt.is_fallback)
+              Object.assign(updates, { model: evt.model, isFallback: true });
+            if (Object.keys(updates).length > 0)
+              setMessages(ms => ms.map(m => m.id === currentAsst.id ? { ...m, ...updates } : m));
+          } else if (evt.type === "error") {
+            if (evt.session_reset) setMessages([]);
+            throw new Error(evt.error);
           }
-        }
-      }
+        },
+      });
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error

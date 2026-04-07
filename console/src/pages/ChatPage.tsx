@@ -5,6 +5,7 @@ import { api, SessionPreview, SessionFull } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useTranslation } from "react-i18next";
+import { sseStream } from "@/lib/sseStream";
 
 interface Message {
   id: string;
@@ -307,79 +308,52 @@ export function ChatPage() {
     elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
 
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
-      const res = await fetch(`/api/projects/${id}/message/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          content,
-          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
-        }),
-        signal: controller.signal,
-      });
       setPendingImages([]);
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(e.detail || `HTTP ${res.status}`);
-      }
-
       setMessages((ms) => [...ms, currentAssistantMsg]);
       setStreamingMsgId(currentAssistantMsg.id);
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
 
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          for (const line of part.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const evt = JSON.parse(line.slice(6));
-              if (evt.text !== undefined) {
-                setActiveTool(null);
-                // #337: Nach Tool-Calls neue Assistant-Message starten
-                if (hadToolsSinceLastText) {
-                  currentAssistantMsg = mkMsg("assistant", "");
-                  setMessages((ms) => [...ms, currentAssistantMsg]);
-                  setStreamingMsgId(currentAssistantMsg.id);
-                  hadToolsSinceLastText = false;
-                }
-                setMessages((ms) => ms.map((m) => m.id === currentAssistantMsg.id ? { ...m, content: m.content + evt.text } : m));
-              } else if (evt.tool_image !== undefined) {
-                // #414: Bild aus Tool-Result
-                const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
-                setMessages((ms) => [...ms, imgMsg]);
-              } else if (evt.tool_call !== undefined) {
-                setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
-                const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
-                setMessages((ms) => [...ms, toolMsg]);
-                hadToolsSinceLastText = true;
-              } else if (evt.done) {
-                const updates: Partial<Message> = {};
-                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
-                  updates.tokenUsage = evt.usage;
-                if (evt.is_fallback)
-                  Object.assign(updates, { model: evt.model, isFallback: true });
-                if (Object.keys(updates).length > 0)
-                  setMessages((ms) => ms.map((m) =>
-                    m.id === currentAssistantMsg.id ? { ...m, ...updates } : m
-                  ));
-                break outer;
-              } else if (evt.error) {
-                if (evt.session_reset) setMessages([]);
-                throw new Error(evt.error);
-              }
-            } catch (parseErr) {
-              if (parseErr instanceof Error && parseErr.message !== "Unexpected end of JSON input") throw parseErr;
+      await sseStream({
+        url: `/api/projects/${id}/message/stream`,
+        body: {
+          content,
+          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
+        },
+        signal: controller.signal,
+        onConnectionLost: () => setError(t("common.connectionLost", { defaultValue: "Verbindung verloren — bitte nochmal senden" })),
+        onEvent: (evt) => {
+          if (evt.type === "text") {
+            setActiveTool(null);
+            if (hadToolsSinceLastText) {
+              currentAssistantMsg = mkMsg("assistant", "");
+              setMessages((ms) => [...ms, currentAssistantMsg]);
+              setStreamingMsgId(currentAssistantMsg.id);
+              hadToolsSinceLastText = false;
             }
+            setMessages((ms) => ms.map((m) => m.id === currentAssistantMsg.id ? { ...m, content: m.content + evt.text } : m));
+          } else if (evt.type === "tool_image") {
+            const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
+            setMessages((ms) => [...ms, imgMsg]);
+          } else if (evt.type === "tool_call") {
+            setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
+            const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
+            setMessages((ms) => [...ms, toolMsg]);
+            hadToolsSinceLastText = true;
+          } else if (evt.type === "done") {
+            const updates: Partial<Message> = {};
+            if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+              updates.tokenUsage = evt.usage;
+            if (evt.is_fallback)
+              Object.assign(updates, { model: evt.model, isFallback: true });
+            if (Object.keys(updates).length > 0)
+              setMessages((ms) => ms.map((m) =>
+                m.id === currentAssistantMsg.id ? { ...m, ...updates } : m
+              ));
+          } else if (evt.type === "error") {
+            if (evt.session_reset) setMessages([]);
+            throw new Error(evt.error);
           }
-        }
-      }
+        },
+      });
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error

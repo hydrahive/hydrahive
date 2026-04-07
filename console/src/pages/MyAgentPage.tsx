@@ -10,6 +10,7 @@ import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
+import { sseStream } from "@/lib/sseStream";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
@@ -356,67 +357,49 @@ export function MyAgentPage() {
     abortRef.current = controller;
     elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
-      const res = await fetch("/api/me/agent/message/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          content,
-          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
-        }),
-        signal: controller.signal,
-      });
       setPendingImages([]);
-      if (!res.ok) { const e = await res.json().catch(()=>({detail:res.statusText})); throw new Error(e.detail||`HTTP ${res.status}`); }
       setMessages(ms => [...ms, curAsst]);
       setStreamingMsgId(curAsst.id);
-      const reader = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const parts = buf.split("\n\n"); buf = parts.pop() ?? "";
-        for (const part of parts) {
-          for (const line of part.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            try {
-              const evt = JSON.parse(line.slice(6));
-              if (evt.text !== undefined) {
-                setActiveTool(null);
-                if (hadTools) { curAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, curAsst]); setStreamingMsgId(curAsst.id); hadTools = false; }
-                setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m,content:m.content+evt.text} : m));
-              }
-              else if (evt.tool_image !== undefined) {
-                // #414: Bild aus Tool-Result
-                const imgMsg = mkMsg("tool" as any, `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
-                setMessages(ms => [...ms, imgMsg]);
-              }
-              else if (evt.tool_call !== undefined) {
-                setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
-                const toolMsg = mkMsg("tool" as any, `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
-                setMessages(ms => [...ms, toolMsg]);
-                hadTools = true;
-              }
-              else if (evt.done) {
-                const updates: Partial<Message> = {};
-                if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
-                  updates.tokenUsage = evt.usage;
-                if (evt.is_fallback)
-                  Object.assign(updates, { model: evt.model, isFallback: true });
-                if (Object.keys(updates).length > 0)
-                  setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m, ...updates} : m));
-                break outer;
-              }
-              else if (evt.error) {
-                if (evt.session_reset) {
-                  setMessages([]);  // Chat leeren nach Session-Reset
-                }
-                throw new Error(evt.error);
-              }
-            } catch(pe) { if (pe instanceof Error && pe.message !== "Unexpected end of JSON input") throw pe; }
+
+      await sseStream({
+        url: "/api/me/agent/message/stream",
+        body: {
+          content,
+          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
+        },
+        signal: controller.signal,
+        onConnectionLost: () => setChatError(t("common.connectionLost", { defaultValue: "Verbindung verloren — bitte nochmal senden" })),
+        onEvent: (evt) => {
+          if (evt.type === "text") {
+            setActiveTool(null);
+            if (hadTools) { curAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, curAsst]); setStreamingMsgId(curAsst.id); hadTools = false; }
+            setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m,content:m.content+evt.text} : m));
           }
-        }
-      }
+          else if (evt.type === "tool_image") {
+            const imgMsg = mkMsg("tool" as any, `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
+            setMessages(ms => [...ms, imgMsg]);
+          }
+          else if (evt.type === "tool_call") {
+            setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
+            const toolMsg = mkMsg("tool" as any, `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
+            setMessages(ms => [...ms, toolMsg]);
+            hadTools = true;
+          }
+          else if (evt.type === "done") {
+            const updates: Partial<Message> = {};
+            if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
+              updates.tokenUsage = evt.usage;
+            if (evt.is_fallback)
+              Object.assign(updates, { model: evt.model, isFallback: true });
+            if (Object.keys(updates).length > 0)
+              setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m, ...updates} : m));
+          }
+          else if (evt.type === "error") {
+            if (evt.session_reset) setMessages([]);
+            throw new Error(evt.error);
+          }
+        },
+      });
     } catch(e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // User aborted — keep partial response, no error
