@@ -41,8 +41,8 @@ $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/core/"
 echo ""
 echo "==> [3/5] pip install auf VM"
 $SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/pip install -e '${INSTALL_DIR}/core[dev]' -q"
-# Playwright-Browser einmalig installieren (skip wenn bereits vorhanden)
-$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/playwright install chromium --with-deps 2>&1 | tail -3 || true"
+# Playwright-Browser einmalig installieren (ohne --with-deps, da apt an unsigned Repos scheitert)
+$SSH "$VM" "sudo -u ${INSTALL_USER} ${INSTALL_DIR}/venv/bin/playwright install chromium 2>&1 | tail -3 || true"
 
 echo ""
 echo "==> [4/5] Console bauen"

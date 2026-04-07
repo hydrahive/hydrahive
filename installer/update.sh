@@ -177,11 +177,13 @@ main() {
     fi
 
     # Playwright Browser installieren (idempotent)
+    # --with-deps weggelassen: triggert apt update, scheitert an unsigned Repos (z.B. Plex)
+    # System-Deps sind über den Installer bereits vorhanden
     if "${VENV}/bin/python3" -c "from playwright.sync_api import sync_playwright" 2>/dev/null; then
         if [ -z "$(find /root/.cache/ms-playwright /home/*/.cache/ms-playwright "${HYDRAHIVE_DIR}/playwright-browsers" 2>/dev/null -name 'chromium-*' -type d | head -1)" ]; then
             info "Installiere Playwright Chromium..."
             PLAYWRIGHT_BROWSERS_PATH="${HYDRAHIVE_DIR}/playwright-browsers" \
-                "${VENV}/bin/playwright" install chromium --with-deps 2>&1 | tail -3 || warn "Playwright install fehlgeschlagen"
+                "${VENV}/bin/playwright" install chromium 2>&1 | tail -3 || warn "Playwright install fehlgeschlagen"
             success "Playwright Chromium installiert"
         fi
     fi
@@ -311,6 +313,8 @@ main() {
         info "Aktualisiere SearXNG..."
         (
             sudo -u searxng git -C /opt/searxng pull --ff-only --quiet 2>/dev/null || true
+            # msgspec wird beim Build von searx benötigt, muss vorher installiert sein
+            /opt/searxng/venv/bin/pip install --quiet msgspec 2>/dev/null || true
             /opt/searxng/venv/bin/pip install --quiet -e /opt/searxng
             systemctl restart searxng
         ) && success "SearXNG aktualisiert" \
