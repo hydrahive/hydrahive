@@ -82,7 +82,26 @@ def _check_hydrahive(ip: str, timeout: float = 5) -> dict | None:
             with urllib.request.urlopen(req, **kw) as r:
                 data = json.loads(r.read().decode())
                 if data.get("service") == "hydrahive-core" or data.get("status") == "ok":
-                    return {"ip": ip, "port": port, "scheme": scheme, "health": data}
+                    result = {"ip": ip, "port": port, "scheme": scheme, "health": data}
+                    # MCP-Endpoint proben
+                    try:
+                        mcp_url = f"{scheme}://{ip}:{port}/api/mcp" if port in (80, 443) else f"{scheme}://{ip}:{port}/mcp"
+                        mcp_body = json.dumps({"jsonrpc": "2.0", "id": 0, "method": "initialize",
+                                               "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                                                          "clientInfo": {"name": "hydrahive-discovery", "version": "1.0"}}}).encode()
+                        mcp_req = urllib.request.Request(mcp_url, data=mcp_body,
+                                                         headers={"Content-Type": "application/json",
+                                                                  "User-Agent": "HydraHive-Discovery/1.0"})
+                        mcp_kw: dict = {"timeout": 3}
+                        if scheme == "https":
+                            mcp_kw["context"] = ctx
+                        with urllib.request.urlopen(mcp_req, **mcp_kw) as mr:
+                            mcp_data = json.loads(mr.read().decode())
+                            if mcp_data.get("result", {}).get("serverInfo"):
+                                result["mcp"] = {"url": mcp_url, "server": mcp_data["result"]["serverInfo"]}
+                    except Exception:
+                        pass  # MCP nicht verfügbar — kein Fehler
+                    return result
         except Exception as e:
             logger.debug("Probe %s://%s:%s failed: %s", scheme, ip, port, e)
             continue
@@ -227,6 +246,7 @@ def register_tailscale_routes(
                     "online": True,
                     "hydrahive": True,
                     "health": result.get("health"),
+                    "mcp": result.get("mcp"),
                 }
             return None
 

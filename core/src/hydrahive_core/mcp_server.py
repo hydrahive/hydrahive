@@ -19,9 +19,12 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
+
+_bearer = HTTPBearer(auto_error=False)
 
 # MCP-Protokoll Konstanten
 MCP_VERSION = "2024-11-05"
@@ -92,8 +95,40 @@ def register_mcp_server_routes(
 ) -> None:
     """Registriert den MCP-Server Endpoint."""
 
+    # MCP-API-Key aus Config laden (alternativ zum JWT Bearer-Token)
+    def _load_mcp_api_key() -> str:
+        from .settings import settings
+        try:
+            cfg = json.loads(settings.mcp_servers_config.read_text())
+            return cfg.get("server_api_key", "")
+        except (OSError, ValueError):
+            return ""
+
+    def _verify_mcp_auth(creds: HTTPAuthorizationCredentials | None) -> bool:
+        """Prüft Auth: JWT Bearer-Token ODER MCP-API-Key."""
+        if not creds:
+            return False
+        token = creds.credentials
+        # Versuch 1: JWT-Token
+        try:
+            require_auth(creds)
+            return True
+        except Exception:
+            pass
+        # Versuch 2: MCP-API-Key
+        api_key = _load_mcp_api_key()
+        if api_key and token == api_key:
+            return True
+        return False
+
+    # Methoden die ohne Auth erlaubt sind (Discovery/Handshake)
+    _PUBLIC_METHODS = {"initialize", "notifications/initialized", "tools/list"}
+
     @app.post("/mcp")
-    async def mcp_endpoint(request: Request):
+    async def mcp_endpoint(
+        request: Request,
+        creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    ):
         """MCP JSON-RPC Endpoint (Streamable HTTP Transport)."""
         try:
             body = await request.json()
@@ -106,6 +141,14 @@ def register_mcp_server_routes(
         method = body.get("method", "")
         params = body.get("params", {})
         req_id = body.get("id")
+
+        # Auth prüfen — public methods ohne Token erlaubt
+        if method not in _PUBLIC_METHODS and not _verify_mcp_auth(creds):
+            return Response(
+                content=json.dumps(_jsonrpc_error(req_id, -32000, "Unauthorized — Bearer-Token oder MCP-API-Key erforderlich")),
+                media_type="application/json",
+                status_code=401,
+            )
 
         # MCP Lifecycle Methods
         if method == "initialize":
@@ -167,6 +210,48 @@ def register_mcp_server_routes(
             content=json.dumps(_jsonrpc_error(req_id, -32601, f"Method not found: {method}")),
             media_type="application/json",
         )
+
+    # ── Admin-Endpoints für MCP-Server Auth ───────────────────────────
+
+    from fastapi import APIRouter as _Router
+    admin_router = _Router(prefix="/admin/mcp", tags=["mcp-admin"])
+
+    @admin_router.get("/api-key")
+    def get_mcp_api_key(_a=Depends(require_auth)):
+        """Zeigt ob ein MCP-API-Key konfiguriert ist (nicht den Key selbst)."""
+        key = _load_mcp_api_key()
+        return {"configured": bool(key), "key_preview": f"{key[:8]}..." if key else None}
+
+    @admin_router.post("/api-key/generate")
+    def generate_mcp_api_key(_a=Depends(require_auth)):
+        """Generiert einen neuen MCP-API-Key und speichert ihn."""
+        import secrets
+        from .settings import settings
+        new_key = f"hh-mcp-{secrets.token_urlsafe(32)}"
+        try:
+            cfg = json.loads(settings.mcp_servers_config.read_text())
+        except (OSError, ValueError):
+            cfg = {}
+        cfg["server_api_key"] = new_key
+        settings.mcp_servers_config.parent.mkdir(parents=True, exist_ok=True)
+        settings.mcp_servers_config.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        settings.mcp_servers_config.chmod(0o600)
+        logger.info("MCP-API-Key generiert")
+        return {"api_key": new_key}
+
+    @admin_router.delete("/api-key")
+    def delete_mcp_api_key(_a=Depends(require_auth)):
+        """Löscht den MCP-API-Key."""
+        from .settings import settings
+        try:
+            cfg = json.loads(settings.mcp_servers_config.read_text())
+        except (OSError, ValueError):
+            cfg = {}
+        cfg.pop("server_api_key", None)
+        settings.mcp_servers_config.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        return {"deleted": True}
+
+    app.include_router(admin_router)
 
 
 async def _execute_mcp_tool(
