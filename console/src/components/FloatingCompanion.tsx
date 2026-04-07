@@ -4,6 +4,7 @@
  * Aktivierung: 5x auf Version in Settings klicken → localStorage hh_companion=1
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 
 type Mood = "idle" | "happy" | "think" | "sleep" | "shock" | "love" | "sad";
@@ -200,11 +201,16 @@ export function FloatingCompanion() {
 
   if (!visible) return null;
 
-  return (
-    <div className="fixed bottom-4 right-20 z-50 flex flex-col items-end gap-2 pointer-events-none select-none">
+  const dock = document.getElementById("companion-dock");
+
+  const companionEl = (
+    <>
       {/* Sprechblase */}
       {showBubble && bubble && (
-        <div className="pointer-events-auto max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div className={dock
+          ? "absolute bottom-full right-0 mb-2 z-50 max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
+          : "pointer-events-auto max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
+        }>
           {bubble}
         </div>
       )}
@@ -222,7 +228,7 @@ export function FloatingCompanion() {
           }
         }}
       >
-        <BlobCreature mood={mood} size={48} />
+        <BlobCreature mood={mood} size={dock ? 32 : 48} />
       </div>
       <style>{`
         @keyframes companion-bob {
@@ -230,6 +236,21 @@ export function FloatingCompanion() {
           50% { transform: translateY(-6px); }
         }
       `}</style>
+    </>
+  );
+
+  // Wenn companion-dock im Sidebar existiert → dort reinrendern
+  if (dock) {
+    return createPortal(
+      <div className="relative flex flex-col items-center">{companionEl}</div>,
+      dock
+    );
+  }
+
+  // Fallback: fixed bottom-right
+  return (
+    <div className="fixed bottom-4 right-20 z-50 flex flex-col items-end gap-2 pointer-events-none select-none">
+      {companionEl}
     </div>
   );
 }

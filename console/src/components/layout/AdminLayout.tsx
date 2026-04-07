@@ -312,9 +312,7 @@ export function AdminLayout() {
               <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.assistantSubtitle")}</p>
             </div>
             {companionActive ? (
-              <span className="flex items-center justify-center rounded-full bg-emerald-400/15 p-1" title={t("layout.assistantStatus")}>
-                <BlobCreature mood="idle" size={28} />
-              </span>
+              <div id="companion-dock" className="relative rounded-full bg-emerald-400/15 px-2.5 py-1 flex items-center justify-center" />
             ) : (
               <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-emerald-300">
                 {t("layout.assistantStatus")}
