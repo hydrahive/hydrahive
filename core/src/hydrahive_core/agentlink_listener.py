@@ -14,7 +14,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .orchestrator import AgentOrchestrator
+    from .orchestrator import Orchestrator as AgentOrchestrator
 
 logger = logging.getLogger(__name__)
 

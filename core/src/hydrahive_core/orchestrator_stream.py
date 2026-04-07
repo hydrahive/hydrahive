@@ -1,0 +1,722 @@
+"""
+orchestrator_stream.py — SSE-Streaming Response (#386)
+
+Streaming-Version des Orchestrators: yieldet SSE-Chunks für die
+Chat-API. Unterstützt Anthropic OAuth, OpenAI Codex und litellm.
+"""
+
+import json as _json
+import logging
+
+from .agent_config import AgentConfig
+from .session_manager import MessageRole
+from .orchestrator_llm import (
+    _should_failover,
+    _load_claude_oauth_token,
+    _load_openai_codex_token,
+    _apply_cache_control,
+    check_llm_provider_available,
+)
+from .orchestrator_context import (
+    _history_token_budget,
+    _estimate_tokens,
+)
+from .orchestrator_tools import _truncate_tool_result
+
+logger = logging.getLogger(__name__)
+
+
+async def handle_message_stream(
+    orch,
+    project_id: str,
+    project_cfg,
+    content: str,
+    sender: str = "user",
+    execution_mode: str | None = None,
+):
+    """
+    Streaming-Version von handle_message.
+    Yieldet SSE-Chunks: data: <text>\\n\\n
+    Bei Quota/Overload-Fehler: automatischer Failover auf fallback_models.
+    Abschluss: data: {done: true}\\n\\n
+    """
+    from .orchestrator import _build_worker_context, _dedup_tools
+    from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
+    from . import tool_registry as _tool_reg
+
+    boss_id  = project_cfg.agents.boss
+    boss_cfg = orch._discovery.get(boss_id)
+    if not boss_cfg:
+        yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
+        return
+
+    # Stale Interrupt-Flags löschen (von eventuell vorangegangenem abgebrochenem Request)
+    from .tool_registry import clear_interrupt as _clear_interrupt
+    _clear_interrupt(project_id)
+
+    # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
+    _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0}
+
+    # Session + System-Prompt aufbauen
+    user_msg_saved = False
+    await orch._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
+    user_msg_saved = True
+
+    # Context-Kompaktierung vor dem LLM-Aufruf
+    await orch._compact_if_needed(project_id, boss_cfg)
+
+    _refresh = content.strip().startswith("!refresh")
+    if _refresh:
+        content = content.strip()[8:].strip()
+    system_prompt = await orch._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+    worker_ctx = _build_worker_context(project_cfg, orch._discovery)
+    if worker_ctx:
+        system_prompt = system_prompt + "\n\n" + worker_ctx
+    # #348: Token-basierte History statt max_messages=10 (OpenClaw-Strategie)
+    _sys_prompt_tokens_s = _estimate_tokens(system_prompt)
+    _hist_budget_s = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens_s)
+    _raw_history   = orch._sessions.get_context(
+        project_id,
+        max_history_tokens=_hist_budget_s,
+    )
+    # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
+    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
+    messages      = [{"role": "system", "content": system_prompt}] + history
+    # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
+    _use_meta = "request_tools" in (boss_cfg.tools or [])
+    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=_use_meta)
+    litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
+    _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
+    if _mcp_s:
+        litellm_tools = (litellm_tools or []) + _mcp_s
+    # Plugin-Tools (#110)
+    _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
+    if _plg_s:
+        litellm_tools = (litellm_tools or []) + _plg_s
+    litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
+
+    sys_tokens_s  = _sys_prompt_tokens_s
+    hist_tokens_s = sum(
+        _estimate_tokens(m.get("content", "") if isinstance(m.get("content"), str) else "")
+        for m in history
+    )
+    tool_tokens_s = _estimate_tokens(_json.dumps(litellm_tools or []))
+    logger.info(
+        "token-budget [stream] proj=%s sys≈%d hist≈%d/%d (%d msgs) tools≈%d total≈%d",
+        project_id, sys_tokens_s, hist_tokens_s, _hist_budget_s, len(history), tool_tokens_s,
+        sys_tokens_s + hist_tokens_s + tool_tokens_s,
+    )
+
+    models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
+
+    _provider_err = check_llm_provider_available(models_to_try, ollama_base_url=boss_cfg.llm.ollama_base_url)
+    if _provider_err:
+        yield f"data: {_json.dumps({'text': _provider_err})}\n\n"
+        yield "data: {\"done\": true}\n\n"
+        return
+
+    try:
+        full_response = ""
+
+        for _attempt_idx, _model_name in enumerate(models_to_try):
+            try:
+                full_response = ""
+                streamed_any  = False
+
+                # --- OpenAI Codex (ChatGPT Plus OAuth) ---
+                _is_codex = _model_name.startswith("openai-codex/")
+                if _is_codex:
+                    codex_token = _load_openai_codex_token()
+                    if codex_token:
+                        async for chunk in _stream_codex(
+                            orch, boss_cfg, boss_id, project_id, content,
+                            messages, litellm_tools, codex_token, _model_name,
+                            execution_mode, _usage,
+                        ):
+                            if isinstance(chunk, dict):
+                                full_response = chunk.get("_full_response", full_response)
+                                streamed_any = chunk.get("_streamed_any", streamed_any)
+                            else:
+                                yield chunk
+                        break
+
+                # --- Claude Max OAuth ---
+                _is_claude    = _model_name.startswith(("claude-", "anthropic/"))
+                oauth_token   = _load_claude_oauth_token() if _is_claude else ""
+
+                if oauth_token:
+                    async for chunk in _stream_anthropic_oauth(
+                        orch, boss_cfg, boss_id, project_id, content,
+                        messages, litellm_tools, oauth_token, _model_name,
+                        execution_mode, _usage,
+                    ):
+                        if isinstance(chunk, dict):
+                            full_response = chunk.get("_full_response", full_response)
+                            streamed_any = chunk.get("_streamed_any", streamed_any)
+                        else:
+                            yield chunk
+
+                else:
+                    # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
+                    async for chunk in _stream_litellm(
+                        orch, boss_cfg, boss_id, project_id, content,
+                        messages, litellm_tools, _model_name,
+                        execution_mode, _usage,
+                    ):
+                        if isinstance(chunk, dict):
+                            full_response = chunk.get("_full_response", full_response)
+                            streamed_any = chunk.get("_streamed_any", streamed_any)
+                        else:
+                            yield chunk
+
+                break  # Erfolgreich — kein weiterer Failover nötig
+
+            except Exception as model_exc:
+                can_failover = (
+                    not streamed_any
+                    and _attempt_idx < len(models_to_try) - 1
+                    and _should_failover(model_exc)
+                )
+                if can_failover:
+                    next_model = models_to_try[_attempt_idx + 1]
+                    logger.warning(
+                        "Streaming-Failover: '%s' → '%s' (%s)",
+                        _model_name, next_model, str(model_exc)[:80],
+                    )
+                    yield f"data: {_json.dumps({'info': f'Modell nicht verfügbar, wechsle zu {next_model}…'})}\n\n"
+                    continue
+                raise
+
+        # Antwort in Session speichern (mit echten Token-Counts aus API)
+        _is_fallback = _model_name != boss_cfg.llm.model
+        _stream_meta: dict = {}
+        if _usage.get("input") or _usage.get("output"):
+            _stream_meta = {
+                "model":              _model_name,
+                "input_tokens":       _usage.get("input",       0),
+                "output_tokens":      _usage.get("output",      0),
+                "cache_write_tokens": _usage.get("cache_write", 0),
+                "cache_read_tokens":  _usage.get("cache_read",  0),
+            }
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT,
+            full_response, agent_id=boss_cfg.id,
+            **_stream_meta,
+        )
+        total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
+        if total_tokens > 0 and _tool_reg._rate_limiter is not None:
+            _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
+        _done_payload: dict = {'done': True, 'session_id': None, 'usage': _usage}
+        if _is_fallback:
+            _done_payload['model'] = _model_name
+            _done_payload['is_fallback'] = True
+        yield f"data: {_json.dumps(_done_payload)}\n\n"
+
+    except Exception as e:
+        err_str = str(e).lower()
+        _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
+                           "error in input stream", "input too long", "request too large")
+        if any(s in err_str for s in _context_errors):
+            logger.warning(
+                "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
+                project_id, e,
+            )
+            await orch._sessions.new_session(project_id)
+            yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
+        else:
+            logger.error("Streaming-Fehler: %s", e)
+            if user_msg_saved:
+                await orch._sessions.pop_last(project_id)
+            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+
+
+# ---------------------------------------------------------------------------
+# Provider-spezifische Streaming-Implementierungen
+# ---------------------------------------------------------------------------
+
+async def _stream_codex(
+    orch, boss_cfg, boss_id, project_id, content,
+    messages, litellm_tools, codex_token, model_name,
+    execution_mode, _usage,
+):
+    """OpenAI Codex (ChatGPT Plus OAuth) — non-streaming mit Tool-Loop."""
+    from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
+
+    codex_resp = await orch._openai_codex_call(
+        boss_cfg, messages, litellm_tools, codex_token, model_name
+    )
+    msg = codex_resp.choices[0].message
+    cur_messages = list(messages)
+    last_signature: tuple[str, ...] | None = None
+    repeated_signature_count = 0
+
+    for _round in range(boss_cfg.max_tool_rounds):
+        if not getattr(msg, "tool_calls", None):
+            break
+        signature = _tool_call_signature_fn(msg.tool_calls)
+        if signature and signature == last_signature:
+            repeated_signature_count += 1
+        else:
+            repeated_signature_count = 0
+        last_signature = signature
+        if repeated_signature_count >= 4:
+            final = await orch._finalize_tool_loop_response(
+                boss_cfg, cur_messages,
+                reason="wiederholte Tool-Signatur",
+                execution_mode=execution_mode,
+            )
+            msg = final.choices[0].message
+            break
+        # Tool-Calls ausführen
+        asst_tc = [
+            {"id": tc.id, "item_id": getattr(tc, "item_id", tc.id), "type": "function",
+             "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+            for tc in msg.tool_calls
+        ]
+        cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
+        for tc in msg.tool_calls:
+            _tc_args = _json.loads(tc.function.arguments or "{}")
+            _tc_detail = f"{tc.function.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc.function.name
+            yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+            await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
+            args = _json.loads(tc.function.arguments or "{}")
+            if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
+                try:
+                    result = await orch._execute_mcp_tool(boss_cfg, tc.function.name, args)
+                except Exception as te:
+                    result = {"error": str(te)}
+            else:
+                tool = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
+                try:
+                    result = await orch._execute_tool(
+                        tool, boss_cfg=boss_cfg, project_id=project_id,
+                        tool_name=tc.function.name, tool_input=args,
+                        execution_mode=execution_mode,
+                    )
+                except Exception as te:
+                    result = {"error": str(te)}
+            result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result)
+            cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
+        next_resp = await orch._openai_codex_call(
+            boss_cfg, cur_messages, litellm_tools, codex_token, model_name,
+            force_tools=False,
+        )
+        msg = next_resp.choices[0].message
+
+    text = msg.content or ""
+    if text:
+        yield f"data: {_json.dumps({'text': text})}\n\n"
+    # Signal zurück an den Aufrufer
+    yield {"_full_response": text, "_streamed_any": bool(text)}
+
+
+async def _stream_anthropic_oauth(
+    orch, boss_cfg, boss_id, project_id, content,
+    messages, litellm_tools, oauth_token, model_name,
+    execution_mode, _usage,
+):
+    """Anthropic SDK Streaming mit OAuth."""
+    import anthropic as _anthropic
+    from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
+
+    client = _anthropic.AsyncAnthropic(
+        api_key="",
+        auth_token=oauth_token,
+        default_headers={
+            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
+            "user-agent":     "claude-cli/2.1.62",
+            "x-app":          "cli",
+        },
+    )
+    system_msg = ""
+    raw: list[dict] = []
+    for m in messages:
+        if m.get("role") == "system":
+            system_msg = m.get("content", "")
+        else:
+            raw.append({"role": m["role"], "content": m.get("content") or ""})
+    # Consecutive gleiche Rollen mergen
+    filtered: list[dict] = []
+    for m in raw:
+        if filtered and filtered[-1]["role"] == m["role"]:
+            filtered[-1]["content"] += "\n\n" + m["content"]
+        else:
+            filtered.append(dict(m))
+
+    model = model_name
+    for prefix in ("openai/", "anthropic/", "claude/"):
+        if model.startswith(prefix):
+            model = model[len(prefix):]
+            break
+    if not model.startswith("claude-"):
+        model = "claude-haiku-4-5-20251001"
+
+    oauth_system = [
+        {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+    ]
+    if system_msg:
+        oauth_system.append({"type": "text", "text": system_msg,
+                             "cache_control": {"type": "ephemeral"}})
+
+    # #351: Ältere History-Messages cachen (max 3 Breakpoints, Anthropic-Limit)
+    _cache_cutoff = max(0, len(filtered) - 4)
+    _hcc = 0
+    for _idx, _fm in enumerate(filtered):
+        if _hcc >= 3:
+            break
+        if _idx < _cache_cutoff and _fm.get("role") in ("user", "assistant"):
+            _ct = _fm.get("content", "")
+            if isinstance(_ct, str) and _ct:
+                filtered[_idx] = {**_fm, "content": [
+                    {"type": "text", "text": _ct, "cache_control": {"type": "ephemeral"}}
+                ]}
+                _hcc += 1
+
+    kwargs: dict = {
+        "model":      model,
+        "max_tokens": boss_cfg.llm.max_tokens,
+        "messages":   filtered,
+        "system":     oauth_system,
+    }
+    if litellm_tools:
+        kwargs["tools"] = [
+            {
+                "name":         t["function"]["name"],
+                "description":  t["function"].get("description", ""),
+                "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+            }
+            for t in litellm_tools
+        ]
+
+    full_response = ""
+    streamed_any = False
+
+    # Agentic Tool-Loop für OAuth-Streaming
+    last_tool_signature: tuple[str, ...] | None = None
+    repeated_tool_signature_count = 0
+    _oauth_file_read_cache: dict[str, str] = {}
+    _oauth_loaded_cats: set[str] = set()
+
+    for _round in range(boss_cfg.max_tool_rounds):
+        _round_text = ""
+        async with client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                full_response += text
+                _round_text   += text
+                streamed_any   = True
+                yield f"data: {_json.dumps({'text': text})}\n\n"
+            final_msg = await stream.get_final_message()
+        _usage["rounds"] += 1
+        if hasattr(final_msg, "usage"):
+            _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)
+            _usage["output"]      += getattr(final_msg.usage, "output_tokens", 0)
+            _usage["cache_write"] += getattr(final_msg.usage, "cache_creation_input_tokens", 0)
+            _usage["cache_read"]  += getattr(final_msg.usage, "cache_read_input_tokens", 0)
+
+        tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
+        if not tool_use_blocks:
+            break
+        # Zwischentext persistent speichern (vor Tool-Ausführung)
+        if _round_text.strip():
+            await orch._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
+        _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
+        signature = tuple(
+            f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
+            for block in tool_use_blocks
+            if block.name not in _LOOP_EXCLUDE_OAUTH
+        )
+        if signature and signature == last_tool_signature:
+            repeated_tool_signature_count += 1
+        else:
+            repeated_tool_signature_count = 0
+        last_tool_signature = signature
+        if repeated_tool_signature_count >= 4:
+            kwargs_final = dict(kwargs)
+            kwargs_final.pop("tools", None)
+            kwargs_final["messages"] = filtered + [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
+                        }
+                    ],
+                }
+            ]
+            async with client.messages.stream(**kwargs_final) as stream:
+                async for text in stream.text_stream:
+                    full_response += text
+                    streamed_any = True
+                    yield f"data: {_json.dumps({'text': text})}\n\n"
+                _fm = await stream.get_final_message()
+            _usage["rounds"] += 1
+            if hasattr(_fm, "usage"):
+                _usage["input"]       += getattr(_fm.usage, "input_tokens", 0)
+                _usage["output"]      += getattr(_fm.usage, "output_tokens", 0)
+                _usage["cache_write"] += getattr(_fm.usage, "cache_creation_input_tokens", 0)
+                _usage["cache_read"]  += getattr(_fm.usage, "cache_read_input_tokens", 0)
+            break
+        if _round == boss_cfg.max_tool_rounds - 2:
+            filtered.append({"role": "user", "content": [{"type": "text", "text": "[System: Letzte Tool-Runde — fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]})
+            kwargs["messages"] = filtered
+
+        tool_results = []
+        any_tool_error = False
+        for block in tool_use_blocks:
+            _tc_input = block.input or {}
+            _tc_detail = f"{block.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_input.items())})" if _tc_input else block.name
+            yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
+            await orch._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id)
+            # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
+            if block.name == "request_tools":
+                try:
+                    categories = (block.input or {}).get("categories", [])
+                    new_cats = [c for c in categories if c not in _oauth_loaded_cats]
+                    added_count = 0
+                    if new_cats:
+                        new_schemas = orch._category_tools_schema(boss_cfg, execution_mode, new_cats)
+                        existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
+                        new_tool_defs = [
+                            {
+                                "name": s["function"]["name"],
+                                "description": s["function"].get("description", ""),
+                                "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
+                            }
+                            for s in new_schemas
+                            if s["function"]["name"] not in existing_names
+                        ]
+                        if new_tool_defs:
+                            kwargs.setdefault("tools", [])
+                            kwargs["tools"].extend(new_tool_defs)
+                            added_count = len(new_tool_defs)
+                        _oauth_loaded_cats.update(new_cats)
+                    result = {"ok": True, "categories": categories, "tools_added": added_count,
+                              "note": "Tools geladen — direkt verwendbar."}
+                except Exception as te:
+                    result = {"error": f"request_tools: {te}"}
+            elif block.name.startswith("mcp_") and boss_cfg.mcp_servers:
+                try:
+                    result = await orch._execute_mcp_tool(boss_cfg, block.name, block.input or {})
+                except Exception as te:
+                    result = {"error": str(te)}
+            else:
+                tool = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
+                if tool:
+                    try:
+                        # file_read Deduplication
+                        if block.name == "file_read":
+                            _rpath = (block.input or {}).get("path", "")
+                            if _rpath and _rpath in _oauth_file_read_cache:
+                                result = _oauth_file_read_cache[_rpath]
+                                logger.debug("file_read dedup (oauth): '%s'", _rpath)
+                            else:
+                                result = await orch._execute_tool(
+                                    tool, boss_cfg=boss_cfg, project_id=project_id,
+                                    tool_name=block.name, tool_input=block.input,
+                                    execution_mode=execution_mode,
+                                )
+                                if _rpath:
+                                    _oauth_file_read_cache[_rpath] = result
+                        else:
+                            result = await orch._execute_tool(
+                                tool, boss_cfg=boss_cfg, project_id=project_id,
+                                tool_name=block.name, tool_input=block.input,
+                                execution_mode=execution_mode,
+                            )
+                    except Exception as te:
+                        result = {"error": str(te)}
+                else:
+                    result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
+            if isinstance(result, dict) and "error" in result:
+                any_tool_error = True
+            result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
+            tool_results.append({
+                "type":        "tool_result",
+                "tool_use_id": block.id,
+                "content":     result_str,
+            })
+        if any_tool_error:
+            repeated_tool_signature_count = 0
+
+        asst_content = []
+        for b in final_msg.content:
+            if b.type == "text":
+                asst_content.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                asst_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+        filtered.append({"role": "assistant", "content": asst_content})
+        filtered.append({"role": "user",      "content": tool_results})
+        kwargs["messages"] = filtered
+    else:
+        # Loop normal beendet (kein break nach letzter Runde)
+        kwargs_final = dict(kwargs)
+        kwargs_final.pop("tools", None)
+        kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]}]
+        async with client.messages.stream(**kwargs_final) as stream:
+            async for text in stream.text_stream:
+                full_response += text
+                streamed_any   = True
+                yield f"data: {_json.dumps({'text': text})}\n\n"
+            _fm2 = await stream.get_final_message()
+        _usage["rounds"] += 1
+        if hasattr(_fm2, "usage"):
+            _usage["input"]       += getattr(_fm2.usage, "input_tokens", 0)
+            _usage["output"]      += getattr(_fm2.usage, "output_tokens", 0)
+            _usage["cache_write"] += getattr(_fm2.usage, "cache_creation_input_tokens", 0)
+            _usage["cache_read"]  += getattr(_fm2.usage, "cache_read_input_tokens", 0)
+
+    yield {"_full_response": full_response, "_streamed_any": streamed_any}
+
+
+async def _stream_litellm(
+    orch, boss_cfg, boss_id, project_id, content,
+    messages, litellm_tools, model_name,
+    execution_mode, _usage,
+):
+    """litellm Streaming (Ollama / OpenAI / Anthropic API-Key) mit Tool-Loop."""
+    import litellm
+    from .orchestrator_llm import _resolve_model
+
+    model, api_base = _resolve_model(model_name, boss_cfg.llm.ollama_base_url)
+    _is_anthropic = model.startswith(("anthropic/", "claude-"))
+    loop_messages = _apply_cache_control(list(messages), _is_anthropic)
+    last_tool_signature: tuple[str, ...] | None = None
+    repeated_tool_signature_count = 0
+    _tools_disabled = False
+    full_response = ""
+    streamed_any = False
+
+    for _round in range(boss_cfg.max_tool_rounds):
+        kwargs = {
+            "model":       model,
+            "messages":    loop_messages,
+            "temperature": boss_cfg.llm.temperature,
+            "max_tokens":  boss_cfg.llm.max_tokens,
+            "stream":      True,
+            "stream_options": {"include_usage": True},
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+        if litellm_tools and not _tools_disabled:
+            kwargs["tools"] = litellm_tools
+
+        round_text = ""
+        accumulated_tcs: dict = {}
+
+        try:
+            _stream = await litellm.acompletion(**kwargs, drop_params=True)
+        except Exception as _e:
+            if "does not support tools" in str(_e) and "tools" in kwargs:
+                _tools_disabled = True
+                kwargs.pop("tools")
+                _stream = await litellm.acompletion(**kwargs, drop_params=True)
+            else:
+                raise
+
+        async for chunk in _stream:
+            if getattr(chunk, "usage", None):
+                _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)
+                _usage["output"]      += getattr(chunk.usage, "completion_tokens", 0)
+                _usage["cache_write"] += getattr(chunk.usage, "cache_creation_input_tokens", 0)
+                _usage["cache_read"]  += getattr(chunk.usage, "cache_read_input_tokens", 0)
+            choice = chunk.choices[0]
+            delta  = choice.delta
+            if delta.content:
+                round_text     += delta.content
+                full_response  += delta.content
+                streamed_any    = True
+                yield f"data: {_json.dumps({'text': delta.content})}\n\n"
+            if getattr(delta, "tool_calls", None):
+                for tc_d in delta.tool_calls:
+                    idx = tc_d.index
+                    if idx not in accumulated_tcs:
+                        accumulated_tcs[idx] = {"id": "", "name": "", "arguments": ""}
+                    if tc_d.id:
+                        accumulated_tcs[idx]["id"] = tc_d.id
+                    fn = getattr(tc_d, "function", None)
+                    if fn:
+                        if getattr(fn, "name", None):
+                            accumulated_tcs[idx]["name"] += fn.name
+                        if getattr(fn, "arguments", None):
+                            accumulated_tcs[idx]["arguments"] += fn.arguments
+
+        if not accumulated_tcs:
+            break
+
+        tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
+        _LOOP_EXCLUDE_LITELLM = {"file_write"}
+        signature = tuple(
+            f"{tc['name']}:{tc['arguments']}"
+            for tc in tc_list
+            if tc['name'] not in _LOOP_EXCLUDE_LITELLM
+        )
+        if signature and signature == last_tool_signature:
+            repeated_tool_signature_count += 1
+        else:
+            repeated_tool_signature_count = 0
+        last_tool_signature = signature
+        if repeated_tool_signature_count >= 4:
+            loop_messages.append({
+                "role": "user",
+                "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
+            })
+            final_resp = await orch._llm_call_single(model_name, boss_cfg, loop_messages, tools=None)
+            final_text = final_resp.choices[0].message.content or ""
+            if final_text:
+                full_response += final_text
+                streamed_any = True
+                yield f"data: {_json.dumps({'text': final_text})}\n\n"
+            break
+
+        def _safe_args(raw: str) -> str:
+            """Stellt sicher dass arguments valides JSON ist."""
+            if not raw:
+                return "{}"
+            try:
+                _json.loads(raw)
+                return raw
+            except _json.JSONDecodeError:
+                try:
+                    parts = [p for p in raw.split("}{") if p]
+                    if len(parts) > 1:
+                        merged = {}
+                        for p in parts:
+                            s = p if p.startswith("{") else "{" + p
+                            s = s if s.endswith("}") else s + "}"
+                            merged.update(_json.loads(s))
+                        return _json.dumps(merged)
+                except Exception as merge_err:
+                    logger.debug("Failed to merge split JSON objects: %s", merge_err)
+                return "{}"
+
+        if round_text:
+            loop_messages.append({"role": "assistant", "content": round_text})
+            await orch._sessions.append(project_id, MessageRole.ASSISTANT, round_text, agent_id=boss_id)
+
+        tool_results_text = []
+        for tc in tc_list:
+            _tc_args = tc.get("args", {})
+            _tc_detail = f"{tc['name']}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc['name']
+            yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+            await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
+            tool = orch._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
+            try:
+                tool_input = _json.loads(_safe_args(tc["arguments"]))
+                result = await orch._execute_tool(
+                    tool, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=tc["name"], tool_input=tool_input,
+                    execution_mode=execution_mode,
+                )
+            except Exception as te:
+                result = f"Tool-Fehler: {te}"
+            tool_results_text.append(
+                f"[Tool: {tc['name']}]\n{_json.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)}"
+            )
+
+        loop_messages.append({
+            "role":    "user",
+            "content": "Tool-Ergebnisse:\n" + "\n\n".join(tool_results_text),
+        })
+
+    yield {"_full_response": full_response, "_streamed_any": streamed_any}

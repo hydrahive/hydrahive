@@ -13,9 +13,12 @@ Ablauf:
 6. Antwort in Session speichern
 
 Teilmodule:
-- orchestrator_llm.py     — LLM-Call-Maschinerie (Failover, OAuth, Retry)
-- orchestrator_context.py — System-Prompt, Memory-Budget, Compaction
-- orchestrator_tools.py   — Tool-Utilities (Truncate, Signature, Execute)
+- orchestrator_llm.py      — LLM-Call-Maschinerie (Failover, OAuth, Retry)
+- orchestrator_context.py  — System-Prompt, Memory-Budget, Compaction
+- orchestrator_tools.py    — Tool-Utilities (Truncate, Signature, Execute)
+- orchestrator_mcp.py      — MCP + Plugin Tool-Integration
+- orchestrator_stream.py   — SSE-Streaming Response
+- orchestrator_dispatch.py — Tool-Loop, Worker-Dispatch, Synthese
 """
 
 import asyncio
@@ -61,6 +64,20 @@ from .orchestrator_tools import (
     _tool_call_signature as _tool_call_signature_fn,
     _execute_tool as _execute_tool_fn,
 )
+from .orchestrator_mcp import (
+    _load_mcp_server_map as _load_mcp_server_map_fn,
+    _mcp_schemas_for_agent as _mcp_schemas_for_agent_fn,
+    _plugin_schemas_for_agent as _plugin_schemas_for_agent_fn,
+    _execute_mcp_tool as _execute_mcp_tool_fn,
+)
+from .orchestrator_stream import handle_message_stream as _handle_message_stream_fn
+from .orchestrator_dispatch import (
+    _tool_loop as _tool_loop_fn,
+    _parse_dispatch_calls as _parse_dispatch_calls_fn,
+    _dispatch_parallel as _dispatch_parallel_fn,
+    _run_worker_task as _run_worker_task_fn,
+    _synthesize as _synthesize_fn,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +118,6 @@ def _load_workflow_prompt(project_dir) -> str:
         return ""
 
     # Topologische Reihenfolge via BFS ab Start-Node
-    # Start-Node = Node ohne eingehende Edges
     targets = {e["target"] for e in edges}
     start_ids = [n["id"] for n in nodes if n["id"] not in targets]
     if not start_ids:
@@ -160,7 +176,6 @@ def _load_workflow_prompt(project_dir) -> str:
             yes_label = config.get("yes_label", "Ja")
             no_label  = config.get("no_label", "Nein")
             lines.append(f"{step_num}. **[Entscheidung]** {condition}")
-            # Finde ausgehende Edges mit Label
             out_edges = edge_map.get(node["id"], [])
             for oe in out_edges:
                 el = oe.get("data", {}).get("label", "")
@@ -229,6 +244,8 @@ class Orchestrator:
         self._queue_last_used: dict[str, float]         = {}
         self._queue_idle_timeout_s: float               = 600.0
 
+    # ---------------------------------------------------------------- Tool Resolution
+
     def _execution_mode_for_request(
         self,
         agent_cfg: AgentConfig,
@@ -247,9 +264,7 @@ class Orchestrator:
         from .tool_loader import META_TOOLS
         permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
         if meta_only:
-            # Nur Meta-Tools laden (Phase 1: request_tools + Kern-Tools)
             ids = [t for t in META_TOOLS if t in (agent_cfg.tools or [])]
-            # request_tools immer dabei wenn es in agent.yaml steht
             if "request_tools" in (agent_cfg.tools or []) and "request_tools" not in ids:
                 ids.insert(0, "request_tools")
             return self._reg.tools_for_agent(ids, agent_permissions=permissions)
@@ -259,7 +274,6 @@ class Orchestrator:
             base_ids = [t.id for t in self._reg.tools_for_agent(
                 select_tools(agent_cfg.tools, user_text), agent_permissions=permissions
             )]
-        # Skill-Tool-Constraints anwenden (#48)
         if user_text:
             skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
             if skill_allowed or skill_blocked:
@@ -288,19 +302,14 @@ class Orchestrator:
         execution_mode: str | None = None,
         user_text: str = "",
     ) -> dict[str, object]:
-        # Bei der Ausführung alle erlaubten Tools ohne select_tools-Filter laden.
-        # select_tools ist nur für Token-Optimierung des LLM-Schemas gedacht,
-        # nicht für die Ausführungs-Whitelist.
         permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
         all_tools = {
             tool.id: tool
             for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
         }
-        # Plugin-Tools hinzufügen (#110) — zugewiesene Plugins direkt in die Tool-Map
         from .plugin_manager import plugin_manager as _pm
         for pt in _pm.get_plugin_tools_for_agent(agent_cfg.id):
             all_tools[pt.id] = pt
-        # Skill-Tool-Constraints anwenden (#48)
         if user_text:
             skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
             if skill_allowed or skill_blocked:
@@ -339,79 +348,22 @@ class Orchestrator:
     def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
         return _tool_call_signature_fn(tool_calls)
 
-    # ---------------------------------------------------------------- MCP
+    # ---------------------------------------------------------------- MCP (delegiert)
 
     def _load_mcp_server_map(self) -> dict[str, dict]:
-        """Lädt mcp_servers.json als {id: cfg} Dict."""
-        import json as _json
-        from pathlib import Path
-        try:
-            data = _json.loads(Path(self._mcp_servers_file).read_text())
-            return {s["id"]: s for s in data.get("servers", [])}
-        except Exception as e:
-            logger.debug("Failed to load MCP servers config: %s", e)
-            return {}
+        return _load_mcp_server_map_fn(self._mcp_servers_file)
 
     async def _mcp_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
-        """
-        Holt litellm-kompatible Tool-Schemas von allen MCP-Servern des Agenten.
-        Tool-Namen werden mit mcp_{server_id}_ präfixiert.
-        """
-        if not agent_cfg.mcp_servers:
-            return []
-        from .mcp_client import list_mcp_tools
-        server_map = self._load_mcp_server_map()
-        schemas: list[dict] = []
-        for server_id in agent_cfg.mcp_servers:
-            srv = server_map.get(server_id)
-            if not srv:
-                logger.warning("MCP-Server '%s' nicht in mcp_servers.json gefunden", server_id)
-                continue
-            tools = await list_mcp_tools(server_id, srv)
-            for t in tools:
-                schemas.append({
-                    "type": "function",
-                    "function": {
-                        "name":        f"mcp_{server_id}_{t['name']}",
-                        "description": f"[{server_id}] {t.get('description', '')}",
-                        "parameters":  t.get("inputSchema") or {"type": "object", "properties": {}},
-                    },
-                })
-        return schemas
+        return await _mcp_schemas_for_agent_fn(agent_cfg, self._mcp_servers_file)
 
     def _plugin_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
-        """Holt litellm-Tool-Schemas von Plugins die dem Agent zugewiesen sind (#110)."""
-        from .plugin_manager import plugin_manager as _pm
-        tools = _pm.get_plugin_tools_for_agent(agent_cfg.id)
-        if not tools:
-            return []
-        return [t.as_litellm_tool() for t in tools]
+        return _plugin_schemas_for_agent_fn(agent_cfg)
 
-    async def _execute_mcp_tool(
-        self,
-        boss_cfg:      AgentConfig,
-        prefixed_name: str,
-        args:          dict,
-    ) -> str:
-        """
-        Dispatcht einen MCP-Tool-Call an den richtigen Server.
-        Erwartet prefixed_name im Format mcp_{server_id}_{tool_name}.
-        """
-        from .mcp_client import call_mcp_tool
-        server_map = self._load_mcp_server_map()
-        for server_id in boss_cfg.mcp_servers:
-            prefix = f"mcp_{server_id}_"
-            if prefixed_name.startswith(prefix):
-                srv = server_map.get(server_id)
-                if not srv:
-                    raise ValueError(f"MCP-Server '{server_id}' nicht konfiguriert")
-                tool_name = prefixed_name[len(prefix):]
-                self._runtime.set_activity(boss_cfg.id, f"MCP: {server_id}/{tool_name}")
-                try:
-                    return await call_mcp_tool(server_id, srv, tool_name, args)
-                finally:
-                    self._runtime.set_activity(boss_cfg.id, "Denkt…")
-        raise ValueError(f"Kein MCP-Server für Tool '{prefixed_name}' gefunden")
+    async def _execute_mcp_tool(self, boss_cfg, prefixed_name, args):
+        return await _execute_mcp_tool_fn(
+            boss_cfg, self._mcp_servers_file, prefixed_name, args,
+            runtime=self._runtime,
+        )
 
     async def _finalize_tool_loop_response(
         self,
@@ -436,7 +388,7 @@ class Orchestrator:
         )
         return await self._llm_call(boss_cfg, summary_messages, tools=None)
 
-    # ------------------------------------------------------------------ public
+    # ------------------------------------------------------------------ Queue
 
     def _get_queue(self, project_id: str) -> asyncio.Queue:
         if project_id not in self._project_queues:
@@ -465,7 +417,6 @@ class Orchestrator:
                         queue.get(), timeout=self._queue_idle_timeout_s
                     )
                 except asyncio.TimeoutError:
-                    # Idle-Timeout: wenn keine Arbeit anliegt, Worker sauber beenden
                     if queue.empty():
                         break
                     continue
@@ -485,16 +436,16 @@ class Orchestrator:
         except asyncio.CancelledError:
             pass
         finally:
-            # Cleanup nur wenn das registrierte Task-Objekt dieses Worker-Task ist
             current = asyncio.current_task()
             task = self._queue_tasks.get(project_id)
             if task is current or task is None or task.done():
                 self._queue_tasks.pop(project_id, None)
-                # Queue nur entfernen wenn wirklich leer, damit keine Arbeit verloren geht
                 q = self._project_queues.get(project_id)
                 if q is not None and q.empty():
                     self._project_queues.pop(project_id, None)
                 self._queue_last_used.pop(project_id, None)
+
+    # ------------------------------------------------------------------ Public API
 
     async def handle_message(
         self,
@@ -563,15 +514,12 @@ class Orchestrator:
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
         messages = [{"role": "system", "content": system_prompt}]
-        # #348: Token-basierte History statt max_messages=10
-        # System-Prompt-Größe abziehen damit History nicht verdrängt wird (OpenClaw-Strategie)
         _sys_prompt_tokens = _estimate_tokens(system_prompt)
         _hist_budget = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens)
         _raw_history = self._sessions.get_context(
             project_id,
             max_history_tokens=_hist_budget,
         )
-        # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
         history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
         # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
@@ -581,7 +529,6 @@ class Orchestrator:
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + mcp_schemas)
-        # Plugin-Tools (#110)
         plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
         if plugin_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
@@ -620,7 +567,7 @@ class Orchestrator:
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
             return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
 
-        # 7. Tool-Calls verarbeiten (Agentic Loop mit max. 5 Runden)
+        # 7. Tool-Calls verarbeiten (Agentic Loop)
         final_response = response.choices[0].message.content or ""
         tool_calls = getattr(response.choices[0].message, "tool_calls", None)
 
@@ -658,10 +605,10 @@ class Orchestrator:
         self._runtime.set_activity(boss_cfg.id, None)
         return final_response, workers_used
 
-    # ----------------------------------------------------------------- private (delegiert an Sub-Module)
+    # ----------------------------------------------------------------- Delegiert an Sub-Module
 
     async def _compact_if_needed(self, project_id: str, boss_cfg, keep_last: int = 6) -> None:
-        return await _compact_if_needed_fn(self._sessions, project_id, boss_cfg, keep_last=keep_last)
+        return await _compact_if_needed_fn(self._sessions, project_id, boss_cfg, keep_last)
 
     @staticmethod
     def _context_mode(user_text: str) -> str:
@@ -682,19 +629,15 @@ class Orchestrator:
         return await _llm_call_single_fn(model_name, agent_cfg, messages, tools)
 
     async def _llm_call(self, agent_cfg, messages, tools):
-        """LLM-Call mit Failover. Ruft self._llm_call_single — bleibt mockbar für Tests."""
+        last_exc = None
         models = [agent_cfg.llm.model] + agent_cfg.llm.fallback_models
-        last_exc: Exception = RuntimeError("Kein Modell konfiguriert")
-        for i, model_name in enumerate(models):
+        for i, m in enumerate(models):
             try:
-                return await self._llm_call_single(model_name, agent_cfg, messages, tools)
+                return await self._llm_call_single(m, agent_cfg, messages, tools)
             except Exception as e:
                 last_exc = e
                 if i < len(models) - 1 and _should_failover(e):
-                    logger.warning(
-                        "Modell '%s' nicht verfügbar (%s) — Failover auf '%s'",
-                        model_name, str(e)[:80], models[i + 1],
-                    )
+                    logger.warning("LLM-Failover: '%s' → '%s' (%s)", m, models[i+1], str(e)[:80])
                     continue
                 raise
         raise last_exc
@@ -705,6 +648,7 @@ class Orchestrator:
     async def _openai_codex_call(self, agent_cfg, messages, tools, token_data, model_name, force_tools=True):
         return await _openai_codex_call(agent_cfg, messages, tools, token_data, model_name, force_tools)
 
+    # ----------------------------------------------------------------- Streaming (delegiert)
 
     async def handle_message_stream(
         self,
@@ -714,992 +658,28 @@ class Orchestrator:
         sender:      str = "user",
         execution_mode: str | None = None,
     ):
-        """
-        Streaming-Version von handle_message.
-        Yieldet SSE-Chunks: data: <text>\n\n
-        Bei Quota/Overload-Fehler: automatischer Failover auf fallback_models.
-        Abschluss: data: {done: true}\n\n
-        """
-        import json as _json
+        async for chunk in _handle_message_stream_fn(
+            self, project_id, project_cfg, content, sender, execution_mode
+        ):
+            yield chunk
 
-        boss_id  = project_cfg.agents.boss
-        boss_cfg = self._discovery.get(boss_id)
-        if not boss_cfg:
-            yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
-            return
+    # ----------------------------------------------------------------- Tool-Loop & Dispatch (delegiert)
 
-        # Stale Interrupt-Flags löschen (von eventuell vorangegangenem abgebrochenem Request)
-        from .tool_registry import clear_interrupt as _clear_interrupt
-        _clear_interrupt(project_id)
-
-        # Token-Usage Akkumulator für diese Session (über alle Tool-Runden)
-        _usage: dict[str, int] = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0}
-
-        # Session + System-Prompt aufbauen
-        user_msg_saved = False
-        await self._sessions.append(project_id, MessageRole.USER, content, agent_id=sender)
-        user_msg_saved = True
-
-        # Context-Kompaktierung vor dem LLM-Aufruf
-        await self._compact_if_needed(project_id, boss_cfg)
-
-        _refresh = content.strip().startswith("!refresh")
-        if _refresh:
-            content = content.strip()[8:].strip()
-        system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
-        worker_ctx = _build_worker_context(project_cfg, self._discovery)
-        if worker_ctx:
-            system_prompt = system_prompt + "\n\n" + worker_ctx
-        # #348: Token-basierte History statt max_messages=10 (OpenClaw-Strategie)
-        _sys_prompt_tokens_s = _estimate_tokens(system_prompt)
-        _hist_budget_s = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens_s)
-        _raw_history   = self._sessions.get_context(
-            project_id,
-            max_history_tokens=_hist_budget_s,
-        )
-        # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
-        history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
-        messages      = [{"role": "system", "content": system_prompt}] + history
-        # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
-        _use_meta = "request_tools" in (boss_cfg.tools or [])
-        boss_tools    = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=_use_meta)
-        litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
-        _mcp_s = await self._mcp_schemas_for_agent(boss_cfg)
-        if _mcp_s:
-            litellm_tools = (litellm_tools or []) + _mcp_s
-        # Plugin-Tools (#110)
-        _plg_s = self._plugin_schemas_for_agent(boss_cfg)
-        if _plg_s:
-            litellm_tools = (litellm_tools or []) + _plg_s
-        litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
-
-        import json as _json
-        sys_tokens_s  = _sys_prompt_tokens_s
-        hist_tokens_s = sum(
-            _estimate_tokens(m.get("content", "") if isinstance(m.get("content"), str) else "")
-            for m in history
-        )
-        tool_tokens_s = _estimate_tokens(_json.dumps(litellm_tools or []))
-        logger.info(
-            "token-budget [stream] proj=%s sys≈%d hist≈%d/%d (%d msgs) tools≈%d total≈%d",
-            project_id, sys_tokens_s, hist_tokens_s, _hist_budget_s, len(history), tool_tokens_s,
-            sys_tokens_s + hist_tokens_s + tool_tokens_s,
+    async def _tool_loop(self, boss_cfg, project_id, project_cfg, messages, response,
+                         max_rounds=None, execution_mode=None):
+        return await _tool_loop_fn(
+            self, boss_cfg, project_id, project_cfg, messages, response,
+            max_rounds, execution_mode,
         )
 
-        models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
+    def _parse_dispatch_calls(self, tool_calls):
+        return _parse_dispatch_calls_fn(tool_calls)
 
-        _provider_err = check_llm_provider_available(models_to_try, ollama_base_url=boss_cfg.llm.ollama_base_url)
-        if _provider_err:
-            yield f"data: {_json.dumps({'text': _provider_err})}\n\n"
-            yield "data: {\"done\": true}\n\n"
-            return
+    async def _dispatch_parallel(self, project_cfg, dispatches, context):
+        return await _dispatch_parallel_fn(self, project_cfg, dispatches, context)
 
-        try:
-            full_response = ""
+    async def _run_worker_task(self, dispatch):
+        return await _run_worker_task_fn(self, dispatch)
 
-            for _attempt_idx, _model_name in enumerate(models_to_try):
-                try:
-                    full_response = ""
-                    streamed_any  = False
-
-                    # --- OpenAI Codex (ChatGPT Plus OAuth) ---
-                    _is_codex = _model_name.startswith("openai-codex/")
-                    if _is_codex:
-                        codex_token = _load_openai_codex_token()
-                        if codex_token:
-                            # Non-streaming call, simuliere SSE danach
-                            codex_resp = await self._openai_codex_call(
-                                boss_cfg, messages, litellm_tools, codex_token, _model_name
-                            )
-                            msg = codex_resp.choices[0].message
-                            # Tool-Loop (gleiche Logik wie litellm-Pfad unten)
-                            cur_messages = list(messages)
-                            last_signature: tuple[str, ...] | None = None
-                            repeated_signature_count = 0
-                            for _round in range(boss_cfg.max_tool_rounds):
-                                if not getattr(msg, "tool_calls", None):
-                                    break
-                                signature = self._tool_call_signature(msg.tool_calls)
-                                if signature and signature == last_signature:
-                                    repeated_signature_count += 1
-                                else:
-                                    repeated_signature_count = 0
-                                last_signature = signature
-                                if repeated_signature_count >= 4:  # #359: 3→4, weniger aggressiv
-                                    final = await self._finalize_tool_loop_response(
-                                        boss_cfg,
-                                        cur_messages,
-                                        reason="wiederholte Tool-Signatur",
-                                        execution_mode=execution_mode,
-                                    )
-                                    msg = final.choices[0].message
-                                    break
-                                # Tool-Calls ausführen
-                                tool_results = []
-                                asst_tc = [
-                                    {"id": tc.id, "item_id": getattr(tc, "item_id", tc.id), "type": "function",
-                                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                                    for tc in msg.tool_calls
-                                ]
-                                cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
-                                for tc in msg.tool_calls:
-                                    _tc_args = _json.loads(tc.function.arguments or "{}")
-                                    _tc_detail = f"{tc.function.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc.function.name
-                                    yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
-                                    # Tool-Call in Session speichern für Reload-Persistenz
-                                    await self._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
-                                    args = _json.loads(tc.function.arguments or "{}")
-                                    if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                                        try:
-                                            result = await self._execute_mcp_tool(boss_cfg, tc.function.name, args)
-                                        except Exception as te:
-                                            result = {"error": str(te)}
-                                    else:
-                                        tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode, user_text=content)
-                                        try:
-                                            result = await self._execute_tool(
-                                                tool,
-                                                boss_cfg=boss_cfg,
-                                                project_id=project_id,
-                                                tool_name=tc.function.name,
-                                                tool_input=args,
-                                                execution_mode=execution_mode,
-                                            )
-                                        except Exception as te:
-                                            result = {"error": str(te)}
-                                    result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result)
-                                    tool_results.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
-                                cur_messages.extend(tool_results)
-                                next_resp = await self._openai_codex_call(
-                                    boss_cfg, cur_messages, litellm_tools, codex_token, _model_name,
-                                    force_tools=False,
-                                )
-                                msg = next_resp.choices[0].message
-                            # Antwort streamen
-                            text = msg.content or ""
-                            full_response = text
-                            streamed_any = bool(text)
-                            if text:
-                                yield f"data: {_json.dumps({'text': text})}\n\n"
-                            break  # Modell hat geantwortet
-
-                    # --- Claude Max OAuth ---
-                    _is_claude    = _model_name.startswith(("claude-", "anthropic/"))
-                    oauth_token   = _load_claude_oauth_token() if _is_claude else ""
-
-                    if oauth_token:
-                        # Anthropic SDK Streaming
-                        import anthropic as _anthropic
-                        client = _anthropic.AsyncAnthropic(
-                            api_key="",
-                            auth_token=oauth_token,
-                            default_headers={
-                                "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
-                                "user-agent":     "claude-cli/2.1.62",
-                                "x-app":          "cli",
-                            },
-                        )
-                        system_msg = ""
-                        raw: list[dict] = []
-                        for m in messages:
-                            if m.get("role") == "system":
-                                system_msg = m.get("content", "")
-                            else:
-                                raw.append({"role": m["role"], "content": m.get("content") or ""})
-                        # Consecutive gleiche Rollen mergen
-                        filtered: list[dict] = []
-                        for m in raw:
-                            if filtered and filtered[-1]["role"] == m["role"]:
-                                filtered[-1]["content"] += "\n\n" + m["content"]
-                            else:
-                                filtered.append(dict(m))
-
-                        model = _model_name
-                        for prefix in ("openai/", "anthropic/", "claude/"):
-                            if model.startswith(prefix):
-                                model = model[len(prefix):]
-                                break
-                        if not model.startswith("claude-"):
-                            model = "claude-haiku-4-5-20251001"
-
-                        oauth_system = [
-                            {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
-                        ]
-                        if system_msg:
-                            # #351: cache_control auf System-Prompt — größter Cache-Gewinn
-                            oauth_system.append({"type": "text", "text": system_msg,
-                                                 "cache_control": {"type": "ephemeral"}})
-
-                        # #351: Ältere History-Messages cachen (max 3 Breakpoints, Anthropic-Limit)
-                        _cache_cutoff = max(0, len(filtered) - 4)
-                        _hcc = 0
-                        for _idx, _fm in enumerate(filtered):
-                            if _hcc >= 3:
-                                break
-                            if _idx < _cache_cutoff and _fm.get("role") in ("user", "assistant"):
-                                _ct = _fm.get("content", "")
-                                if isinstance(_ct, str) and _ct:
-                                    filtered[_idx] = {**_fm, "content": [
-                                        {"type": "text", "text": _ct, "cache_control": {"type": "ephemeral"}}
-                                    ]}
-                                    _hcc += 1
-
-                        kwargs: dict = {
-                            "model":      model,
-                            "max_tokens": boss_cfg.llm.max_tokens,
-                            "messages":   filtered,
-                            "system":     oauth_system,
-                        }
-                        if litellm_tools:
-                            kwargs["tools"] = [
-                                {
-                                    "name":         t["function"]["name"],
-                                    "description":  t["function"].get("description", ""),
-                                    "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
-                                }
-                                for t in litellm_tools
-                            ]
-
-                        # Agentic Tool-Loop für OAuth-Streaming
-                        last_tool_signature: tuple[str, ...] | None = None
-                        repeated_tool_signature_count = 0
-                        _oauth_file_read_cache: dict[str, str] = {}  # path → first result (dedup)
-                        for _round in range(boss_cfg.max_tool_rounds):
-                            _round_text = ""
-                            async with client.messages.stream(**kwargs) as stream:
-                                async for text in stream.text_stream:
-                                    full_response += text
-                                    _round_text   += text
-                                    streamed_any   = True
-                                    yield f"data: {_json.dumps({'text': text})}\n\n"
-                                final_msg = await stream.get_final_message()
-                            _usage["rounds"] += 1
-                            if hasattr(final_msg, "usage"):
-                                _usage["input"]       += getattr(final_msg.usage, "input_tokens", 0)
-                                _usage["output"]      += getattr(final_msg.usage, "output_tokens", 0)
-                                _usage["cache_write"] += getattr(final_msg.usage, "cache_creation_input_tokens", 0)
-                                _usage["cache_read"]  += getattr(final_msg.usage, "cache_read_input_tokens", 0)
-
-                            tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
-                            if not tool_use_blocks:
-                                break
-                            # Zwischentext persistent speichern (vor Tool-Ausführung)
-                            if _round_text.strip():
-                                await self._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
-                            _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
-                            signature = tuple(
-                                f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
-                                for block in tool_use_blocks
-                                if block.name not in _LOOP_EXCLUDE_OAUTH
-                            )
-                            if signature and signature == last_tool_signature:
-                                repeated_tool_signature_count += 1
-                            else:
-                                repeated_tool_signature_count = 0
-                            last_tool_signature = signature
-                            if repeated_tool_signature_count >= 4:  # #359: weniger aggressiv
-                                kwargs_final = dict(kwargs)
-                                kwargs_final.pop("tools", None)
-                                kwargs_final["messages"] = filtered + [
-                                    {
-                                        "role": "user",
-                                        "content": [
-                                            {
-                                                "type": "text",
-                                                "text": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
-                                            }
-                                        ],
-                                    }
-                                ]
-                                async with client.messages.stream(**kwargs_final) as stream:
-                                    async for text in stream.text_stream:
-                                        full_response += text
-                                        streamed_any = True
-                                        yield f"data: {_json.dumps({'text': text})}\n\n"
-                                    _fm = await stream.get_final_message()
-                                _usage["rounds"] += 1
-                                if hasattr(_fm, "usage"):
-                                    _usage["input"]       += getattr(_fm.usage, "input_tokens", 0)
-                                    _usage["output"]      += getattr(_fm.usage, "output_tokens", 0)
-                                    _usage["cache_write"] += getattr(_fm.usage, "cache_creation_input_tokens", 0)
-                                    _usage["cache_read"]  += getattr(_fm.usage, "cache_read_input_tokens", 0)
-                                break
-                            if _round == boss_cfg.max_tool_rounds - 2:
-                                # Vorletzter Durchlauf — Agent soll jetzt abschließen
-                                filtered.append({"role": "user", "content": [{"type": "text", "text": "[System: Letzte Tool-Runde — fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]})
-                                kwargs["messages"] = filtered
-
-                            tool_results = []
-                            any_tool_error = False
-                            _oauth_loaded_cats: set[str] = locals().get("_oauth_loaded_cats", set())  # type: ignore[assignment]
-                            for block in tool_use_blocks:
-                                _tc_input = block.input or {}
-                                _tc_detail = f"{block.name}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_input.items())})" if _tc_input else block.name
-                                yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
-                                await self._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id)
-                                # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
-                                if block.name == "request_tools":
-                                    try:
-                                        categories = (block.input or {}).get("categories", [])
-                                        new_cats = [c for c in categories if c not in _oauth_loaded_cats]
-                                        added_count = 0
-                                        if new_cats:
-                                            new_schemas = self._category_tools_schema(boss_cfg, execution_mode, new_cats)
-                                            existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
-                                            new_tool_defs = [
-                                                {
-                                                    "name": s["function"]["name"],
-                                                    "description": s["function"].get("description", ""),
-                                                    "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
-                                                }
-                                                for s in new_schemas
-                                                if s["function"]["name"] not in existing_names
-                                            ]
-                                            if new_tool_defs:
-                                                kwargs.setdefault("tools", [])
-                                                kwargs["tools"].extend(new_tool_defs)
-                                                added_count = len(new_tool_defs)
-                                            _oauth_loaded_cats.update(new_cats)
-                                        result = {"ok": True, "categories": categories, "tools_added": added_count,
-                                                  "note": "Tools geladen — direkt verwendbar."}
-                                    except Exception as te:
-                                        result = {"error": f"request_tools: {te}"}
-                                elif block.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                                    try:
-                                        result = await self._execute_mcp_tool(boss_cfg, block.name, block.input or {})
-                                    except Exception as te:
-                                        result = {"error": str(te)}
-                                else:
-                                    tool = self._resolve_allowed_tool(boss_cfg, block.name, execution_mode, user_text=content)
-                                    if tool:
-                                        try:
-                                            # file_read Deduplication
-                                            if block.name == "file_read":
-                                                _rpath = (block.input or {}).get("path", "")
-                                                if _rpath and _rpath in _oauth_file_read_cache:
-                                                    result = _oauth_file_read_cache[_rpath]
-                                                    logger.debug("file_read dedup (oauth): '%s'", _rpath)
-                                                else:
-                                                    result = await self._execute_tool(
-                                                        tool,
-                                                        boss_cfg=boss_cfg,
-                                                        project_id=project_id,
-                                                        tool_name=block.name,
-                                                        tool_input=block.input,
-                                                        execution_mode=execution_mode,
-                                                    )
-                                                    if _rpath:
-                                                        _oauth_file_read_cache[_rpath] = result
-                                            else:
-                                                result = await self._execute_tool(
-                                                    tool,
-                                                    boss_cfg=boss_cfg,
-                                                    project_id=project_id,
-                                                    tool_name=block.name,
-                                                    tool_input=block.input,
-                                                    execution_mode=execution_mode,
-                                                )
-                                        except Exception as te:
-                                            result = {"error": str(te)}
-                                    else:
-                                        result = {"error": f"Tool '{block.name}' ist in diesem Modus nicht erlaubt"}
-                                if isinstance(result, dict) and "error" in result:
-                                    any_tool_error = True
-                                result_str = _truncate_tool_result(_json.dumps(result, ensure_ascii=False))
-                                tool_results.append({
-                                    "type":        "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content":     result_str,
-                                })
-                            # Loop-Counter zurücksetzen wenn ein Tool-Fehler aufgetreten ist
-                            # (verhindert fälschliche Loop-Erkennung bei Retry nach Fehler)
-                            if any_tool_error:
-                                repeated_tool_signature_count = 0
-
-                            asst_content = []
-                            for b in final_msg.content:
-                                if b.type == "text":
-                                    asst_content.append({"type": "text", "text": b.text})
-                                elif b.type == "tool_use":
-                                    asst_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
-                            filtered.append({"role": "assistant", "content": asst_content})
-                            filtered.append({"role": "user",      "content": tool_results})
-                            kwargs["messages"] = filtered
-                        else:
-                            # Loop normal beendet (kein break nach letzter Runde)
-                            # Finaler Call ohne Tools damit der Agent abschließen kann
-                            kwargs_final = dict(kwargs)
-                            kwargs_final.pop("tools", None)
-                            kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]}]
-                            async with client.messages.stream(**kwargs_final) as stream:
-                                async for text in stream.text_stream:
-                                    full_response += text
-                                    streamed_any   = True
-                                    yield f"data: {_json.dumps({'text': text})}\n\n"
-                                _fm2 = await stream.get_final_message()
-                            _usage["rounds"] += 1
-                            if hasattr(_fm2, "usage"):
-                                _usage["input"]       += getattr(_fm2.usage, "input_tokens", 0)
-                                _usage["output"]      += getattr(_fm2.usage, "output_tokens", 0)
-                                _usage["cache_write"] += getattr(_fm2.usage, "cache_creation_input_tokens", 0)
-                                _usage["cache_read"]  += getattr(_fm2.usage, "cache_read_input_tokens", 0)
-
-                    else:
-                        # litellm Streaming (Ollama / OpenAI) mit Tool-Loop
-                        import json as _json2
-                        model, api_base = self._resolve_model(_model_name, boss_cfg.llm.ollama_base_url)
-                        # #351: Prompt Caching — cache_control auf System-Prompt + stabile History
-                        _is_anthropic = model.startswith(("anthropic/", "claude-"))
-                        loop_messages = _apply_cache_control(list(messages), _is_anthropic)
-                        last_tool_signature: tuple[str, ...] | None = None
-                        repeated_tool_signature_count = 0
-                        _tools_disabled = False  # wird gesetzt wenn Modell keine Tools unterstützt
-
-                        for _round in range(boss_cfg.max_tool_rounds):
-                            kwargs = {
-                                "model":       model,
-                                "messages":    loop_messages,
-                                "temperature": boss_cfg.llm.temperature,
-                                "max_tokens":  boss_cfg.llm.max_tokens,
-                                "stream":      True,
-                                "stream_options": {"include_usage": True},  # #351: Cache-Usage im Stream
-                            }
-                            if api_base:
-                                kwargs["api_base"] = api_base
-                            if litellm_tools and not _tools_disabled:
-                                kwargs["tools"] = litellm_tools
-
-                            round_text = ""
-                            accumulated_tcs: dict = {}  # index → {id, name, arguments}
-
-                            try:
-                              _stream = await litellm.acompletion(**kwargs, drop_params=True)
-                            except Exception as _e:
-                                if "does not support tools" in str(_e) and "tools" in kwargs:
-                                    _tools_disabled = True
-                                    kwargs.pop("tools")
-                                    _stream = await litellm.acompletion(**kwargs, drop_params=True)
-                                else:
-                                    raise
-
-                            async for chunk in _stream:
-                                # litellm liefert usage im letzten Chunk (stream_options)
-                                if getattr(chunk, "usage", None):
-                                    _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)
-                                    _usage["output"]      += getattr(chunk.usage, "completion_tokens", 0)
-                                    _usage["cache_write"] += getattr(chunk.usage, "cache_creation_input_tokens", 0)
-                                    _usage["cache_read"]  += getattr(chunk.usage, "cache_read_input_tokens", 0)
-                                choice = chunk.choices[0]
-                                delta  = choice.delta
-                                if delta.content:
-                                    round_text     += delta.content
-                                    full_response  += delta.content
-                                    streamed_any    = True
-                                    yield f"data: {_json.dumps({'text': delta.content})}\n\n"
-                                # Tool-Call-Deltas akkumulieren
-                                if getattr(delta, "tool_calls", None):
-                                    for tc_d in delta.tool_calls:
-                                        idx = tc_d.index
-                                        if idx not in accumulated_tcs:
-                                            accumulated_tcs[idx] = {"id": "", "name": "", "arguments": ""}
-                                        if tc_d.id:
-                                            accumulated_tcs[idx]["id"] = tc_d.id
-                                        fn = getattr(tc_d, "function", None)
-                                        if fn:
-                                            if getattr(fn, "name", None):
-                                                accumulated_tcs[idx]["name"] += fn.name
-                                            if getattr(fn, "arguments", None):
-                                                accumulated_tcs[idx]["arguments"] += fn.arguments
-
-                            # Kein Tool-Call → fertig
-                            if not accumulated_tcs:
-                                break
-
-                            # Assistant-Nachricht mit tool_calls in History
-                            tc_list = [accumulated_tcs[i] for i in sorted(accumulated_tcs)]
-                            _LOOP_EXCLUDE_LITELLM = {"file_write"}
-                            signature = tuple(
-                                f"{tc['name']}:{tc['arguments']}"
-                                for tc in tc_list
-                                if tc['name'] not in _LOOP_EXCLUDE_LITELLM
-                            )
-                            if signature and signature == last_tool_signature:
-                                repeated_tool_signature_count += 1
-                            else:
-                                repeated_tool_signature_count = 0
-                            last_tool_signature = signature
-                            if repeated_tool_signature_count >= 4:  # #359: weniger aggressiv
-                                loop_messages.append({
-                                    "role": "user",
-                                    "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
-                                })
-                                final_resp = await self._llm_call_single(_model_name, boss_cfg, loop_messages, tools=None)
-                                final_text = final_resp.choices[0].message.content or ""
-                                if final_text:
-                                    full_response += final_text
-                                    streamed_any = True
-                                    yield f"data: {_json.dumps({'text': final_text})}\n\n"
-                                break
-
-                            def _safe_args(raw: str) -> str:
-                                """Stellt sicher dass arguments valides JSON ist."""
-                                if not raw:
-                                    return "{}"
-                                try:
-                                    _json2.loads(raw)
-                                    return raw
-                                except _json2.JSONDecodeError:
-                                    # Versuche zu reparieren: doppelte Objekte zusammenführen
-                                    try:
-                                        parts = [p for p in raw.split("}{") if p]
-                                        if len(parts) > 1:
-                                            merged = {}
-                                            for p in parts:
-                                                s = p if p.startswith("{") else "{" + p
-                                                s = s if s.endswith("}") else s + "}"
-                                                merged.update(_json2.loads(s))
-                                            return _json2.dumps(merged)
-                                    except Exception as merge_err:
-                                        logger.debug("Failed to merge split JSON objects: %s", merge_err)
-                                    return "{}"
-
-                            # Assistant-Nachricht ohne tool_calls einfügen (plain text) +
-                            # Tools ausführen und Ergebnisse als user-Nachricht — umgeht
-                            # litellm Ollama-Transformation die mit tool_call-History crasht
-                            if round_text:
-                                loop_messages.append({"role": "assistant", "content": round_text})
-                                # Zwischentext persistent in Session speichern
-                                await self._sessions.append(project_id, MessageRole.ASSISTANT, round_text, agent_id=boss_id)
-
-                            tool_results_text = []
-                            for tc in tc_list:
-                                _tc_args = tc.get("args", {})
-                                _tc_detail = f"{tc['name']}({', '.join(f'{k}={repr(v)[:50]}' for k,v in _tc_args.items())})" if _tc_args else tc['name']
-                                yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
-                                await self._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
-                                tool = self._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
-                                try:
-                                    tool_input = _json2.loads(_safe_args(tc["arguments"]))
-                                    result = await self._execute_tool(
-                                        tool,
-                                        boss_cfg=boss_cfg,
-                                        project_id=project_id,
-                                        tool_name=tc["name"],
-                                        tool_input=tool_input,
-                                        execution_mode=execution_mode,
-                                    )
-                                except Exception as te:
-                                    result = f"Tool-Fehler: {te}"
-                                tool_results_text.append(
-                                    f"[Tool: {tc['name']}]\n{_json2.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)}"
-                                )
-
-                            loop_messages.append({
-                                "role":    "user",
-                                "content": "Tool-Ergebnisse:\n" + "\n\n".join(tool_results_text),
-                            })
-
-                    break  # Erfolgreich — kein weiterer Failover nötig
-
-                except Exception as model_exc:
-                    can_failover = (
-                        not streamed_any
-                        and _attempt_idx < len(models_to_try) - 1
-                        and _should_failover(model_exc)
-                    )
-                    if can_failover:
-                        next_model = models_to_try[_attempt_idx + 1]
-                        logger.warning(
-                            "Streaming-Failover: '%s' → '%s' (%s)",
-                            _model_name, next_model, str(model_exc)[:80],
-                        )
-                        yield f"data: {_json.dumps({'info': f'Modell nicht verfügbar, wechsle zu {next_model}…'})}\n\n"
-                        continue
-                    raise
-
-            # Antwort in Session speichern (mit echten Token-Counts aus API)
-            _is_fallback = _model_name != boss_cfg.llm.model
-            _stream_meta: dict = {}
-            if _usage.get("input") or _usage.get("output"):
-                _stream_meta = {
-                    "model":              _model_name,
-                    "input_tokens":       _usage.get("input",       0),
-                    "output_tokens":      _usage.get("output",      0),
-                    "cache_write_tokens": _usage.get("cache_write", 0),
-                    "cache_read_tokens":  _usage.get("cache_read",  0),
-                }
-            await self._sessions.append(
-                project_id, MessageRole.ASSISTANT,
-                full_response, agent_id=boss_cfg.id,
-                **_stream_meta,
-            )
-            total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
-            if total_tokens > 0 and _tool_reg._rate_limiter is not None:
-                _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
-            _done_payload: dict = {'done': True, 'session_id': None, 'usage': _usage}
-            if _is_fallback:
-                _done_payload['model'] = _model_name
-                _done_payload['is_fallback'] = True
-            yield f"data: {_json.dumps(_done_payload)}\n\n"
-
-        except Exception as e:
-            err_str = str(e).lower()
-            _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
-                               "error in input stream", "input too long", "request too large")
-            if any(s in err_str for s in _context_errors):
-                logger.warning(
-                    "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
-                    project_id, e,
-                )
-                await self._sessions.new_session(project_id)
-                yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
-            else:
-                logger.error("Streaming-Fehler: %s", e)
-                if user_msg_saved:
-                    await self._sessions.pop_last(project_id)
-                yield f"data: {_json.dumps({'error': str(e)})}\n\n"
-
-    async def _tool_loop(
-        self,
-        boss_cfg:    AgentConfig,
-        project_id:  str,
-        project_cfg: ProjectConfig,
-        messages:    list[dict],
-        response,
-        max_rounds:  int | None = None,
-        execution_mode: str | None = None,
-    ) -> tuple[str, list[str]]:
-        """
-        Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
-        Dispatch-Tasks werden parallel ausgeführt, andere Tools sequentiell.
-        Max. max_rounds Runden um Endlosschleifen zu vermeiden.
-        Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
-        """
-        # user_text für on-demand Tool-Filterung aus letzter User-Message
-        _last_user = next(
-            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
-            "",
-        )
-        # Im _tool_loop immer alle Tools (Kategorien wurden ggf. schon per request_tools nachgeladen)
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
-        litellm_tools: list[dict] = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
-        _mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
-        if _mcp_schemas:
-            litellm_tools = litellm_tools + _mcp_schemas
-        # Plugin-Tools (#110)
-        _plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
-        if _plugin_schemas:
-            litellm_tools = litellm_tools + _plugin_schemas
-        # Dedup über alles (MCP + Plugins können Duplikate erzeugen)
-        litellm_tools = _dedup_tools(litellm_tools)
-        _loaded_categories: set[str] = set()  # Tracking für On-Demand-Kategorien
-        _file_read_cache: dict[str, str] = {}  # path → first result (dedup across rounds)
-        current_messages = list(messages)
-        workers_used: list[str] = []
-        last_signature: tuple[str, ...] | None = None
-        repeated_signature_count = 0
-        max_rounds = max_rounds or boss_cfg.max_tool_rounds
-
-        for _round in range(max_rounds):
-            tool_calls = getattr(response.choices[0].message, "tool_calls", None)
-            if not tool_calls:
-                return response.choices[0].message.content or "", workers_used
-
-            signature = self._tool_call_signature(tool_calls)
-            if signature and signature == last_signature:
-                repeated_signature_count += 1
-            else:
-                repeated_signature_count = 0
-            last_signature = signature
-
-            if repeated_signature_count >= 2:
-                logger.warning(
-                    "Tool-Loop: wiederholte Tool-Signatur erkannt (%s) — erzwinge Abschluss",
-                    ", ".join(signature[:3])[:180],
-                )
-                try:
-                    final = await self._finalize_tool_loop_response(
-                        boss_cfg,
-                        current_messages,
-                        reason="wiederholte Tool-Signatur",
-                        execution_mode=execution_mode,
-                    )
-                    return final.choices[0].message.content or "", workers_used
-                except Exception as e:
-                    logger.error("Tool-Loop Finalisierung fehlgeschlagen: %s", e)
-                    return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
-
-            # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
-            if _round == max_rounds - 1:
-                logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
-                try:
-                    from .tool_registry import _notify as _tr_notify
-                    _tr_notify(project_id, "agent_warning",
-                               f"Tool-Loop Limit erreicht",
-                               f"Agent hat {max_rounds} Runden durchlaufen — Antwort wird erzwungen.",
-                               link=f"/chat/{project_id}")
-                except Exception as e:
-                    logger.debug("Failed to send tool-loop warning notification: %s", e)
-                try:
-                    final = await self._finalize_tool_loop_response(
-                        boss_cfg,
-                        current_messages,
-                        reason=f"max_rounds={max_rounds}",
-                        execution_mode=execution_mode,
-                    )
-                    return final.choices[0].message.content or "", workers_used
-                except Exception as e:
-                    logger.error("Tool-Loop max_rounds Finalisierung fehlgeschlagen: %s", e)
-                    return "[Fehler] Konnte keine Antwort erzeugen — bitte erneut versuchen.", workers_used
-
-            # Assistant-Message mit Tool-Calls in History aufnehmen
-            current_messages.append({
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                     "id": tc.id,
-                     "item_id": getattr(tc, "item_id", tc.id),
-                     "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tool_calls
-                ],
-            })
-
-            # dispatch_task separat → paralleles Worker-Dispatch
-            # request_tools separat → on-demand Tool-Kategorien nachladen
-            dispatch_tcs     = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
-            request_tool_tcs = [tc for tc in tool_calls if tc.function.name == "request_tools"]
-            other_tcs        = [tc for tc in tool_calls if tc.function.name not in ("dispatch_task", "request_tools")]
-
-            tool_results: dict[str, str] = {}  # call_id → content
-
-            # On-Demand Tool-Kategorien nachladen
-            for tc in request_tool_tcs:
-                try:
-                    args       = json.loads(tc.function.arguments)
-                    categories = args.get("categories", [])
-                    new_cats   = [c for c in categories if c not in _loaded_categories]
-                    if new_cats:
-                        new_schemas = self._category_tools_schema(boss_cfg, execution_mode, new_cats)
-                        existing    = {t["function"]["name"] for t in litellm_tools}
-                        added = [s for s in new_schemas if s["function"]["name"] not in existing]
-                        litellm_tools.extend(added)
-                        _loaded_categories.update(new_cats)
-                        logger.info(
-                            "request_tools: +%d Tools (Kategorien: %s, Agent: %s)",
-                            len(added), new_cats, boss_cfg.id,
-                        )
-                    tool_results[tc.id] = json.dumps({
-                        "ok": True,
-                        "categories": categories,
-                        "tools_added": len([c for c in categories if c not in (_loaded_categories - set(new_cats))]),
-                        "note": "Du kannst die geladenen Tools jetzt direkt verwenden.",
-                    }, ensure_ascii=False)
-                except Exception as e:
-                    tool_results[tc.id] = f"[Fehler] request_tools: {e}"
-
-            if dispatch_tcs:
-                dispatches = self._parse_dispatch_calls(dispatch_tcs)
-                results = await self._dispatch_parallel(project_cfg, dispatches, context="")
-                for res in results:
-                    call_id = next(
-                        (tc.id for tc in dispatch_tcs
-                         if json.loads(tc.function.arguments).get("worker_id") == res.worker_id),
-                        "unknown"
-                    )
-                    content = res.result if res.success else f"[Fehler] {res.error}"
-                    tool_results[call_id] = content
-                    if res.worker_id not in workers_used:
-                        workers_used.append(res.worker_id)
-
-            for tc in other_tcs:
-                args = json.loads(tc.function.arguments)
-
-                # MCP-Tool? (Prefix mcp_{server_id}_)
-                if tc.function.name.startswith("mcp_") and boss_cfg.mcp_servers:
-                    try:
-                        result = await self._execute_mcp_tool(boss_cfg, tc.function.name, args)
-                        tool_results[tc.id] = _truncate_tool_result(
-                            result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
-                        )
-                    except Exception as e:
-                        logger.error("MCP-Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
-                        tool_results[tc.id] = f"[Fehler] {e}"
-                    continue
-
-                tool = self._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
-                if tool is None:
-                    tool_results[tc.id] = f"[Fehler] Tool in diesem Modus nicht erlaubt: {tc.function.name}"
-                    continue
-                try:
-                    # file_read Deduplication: gleiche Datei nicht mehrfach lesen
-                    if tc.function.name == "file_read":
-                        _read_path = args.get("path", "")
-                        if _read_path and _read_path in _file_read_cache:
-                            tool_results[tc.id] = _file_read_cache[_read_path]
-                            logger.debug("file_read dedup: '%s' bereits gelesen", _read_path)
-                            continue
-
-                    result = await self._execute_tool(
-                        tool,
-                        boss_cfg=boss_cfg,
-                        project_id=project_id,
-                        tool_name=tc.function.name,
-                        tool_input=args,
-                        execution_mode=execution_mode,
-                    )
-                    result_str = _truncate_tool_result(json.dumps(result, ensure_ascii=False))
-                    tool_results[tc.id] = result_str
-                    # Cache befüllen
-                    if tc.function.name == "file_read":
-                        _read_path = args.get("path", "")
-                        if _read_path:
-                            _file_read_cache[_read_path] = result_str
-                except Exception as e:
-                    logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, e)
-                    tool_results[tc.id] = f"[Fehler] {e}"
-
-            # Tool-Results in Messages einbauen
-            for tc in tool_calls:
-                current_messages.append({
-                    "role":         "tool",
-                    "tool_call_id": tc.id,
-                    "content":      tool_results.get(tc.id, ""),
-                })
-
-            # Nächste LLM-Runde
-            try:
-                response = await self._llm_call(boss_cfg, current_messages, litellm_tools)
-            except Exception as e:
-                logger.error("LLM-Fehler in Tool-Loop: %s", e)
-                return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", workers_used
-
-        return response.choices[0].message.content or "", workers_used
-
-    def _parse_dispatch_calls(self, tool_calls: list) -> list[dict]:
-        """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls."""
-        dispatches = []
-        for tc in tool_calls:
-            if tc.function.name != "dispatch_task":
-                continue
-            try:
-                args = json.loads(tc.function.arguments)
-                dispatches.append({
-                    "call_id":   tc.id,
-                    "worker_id": args["worker_id"],
-                    "task":      args["task"],
-                    "context":   args.get("context", ""),
-                })
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning("Ungültiger dispatch_task-Aufruf: %s", e)
-        return dispatches
-
-    async def _dispatch_parallel(
-        self,
-        project_cfg: ProjectConfig,
-        dispatches:  list[dict],
-        context:     str,
-    ) -> list[DispatchResult]:
-        """
-        Alle Tasks parallel ausführen (AG2: paralleles Dispatching für Swarm).
-        Nur Agenten die dem Projekt zugewiesen sind dürfen gespawnt werden (AG5).
-        """
-        allowed_workers = set(project_cfg.agents.workers)
-        tasks = []
-        for d in dispatches:
-            if d["worker_id"] not in allowed_workers:
-                logger.warning(
-                    "dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"]
-                )
-                async def _rejected(d=d) -> DispatchResult:
-                    return DispatchResult(
-                        worker_id=d["worker_id"], task=d["task"],
-                        result="", success=False,
-                        error="Agent nicht dem Projekt zugewiesen",
-                    )
-                tasks.append(_rejected())
-                continue
-            tasks.append(self._run_worker_task(d))
-
-        return list(await asyncio.gather(*tasks, return_exceptions=False))
-
-    async def _run_worker_task(self, dispatch: dict) -> DispatchResult:
-        """Einen Worker-Agenten mit einem Task beauftragen."""
-        worker_id = dispatch["worker_id"]
-        task      = dispatch["task"]
-        context   = dispatch.get("context", "")
-
-        worker_cfg = self._discovery.get(worker_id)
-        if not worker_cfg:
-            return DispatchResult(
-                worker_id=worker_id, task=task, result="",
-                success=False, error=f"Agent '{worker_id}' nicht in Discovery"
-            )
-
-        logger.info("Dispatche Task an %s: %s", worker_id, task[:60])
-
-        # Worker-LLM-Aufruf (kein Tool-Calling für Worker — nur ausführen)
-        messages = [
-            {"role": "system", "content": f"Du bist {worker_cfg.identity}. Erledige den folgenden Task präzise und knapp."},
-        ]
-        if context:
-            messages.append({"role": "user", "content": f"Kontext: {context}"})
-        messages.append({"role": "user", "content": task})
-
-        try:
-            response = await self._llm_call(worker_cfg, messages, tools=None)
-            result = response.choices[0].message.content or ""
-            return DispatchResult(worker_id=worker_id, task=task, result=result)
-        except Exception as e:
-            logger.error("Worker '%s' LLM-Fehler: %s", worker_id, e)
-            return DispatchResult(
-                worker_id=worker_id, task=task, result="",
-                success=False, error=str(e)
-            )
-
-    async def _synthesize(
-        self,
-        boss_cfg:   AgentConfig,
-        messages:   list[dict],
-        tool_calls: list,
-        results:    list[DispatchResult],
-    ) -> str:
-        """Boss fasst Worker-Ergebnisse zur finalen Antwort zusammen."""
-        # Tool-Results als Messages anhängen
-        follow_up = list(messages)
-        follow_up.append({
-            "role": "assistant",
-            "tool_calls": [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in tool_calls
-            ],
-        })
-        for result in results:
-            # Tool-Result für den passenden Call
-            call_id = next(
-                (tc.id for tc in tool_calls
-                 if json.loads(tc.function.arguments).get("worker_id") == result.worker_id),
-                "unknown"
-            )
-            content = result.result if result.success else f"[Fehler] {result.error}"
-            follow_up.append({
-                "role":         "tool",
-                "tool_call_id": call_id,
-                "content":      content,
-            })
-
-        try:
-            response = await self._llm_call(boss_cfg, follow_up, tools=None)
-            return response.choices[0].message.content or ""
-        except Exception as e:
-            logger.error("Synthese-LLM-Fehler: %s", e)
-            # Fallback: Ergebnisse direkt zusammenfassen
-            lines = [f"**{r.worker_id}**: {r.result}" for r in results if r.success]
-            return "\n".join(lines)
+    async def _synthesize(self, boss_cfg, messages, tool_calls, results):
+        return await _synthesize_fn(self, boss_cfg, messages, tool_calls, results)
