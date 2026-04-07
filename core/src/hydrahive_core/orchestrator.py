@@ -487,6 +487,8 @@ class Orchestrator:
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
         Gibt (finaler Text, beteiligte Worker-IDs) zurück.
         """
+        import time as _perf_time
+        _request_start = _perf_time.monotonic()
         workers_used: list[str] = []
 
         # 1. Nachricht in Session speichern
@@ -606,6 +608,15 @@ class Orchestrator:
         )
 
         self._runtime.set_activity(boss_cfg.id, None)
+
+        # #373: Performance Metrics aktualisieren
+        _elapsed_ms = (_perf_time.monotonic() - _request_start) * 1000
+        handle = self._runtime._handles.get(boss_cfg.id)
+        if handle:
+            handle.total_requests += 1
+            handle.total_response_ms += _elapsed_ms
+            handle.last_response_ms = _elapsed_ms
+
         return final_response, workers_used
 
     # ----------------------------------------------------------------- Delegiert an Sub-Module

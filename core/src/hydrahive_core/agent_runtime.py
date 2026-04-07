@@ -95,6 +95,19 @@ class AgentHandle:
     matrix_client:    object | None = field(default=None, repr=False)  # MatrixAgent
     current_activity: str | None = field(default=None, repr=False)  # Live-Aktivität (z.B. "Denkt…", "Tool: shell_exec")
     discord_client: object | None = field(default=None, repr=False)  # AgentDiscordClient
+    # #373: Performance Metrics
+    total_requests:     int   = 0
+    total_errors:       int   = 0
+    total_response_ms:  float = 0.0
+    last_response_ms:   float = 0.0
+
+    @property
+    def avg_response_ms(self) -> float:
+        return self.total_response_ms / self.total_requests if self.total_requests else 0.0
+
+    @property
+    def error_rate(self) -> float:
+        return self.total_errors / self.total_requests * 100 if self.total_requests else 0.0
 
 
 class AgentRuntime:
@@ -219,6 +232,11 @@ class AgentRuntime:
                 "on_failure":         h.heartbeat_cfg.on_failure,
                 "heartbeat_enabled":  h.heartbeat_cfg.enabled,
                 "current_activity":   h.current_activity,
+                # #373: Performance Metrics
+                "total_requests":   h.total_requests,
+                "avg_response_ms":  round(h.avg_response_ms, 1),
+                "last_response_ms": round(h.last_response_ms, 1),
+                "error_rate":       round(h.error_rate, 1),
             }
             for aid, h in self._handles.items()
         }
