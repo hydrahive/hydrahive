@@ -6334,3 +6334,119 @@ try:
     logger.info("Browser-Tools (Playwright) registriert")
 except Exception as _bt_err:
     logger.warning("Browser-Tools nicht verfügbar: %s", _bt_err)
+
+
+# ============================================================= Plan Mode (#477)
+
+# Globaler Plan-Mode State pro Projekt
+_plan_mode_state: dict[str, dict] = {}  # project_id → {"active": bool, "plan_file": str}
+
+
+def is_plan_mode(project_id: str) -> bool:
+    return _plan_mode_state.get(project_id, {}).get("active", False)
+
+
+def get_plan_file(project_id: str) -> str | None:
+    return _plan_mode_state.get(project_id, {}).get("plan_file")
+
+
+class EnterPlanModeTool(BaseTool):
+    """Aktiviert den Plan Mode: Agent wechselt in Read-Only und erstellt einen Plan."""
+
+    @property
+    def id(self) -> str: return "enter_plan_mode"
+    @property
+    def name(self) -> str: return "Plan Mode aktivieren"
+    @property
+    def description(self) -> str:
+        return (
+            "Aktiviert den Plan Mode. Im Plan Mode kannst du NUR lesen (Dateien, Code, Repos) "
+            "und einen Plan schreiben. Nutze dies bei komplexen Aufgaben um erst zu analysieren "
+            "und einen strukturierten Plan zu erstellen, bevor du Änderungen vornimmst. "
+            "Der Plan wird als Markdown-Datei gespeichert. Rufe exit_plan_mode auf wenn der Plan fertig ist."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Kurzer Titel für den Plan (z.B. 'Refactoring Auth-Modul')",
+                },
+            },
+            "required": ["title"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        if is_plan_mode(project_id):
+            return {"error": "Plan Mode ist bereits aktiv."}
+
+        title = kwargs.get("title", "Plan")
+        import uuid as _uuid
+        slug = _uuid.uuid4().hex[:6]
+        plan_file = f"/tmp/hydrahive-plans/{project_id}_{slug}.md"
+
+        from pathlib import Path
+        Path(plan_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(plan_file).write_text(
+            f"# Plan: {title}\n\n"
+            f"*Erstellt von Agent {agent_id}*\n\n"
+            f"## Analyse\n\n\n## Schritte\n\n1. \n\n## Risiken\n\n\n",
+            encoding="utf-8",
+        )
+
+        _plan_mode_state[project_id] = {"active": True, "plan_file": plan_file, "title": title}
+        logger.info("Plan Mode aktiviert: %s (Projekt: %s)", title, project_id)
+        return {
+            "status": "Plan Mode aktiviert",
+            "plan_file": plan_file,
+            "info": (
+                "Du bist jetzt im Plan Mode. Du kannst NUR lesen (file_read, list_directory, "
+                "shell_exec für read-only Befehle, web_search etc.) und den Plan schreiben. "
+                "Nutze file_write mit dem Plan-Pfad um deinen Plan zu aktualisieren. "
+                "Rufe exit_plan_mode auf wenn der Plan fertig ist."
+            ),
+        }
+
+
+class ExitPlanModeTool(BaseTool):
+    """Beendet den Plan Mode und gibt den fertigen Plan zurück."""
+
+    @property
+    def id(self) -> str: return "exit_plan_mode"
+    @property
+    def name(self) -> str: return "Plan Mode beenden"
+    @property
+    def description(self) -> str:
+        return (
+            "Beendet den Plan Mode. Der fertige Plan wird zurückgegeben und der Agent "
+            "wechselt zurück in den normalen Modus wo er Änderungen vornehmen kann."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {"type": "object", "properties": {}, "required": []}
+
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
+        if not is_plan_mode(project_id):
+            return {"error": "Plan Mode ist nicht aktiv."}
+
+        state = _plan_mode_state.pop(project_id, {})
+        plan_file = state.get("plan_file", "")
+        plan_content = ""
+        from pathlib import Path
+        if plan_file and Path(plan_file).exists():
+            plan_content = Path(plan_file).read_text(encoding="utf-8")
+
+        logger.info("Plan Mode beendet (Projekt: %s)", project_id)
+        return {
+            "status": "Plan Mode beendet — du kannst jetzt implementieren.",
+            "plan": plan_content,
+            "plan_file": plan_file,
+        }
+
+
+registry.register(EnterPlanModeTool())
+registry.register(ExitPlanModeTool())

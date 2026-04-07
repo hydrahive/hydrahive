@@ -511,7 +511,25 @@ class Orchestrator:
             if wf_text:
                 system_prompt = system_prompt + "\n\n" + wf_text
 
-        # 3c. Worker-Kontext injizieren (verhindert Halluzination von Worker-IDs, #107)
+        # 3c. Plan Mode Injection
+        from .tool_registry import is_plan_mode as _is_plan_mode, get_plan_file as _get_plan_file
+        if _is_plan_mode(project_id):
+            _pf = _get_plan_file(project_id) or "plan.md"
+            system_prompt += (
+                "\n\n## PLAN MODE AKTIV\n\n"
+                "**Du bist im Plan Mode.** Das bedeutet:\n"
+                "- Du darfst NUR lesen: file_read, list_directory, shell_exec (nur lesende Befehle), "
+                "web_search, gitea_repo_tree, gitea_repo_file etc.\n"
+                "- Du darfst KEINE Dateien ändern, keinen Code schreiben, keine Commits machen.\n"
+                "- EINZIGE Ausnahme: Du darfst den Plan schreiben/aktualisieren mit file_write "
+                f"auf den Pfad `{_pf}`.\n"
+                "- Analysiere den Code gründlich, verstehe die Architektur, identifiziere Risiken.\n"
+                "- Schreibe einen strukturierten Plan mit: Analyse, Schritte, Risiken.\n"
+                "- Wenn der Plan fertig ist, rufe `exit_plan_mode` auf.\n"
+                "- Diese Instruktion überschreibt alle anderen Regeln bezüglich Code-Änderungen."
+            )
+
+        # 3d. Worker-Kontext injizieren (verhindert Halluzination von Worker-IDs, #107)
         worker_ctx = _build_worker_context(project_cfg, self._discovery)
         if worker_ctx:
             system_prompt = system_prompt + "\n\n" + worker_ctx
@@ -537,6 +555,22 @@ class Orchestrator:
         plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
         if plugin_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
+        # Plan Mode: nur read-only Tools + enter/exit_plan_mode + file_write (für Plan-Datei)
+        from .tool_registry import is_plan_mode as _is_plan_mode
+        if _is_plan_mode(project_id) and litellm_tools:
+            _PLAN_MODE_ALLOWED = {"enter_plan_mode", "exit_plan_mode", "file_write",
+                                  "request_tools"}
+            litellm_tools = [
+                t for t in litellm_tools
+                if t.get("function", {}).get("name", "") in _PLAN_MODE_ALLOWED
+                or any(
+                    tool.is_read_only
+                    for tool in [self._reg.get(t.get("function", {}).get("name", ""))]
+                    if tool is not None
+                )
+            ]
+            logger.info("Plan Mode aktiv — %d Tools nach Filter", len(litellm_tools))
+
         litellm_tools = litellm_tools or None
 
         import json as _json
