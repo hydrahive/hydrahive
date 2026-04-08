@@ -77,6 +77,10 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "agent_tokens"
 
     @property
+    def alerts_config(self) -> Path:
+        return self.etc_dir / "alerts.json"
+
+    @property
     def voice_config(self) -> Path:
         return self.etc_dir / "voice.json"
 

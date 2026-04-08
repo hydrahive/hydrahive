@@ -851,3 +851,36 @@ def register_system_routes(
             cfg[k] = v
         save_config(cfg)
         return {"updated": True, "config": cfg}
+
+    # ── Smart Alerts (#374) ─────────────────────────────────────────
+
+    @admin_router.get("/admin/alerts/config")
+    def get_alerts_config():
+        from .alert_service import _load_config as _lac
+        return _lac()
+
+    class AlertConfigRequest(BaseModel):
+        enabled: bool | None = None
+        check_interval_seconds: int | None = None
+        disk_warn_pct: int | None = None
+        disk_crit_pct: int | None = None
+        heartbeat_max_age_seconds: int | None = None
+        journal_error_threshold: int | None = None
+        oauth_warn_days: int | None = None
+        cooldown_minutes: int | None = None
+        notify_users: list[str] | None = None
+
+    @admin_router.put("/admin/alerts/config")
+    def update_alerts_config(req: AlertConfigRequest):
+        from .alert_service import _load_config as _lac, save_config as _sac
+        cfg = _lac()
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
+        _sac(cfg)
+        return {"updated": True, "config": cfg}
+
+    @admin_router.post("/admin/alerts/check")
+    async def trigger_alert_check():
+        from .alert_service import alert_service as _as
+        result = await _as.run_now()
+        return result

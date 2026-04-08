@@ -441,6 +441,14 @@ async def lifespan(app: FastAPI):
         notify_fn=_disk_notify,
     )
 
+    # Smart Alert System (#374)
+    from .alert_service import alert_service as _alert_service
+    _alert_service.start(
+        discovery=discovery,
+        notify_fn=notification_service.push,
+        load_users_fn=_load_users,
+    )
+
     # Folder-Watcher für Datei-Pipelines starten (#60)
     _folder_watcher_task = asyncio.create_task(
         run_folder_watcher(
@@ -455,6 +463,7 @@ async def lifespan(app: FastAPI):
     logger.info("HydraHive Core bereit")
     yield
     _folder_watcher_task.cancel()
+    _alert_service.stop()
     _cs.stop()
     scheduler_service.stop()
     notification_service.stop()
