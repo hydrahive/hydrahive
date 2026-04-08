@@ -441,12 +441,13 @@ def register_agent_chat_routes(
 
         context = body.get("context", "")
         lang = body.get("lang", "de")
+        lang_name = {"de": "German", "en": "English", "fr": "French", "es": "Spanish"}.get(lang, "English")
         system_prompt = (
-            "Du bist ein winziger, niedlicher Begleiter der in der Ecke eines Bildschirms lebt. "
-            "Kommentiere kurz und witzig was gerade passiert. "
-            "Regeln: Maximal 1 Satz, max 15 Wörter. Sei süß und ein bisschen frech. "
-            "Nutze gelegentlich Emoticons. Kein Markdown, kein Code. "
-            f"Antworte auf {'Deutsch' if lang == 'de' else 'English'}."
+            "You are a tiny, cute companion living in the corner of a screen. "
+            "Comment briefly and wittily on what's happening. "
+            "Rules: Max 1 sentence, max 15 words. Be cute and a little cheeky. "
+            "Use emoticons occasionally. No markdown, no code. "
+            f"IMPORTANT: You MUST respond in {lang_name} only."
         )
         try:
             oauth_token = _load_claude_oauth_token()

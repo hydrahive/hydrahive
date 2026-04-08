@@ -64,19 +64,19 @@ export function BlobCreature({ mood, size = 48 }: { mood: Mood; size?: number })
   );
 }
 
-// Kontext-Prompts je nach Seite
+// Kontext-Prompts je nach Seite (English — LLM übersetzt selbst in die User-Sprache)
 const PAGE_CONTEXTS: Record<string, string> = {
-  "/dashboard":     "Der User schaut aufs Dashboard.",
-  "/my-agent":      "Der User konfiguriert seinen persönlichen Agenten.",
-  "/agents":        "Der User verwaltet seine Agenten.",
-  "/projects":      "Der User arbeitet an Projekten.",
-  "/settings":      "Der User ist in den Einstellungen.",
-  "/hub":           "Der User stöbert im HydraHub nach Plugins.",
-  "/brain":         "Der User schaut sich das 3D-Agentennetz an.",
-  "/system":        "Der User prüft den Systemstatus.",
-  "/prompt-guide":  "Der User lernt bessere Prompts zu schreiben.",
-  "/blueprint":     "Der User baut Automatisierungen.",
-  "/mcp":           "Der User konfiguriert MCP-Server.",
+  "/dashboard":     "The user is looking at the dashboard.",
+  "/my-agent":      "The user is configuring their personal agent.",
+  "/agents":        "The user is managing their agents.",
+  "/projects":      "The user is working on projects.",
+  "/settings":      "The user is in the settings.",
+  "/hub":           "The user is browsing HydraHub for plugins.",
+  "/brain":         "The user is looking at the 3D agent network.",
+  "/system":        "The user is checking the system status.",
+  "/prompt-guide":  "The user is learning to write better prompts.",
+  "/blueprint":     "The user is building automations.",
+  "/mcp":           "The user is configuring MCP servers.",
 };
 
 export function FloatingCompanion() {
@@ -153,7 +153,7 @@ export function FloatingCompanion() {
     if (path === lastPathRef.current) return;
     lastPathRef.current = path;
     const context = Object.entries(PAGE_CONTEXTS).find(([p]) => path.startsWith(p))?.[1]
-      || "Der User navigiert in der Console.";
+      || "The user is navigating in the console.";
     triggerComment(context);
   }, [location.pathname, visible]);
 
@@ -164,7 +164,7 @@ export function FloatingCompanion() {
       if (Math.random() > 0.3) return; // nur 30% der Nachrichten kommentieren
       const detail = (e as CustomEvent).detail || {};
       const preview = (detail.text || "").slice(0, 60);
-      triggerComment(`Der User hat eine Chat-Nachricht gesendet: "${preview}"`);
+      triggerComment(`The user sent a chat message: "${preview}"`);
     };
     window.addEventListener("hh-chat-sent", handler);
     return () => window.removeEventListener("hh-chat-sent", handler);
@@ -173,7 +173,7 @@ export function FloatingCompanion() {
   // Trigger: Update fertig
   useEffect(() => {
     if (!visible) return;
-    const handler = () => triggerComment("Ein System-Update wurde gerade abgeschlossen.");
+    const handler = () => triggerComment("A system update was just completed.");
     window.addEventListener("hh-update-done", handler);
     return () => window.removeEventListener("hh-update-done", handler);
   }, [visible]);
@@ -183,7 +183,7 @@ export function FloatingCompanion() {
     if (!visible) return;
     const handler = (e: Event) => {
       const msg = (e as CustomEvent).detail?.message || "ein Fehler";
-      triggerComment(`Es ist ein Fehler aufgetreten: ${msg}`);
+      triggerComment(`An error occurred: ${msg}`);
     };
     window.addEventListener("hh-error", handler);
     return () => window.removeEventListener("hh-error", handler);
@@ -196,7 +196,7 @@ export function FloatingCompanion() {
     const lastVisit = localStorage.getItem("hh_companion_last_visit");
     if (lastVisit !== today) {
       localStorage.setItem("hh_companion_last_visit", today);
-      setTimeout(() => triggerComment("Der User hat sich heute zum ersten Mal eingeloggt. Begrüße ihn!"), 2000);
+      setTimeout(() => triggerComment("The user logged in for the first time today. Greet them!"), 2000);
     }
   }, [visible]);
 
@@ -206,7 +206,7 @@ export function FloatingCompanion() {
     const interval = setInterval(() => {
       if (mood === "sleep") return;
       if (Math.random() > 0.4) return; // 40% Chance alle 3 Min
-      triggerComment("Es ist gerade ruhig. Der User ist da aber macht nichts besonderes. Sag was nettes oder witziges.");
+      triggerComment("It's quiet right now. The user is there but not doing anything special. Say something nice or funny.");
     }, 180000);
     return () => clearInterval(interval);
   }, [visible, mood]);
@@ -218,8 +218,8 @@ export function FloatingCompanion() {
       {/* Sprechblase */}
       {showBubble && bubble && (
         <div className={dockEl
-          ? "absolute bottom-full right-0 mb-2 z-50 max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
-          : "pointer-events-auto max-w-[220px] rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
+          ? "absolute bottom-full right-0 mb-2 z-50 min-w-[120px] max-w-[220px] w-max whitespace-normal break-words rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs leading-relaxed text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
+          : "pointer-events-auto min-w-[120px] max-w-[220px] w-max whitespace-normal break-words rounded-2xl rounded-br-sm bg-card border border-border/60 shadow-lg px-3 py-2 text-xs leading-relaxed text-foreground animate-in fade-in slide-in-from-bottom-2 duration-300"
         }>
           {bubble}
         </div>
