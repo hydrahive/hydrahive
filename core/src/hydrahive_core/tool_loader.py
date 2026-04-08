@@ -71,6 +71,10 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "skills": [
         "create_skill", "list_skills", "delete_skill",
     ],
+    "server": [
+        "server_shell", "server_file_read", "server_file_write",
+        "server_file_list", "server_file_search", "server_file_patch",
+    ],
     "a2a": [
         "remote_agent",
     ],

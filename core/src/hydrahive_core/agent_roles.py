@@ -70,6 +70,9 @@ _TOOLS_CODER = [
     "gitea_repo_commits", "gitea_repo_diff",
     "gitea_create_issue", "gitea_update_issue", "gitea_comment_issue",
     "wks_file_read", "wks_file_write", "wks_shell_exec",
+    # Remote-Server (SSH) — für zugewiesene Server
+    "server_shell", "server_file_read", "server_file_write",
+    "server_file_list", "server_file_search", "server_file_patch",
 ]
 
 _TOOLS_ADMIN = [
