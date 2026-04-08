@@ -56,14 +56,17 @@ class Message:
     def as_llm_message(self) -> dict:
         """Format für LLM-API (OpenAI-kompatibel via litellm).
 
-        Prefixed den Content mit Timestamp damit das LLM echtes
-        Zeitgefühl bekommt (#477).
+        Prefixed User-Messages mit Timestamp damit das LLM echtes
+        Zeitgefühl bekommt (#477). Assistant-Messages bleiben ohne
+        Prefix — sonst ahmt das LLM den Timestamp-Stil nach.
         """
-        try:
-            dt = datetime.fromisoformat(self.timestamp)
-            prefix = f"[{dt.strftime('%H:%M:%S')}] "
-        except (ValueError, TypeError):
-            prefix = ""
+        prefix = ""
+        if self.role == MessageRole.USER:
+            try:
+                dt = datetime.fromisoformat(self.timestamp)
+                prefix = f"[{dt.strftime('%H:%M:%S')}] "
+            except (ValueError, TypeError):
+                pass
         return {"role": self.role.value, "content": prefix + self.content}
 
     def as_history_message(self) -> dict:
