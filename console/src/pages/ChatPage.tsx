@@ -555,8 +555,8 @@ export function ChatPage() {
                 </div>
               )}
               {messages.map((msg) => {
-                // Leere Assistant-Messages ausblenden (z.B. vor Tool-Calls ohne Text)
-                if (msg.role === "assistant" && !msg.content && !msg.tokenUsage) return null;
+                // Leere Assistant-Messages ausblenden (nur in History, nicht während Stream)
+                if (msg.role === "assistant" && !msg.content && !msg.tokenUsage && !sending) return null;
                 if (msg.role === "tool") {
                   // Mehrere aufeinanderfolgende Tool-Calls gruppieren
                   const msgIdx = messages.indexOf(msg);
