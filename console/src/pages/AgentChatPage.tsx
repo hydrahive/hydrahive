@@ -539,6 +539,8 @@ export function AgentChatPage() {
           </div>
         )}
         {(viewSession ? viewSession.messages : messages).map((msg) => {
+          // Leere Assistant-Messages ausblenden (z.B. vor Tool-Calls ohne Text)
+          if (msg.role === "assistant" && !msg.content && !msg.tokenUsage) return null;
           if (msg.role === "tool") {
             const allMsgs = viewSession ? viewSession.messages : messages;
             const msgIdx = allMsgs.indexOf(msg);
