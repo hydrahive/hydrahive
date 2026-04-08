@@ -434,7 +434,6 @@ export function ChatPage() {
         </div>
       </div>
 
-      <OAuthUsageBar />
       <section className="section-card flex-1 min-h-0 overflow-hidden p-0">
         <div className="grid h-full min-h-0 gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
           <div className="relative flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r overflow-hidden">
@@ -456,6 +455,7 @@ export function ChatPage() {
                 </div>
               </div>
             </div>
+            <OAuthUsageBar />
 
             {/* History Drawer */}
             {showHistory && (
