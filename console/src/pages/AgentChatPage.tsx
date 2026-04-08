@@ -264,6 +264,7 @@ export function AgentChatPage() {
       (userMsg as any)._images = pendingImages.map(i => i.preview);
     }
     let currentAsst = mkMsg("assistant", "");
+    let asstAdded = false;
     let hadToolCalls = false;
     setMessages(ms => [...ms, userMsg]);
     setPendingImages([]);
@@ -276,7 +277,6 @@ export function AgentChatPage() {
     setDebugEvents([]);
 
     try {
-      setMessages(ms => [...ms, currentAsst]);
 
       await sseStream({
         url: `/api/agents/${id}/message/stream`,
@@ -297,7 +297,7 @@ export function AgentChatPage() {
             return;
           }
           if (evt.type === "text") {
-            if (hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); hadToolCalls = false; }
+            if (!asstAdded || hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); asstAdded = true; hadToolCalls = false; }
             setMessages(ms => ms.map(m =>
               m.id === currentAsst.id ? { ...m, content: m.content + evt.text } : m
             ));
@@ -338,8 +338,6 @@ export function AgentChatPage() {
       }
     } finally {
       setSending(false);
-      // Leere Assistant-Messages aufräumen — verzögert damit alle State-Updates durch sind
-      setTimeout(() => setMessages(ms => ms.filter(m => !(m.role === "assistant" && !m.content))), 100);
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);
