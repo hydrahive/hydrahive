@@ -21,7 +21,15 @@ export default function OAuthUsageBar() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  if (!data?.available) return null;
+  if (!data) return (
+    <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 border-b text-xs text-muted-foreground/50">
+      <Activity className="h-3 w-3 animate-pulse" />
+      <span className="hidden sm:inline">OAuth</span>
+      <span>...</span>
+    </div>
+  );
+
+  if (!data.available) return null;
 
   return (
     <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 border-b text-xs">
