@@ -1849,6 +1849,20 @@ def get_metrics():
     }
 
 
+@admin_router.get("/admin/session-metrics")
+def get_session_metrics(_a=Depends(require_admin)):
+    """#512: Kontext- und Turn-Metriken pro Projekt-Session."""
+    from .session_metrics import metrics as _sm
+    return _sm.snapshot_all()
+
+
+@admin_router.get("/admin/session-metrics/{project_id}")
+def get_session_metrics_project(project_id: str, _a=Depends(require_admin)):
+    """#512: Metriken für ein einzelnes Projekt."""
+    from .session_metrics import metrics as _sm
+    return _sm.snapshot(project_id)
+
+
 @admin_router.get("/admin/agents/live")
 def get_agents_live(_a=Depends(require_admin)):
     """

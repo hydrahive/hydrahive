@@ -56,6 +56,7 @@ export const api = {
   health:        ()           => api.get<{status:string}>("/health"),
   status:        ()           => api.get<Record<string,unknown>>("/status"),
   gpuInfo:       ()           => api.get<GpuInfo>("/system/gpu"),
+  sessionMetrics: ()          => api.get<Record<string,any>>("/admin/session-metrics"),
   oauthUsage:    ()           => api.get<Record<string,unknown>>("/admin/system/oauth-usage"),
   oauthUsageFetch: ()         => api.get<Record<string,unknown>>("/admin/system/oauth-usage/fetch"),
   heartbeatTasks: ()          => api.get<{tasks: HeartbeatTaskStatus[]}>("/system/heartbeat-tasks"),

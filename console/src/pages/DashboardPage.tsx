@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe } from "lucide-react";
+import { Bot, FolderKanban, Activity, Cpu, ArrowRight, ShieldCheck, Radar, Workflow, RefreshCw, Clock3, Layers3, AlertTriangle, Siren, TimerReset, BarChart2, LayoutDashboard, Plus, X, Save, Pencil, Trash2, FileText, Link2, MonitorPlay, Globe, Brain, Zap, RotateCcw, GitBranch } from "lucide-react";
 import { api, AuditEntry, GpuInfo, HeartbeatTaskStatus, UpdateStatus } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -275,6 +275,7 @@ function TabEditorModal({ tab, onSave, onDelete, onClose }: {
 const WIDGET_DEFS = [
   { id: "status",     label: "Core-Status",    icon: "Radar" },
   { id: "metrics",    label: "Metriken",       icon: "BarChart2" },
+  { id: "context",    label: "Context-Metriken", icon: "Brain" },
   { id: "agents",     label: "Agenten",        icon: "Bot" },
   { id: "heartbeat",  label: "Heartbeats",     icon: "Activity" },
   { id: "gpu",        label: "GPU",            icon: "Cpu" },
@@ -306,6 +307,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   const [agentMap, setAgentMap] = useState<Record<string, any>>({});
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [sessionMetrics, setSessionMetrics] = useState<Record<string, any>>({});
 
   const loadDashboard = useCallback(async (silent = false) => {
     let alive = true;
@@ -320,9 +322,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       api.projects(),
       api.agents(),
       api.oauthUsage(),
+      api.sessionMetrics(),
     ]).then((results) => {
       if (!alive) return;
-      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes, oauthRes] = results;
+      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes, oauthRes, smRes] = results;
       setHealthy(healthRes.status === "fulfilled");
       if (statusRes.status === "fulfilled") setStatus(statusRes.value);
       if (gpuRes.status === "fulfilled") setGpu(gpuRes.value);
@@ -332,6 +335,7 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       if (projectsRes.status === "fulfilled") setProjectMap(projectsRes.value as Record<string, any>);
       if (agentsRes.status === "fulfilled") setAgentMap(agentsRes.value as Record<string, any>);
       if (oauthRes.status === "fulfilled") setOauthUsage(oauthRes.value as Record<string, unknown>);
+      if (smRes.status === "fulfilled") setSessionMetrics(smRes.value as Record<string, any>);
       setLastUpdated(new Date());
       setIsRefreshing(false);
     });
@@ -775,6 +779,75 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           </div>
         ))}
       </section>}
+
+      {isVisible("context") && (() => {
+        const entries = Object.entries(sessionMetrics);
+        if (entries.length === 0) return (
+          <section className="section-card">
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="h-4 w-4 text-primary" />
+              <h2 className="text-lg font-semibold tracking-tight">Context-Metriken</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">Keine aktiven Sessions</p>
+          </section>
+        );
+        return (
+          <section className="space-y-4">
+            {entries.map(([pid, m]: [string, any]) => (
+              <div key={pid} className="section-card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="h-4 w-4 text-primary" />
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    {(projectMap as Record<string,any>)[pid]?.name || pid}
+                  </h2>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {m.llm_call_count} LLM-Calls
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Input-Tokens</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{(m.total_input_tokens / 1000).toFixed(1)}k</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Output: {(m.total_output_tokens / 1000).toFixed(1)}k</p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cache-Hit</p>
+                    <p className={`mt-2 text-2xl font-semibold tracking-tight ${m.cache_hit_rate > 0.5 ? "text-green-400" : m.cache_hit_rate > 0.2 ? "text-yellow-400" : "text-red-400"}`}>
+                      {(m.cache_hit_rate * 100).toFixed(0)}%
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Read: {(m.total_cache_read / 1000).toFixed(1)}k / Write: {(m.total_cache_write / 1000).toFixed(1)}k
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Compactions</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{m.compaction_count}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {m.compaction_stages.length > 0 ? `Stufen: ${m.compaction_stages.join(", ")}` : "Keine"}
+                      {m.overflow_count > 0 && <span className="text-red-400"> · {m.overflow_count} Overflow</span>}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-background/55 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tool-Loop</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight">{m.tool_rounds_total} Rounds</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {m.tool_calls_total} Calls · {m.avg_latency_ms}ms avg
+                      {m.signature_aborts > 0 && <span className="text-yellow-400"> · {m.signature_aborts} Abbrüche</span>}
+                    </p>
+                  </div>
+                </div>
+                {(m.retries > 0 || m.failovers > 0 || m.session_resets > 0) && (
+                  <div className="mt-3 flex gap-3 text-sm">
+                    {m.retries > 0 && <span className="flex items-center gap-1 text-yellow-400"><RotateCcw className="h-3 w-3" />{m.retries} Retries</span>}
+                    {m.failovers > 0 && <span className="flex items-center gap-1 text-orange-400"><GitBranch className="h-3 w-3" />{m.failovers} Failovers</span>}
+                    {m.session_resets > 0 && <span className="flex items-center gap-1 text-red-400"><Zap className="h-3 w-3" />{m.session_resets} Resets</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        );
+      })()}
 
       {isVisible("heartbeat") && <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="section-card">

@@ -47,6 +47,7 @@ from .orchestrator_llm import (
     _llm_call as _llm_call_fn,
     _apply_cache_control,
     check_llm_provider_available,
+    _current_project_id,
 )
 from .orchestrator_context import (
     _context_mode,
@@ -77,6 +78,7 @@ from .orchestrator_dispatch import (
     _run_worker_task as _run_worker_task_fn,
     _synthesize as _synthesize_fn,
 )
+from .session_metrics import metrics as _metrics
 
 logger = logging.getLogger(__name__)
 
@@ -632,6 +634,9 @@ class Orchestrator:
 
         # 6. LLM aufrufen
         self._runtime.set_activity(boss_cfg.id, "Denkt…")
+        # #512: project_id für Retry/Failover-Metriken setzen
+        _current_project_id.set(project_id)
+        _llm_start = _perf_time.monotonic()
         try:
             response = await self._llm_call(boss_cfg, messages, litellm_tools)
         except Exception as e:
@@ -643,12 +648,36 @@ class Orchestrator:
                     "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
                     project_id, e,
                 )
+                _metrics.record_overflow(project_id)
+                _metrics.record_session_reset(project_id)
                 await self._sessions.new_session(project_id)
                 return (
                     "Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
                 ), []
             logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
             return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
+
+        # #512: LLM-Call Metriken erfassen
+        _llm_latency = (_perf_time.monotonic() - _llm_start) * 1000
+        _m_input = _m_output = _m_cache_r = _m_cache_w = 0
+        if hasattr(response, "usage") and response.usage:
+            _u = response.usage
+            _m_input   = getattr(_u, "input_tokens", 0) or getattr(_u, "prompt_tokens", 0) or 0
+            _m_output  = getattr(_u, "output_tokens", 0) or getattr(_u, "completion_tokens", 0) or 0
+            _m_cache_r = getattr(_u, "cache_read_input_tokens", 0) or 0
+            _m_cache_w = getattr(_u, "cache_creation_input_tokens", 0) or 0
+        _metrics.record_llm_call(
+            project_id,
+            model=boss_cfg.llm.model,
+            prompt_tokens=sys_tokens,
+            history_tokens=hist_tokens,
+            tool_tokens=tool_tokens,
+            input_tokens=_m_input,
+            output_tokens=_m_output,
+            cache_read=_m_cache_r,
+            cache_write=_m_cache_w,
+            latency_ms=_llm_latency,
+        )
 
         # 7. Tool-Calls verarbeiten (Agentic Loop)
         final_response = response.choices[0].message.content or ""
@@ -729,6 +758,10 @@ class Orchestrator:
             except Exception as e:
                 last_exc = e
                 if i < len(models) - 1 and _should_failover(e):
+                    # #512: Failover-Metrik
+                    _pid = _current_project_id.get(None) if hasattr(_current_project_id, 'get') else None
+                    if _pid:
+                        _metrics.record_failover(_pid)
                     logger.warning("LLM-Failover: '%s' → '%s' (%s)", m, models[i+1], str(e)[:80])
                     continue
                 raise

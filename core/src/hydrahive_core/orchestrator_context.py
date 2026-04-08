@@ -18,6 +18,7 @@ from pathlib import Path
 import litellm
 
 from .learning_memory import build_learning_prompt_snippet
+from .session_metrics import metrics as _metrics
 from .memory_search import search_memory, update_index as update_memory_index
 from .semantic_index import score_texts
 from .settings import settings
@@ -989,6 +990,7 @@ async def _compact_if_needed(
             return
 
         await sessions.compact(project_id, summary, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
+        _metrics.record_compaction(project_id, stage=1)
         logger.info(
             "Context kompaktiert Stufe-1 (Projekt: %s, ~%d Tokens nach Kompaktierung, %d Rounds behalten)",
             project_id, sessions.estimated_tokens(project_id), keep_last_rounds,
@@ -1013,6 +1015,7 @@ async def _compact_if_needed(
             if meta:
                 await sessions.compact(project_id, meta, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
                 summary = meta
+                _metrics.record_compaction(project_id, stage=2)
                 logger.info(
                     "Context kompaktiert Stufe-2 (Projekt: %s, ~%d Tokens nach Meta-Summary)",
                     project_id, sessions.estimated_tokens(project_id),
@@ -1037,6 +1040,7 @@ async def _compact_if_needed(
                 sessions._persist(session)
             # Nochmal kompaktieren mit weniger keep_last (1 Round in Notfall)
             await sessions.compact(project_id, summary, keep_last=4, keep_last_rounds=1)
+            _metrics.record_compaction(project_id, stage=3)
             logger.info(
                 "Full-Compaction abgeschlossen (Projekt: %s, ~%d Tokens)",
                 project_id, sessions.estimated_tokens(project_id),

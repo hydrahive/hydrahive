@@ -13,6 +13,7 @@ Standalone-Funktionen für LLM-Aufrufe (kein Orchestrator-State nötig):
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import os
 from pathlib import Path
@@ -22,6 +23,12 @@ import litellm
 from .settings import settings
 
 logger = logging.getLogger(__name__)
+
+# #512: ContextVar für project_id — wird vom Orchestrator gesetzt,
+# damit _llm_with_retry Retry/Failover-Metriken erfassen kann
+_current_project_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_current_project_id", default=None,
+)
 
 
 # ---------------------------------------------------------------- Prompt Caching
@@ -249,6 +256,11 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float
                 delay = min(base_delay * (2 ** attempt), 60.0)
                 delay *= (1 + _random.uniform(-0.1, 0.1))
                 _set_cooldown(seconds=delay)
+                # #512: Retry-Metrik für Rate-Limits
+                _pid = _current_project_id.get()
+                if _pid:
+                    from .session_metrics import metrics as _m
+                    _m.record_retry(_pid)
                 logger.warning(
                     "Rate-Limit (Versuch %d/%d): %s — retry in %.1fs",
                     attempt + 1, max_attempts, str(e)[:80], delay,
@@ -261,6 +273,12 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float
             # Letzter Versuch → aufgeben
             if attempt == max_attempts - 1:
                 raise
+
+            # #512: Retry-Metrik erfassen
+            _pid = _current_project_id.get()
+            if _pid:
+                from .session_metrics import metrics as _m
+                _m.record_retry(_pid)
 
             # Backoff berechnen: 1s, 2s, 4s... max 60s + Jitter
             delay = min(base_delay * (2 ** attempt), 60.0)

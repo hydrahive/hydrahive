@@ -19,7 +19,9 @@ from .orchestrator_llm import (
     _load_openai_codex_token,
     _apply_cache_control,
     check_llm_provider_available,
+    _current_project_id,
 )
+from .session_metrics import metrics as _metrics
 from .orchestrator_context import (
     _history_token_budget,
     _estimate_tokens,
@@ -190,6 +192,9 @@ async def handle_message_stream(
     # #433 + #445: Context-Info als SSE-Event für Frontend
     yield f"data: {_json.dumps({'_context_info': {'system_tokens': sys_tokens_s, 'history_tokens': hist_tokens_s, 'tool_tokens': tool_tokens_s, 'history_messages': len(history), 'history_budget': _hist_budget_s}})}\n\n"
 
+    # #512: project_id für Retry/Failover-Metriken setzen
+    _current_project_id.set(project_id)
+
     models_to_try = [boss_cfg.llm.model] + boss_cfg.llm.fallback_models
 
     _provider_err = check_llm_provider_available(models_to_try, ollama_base_url=boss_cfg.llm.ollama_base_url)
@@ -296,6 +301,19 @@ async def handle_message_stream(
         total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
         if total_tokens > 0 and _tool_reg._rate_limiter is not None:
             _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
+
+        # #512: Streaming-LLM-Call Metriken erfassen (akkumuliert über alle Rounds)
+        _metrics.record_llm_call(
+            project_id,
+            model=_model_name,
+            prompt_tokens=sys_tokens_s,
+            history_tokens=hist_tokens_s,
+            tool_tokens=tool_tokens_s,
+            input_tokens=_usage.get("input", 0),
+            output_tokens=_usage.get("output", 0),
+            cache_read=_usage.get("cache_read", 0),
+            cache_write=_usage.get("cache_write", 0),
+        )
         _done_payload: dict = {'done': True, 'session_id': None, 'usage': _usage}
         if _is_fallback:
             _done_payload['model'] = _model_name
@@ -323,6 +341,8 @@ async def handle_message_stream(
                 "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
                 project_id, e,
             )
+            _metrics.record_overflow(project_id)
+            _metrics.record_session_reset(project_id)
             await orch._sessions.new_session(project_id)
             yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
         else:

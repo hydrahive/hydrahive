@@ -17,6 +17,8 @@ from .orchestrator_tools import (
     handle_request_tools,
 )
 
+from .session_metrics import metrics as _metrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -354,12 +356,16 @@ async def _tool_loop(
         if not tool_calls:
             return response.choices[0].message.content or "", workers_used
 
+        # #512: Tool-Round Metriken
+        _metrics.record_tool_round(project_id, len(tool_calls))
+
         signature = _tool_call_signature_fn(tool_calls)
         last_signature, repeated_signature_count, should_abort = check_repeated_signature(
             signature, last_signature, repeated_signature_count, threshold=2,
         )
 
         if should_abort:
+            _metrics.record_signature_abort(project_id)
             logger.warning(
                 "Tool-Loop: wiederholte Tool-Signatur erkannt (%s) — erzwinge Abschluss",
                 ", ".join(signature[:3])[:180],
@@ -378,6 +384,7 @@ async def _tool_loop(
 
         # Letzte Runde: kein weiteres Tool-Calling → Final-Antwort erzwingen
         if _round == max_rounds - 1:
+            _metrics.record_max_rounds_hit(project_id)
             logger.warning("Tool-Loop: max_rounds=%d erreicht — erzwinge Textantwort", max_rounds)
             try:
                 from .tool_registry import _notify as _tr_notify
