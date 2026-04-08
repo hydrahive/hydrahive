@@ -170,8 +170,15 @@ def register_system_routes(
             try:
                 status = json.loads(p.read_text())
             except Exception as e:
-                logger.debug("Failed to parse update status file: %s", e)
+                # JSON kaputt (z.B. unescapte Quotes in Commit-Message) — Felder extrahieren
+                logger.debug("Failed to parse update status file: %s — trying regex fallback", e)
+                import re
+                raw = p.read_text()
                 status = {"status": "unknown"}
+                for key in ("status", "commit", "commit_full", "finished_at"):
+                    m = re.search(rf'"{key}"\s*:\s*"([^"]*)"', raw)
+                    if m:
+                        status[key] = m.group(1)
         else:
             status = {"status": "never"}
         if status.get("status") == "running" and status.get("started_at"):

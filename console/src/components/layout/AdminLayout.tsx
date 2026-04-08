@@ -244,7 +244,6 @@ export function AdminLayout() {
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
   const allNavItems: NavItem[] = [
-    { to: "/quickstart",     icon: Rocket,          label: t("nav.quickstart", { defaultValue: "Quickstart" }), hint: t("navHint.quickstart", { defaultValue: "Interaktiver Einrichtungs-Guide" }) },
     { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
     { to: "/my-agent",       icon: Bot,             label: t("nav.myAgent"),         hint: t("navHint.myAgent") },
     { to: "/agents",         icon: Users,           label: t("nav.agents"),          hint: t("navHint.agents") },
