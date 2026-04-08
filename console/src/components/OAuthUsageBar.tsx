@@ -73,29 +73,33 @@ export default function OAuthUsageBar() {
         <div className={`flex items-center gap-2 px-3 py-1 text-xs ${showClaude ? "border-t border-border/30" : ""}`}>
           <Cpu className="h-3 w-3 text-muted-foreground flex-shrink-0" />
           <span className="text-muted-foreground font-medium hidden sm:inline">Codex</span>
-          <span className="text-muted-foreground/70 font-mono text-[10px]">{codex!.account_id?.slice(0, 12)}…</span>
           {(() => {
             const rl = (codex as any)?.rate_limits;
-            if (!rl) return <span className="px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-green-500/15 text-green-500">active</span>;
-            const remaining = parseInt(rl["x-ratelimit-remaining-requests"] ?? rl["x-ratelimit-remaining-tokens"] ?? "", 10);
-            const limit = parseInt(rl["x-ratelimit-limit-requests"] ?? rl["x-ratelimit-limit-tokens"] ?? "", 10);
-            if (!isNaN(remaining) && !isNaN(limit) && limit > 0) {
-              const pct = Math.round((1 - remaining / limit) * 100);
-              const color = pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-orange-500" : pct >= 40 ? "bg-yellow-500" : "bg-green-500";
-              return (
-                <>
-                  <div className="h-1.5 w-16 sm:w-20 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.min(100, pct)}%` }} />
+            const primary = parseInt(rl?.["x-codex-primary-used-percent"] ?? "", 10);
+            const secondary = parseInt(rl?.["x-codex-secondary-used-percent"] ?? "", 10);
+            if (!isNaN(primary) || !isNaN(secondary)) {
+              const bars = [
+                { label: "5h", pct: isNaN(primary) ? 0 : primary },
+                { label: "7d", pct: isNaN(secondary) ? 0 : secondary },
+              ];
+              return bars.map(b => {
+                const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+                return (
+                  <div key={b.label} className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground/70 whitespace-nowrap">{b.label}:</span>
+                    <div className="h-1.5 w-16 sm:w-20 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.min(100, b.pct)}%` }} />
+                    </div>
+                    <span className={`w-7 text-right tabular-nums ${b.pct >= 90 ? "text-red-500 font-medium" : "text-muted-foreground/70"}`}>{b.pct}%</span>
                   </div>
-                  <span className={`w-7 text-right tabular-nums ${pct >= 90 ? "text-red-500 font-medium" : "text-muted-foreground/70"}`}>{pct}%</span>
-                </>
-              );
+                );
+              });
             }
             return <span className="px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-green-500/15 text-green-500">active</span>;
           })()}
-          {codex!.models && (
-            <span className="text-muted-foreground/50 text-[10px]">{codex!.models.length} Models</span>
-          )}
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-blue-500/15 text-blue-400`}>
+            {(codex as any)?.rate_limits?.["x-codex-plan-type"] || "plus"}
+          </span>
         </div>
       )}
     </div>
