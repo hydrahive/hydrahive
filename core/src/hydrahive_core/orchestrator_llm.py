@@ -842,6 +842,7 @@ async def _openai_codex_call(
 
     text = ""
     accumulated_fn: dict[str, dict] = {}  # item_id → {id, call_id, name, arguments}
+    _codex_usage: dict[str, int] = {"input": 0, "output": 0}
 
     async with _httpx.AsyncClient(timeout=120) as client:
         async with client.stream(
@@ -904,6 +905,13 @@ async def _openai_codex_call(
                     if cid in accumulated_fn:
                         accumulated_fn[cid]["arguments"] = ev.get("arguments", accumulated_fn[cid]["arguments"])
 
+                elif ev_type == "response.completed":
+                    # Token-Usage aus Codex response.completed Event
+                    usage = ev.get("response", {}).get("usage", {})
+                    if usage:
+                        _codex_usage["input"] = usage.get("input_tokens", 0)
+                        _codex_usage["output"] = usage.get("output_tokens", 0)
+
     tool_calls_out = [
         SimpleNamespace(
             id=fn["call_id"],
@@ -923,7 +931,11 @@ async def _openai_codex_call(
         tool_calls=tool_calls_out if tool_calls_out else None,
     )
     choice = SimpleNamespace(message=message, finish_reason="stop")
-    return SimpleNamespace(choices=[choice], model=model_id)
+    usage = SimpleNamespace(
+        prompt_tokens=_codex_usage["input"],
+        completion_tokens=_codex_usage["output"],
+    )
+    return SimpleNamespace(choices=[choice], model=model_id, usage=usage)
 
 
 # ---------------------------------------------------------------- LLM Call Chain

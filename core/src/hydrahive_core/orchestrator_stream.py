@@ -313,6 +313,10 @@ async def _stream_codex(
         boss_cfg, messages, litellm_tools, codex_token, model_name
     )
     msg = codex_resp.choices[0].message
+    # Token-Usage aus Codex Response akkumulieren
+    if hasattr(codex_resp, "usage") and codex_resp.usage:
+        _usage["input"] += getattr(codex_resp.usage, "prompt_tokens", 0)
+        _usage["output"] += getattr(codex_resp.usage, "completion_tokens", 0)
     cur_messages = list(messages)
     last_signature: tuple[str, ...] | None = None
     repeated_signature_count = 0
@@ -376,6 +380,9 @@ async def _stream_codex(
             force_tools=False,
         )
         msg = next_resp.choices[0].message
+        if hasattr(next_resp, "usage") and next_resp.usage:
+            _usage["input"] += getattr(next_resp.usage, "prompt_tokens", 0)
+            _usage["output"] += getattr(next_resp.usage, "completion_tokens", 0)
 
     text = msg.content or ""
     if text:
