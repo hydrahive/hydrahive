@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useMemo, useCallback, memo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ImagePlus } from "lucide-react";
+import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ImagePlus, Bug, Zap, Cpu } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
-import { sseStream } from "@/lib/sseStream";
+import { sseStream, type SSEEvent } from "@/lib/sseStream";
 
 interface Message {
   id:         string;
@@ -65,6 +65,8 @@ export function AgentChatPage() {
   const [unrestricted] = useState(false);
   const [pendingImages, setPendingImages] = useState<{data: string; media_type: string; preview: string}[]>([]);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugEvents, setDebugEvents] = useState<{ ts: number; type: string; data: Record<string, unknown> }[]>([]);
   const fileInputRef    = useRef<HTMLInputElement>(null);
 
   const bottomRef       = useRef<HTMLDivElement>(null);
@@ -269,6 +271,7 @@ export function AgentChatPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    setDebugEvents([]);
 
     try {
       setMessages(ms => [...ms, currentAsst]);
@@ -283,6 +286,14 @@ export function AgentChatPage() {
         signal: controller.signal,
         onConnectionLost: () => setError(t("common.connectionLost", { defaultValue: "Verbindung verloren — bitte nochmal senden" })),
         onEvent: (evt) => {
+          // Debug-Events sammeln (alle außer text-chunks)
+          if (evt.type !== "text") {
+            setDebugEvents(prev => [...prev, { ts: Date.now(), type: evt.type, data: evt as unknown as Record<string, unknown> }]);
+          }
+          if (evt.type === "context_info" || evt.type === "info") {
+            // Nur ins Debug-Panel, nicht in den Chat
+            return;
+          }
           if (evt.type === "text") {
             if (hadToolCalls) { currentAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, currentAsst]); hadToolCalls = false; }
             setMessages(ms => ms.map(m =>
@@ -357,6 +368,12 @@ export function AgentChatPage() {
           <h1 className="text-sm font-semibold truncate">{agentName}</h1>
           <p className="text-xs text-muted-foreground font-mono">{agentModel.model ?? id}</p>
         </div>
+        <button onClick={() => setShowDebug(d => !d)}
+          className={`p-1.5 rounded-md transition-colors ${showDebug ? "bg-orange-500/15 text-orange-500" : "hover:bg-accent text-muted-foreground"}`}
+          title="Debug-Konsole"
+          aria-label="Toggle debug console">
+          <Bug className="h-4 w-4" />
+        </button>
         <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
           className={`p-1.5 rounded-md transition-colors ${showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
           title="Chat-Verlauf"
@@ -366,6 +383,82 @@ export function AgentChatPage() {
       </div>
 
       <OAuthUsageBar />
+
+      {/* Debug-Konsole (#371) */}
+      {showDebug && (
+        <div className="border-b bg-[#0d0d0d] text-[#d4d4d4] max-h-48 overflow-y-auto px-4 py-3 font-mono text-xs space-y-1.5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="flex items-center gap-1.5 text-orange-400 font-semibold"><Bug className="h-3 w-3" /> Debug-Konsole</span>
+            <span className="text-muted-foreground">{debugEvents.length} Events</span>
+          </div>
+          {debugEvents.length === 0 && (
+            <span className="text-muted-foreground">Sende eine Nachricht um Debug-Events zu sehen...</span>
+          )}
+          {debugEvents.map((evt, i) => {
+            const time = new Date(evt.ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            if (evt.type === "context_info") {
+              const d = evt.data as Record<string, number>;
+              const sys = d.system_tokens ?? 0;
+              const hist = d.history_tokens ?? 0;
+              const tool = d.tool_tokens ?? 0;
+              const total = sys + hist + tool;
+              return (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground w-16">{time}</span>
+                  <Cpu className="h-3 w-3 text-blue-400" />
+                  <span className="text-blue-400">Context:</span>
+                  <span>System {sys.toLocaleString()}</span>
+                  <span className="text-muted-foreground">+</span>
+                  <span>History {hist.toLocaleString()}</span>
+                  <span className="text-muted-foreground">+</span>
+                  <span>Tools {tool.toLocaleString()}</span>
+                  <span className="text-muted-foreground">=</span>
+                  <span className="text-white font-medium">{total.toLocaleString()} Tokens</span>
+                </div>
+              );
+            }
+            if (evt.type === "tool_call") {
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-16">{time}</span>
+                  <Zap className="h-3 w-3 text-yellow-400" />
+                  <span className="text-yellow-400">{String((evt.data as any).tool_call)}</span>
+                  <span className="text-muted-foreground truncate max-w-[60%]">{String((evt.data as any).tool_detail || "")}</span>
+                </div>
+              );
+            }
+            if (evt.type === "done") {
+              const u = (evt.data as any).usage;
+              return (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground w-16">{time}</span>
+                  <span className="text-green-400 font-medium">Done</span>
+                  {u && <span>↑{u.input?.toLocaleString()} ↓{u.output?.toLocaleString()}</span>}
+                  {u?.cache_read > 0 && <span className="text-green-500">{u.cache_read.toLocaleString()} cached</span>}
+                  {(evt.data as any).is_fallback && <span className="text-orange-400">Fallback: {String((evt.data as any).model)}</span>}
+                </div>
+              );
+            }
+            if (evt.type === "info") {
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-16">{time}</span>
+                  <span className="text-cyan-400">{String((evt.data as any).info)}</span>
+                </div>
+              );
+            }
+            if (evt.type === "error") {
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-16">{time}</span>
+                  <span className="text-red-400 font-medium">Error: {String((evt.data as any).error)}</span>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      )}
 
       {/* History Panel */}
       {showHistory && (

@@ -14,7 +14,9 @@ export type SSEEvent =
   | { type: "text"; text: string }
   | { type: "tool_call"; tool_call: string; tool_input?: Record<string, unknown>; tool_detail?: string }
   | { type: "tool_image"; tool_image: string; tool_name?: string }
-  | { type: "done"; usage?: { input: number; output: number }; is_fallback?: boolean; model?: string }
+  | { type: "context_info"; system_tokens: number; history_tokens: number; tool_tokens: number; history_messages: number; history_budget: number }
+  | { type: "info"; info: string }
+  | { type: "done"; usage?: { input: number; output: number; cache_read?: number; cache_write?: number; rounds?: number }; is_fallback?: boolean; model?: string }
   | { type: "error"; error: string; session_reset?: boolean };
 
 export interface SSEStreamOptions {
@@ -96,6 +98,11 @@ export async function sseStream(opts: SSEStreamOptions): Promise<void> {
             const raw = JSON.parse(line.slice(6));
             if (raw.text !== undefined) {
               opts.onEvent({ type: "text", text: raw.text });
+            } else if (raw._context_info !== undefined) {
+              const ci = raw._context_info;
+              opts.onEvent({ type: "context_info", system_tokens: ci.system_tokens ?? 0, history_tokens: ci.history_tokens ?? 0, tool_tokens: ci.tool_tokens ?? 0, history_messages: ci.history_messages ?? 0, history_budget: ci.history_budget ?? 0 });
+            } else if (raw.info !== undefined) {
+              opts.onEvent({ type: "info", info: raw.info });
             } else if (raw.tool_image !== undefined) {
               opts.onEvent({ type: "tool_image", tool_image: raw.tool_image, tool_name: raw.tool_name });
             } else if (raw.tool_call !== undefined) {
