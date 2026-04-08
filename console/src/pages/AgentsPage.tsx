@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench, HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -79,10 +79,24 @@ const STATUS_COLORS: Record<string, string> = {
   error: "text-destructive",
 };
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({ label, children, hint, tooltip }: { label: string; children: React.ReactNode; hint?: string; tooltip?: string }) {
+  const [showTip, setShowTip] = useState(false);
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</label>
+      <div className="flex items-center gap-1.5">
+        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</label>
+        {tooltip && (
+          <button type="button" onClick={() => setShowTip(s => !s)}
+            className="text-muted-foreground/50 hover:text-primary transition-colors">
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {showTip && tooltip && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+          {tooltip}
+        </div>
+      )}
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -501,7 +515,7 @@ function AgentsCrudTab() {
             </div>
 
             {editId && (
-              <Field label={t("agents.fallbackModels")} hint={t("agents.fallbackModelsHint")}>
+              <Field label={t("agents.fallbackModels")} hint={t("agents.fallbackModelsHint")} tooltip={t("agents.fallbackModelsTip", { defaultValue: "Wenn das Hauptmodell nicht verfügbar ist (Quota, Overload, Timeout), wird automatisch das nächste Modell aus dieser Liste probiert. Reihenfolge = Priorität." })}>
                 <div className="space-y-2">
                   <div className="flex min-h-7 flex-wrap gap-1.5">
                     {form.fallback_models.length === 0 ? (
@@ -552,10 +566,10 @@ function AgentsCrudTab() {
             )}
 
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label={t("agents.temperature")}>
+              <Field label={t("agents.temperature")} tooltip={t("agents.temperatureTip", { defaultValue: "0 = deterministisch (immer gleiche Antwort), 1 = kreativ/variabel. Für Code-Agenten 0–0.3 empfohlen, für kreative Aufgaben 0.7–1.0." })}>
                 <Input type="number" value={form.temperature} onChange={(e) => set("temperature", parseFloat(e.target.value))} min={0} max={2} step={0.1} />
               </Field>
-              <Field label={t("agents.maxTokens")}>
+              <Field label={t("agents.maxTokens")} tooltip={t("agents.maxTokensTip", { defaultValue: "Maximale Anzahl Tokens in der Antwort. 4096 reicht für die meisten Aufgaben, 8192+ für lange Code-Generierung." })}>
                 <Input type="number" value={form.max_tokens} onChange={(e) => set("max_tokens", parseInt(e.target.value))} min={256} max={32000} step={256} />
               </Field>
             </div>
@@ -563,9 +577,9 @@ function AgentsCrudTab() {
             <div>
               <p className="metric-kicker mb-3">{t("agents.heartbeatSection")}</p>
               <div className="grid gap-4 md:grid-cols-3">
-                <Field label={t("agents.interval")}><Input value={form.heartbeat_interval} onChange={(e) => set("heartbeat_interval", e.target.value)} placeholder="30s" /></Field>
-                <Field label={t("agents.timeout")}><Input value={form.heartbeat_timeout} onChange={(e) => set("heartbeat_timeout", e.target.value)} placeholder="90s" /></Field>
-                <Field label={t("agents.onFailure")}>
+                <Field label={t("agents.interval")} tooltip={t("agents.heartbeatIntervalTip", { defaultValue: "Wie oft der Agent einen Heartbeat sendet. Format: 30s, 1m, 5m. Kürzere Intervalle = schnellere Fehlererkennung, aber mehr Last." })}><Input value={form.heartbeat_interval} onChange={(e) => set("heartbeat_interval", e.target.value)} placeholder="30s" /></Field>
+                <Field label={t("agents.timeout")} tooltip={t("agents.heartbeatTimeoutTip", { defaultValue: "Nach wie vielen Sekunden ohne Heartbeat der Agent als 'tot' gilt. Sollte mindestens 2-3x das Intervall sein." })}><Input value={form.heartbeat_timeout} onChange={(e) => set("heartbeat_timeout", e.target.value)} placeholder="90s" /></Field>
+                <Field label={t("agents.onFailure")} tooltip={t("agents.heartbeatOnFailureTip", { defaultValue: "restart = Agent automatisch neu starten. stop = Agent stoppen und Admin benachrichtigen. alert = nur Warnung, Agent läuft weiter." })}>
                   <select value={form.heartbeat_on_failure} onChange={(e) => set("heartbeat_on_failure", e.target.value)} className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="restart">restart</option>
                     <option value="stop">stop</option>
@@ -595,7 +609,7 @@ function AgentsCrudTab() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Max Tool Rounds" hint="Maximale Anzahl Tool-Aufrufe pro Nachricht (leer = Standard)">
+              <Field label="Max Tool Rounds" hint={t("agents.maxToolRoundsHint", { defaultValue: "Leer = Standard (6 Runden)" })} tooltip={t("agents.maxToolRoundsTip", { defaultValue: "Wie oft der Agent pro Nachricht Tools aufrufen darf. Jede Runde: LLM denkt → ruft Tool auf → bekommt Ergebnis. Mehr Runden = komplexere Aufgaben möglich, aber höhere Kosten und Latenz." })}>
                 <Input
                   type="number"
                   value={form.max_tool_rounds ?? ""}
@@ -603,7 +617,7 @@ function AgentsCrudTab() {
                   min={1} max={50} placeholder="Standard (6)"
                 />
               </Field>
-              <Field label="Execution Mode" hint="Standard-Modus für diesen Agenten. Unrestricted = voller Root-Zugang, keine Blocklists.">
+              <Field label="Execution Mode" hint={t("agents.executionModeHint", { defaultValue: "Standard-Modus für diesen Agenten" })} tooltip={t("agents.executionModeTip", { defaultValue: "safe = Shell-Blocklist aktiv, nur ungefährliche Befehle. elevated = erweiterte Rechte, Blocklist gelockert. root = voller Systemzugriff. unrestricted = keine Einschränkungen, keine Blocklists. Für die meisten Agenten reicht 'safe'." })}>
                 <select
                   value={form.execution_mode_default}
                   onChange={(e) => set("execution_mode_default", e.target.value)}
@@ -745,7 +759,7 @@ function AgentsCrudTab() {
               </div>
             </div>
 
-            <Field label={t("agents.soul")} hint={t("agents.soulHint")}>
+            <Field label={t("agents.soul")} hint={t("agents.soulHint")} tooltip={t("agents.soulTip", { defaultValue: "Die soul.md definiert Persönlichkeit und Verhalten des Agenten. Wird als System-Prompt an das LLM gesendet. Schreibe in Markdown — z.B. Rolle, Kommunikationsstil, Einschränkungen, Spezialwissen." })}>
               <textarea
                 value={form.soul}
                 onChange={(e) => set("soul", e.target.value)}
