@@ -338,8 +338,8 @@ export function AgentChatPage() {
       }
     } finally {
       setSending(false);
-      // Leere Assistant-Messages aufräumen (Codex: Tool-Calls vor Text erzeugen leere Platzhalter)
-      setMessages(ms => ms.filter(m => !(m.role === "assistant" && !m.content)));
+      // Leere Assistant-Messages aufräumen — verzögert damit alle State-Updates durch sind
+      setTimeout(() => setMessages(ms => ms.filter(m => !(m.role === "assistant" && !m.content))), 100);
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);
