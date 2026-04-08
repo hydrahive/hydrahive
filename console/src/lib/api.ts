@@ -154,6 +154,8 @@ export const api = {
     api.get<{sessions: SessionPreview[]}>(`/agents/${agentId}/sessions?limit=${limit}`),
   listProjectSessions: (projectId: string, limit = 20) =>
     api.get<{sessions: SessionPreview[]}>(`/projects/${projectId}/sessions?limit=${limit}`),
+  resumeProjectSession: (projectId: string, sessionId: string) =>
+    api.post<{ resumed: boolean; id: string; messages: SessionFull["messages"] }>(`/projects/${projectId}/sessions/${sessionId}/resume`, {}),
   getSessionById: (agentId: string, sessionId: string) =>
     api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
   resumeSession: (agentId: string, sessionId: string) =>

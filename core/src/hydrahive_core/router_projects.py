@@ -389,6 +389,23 @@ def register_project_routes(
             raise HTTPException(404, "Session nicht gefunden")
         return session.to_dict()
 
+    @auth_router.post("/projects/{project_id}/sessions/{session_id}/resume")
+    async def resume_project_session(project_id: str, session_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        session = await sessions.resume_session(project_id, session_id)
+        if not session:
+            raise HTTPException(404, "Session nicht gefunden")
+        return {
+            "resumed": True,
+            "id": session.id,
+            "messages": [
+                {"role": m.role.value, "content": m.content, "timestamp": m.timestamp}
+                for m in session.messages
+            ],
+        }
+
     @auth_router.post("/projects/{project_id}/message/stream")
     async def send_message_stream(
         project_id: str,
