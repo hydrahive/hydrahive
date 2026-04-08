@@ -245,7 +245,7 @@ export function MyAgentPage() {
     try {
       const d = await api.getSessionById(agentInfo.agent_id, sid);
       const msgs = d.messages
-        .filter(m => m.role === "user" || m.role === "assistant")
+        .filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && !m.content))
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
       chat.setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
       chat.setShowHistory(false);
@@ -257,7 +257,7 @@ export function MyAgentPage() {
     try {
       const d = await api.resumeSession(agentInfo.agent_id, sid);
       const msgs = d.messages
-        .filter(m => m.role === "user" || m.role === "assistant")
+        .filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && !m.content))
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
       chat.setMessages(msgs);
       chat.setViewSession(null);

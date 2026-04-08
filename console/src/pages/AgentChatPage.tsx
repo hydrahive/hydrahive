@@ -180,7 +180,7 @@ export function AgentChatPage() {
               <button key={s.id} onClick={() => {
                 api.get<{ id: string; messages: any[]; started_at: string }>(`/agents/${id}/sessions/${s.id}`)
                   .then(d => {
-                    const msgs = d.messages.map((m: any) => mkMsg(m.role, m.content));
+                    const msgs = d.messages.filter((m: any) => !(m.role === "assistant" && !m.content)).map((m: any) => mkMsg(m.role, m.content));
                     chat.setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
                   }).catch(() => {});
               }}
