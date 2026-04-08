@@ -1483,6 +1483,82 @@ function SettingsPanel({
           </button>
         </div>
       </form>
+
+      {/* GDPR / Datenschutz */}
+      <GdprSection />
+    </div>
+  );
+}
+
+// ── GDPR Section (#495) ──────────────────────────────────────────────────────
+
+function GdprSection() {
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function handleExport() {
+    setExporting(true); setMsg("");
+    try {
+      const data = await api.get<Record<string, unknown>>("/me/gdpr-export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hydrahive-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg("Export heruntergeladen.");
+    } catch { setMsg("Export fehlgeschlagen."); }
+    finally { setExporting(false); }
+  }
+
+  async function handleDelete() {
+    setDeleting(true); setMsg("");
+    try {
+      const d = await api.delete<{ deleted: string[]; note: string }>("/me/gdpr-delete");
+      setMsg(`Gelöscht: ${(d.deleted || []).join(", ")}. ${d.note || ""}`);
+      setConfirmDelete(false);
+    } catch { setMsg("Löschung fehlgeschlagen."); }
+    finally { setDeleting(false); }
+  }
+
+  return (
+    <div className="p-6 max-w-2xl border-t mt-4">
+      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+        <Shield className="h-4 w-4" /> Datenschutz (GDPR)
+      </h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        Exportiere oder lösche deine persönlichen Daten (Sessions, Memory, Dateien). Dein Account bleibt erhalten.
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <button onClick={handleExport} disabled={exporting}
+          className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-muted transition-colors disabled:opacity-50">
+          <Download className="h-3.5 w-3.5" />
+          {exporting ? "Exportiere..." : "Meine Daten exportieren"}
+        </button>
+        {!confirmDelete ? (
+          <button onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-destructive/30 text-destructive rounded-md hover:bg-destructive/10 transition-colors">
+            <Trash2 className="h-3.5 w-3.5" />
+            Meine Daten löschen
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-destructive">Wirklich alle Daten löschen?</span>
+            <button onClick={handleDelete} disabled={deleting}
+              className="px-3 py-1.5 text-xs bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 disabled:opacity-50">
+              {deleting ? "Lösche..." : "Ja, löschen"}
+            </button>
+            <button onClick={() => setConfirmDelete(false)}
+              className="px-3 py-1.5 text-xs border rounded-md hover:bg-muted">
+              Abbrechen
+            </button>
+          </div>
+        )}
+      </div>
+      {msg && <p className="text-xs mt-3 text-muted-foreground">{msg}</p>}
     </div>
   );
 }

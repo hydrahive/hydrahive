@@ -545,12 +545,24 @@ class SessionManager:
         return result
 
     def estimated_tokens(self, project_id: str) -> int:
-        """Grobe Token-Schaetzung der aktiven Session (1 Token ≈ 4 Zeichen)."""
+        """Token-Count der aktiven Session.
+
+        Nutzt echte Token-Counts aus API-Responses wenn vorhanden (#496),
+        fällt auf Zeichenschätzung zurück für Messages ohne Counts.
+        """
         session = self._active.get(project_id)
         if not session:
             return 0
         from .token_estimation import estimate_tokens
-        return sum(estimate_tokens(m.content) for m in session.messages)
+        total = 0
+        for m in session.messages:
+            real_in = m.metadata.get("input_tokens", 0) or 0
+            real_out = m.metadata.get("output_tokens", 0) or 0
+            if real_in or real_out:
+                total += real_in + real_out
+            else:
+                total += estimate_tokens(m.content)
+        return total
 
     async def resume_session(self, project_id: str, session_id: str) -> "Session | None":
         """Lädt eine historische Session und setzt sie als aktive Session."""
