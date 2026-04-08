@@ -338,6 +338,8 @@ export function AgentChatPage() {
       }
     } finally {
       setSending(false);
+      // Leere Assistant-Messages aufräumen (Codex: Tool-Calls vor Text erzeugen leere Platzhalter)
+      setMessages(ms => ms.filter(m => !(m.role === "assistant" && !m.content)));
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);
@@ -539,12 +541,6 @@ export function AgentChatPage() {
           </div>
         )}
         {(viewSession ? viewSession.messages : messages).map((msg) => {
-          // Leere Assistant-Messages ausblenden (nicht die letzte — könnte noch streamen)
-          if (msg.role === "assistant" && !msg.content) {
-            const allMsgs = viewSession ? viewSession.messages : messages;
-            const isLast = allMsgs.indexOf(msg) === allMsgs.length - 1;
-            if (!isLast) return null;
-          }
           if (msg.role === "tool") {
             const allMsgs = viewSession ? viewSession.messages : messages;
             const msgIdx = allMsgs.indexOf(msg);
