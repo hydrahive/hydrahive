@@ -244,6 +244,7 @@ export function AdminLayout() {
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
   const allNavItems: NavItem[] = [
+    { to: "/quickstart",     icon: Rocket,          label: t("nav.quickstart", { defaultValue: "Quickstart" }), hint: t("navHint.quickstart", { defaultValue: "Interaktiver Einrichtungs-Guide" }) },
     { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
     { to: "/my-agent",       icon: Bot,             label: t("nav.myAgent"),         hint: t("navHint.myAgent") },
     { to: "/agents",         icon: Users,           label: t("nav.agents"),          hint: t("navHint.agents") },
@@ -256,7 +257,6 @@ export function AdminLayout() {
     { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
     { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
-    { to: "/quickstart",     icon: Rocket,          label: t("nav.quickstart", { defaultValue: "Quickstart" }), hint: t("navHint.quickstart", { defaultValue: "Interaktiver Einrichtungs-Guide" }) },
     { to: "/prompt-guide",   icon: Lightbulb,       label: t("nav.promptGuide"),     hint: t("navHint.promptGuide", { defaultValue: "KI-Tipps für bessere Prompts" }) },
   ];
 
