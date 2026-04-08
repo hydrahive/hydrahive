@@ -72,6 +72,17 @@ _TOOLS_CODER = [
     "wks_file_read", "wks_file_write", "wks_shell_exec",
 ]
 
+_TOOLS_ADMIN = [
+    *_TOOLS_CODER,
+    "create_agent", "delete_agent", "create_project", "delete_project",
+    "discord_send", "discord_read", "discord_list_channels",
+    "discord_list_all_channels", "discord_create_category",
+    "discord_create_channel", "discord_delete_channel",
+    "discord_set_topic", "discord_rename_channel",
+    "discord_list_members", "discord_list_roles",
+    "discord_delete_message", "discord_pin_message",
+]
+
 # ── Presets ───────────────────────────────────────────────────────────────────
 
 ROLE_PRESETS: dict[str, dict] = {
@@ -102,7 +113,7 @@ ROLE_PRESETS: dict[str, dict] = {
     },
     "admin": {
         "description": "Vollzugriff — nur für Admins",
-        "tools": "__ALL__",
+        "tools": _TOOLS_ADMIN,
         "execution_modes": {
             "default": "root",
             "safe": {"permissions": _PERM_CODER_SAFE},
@@ -118,12 +129,10 @@ def resolve_role(
     *,
     tools_extra: list[str] | None = None,
     tools_deny: list[str] | None = None,
-    all_tool_ids: list[str] | None = None,
 ) -> tuple[list[str], dict] | None:
     """Löst eine Rolle in (tools, execution_modes) auf.
 
     Returns None wenn role None ist (Legacy/Custom-Modus).
-    Bei admin-Rolle mit tools="__ALL__" wird all_tool_ids benötigt.
     """
     if role is None:
         return None
@@ -131,11 +140,7 @@ def resolve_role(
     if preset is None:
         return None
 
-    tools = preset["tools"]
-    if tools == "__ALL__":
-        tools = list(all_tool_ids) if all_tool_ids else []
-    else:
-        tools = list(tools)
+    tools = list(preset["tools"])
 
     if tools_extra:
         for t in tools_extra:

@@ -22,7 +22,7 @@ const ROLES: RoleInfo[] = [
   { id: "reader",    label: "Leser",       desc: "Lesen & Suchen",        icon: Eye,      tools: [], toolCount: 7 },
   { id: "assistant", label: "Assistent",    desc: "Lesen & Schreiben",     icon: Bot,      tools: [], toolCount: 13 },
   { id: "coder",     label: "Entwickler",   desc: "Shell, Git & Code",     icon: Code,     tools: [], toolCount: 27 },
-  { id: "admin",     label: "Admin",        desc: "Vollzugriff",           icon: Shield,   tools: "__ALL__", toolCount: -1, danger: true },
+  { id: "admin",     label: "Admin",        desc: "Vollzugriff",           icon: Shield,   tools: [], toolCount: 39, danger: true },
 ];
 
 interface RoleSelectorProps {
