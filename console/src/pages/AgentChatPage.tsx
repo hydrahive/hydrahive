@@ -4,6 +4,7 @@ import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, Ro
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, type SessionPreview } from "@/lib/api";
 import VoiceChatButton from "@/components/VoiceChatButton";
+import OAuthUsageBar from "@/components/OAuthUsageBar";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 import { sseStream } from "@/lib/sseStream";
@@ -363,6 +364,8 @@ export function AgentChatPage() {
           <Clock className="h-4 w-4" />
         </button>
       </div>
+
+      <OAuthUsageBar />
 
       {/* History Panel */}
       {showHistory && (

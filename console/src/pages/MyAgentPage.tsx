@@ -6,6 +6,7 @@ const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.Bu
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
 import VoiceChatButton from "@/components/VoiceChatButton";
+import OAuthUsageBar from "@/components/OAuthUsageBar";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -536,7 +537,8 @@ export function MyAgentPage() {
                     : loadError}
                 </div>
               )}
-              <div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+              <div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-[28px] border border-border/60 bg-card/80 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur overflow-hidden">
+                <OAuthUsageBar />
                 <div className="border-b border-border/60 px-4 py-3 sm:px-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

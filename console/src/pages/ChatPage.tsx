@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2, RefreshCw, RotateCcw, Plus, ImagePlus } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
 import VoiceChatButton from "@/components/VoiceChatButton";
+import OAuthUsageBar from "@/components/OAuthUsageBar";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useTranslation } from "react-i18next";
@@ -433,6 +434,7 @@ export function ChatPage() {
         </div>
       </div>
 
+      <OAuthUsageBar />
       <section className="section-card flex-1 min-h-0 overflow-hidden p-0">
         <div className="grid h-full min-h-0 gap-0 lg:grid-cols-[minmax(0,1.7fr)_22rem]">
           <div className="relative flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r overflow-hidden">
