@@ -330,8 +330,25 @@ class Orchestrator:
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):
         from .plugin_manager import plugin_manager as _pm
+        from .hooks import parse_hooks_config, run_hooks
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
-        # #421: Blockierende Pre-Hooks
+
+        # #472: Agent-YAML Hook-System (before_tool)
+        hook_context = {
+            "tool_name": tool_name,
+            "tool_input": tool_input or {},
+            "agent_id": boss_cfg.id,
+            "project_id": project_id,
+        }
+        parsed_hooks = parse_hooks_config(getattr(boss_cfg, "hooks", None))
+        before_hooks = parsed_hooks.get("before_tool", [])
+        if before_hooks:
+            allowed = await run_hooks("before_tool", hook_context, before_hooks)
+            if not allowed:
+                self._runtime.set_activity(boss_cfg.id, "Denkt…")
+                return {"error": f"Tool '{tool_name}' blockiert durch Hook (before_tool)", "blocked": True}
+
+        # #421: Blockierende Plugin Pre-Hooks (Legacy)
         hook_result = await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
         if isinstance(hook_result, dict) and hook_result.get("block"):
             self._runtime.set_activity(boss_cfg.id, "Denkt…")
@@ -343,6 +360,13 @@ class Orchestrator:
                 execution_mode=execution_mode,
             )
             await _pm.emit("tool.after", project_id=project_id, tool_name=tool_name, result=result)
+
+            # #472: Agent-YAML Hook-System (after_tool)
+            after_hooks = parsed_hooks.get("after_tool", [])
+            if after_hooks:
+                hook_context["result"] = result
+                await run_hooks("after_tool", hook_context, after_hooks)
+
             return result
         finally:
             self._runtime.set_activity(boss_cfg.id, "Denkt…")
