@@ -212,9 +212,9 @@ function useQuickstartData() {
       for (const c of (doctor.checks || [])) checks[c.name?.toLowerCase() || ""] = c.status;
       setData({
         llmConfigured: setup.llm_configured ?? false,
-        agentsCount: status.agents_count ?? Object.keys(status.agents || {}).length ?? 0,
-        projectsCount: status.projects_count ?? Object.keys(status.projects || {}).length ?? 0,
-        sessionsCount: status.active_sessions ?? 0,
+        agentsCount: status.discovery?.count ?? 0,
+        projectsCount: status.projects?.count ?? 0,
+        sessionsCount: (status.sessions?.active_projects || []).length,
         doctorChecks: checks,
         userCount: (users.users || []).length,
       });
