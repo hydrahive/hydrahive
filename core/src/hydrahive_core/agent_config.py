@@ -176,7 +176,7 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
 
     # #492: Rolle auflösen → tools + execution_modes setzen
     if config.role:
-        from .agent_roles import resolve_role
+        from .agent_roles import resolve_role, ROLE_PRESETS
         resolved = resolve_role(
             config.role,
             tools_extra=config.tools_extra or None,
@@ -189,6 +189,11 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
                 config.tools = role_tools
             if not raw.get("execution_modes"):
                 config.execution_modes = ExecutionModesConfig.model_validate(role_exec_modes)
+            # tool_selection aus Rolle (z.B. admin → always)
+            if not raw.get("tool_selection"):
+                role_preset = ROLE_PRESETS.get(config.role)  # type: ignore[arg-type]
+                if role_preset and "tool_selection" in role_preset:
+                    config.tool_selection = role_preset["tool_selection"]
 
     config.agent_dir = agent_dir
     return config

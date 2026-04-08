@@ -114,6 +114,7 @@ ROLE_PRESETS: dict[str, dict] = {
     "admin": {
         "description": "Vollzugriff — nur für Admins",
         "tools": _TOOLS_ADMIN,
+        "tool_selection": "always",
         "execution_modes": {
             "default": "root",
             "safe": {"permissions": _PERM_CODER_SAFE},
