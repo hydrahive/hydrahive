@@ -1,6 +1,7 @@
 import React from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { NotificationBell } from "@/components/NotificationBell";
+import { NotificationQueue } from "@/components/NotificationQueue";
 import { SupportWidget } from "@/components/SupportWidget";
 import { FloatingCompanion, useCompanionActivation, BlobCreature } from "@/components/FloatingCompanion";
 import {
@@ -601,6 +602,7 @@ export function AdminLayout() {
         </div>
       </nav>
 
+      <NotificationQueue />
       <SupportWidget />
       <FloatingCompanion />
     </div>
