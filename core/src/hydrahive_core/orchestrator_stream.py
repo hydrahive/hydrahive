@@ -253,11 +253,12 @@ async def handle_message_stream(
                 "cache_write_tokens": _usage.get("cache_write", 0),
                 "cache_read_tokens":  _usage.get("cache_read",  0),
             }
-        await orch._sessions.append(
-            project_id, MessageRole.ASSISTANT,
-            full_response, agent_id=boss_cfg.id,
-            **_stream_meta,
-        )
+        if full_response:  # Leere Responses nicht in Session speichern
+            await orch._sessions.append(
+                project_id, MessageRole.ASSISTANT,
+                full_response, agent_id=boss_cfg.id,
+                **_stream_meta,
+            )
         total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
         if total_tokens > 0 and _tool_reg._rate_limiter is not None:
             _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)

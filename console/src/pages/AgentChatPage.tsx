@@ -94,7 +94,7 @@ export function AgentChatPage() {
     )
       .then(d => {
         const loaded = d.messages
-          .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+          .filter((m: any) => (m.role === "user" || m.role === "assistant" || m.role === "tool") && !(m.role === "assistant" && !m.content))
           .map((m: any) => {
             const msg = mkMsg(m.role as Message["role"], m.content);
             if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
