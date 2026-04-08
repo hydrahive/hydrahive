@@ -97,6 +97,9 @@ class PluginTool(BaseTool):
         return self._plugin_id
 
     async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
+        import time as _time
+        _t0 = _time.monotonic()
+        _err: str | None = None
         try:
             result = self._handler(agent_id=agent_id, project_id=project_id, **kwargs)
             if inspect.isawaitable(result):
@@ -104,7 +107,18 @@ class PluginTool(BaseTool):
             return result
         except Exception as e:
             logger.error("Plugin-Tool '%s' Fehler: %s", self._id, e)
+            _err = str(e)
             return f"Plugin-Tool-Fehler: {e}"
+        finally:
+            # #367: Metriken an LoadedPlugin melden
+            _ms = (_time.monotonic() - _t0) * 1000
+            try:
+                from .plugin_manager import plugin_manager
+                lp = plugin_manager._plugins.get(self._plugin_id)
+                if lp:
+                    lp.record_call(_ms, _err)
+            except Exception:
+                pass
 
 
 # ── PluginAPI: Das Interface für Plugins ────────────────────────────────────

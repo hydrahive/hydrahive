@@ -103,6 +103,30 @@ class LoadedPlugin:
     tools:      list = field(default_factory=list)    # list[PluginTool]
     hook_count: int = 0
     module:     Any = None
+    # Runtime-Metriken (#367)
+    call_count:      int = 0
+    error_count:     int = 0
+    total_latency_ms: float = 0.0
+    last_called_at:  str | None = None
+    last_error:      str | None = None
+
+    def record_call(self, latency_ms: float, error: str | None = None) -> None:
+        """Tool-Aufruf aufzeichnen (#367)."""
+        import datetime as _dt
+        self.call_count += 1
+        self.total_latency_ms += latency_ms
+        self.last_called_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        if error:
+            self.error_count += 1
+            self.last_error = error
+
+    @property
+    def avg_latency_ms(self) -> float:
+        return round(self.total_latency_ms / self.call_count, 1) if self.call_count else 0.0
+
+    @property
+    def error_rate_pct(self) -> float:
+        return round(self.error_count / self.call_count * 100, 1) if self.call_count else 0.0
 
     @property
     def info(self) -> dict:
@@ -120,6 +144,24 @@ class LoadedPlugin:
             "tools":       [t.id for t in self.tools],
             "hook_count":  self.hook_count,
             "permissions": self.manifest.permissions,
+        }
+
+    @property
+    def metrics(self) -> dict:
+        """Runtime-Metriken für Metrics-Dashboard (#367)."""
+        return {
+            "id":             self.manifest.id,
+            "name":           self.manifest.name,
+            "enabled":        self.enabled,
+            "error":          self.error,
+            "tool_count":     len(self.tools),
+            "hook_count":     self.hook_count,
+            "call_count":     self.call_count,
+            "error_count":    self.error_count,
+            "error_rate_pct": self.error_rate_pct,
+            "avg_latency_ms": self.avg_latency_ms,
+            "last_called_at": self.last_called_at,
+            "last_error":     self.last_error,
         }
 
 

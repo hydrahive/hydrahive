@@ -50,6 +50,22 @@ def register_plugin_routes(
             "total":          len(manifest_plugins) + len(legacy_plugins),
         }
 
+    # ── Plugin Metrics (#367) ──────────────────────────────────────────
+
+    @admin_router.get("/plugins/metrics")
+    def get_plugin_metrics(_a: tuple = Depends(require_admin)):
+        """Runtime-Metriken aller Plugins: Calls, Fehlerrate, Latenz."""
+        plugins = []
+        for pid, lp in plugin_manager._plugins.items():
+            plugins.append(lp.metrics)
+        plugins.sort(key=lambda p: p["call_count"], reverse=True)
+        return {
+            "plugins": plugins,
+            "total": len(plugins),
+            "total_calls": sum(p["call_count"] for p in plugins),
+            "total_errors": sum(p["error_count"] for p in plugins),
+        }
+
     # ── Plugin-Details ──────────────────────────────────────────────────
 
     @admin_router.get("/plugins/{plugin_id}")
