@@ -88,6 +88,14 @@ export function ChatPage() {
     return () => clearInterval(poll);
   }, [id, chat.sending]);
 
+  // Past Sessions laden wenn History-Panel geöffnet wird
+  useEffect(() => {
+    if (!chat.showHistory || !id) return;
+    api.listProjectSessions(id, 30)
+      .then(d => setHistoryList(d.sessions || []))
+      .catch(() => {});
+  }, [chat.showHistory, id]);
+
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Header */}

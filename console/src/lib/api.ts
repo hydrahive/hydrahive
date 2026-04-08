@@ -152,6 +152,8 @@ export const api = {
   // Session History
   listSessions:  (agentId: string, limit = 20) =>
     api.get<{sessions: SessionPreview[]}>(`/agents/${agentId}/sessions?limit=${limit}`),
+  listProjectSessions: (projectId: string, limit = 20) =>
+    api.get<{sessions: SessionPreview[]}>(`/projects/${projectId}/sessions?limit=${limit}`),
   getSessionById: (agentId: string, sessionId: string) =>
     api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
   resumeSession: (agentId: string, sessionId: string) =>
