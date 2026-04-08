@@ -852,11 +852,8 @@ async def _openai_codex_call(
                 body = await resp.aread()
                 raise RuntimeError(f"Codex API {resp.status_code}: {body.decode()[:300]}")
 
-            # Rate-Limit Headers auslesen und persistieren (#488b)
-            _codex_rate_headers = {
-                k: v for k, v in resp.headers.items()
-                if k.lower().startswith("x-ratelimit") or k.lower().startswith("openai")
-            }
+            # Rate-Limit Headers auslesen und persistieren
+            _codex_rate_headers = dict(resp.headers)
             if _codex_rate_headers:
                 try:
                     from .settings import settings as _settings
