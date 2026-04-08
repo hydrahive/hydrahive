@@ -355,6 +355,16 @@ async def _stream_codex(
                 tool_name=tc.function.name, tool_input=_tc_args,
                 execution_mode=execution_mode, user_text=content,
             )
+            # #489: Session Memory — Tool-Call zählen, bei Schwelle Facts extrahieren
+            try:
+                from .session_memory import record_tool_call, mark_extracted, extract_session_facts
+                if record_tool_call(boss_id) and boss_cfg.agent_dir:
+                    _sm_ctx = orch._sessions.get_context(project_id, max_messages=20)
+                    _sm_facts = await extract_session_facts(boss_id, boss_cfg.agent_dir, _sm_ctx)
+                    if _sm_facts:
+                        mark_extracted(boss_id)
+            except Exception as _sm_err:
+                logger.debug("Session memory: %s", _sm_err)
             # #414: Bild-Event senden bevor Result formatiert wird
             _img_evt = _extract_tool_image(result, tc.function.name)
             if _img_evt:
