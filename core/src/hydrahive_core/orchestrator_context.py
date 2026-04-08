@@ -278,6 +278,33 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
     except Exception as e:
         logger.debug("Repo-Injection übersprungen: %s", e)
 
+    # Zugewiesene Remote-Server — SSH-Zugang über server_shell/server_file_* Tools
+    try:
+        from .router_servers import _load_agent_servers, _load_servers
+        agent_servers_map = _load_agent_servers()
+        assigned_ids = agent_servers_map.get(boss_cfg.id, [])
+        if assigned_ids:
+            all_servers = {s["id"]: s for s in _load_servers()}
+            srv_lines = []
+            for sid in assigned_ids:
+                srv = all_servers.get(sid)
+                if srv:
+                    srv_lines.append(
+                        f"- **{srv.get('name', sid)}** (ID: `{sid}`): "
+                        f"`{srv.get('ssh_user', '?')}@{srv.get('ip', '?')}:{srv.get('ssh_port', 22)}`"
+                        + (f" — {srv.get('description', '')}" if srv.get("description") else "")
+                    )
+            if srv_lines:
+                parts.append(
+                    "## Zugewiesene Remote-Server\n\n"
+                    "Diese Server sind dir zugewiesen. Nutze `server_shell` (mit `server_id`) "
+                    "um Befehle auszuführen, und `server_file_read`/`server_file_write` für Dateien. "
+                    "SSH-Keys werden automatisch geladen — NICHT manuell per ssh/shell_exec verbinden!\n\n"
+                    + "\n".join(srv_lines)
+                )
+    except Exception as e:
+        logger.debug("Server-Injection übersprungen: %s", e)
+
     # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
     _handbook_path = settings.system_handbook
     if _handbook_path.exists():
