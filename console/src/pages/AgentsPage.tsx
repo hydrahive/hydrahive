@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";

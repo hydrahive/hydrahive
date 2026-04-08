@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, memo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Square, Bot, User, Terminal, Smile, Clock, X, Plus, RotateCcw, RefreshCw, ImagePlus } from "lucide-react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -24,13 +24,13 @@ function mkMsg(role: Message["role"], content: string): Message {
   return { id: `msg-${++_msgCounter}`, role, content, ts: new Date().toISOString() };
 }
 
-function MsgTime({ iso }: { iso?: string }) {
+const MsgTime = memo(function MsgTime({ iso }: { iso?: string }) {
   if (!iso) return null;
   try {
     const d = new Date(iso);
     return <span className="text-[10px] text-muted-foreground/50">{d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>;
   } catch { return null; }
-}
+});
 
 export function AgentChatPage() {
   const { t } = useTranslation();
@@ -428,7 +428,7 @@ export function AgentChatPage() {
         </div>
       )}
 
-      {/* #384: useMemo für Message-Liste */}
+      {/* Message-Liste — #384: MsgTime ist memo'd, stabile Messages vermeiden Re-Renders */}
       <div className={`flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-4 ${showHistory ? "hidden" : ""}`}>
         {(viewSession ? viewSession.messages : messages).length === 0 && !viewSession && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-3 text-muted-foreground">

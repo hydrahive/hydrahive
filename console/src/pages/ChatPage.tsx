@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, Square, Bot, User, Network, Terminal, Radar, Sparkles, Smile, History, X, ChevronRight, Loader2, RefreshCw, RotateCcw, Plus, ImagePlus } from "lucide-react";
 import { api, SessionPreview, SessionFull } from "@/lib/api";
@@ -25,13 +25,13 @@ function mkMsg(role: Message["role"], content: string, workers?: string[]): Mess
   return { id: `msg-${++msgCounter}`, role, content, workers, ts: new Date().toISOString() };
 }
 
-function MsgTime({ iso }: { iso?: string }) {
+const MsgTime = memo(function MsgTime({ iso }: { iso?: string }) {
   if (!iso) return null;
   try {
     const d = new Date(iso);
     return <span className="text-[10px] text-muted-foreground/50">{d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>;
   } catch { return null; }
-}
+});
 
 export function ChatPage() {
   const { t } = useTranslation();
