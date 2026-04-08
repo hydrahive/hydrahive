@@ -27,6 +27,51 @@ class MessageRole(str, Enum):
     TOOL      = "tool"
 
 
+def redact_thinking_blocks(messages: list[dict]) -> list[dict]:
+    """Redact thinking blocks from older assistant messages (#473).
+
+    Extended Thinking (Claude 3.7+/Sonnet 4/Opus 4) returns thinking blocks
+    in responses. These are useful for the current turn but waste massive
+    tokens when re-sent in history. This function replaces thinking content
+    with a minimal placeholder for all assistant messages except the last one.
+
+    Handles both:
+    - List-of-blocks content: [{"type": "thinking", "thinking": "..."}, ...]
+    - String content with embedded JSON thinking markers (safety net)
+    """
+    if not messages:
+        return messages
+
+    # Find index of last assistant message
+    last_asst_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "assistant":
+            last_asst_idx = i
+            break
+
+    result = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "assistant" or i == last_asst_idx:
+            result.append(msg)
+            continue
+
+        content = msg.get("content")
+        if isinstance(content, list):
+            # List-of-blocks format — redact thinking blocks
+            new_blocks = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "thinking":
+                    new_blocks.append({"type": "thinking", "thinking": "[redacted]"})
+                else:
+                    new_blocks.append(block)
+            result.append({**msg, "content": new_blocks})
+        else:
+            # String content — no thinking blocks to redact
+            result.append(msg)
+
+    return result
+
+
 @dataclass
 class Message:
     role:      MessageRole
@@ -175,6 +220,9 @@ class Session:
                     result.append(m.as_llm_message())
             else:
                 result.append(m.as_llm_message())
+
+        # #473: Redact thinking blocks from older assistant messages
+        result = redact_thinking_blocks(result)
         return result
 
     def history_context(self, max_messages: int = 50) -> list[dict]:

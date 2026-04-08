@@ -572,13 +572,18 @@ async def _stream_anthropic_oauth(
 
         asst_content = []
         for b in final_msg.content:
-            if b.type == "text":
+            if b.type == "thinking":
+                # #473: Include thinking blocks — will be redacted in older messages
+                asst_content.append({"type": "thinking", "thinking": getattr(b, "thinking", "[redacted]")})
+            elif b.type == "text":
                 asst_content.append({"type": "text", "text": b.text})
             elif b.type == "tool_use":
                 asst_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
         filtered.append({"role": "assistant", "content": asst_content})
         filtered.append({"role": "user",      "content": tool_results})
-        kwargs["messages"] = filtered
+        # #473: Redact thinking blocks from older assistant messages before next round
+        from .session_manager import redact_thinking_blocks
+        kwargs["messages"] = redact_thinking_blocks(filtered)
     else:
         # Loop normal beendet (kein break nach letzter Runde)
         kwargs_final = dict(kwargs)
