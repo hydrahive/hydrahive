@@ -40,15 +40,22 @@ META_TOOLS: list[str] = [
 ]
 
 # Mapping: Kategorie-Name → Tool-IDs
+# JEDES Tool das in einer Rolle existiert MUSS auch hier sein,
+# damit es per request_tools(categories=[...]) nachgeladen werden kann.
 TOOL_CATEGORIES: dict[str, list[str]] = {
-    "discord": [
-        "discord_send", "discord_read", "discord_list_all_channels",
-        "discord_list_channels", "discord_create_category", "discord_create_channel",
-        "discord_delete_channel", "discord_set_topic", "discord_rename_channel",
-        "discord_list_members", "discord_list_roles", "discord_delete_message",
-        "discord_pin_message",
+    "file": [
+        "file_read", "file_write", "file_undo", "file_search", "file_patch",
+        "list_directory", "fix_permissions",
+        "read_system_file", "write_system_file",
+    ],
+    "shell": [
+        "shell_exec", "project_shell",
     ],
     "git": [
+        # Nativ
+        "git_status", "git_diff", "git_worktree",
+        "git_commit", "git_push", "git_create_pr", "git_merge",
+        # Gitea API
         "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file",
         "gitea_repo_commits", "gitea_repo_diff",
         "gitea_create_issue", "gitea_update_issue", "gitea_comment_issue",
@@ -56,24 +63,41 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "web": [
         "http_request", "web_search",
     ],
-    "file": [
-        "file_read", "file_write", "read_system_file", "write_system_file",
-    ],
-    "shell": [
-        "shell_exec",
+    "memory": [
+        "read_memory", "write_memory",
+        "shared_memory_read", "shared_memory_write",
+        "user_memory_read", "user_memory_write",
+        "read_scratchpad", "write_scratchpad",
     ],
     "mail": [
         "send_mail", "receive_mail",
     ],
-    "wks": [
-        "wks_file_read", "wks_file_write", "wks_shell_exec",
-    ],
     "skills": [
         "create_skill", "list_skills", "delete_skill",
+    ],
+    "discord": [
+        "discord_send", "discord_read", "discord_list_all_channels",
+        "discord_list_channels", "discord_create_category", "discord_create_channel",
+        "discord_delete_channel", "discord_set_topic", "discord_rename_channel",
+        "discord_list_members", "discord_list_roles", "discord_delete_message",
+        "discord_pin_message",
+    ],
+    "wks": [
+        "wks_file_read", "wks_file_write", "wks_shell_exec",
     ],
     "server": [
         "server_shell", "server_file_read", "server_file_write",
         "server_file_list", "server_file_search", "server_file_patch",
+    ],
+    "vision": [
+        "analyze_image",
+    ],
+    "admin": [
+        "create_agent", "delete_agent", "create_project", "delete_project",
+        "spawn_agent", "manage_team", "get_secret",
+    ],
+    "plan": [
+        "enter_plan_mode", "exit_plan_mode",
     ],
     "a2a": [
         "remote_agent",

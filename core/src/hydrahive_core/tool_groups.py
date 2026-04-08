@@ -27,6 +27,8 @@ ALWAYS_TOOLS: frozenset[str] = frozenset({
     "file_read",
     "file_write",
     "file_undo",
+    "file_search",
+    "list_directory",
     "read_memory",
     "write_memory",
     "web_search",
@@ -38,6 +40,9 @@ ALWAYS_TOOLS: frozenset[str] = frozenset({
     "delegate_agent",
     "read_handoff",
     "write_handoff",
+    "analyze_image",
+    "read_scratchpad",
+    "write_scratchpad",
 })
 
 # ---------------------------------------------------------------------------
@@ -66,7 +71,8 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
             "gitea_create_issue", "gitea_update_issue", "gitea_comment_issue",
             "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file",
             "gitea_repo_commits", "gitea_repo_diff",
-            "git_status", "git_diff", "git_commit", "git_push", "git_create_pr",
+            "git_status", "git_diff", "git_worktree",
+            "git_commit", "git_push", "git_create_pr", "git_merge",
         }),
     ),
     # System / Shell
@@ -75,8 +81,9 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
          "journal", "install ", "pip ", "apt ", "chmod", "chown",
          "skript", "script", "ausführen", "starten", "stoppen"),
         frozenset({
-            "shell_exec",
+            "shell_exec", "project_shell",
             "read_system_file", "write_system_file",
+            "fix_permissions",
             "wks_file_write", "wks_shell_exec",
         }),
     ),
@@ -110,7 +117,9 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
          "mount", "fdisk", "mkfs", "iptables", "ufw", "push", "office",
          "paket", "package", "update", "upgrade"),
         frozenset({
-            "shell_exec", "read_system_file", "write_system_file",
+            "shell_exec", "project_shell",
+            "read_system_file", "write_system_file",
+            "fix_permissions",
         }),
     ),
     # Vision / Bildanalyse
@@ -119,6 +128,32 @@ _GROUPS: list[tuple[tuple[str, ...], frozenset[str]]] = [
          "analysier", "zeig", "ocr", "vision", "upload"),
         frozenset({
             "analyze_image",
+        }),
+    ),
+    # Admin / Verwaltung
+    (
+        ("agent erstell", "agent lösch", "projekt erstell", "projekt lösch",
+         "spawn", "team", "secret", "vault", "plan mode", "planmode"),
+        frozenset({
+            "create_agent", "delete_agent", "create_project", "delete_project",
+            "spawn_agent", "manage_team", "get_secret",
+            "enter_plan_mode", "exit_plan_mode",
+        }),
+    ),
+    # Dateien erweitert (Patch, Suche)
+    (
+        ("patch", "ersetze", "ändere", "fix", "refactor", "such", "find", "grep"),
+        frozenset({
+            "file_patch", "file_search", "fix_permissions",
+        }),
+    ),
+    # Memory erweitert
+    (
+        ("memory", "gedächtnis", "scratchpad", "notiz", "merke", "erinner"),
+        frozenset({
+            "shared_memory_read", "shared_memory_write",
+            "user_memory_read", "user_memory_write",
+            "read_scratchpad", "write_scratchpad",
         }),
     ),
 ]

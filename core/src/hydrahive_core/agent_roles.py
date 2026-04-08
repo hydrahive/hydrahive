@@ -17,13 +17,13 @@ ALL_ROLES: list[str] = ["reader", "assistant", "coder", "admin"]
 
 _PERM_READER = [
     "filesystem.read", "memory.read", "handoff.read",
-    "agents.ask", "mail",
+    "agents.ask", "mail", "vision",
 ]
 
 _PERM_ASSISTANT = [
     *_PERM_READER,
     "filesystem.write", "memory.write", "handoff.write",
-    "agents.delegate",
+    "agents.delegate", "skills",
 ]
 
 _PERM_CODER_SAFE = [
@@ -36,48 +36,80 @@ _PERM_CODER_ELEVATED = [
     *_PERM_CODER_SAFE,
     "system.read", "system.write",
     "shell.exec",
-    "git.write",
+    "git.write", "git.push", "git.pr",
     "workstation.write", "workstation.shell",
+    "server.read", "server.write", "server.shell",
 ]
 
 _PERM_ADMIN = [
     *_PERM_CODER_ELEVATED,
-    "git.push", "git.pr",
     "spawn_agents", "admin.manage",
     "discord", "vault",
     "filesystem.read_all",
+    "plan_mode", "a2a",
 ]
 
 # ── Tool-Listen pro Rolle ─────────────────────────────────────────────────────
 
 _TOOLS_READER = [
-    "file_read", "web_search", "http_request",
-    "read_memory", "receive_mail",
-    "read_handoff", "ask_agent",
+    # Dateien (nur lesen)
+    "file_read", "list_directory",
+    # Web
+    "web_search", "http_request",
+    # Memory (lesen)
+    "read_memory", "shared_memory_read", "user_memory_read",
+    # Kommunikation
+    "receive_mail", "read_handoff", "ask_agent",
+    # Vision
+    "analyze_image",
 ]
 
 _TOOLS_ASSISTANT = [
     *_TOOLS_READER,
-    "file_write", "write_memory",
+    # Dateien (schreiben)
+    "file_write", "file_undo", "file_search",
+    # Memory (schreiben)
+    "write_memory", "shared_memory_write", "user_memory_write",
+    # Scratchpad
+    "read_scratchpad", "write_scratchpad",
+    # Skills
+    "create_skill", "list_skills", "delete_skill",
+    # Kommunikation
     "send_mail", "write_handoff", "delegate_agent",
 ]
 
 _TOOLS_CODER = [
     *_TOOLS_ASSISTANT,
+    # Shell & System
     "shell_exec", "project_shell",
     "read_system_file", "write_system_file",
+    "fix_permissions",
+    # Dateien (erweitert)
+    "file_patch",
+    # Git (nativ)
+    "git_status", "git_diff", "git_worktree",
+    "git_commit", "git_push", "git_create_pr", "git_merge",
+    # Gitea API
     "gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file",
     "gitea_repo_commits", "gitea_repo_diff",
     "gitea_create_issue", "gitea_update_issue", "gitea_comment_issue",
+    # Workstation (WKS)
     "wks_file_read", "wks_file_write", "wks_shell_exec",
-    # Remote-Server (SSH) — für zugewiesene Server
+    # Remote-Server (SSH)
     "server_shell", "server_file_read", "server_file_write",
     "server_file_list", "server_file_search", "server_file_patch",
 ]
 
 _TOOLS_ADMIN = [
     *_TOOLS_CODER,
+    # Agent/Projekt-Verwaltung
     "create_agent", "delete_agent", "create_project", "delete_project",
+    "spawn_agent", "manage_team",
+    # Secrets & Plan
+    "get_secret", "enter_plan_mode", "exit_plan_mode",
+    # A2A / Federation
+    "remote_agent",
+    # Discord
     "discord_send", "discord_read", "discord_list_channels",
     "discord_list_all_channels", "discord_create_category",
     "discord_create_channel", "discord_delete_channel",
