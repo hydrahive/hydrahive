@@ -70,6 +70,15 @@ class SpawnRequest(BaseModel):
     agent_id: str
 
 
+class PatchAgentToolsRequest(BaseModel):
+    tools: list[str]
+
+
+class WorkflowDataRequest(BaseModel):
+    nodes: list = []
+    edges: list = []
+
+
 class HeartbeatPatchRequest(BaseModel):
     enabled:    bool  = True
     interval:   str   = "30s"
@@ -211,16 +220,14 @@ def register_agent_admin_routes(
         return {"updated": True, "agent_id": agent_id}
 
     @admin_router.patch("/agents/{agent_id}/tools")
-    async def patch_agent_tools(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
+    async def patch_agent_tools(agent_id: str, req: PatchAgentToolsRequest, _a: tuple = Depends(require_admin)):
         import yaml as _yaml
         _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         yaml_path = agent_dir / "agent.yaml"
         if not yaml_path.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-        tools = body.get("tools")
-        if not isinstance(tools, list):
-            raise HTTPException(400, "tools muss eine Liste sein")
+        tools = req.tools
         raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         raw["tools"] = tools
         yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, default_flow_style=False), encoding="utf-8")
@@ -257,14 +264,14 @@ def register_agent_admin_routes(
             return {"nodes": [], "edges": []}
 
     @admin_router.put("/agents/{agent_id}/workflow-blueprint")
-    def save_workflow_blueprint(agent_id: str, body: dict, _a: tuple = Depends(require_admin)):
+    def save_workflow_blueprint(agent_id: str, req: WorkflowDataRequest, _a: tuple = Depends(require_admin)):
         import json as _json
         _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
         wf_path = agent_dir / "workflow_blueprint.json"
-        wf_path.write_text(_json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+        wf_path.write_text(_json.dumps(req.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         # Prompt-Cache invalidieren damit Blueprint sofort wirkt
         try:
             from .orchestrator_context import invalidate_prompt_cache
@@ -288,14 +295,14 @@ def register_agent_admin_routes(
             return {"nodes": [], "edges": []}
 
     @auth_router.put("/agents/{agent_id}/workflow-flow")
-    def save_workflow_flow(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
+    def save_workflow_flow(agent_id: str, req: WorkflowDataRequest, _a: tuple = Depends(require_auth)):
         import json as _json
         _validate_agent_id(agent_id)
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
         wf_path = agent_dir / "workflow_flow.json"
-        wf_path.write_text(_json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
+        wf_path.write_text(_json.dumps(req.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         try:
             from .orchestrator_context import invalidate_prompt_cache
             invalidate_prompt_cache(agent_id)

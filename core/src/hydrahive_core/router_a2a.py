@@ -77,6 +77,10 @@ class A2APeerUpsert(BaseModel):
     description: str = ""
 
 
+class A2ASecretRequest(BaseModel):
+    secret: str = ""
+
+
 class A2ASendRequest(BaseModel):
     agent_id:    str
     message:     str
@@ -221,8 +225,8 @@ def register_a2a_routes(
 
     # ── Admin: Secret setzen ──────────────────────────────────────────────────
     @admin_router.put("/admin/a2a/secret")
-    async def set_secret(body: dict[str, Any], _a=Depends(require_admin)):
-        secret = body.get("secret", "").strip()
+    async def set_secret(req: A2ASecretRequest, _a=Depends(require_admin)):
+        secret = req.secret.strip()
         cfg = _load_config()
         cfg["secret"] = secret
         _save_config(cfg)

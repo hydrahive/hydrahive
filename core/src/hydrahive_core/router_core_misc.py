@@ -46,6 +46,42 @@ class IncomingMessage(BaseModel):
     images: list[dict] | None = None  # [{"data": "base64...", "media_type": "image/png"}]
 
 
+class AgentSoulRequest(BaseModel):
+    soul: str = ""
+
+
+class AgentFullConfigRequest(BaseModel):
+    config: dict
+
+
+class CloneAgentRequest(BaseModel):
+    new_id: str
+
+
+class WriteFileRequest(BaseModel):
+    path: str
+    content: str = ""
+
+
+class DashboardConfigRequest(BaseModel):
+    custom_tabs: list[dict] = []
+    overview_widgets: dict = {}
+
+
+class ShellCommandRequest(BaseModel):
+    command: str
+
+
+class AgentMemoryRequest(BaseModel):
+    filename: str = "session"
+    content: str
+    mode: str = "overwrite"
+
+
+class SessionImportRequest(BaseModel):
+    session_b64: str
+
+
 _JOURNAL_TIMESTAMP_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?)\b")
 _JOURNAL_MESSAGE_RE = re.compile(
     r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?\s+\S+\s+\S+(?:\[\d+\])?:\s*(?P<msg>.*)$"
@@ -632,14 +668,13 @@ def register_core_misc_routes(
         return {"agent_id": agent_id, "soul": soul_path.read_text(encoding="utf-8")}
 
     @admin_router.put("/agents/{agent_id}/soul")
-    def update_agent_soul(agent_id: str, body: dict):
+    def update_agent_soul(agent_id: str, req: AgentSoulRequest):
         """Soul.md eines Agents schreiben."""
         cfg = discovery.get(agent_id)
         if not cfg or not cfg.agent_dir:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-        soul = body.get("soul", "")
         soul_path = cfg.agent_dir / "soul.md"
-        soul_path.write_text(soul, encoding="utf-8")
+        soul_path.write_text(req.soul, encoding="utf-8")
         return {"ok": True, "agent_id": agent_id}
 
     @admin_router.get("/agents/{agent_id}/config/full")
@@ -658,13 +693,13 @@ def register_core_misc_routes(
             raise HTTPException(500, "Konfiguration konnte nicht geladen werden")
 
     @admin_router.put("/agents/{agent_id}/config/full")
-    def update_agent_full_config(agent_id: str, body: dict):
+    def update_agent_full_config(agent_id: str, req: AgentFullConfigRequest):
         """Komplette agent.yaml überschreiben."""
         cfg = discovery.get(agent_id)
         if not cfg or not cfg.agent_dir:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
         import yaml as _yaml
-        config = body.get("config", {})
+        config = req.config
         if not config:
             raise HTTPException(400, "config fehlt")
         yaml_path = cfg.agent_dir / "agent.yaml"
@@ -677,14 +712,14 @@ def register_core_misc_routes(
         return {"ok": True, "agent_id": agent_id}
 
     @admin_router.post("/agents/{agent_id}/clone")
-    def clone_agent(agent_id: str, body: dict):
+    def clone_agent(agent_id: str, req: CloneAgentRequest):
         """Agent duplizieren mit neuer ID."""
         import shutil as _sh
         import re as _re
         cfg = discovery.get(agent_id)
         if not cfg or not cfg.agent_dir:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-        new_id = body.get("new_id", "").strip()
+        new_id = req.new_id.strip()
         if not new_id or not _re.match(r'^[a-z0-9_-]{1,64}$', new_id):
             raise HTTPException(400, "Ungültige new_id")
         new_dir = cfg.agent_dir.parent / new_id
@@ -765,10 +800,10 @@ def register_core_misc_routes(
             raise HTTPException(500, "Datei konnte nicht gelesen werden")
 
     @admin_router.put("/admin/files/write")
-    def write_file(body: dict):
+    def write_file(req: WriteFileRequest):
         """Datei schreiben (nur erlaubte Pfade)."""
-        path = body.get("path", "")
-        content = body.get("content", "")
+        path = req.path
+        content = req.content
         if not path:
             raise HTTPException(400, "path fehlt")
         resolved = Path(path).resolve()
@@ -814,15 +849,15 @@ def register_core_misc_routes(
             return {"custom_tabs": [], "overview_widgets": {"hidden": [], "order": []}}
 
     @auth_router.put("/dashboard/config")
-    def save_dashboard_config(body: dict, _a: tuple[str, str] = Depends(require_auth)):
+    def save_dashboard_config(req: DashboardConfigRequest, _a: tuple[str, str] = Depends(require_auth)):
         import json as _json
         username, _ = _a
         _DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
         cfg_path = _DASHBOARD_DIR / f"{username}.json"
         # Validierung: nur erlaubte Keys
         safe = {
-            "custom_tabs": body.get("custom_tabs", [])[:20],  # max 20 Tabs
-            "overview_widgets": body.get("overview_widgets", {}),
+            "custom_tabs": req.custom_tabs[:20],  # max 20 Tabs
+            "overview_widgets": req.overview_widgets,
         }
         # Tabs validieren
         for tab in safe["custom_tabs"]:
@@ -857,10 +892,10 @@ def register_core_misc_routes(
     _SHELL_INJECTION_CHARS = {";", "&", "`", "$", "(", ")", "\n", "\\"}
 
     @admin_router.post("/admin/shell")
-    def run_shell(body: dict):
+    def run_shell(req: ShellCommandRequest):
         """Eingeschränkter Shell-Zugriff (Whitelist)."""
         import subprocess, shlex
-        cmd = body.get("command", "").strip()
+        cmd = req.command.strip()
         if not cmd:
             raise HTTPException(400, "command fehlt")
         # Shell-Injection-Zeichen blockieren (;, &, $, `, Backticks etc.)

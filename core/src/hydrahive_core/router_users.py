@@ -150,6 +150,10 @@ class UpdateUserRequest(BaseModel):
     discord_user_id: str | None = None
 
 
+class ChangePasswordRequest(BaseModel):
+    password: str
+
+
 class MyAgentUpdateRequest(BaseModel):
     identity: str
     soul: str = ""
@@ -421,8 +425,8 @@ def register_user_routes(
         return {"updated": True, "username": username}
 
     @admin_router.put("/users/{username}/password")
-    async def change_user_password(username: str, body: dict):
-        new_password = body.get("password", "").strip()
+    async def change_user_password(username: str, req: ChangePasswordRequest):
+        new_password = req.password.strip()
         if len(new_password) < 8:
             raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben")
         users = load_users()

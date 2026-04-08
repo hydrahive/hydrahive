@@ -11,8 +11,15 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+class KnowledgeSearchRequest(BaseModel):
+    query: str
+    mode: str = "hybrid"
+    limit: int = 10
 
 AMEM_SEARCH_URL = "http://127.0.0.1:8021/api/search"
 AMEM_STATS_URL = "http://127.0.0.1:8021/api/stats"
@@ -54,17 +61,14 @@ def register_knowledge_routes(
         return {"available": False, "total_notes": 0}
 
     @admin_router.post("/admin/knowledge/search")
-    def knowledge_search(body: dict, _a=Depends(require_admin)):
-        """Durchsucht A-MEM Shared Memory.
-
-        Body: {"query": str, "mode": "hybrid"|"agentic", "limit": int}
-        """
-        query = body.get("query", "").strip()
+    def knowledge_search(req: KnowledgeSearchRequest, _a=Depends(require_admin)):
+        """Durchsucht A-MEM Shared Memory."""
+        query = req.query.strip()
         if not query:
             return {"results": [], "error": "Kein Suchbegriff"}
 
-        mode = body.get("mode", "hybrid")
-        limit = min(body.get("limit", 10), 50)
+        mode = req.mode
+        limit = min(req.limit, 50)
 
         data = _curl_json(AMEM_SEARCH_URL, method="POST", data={
             "query": query,

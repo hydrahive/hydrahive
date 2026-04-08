@@ -4,9 +4,20 @@ import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
+from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .learning_memory import append_learning_snapshot
+
+
+class AgentMemoryRequest(BaseModel):
+    filename: str = "session"
+    content: str
+    mode: str = "overwrite"
+
+
+class SessionImportRequest(BaseModel):
+    session_b64: str
 
 
 def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str) -> None:
@@ -117,16 +128,16 @@ def register_agent_chat_routes(
                 "started_at": session.started_at, "ended_at": session.ended_at}
 
     @auth_router.post("/agents/{agent_id}/memory", status_code=201)
-    def write_agent_memory(agent_id: str, body: dict, _a: tuple = Depends(require_auth)):
+    def write_agent_memory(agent_id: str, req: AgentMemoryRequest, _a: tuple = Depends(require_auth)):
         import re as _re
 
         _check_agent_access(agent_id, _a)
         # #277: agent_id gegen Path Traversal absichern
         if not _re.match(r"^[a-z0-9_-]+$", agent_id):
             raise HTTPException(400, "Ungültige agent_id")
-        filename = str(body.get("filename", "session")).strip().removesuffix(".md")
-        content = str(body.get("content", "")).strip()
-        mode = str(body.get("mode", "overwrite"))
+        filename = req.filename.strip().removesuffix(".md")
+        content = req.content.strip()
+        mode = req.mode
         if not _re.match(r"^[a-z0-9_-]+$", filename):
             raise HTTPException(400, "Ungültiger Dateiname (nur a-z, 0-9, -, _)")
         if not content:
@@ -173,13 +184,13 @@ def register_agent_chat_routes(
         return {"session_b64": base64.b64encode(data.encode()).decode(), "agent_id": agent_id, "message_count": len(session.messages)}
 
     @auth_router.post("/agents/{agent_id}/sessions/import")
-    async def agent_import_session(agent_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
+    async def agent_import_session(agent_id: str, req: SessionImportRequest, _a: tuple[str, str] = Depends(require_auth)):
         """Session aus base64-Export importieren."""
         _check_agent_access(agent_id, _a)
         import base64, json
         from ..hydrahive_core.session_manager import Session
         try:
-            raw = json.loads(base64.b64decode(body["session_b64"]))
+            raw = json.loads(base64.b64decode(req.session_b64))
             session = Session.from_dict(raw)
             session.project_id = agent_id  # Re-scope auf diesen Agent
             await agent_sessions.replace_messages(agent_id, session.messages)

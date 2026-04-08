@@ -19,6 +19,16 @@ from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
+from pydantic import BaseModel
+
+
+class VoiceTextRequest(BaseModel):
+    text: str
+    agent_id: str | None = None
+
+
+class VoiceTtsRequest(BaseModel):
+    text: str
 
 from .settings import settings
 
@@ -214,14 +224,14 @@ def register_voice_routes(
     # ── Text → Agent → Text ─────────────────────────────────────────
     @auth_router.post("/voice")
     async def voice_text(
-        body: dict = Body(...),
+        req: VoiceTextRequest,
         auth: tuple[str, str] = Depends(require_auth),
     ):
-        text = body.get("text", "").strip()
+        text = req.text.strip()
         if not text:
             raise HTTPException(400, "text erforderlich")
         cfg = _load_voice_config()
-        agent_id = body.get("agent_id") or cfg.get("default_agent", "personal_admin")
+        agent_id = req.agent_id or cfg.get("default_agent", "personal_admin")
         response = await _agent_respond(text, agent_id, auth)
         return {"text": response, "agent_id": agent_id}
 
@@ -248,10 +258,10 @@ def register_voice_routes(
     # ── Text → Audio (TTS) ──────────────────────────────────────────
     @auth_router.post("/voice/tts")
     async def voice_tts(
-        body: dict = Body(...),
+        req: VoiceTtsRequest,
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        text = body.get("text", "").strip()
+        text = req.text.strip()
         if not text:
             raise HTTPException(400, "text erforderlich")
         cfg = _load_voice_config()

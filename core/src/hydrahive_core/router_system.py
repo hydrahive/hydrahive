@@ -18,6 +18,23 @@ class NetworkProfileRequest(BaseModel):
     profile: str
 
 
+class AgentLinkConfigRequest(BaseModel):
+    base_url: str = "http://localhost:8000"
+    ws_url: str = "ws://localhost:8000"
+    enabled: bool = True
+
+
+class TimezoneRequest(BaseModel):
+    timezone: str
+
+
+class CleanupConfigRequest(BaseModel):
+    transcript_days: int | None = None
+    backup_keep: int | None = None
+    warn_pct_yellow: int | None = None
+    warn_pct_red: int | None = None
+
+
 class GiteaConfigRequest(BaseModel):
     url: str = "http://127.0.0.1:3001"
     token: str = ""
@@ -292,13 +309,13 @@ def register_system_routes(
         }
 
     @admin_router.put("/admin/agentlink/config")
-    def set_agentlink_config(body: dict = Body(...)):
+    def set_agentlink_config(req: AgentLinkConfigRequest):
         """AgentLink-Konfiguration speichern."""
         from .agentlink_client import _config_cache
         cfg = {
-            "base_url": body.get("base_url", "http://localhost:8000").strip().rstrip("/"),
-            "ws_url":   body.get("ws_url", "ws://localhost:8000").strip().rstrip("/"),
-            "enabled":  bool(body.get("enabled", True)),
+            "base_url": req.base_url.strip().rstrip("/"),
+            "ws_url":   req.ws_url.strip().rstrip("/"),
+            "enabled":  req.enabled,
         }
         _AGENTLINK_CFG.write_text(json.dumps(cfg, indent=2))
         _AGENTLINK_CFG.chmod(0o600)
@@ -336,9 +353,9 @@ def register_system_routes(
         }
 
     @admin_router.put("/admin/system/timezone")
-    def set_system_timezone(body: dict = Body(...)):
+    def set_system_timezone(req: TimezoneRequest):
         """Systemzeitzone setzen (erfordert timedatectl-Berechtigung)."""
-        tz = body.get("timezone", "").strip()
+        tz = req.timezone.strip()
         if not tz or "/" not in tz:
             raise HTTPException(400, "Ungültige Zeitzone (Format: Region/Stadt, z.B. Europe/Berlin)")
         result = subprocess.run(
@@ -827,12 +844,10 @@ def register_system_routes(
         return result
 
     @admin_router.put("/admin/cleanup/config")
-    def update_cleanup_config(body: dict = Body(...)):
+    def update_cleanup_config(req: CleanupConfigRequest):
         from .cleanup_service import _load_config, save_config
-        allowed = {"transcript_days", "backup_keep", "warn_pct_yellow", "warn_pct_red"}
         cfg = _load_config()
-        for k, v in body.items():
-            if k in allowed:
-                cfg[k] = v
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
         save_config(cfg)
         return {"updated": True, "config": cfg}

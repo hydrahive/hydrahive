@@ -18,6 +18,46 @@ class LlmProviderConfig(BaseModel):
     enabled: bool = True
 
 
+class CoachConfigRequest(BaseModel):
+    model: str = ""
+    enabled: bool = False
+
+
+class SystemDefaultRequest(BaseModel):
+    model: str = ""
+
+
+class ClaudeOAuthTokenRequest(BaseModel):
+    api_key: str
+
+
+class OpenAICodexTokenRequest(BaseModel):
+    access_token: str
+    account_id: str
+    refresh_token: str = ""
+
+
+class OAuthExchangeRequest(BaseModel):
+    code: str = ""
+    state: str = ""
+    code_and_state: str = ""
+
+
+class OpenAICodexExchangeRequest(BaseModel):
+    code: str = ""
+    state: str = ""
+    redirect_url: str = ""
+
+
+class OllamaPullRequest(BaseModel):
+    model: str
+
+
+class EmbeddingConfigRequest(BaseModel):
+    model: str
+    voyage_api_key: str = ""
+
+
 _oauth_pending: dict[str, dict] = {}
 
 # #391: mtime-basierter Config-Cache
@@ -95,11 +135,11 @@ def register_llm_routes(
         return {"model": coach.get("model", ""), "enabled": coach.get("enabled", False)}
 
     @admin_router.put("/llm/config/coach")
-    def set_coach_config(body: dict):
+    def set_coach_config(req: CoachConfigRequest):
         config = _load_llm_config()
         config["coach"] = {
-            "model": body.get("model", "").strip(),
-            "enabled": bool(body.get("enabled", False)),
+            "model": req.model.strip(),
+            "enabled": req.enabled,
         }
         _save_llm_config(config)
         return {"updated": True, **config["coach"]}
@@ -110,9 +150,9 @@ def register_llm_routes(
         return {"model": config.get("system_default", {}).get("model", "")}
 
     @admin_router.put("/llm/config/system_default")
-    async def set_system_default(body: dict):
+    async def set_system_default(req: SystemDefaultRequest):
         import yaml as _yaml
-        model = body.get("model", "").strip()
+        model = req.model.strip()
         config = _load_llm_config()
         if not model:
             config.pop("system_default", None)
@@ -137,8 +177,8 @@ def register_llm_routes(
         return {"updated": True, "model": model, "agents_updated": updated}
 
     @admin_router.put("/llm/config/claude_max")
-    async def set_claude_oauth_token(body: dict):
-        token = body.get("api_key", "").strip()
+    async def set_claude_oauth_token(req: ClaudeOAuthTokenRequest):
+        token = req.api_key.strip()
         if not token:
             raise HTTPException(400, "api_key fehlt")
         if not token.startswith("sk-ant-oat01-"):
@@ -271,20 +311,13 @@ def register_llm_routes(
         return {"models": models}
 
     @admin_router.put("/llm/config/openai_codex")
-    async def set_openai_codex_token(body: dict):
+    async def set_openai_codex_token(req: OpenAICodexTokenRequest):
         import json as _json
 
-        access_token = body.get("access_token", "").strip()
-        account_id = body.get("account_id", "").strip()
-        if not access_token:
-            raise HTTPException(400, "access_token fehlt")
-        if not account_id:
-            raise HTTPException(400, "account_id fehlt")
-
         data = {
-            "access_token": access_token,
-            "refresh_token": body.get("refresh_token", ""),
-            "account_id": account_id,
+            "access_token": req.access_token.strip(),
+            "refresh_token": req.refresh_token,
+            "account_id": req.account_id.strip(),
         }
         token_file = settings.openai_codex_token
         token_file.parent.mkdir(parents=True, exist_ok=True)
@@ -345,16 +378,16 @@ def register_llm_routes(
         return {"auth_url": auth_url, "state": state}
 
     @admin_router.post("/llm/oauth/anthropic/exchange")
-    async def exchange_anthropic_code(body: dict):
+    async def exchange_anthropic_code(req: OAuthExchangeRequest):
         import time
         import httpx as _httpx
 
-        code_and_state = body.get("code_and_state", "").strip()
+        code_and_state = req.code_and_state.strip()
         if code_and_state and "#" in code_and_state:
             code, state = code_and_state.split("#", 1)
         else:
-            code = body.get("code", "").strip()
-            state = body.get("state", "").strip()
+            code = req.code.strip()
+            state = req.state.strip()
 
         if not code or not state:
             raise HTTPException(400, "code und state erforderlich")
@@ -432,7 +465,7 @@ def register_llm_routes(
         return {"auth_url": auth_url, "state": state}
 
     @admin_router.post("/llm/oauth/openai_codex/exchange")
-    async def exchange_openai_codex_code(body: dict):
+    async def exchange_openai_codex_code(req: OpenAICodexExchangeRequest):
         import base64 as _b64
         import json as _json
         import time
@@ -440,15 +473,15 @@ def register_llm_routes(
 
         import httpx as _httpx
 
-        redirect_url = body.get("redirect_url", "").strip()
+        redirect_url = req.redirect_url.strip()
         if redirect_url:
             parsed = urlparse(redirect_url)
             qs = parse_qs(parsed.query)
             code = qs.get("code", [""])[0]
             state = qs.get("state", [""])[0]
         else:
-            code = body.get("code", "").strip()
-            state = body.get("state", "").strip()
+            code = req.code.strip()
+            state = req.state.strip()
 
         if not code or not state:
             raise HTTPException(400, "code und state erforderlich (oder redirect_url mit beiden)")
@@ -609,10 +642,10 @@ def register_llm_routes(
             return {"available": False, "models": [], "error": str(e)}
 
     @admin_router.post("/llm/ollama/pull")
-    async def pull_ollama_model(body: dict):
+    async def pull_ollama_model(req: OllamaPullRequest):
         import subprocess as _sub
 
-        model = body.get("model", "").strip()
+        model = req.model.strip()
         if not model:
             raise HTTPException(400, "model fehlt")
         try:
@@ -652,10 +685,10 @@ def register_llm_routes(
         }
 
     @admin_router.put("/llm/embedding/config")
-    async def set_embedding_config(body: dict):
+    async def set_embedding_config(req: EmbeddingConfigRequest):
         """Speichert Embedding-Modell und optionalen Voyage AI API-Key."""
-        model     = body.get("model", "").strip()
-        voyage_key = body.get("voyage_api_key", "").strip()
+        model     = req.model.strip()
+        voyage_key = req.voyage_api_key.strip()
 
         if not model:
             raise HTTPException(400, "model fehlt")

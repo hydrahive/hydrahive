@@ -147,6 +147,45 @@ async def kas_create_mailaccount(local_part: str, domain_part: str, password: st
         return {"ok": False, "error": str(e)}
 
 
+class PromptCoachRequest(BaseModel):
+    content: str
+
+
+class WhatsAppConfigRequest(BaseModel):
+    private_chats_enabled: bool | None = None
+    group_chats_enabled: bool | None = None
+    require_keyword: str | None = None
+    allowed_numbers: list[str] | None = None
+    blocked_numbers: list[str] | None = None
+    owner_numbers: list[str] | None = None
+    voice_mode: str | None = None
+    voice_name: str | None = None
+
+
+class VoicePreviewRequest(BaseModel):
+    voice: str = "de-DE-KatjaNeural"
+    text: str = "Hallo, ich bin dein HydraHive Assistent. So klinge ich!"
+
+
+class TelegramConnectRequest(BaseModel):
+    bot_token: str
+    allow_private: bool = True
+    allow_groups: bool = False
+    require_keyword: str = ""
+    allowed_user_ids: list[str] = []
+    blocked_user_ids: list[str] = []
+    admin_user_ids: list[str] = []
+
+
+class TelegramConfigRequest(BaseModel):
+    allow_private: bool | None = None
+    allow_groups: bool | None = None
+    require_keyword: str | None = None
+    allowed_user_ids: list[str] | None = None
+    blocked_user_ids: list[str] | None = None
+    admin_user_ids: list[str] | None = None
+
+
 class DiscordConfigRequest(BaseModel):
     bot_token: str = ""           # leer = bestehenden Token behalten
     guild_id: str = ""
@@ -384,10 +423,10 @@ def register_user_integration_routes(
     )
 
     @auth_router.post("/me/agent/coach")
-    async def prompt_coach(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+    async def prompt_coach(req: PromptCoachRequest, auth: tuple = Depends(require_auth)):
         """LLM-gestützter Prompt-Qualitätscheck vor dem Senden."""
         import json as _json
-        content = body.get("content", "").strip()
+        content = req.content.strip()
         if not content:
             return {"ok": True}
 
@@ -911,28 +950,20 @@ def register_user_integration_routes(
         }
 
     @auth_router.put("/me/whatsapp/config")
-    async def update_my_whatsapp_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+    async def update_my_whatsapp_config(req: WhatsAppConfigRequest, auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)
         from .whatsapp_agent import load_whatsapp_config, save_whatsapp_config
         cfg = load_whatsapp_config(username) or {"enabled": True}
-        cfg.update({
-            "private_chats_enabled": bool(body.get("private_chats_enabled", cfg.get("private_chats_enabled", True))),
-            "group_chats_enabled":   bool(body.get("group_chats_enabled",   cfg.get("group_chats_enabled", False))),
-            "require_keyword":       str(body.get("require_keyword", cfg.get("require_keyword", ""))).strip(),
-            "allowed_numbers":       list(body.get("allowed_numbers", cfg.get("allowed_numbers", []))),
-            "blocked_numbers":       list(body.get("blocked_numbers", cfg.get("blocked_numbers", []))),
-            "owner_numbers":         list(body.get("owner_numbers",   cfg.get("owner_numbers", []))),
-            "voice_mode":            str(body.get("voice_mode", cfg.get("voice_mode", "echo"))).strip(),
-            "voice_name":            str(body.get("voice_name", cfg.get("voice_name", "de-DE-KatjaNeural"))).strip(),
-        })
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
         save_whatsapp_config(username, cfg)
         return {"updated": True}
 
     @auth_router.post("/me/whatsapp/voice-preview")
-    async def whatsapp_voice_preview(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+    async def whatsapp_voice_preview(req: VoicePreviewRequest, auth: tuple = Depends(require_auth)):
         """Spielt eine TTS-Stimme als Preview ab."""
-        voice = body.get("voice", "de-DE-KatjaNeural")
-        text = body.get("text", "Hallo, ich bin dein HydraHive Assistent. So klinge ich!")
+        voice = req.voice
+        text = req.text
         if len(text) > 200:
             text = text[:200]
         try:
@@ -1397,13 +1428,13 @@ def register_user_integration_routes(
         }
 
     @auth_router.post("/me/telegram/connect")
-    async def connect_my_telegram(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+    async def connect_my_telegram(req: TelegramConnectRequest, auth: tuple = Depends(require_auth)):
         from .telegram_agent import (
             load_telegram_config, save_telegram_config,
             start_telegram_bot, stop_telegram_bot,
         )
         username = _username_from_auth(auth)
-        token = body.get("bot_token", "").strip()
+        token = req.bot_token.strip()
         if not token:
             raise HTTPException(400, "bot_token fehlt")
 
@@ -1414,12 +1445,12 @@ def register_user_integration_routes(
         cfg.update({
             "enabled": True,
             "bot_token": token,
-            "allow_private":   body.get("allow_private", cfg.get("allow_private", True)),
-            "allow_groups":    body.get("allow_groups", cfg.get("allow_groups", False)),
-            "require_keyword": body.get("require_keyword", cfg.get("require_keyword", "")),
-            "allowed_user_ids": body.get("allowed_user_ids", cfg.get("allowed_user_ids", [])),
-            "blocked_user_ids": body.get("blocked_user_ids", cfg.get("blocked_user_ids", [])),
-            "admin_user_ids":  body.get("admin_user_ids", cfg.get("admin_user_ids", [])),
+            "allow_private":   req.allow_private,
+            "allow_groups":    req.allow_groups,
+            "require_keyword": req.require_keyword,
+            "allowed_user_ids": req.allowed_user_ids,
+            "blocked_user_ids": req.blocked_user_ids,
+            "admin_user_ids":  req.admin_user_ids,
         })
         save_telegram_config(username, cfg)
 
@@ -1436,16 +1467,14 @@ def register_user_integration_routes(
         }
 
     @auth_router.put("/me/telegram/config")
-    async def update_my_telegram_config(body: dict = Body(...), auth: tuple = Depends(require_auth)):
+    async def update_my_telegram_config(req: TelegramConfigRequest, auth: tuple = Depends(require_auth)):
         from .telegram_agent import load_telegram_config, save_telegram_config
         username = _username_from_auth(auth)
         cfg = load_telegram_config(username)
         if not cfg:
             raise HTTPException(404, "Telegram nicht konfiguriert")
-        for field in ("allow_private", "allow_groups", "require_keyword",
-                      "allowed_user_ids", "blocked_user_ids", "admin_user_ids"):
-            if field in body:
-                cfg[field] = body[field]
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
         save_telegram_config(username, cfg)
         return {"updated": True}
 

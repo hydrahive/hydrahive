@@ -68,6 +68,10 @@ class InstallRequest(BaseModel):
     model_override: str | None = None
 
 
+class ClawhubConfigRequest(BaseModel):
+    token: str
+
+
 class ClawhubInstallRequest(BaseModel):
     slug:     str
     agent_id: str
@@ -437,9 +441,9 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         }
 
     @router.put("/hub/clawhub/config")
-    async def clawhub_config(body: dict, _auth=Depends(require_admin)):
+    async def clawhub_config(req: ClawhubConfigRequest, _auth=Depends(require_admin)):
         """ClawhHub Token speichern."""
-        token = body.get("token", "").strip()
+        token = req.token.strip()
         if not token:
             raise HTTPException(400, "Token darf nicht leer sein")
         _save_clawhub_config({"token": token})

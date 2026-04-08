@@ -11,6 +11,19 @@ from pydantic import BaseModel
 VALID_EVENTS = {"message", "agent_error", "provision", "agent_start", "agent_stop"}
 
 
+class AgentLinkCreateRequest(BaseModel):
+    from_agent: str = "manual"
+    to_agent: str = ""
+    context: str = ""
+    data: dict = {}
+    ttl_seconds: int = 3600
+
+
+class WebhookTestRequest(BaseModel):
+    url: str
+    secret: str = ""
+
+
 class WebhookRequest(BaseModel):
     name: str
     url: str
@@ -129,7 +142,7 @@ def register_project_integration_routes(
         return {"deleted": True, "handoff_id": handoff_id}
 
     @auth_router.post("/projects/{project_id}/agentlink")
-    def create_agentlink(project_id: str, body: dict, _a: tuple[str, str] = Depends(require_auth)):
+    def create_agentlink(project_id: str, req: AgentLinkCreateRequest, _a: tuple[str, str] = Depends(require_auth)):
         from .agentlink import write_handoff as _wh
 
         _check_project_access(project_id, _a)
@@ -138,11 +151,11 @@ def register_project_integration_routes(
             raise HTTPException(404, "Projekt nicht gefunden")
         return _wh(
             project_dir,
-            from_agent=body.get("from_agent", "manual"),
-            to_agent=body.get("to_agent", ""),
-            context=body.get("context", ""),
-            data=body.get("data", {}),
-            ttl_seconds=int(body.get("ttl_seconds", 3600)),
+            from_agent=req.from_agent,
+            to_agent=req.to_agent,
+            context=req.context,
+            data=req.data,
+            ttl_seconds=req.ttl_seconds,
         )
 
     @admin_router.get("/projects/{project_id}/webhooks")
@@ -191,9 +204,9 @@ def register_project_integration_routes(
         return {"deleted": True, "webhook_id": webhook_id}
 
     @admin_router.post("/projects/{project_id}/webhooks/test")
-    async def test_webhook(project_id: str, body: dict, _a: tuple = Depends(require_admin)):
-        url = body.get("url", "")
-        secret = body.get("secret", "")
+    async def test_webhook(project_id: str, req: WebhookTestRequest, _a: tuple = Depends(require_admin)):
+        url = req.url
+        secret = req.secret
         if not url:
             raise HTTPException(400, "url fehlt")
         await _fire_webhook({"url": url, "secret": secret}, "ping", {"project_id": project_id, "message": "HydraHive Webhook Test"}, logger=logger)

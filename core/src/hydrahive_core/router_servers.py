@@ -35,6 +35,10 @@ AGENT_SERVERS_FILE = settings.agent_servers_config
 _SAFE_ID = re.compile(r"^[a-z0-9_-]+$")
 
 
+class AgentServersRequest(BaseModel):
+    server_ids: list[str]
+
+
 class ServerRequest(BaseModel):
     id: str = ""
     name: str
@@ -252,10 +256,8 @@ def register_server_routes(
         return {"agent_id": agent_id, "servers": result}
 
     @admin_router.put("/agents/{agent_id}/servers")
-    def set_agent_servers(agent_id: str, body: dict = Body(...)):
-        server_ids = body.get("server_ids", [])
-        if not isinstance(server_ids, list):
-            raise HTTPException(400, "server_ids muss eine Liste sein")
+    def set_agent_servers(agent_id: str, req: AgentServersRequest):
+        server_ids = req.server_ids
         # Validieren dass Server existieren
         existing = {s["id"] for s in _load_servers()}
         for sid in server_ids:
