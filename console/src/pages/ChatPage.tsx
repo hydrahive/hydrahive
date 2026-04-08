@@ -311,6 +311,7 @@ export function ChatPage() {
 
     const userMsg = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) };
     let currentAssistantMsg = mkMsg("assistant", "");
+    let asstAdded = false;
     let hadToolsSinceLastText = false;
     setMessages((ms) => [...ms, userMsg]);
     setSending(true);
@@ -322,8 +323,6 @@ export function ChatPage() {
 
     try {
       setPendingImages([]);
-      setMessages((ms) => [...ms, currentAssistantMsg]);
-      setStreamingMsgId(currentAssistantMsg.id);
 
       await sseStream({
         url: `/api/projects/${id}/message/stream`,
@@ -336,10 +335,11 @@ export function ChatPage() {
         onEvent: (evt) => {
           if (evt.type === "text") {
             setActiveTool(null);
-            if (hadToolsSinceLastText) {
+            if (!asstAdded || hadToolsSinceLastText) {
               currentAssistantMsg = mkMsg("assistant", "");
               setMessages((ms) => [...ms, currentAssistantMsg]);
               setStreamingMsgId(currentAssistantMsg.id);
+              asstAdded = true;
               hadToolsSinceLastText = false;
             }
             setMessages((ms) => ms.map((m) => m.id === currentAssistantMsg.id ? { ...m, content: m.content + evt.text } : m));
@@ -383,7 +383,6 @@ export function ChatPage() {
     } finally {
       setSending(false);
       // Leere Assistant-Messages aufräumen — verzögert damit alle State-Updates durch sind
-      setTimeout(() => setMessages(ms => ms.filter(m => !(m.role === "assistant" && !m.content))), 100);
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);

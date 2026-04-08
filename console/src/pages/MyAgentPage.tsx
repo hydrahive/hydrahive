@@ -357,6 +357,7 @@ export function MyAgentPage() {
 
     const userMsg = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) } as any;
     let curAsst = mkMsg("assistant", "");
+    let asstAdded = false;
     let hadTools = false;
     setMessages(ms => [...ms, userMsg]);
     setSending(true);
@@ -366,7 +367,6 @@ export function MyAgentPage() {
     elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
     try {
       setPendingImages([]);
-      setMessages(ms => [...ms, curAsst]);
       setStreamingMsgId(curAsst.id);
 
       await sseStream({
@@ -380,7 +380,7 @@ export function MyAgentPage() {
         onEvent: (evt) => {
           if (evt.type === "text") {
             setActiveTool(null);
-            if (hadTools) { curAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, curAsst]); setStreamingMsgId(curAsst.id); hadTools = false; }
+            if (!asstAdded || hadTools) { curAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, curAsst]); setStreamingMsgId(curAsst.id); asstAdded = true; hadTools = false; }
             setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m,content:m.content+evt.text} : m));
           }
           else if (evt.type === "tool_image") {
