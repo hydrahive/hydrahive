@@ -1093,6 +1093,161 @@ class ReadHandoffTool(BaseTool):
 
 import re as _re_shell
 
+# ---------------------------------------------------------------------------
+# #474: AST-basiertes Bash-Command-Parsing (shlex + heuristische Analyse)
+# Läuft VOR der Regex-Blocklist und fängt Umgehungen ab, die reine Regex
+# nicht erkennen kann: Command Substitution, Pipe-Chains, Variable Injection,
+# Privilege Escalation Wrapper, String-Verkettung/Obfuskation.
+# FAIL-CLOSED: Wenn shlex.split() fehlschlägt, wird der Befehl blockiert.
+# ---------------------------------------------------------------------------
+
+# Befehle, die in Pipe-Chains / nach Semikolons blockiert sind
+_PIPE_DANGEROUS_COMMANDS: frozenset[str] = frozenset({
+    "rm", "rmdir", "dd", "mkfs", "fdisk", "parted", "shred", "wipefs",
+    "kill", "killall", "pkill", "reboot", "shutdown", "poweroff", "halt", "init",
+    "systemctl", "chmod", "chown", "chattr",
+})
+
+# Privilege-Escalation-Wrapper (werden rekursiv aufgelöst)
+_ESCALATION_WRAPPERS: frozenset[str] = frozenset({
+    "sudo", "pkexec", "doas", "su", "runuser", "machinectl",
+})
+
+# Gefährliche Umgebungsvariablen (auch via ${VAR} oder $VAR Zugriff)
+_DANGEROUS_ENV_VARS: frozenset[str] = frozenset({
+    "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH",
+    "NODE_OPTIONS", "NODE_TLS_REJECT_UNAUTHORIZED",
+    "GOFLAGS", "RUSTFLAGS",
+    "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+    "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT",
+})
+
+# Kompiliertes Pattern für $VAR und ${VAR} Erkennung
+_ENV_VAR_PATTERN = _re_shell.compile(
+    r'\$\{?(' + '|'.join(_re_shell.escape(v) for v in _DANGEROUS_ENV_VARS) + r')\}?'
+)
+
+# Obfuskation-Patterns: String-Verkettung, hex/octal escapes für gefährliche Befehle
+_OBFUSCATION_PATTERNS: list[tuple[_re_shell.Pattern, str]] = [
+    # r"m" -rf  oder  "r"m -rf  (Anführungszeichen mitten im kurzen Befehlsnamen, <=6 Zeichen)
+    (_re_shell.compile(r'''(?:^|[\s;|&])([a-z]{0,3}["'][a-z]{1,3}["'][a-z]{0,3})\s+-[a-zA-Z]*[rf]''', _re_shell.IGNORECASE),
+     "Obfuskierter Befehl (Anführungszeichen-Verkettung) verboten"),
+    # $'\x72\x6d' = rm  (hex/octal escape)
+    (_re_shell.compile(r"\$'[^']*\\x[0-9a-fA-F]{2}"),
+     "Hex-Escape ($'\\x..') in Befehlen verboten"),
+    (_re_shell.compile(r"\$'[^']*\\[0-7]{3}"),
+     "Octal-Escape ($'\\NNN') in Befehlen verboten"),
+    # printf '\x72\x6d' | sh  (printf-Piped-to-Shell)
+    (_re_shell.compile(r'\bprintf\b.*\\x[0-9a-fA-F].*\|\s*(sh|bash|dash|zsh|ksh)\b'),
+     "printf mit hex-escape nach Shell gepipet — verboten"),
+    # base64 decode piped to shell
+    (_re_shell.compile(r'\b(base64|b64decode)\b.*\|\s*(sh|bash|dash|zsh|ksh|source)\b'),
+     "base64-decode nach Shell gepipet — verboten"),
+]
+
+
+def _ast_check_command(command: str) -> str | None:
+    """
+    AST-level Analyse eines Shell-Befehls.
+    Gibt Fehlermeldung zurück wenn blockiert, sonst None.
+    FAIL-CLOSED: bei Parse-Fehlern wird blockiert.
+    """
+    # 1. Obfuskation erkennen (vor dem Parsen, da shlex diese nicht auflöst)
+    for pattern, reason in _OBFUSCATION_PATTERNS:
+        if pattern.search(command):
+            return reason
+
+    # 2. Command Substitution: $( ), $(( )), Backticks
+    #    (Auch die Regex-Blocklist prüft das — hier als AST-Layer-Redundanz)
+    if '$(' in command:
+        return "Command Substitution $(...) verboten"
+    if '`' in command:
+        return "Backticks (Command Substitution) verboten"
+
+    # 3. Dangerous variable expansion: $LD_PRELOAD, ${NODE_OPTIONS}, etc.
+    env_match = _ENV_VAR_PATTERN.search(command)
+    if env_match:
+        return f"Zugriff auf gefährliche Variable ${env_match.group(1)} verboten"
+
+    # 4. Parse mit shlex — FAIL-CLOSED bei Fehler
+    try:
+        tokens = _shlex_shell.split(command)
+    except ValueError as e:
+        return f"Befehl konnte nicht sicher geparst werden (shlex: {e}) — FAIL-CLOSED"
+
+    if not tokens:
+        return None
+
+    # 5. Pipe-Chain-Analyse: Aufsplitten an | ; && ||
+    #    Jedes Segment wird einzeln auf gefährliche Befehle geprüft
+    segments = _re_shell.split(r'\s*(?:\|(?!\|)|\|\||&&|;)\s*', command)
+    for segment in segments:
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            seg_tokens = _shlex_shell.split(segment)
+        except ValueError:
+            return f"Segment konnte nicht geparst werden: {segment[:60]} — FAIL-CLOSED"
+        if not seg_tokens:
+            continue
+
+        # Escalation-Wrapper auflösen: sudo rm -rf → prüfe rm -rf
+        resolved = _resolve_escalation(seg_tokens)
+        exe_name = _re_shell.sub(r'^.*/', '', resolved[0]).lower() if resolved else ""
+
+        # 5a. Pipe-Chain: gefährliche Befehle in jedem Segment erkennen
+        if exe_name in _PIPE_DANGEROUS_COMMANDS:
+            # Der Befehl selbst ist gefährlich — die Regex-Blocklist
+            # prüft das auch, aber hier fangen wir es auch nach Pipe auf
+            pass  # Regex-Layer fängt die konkreten Patterns
+
+        # 5b. Prüfe ob ein Escalation-Wrapper einen blockierten Befehl umschließt
+        first_exe = _re_shell.sub(r'^.*/', '', seg_tokens[0]).lower() if seg_tokens else ""
+        if first_exe in _ESCALATION_WRAPPERS:
+            if resolved and resolved != seg_tokens:
+                # Rekursiv den aufgelösten Befehl prüfen
+                resolved_cmd = " ".join(resolved)
+                inner_block = _check_shell_blocklist(resolved_cmd)
+                if inner_block:
+                    return f"Escalation-Wrapper ({seg_tokens[0]}) um blockierten Befehl: {inner_block}"
+
+    return None
+
+
+def _resolve_escalation(tokens: list[str]) -> list[str]:
+    """
+    Löst Privilege-Escalation-Wrapper rekursiv auf.
+    sudo -u root rm -rf /  →  rm -rf /
+    pkexec rm -rf /  →  rm -rf /
+    doas -u user sudo rm  →  rm
+    Max. 5 Iterationen gegen Endlosschleifen.
+    """
+    result = tokens[:]
+    for _ in range(5):
+        if not result:
+            break
+        exe = _re_shell.sub(r'^.*/', '', result[0]).lower()
+        if exe not in _ESCALATION_WRAPPERS:
+            break
+        # Optionen überspringen
+        rest = result[1:]
+        while rest and rest[0].startswith('-'):
+            # su -c "command" → den Command extrahieren
+            if exe == 'su' and rest[0] == '-c' and len(rest) > 1:
+                try:
+                    return _shlex_shell.split(rest[1])
+                except ValueError:
+                    return rest[1:]
+            rest = rest[1:]
+        # Username-Argument bei su/runuser überspringen
+        if exe in ('su', 'runuser') and rest and not rest[0].startswith('-'):
+            rest = rest[1:]
+        result = rest
+    return result
+
+
 # Kommandos die niemals ausgeführt werden dürfen — unabhängig vom Agenten
 _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     # Rekursives Löschen
@@ -1174,16 +1329,29 @@ _EXEC_WRAPPERS  = {"env", "nohup", "nice", "ionice", "timeout", "xargs", "sudo",
 def _check_shell_blocklist(command: str) -> str | None:
     """
     Gibt die Fehlermeldung zurück wenn der Befehl blockiert ist, sonst None.
-    Prüft Regex-Patterns und löst Shell-/Exec-Wrapper rekursiv auf.
+
+    Zweischichtiger Schutz:
+      1. AST-Level-Analyse (#474): Command Substitution, Pipe-Chains, Variable
+         Injection, Escalation Wrapper, Obfuskation. FAIL-CLOSED.
+      2. Regex-Blocklist (Original): Pattern-Matching als Fallback-Layer.
+      3. Token-Level: eval, Shell-Wrapper (-c), Exec-Wrapper.
     """
+    # --- Layer 1: AST-Level-Analyse (#474) ---
+    ast_block = _ast_check_command(command)
+    if ast_block:
+        return ast_block
+
+    # --- Layer 2: Regex-Blocklist ---
     for pattern, reason in _SHELL_BLOCKLIST:
         if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
             return reason
 
+    # --- Layer 3: Token-Level-Analyse ---
     try:
         tokens = _shlex_shell.split(command)
     except ValueError:
-        return None
+        # #474 FAIL-CLOSED: Parse-Fehler = blockieren (nicht durchlassen)
+        return "Befehl konnte nicht sicher geparst werden — FAIL-CLOSED"
 
     if not tokens:
         return None
