@@ -86,7 +86,32 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
 # ---------------------------------------------------------------- OAuth Rate Limits
 
 # Globaler State: letzte bekannte Rate-Limit-Werte aus Anthropic Response-Headers
-_oauth_rate_limits: dict = {}
+# Persistiert unter /etc/hydrahive/oauth_usage.json damit Daten Neustarts überleben.
+import json as _json
+from pathlib import Path as _Path
+
+_OAUTH_CACHE_FILE = _Path("/etc/hydrahive/oauth_usage.json")
+
+
+def _load_oauth_cache() -> dict:
+    """Beim Start gespeicherte OAuth-Daten von Disk laden."""
+    try:
+        if _OAUTH_CACHE_FILE.exists():
+            return _json.loads(_OAUTH_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_oauth_cache(data: dict) -> None:
+    """OAuth-Daten auf Disk persistieren (fire-and-forget)."""
+    try:
+        _OAUTH_CACHE_FILE.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_oauth_rate_limits: dict = _load_oauth_cache()
 
 
 def _extract_rate_limit_headers(headers) -> None:
@@ -139,6 +164,7 @@ def _extract_rate_limit_headers(headers) -> None:
     if len(data) > 1:  # mehr als nur updated_at
         global _oauth_rate_limits
         _oauth_rate_limits = data
+        _save_oauth_cache(data)
         logger.debug("OAuth rate limits updated: %s", data)
 
 
