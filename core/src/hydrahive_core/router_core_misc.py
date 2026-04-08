@@ -367,6 +367,22 @@ def register_core_misc_routes(
     def health():
         return {"status": "ok", "service": "hydrahive-core"}
 
+    @auth_router.get("/agent-roles")
+    def list_agent_roles():
+        """#492: Rollen-Presets für Frontend."""
+        from .agent_roles import ROLE_PRESETS, ALL_ROLES
+        return {
+            "roles": {
+                role: {
+                    "description": ROLE_PRESETS[role]["description"],
+                    "tools": ROLE_PRESETS[role]["tools"],
+                    "execution_mode": ROLE_PRESETS[role]["execution_modes"]["default"],
+                    "tool_count": len(ROLE_PRESETS[role]["tools"]) if isinstance(ROLE_PRESETS[role]["tools"], list) else -1,
+                }
+                for role in ALL_ROLES
+            },
+        }
+
     @auth_router.get("/agents")
     def list_agents():
         registered = discovery.agents

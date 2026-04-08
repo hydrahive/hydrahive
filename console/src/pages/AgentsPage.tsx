@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ToolGroupSelector } from "@/components/ToolGroupSelector";
+import { RoleSelector } from "@/components/RoleSelector";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { agentCategory, AGENT_COLORS, cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const EMPTY_FORM = {
   allowed_agents: [] as string[],
   sources: [] as { name: string; url: string; description: string }[],
   max_tool_rounds: null as number | null,
+  role: null as string | null,
   execution_mode_default: "elevated" as string,
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
@@ -281,6 +283,7 @@ function AgentsCrudTab() {
       allowed_agents: cfg?.allowed_agents ?? [],
       sources: cfg?.sources ?? [],
       max_tool_rounds: cfg?.max_tool_rounds ?? null,
+      role: cfg?.role ?? null,
       execution_mode_default: cfg?.execution_modes?.default ?? "elevated",
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
@@ -589,24 +592,36 @@ function AgentsCrudTab() {
               </div>
             </div>
 
+            {/* Rolle (#492) */}
             <div>
-              <div className="flex items-center gap-3 mb-3">
-                <p className="metric-kicker">{t("agents.tools")}</p>
-                <button type="button" onClick={() => setForm(f => ({ ...f, tools: knownTools.filter(t => !DANGER_TOOLS.has(t)) }))}
-                  className="text-xs text-muted-foreground hover:text-foreground transition">
-                  Alle außer ⚠
-                </button>
-                <button type="button" onClick={() => setForm(f => ({ ...f, tools: [] }))}
-                  className="text-xs text-muted-foreground hover:text-foreground transition">
-                  Keine
-                </button>
-              </div>
-              <ToolGroupSelector
-                selectedTools={form.tools}
-                onChange={(tools) => setForm(f => ({ ...f, tools }))}
-                onUnrestrictedChange={(enabled) => setForm(f => ({ ...f, execution_mode_default: enabled ? "unrestricted" : "elevated" }))}
+              <p className="metric-kicker mb-3">Rolle & Tools</p>
+              <RoleSelector
+                value={form.role}
+                onChange={(role) => setForm(f => ({ ...f, role }))}
               />
             </div>
+
+            {/* Custom: Legacy ToolGroupSelector */}
+            {form.role === null && (
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <p className="metric-kicker">{t("agents.tools")}</p>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, tools: knownTools.filter(t => !DANGER_TOOLS.has(t)) }))}
+                    className="text-xs text-muted-foreground hover:text-foreground transition">
+                    Alle außer ⚠
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, tools: [] }))}
+                    className="text-xs text-muted-foreground hover:text-foreground transition">
+                    Keine
+                  </button>
+                </div>
+                <ToolGroupSelector
+                  selectedTools={form.tools}
+                  onChange={(tools) => setForm(f => ({ ...f, tools }))}
+                  onUnrestrictedChange={(enabled) => setForm(f => ({ ...f, execution_mode_default: enabled ? "unrestricted" : "elevated" }))}
+                />
+              </div>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Max Tool Rounds" hint={t("agents.maxToolRoundsHint", { defaultValue: "Leer = Standard (6 Runden)" })} tooltip={t("agents.maxToolRoundsTip", { defaultValue: "Wie oft der Agent pro Nachricht Tools aufrufen darf. Jede Runde: LLM denkt → ruft Tool auf → bekommt Ergebnis. Mehr Runden = komplexere Aufgaben möglich, aber höhere Kosten und Latenz." })}>
@@ -617,18 +632,21 @@ function AgentsCrudTab() {
                   min={1} max={50} placeholder="Standard (6)"
                 />
               </Field>
-              <Field label="Execution Mode" hint={t("agents.executionModeHint", { defaultValue: "Standard-Modus für diesen Agenten" })} tooltip={t("agents.executionModeTip", { defaultValue: "safe = Shell-Blocklist aktiv, nur ungefährliche Befehle. elevated = erweiterte Rechte, Blocklist gelockert. root = voller Systemzugriff. unrestricted = keine Einschränkungen, keine Blocklists. Für die meisten Agenten reicht 'safe'." })}>
-                <select
-                  value={form.execution_mode_default}
-                  onChange={(e) => set("execution_mode_default", e.target.value)}
-                  className={`w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${form.execution_mode_default === "unrestricted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
-                >
-                  <option value="safe">Safe</option>
-                  <option value="elevated">Elevated</option>
-                  <option value="root">Root</option>
-                  <option value="unrestricted">⚠ Unrestricted (voller Zugang)</option>
-                </select>
-              </Field>
+              {/* Execution Mode nur bei Custom */}
+              {form.role === null && (
+                <Field label="Execution Mode" hint={t("agents.executionModeHint", { defaultValue: "Standard-Modus für diesen Agenten" })} tooltip={t("agents.executionModeTip", { defaultValue: "safe = Shell-Blocklist aktiv, nur ungefährliche Befehle. elevated = erweiterte Rechte, Blocklist gelockert. root = voller Systemzugriff. unrestricted = keine Einschränkungen, keine Blocklists. Für die meisten Agenten reicht 'safe'." })}>
+                  <select
+                    value={form.execution_mode_default}
+                    onChange={(e) => set("execution_mode_default", e.target.value)}
+                    className={`w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${form.execution_mode_default === "unrestricted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
+                  >
+                    <option value="safe">Safe</option>
+                    <option value="elevated">Elevated</option>
+                    <option value="root">Root</option>
+                    <option value="unrestricted">⚠ Unrestricted (voller Zugang)</option>
+                  </select>
+                </Field>
+              )}
             </div>
 
             {agentList.filter(([aid]) => aid !== editId).length > 0 && (

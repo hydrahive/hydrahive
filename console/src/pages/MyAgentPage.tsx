@@ -6,6 +6,7 @@ const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.Bu
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
 import { ChatView } from "@/components/ChatView";
+import { RoleSelector } from "@/components/RoleSelector";
 import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -1242,16 +1243,21 @@ function SettingsPanel({
   const [maxTokens,      setMaxTokens]      = useState(cfg.llm?.max_tokens ?? 4096);
   const [fallbacks,      setFallbacks]      = useState<string[]>(cfg.llm?.fallback_models ?? []);
   const [fbInput,        setFbInput]        = useState("");
+  const [role,           setRole]           = useState<string | null>((cfg as any).role ?? null);
   const [tools,          setTools]          = useState<string[]>(cfg.tools ?? []);
   const [allowedAgents,  setAllowedAgents]  = useState<string[]>(cfg.allowed_agents ?? []);
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
   const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string;wks_base_url?:string}[]>([]);
+  const [roleData, setRoleData] = useState<Record<string, { description: string; tools: string[]; tool_count: number }> | undefined>();
 
   useEffect(() => {
     api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models")
       .then(r => setAvailableModels(r.models))
-      .catch(e => console.error("Failed to load available models", e));
+      .catch(() => {});
+    api.get<{roles: typeof roleData}>("/agent-roles")
+      .then(r => setRoleData(r.roles))
+      .catch(() => {});
   }, []);
 
   // Sync state wenn agentInfo von außen aktualisiert wird (nach Speichern oder Reload)
@@ -1263,6 +1269,7 @@ function SettingsPanel({
     setTemperature(c.llm?.temperature ?? 0.7);
     setMaxTokens(c.llm?.max_tokens ?? 4096);
     setFallbacks(c.llm?.fallback_models ?? []);
+    setRole((c as any).role ?? null);
     setTools(c.tools ?? []);
     setAllowedAgents(c.allowed_agents ?? []);
   }, [agentInfo]);
@@ -1295,7 +1302,10 @@ function SettingsPanel({
       }
       await api.put("/me/agent", {
         identity, soul, model, temperature, max_tokens: maxTokens,
-        fallback_models: allFallbacks, tools, allowed_agents: allowedAgents,
+        fallback_models: allFallbacks,
+        role: role || undefined,
+        tools: role ? [] : tools,
+        allowed_agents: allowedAgents,
         ollama_base_url,
       });
       setSaveMsg(t("myAgent.settingsSaved"));
@@ -1390,32 +1400,39 @@ function SettingsPanel({
           </div>
         </section>
 
-        {/* Tools */}
+        {/* Rolle & Tools (#492) */}
         <section className="space-y-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
-            <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
-              className="text-xs text-muted-foreground hover:text-foreground transition">
-              Alle außer ⚠
-            </button>
-            <button type="button" onClick={() => setTools([])}
-              className="text-xs text-muted-foreground hover:text-foreground transition">
-              Keine
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {ALL_TOOLS.map(t => {
-              const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
-              return (
-                <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
-                  <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
-                    className="rounded" />
-                  <span className="text-xs">{t.label}</span>
-                  <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
-                </label>
-              );
-            })}
-          </div>
+          <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
+          <RoleSelector value={role} onChange={setRole} roleData={roleData} />
+          {/* Custom: Legacy-Checkboxen */}
+          {role === null && (
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Eigene Tool-Auswahl:</span>
+                <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Alle außer ⚠
+                </button>
+                <button type="button" onClick={() => setTools([])}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Keine
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_TOOLS.map(t => {
+                  const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
+                  return (
+                    <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
+                      <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
+                        className="rounded" />
+                      <span className="text-xs">{t.label}</span>
+                      <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Delegation */}

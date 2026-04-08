@@ -88,6 +88,9 @@ def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
 
 
 def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None, *, is_admin: bool = False) -> tuple[dict, bool]:
+    # #492: Agents mit role brauchen kein Legacy-Upgrade
+    if agent_data.get("role"):
+        return agent_data, False
     changed = False
     defaults = default_personal_agent_execution_modes(is_admin=is_admin)
     execution_modes = agent_data.setdefault("execution_modes", {})
@@ -161,7 +164,10 @@ class MyAgentUpdateRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     fallback_models: list[str] = Field(default_factory=list)
+    role: str | None = None  # #492: reader/assistant/coder/admin
     tools: list[str] = Field(default_factory=list)
+    tools_extra: list[str] = Field(default_factory=list)
+    tools_deny: list[str] = Field(default_factory=list)
     allowed_agents: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None
@@ -186,12 +192,20 @@ def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
         "identity": req.identity,
         "llm": build_personal_agent_llm_data(req),
         "soul": "./soul.md",
-        "tools": list(req.tools),
         "allowed_agents": list(req.allowed_agents),
         "mcp_servers": list(req.mcp_servers),
-        "execution_modes": default_personal_agent_execution_modes(),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
+    # #492: Role-basiert oder Legacy
+    if req.role:
+        agent_data["role"] = req.role
+        if req.tools_extra:
+            agent_data["tools_extra"] = list(req.tools_extra)
+        if req.tools_deny:
+            agent_data["tools_deny"] = list(req.tools_deny)
+    else:
+        agent_data["tools"] = list(req.tools)
+        agent_data["execution_modes"] = default_personal_agent_execution_modes()
     return agent_data
 
 

@@ -94,7 +94,10 @@ class AgentConfig(BaseModel):
     llm:      LlmConfig
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
+    role:            str | None = None  # #492: reader/assistant/coder/admin — setzt tools + execution_modes automatisch
     tools:           list[str] = Field(default_factory=list)
+    tools_extra:     list[str] = Field(default_factory=list)  # #492: zusätzliche Tools on top of role
+    tools_deny:      list[str] = Field(default_factory=list)  # #492: Tools explizit verbieten
     tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
     allowed_agents:  list[str] = Field(default_factory=list)
     mcp_servers:     list[str] = Field(default_factory=list)
@@ -170,6 +173,22 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
     except ValidationError as e:
         logger.warning("Validierungsfehler in %s:\n%s", yaml_path, e)
         return None
+
+    # #492: Rolle auflösen → tools + execution_modes setzen
+    if config.role:
+        from .agent_roles import resolve_role
+        resolved = resolve_role(
+            config.role,
+            tools_extra=config.tools_extra or None,
+            tools_deny=config.tools_deny or None,
+        )
+        if resolved:
+            role_tools, role_exec_modes = resolved
+            # Nur überschreiben wenn nicht explizit in YAML gesetzt
+            if not raw.get("tools"):
+                config.tools = role_tools
+            if not raw.get("execution_modes"):
+                config.execution_modes = ExecutionModesConfig.model_validate(role_exec_modes)
 
     config.agent_dir = agent_dir
     return config
