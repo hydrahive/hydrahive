@@ -89,6 +89,22 @@ export function FloatingCompanion() {
   const lastCommentRef = useRef(0);
   const lastPathRef = useRef("");
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [wander, setWander] = useState({ x: 0, y: 0 });
+
+  // Zufälliges Wandern — alle 2-4s neue Position
+  useEffect(() => {
+    if (!visible) return;
+    const move = () => {
+      if (mood === "sleep") { setWander({ x: 0, y: 0 }); return; }
+      setWander({
+        x: Math.round((Math.random() - 0.5) * 16),
+        y: Math.round((Math.random() - 0.5) * 12),
+      });
+    };
+    move();
+    const t = setInterval(move, 2000 + Math.random() * 2000);
+    return () => clearInterval(t);
+  }, [visible, mood]);
 
   // Check activation
   useEffect(() => {
@@ -226,13 +242,16 @@ export function FloatingCompanion() {
       )}
       {/* Companion — animated SVG blob */}
       <div
-        className="pointer-events-auto cursor-default transition-all duration-500 hover:scale-110"
-        style={{ animation: mood === "sleep" ? "none" : "companion-bob 3s ease-in-out infinite" }}
+        className="pointer-events-auto cursor-default hover:scale-110"
+        style={{
+          transform: `translate(${wander.x}px, ${wander.y}px)`,
+          transition: "transform 1.8s cubic-bezier(0.25, 0.1, 0.25, 1)",
+        }}
         title="👋"
         onClick={() => {
           if (mood === "sleep") {
             setMood("happy");
-            setBubble("*gähn* ... bin wach!");
+            setBubble("*yawn* ... I'm awake!");
             setShowBubble(true);
             setTimeout(() => setShowBubble(false), 4000);
           }
@@ -240,12 +259,6 @@ export function FloatingCompanion() {
       >
         <BlobCreature mood={mood} size={dockEl ? 32 : 48} />
       </div>
-      <style>{`
-        @keyframes companion-bob {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-      `}</style>
     </>
   );
 
