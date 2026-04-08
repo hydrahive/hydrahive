@@ -852,6 +852,21 @@ async def _openai_codex_call(
                 body = await resp.aread()
                 raise RuntimeError(f"Codex API {resp.status_code}: {body.decode()[:300]}")
 
+            # Rate-Limit Headers auslesen und persistieren (#488b)
+            _codex_rate_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower().startswith("x-ratelimit") or k.lower().startswith("openai")
+            }
+            if _codex_rate_headers:
+                try:
+                    from .settings import settings as _settings
+                    _rl_path = _settings.etc_dir / "codex_ratelimits.json"
+                    import time as _time
+                    _rl_data = {**_codex_rate_headers, "_updated_at": _time.time(), "_model": model_id}
+                    _rl_path.write_text(_json.dumps(_rl_data, indent=2))
+                except Exception:
+                    pass
+
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
                     continue

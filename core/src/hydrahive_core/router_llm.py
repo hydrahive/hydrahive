@@ -330,6 +330,7 @@ def register_llm_routes(
     @admin_router.get("/llm/openai_codex_status")
     def get_openai_codex_status():
         import json as _json
+        import time as _time
 
         token_file = settings.openai_codex_token
         if not token_file.exists() or token_file.stat().st_size == 0:
@@ -337,7 +338,7 @@ def register_llm_routes(
         try:
             data = _json.loads(token_file.read_text(encoding="utf-8"))
             if data.get("access_token") and data.get("account_id"):
-                return {
+                result = {
                     "configured": True,
                     "account_id": data["account_id"],
                     "models": [
@@ -351,6 +352,20 @@ def register_llm_routes(
                         "gpt-5.4",
                     ],
                 }
+                # Rate-Limit-Info aus letztem Codex-Call
+                rl_path = settings.etc_dir / "codex_ratelimits.json"
+                if rl_path.exists():
+                    try:
+                        rl = _json.loads(rl_path.read_text(encoding="utf-8"))
+                        age_s = _time.time() - rl.get("_updated_at", 0)
+                        result["rate_limits"] = {
+                            k: v for k, v in rl.items() if not k.startswith("_")
+                        }
+                        result["rate_limits_age_seconds"] = int(age_s)
+                        result["rate_limits_model"] = rl.get("_model", "")
+                    except Exception:
+                        pass
+                return result
         except Exception as e:
             logger.debug("Failed to load OpenAI Codex OAuth config: %s", e)
         return {"configured": False, "account_id": None}
