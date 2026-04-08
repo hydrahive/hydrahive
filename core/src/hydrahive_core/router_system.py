@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -884,3 +885,56 @@ def register_system_routes(
         from .alert_service import alert_service as _as
         result = await _as.run_now()
         return result
+
+    # ── AutoDream ────────────────────────────────────────────────────
+
+    @admin_router.get("/admin/dream/config")
+    def get_dream_config():
+        from .auto_dream import _load_dream_config
+        return _load_dream_config()
+
+    class DreamConfigRequest(BaseModel):
+        enabled: bool | None = None
+        min_hours: int | None = None
+        min_sessions: int | None = None
+        check_interval_seconds: int | None = None
+        summary_model: str | None = None
+
+    @admin_router.put("/admin/dream/config")
+    def update_dream_config(req: DreamConfigRequest):
+        from .auto_dream import _load_dream_config, save_dream_config
+        cfg = _load_dream_config()
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
+        save_dream_config(cfg)
+        return {"updated": True, "config": cfg}
+
+    @admin_router.post("/admin/dream/run")
+    async def trigger_dream(agent_id: str = ""):
+        from .auto_dream import auto_dream_service
+        result = await auto_dream_service.run_now(agent_id=agent_id or None)
+        return result
+
+    @admin_router.get("/admin/dream/status")
+    def get_dream_status():
+        """Dream-Status aller Agenten."""
+        from .auto_dream import _read_dream_state
+        agents_dir = Path(agents_dir_str) if 'agents_dir_str' in dir() else settings.agents_dir
+        statuses = []
+        for agent_dir in sorted(settings.agents_dir.iterdir()):
+            if not agent_dir.is_dir() or not (agent_dir / "agent.yaml").exists():
+                continue
+            state = _read_dream_state(agent_dir)
+            transcripts_dir = agent_dir / "transcripts"
+            transcript_count = len(list(transcripts_dir.glob("*.md"))) if transcripts_dir.exists() else 0
+            last_dream = state.get("last_dream_at", 0)
+            hours_since = (time.time() - last_dream) / 3600 if last_dream else None
+            statuses.append({
+                "agent_id": agent_dir.name,
+                "last_dream_at": datetime.fromtimestamp(last_dream, tz=timezone.utc).isoformat() if last_dream else None,
+                "hours_since_dream": round(hours_since, 1) if hours_since else None,
+                "dream_count": state.get("dream_count", 0),
+                "transcript_count": transcript_count,
+                "last_sessions_reviewed": state.get("last_sessions_reviewed", 0),
+            })
+        return {"agents": statuses, "total": len(statuses)}

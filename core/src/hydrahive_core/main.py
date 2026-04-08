@@ -449,6 +449,10 @@ async def lifespan(app: FastAPI):
         load_users_fn=_load_users,
     )
 
+    # AutoDream — Background Memory-Konsolidierung
+    from .auto_dream import auto_dream_service as _dream_service
+    _dream_service.start(agents_dir=AGENTS_DIR, notify_fn=notification_service.push)
+
     # Folder-Watcher für Datei-Pipelines starten (#60)
     _folder_watcher_task = asyncio.create_task(
         run_folder_watcher(
@@ -463,6 +467,7 @@ async def lifespan(app: FastAPI):
     logger.info("HydraHive Core bereit")
     yield
     _folder_watcher_task.cancel()
+    _dream_service.stop()
     _alert_service.stop()
     _cs.stop()
     scheduler_service.stop()
