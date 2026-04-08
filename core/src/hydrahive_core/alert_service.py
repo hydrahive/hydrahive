@@ -176,12 +176,13 @@ def check_oauth_token(cfg: dict) -> list[dict]:
                         "body": "Token ist abgelaufen und kein Refresh-Token vorhanden. Bitte erneut authentifizieren.",
                         "link": "/settings",
                     })
-                elif remaining <= warn_days:
+                elif remaining <= warn_days and not has_refresh:
+                    # Nur warnen wenn kein Refresh-Token — mit Refresh erneuert sich der Token automatisch
                     alerts.append({
                         "key": "oauth_expiring",
                         "level": "warning",
                         "title": f"Claude OAuth-Token läuft in {remaining:.0f} Tagen ab",
-                        "body": f"Token läuft in {remaining:.1f} Tagen ab. {'Refresh-Token vorhanden.' if has_refresh else 'Kein Refresh-Token — manuell erneuern!'}",
+                        "body": f"Token läuft in {remaining:.1f} Tagen ab. Kein Refresh-Token — manuell erneuern!",
                         "link": "/settings",
                     })
     except Exception as e:
