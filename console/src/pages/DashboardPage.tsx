@@ -338,6 +338,16 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
     return () => { alive = false; };
   }, []);
 
+  // Fast OAuth-Usage polling (3s) — leichtgewichtig, nur ein kleiner JSON-Call
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      api.oauthUsage().then(d => { if (alive) setOauthUsage(d as Record<string,unknown>); }).catch(() => {});
+    };
+    const t = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   useEffect(() => {
     let disposed = false;
     loadDashboard(false);
@@ -655,6 +665,10 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
           <div className="flex items-center gap-3">
             <Activity className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <span className="text-sm font-medium">Claude OAuth</span>
+            <button onClick={() => { api.oauthUsageFetch().then(d => { if (d && (d as any).available) { api.oauthUsage().then(c => setOauthUsage(c as Record<string,unknown>)).catch(() => {}); } }).catch(() => {}); }}
+              className="p-0.5 rounded hover:bg-muted transition-colors" title="Live von Anthropic abrufen" aria-label="OAuth Refresh">
+              <RefreshCw className="h-3 w-3 text-muted-foreground" />
+            </button>
             {!oauthUsage.available ? (
               <span className="text-xs text-muted-foreground ml-auto">{String(oauthUsage.message)}</span>
             ) : (
