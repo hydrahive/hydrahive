@@ -302,6 +302,10 @@ export function AgentChatPage() {
           } else if (evt.type === "tool_image") {
             const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
             setMessages(ms => [...ms, imgMsg]);
+          } else if (evt.type === "tool_warning") {
+            // #486: Destructive Command Warning als Tool-Message anzeigen
+            const warnMsg = mkMsg("tool" as Message["role"], `⚠️ ${evt.tool_name}|⚠️ WARNUNG: ${evt.tool_warning}`);
+            setMessages(ms => [...ms, warnMsg]);
           } else if (evt.type === "tool_call") {
             const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
             setMessages(ms => [...ms, toolMsg]);

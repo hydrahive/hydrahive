@@ -331,6 +331,12 @@ async def _stream_codex(
             _tc_args = _json.loads(tc.function.arguments or "{}")
             _tc_detail = format_tool_detail(tc.function.name, _tc_args)
             yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+            # #486: Destructive Command Warning
+            if tc.function.name in ("shell_exec", "wks_shell_exec"):
+                from .destructive_warning import get_destructive_warning
+                _dw = get_destructive_warning(_tc_args.get("command", ""))
+                if _dw:
+                    yield f"data: {_json.dumps({'tool_warning': _dw, 'tool_name': tc.function.name})}\n\n"
             await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
             result, _ = await execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,

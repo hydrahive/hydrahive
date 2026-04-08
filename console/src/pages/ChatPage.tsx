@@ -344,6 +344,9 @@ export function ChatPage() {
           } else if (evt.type === "tool_image") {
             const imgMsg = mkMsg("tool" as Message["role"], `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
             setMessages((ms) => [...ms, imgMsg]);
+          } else if (evt.type === "tool_warning") {
+            const warnMsg = mkMsg("tool" as Message["role"], `⚠️ ${evt.tool_name}|⚠️ WARNUNG: ${evt.tool_warning}`);
+            setMessages((ms) => [...ms, warnMsg]);
           } else if (evt.type === "tool_call") {
             setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
             const toolMsg = mkMsg("tool" as Message["role"], `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
