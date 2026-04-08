@@ -40,6 +40,10 @@ export interface UseChatStreamOptions {
   onSlashCommand?: (cmd: string, args: string) => boolean;
   /** Called after stream completes with the full response text */
   onStreamComplete?: (response: string) => void;
+  /** Called before sending a message (e.g. for companion events) */
+  onBeforeSend?: (content: string) => void;
+  /** Called when user aborts (e.g. for extra interrupt API calls) */
+  onAbort?: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,7 +141,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
-  }, []);
+    opts.onAbort?.();
+  }, [opts.onAbort]);
 
   // ── Send ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +167,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
       setMessages([]);
       return;
     }
+
+    // Before-send callback (e.g. companion event)
+    opts.onBeforeSend?.(content);
 
     // Coach check
     if (coachEnabled && !contentOverride) {

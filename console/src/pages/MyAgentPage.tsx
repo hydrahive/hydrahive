@@ -3,26 +3,17 @@ import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, R
 import { cn } from "@/lib/utils";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
-import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
-import VoiceChatButton from "@/components/VoiceChatButton";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
+import { ChatView } from "@/components/ChatView";
+import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
-import { sseStream } from "@/lib/sseStream";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
-
-interface Message { id: string; role: "user"|"assistant"|"system"|"tool"; content: string; tokenUsage?: { input: number; output: number; rounds?: number; cache_write?: number; cache_read?: number }; model?: string; isFallback?: boolean; ts?: string; }
-
-function MsgTime({ iso }: { iso?: string }) {
-  if (!iso) return null;
-  try { const d = new Date(iso); return <span className="text-[10px] text-muted-foreground/50">{d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>; }
-  catch { return null; }
-}
 
 interface AgentCfg {
   identity:        string;
@@ -124,10 +115,6 @@ const KNOWN_MODELS = [
 
 // SLASH_COMMANDS moved inside MyAgentPage component to use live t() calls
 
-let _cnt = 0;
-const mkMsg = (role: Message["role"], content: string): Message =>
-  ({ id: `m${++_cnt}`, role, content, ts: new Date().toISOString() });
-
 // ── MessengerSection ──────────────────────────────────────────────────────────
 
 function MessengerSection({ title, icon: Icon, defaultOpen, children }: {
@@ -164,60 +151,69 @@ export function MyAgentPage() {
 
   const [tab,        setTab]        = useState<string>("chat");
   const [userApps, setUserApps] = useState<{ id: string; name: string; tab: { label: string; icon: string; order: number }; config_fields: any[]; config: Record<string, unknown>; enabled: boolean }[]>([]);
-  const [messages,   setMessages]   = useState<Message[]>([]);
-  const [input,      setInput]      = useState("");
-  const [sending,    setSending]    = useState(false);
-  const [chatError,  setChatError]  = useState("");
-  const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
-  const [coachFeedback, setCoachFeedback] = useState<{ ok: boolean; suggestion?: string; reason?: string } | null>(null);
-  const [coachChecking, setCoachChecking] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
-  const [showSuggest,  setShowSuggest]  = useState(false);
-  const [showEmoji,    setShowEmoji]    = useState(false);
-  const [suggestIdx,   setSuggestIdx]   = useState(0);
-  const [showHistory,  setShowHistory]  = useState(false);
   const [pastSessions, setPastSessions] = useState<SessionPreview[]>([]);
-  const [viewSession,  setViewSession]  = useState<{ id: string; messages: Message[]; startedAt: string } | null>(null);
   const [agents,     setAgents]     = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
-  const [activeTool,     setActiveTool]     = useState<{name:string;detail:string} | null>(null);
-  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
-  const [doneMsgId,      setDoneMsgId]      = useState<string | null>(null);
 
-  const [pendingImages, setPendingImages] = useState<{data: string; media_type: string; preview: string}[]>([]);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const fileInputRef    = useRef<HTMLInputElement>(null);
-  const bottomRef       = useRef<HTMLDivElement>(null);
-  const textareaRef     = useRef<HTMLTextAreaElement>(null);
-  const abortRef        = useRef<AbortController | null>(null);
-  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [elapsed, setElapsed] = useState(0);
+  // ── Chat Hook ────────────────────────────────────────────────────────────
+  const chat = useChatStream({
+    streamEndpoint: "/api/me/agent/message/stream",
+    historyEndpoint: "/api/me/agent/session/history",
+    onBeforeSend: (content) => {
+      window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
+    },
+    onAbort: () => {
+      const token = localStorage.getItem("hydrahive_token") || "";
+      fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    },
+    onSlashCommand: (cmd, args) => {
+      const agentId = agentInfo?.agent_id;
+      if (cmd === "/help") { sysMsg("**Commands:**\n\n" + SLASH_COMMANDS.map(c=>`\`${c.cmd}\` — ${c.desc}`).join("\n")); return true; }
+      if (cmd === "/clear") {
+        chat.setMessages([]);
+        api.delete("/me/agent/session").catch(() => {});
+        sysMsg("Chat-Verlauf geleert."); return true;
+      }
+      if (cmd === "/model") {
+        sysMsg(`**Modell:** \`${agentInfo?.config?.llm?.model ?? "?"}\`\n**Temperatur:** ${agentInfo?.config?.llm?.temperature ?? "?"}`);
+        return true;
+      }
+      if (cmd === "/retry") {
+        const last = [...chat.messages].reverse().find(m => m.role === "user");
+        if (!last) { sysMsg("Keine Nachricht zum Wiederholen."); return true; }
+        chat.send(last.content); return true;
+      }
+      if (cmd === "/remember") {
+        const fn = args ? args.replace(/[^a-z0-9_-]/gi,"-").toLowerCase() : new Date().toISOString().slice(0,10);
+        const history = chat.messages.filter(m=>m.role==="user"||m.role==="assistant").slice(-30)
+          .map(m=>`**${m.role==="user"?"User":"Agent"}:** ${m.content}`).join("\n\n");
+        if (!history) { sysMsg("Kein Verlauf."); return true; }
+        if (agentId) {
+          api.post(`/agents/${agentId}/memory`, { filename: fn, content: `# Session ${new Date().toLocaleString("de")}\n\n${history}` })
+            .then(() => sysMsg(`Gespeichert als \`${fn}.md\``))
+            .catch((e:Error) => sysMsg(`Fehler: ${e.message}`));
+        }
+        return true;
+      }
+      if (cmd === "/history") {
+        chat.setViewSession(null);
+        chat.setShowHistory(true);
+        return true;
+      }
+      sysMsg(`Unbekannter Command: \`${cmd}\`. /help für Übersicht.`); return true;
+    },
+  });
 
-  function toolDetail(name: string, input: Record<string,unknown>): string {
-    if (name === "read_system_file" || name === "file_read")   return String(input.path ?? input.file_path ?? "");
-    if (name === "write_system_file" || name === "file_write") return String(input.path ?? input.file_path ?? "");
-    if (name === "shell_exec")    return String(input.command ?? "").slice(0, 60);
-    if (name === "web_search")    return String(input.query ?? "");
-    if (name === "http_request")  return String(input.url ?? "");
-    if (name === "ask_agent")     return String(input.target ?? "");
-    if (name === "delegate_agent")return String(input.target ?? "");
-    if (name === "write_memory" || name === "read_memory") return String(input.filename ?? "");
-    if (name === "write_handoff" || name === "read_handoff") return String(input.to_agent ?? input.handoff_id ?? "");
-    return "";
-  }
-
-  const suggestions = input.startsWith("/")
-    ? SLASH_COMMANDS.filter(c => c.cmd.startsWith(input.split(" ")[0]))
-    : [];
+  function sysMsg(c: string) { chat.setMessages(ms => [...ms, mkMsg("system", c)]); }
 
   // ── Daten laden ──────────────────────────────────────────────────────────
   async function loadAgent() {
     setLoadError("");
     try {
       const d = await api.get<AgentInfo>("/me/agent");
-      // Soul nachladen
       const soul = await api.get<{soul:string;exists:boolean}>(`/agents/${d.agent_id}/soul`)
         .catch(() => ({ soul: "", exists: false }));
       setAgentInfo({ ...d, config: { ...d.config, soul: soul.soul } });
@@ -229,35 +225,19 @@ export function MyAgentPage() {
 
   useEffect(() => {
     loadAgent();
-    api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(e => console.error("Failed to load user apps", e));
-    api.get<{session_id:string|null;messages:{role:string;content:string}[];count:number}>(
-      "/me/agent/session/history"
-    ).then(d => {
-      const loaded = d.messages
-        .filter((m: any) => m.role === "user" || m.role === "assistant" || m.role === "tool")
-        .map((m: any) => {
-          const msg = mkMsg(m.role as any, m.content);
-          if (m.metadata?.input_tokens || m.metadata?.output_tokens) {
-            msg.tokenUsage = { input: m.metadata.input_tokens || 0, output: m.metadata.output_tokens || 0, rounds: m.metadata.rounds, cache_write: m.metadata.cache_write_tokens || 0, cache_read: m.metadata.cache_read_tokens || 0 };
-          }
-          return msg;
-        });
-      if (loaded.length > 0) setMessages(loaded);
-    }).catch(e => console.error("Failed to load agent session history", e));
+    api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(() => {});
+    chat.loadHistory();
     api.get<Record<string,unknown>>("/agents").then(d => {
       setAgents(Object.keys(d).filter(id => !id.startsWith("personal_")));
-    }).catch(e => console.error("Failed to load agents list", e));
-    api.mcpServers().then(d => setMcpServers(d.servers)).catch(e => console.error("Failed to load MCP servers", e));
+    }).catch(() => {});
+    api.mcpServers().then(d => setMcpServers(d.servers)).catch(() => {});
   }, []);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-  useEffect(() => { setShowSuggest(suggestions.length > 0 && input.length > 0); setSuggestIdx(0); }, [input]);
-
-  // ── Chat-Logik ────────────────────────────────────────────────────────────
+  // Load past sessions when history panel opens
   useEffect(() => {
-    if (!showHistory || !agentInfo?.agent_id) return;
-    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(e => console.error("Failed to list past sessions", e));
-  }, [showHistory, agentInfo?.agent_id]);
+    if (!chat.showHistory || !agentInfo?.agent_id) return;
+    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(() => {});
+  }, [chat.showHistory, agentInfo?.agent_id]);
 
   async function openPastSession(sid: string) {
     if (!agentInfo?.agent_id) return;
@@ -266,8 +246,8 @@ export function MyAgentPage() {
       const msgs = d.messages
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
-      setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
-      setShowHistory(false);
+      chat.setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
+      chat.setShowHistory(false);
     } catch {}
   }
 
@@ -278,164 +258,10 @@ export function MyAgentPage() {
       const msgs = d.messages
         .filter(m => m.role === "user" || m.role === "assistant")
         .map(m => mkMsg(m.role as "user" | "assistant", m.content));
-      setMessages(msgs);
-      setViewSession(null);
-      setShowHistory(false);
+      chat.setMessages(msgs);
+      chat.setViewSession(null);
+      chat.setShowHistory(false);
     } catch {}
-  }
-
-  function sysMsg(c: string) { setMessages(ms => [...ms, mkMsg("system", c)]); }
-
-  function handleSlash(cmd: string): boolean {
-    const base = cmd.trim().split(/\s+/)[0].toLowerCase();
-    const agentId = agentInfo?.agent_id;
-    if (base === "/help") { sysMsg("**Commands:**\n\n" + SLASH_COMMANDS.map(c=>`\`${c.cmd}\` — ${c.desc}`).join("\n")); return true; }
-    if (base === "/clear") {
-      setMessages([]);
-      api.delete("/me/agent/session").catch(e => console.error("Failed to clear agent session", e));
-      sysMsg("Chat-Verlauf geleert."); return true;
-    }
-    if (base === "/model") {
-      sysMsg(`**Modell:** \`${agentInfo?.config?.llm?.model ?? "?"}\`\n**Temperatur:** ${agentInfo?.config?.llm?.temperature ?? "?"}`);
-      return true;
-    }
-    if (base === "/retry") {
-      const last = [...messages].reverse().find(m => m.role === "user");
-      if (!last) { sysMsg("Keine Nachricht zum Wiederholen."); return true; }
-      setInput(last.content); setTimeout(() => textareaRef.current?.focus(), 0); return true;
-    }
-    if (base === "/remember") {
-      const parts = cmd.trim().split(/\s+/);
-      const fn = parts[1] ? parts[1].replace(/[^a-z0-9_-]/gi,"-").toLowerCase() : new Date().toISOString().slice(0,10);
-      const history = messages.filter(m=>m.role==="user"||m.role==="assistant").slice(-30)
-        .map(m=>`**${m.role==="user"?"User":"Agent"}:** ${m.content}`).join("\n\n");
-      if (!history) { sysMsg("Kein Verlauf."); return true; }
-      if (agentId) {
-        api.post(`/agents/${agentId}/memory`, { filename: fn, content: `# Session ${new Date().toLocaleString("de")}\n\n${history}` })
-          .then(() => sysMsg(`Gespeichert als \`${fn}.md\``))
-          .catch((e:Error) => sysMsg(`Fehler: ${e.message}`));
-      }
-      return true;
-    }
-    if (base === "/history") {
-      setViewSession(null);
-      setShowHistory(true);
-      return true;
-    }
-    sysMsg(`Unbekannter Command: \`${base}\`. /help für Übersicht.`); return true;
-  }
-
-  async function stop() {
-    if (abortRef.current) abortRef.current.abort();
-    const token = localStorage.getItem("hydrahive_token") || "";
-    fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(e => console.error("Failed to interrupt agent", e));
-  }
-
-  async function send(overrideContent?: string) {
-    const rawContent = overrideContent ?? input.trim();
-    if (!rawContent || sending) return;
-    const content = rawContent;
-    setInput(""); setChatError(""); setShowSuggest(false); setCoachFeedback(null);
-    if (content.startsWith("/")) { handleSlash(content); return; }
-    // Companion-Event
-    window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
-
-    // Prompt-Coach Check (#169)
-    if (!overrideContent && coachEnabled) {
-      setCoachChecking(true);
-      try {
-        const check = await api.post<{ ok: boolean; suggestion?: string; reason?: string }>("/me/agent/coach", { content });
-        if (!check.ok) {
-          setCoachFeedback(check);
-          setInput(content); // Input wiederherstellen
-          setCoachChecking(false);
-          return;
-        }
-      } catch { /* Coach-Fehler → durchlassen */ }
-      setCoachChecking(false);
-    }
-
-    const userMsg = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) } as any;
-    let curAsst = mkMsg("assistant", "");
-    let asstAdded = false;
-    let hadTools = false;
-    setMessages(ms => [...ms, userMsg]);
-    setSending(true);
-    setElapsed(0);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    elapsedTimerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-    try {
-      setPendingImages([]);
-      setStreamingMsgId(curAsst.id);
-
-      await sseStream({
-        url: "/api/me/agent/message/stream",
-        body: {
-          content,
-          ...(pendingImages.length > 0 ? { images: pendingImages.map(i => ({ data: i.data, media_type: i.media_type })) } : {}),
-        },
-        signal: controller.signal,
-        onConnectionLost: () => setChatError(t("common.connectionLost", { defaultValue: "Verbindung verloren — bitte nochmal senden" })),
-        onEvent: (evt) => {
-          if (evt.type === "text") {
-            setActiveTool(null);
-            if (!asstAdded || hadTools) { curAsst = mkMsg("assistant", ""); setMessages(ms => [...ms, curAsst]); setStreamingMsgId(curAsst.id); asstAdded = true; hadTools = false; }
-            setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m,content:m.content+evt.text} : m));
-          }
-          else if (evt.type === "tool_image") {
-            const imgMsg = mkMsg("tool" as any, `__IMG__${evt.tool_name || "screenshot"}|${evt.tool_image}`);
-            setMessages(ms => [...ms, imgMsg]);
-          }
-          else if (evt.type === "tool_call") {
-            setActiveTool({ name: evt.tool_call, detail: toolDetail(evt.tool_call, evt.tool_input ?? {}) });
-            const toolMsg = mkMsg("tool" as any, `${evt.tool_call}|${evt.tool_detail || toolDetail(evt.tool_call, evt.tool_input ?? {})}`);
-            setMessages(ms => [...ms, toolMsg]);
-            hadTools = true;
-          }
-          else if (evt.type === "done") {
-            const updates: Partial<Message> = {};
-            if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
-              updates.tokenUsage = evt.usage;
-            if (evt.is_fallback)
-              Object.assign(updates, { model: evt.model, isFallback: true });
-            if (Object.keys(updates).length > 0)
-              setMessages(ms => ms.map(m => m.id===curAsst.id ? {...m, ...updates} : m));
-          }
-          else if (evt.type === "error") {
-            if (evt.session_reset) setMessages([]);
-            throw new Error(evt.error);
-          }
-        },
-      });
-    } catch(e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        // User aborted — keep partial response, no error
-      } else {
-        setChatError(e instanceof Error ? e.message : t("common.error"));
-        setMessages(ms => ms.filter(m => m.id!==userMsg.id && m.id!==curAsst.id));
-        setInput(content);
-      }
-    } finally {
-      setSending(false);
-      abortRef.current = null;
-      if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
-      setElapsed(0);
-      setActiveTool(null);
-      if (streamingMsgId) setDoneMsgId(streamingMsgId);
-      setStreamingMsgId(null);
-      textareaRef.current?.focus();
-    }
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (showSuggest && suggestions.length > 0) {
-      if (e.key==="ArrowDown") { e.preventDefault(); setSuggestIdx(i=>(i+1)%suggestions.length); return; }
-      if (e.key==="ArrowUp")   { e.preventDefault(); setSuggestIdx(i=>(i-1+suggestions.length)%suggestions.length); return; }
-      if (e.key==="Tab"||(e.key==="Enter"&&showSuggest)) { e.preventDefault(); setInput(suggestions[suggestIdx].cmd+" "); setShowSuggest(false); return; }
-      if (e.key==="Escape") { setShowSuggest(false); return; }
-    }
-    if (e.key==="Enter"&&!e.shiftKey) { e.preventDefault(); send(); }
   }
 
   const identity = agentInfo?.config?.identity ?? "Mein Agent";
@@ -547,14 +373,14 @@ export function MyAgentPage() {
                       <p className="text-xs text-muted-foreground">{t("myAgent.historySubtitle")}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {activeTool && (
+                      {chat.activeTool && (
                         <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
                           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          <code className="max-w-[10rem] truncate font-mono">{activeTool.name}</code>
+                          <code className="max-w-[10rem] truncate font-mono">{chat.activeTool.name}</code>
                         </div>
                       )}
-                      <button onClick={() => { setShowHistory(h => !h); setViewSession(null); }}
-                        className={`p-1.5 rounded-lg transition-colors ${showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
+                      <button onClick={() => { chat.setShowHistory(h => !h); chat.setViewSession(null); }}
+                        className={`p-1.5 rounded-lg transition-colors ${chat.showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
                         title="Vergangene Sessions"
                         aria-label="Toggle chat history">
                         <Clock className="h-4 w-4" />
@@ -564,11 +390,11 @@ export function MyAgentPage() {
                 </div>
 
                 {/* History Panel */}
-                {showHistory && (
+                {chat.showHistory && (
                   <div className="border-b border-border/60">
                     <div className="flex items-center justify-between px-4 py-2 bg-muted/30">
                       <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
-                      <button onClick={() => setShowHistory(false)} className="p-1 rounded hover:bg-accent" aria-label="Close history">
+                      <button onClick={() => chat.setShowHistory(false)} className="p-1 rounded hover:bg-accent" aria-label="Close history">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -602,21 +428,21 @@ export function MyAgentPage() {
                 )}
 
                 {/* View past session banner */}
-                {viewSession && (
+                {chat.viewSession && (
                   <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-border/60 text-xs flex-shrink-0 gap-2">
                     <span className="text-amber-600 dark:text-amber-400 font-medium truncate min-w-0">
-                      Vergangene Session — {new Date(viewSession.startedAt).toLocaleString("de")}
+                      Vergangene Session — {new Date(chat.viewSession.startedAt).toLocaleString("de")}
                     </span>
                     <div className="flex gap-2 flex-shrink-0">
-                      <button onClick={() => { setViewSession(null); setShowHistory(true); }}
+                      <button onClick={() => { chat.setViewSession(null); chat.setShowHistory(true); }}
                         className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
                         <ArrowLeft className="h-3 w-3" /> Zurück
                       </button>
-                      <button onClick={() => resumePastSession(viewSession.id)}
+                      <button onClick={() => resumePastSession(chat.viewSession!.id)}
                         className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
                         <RotateCcw className="h-3 w-3" /> Fortsetzen
                       </button>
-                      <button onClick={() => { setViewSession(null); api.delete("/me/agent/session").catch(e => console.error("Failed to delete agent session", e)); setMessages([]); }}
+                      <button onClick={() => { chat.setViewSession(null); api.delete("/me/agent/session").catch(() => {}); chat.setMessages([]); }}
                         className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
                         <Plus className="h-3 w-3" /> Neuer Chat
                       </button>
@@ -624,324 +450,25 @@ export function MyAgentPage() {
                   </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto min-h-0 space-y-3 sm:space-y-4 px-3 py-3 sm:px-5 sm:py-5">
-                  {!viewSession && messages.length === 0 && (
-                    <div className="flex min-h-[18rem] flex-col items-center justify-center rounded-3xl border border-dashed border-border/70 bg-muted/20 px-6 text-center text-muted-foreground">
-                      <Bot className="h-10 w-10 opacity-70" />
-                      <p className="mt-4 text-sm font-medium text-foreground">{t("myAgent.greetingTitle", { name: identity })}</p>
-                      <p className="mt-2 max-w-md text-xs">{t("myAgent.greetingSubtitle")} <code className="rounded bg-background px-1.5 py-0.5">/help</code> {t("myAgent.greetingSubtitle2")}</p>
-                    </div>
-                  )}
-
-                  {(viewSession ? viewSession.messages : messages).map((msg) => {
-                    if (msg.role === "tool") {
-                      const allMsgs = viewSession ? viewSession.messages : messages;
-                      const msgIdx = allMsgs.indexOf(msg);
-                      if (msgIdx > 0 && allMsgs[msgIdx - 1]?.role === "tool") return null;
-                      const toolGroup: typeof allMsgs = [msg];
-                      for (let i = msgIdx + 1; i < allMsgs.length && allMsgs[i].role === "tool"; i++) toolGroup.push(allMsgs[i]);
-                      const badges = toolGroup.filter(tm => !tm.content.startsWith("__IMG__"));
-                      const images = toolGroup.filter(tm => tm.content.startsWith("__IMG__"));
-                      return (
-                        <div key={msg.id} className="flex flex-col items-center gap-2">
-                          {badges.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 max-w-[90%] justify-center">
-                              {badges.map(tm => {
-                                const [toolName, ...dp] = tm.content.split("|");
-                                return (
-                                  <span key={tm.id} title={dp.join("|") || toolName}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
-                                    <Terminal className="h-2.5 w-2.5" />
-                                    {toolName}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {images.map(tm => {
-                            const [label, ...srcParts] = tm.content.replace("__IMG__", "").split("|");
-                            const src = srcParts.join("|");
-                            return (
-                              <div key={tm.id} className="max-w-[75%] rounded-lg border bg-card p-2">
-                                <img src={src} alt={label} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setLightboxSrc(src)} />
-                                <div className="text-[10px] text-muted-foreground mt-1 text-center font-mono">{label}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    }
-                    if (msg.role === "system") return (
-                      <div key={msg.id} className="flex justify-center">
-                        <div className="flex max-w-[90%] items-start gap-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                          <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary/60" />
-                          <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-0.5 overflow-x-auto">
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
-                          </div>
-                        </div>
-                      </div>
-                    );
-
-                    return (
-                      <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                      <div className={`mb-0.5 px-12 ${msg.role === "user" ? "text-right" : "text-left"}`}><MsgTime iso={msg.ts} /></div>
-                      <div className={`flex gap-3 w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        {msg.role === "assistant" && (
-                          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                            <Bot className="h-4 w-4 text-primary" />
-                          </div>
-                        )}
-                        <div className="max-w-[85%] min-w-0">
-                          <div className={`rounded-[22px] px-4 py-3 text-sm break-words shadow-sm overflow-x-auto ${
-                            msg.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "border border-border/60 bg-background/90 prose prose-sm max-w-none dark:prose-invert"
-                          }`}>
-                            {msg.role === "user"
-                              ? <>
-                                  {(msg as any)._images && (msg as any)._images.length > 0 && (
-                                    <div className="flex gap-1 mb-1 flex-wrap">
-                                      {(msg as any)._images.map((src: string, i: number) => (
-                                        <img key={i} src={src} alt="" className="h-20 rounded-md" />
-                                      ))}
-                                    </div>
-                                  )}
-                                  <span className="whitespace-pre-wrap">{msg.content}</span>
-                                </>
-                              : streamingMsgId === msg.id && !msg.content
-                                ? <div className="flex h-5 items-center gap-1">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
-                                  </div>
-                                : <>
-                                    <ReactMarkdown components={{ img: ({ src, alt }) => src?.startsWith("data:image") ? (
-                                      <img src={src} alt={alt || ""} className="rounded-md max-h-[400px] w-auto cursor-pointer hover:opacity-80 transition-opacity my-2" onClick={() => setLightboxSrc(src)} />
-                                    ) : <img src={src} alt={alt || ""} /> }}>{msg.content}</ReactMarkdown>
-                                    {streamingMsgId === msg.id
-                                      ? <span className="ml-0.5 inline-block h-4 w-2 animate-pulse rounded-sm bg-primary/70 align-text-bottom" />
-                                      : doneMsgId === msg.id && <span className="ml-1 inline-block align-text-bottom text-xs text-green-500">✓</span>
-                                    }
-                                  </>
-                            }
-                          </div>
-                          {msg.role === "assistant" && (msg.tokenUsage || msg.isFallback) && (
-                            <div className="flex gap-1 px-1 pt-1 flex-wrap">
-                              {msg.isFallback && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/10 border border-orange-500/30 px-2 py-0.5 text-xs text-orange-500" title="Antwort kam von einem Fallback-Modell">
-                                  ⚡ Fallback: {msg.model}
-                                </span>
-                              )}
-                              {msg.tokenUsage && (msg.tokenUsage.input > 0 || msg.tokenUsage.output > 0) && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title="Verbrauchte Tokens dieser Antwort (inkl. aller Tool-Runden)">
-                                  ↑ {msg.tokenUsage.input.toLocaleString()} ↓ {msg.tokenUsage.output.toLocaleString()} Tokens
-                                  {msg.tokenUsage.rounds && msg.tokenUsage.rounds > 1 && (
-                                    <span className="opacity-60">· {msg.tokenUsage.rounds} Runden</span>
-                                  )}
-                                  {(msg.tokenUsage.cache_read ?? 0) > 0 && (
-                                    <span className="text-green-500">· {msg.tokenUsage.cache_read!.toLocaleString()} cached</span>
-                                  )}
-                                  {(msg.tokenUsage.cache_write ?? 0) > 0 && (
-                                    <span className="text-blue-400">· {msg.tokenUsage.cache_write!.toLocaleString()} cache-write</span>
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        {msg.role === "user" && (
-                          <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary">
-                            <User className="h-4 w-4" />
-                          </div>
-                        )}
-                      </div>
-                      </div>
-                    );
-                  })}
-
-                  {sending && messages[messages.length - 1]?.role !== "assistant" && (
-                    <div className="flex justify-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                        <Bot className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="rounded-[22px] border border-border/60 bg-background/90 px-4 py-3 shadow-sm">
-                        <div className="flex h-5 items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div ref={bottomRef} />
-                </div>
-
-                {activeTool && (
-                  <div className="border-t border-border/60 bg-muted/30 px-4 py-2 text-xs text-muted-foreground sm:px-5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex flex-shrink-0 gap-0.5">
-                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
-                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
-                        <span className="h-1 w-1 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
-                      </span>
-                      <code className="flex-shrink-0 font-mono text-primary">{activeTool.name}</code>
-                      {activeTool.detail && <span className="truncate">{activeTool.detail}</span>}
-                    </div>
-                  </div>
-                )}
-
-                {chatError && (
-                  <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive sm:px-5">
-                    {chatError}
-                  </div>
-                )}
-
-                <div className="border-t border-border/60 bg-card/95 backdrop-blur px-4 py-4 sm:px-5 rounded-b-[28px] flex-shrink-0 min-w-0">
-                  <div className="text-right mb-1"><span className="text-[10px] text-muted-foreground/40">{new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span></div>
-                  <div className="relative min-w-0">
-                    {showSuggest && suggestions.length > 0 && (
-                      <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-lg z-10">
-                        {suggestions.map((s, i) => (
-                          <button key={s.cmd}
-                            onMouseDown={(e) => { e.preventDefault(); setInput(s.cmd + " "); setShowSuggest(false); textareaRef.current?.focus(); }}
-                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${i === suggestIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}>
-                            <span className="font-mono text-xs text-primary">{s.cmd}</span>
-                            <span className="text-xs text-muted-foreground">{s.desc}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="rounded-[24px] border border-border/70 bg-background/90 p-3 shadow-sm min-w-0">
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        {SLASH_COMMANDS.map((cmd) => (
-                          <button key={cmd.cmd}
-                            type="button"
-                            onClick={() => { setInput(`${cmd.cmd} `); textareaRef.current?.focus(); }}
-                            className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
-                            {cmd.cmd}
-                          </button>
-                        ))}
-                      </div>
-                      {showEmoji && (
-                        <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowEmoji(false)} />
-                        <div className="absolute bottom-16 right-0 z-50">
-                          <EmojiPicker
-                            theme={Theme.DARK}
-                            onEmojiClick={(e: EmojiClickData) => {
-                              setInput(prev => prev + e.emoji);
-                              textareaRef.current?.focus();
-                            }}
-                            height={380}
-                            width={320}
-                          />
-                        </div>
-                        </>
-                      )}
-                      {/* Coach Feedback */}
-                      {coachFeedback && !coachFeedback.ok && (
-                        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-3 py-2 sm:px-4 sm:py-3 mb-2 text-sm space-y-2">
-                          <p className="text-orange-400 font-medium text-xs sm:text-sm">{coachFeedback.reason || "Dein Prompt könnte klarer sein"}</p>
-                          {coachFeedback.suggestion && (
-                            <p className="text-muted-foreground text-xs bg-muted/30 rounded-lg p-2 font-mono">{coachFeedback.suggestion}</p>
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            {coachFeedback.suggestion && (
-                              <button onClick={() => { setInput(coachFeedback.suggestion!); setCoachFeedback(null); }}
-                                className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90">
-                                Übernehmen
-                              </button>
-                            )}
-                            <button onClick={() => { setCoachFeedback(null); send(input); }}
-                              className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
-                              Trotzdem senden
-                            </button>
-                            <a href="/prompt-guide" className="hidden sm:flex rounded-lg px-3 py-1.5 text-xs text-primary hover:underline items-center gap-1">
-                              <Lightbulb className="h-3 w-3" /> Prompt-Tipps
-                            </a>
-                          </div>
-                        </div>
-                      )}
-                      {/* Image previews */}
-                      {pendingImages.length > 0 && (
-                        <div className="flex gap-2 mb-2 flex-wrap">
-                          {pendingImages.map((img, i) => (
-                            <div key={i} className="relative group">
-                              <img src={img.preview} alt="" className="h-16 w-16 object-cover rounded-lg border" />
-                              <button onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
-                                className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                                X
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {/* Toolbar: Coach + Emoji */}
-                      <div className="flex items-center gap-1 sm:gap-2 mb-1 flex-wrap">
-                        <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer select-none">
-                          <input type="checkbox" checked={coachEnabled} onChange={e => {
-                            setCoachEnabled(e.target.checked);
-                            localStorage.setItem("hh_prompt_coach", e.target.checked ? "1" : "0");
-                          }} className="rounded" />
-                          <span className="hidden sm:inline">Prompt-Coach</span>
-                          <span className="sm:hidden">🧠</span>
-                          {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
-                        </label>
-                        <button onClick={() => setShowEmoji(v => !v)} type="button"
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition">
-                          <Smile className="h-3.5 w-3.5" /><span className="hidden sm:inline">Emoji</span>
+                {/* Shared ChatView (#491) */}
+                <ChatView
+                  {...chat}
+                  t={t}
+                  showOAuthBar={false}
+                  slashCommands={SLASH_COMMANDS}
+                  headerSlot={
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {SLASH_COMMANDS.map((cmd) => (
+                        <button key={cmd.cmd}
+                          type="button"
+                          onClick={() => { chat.setInput(`${cmd.cmd} `); chat.textareaRef.current?.focus(); }}
+                          className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+                          {cmd.cmd}
                         </button>
-                        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
-                          onChange={e => {
-                            const files = Array.from(e.target.files || []);
-                            files.forEach(f => {
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const base64 = (reader.result as string).split(",")[1];
-                                const media_type = f.type || "image/png";
-                                const preview = reader.result as string;
-                                setPendingImages(prev => [...prev, { data: base64, media_type, preview }]);
-                              };
-                              reader.readAsDataURL(f);
-                            });
-                            e.target.value = "";
-                          }} />
-                        <button onClick={() => fileInputRef.current?.click()} type="button"
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition"
-                          aria-label="Bild hochladen">
-                          <ImagePlus className={`h-3.5 w-3.5 ${pendingImages.length > 0 ? "text-primary" : ""}`} /><span className="hidden sm:inline">Bild</span>
-                        </button>
-                        <VoiceChatButton onTranscript={(t) => setInput(prev => prev ? prev + " " + t : t)} disabled={sending || !!viewSession} className="!p-1 !rounded-lg" />
-                      </div>
-                      {/* Input + Send */}
-                      <div className="flex items-end gap-1.5 sm:gap-2 min-w-0">
-                        <textarea ref={textareaRef} value={input}
-                          onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
-                          onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
-                          placeholder={viewSession ? "Vergangene Session — schreibgeschützt" : t("myAgent.messagePlaceholder")} rows={1}
-                          disabled={!!viewSession}
-                          className="min-h-[2.5rem] sm:min-h-[3rem] min-w-0 flex-1 resize-none rounded-xl sm:rounded-2xl border border-border/60 bg-card px-3 py-2 sm:px-4 sm:py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ maxHeight: "160px", overflowY: "auto" }} />
-                        {sending ? (
-                          <button onClick={stop}
-                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-destructive text-destructive-foreground transition hover:bg-destructive/90"
-                            title={`Abbrechen${elapsed > 0 ? ` (${elapsed}s)` : ""}`}
-                            aria-label="Stop generation">
-                            <Square className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <button onClick={() => send()} disabled={!input.trim() || coachChecking}
-                            className="inline-flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
-                            aria-label="Send message">
-                            <Send className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  </div>
-                </div>
+                  }
+                />
               </div>
             </section>
 
@@ -954,7 +481,7 @@ export function MyAgentPage() {
                     <div className="text-xs text-muted-foreground font-mono">{agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}</div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
+                    {chat.sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
                   </div>
                 </div>
 
@@ -966,7 +493,7 @@ export function MyAgentPage() {
                   </div>
                   <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
                     <div className="text-muted-foreground">{t("myAgent.historyCount")}</div>
-                    <div className="font-medium mt-0.5">{messages.filter(m => m.role !== "system").length}</div>
+                    <div className="font-medium mt-0.5">{chat.messages.filter(m => m.role !== "system").length}</div>
                   </div>
                   <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
                     <div className="text-muted-foreground">safe</div>
@@ -988,11 +515,11 @@ export function MyAgentPage() {
                   ))}
                 </div>
 
-                {activeTool && (
+                {chat.activeTool && (
                   <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
                     <div className="flex items-center gap-1.5 text-primary">
                       <RefreshCw className="h-3 w-3 animate-spin" />
-                      <code className="font-mono truncate">{activeTool.name}</code>
+                      <code className="font-mono truncate">{chat.activeTool.name}</code>
                     </div>
                   </div>
                 )}
@@ -1111,11 +638,7 @@ export function MyAgentPage() {
       {tab.startsWith("app-") && (
         <UserAppTab appId={tab.replace("app-", "")} apps={userApps} />
       )}
-      {lightboxSrc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer" onClick={() => setLightboxSrc(null)}>
-          <img src={lightboxSrc} alt="Fullscreen" className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl" />
-        </div>
-      )}
+      {/* Lightbox is now rendered inside ChatView */}
     </div>
   );
 }

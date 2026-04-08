@@ -60,6 +60,12 @@ export interface ChatViewProps {
   // Display options
   showWorkers?: boolean;
   viewSession?: { id: string; messages: ChatMessage[]; startedAt: string } | null;
+  /** Show OAuth usage bar (default: true) */
+  showOAuthBar?: boolean;
+  /** Extra content rendered above the input (e.g. slash command chips) */
+  headerSlot?: React.ReactNode;
+  /** Custom CSS class for the outer wrapper */
+  className?: string;
   // Translations
   t: (key: string, opts?: Record<string, string>) => string;
   // Slash commands for suggestion dropdown
@@ -77,7 +83,9 @@ export function ChatView(props: ChatViewProps) {
     coachEnabled, toggleCoach, coachFeedback, setCoachFeedback, coachChecking,
     bottomRef, textareaRef, fileInputRef,
     send, abort, handleImageUpload,
-    showWorkers, viewSession, t,
+    showWorkers, viewSession,
+    showOAuthBar = true, headerSlot, className,
+    t,
     slashCommands = [],
   } = props;
 
@@ -95,7 +103,7 @@ export function ChatView(props: ChatViewProps) {
 
   return (
     <>
-      <OAuthUsageBar />
+      {showOAuthBar && <OAuthUsageBar />}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
@@ -280,6 +288,8 @@ export function ChatView(props: ChatViewProps) {
             </div>
           </div>
         )}
+        {/* Page-specific header slot (e.g. slash command chips) */}
+        {headerSlot}
         {/* Coach toggle */}
         <div className="flex items-center gap-2 mb-2">
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
