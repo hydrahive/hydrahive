@@ -127,7 +127,6 @@ async def handle_message_stream(
             if history[i].get("role") == "user":
                 history[i] = {"role": "user", "content": _vision_blocks}
                 break
-    messages      = [{"role": "system", "content": system_prompt}] + history
     # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
     _use_meta = "request_tools" in (boss_cfg.tools or [])
     boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content, meta_only=_use_meta)
@@ -140,6 +139,29 @@ async def handle_message_stream(
     if _plg_s:
         litellm_tools = (litellm_tools or []) + _plg_s
     litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
+
+    # Anti-Halluzinations-Guard: System-Prompt ergänzen mit tatsächlich verfügbaren Tools
+    # Verhindert dass der Agent Tools als Text schreibt statt sie echt aufzurufen
+    _active_tool_names = [t["function"]["name"] for t in (litellm_tools or [])] if litellm_tools else []
+    if _active_tool_names:
+        _tool_guard = (
+            "\n\n## Verfügbare Tools\n"
+            "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
+            + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
+            "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
+            "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
+            "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+            "nutze IMMER den echten Tool-Aufruf-Mechanismus."
+        )
+        system_prompt = system_prompt + _tool_guard
+    else:
+        system_prompt = system_prompt + (
+            "\n\n## WARNUNG: Keine Tools verfügbar\n"
+            "Dir stehen aktuell KEINE Tools zur Verfügung. "
+            "Schreibe KEINE Tool-Aufrufe als Text. Antworte nur mit Text."
+        )
+
+    messages      = [{"role": "system", "content": system_prompt}] + history
 
     sys_tokens_s  = _sys_prompt_tokens_s
     hist_tokens_s = sum(
@@ -630,7 +652,7 @@ async def _stream_anthropic_oauth(
         # Loop normal beendet (kein break nach letzter Runde)
         kwargs_final = dict(kwargs)
         kwargs_final.pop("tools", None)
-        kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum.]"}]}]
+        kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Tool-Limit erreicht. Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum. WICHTIG: Du hast KEINE Tools mehr — schreibe KEINE Tool-Aufrufe als Text.]"}]}]
         async with client.messages.stream(**kwargs_final) as stream:
             async for text in stream.text_stream:
                 full_response += text
@@ -735,7 +757,7 @@ async def _stream_litellm(
         if should_abort:
             loop_messages.append({
                 "role": "user",
-                "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? Rufe keine weiteren Tools auf.]",
+                "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? WICHTIG: Du hast KEINE Tools mehr — schreibe KEINE Tool-Aufrufe als Text, antworte NUR mit normalem Text.]",
             })
             final_resp = await orch._llm_call_single(model_name, boss_cfg, loop_messages, tools=None)
             final_text = final_resp.choices[0].message.content or ""

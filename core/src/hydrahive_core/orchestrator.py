@@ -597,6 +597,26 @@ class Orchestrator:
 
         litellm_tools = litellm_tools or None
 
+        # Anti-Halluzinations-Guard: System-Prompt mit tatsächlich verfügbaren Tools ergänzen
+        _active_tool_names = [t["function"]["name"] for t in (litellm_tools or [])] if litellm_tools else []
+        if _active_tool_names:
+            _tool_guard = (
+                "\n\n## Verfügbare Tools\n"
+                "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
+                + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
+                "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
+                "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
+                "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+                "nutze IMMER den echten Tool-Aufruf-Mechanismus."
+            )
+            messages[0]["content"] = messages[0]["content"] + _tool_guard
+        elif not litellm_tools:
+            messages[0]["content"] = messages[0]["content"] + (
+                "\n\n## WARNUNG: Keine Tools verfügbar\n"
+                "Dir stehen aktuell KEINE Tools zur Verfügung. "
+                "Schreibe KEINE Tool-Aufrufe als Text. Antworte nur mit Text."
+            )
+
         import json as _json
         sys_tokens   = _sys_prompt_tokens
         hist_tokens  = sum(

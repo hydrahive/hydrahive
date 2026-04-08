@@ -14,8 +14,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Tools die IMMER im ersten Prompt dabei sind (kein request_tools nötig)
+# WICHTIG: file_read, file_write, shell_exec, project_shell MÜSSEN hier sein!
+# Ohne diese halluziniert der Agent Tool-Aufrufe als Text statt sie echt auszuführen,
+# weil die soul.md diese Tools erwähnt aber sie nicht im API-Request sind.
 META_TOOLS: list[str] = [
     "request_tools",
+    # Dateien — Basis-Funktionalität die fast jeder Agent braucht
+    "file_read",
+    "file_write",
+    # Shell — ohne diese schreibt der Agent "shell_exec" als Text
+    "shell_exec",
+    "project_shell",
+    # Memory & Kommunikation
     "write_memory",
     "read_memory",
     "ask_agent",
@@ -24,6 +34,9 @@ META_TOOLS: list[str] = [
     "write_handoff",
     "create_skill",
     "list_skills",
+    # Web — häufig in soul.md referenziert
+    "web_search",
+    "http_request",
 ]
 
 # Mapping: Kategorie-Name → Tool-IDs
