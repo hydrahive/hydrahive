@@ -303,7 +303,13 @@ export function AdminLayout() {
             <span className="font-medium">{user?.username ?? t("layout.unknown")}</span>
             {isAdmin && <span className="rounded-full bg-white/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.18em]">admin</span>}
           </div>
-          <p className="mt-1 text-xs text-[hsl(var(--sidebar-muted))]">{t("layout.hybridConsole")}</p>
+          <NavLink to="/quickstart"
+            className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all
+              bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/25
+              hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.98]">
+            <Rocket className="h-3.5 w-3.5 animate-bounce" style={{ animationDuration: "2s" }} />
+            Quickstart Guide
+          </NavLink>
         </div>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-[hsl(var(--sidebar-foreground))] shadow-sm">
           <p className="text-[0.62rem] uppercase tracking-[0.24em] text-[hsl(var(--sidebar-muted))]">
