@@ -1,16 +1,18 @@
 """
-session_manager.py — Sitzungskonzept (#6)
+session_manager.py — Sitzungskonzept (#6, #395 SQLite)
 
 Jede Arbeitssession hält die Conversation-History die der Boss-Agent
 ans LLM übergibt. Ein Projekt hat immer genau eine aktive Session.
 Vergangene Sessions werden auf Disk persistiert und können geladen werden.
 
-Analog zu OpenClaw (O2: unverändert übernehmen), integriert in neuen Lifecycle.
+Persistence via SQLite (WAL-Mode) statt JSON-Dateien (#395).
+In-Memory-Cache für aktive Sessions bleibt bestehen.
 """
 
 import asyncio
 import json
 import logging
+import sqlite3
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -301,40 +303,95 @@ def group_messages_by_api_round(messages: list[Message]) -> list[list[Message]]:
 class SessionManager:
     """
     Ein SessionManager pro Core-Instanz.
-    Hält eine aktive Session pro Projekt, persistiert auf Disk.
+    Hält eine aktive Session pro Projekt, persistiert in SQLite (#395).
     """
 
-    SESSIONS_SUBDIR = ".sessions"
+    SESSIONS_SUBDIR = ".sessions"  # Legacy, für JSON-Migration
 
     def __init__(self, projects_dir: str | Path = "/projects") -> None:
         self._projects_dir = Path(projects_dir)
         self._active: dict[str, Session] = {}       # project_id → Session
         self._locks: dict[str, asyncio.Lock] = {}   # project_id → Lock
+        self._db: sqlite3.Connection | None = None
 
     def _get_lock(self, project_id: str) -> asyncio.Lock:
         """Thread-safe Lock pro Projekt (#354)."""
         return self._locks.setdefault(project_id, asyncio.Lock())
 
+    # ------------------------------------------------------------------ DB init
+
+    def _init_db(self) -> sqlite3.Connection:
+        """SQLite-DB öffnen und Schema erstellen."""
+        self._projects_dir.mkdir(parents=True, exist_ok=True)
+        db_path = self._projects_dir / "sessions.db"
+        db = sqlite3.connect(str(db_path), check_same_thread=False)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA foreign_keys=ON")
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id            TEXT PRIMARY KEY,
+                project_id    TEXT NOT NULL,
+                started_at    TEXT NOT NULL,
+                ended_at      TEXT,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                preview       TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_sessions_project
+                ON sessions(project_id, started_at DESC);
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                msg_id      TEXT,
+                role        TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                timestamp   TEXT NOT NULL,
+                agent_id    TEXT,
+                metadata    TEXT NOT NULL DEFAULT '{}',
+                seq         INTEGER NOT NULL,
+                input_tokens       INTEGER NOT NULL DEFAULT 0,
+                output_tokens      INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+                model              TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_messages_session
+                ON messages(session_id, seq);
+            CREATE INDEX IF NOT EXISTS idx_messages_usage
+                ON messages(input_tokens) WHERE input_tokens > 0;
+        """)
+        db.commit()
+        return db
+
     # ------------------------------------------------------------------ public
 
     def start(self) -> None:
-        """Aktive Sessions aus Disk wiederherstellen (nach Core-Neustart)."""
+        """DB initialisieren und aktive Sessions wiederherstellen."""
+        self._db = self._init_db()
+
         restored = 0
-        for project_dir in self._projects_dir.iterdir():
-            if not project_dir.is_dir():
-                continue
-            session = self._load_latest(project_dir)
-            if session and session.ended_at is None:
-                self._active[session.project_id] = session
-                restored += 1
-        logger.info("SessionManager gestartet — %d aktive Sessions wiederhergestellt", restored)
+        rows = self._db.execute(
+            "SELECT id, project_id, started_at, ended_at FROM sessions WHERE ended_at IS NULL"
+        ).fetchall()
+        for row in rows:
+            session = Session(
+                id=row["id"],
+                project_id=row["project_id"],
+                started_at=row["started_at"],
+                ended_at=None,
+                messages=self._load_messages(row["id"]),
+            )
+            self._active[session.project_id] = session
+            restored += 1
+        logger.info("SessionManager gestartet (SQLite) — %d aktive Sessions wiederhergestellt", restored)
 
     def get_or_create(self, project_id: str) -> Session:
         """Gibt aktive Session zurück oder startet eine neue (synchron, ohne Lock)."""
         if project_id not in self._active:
             session = Session.new(project_id)
             self._active[project_id] = session
-            self._persist(session)
+            self._db_insert_session(session)
             logger.info("Neue Session (sync): %s (Projekt: %s)", session.id[:8], project_id)
             return session
         return self._active[project_id]
@@ -345,13 +402,13 @@ class SessionManager:
             if project_id in self._active:
                 old = self._active[project_id]
                 old.end()
-                self._persist(old)
+                self._db_end_session(old)
                 logger.info("Session beendet: %s (Projekt: %s, %d Nachrichten)",
                             old.id[:8], project_id, len(old.messages))
 
             session = Session.new(project_id)
             self._active[project_id] = session
-            self._persist(session)
+            self._db_insert_session(session)
             logger.info("Neue Session: %s (Projekt: %s)", session.id[:8], project_id)
             return session
 
@@ -361,7 +418,7 @@ class SessionManager:
             session = self._active.pop(project_id, None)
             if session:
                 session.end()
-                self._persist(session)
+                self._db_end_session(session)
                 logger.info("Session %s beendet", session.id[:8])
             if project_id in self._locks:
                 del self._locks[project_id]
@@ -380,7 +437,14 @@ class SessionManager:
             session = self.get_or_create(project_id)
             message = Message.create(role, content, agent_id=agent_id, **metadata)
             session.append(message)
-            self._persist(session)
+            self._db_insert_message(session.id, message, len(session.messages) - 1)
+            # Preview aktualisieren bei erster User-Message
+            if role == MessageRole.USER and session.messages.index(message) == 0:
+                self._db.execute(
+                    "UPDATE sessions SET preview = ? WHERE id = ?",
+                    (content[:120], session.id),
+                )
+                self._db.commit()
             return message
 
     async def replace_messages(self, project_id: str, messages: list[Message]) -> None:
@@ -388,7 +452,7 @@ class SessionManager:
         async with self._get_lock(project_id):
             session = self.get_or_create(project_id)
             session.messages = messages
-            self._persist(session)
+            self._db_replace_messages(session)
 
     async def pop_last(self, project_id: str) -> None:
         """Letzte Nachricht aus der aktiven Session entfernen (Rollback bei Fehler)."""
@@ -396,7 +460,18 @@ class SessionManager:
             session = self._active.get(project_id)
             if session and session.messages:
                 session.messages.pop()
-                self._persist(session)
+                # Letzte Message in DB entfernen
+                self._db.execute(
+                    "DELETE FROM messages WHERE session_id = ? AND seq = ("
+                    "  SELECT MAX(seq) FROM messages WHERE session_id = ?"
+                    ")",
+                    (session.id, session.id),
+                )
+                self._db.execute(
+                    "UPDATE sessions SET message_count = ? WHERE id = ?",
+                    (len(session.messages), session.id),
+                )
+                self._db.commit()
 
     def get_context(
         self,
@@ -425,69 +500,48 @@ class SessionManager:
 
     def get_usage_stats(self, limit_sessions_per_project: int = 50) -> dict:
         """
-        Aggregiert Token-Usage aus allen Session-Dateien aller Projekte.
-        Liest nur Sessions die echte Usage-Metadata haben (input_tokens > 0).
+        Aggregiert Token-Usage aus SQLite (#395).
         Gibt {project_id: {total_input, total_output, total_cache_read, total_cache_write,
                            model_breakdown: {model: {...}}, sessions_with_usage}} zurück.
         """
+        if not self._db:
+            return {}
+
+        rows = self._db.execute("""
+            SELECT s.project_id, m.model,
+                   SUM(m.input_tokens) as total_input,
+                   SUM(m.output_tokens) as total_output,
+                   SUM(m.cache_read_tokens) as total_cache_read,
+                   SUM(m.cache_write_tokens) as total_cache_write,
+                   COUNT(DISTINCT m.session_id) as sessions_with_usage
+            FROM messages m
+            JOIN sessions s ON m.session_id = s.id
+            WHERE m.input_tokens > 0 OR m.output_tokens > 0
+            GROUP BY s.project_id, m.model
+        """).fetchall()
+
         result: dict[str, dict] = {}
-
-        for project_dir in self._projects_dir.iterdir():
-            if not project_dir.is_dir():
-                continue
-            project_id = project_dir.name
-            sessions_dir = project_dir / self.SESSIONS_SUBDIR
-            if not sessions_dir.exists():
-                continue
-
-            files = sorted(
-                sessions_dir.glob("*.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )[:limit_sessions_per_project]
-
-            proj_stats: dict = {
-                "total_input":       0,
-                "total_output":      0,
-                "total_cache_read":  0,
-                "total_cache_write": 0,
-                "sessions_with_usage": 0,
-                "model_breakdown": {},
+        for row in rows:
+            pid = row["project_id"]
+            model = row["model"] or "unknown"
+            if pid not in result:
+                result[pid] = {
+                    "total_input": 0, "total_output": 0,
+                    "total_cache_read": 0, "total_cache_write": 0,
+                    "sessions_with_usage": 0, "model_breakdown": {},
+                }
+            stats = result[pid]
+            stats["total_input"] += row["total_input"]
+            stats["total_output"] += row["total_output"]
+            stats["total_cache_read"] += row["total_cache_read"]
+            stats["total_cache_write"] += row["total_cache_write"]
+            stats["sessions_with_usage"] += row["sessions_with_usage"]
+            stats["model_breakdown"][model] = {
+                "input": row["total_input"],
+                "output": row["total_output"],
+                "cache_read": row["total_cache_read"],
+                "cache_write": row["total_cache_write"],
             }
-
-            for f in files:
-                try:
-                    data = json.loads(f.read_text(encoding="utf-8"))
-                    has_usage = False
-                    for m in data.get("messages", []):
-                        meta = m.get("metadata", {})
-                        inp = meta.get("input_tokens", 0)
-                        out = meta.get("output_tokens", 0)
-                        if not (inp or out):
-                            continue
-                        has_usage = True
-                        cw  = meta.get("cache_write_tokens", 0)
-                        cr  = meta.get("cache_read_tokens",  0)
-                        mdl = meta.get("model", "unknown")
-                        proj_stats["total_input"]       += inp
-                        proj_stats["total_output"]      += out
-                        proj_stats["total_cache_read"]  += cr
-                        proj_stats["total_cache_write"] += cw
-                        mb = proj_stats["model_breakdown"].setdefault(mdl, {
-                            "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
-                        })
-                        mb["input"]       += inp
-                        mb["output"]      += out
-                        mb["cache_read"]  += cr
-                        mb["cache_write"] += cw
-                    if has_usage:
-                        proj_stats["sessions_with_usage"] += 1
-                except Exception:
-                    continue
-
-            if proj_stats["total_input"] or proj_stats["total_output"]:
-                result[project_id] = proj_stats
-
         return result
 
     def estimated_tokens(self, project_id: str) -> int:
@@ -506,63 +560,75 @@ class SessionManager:
                 old = self._active.pop(project_id)
                 if old.id != session_id:
                     old.end()
-                    self._persist(old)
+                    self._db_end_session(old)
 
-            # Session von Disk laden
-            path = self._session_dir(project_id) / f"{session_id}.json"
-            if not path.exists():
+            # Session aus DB laden
+            row = self._db.execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if not row:
                 return None
+
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                session = Session.from_dict(data)
+                session = Session(
+                    id=row["id"],
+                    project_id=row["project_id"],
+                    started_at=row["started_at"],
+                    ended_at=None,
+                    messages=self._load_messages(session_id),
+                )
             except Exception as e:
                 logger.warning("resume_session: Fehler beim Laden von %s: %s", session_id, e)
                 return None
 
             # Als aktiv setzen — ended_at zurücksetzen
-            session.ended_at = None
             self._active[project_id] = session
-            self._persist(session)
+            self._db.execute("UPDATE sessions SET ended_at = NULL WHERE id = ?", (session_id,))
+            self._db.commit()
             logger.info("Session %s als aktive Session für %s wiederhergestellt (%d Nachrichten)",
                         session_id[:8], project_id, len(session.messages))
             return session
 
     def list_sessions(self, project_id: str, limit: int = 20) -> list[dict]:
         """Alle gespeicherten Sessions eines Projekts (neueste zuerst) mit Preview."""
-        sessions_dir = self._projects_dir / project_id / self.SESSIONS_SUBDIR
-        if not sessions_dir.exists():
+        if not self._db:
             return []
-        files = sorted(sessions_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        result = []
-        for f in files[:limit]:
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-                msgs = data.get("messages", [])
-                first_user = next((m for m in msgs if m["role"] == "user"), None)
-                result.append({
-                    "id": data["id"],
-                    "started_at": data["started_at"],
-                    "ended_at": data.get("ended_at"),
-                    "message_count": len(msgs),
-                    "preview": first_user["content"][:120] if first_user else "",
-                })
-            except Exception:
-                continue
-        return result
+        rows = self._db.execute(
+            "SELECT id, started_at, ended_at, message_count, preview "
+            "FROM sessions WHERE project_id = ? ORDER BY started_at DESC LIMIT ?",
+            (project_id, limit),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "started_at": r["started_at"],
+                "ended_at": r["ended_at"],
+                "message_count": r["message_count"],
+                "preview": r["preview"],
+            }
+            for r in rows
+        ]
 
     def get_session_by_id(self, project_id: str, session_id: str) -> "Session | None":
         """Eine bestimmte Session laden (aktive oder historische)."""
         active = self._active.get(project_id)
         if active and active.id == session_id:
             return active
-        path = self._session_dir(project_id) / f"{session_id}.json"
-        if not path.exists():
+        if not self._db:
             return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return Session.from_dict(data)
-        except Exception:
+        row = self._db.execute(
+            "SELECT * FROM sessions WHERE id = ? AND project_id = ?",
+            (session_id, project_id),
+        ).fetchone()
+        if not row:
             return None
+        return Session(
+            id=row["id"],
+            project_id=row["project_id"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            messages=self._load_messages(session_id),
+        )
 
     async def compact(
         self,
@@ -608,52 +674,114 @@ class SessionManager:
                 content=f"[Zusammenfassung früherer Konversation]\n{summary}",
             )
             session.messages = [summary_msg] + tail
-            self._persist(session)
+            self._db_replace_messages(session)
             logger.info(
                 "Session %s kompaktiert: Summary + %d Nachrichten (%s Rounds) behalten",
                 session.id[:8], len(tail),
                 keep_last_rounds if keep_last_rounds else "flat",
             )
 
-    # ----------------------------------------------------------------- private
+    # ----------------------------------------------------------------- private DB helpers
 
-    def _session_dir(self, project_id: str) -> Path:
-        d = self._projects_dir / project_id / self.SESSIONS_SUBDIR
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+    def _db_insert_session(self, session: Session) -> None:
+        """Neue Session in DB einfügen."""
+        self._db.execute(
+            "INSERT INTO sessions (id, project_id, started_at, ended_at, message_count, preview) "
+            "VALUES (?, ?, ?, ?, 0, '')",
+            (session.id, session.project_id, session.started_at, session.ended_at),
+        )
+        self._db.commit()
 
-    def _persist(self, session: Session) -> None:
-        """Atomic Write mit WAL: WAL-append → tmp-write → rename (#358, #393)."""
-        path = self._session_dir(session.project_id) / f"{session.id}.json"
-        wal_path = path.with_suffix(".wal")
-        tmp = path.with_suffix(".json.tmp")
-        try:
-            data = json.dumps(session.to_dict(), ensure_ascii=False, indent=2)
-            # #393: WAL — letzten State vor Write sichern (Crash-Recovery)
-            try:
-                with wal_path.open("a", encoding="utf-8") as wal:
-                    wal.write(f"{datetime.now(timezone.utc).isoformat()}|{len(session.messages)}\n")
-            except OSError:
-                pass  # WAL-Fehler ist nicht fatal
-            tmp.write_text(data, encoding="utf-8")
-            tmp.chmod(0o600)
-            tmp.replace(path)  # atomic auf POSIX
-            # WAL nach erfolgreichem Write löschen
-            wal_path.unlink(missing_ok=True)
-        except OSError as e:
-            logger.warning("Session konnte nicht gespeichert werden: %s", e)
-            tmp.unlink(missing_ok=True)
+    def _db_end_session(self, session: Session) -> None:
+        """Session als beendet markieren."""
+        self._db.execute(
+            "UPDATE sessions SET ended_at = ? WHERE id = ?",
+            (session.ended_at, session.id),
+        )
+        self._db.commit()
 
-    def _load_latest(self, project_dir: Path) -> Session | None:
-        sessions_dir = project_dir / self.SESSIONS_SUBDIR
-        if not sessions_dir.exists():
-            return None
-        files = sorted(sessions_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
-        if not files:
-            return None
-        try:
-            data = json.loads(files[-1].read_text(encoding="utf-8"))
-            return Session.from_dict(data)
-        except Exception as e:
-            logger.warning("Session-Datei konnte nicht geladen werden (%s): %s", files[-1], e)
-            return None
+    def _db_insert_message(self, session_id: str, message: Message, seq: int) -> None:
+        """Einzelne Message in DB einfügen."""
+        meta = message.metadata or {}
+        self._db.execute(
+            "INSERT INTO messages "
+            "(session_id, msg_id, role, content, timestamp, agent_id, metadata, seq, "
+            " input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                message.msg_id,
+                message.role.value,
+                message.content,
+                message.timestamp,
+                message.agent_id,
+                json.dumps(meta, ensure_ascii=False),
+                seq,
+                meta.get("input_tokens", 0) or 0,
+                meta.get("output_tokens", 0) or 0,
+                meta.get("cache_read_tokens", 0) or 0,
+                meta.get("cache_write_tokens", 0) or 0,
+                meta.get("model"),
+            ),
+        )
+        self._db.execute(
+            "UPDATE sessions SET message_count = message_count + 1 WHERE id = ?",
+            (session_id,),
+        )
+        self._db.commit()
+
+    def _db_replace_messages(self, session: Session) -> None:
+        """Alle Messages einer Session ersetzen (für compact/replace_messages)."""
+        self._db.execute("DELETE FROM messages WHERE session_id = ?", (session.id,))
+        for i, msg in enumerate(session.messages):
+            meta = msg.metadata or {}
+            self._db.execute(
+                "INSERT INTO messages "
+                "(session_id, msg_id, role, content, timestamp, agent_id, metadata, seq, "
+                " input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    session.id,
+                    msg.msg_id,
+                    msg.role.value,
+                    msg.content,
+                    msg.timestamp,
+                    msg.agent_id,
+                    json.dumps(meta, ensure_ascii=False),
+                    i,
+                    meta.get("input_tokens", 0) or 0,
+                    meta.get("output_tokens", 0) or 0,
+                    meta.get("cache_read_tokens", 0) or 0,
+                    meta.get("cache_write_tokens", 0) or 0,
+                    meta.get("model"),
+                ),
+            )
+        # Preview aus erster User-Message
+        preview = ""
+        for msg in session.messages:
+            if msg.role == MessageRole.USER:
+                preview = msg.content[:120]
+                break
+        self._db.execute(
+            "UPDATE sessions SET message_count = ?, preview = ? WHERE id = ?",
+            (len(session.messages), preview, session.id),
+        )
+        self._db.commit()
+
+    def _load_messages(self, session_id: str) -> list[Message]:
+        """Alle Messages einer Session aus DB laden."""
+        rows = self._db.execute(
+            "SELECT * FROM messages WHERE session_id = ? ORDER BY seq",
+            (session_id,),
+        ).fetchall()
+        return [
+            Message(
+                role=MessageRole(r["role"]),
+                content=r["content"],
+                timestamp=r["timestamp"],
+                msg_id=r["msg_id"],
+                agent_id=r["agent_id"],
+                metadata=json.loads(r["metadata"]) if r["metadata"] else {},
+            )
+            for r in rows
+        ]
