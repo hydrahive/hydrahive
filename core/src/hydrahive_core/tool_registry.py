@@ -4432,7 +4432,7 @@ class WksShellExecTool(BaseTool):
         def _run():
             client = _make_ssh_client(wks)
             full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
-            _, stdout, stderr = client.exec_command(full_cmd, timeout=60)
+            _, stdout, stderr = client.exec_command(full_cmd, timeout=300)
             out      = stdout.read().decode("utf-8", errors="replace")
             err      = stderr.read().decode("utf-8", errors="replace")
             exit_code = stdout.channel.recv_exit_status()
@@ -4504,7 +4504,7 @@ class ServerShellTool(BaseTool):
                 timeout=10,
             )
             full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
-            _, stdout, stderr = client.exec_command(full_cmd, timeout=60)
+            _, stdout, stderr = client.exec_command(full_cmd, timeout=300)
             out       = stdout.read().decode("utf-8", errors="replace")
             err       = stderr.read().decode("utf-8", errors="replace")
             exit_code = stdout.channel.recv_exit_status()

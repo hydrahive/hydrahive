@@ -5,6 +5,7 @@ Streaming-Version des Orchestrators: yieldet SSE-Chunks für die
 Chat-API. Unterstützt Anthropic OAuth, OpenAI Codex und litellm.
 """
 
+import asyncio as _asyncio
 import json as _json
 import logging
 import os
@@ -29,6 +30,17 @@ from .orchestrator_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# SSE-Keepalive: verhindert dass Proxies (nginx) oder Browser die Verbindung
+# bei langen Tool-Ausführungen (Compile, SSH etc.) wegen Inaktivität schließen.
+_KEEPALIVE_INTERVAL = 15  # Sekunden
+
+
+async def _keepalive_comment_stream():
+    """Yieldet SSE-Kommentare alle 15s — hält die Verbindung am Leben."""
+    while True:
+        await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+        yield ": keepalive\n\n"
 
 
 def _extract_tool_image(result: Any, tool_name: str) -> str | None:
@@ -377,11 +389,17 @@ async def _stream_codex(
                 if _dw:
                     yield f"data: {_json.dumps({'tool_warning': _dw, 'tool_name': tc.function.name})}\n\n"
             await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
-            result, _ = await execute_tool_call(
+            # Tool ausführen mit SSE-Keepalive (verhindert Timeout bei langen Befehlen)
+            _tool_task = _asyncio.create_task(execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc.function.name, tool_input=_tc_args,
                 execution_mode=execution_mode, user_text=content,
-            )
+            ))
+            while not _tool_task.done():
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not _tool_task.done():
+                    yield ": keepalive\n\n"
+            result, _ = _tool_task.result()
             # #489: Session Memory — Tool-Call zählen, bei Schwelle Facts extrahieren
             try:
                 from .session_memory import record_tool_call, mark_extracted, extract_session_facts
@@ -613,12 +631,18 @@ async def _stream_anthropic_oauth(
                 except Exception as te:
                     result = {"error": f"request_tools: {te}"}
             else:
-                result, is_error = await execute_tool_call(
+                # Tool ausführen mit SSE-Keepalive
+                _tool_task_oauth = _asyncio.create_task(execute_tool_call(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=block.name, tool_input=_tc_input,
                     execution_mode=execution_mode, user_text=content,
                     file_read_cache=_oauth_file_read_cache,
-                )
+                ))
+                while not _tool_task_oauth.done():
+                    await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                    if not _tool_task_oauth.done():
+                        yield ": keepalive\n\n"
+                result, is_error = _tool_task_oauth.result()
                 if is_error:
                     any_tool_error = True
                 # #414: Bild-Event senden
@@ -798,11 +822,17 @@ async def _stream_litellm(
             _tc_detail = format_tool_detail(tc["name"], tool_input)
             yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': tool_input, 'tool_detail': _tc_detail})}\n\n"
             await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
-            result, _ = await execute_tool_call(
+            # Tool ausführen mit SSE-Keepalive
+            _tool_task_lm = _asyncio.create_task(execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc["name"], tool_input=tool_input,
                 execution_mode=execution_mode,
-            )
+            ))
+            while not _tool_task_lm.done():
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not _tool_task_lm.done():
+                    yield ": keepalive\n\n"
+            result, _ = _tool_task_lm.result()
             # #414: Bild-Event senden
             _img_evt = _extract_tool_image(result, tc["name"])
             if _img_evt:
