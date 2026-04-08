@@ -67,6 +67,7 @@ export function AgentChatPage() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [debugEvents, setDebugEvents] = useState<{ ts: number; type: string; data: Record<string, unknown> }[]>([]);
+  const [followUpChips, setFollowUpChips] = useState<string[]>([]);
   const fileInputRef    = useRef<HTMLInputElement>(null);
 
   const bottomRef       = useRef<HTMLDivElement>(null);
@@ -267,6 +268,7 @@ export function AgentChatPage() {
     setMessages(ms => [...ms, userMsg]);
     setPendingImages([]);
     setSending(true);
+    setFollowUpChips([]);
     setElapsed(0);
     const controller = new AbortController();
     abortRef.current = controller;
@@ -318,6 +320,8 @@ export function AgentChatPage() {
               Object.assign(updates, { model: evt.model, isFallback: true });
             if (Object.keys(updates).length > 0)
               setMessages(ms => ms.map(m => m.id === currentAsst.id ? { ...m, ...updates } : m));
+          } else if (evt.type === "suggestions") {
+            setFollowUpChips(evt.suggestions);
           } else if (evt.type === "error") {
             if (evt.session_reset) setMessages([]);
             throw new Error(evt.error);
@@ -735,6 +739,17 @@ export function AgentChatPage() {
             Prompt-Coach {coachChecking && <RefreshCw className="h-3 w-3 animate-spin" />}
           </label>
         </div>
+        {/* #488: Follow-up Suggestion Chips */}
+        {followUpChips.length > 0 && !sending && (
+          <div className="flex gap-1.5 mb-2 flex-wrap">
+            {followUpChips.map((s, i) => (
+              <button key={i} onClick={() => { setFollowUpChips([]); setInput(s); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                className="px-3 py-1 text-xs rounded-full border border-primary/30 bg-primary/5 text-primary hover:bg-primary/15 transition-colors">
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         {/* Bild-Preview (#414) */}
         {pendingImages.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">

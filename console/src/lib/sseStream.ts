@@ -18,6 +18,7 @@ export type SSEEvent =
   | { type: "info"; info: string }
   | { type: "tool_warning"; tool_warning: string; tool_name: string }
   | { type: "done"; usage?: { input: number; output: number; cache_read?: number; cache_write?: number; rounds?: number }; is_fallback?: boolean; model?: string }
+  | { type: "suggestions"; suggestions: string[] }
   | { type: "error"; error: string; session_reset?: boolean };
 
 export interface SSEStreamOptions {
@@ -112,7 +113,9 @@ export async function sseStream(opts: SSEStreamOptions): Promise<void> {
               opts.onEvent({ type: "tool_call", tool_call: raw.tool_call, tool_input: raw.tool_input, tool_detail: raw.tool_detail });
             } else if (raw.done) {
               opts.onEvent({ type: "done", usage: raw.usage, is_fallback: raw.is_fallback, model: raw.model });
-              return; // Normal end
+              // Suggestions may follow — stream continues until server closes
+            } else if (raw.suggestions) {
+              opts.onEvent({ type: "suggestions", suggestions: raw.suggestions });
             } else if (raw.error) {
               opts.onEvent({ type: "error", error: raw.error, session_reset: raw.session_reset });
               return;

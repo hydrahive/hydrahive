@@ -267,6 +267,18 @@ async def handle_message_stream(
             _done_payload['is_fallback'] = True
         yield f"data: {_json.dumps(_done_payload)}\n\n"
 
+        # #488: Prompt Speculation — Follow-up Vorschläge generieren
+        try:
+            from .prompt_speculation import generate_suggestions
+            _suggestions = await generate_suggestions(
+                user_text=_text_content if isinstance(_text_content, str) else str(content),
+                assistant_response=full_response,
+            )
+            if _suggestions:
+                yield f"data: {_json.dumps({'suggestions': _suggestions})}\n\n"
+        except Exception as _spec_err:
+            logger.debug("Prompt speculation failed: %s", _spec_err)
+
     except Exception as e:
         err_str = str(e).lower()
         _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
