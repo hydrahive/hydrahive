@@ -399,9 +399,83 @@ def register_user_routes(
         # Session aus dem In-Memory-State des SessionManagers entfernen
         await agent_sessions.end_session(personal_id)
 
-        logger.info("User gelöscht: %s", username)
+        # SQLite Sessions für den Agent löschen
+        try:
+            db = agent_sessions._init_db()
+            db.execute("DELETE FROM sessions WHERE project_id = ?", (personal_id,))
+            db.execute("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE project_id = ?)", (personal_id,))
+            db.commit()
+        except Exception as _e:
+            logger.warning("Session-DB-Bereinigung für %s fehlgeschlagen: %s", personal_id, _e)
+
+        logger.info("User gelöscht (GDPR): %s", username)
         audit_log("user.delete", target=username)
         return {"deleted": True, "username": username}
+
+    # ── GDPR Data Export (#400) ─────────────────────────────────────────────
+
+    @admin_router.get("/users/{username}/export")
+    async def export_user_data(username: str):
+        """GDPR Art. 20: Vollständiger Daten-Export eines Users als JSON."""
+        users = load_users()
+        if username not in users:
+            raise HTTPException(404, f"User '{username}' nicht gefunden")
+
+        import json as _json
+        personal_id = f"personal_{username}"
+        export: dict = {"username": username, "role": users[username].get("role"), "group": users[username].get("group")}
+
+        # Agent-Config
+        agent_dir = Path(agents_dir) / personal_id
+        agent_yaml = agent_dir / "agent.yaml"
+        if agent_yaml.exists():
+            import yaml as _yaml
+            export["agent_config"] = _yaml.safe_load(agent_yaml.read_text(encoding="utf-8"))
+
+        # Memory
+        memory_dir = agent_dir / "memory"
+        if memory_dir.exists():
+            export["memory"] = {}
+            for f in memory_dir.iterdir():
+                if f.is_file():
+                    try:
+                        export["memory"][f.name] = f.read_text(encoding="utf-8")
+                    except Exception:
+                        pass
+
+        # Sessions aus SQLite
+        try:
+            db = agent_sessions._init_db()
+            rows = db.execute(
+                "SELECT id, started_at, ended_at FROM sessions WHERE project_id = ? ORDER BY started_at DESC",
+                (personal_id,),
+            ).fetchall()
+            sessions = []
+            for row in rows:
+                msgs = db.execute(
+                    "SELECT role, content, metadata, created_at FROM messages WHERE session_id = ? ORDER BY created_at",
+                    (row["id"],),
+                ).fetchall()
+                sessions.append({
+                    "id": row["id"],
+                    "started_at": row["started_at"],
+                    "ended_at": row["ended_at"],
+                    "messages": [{"role": m["role"], "content": m["content"], "created_at": m["created_at"]} for m in msgs],
+                })
+            export["sessions"] = sessions
+        except Exception as _e:
+            export["sessions_error"] = str(_e)
+
+        # Soul
+        soul_file = agent_dir / "soul.md"
+        if soul_file.exists():
+            try:
+                export["soul"] = soul_file.read_text(encoding="utf-8")
+            except Exception:
+                pass
+
+        audit_log("user.export", target=username)
+        return export
 
     @admin_router.put("/users/{username}")
     async def update_user(username: str, req: UpdateUserRequest):
@@ -682,6 +756,53 @@ def register_user_routes(
             media_type="application/gzip",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @auth_router.get("/me/gdpr-export")
+    async def gdpr_export_self(auth: tuple[str, str] = Depends(require_auth)):
+        """GDPR Art. 20: Self-Service Daten-Export als JSON."""
+        username, _role = auth
+        # Delegiere an den Admin-Endpoint
+        return await export_user_data(username)
+
+    @auth_router.delete("/me/gdpr-delete")
+    async def gdpr_delete_self(auth: tuple[str, str] = Depends(require_auth)):
+        """GDPR Art. 17: Recht auf Löschung — löscht eigene Daten (nicht den Account)."""
+        username, _role = auth
+        personal_id = f"personal_{username}"
+        import shutil as _shutil
+
+        deleted_items = []
+
+        # Sessions aus SQLite löschen
+        try:
+            db = agent_sessions._init_db()
+            db.execute("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE project_id = ?)", (personal_id,))
+            db.execute("DELETE FROM sessions WHERE project_id = ?", (personal_id,))
+            db.commit()
+            deleted_items.append("sessions")
+        except Exception:
+            pass
+
+        # Memory löschen
+        memory_dir = Path(agents_dir) / personal_id / "memory"
+        if memory_dir.exists():
+            _shutil.rmtree(memory_dir)
+            memory_dir.mkdir(exist_ok=True)
+            deleted_items.append("memory")
+
+        # Session-Dateien löschen (legacy .json)
+        sessions_dir = Path(agents_dir) / personal_id / ".sessions"
+        if sessions_dir.exists():
+            _shutil.rmtree(sessions_dir)
+            sessions_dir.mkdir(exist_ok=True)
+            deleted_items.append("session_files")
+
+        # Aktive Session beenden
+        await agent_sessions.end_session(personal_id)
+
+        audit_log("user.gdpr_delete", target=username)
+        logger.info("GDPR-Löschung für %s: %s", username, deleted_items)
+        return {"deleted": deleted_items, "username": username, "note": "Account bleibt erhalten, Daten gelöscht"}
 
     # ── Agent Import ───────────────────────────────────────────────────────────
 

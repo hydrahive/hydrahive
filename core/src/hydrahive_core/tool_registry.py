@@ -1144,6 +1144,12 @@ _OBFUSCATION_PATTERNS: list[tuple[_re_shell.Pattern, str]] = [
     # base64 decode piped to shell
     (_re_shell.compile(r'\b(base64|b64decode)\b.*\|\s*(sh|bash|dash|zsh|ksh|source)\b'),
      "base64-decode nach Shell gepipet — verboten"),
+    # Brace expansion as obfuscation: {r,m} → rm, /dev/{s,d}a
+    (_re_shell.compile(r'\{[a-z],[a-z]\}'),
+     "Brace-Expansion als Verschleierung verboten"),
+    # eval/source with variable: eval "$cmd", source <(...)
+    (_re_shell.compile(r'\b(eval|source)\s+["\$]'),
+     "eval/source mit Variable/Substitution verboten"),
 ]
 
 
@@ -1153,6 +1159,18 @@ def _ast_check_command(command: str) -> str | None:
     Gibt Fehlermeldung zurück wenn blockiert, sonst None.
     FAIL-CLOSED: bei Parse-Fehlern wird blockiert.
     """
+    # 0. Unicode/Control-Character-Angriffe (vor allem anderen)
+    for ch in command:
+        cp = ord(ch)
+        # Control chars (außer \t \n \r) und Unicode-Whitespace-Tricks
+        if cp < 0x20 and cp not in (0x09, 0x0A, 0x0D):
+            return f"Kontrollzeichen U+{cp:04X} im Befehl verboten"
+        # Unicode-Whitespace der wie Space aussieht aber keiner ist
+        if cp in (0x00A0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
+                  0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x200B,
+                  0x202F, 0x205F, 0x2060, 0x3000, 0xFEFF):
+            return f"Unicode-Whitespace U+{cp:04X} im Befehl verboten"
+
     # 1. Obfuskation erkennen (vor dem Parsen, da shlex diese nicht auflöst)
     for pattern, reason in _OBFUSCATION_PATTERNS:
         if pattern.search(command):
@@ -1164,6 +1182,30 @@ def _ast_check_command(command: str) -> str | None:
         return "Command Substitution $(...) verboten"
     if '`' in command:
         return "Backticks (Command Substitution) verboten"
+
+    # 2b. Process Substitution: <( ), >( )
+    if _re_shell.search(r'[<>]\(', command):
+        return "Process Substitution <()/> () verboten"
+
+    # 2c. Zsh-spezifische Angriffe
+    if _re_shell.search(r'\bzmodload\b', command):
+        return "zmodload verboten"
+    if _re_shell.search(r'\bemulate\b.*-c\b', command):
+        return "emulate -c verboten"
+    if _re_shell.search(r'(?:^|\s)=[a-zA-Z]', command):
+        return "Zsh =cmd Expansion verboten"
+
+    # 2d. IFS Injection
+    if _re_shell.search(r'\bIFS=', command):
+        return "IFS-Manipulation verboten"
+
+    # 2e. /proc Zugriff auf sensitive Pfade
+    if _re_shell.search(r'/proc/[0-9]+/environ\b|/proc/self/environ\b', command):
+        return "/proc/environ Zugriff verboten"
+
+    # 2f. Obfuskierte Flags: \-\-help statt --help (Backslash in Flags)
+    if _re_shell.search(r'\\-\\-[a-z]', command):
+        return "Obfuskierte Flags (\\-\\-) verboten"
 
     # 3. Dangerous variable expansion: $LD_PRELOAD, ${NODE_OPTIONS}, etc.
     env_match = _ENV_VAR_PATTERN.search(command)
