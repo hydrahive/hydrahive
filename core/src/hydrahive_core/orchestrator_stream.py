@@ -106,6 +106,12 @@ async def handle_message_stream(
     if worker_ctx:
         _static_prompt = _static_prompt + "\n\n" + worker_ctx
     system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt
+    # #485: Frustration Detection — System-Prompt-Injection wenn User genervt ist
+    from .frustration_detection import get_frustration_injection
+    _frustration_hint = get_frustration_injection(_text_content if isinstance(_text_content, str) else str(content))
+    if _frustration_hint:
+        system_prompt += _frustration_hint
+        logger.debug("Frustration detected in message from %s", sender)
     # #348: Token-basierte History statt max_messages=10 (OpenClaw-Strategie)
     _sys_prompt_tokens_s = _estimate_tokens(system_prompt)
     _hist_budget_s = _history_token_budget(boss_cfg.llm.model, system_prompt_tokens=_sys_prompt_tokens_s)
