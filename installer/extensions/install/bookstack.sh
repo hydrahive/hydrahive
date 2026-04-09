@@ -41,7 +41,7 @@ detect_php() {
 }
 
 # --- System-Abhängigkeiten ---
-info "Installiere Abhängigkeiten (PHP, nginx, MariaDB, Composer, git)..."
+info "Installiere Abhängigkeiten (PHP, MariaDB, Composer, git)..."
 apt-get update -qq
 apt-get install -y --quiet \
     php-cli php-mysql php-curl php-xml php-mbstring \
