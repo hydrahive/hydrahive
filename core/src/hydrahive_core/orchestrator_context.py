@@ -77,6 +77,10 @@ def _history_token_budget(model: str, system_prompt_tokens: int = 0) -> int:
     return int(available * _MAX_HISTORY_SHARE)
 
 
+# #527: Cache-Segment-Hashes für Break-Detection
+_SEGMENT_HASHES: dict[str, dict[str, str]] = {}  # agent_id → {segment_name: hash}
+
+
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
@@ -98,6 +102,47 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     if wf_flow.exists():
         parts.append(f"workflow_flow:{wf_flow.stat().st_mtime:.0f}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | None:
+    """#527: Identifiziert welches Segment den Cache-Break verursacht hat."""
+    segments: dict[str, str] = {}
+    segments["mode"] = mode
+    handbook = settings.system_handbook
+    if handbook.exists():
+        segments["handbook"] = f"{handbook.stat().st_mtime:.0f}"
+    soul = agent_dir / "soul.md"
+    if soul.exists():
+        segments["soul"] = f"{soul.stat().st_mtime:.0f}"
+    memory_dir = agent_dir / "memory"
+    if memory_dir.exists():
+        mem_mtimes = [f"{f.name}:{f.stat().st_mtime:.0f}" for f in sorted(memory_dir.glob("*.md"))]
+        segments["memory"] = hashlib.sha256("|".join(mem_mtimes).encode()).hexdigest()[:8]
+    skills_dir = agent_dir / "skills"
+    if skills_dir.exists():
+        skill_mtimes = [f"{f.name}:{f.stat().st_mtime:.0f}" for f in sorted(skills_dir.glob("*.md"))]
+        segments["skills"] = hashlib.sha256("|".join(skill_mtimes).encode()).hexdigest()[:8]
+    wf_flow = agent_dir / "workflow_flow.json"
+    if wf_flow.exists():
+        segments["workflow"] = f"{wf_flow.stat().st_mtime:.0f}"
+
+    old = _SEGMENT_HASHES.get(agent_id, {})
+    _SEGMENT_HASHES[agent_id] = segments
+
+    if not old:
+        return None  # Erster Aufruf — kein Vergleich möglich
+
+    changed = []
+    for key, val in segments.items():
+        if old.get(key) != val:
+            changed.append(key)
+    for key in old:
+        if key not in segments:
+            changed.append(f"-{key}")
+
+    if changed:
+        return f"cache-break: {', '.join(changed)}"
+    return None
 
 
 def _context_mode(user_text: str) -> str:
@@ -142,7 +187,12 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
                 if current_h == h:
                     logger.debug("system-prompt cache-hit (agent=%s age=%.0fs)", boss_cfg.id, time.time() - ts)
                     return prompt
-        logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
+        # #527: Cache-Break-Diagnose — welches Segment hat sich geändert?
+        _break_reason = _diagnose_cache_break(boss_cfg.id, boss_cfg.agent_dir, mode)
+        if _break_reason:
+            logger.info("system-prompt %s (agent=%s)", _break_reason, boss_cfg.id)
+        else:
+            logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
 
     # Datum + Uhrzeit im System-Prompt — LLM hat sonst kein Zeitgefühl
     from datetime import datetime, timezone as _tz
@@ -203,16 +253,15 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             if learning_snippet:
                 mem_parts.append(learning_snippet)
 
-        # Index aktualisieren (lazy — nur geänderte Dateien, <5ms wenn nichts geändert)
-        # run_in_executor: SQLite + FAISS/Embedding sind blocking I/O, darf Event-Loop nicht blockieren
+        # #500: Memory-Prefetch — Index-Update und BM25-Suche parallel ausführen
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
-
-        # BM25-Suche: normal=4, full=8 Treffer × max 700 chars ≈ 2.8-5.6k chars
         k = 8 if mode == "full" else 4
-        snippets = await loop.run_in_executor(
+        _index_task = loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        _search_task = loop.run_in_executor(
             None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
         )
+        await _index_task  # Index fertig → Suche kann davon profitieren
+        snippets = await _search_task
 
         if snippets:
             mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
@@ -466,20 +515,26 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     dynamic_parts = []
 
     if boss_cfg.agent_dir:
-        # BM25 Memory Search
-        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        # #500: Prefetch — Memory-Index und BM25-Suche parallel
         k = 8 if mode == "full" else 4
-        snippets = await loop.run_in_executor(
+        _idx_task = loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        _mem_task = loop.run_in_executor(
             None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
         )
+        # Skills parallel laden
+        all_skills = load_skills(boss_cfg.agent_dir)
+        _skill_task = None
+        if all_skills:
+            skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
+            _skill_task = loop.run_in_executor(None, score_texts, skill_texts, user_text)
+
+        await _idx_task
+        snippets = await _mem_task
         if snippets:
             dynamic_parts.append("### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets))
 
-        # Semantic Skills
-        all_skills = load_skills(boss_cfg.agent_dir)
-        if all_skills:
-            skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
-            raw_scores = await loop.run_in_executor(None, score_texts, skill_texts, user_text)
+        if all_skills and _skill_task:
+            raw_scores = await _skill_task
             semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)} if raw_scores else {}
             active_skills = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
             if active_skills:

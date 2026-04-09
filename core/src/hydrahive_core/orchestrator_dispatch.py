@@ -114,6 +114,8 @@ async def _dispatch_dag(
                 d["worker_id"] = auto_worker
                 logger.info("Auto-assigned worker '%s' für Task: %s", auto_worker, d["task"][:60])
 
+    # #526: Built-in Workers sind immer verfügbar
+    from .built_in_workers import is_builtin_worker
     allowed_workers = set(project_cfg.agents.workers)
     has_deps = any(d.get("depends_on") for d in dispatches)
 
@@ -121,7 +123,7 @@ async def _dispatch_dag(
     if not has_deps:
         tasks = []
         for d in dispatches:
-            if d["worker_id"] not in allowed_workers:
+            if d["worker_id"] not in allowed_workers and not is_builtin_worker(d["worker_id"]):
                 logger.warning("dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"])
                 async def _rejected(d=d) -> DispatchResult:
                     return DispatchResult(worker_id=d["worker_id"], task=d["task"],
@@ -215,12 +217,70 @@ async def _dispatch_dag(
 _dispatch_parallel = _dispatch_dag
 
 
+async def _run_builtin_worker(orch, dispatch: dict, profile: dict) -> DispatchResult:
+    """#526: Built-in Worker ausführen — nutzt Boss-LLM mit speziellem System-Prompt."""
+    worker_id = dispatch["worker_id"]
+    task = dispatch["task"]
+    context = dispatch.get("context", "")
+    task_id = dispatch.get("task_id")
+
+    logger.info("Built-in Worker '%s': %s", worker_id, task[:60])
+
+    messages = [
+        {"role": "system", "content": profile["system_prompt"]},
+    ]
+    if context:
+        messages.append({"role": "user", "content": f"Kontext: {context}"})
+    messages.append({"role": "user", "content": task})
+
+    # Built-in Workers nutzen das Boss-LLM (kein eigener Agent nötig)
+    # Tool-Schemas nur für erlaubte Tools
+    allowed = set(profile.get("allowed_tools", []))
+    tools = []
+    for tool_obj in orch._tool_registry.values():
+        if hasattr(tool_obj, "id") and tool_obj.id in allowed:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": tool_obj.id,
+                    "description": tool_obj.description,
+                    "parameters": tool_obj.parameters,
+                },
+            })
+
+    try:
+        import litellm
+        from .orchestrator_llm import _llm_with_retry
+        # Einfacher LLM-Call ohne Tool-Loop (Worker liefern Analyse, keine Aktionen)
+        resp = await _llm_with_retry(lambda: litellm.acompletion(
+            model="claude-haiku-4-5-20251001",
+            messages=messages,
+            tools=tools if tools else None,
+            max_tokens=4000,
+            drop_params=True,
+        ))
+        result = resp.choices[0].message.content or ""
+        return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
+    except Exception as e:
+        logger.error("Built-in Worker '%s' Fehler: %s", worker_id, e)
+        return DispatchResult(
+            worker_id=worker_id, task=task, result="",
+            success=False, error=str(e), task_id=task_id,
+        )
+
+
 async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
     """Einen Worker-Agenten mit einem Task beauftragen."""
     worker_id = dispatch["worker_id"]
     task      = dispatch["task"]
     context   = dispatch.get("context", "")
     task_id   = dispatch.get("task_id")
+
+    # #526: Built-in Workers (explore, plan) — virtueller Agent mit eigenem Prompt
+    from .built_in_workers import get_builtin_worker
+    builtin = get_builtin_worker(worker_id)
+    if builtin:
+        return await _run_builtin_worker(orch, dispatch, builtin)
 
     worker_cfg = orch._discovery.get(worker_id)
     if not worker_cfg:

@@ -70,6 +70,9 @@ class SessionMetricsData:
     tool_results_budgeted: int = 0      # Wie oft wurde ein Result gekürzt
     tool_results_bytes_saved: int = 0   # Eingespartes Volumen in Zeichen
 
+    # #527: Cache-Break-Diagnostik
+    cache_breaks: list = field(default_factory=list)  # Letzte 10 Break-Reasons
+
     def cache_hit_rate(self) -> float:
         """Cache-Hit-Rate über alle Calls."""
         total_input = self.total_input_tokens
@@ -106,6 +109,7 @@ class SessionMetricsData:
             "failovers":          self.failovers,
             "tool_results_budgeted": self.tool_results_budgeted,
             "tool_results_bytes_saved": self.tool_results_bytes_saved,
+            "cache_breaks": self.cache_breaks[-5:],
             "avg_latency_ms":     round(self.avg_latency_ms(), 1),
             "last_calls":         [
                 {
@@ -220,6 +224,13 @@ class SessionMetrics:
     def record_failover(self, project_id: str) -> None:
         d = self._get(project_id)
         d.failovers += 1
+
+    def record_cache_break(self, project_id: str, reason: str) -> None:
+        """#527: Cache-Break-Reason tracken."""
+        d = self._get(project_id)
+        d.cache_breaks.append(reason)
+        if len(d.cache_breaks) > 10:
+            d.cache_breaks = d.cache_breaks[-10:]
 
     def record_tool_budget(self, project_id: str, original_len: int, budgeted_len: int) -> None:
         """#516: Tool-Result wurde durch Budgeting gekürzt."""

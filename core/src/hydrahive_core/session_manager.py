@@ -74,6 +74,72 @@ def redact_thinking_blocks(messages: list[dict]) -> list[dict]:
     return result
 
 
+def repair_tool_pairs(messages: list[dict]) -> list[dict]:
+    """#507: Verwaiste tool_use/tool_result Paare reparieren.
+
+    Beim Session-Resume können inkonsistente Paare auftreten:
+    - tool-Messages ohne vorheriges assistant-Message mit tool_calls
+    - assistant-Messages mit tool_calls ohne nachfolgende tool-Results
+
+    Diese Funktion entfernt verwaiste tool-Messages und fügt
+    Dummy-Results für verwaiste tool_calls ein.
+    """
+    if not messages:
+        return messages
+
+    result: list[dict] = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+
+        # Tool-Messages ohne Kontext → entfernen (verwaist)
+        if msg.get("role") == "tool":
+            # Prüfen ob vorherige Message ein assistant mit tool_calls ist
+            has_parent = False
+            for j in range(len(result) - 1, -1, -1):
+                if result[j].get("role") == "assistant":
+                    if result[j].get("tool_calls"):
+                        has_parent = True
+                    break
+                if result[j].get("role") == "tool":
+                    has_parent = True  # Teil einer Tool-Gruppe
+                    break
+            if not has_parent:
+                # Verwaiste tool-Message → überspringen
+                i += 1
+                continue
+
+        # Assistant mit tool_calls → prüfen ob tool-Results folgen
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            result.append(msg)
+            tc_ids = [tc.get("id") or tc.get("tool_call_id", f"tc_{k}")
+                      for k, tc in enumerate(msg["tool_calls"])]
+            # Nachfolgende tool-Messages sammeln
+            found_ids: set[str] = set()
+            j = i + 1
+            while j < len(messages) and messages[j].get("role") == "tool":
+                tid = messages[j].get("tool_call_id", "")
+                if tid:
+                    found_ids.add(tid)
+                result.append(messages[j])
+                j += 1
+            # Fehlende tool-Results mit Dummy auffüllen
+            for tc_id in tc_ids:
+                if tc_id not in found_ids:
+                    result.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": "[Session unterbrochen — Ergebnis nicht verfügbar]",
+                    })
+            i = j
+            continue
+
+        result.append(msg)
+        i += 1
+
+    return result
+
+
 @dataclass
 class Message:
     role:      MessageRole
@@ -240,6 +306,8 @@ class Session:
 
         # #473: Redact thinking blocks from older assistant messages
         result = redact_thinking_blocks(result)
+        # #507: Verwaiste tool_use/tool_result Paare reparieren
+        result = repair_tool_pairs(result)
         return result
 
     def history_context(self, max_messages: int = 50) -> list[dict]:
