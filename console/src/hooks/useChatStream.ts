@@ -151,8 +151,17 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
 
+  const hasScrolledInitial = useRef(false);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!hasScrolledInitial.current && messages.length > 0) {
+      // Erster Load (Cache oder API): sofort ans Ende, keine Animation
+      hasScrolledInitial.current = true;
+      const container = bottomRef.current?.parentElement;
+      if (container) container.scrollTop = container.scrollHeight;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
