@@ -47,7 +47,7 @@ const AGENT_COLORS = [
 ];
 
 const POINT_COUNT = 200;
-const SCAN_SPEED = 1.5;
+const SCAN_SPEED = 0.45;
 const POLL_INTERVAL = 2000;
 
 // ── EKG Canvas Component ─────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
         }
         return { ...agent, points: pts };
       }));
-    }, 50);
+    }, 150);
     return () => clearInterval(tick);
   }, []);
 
