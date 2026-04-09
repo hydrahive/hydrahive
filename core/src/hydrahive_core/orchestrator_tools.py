@@ -314,6 +314,20 @@ async def execute_tool_call(
             logger.debug("file_read dedup: '%s'", _rpath)
             return file_read_cache[_rpath], False
 
+    # #466: Permission Classifier — Risikobewertung vor Ausführung
+    try:
+        from .permission_classifier import classify_action, RiskLevel
+        risk = await classify_action(tool_name, tool_input, use_llm=False)
+        if risk == RiskLevel.DENY:
+            logger.warning("Permission DENY: %s(%s) — Tool blockiert", tool_name, str(tool_input)[:80])
+            return {
+                "error": f"Aktion blockiert: '{tool_name}' wurde als gefährlich eingestuft.",
+                "risk": "deny",
+                "hint": "Diese Aktion wurde aus Sicherheitsgründen verhindert.",
+            }, True
+    except Exception as _cls_err:
+        logger.debug("Permission classifier error: %s", _cls_err)
+
     try:
         result = await orch._execute_tool(
             tool,
