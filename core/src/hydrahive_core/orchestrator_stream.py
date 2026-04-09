@@ -457,10 +457,13 @@ async def _stream_codex(
                 for tc in parallel_tcs
             ]
             # Keepalive während parallel Tools laufen
+            _par_wait = 0.0
             while not all(t.done() for t in _par_tasks):
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(0.2)
+                _par_wait += 0.2
+                if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _par_wait = 0.0
             for tc, task in zip(parallel_tcs, _par_tasks):
                 result, _ = task.result()
                 _tool_results[tc.id] = (result, tc)
@@ -475,10 +478,13 @@ async def _stream_codex(
                 tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                 execution_mode=execution_mode, user_text=content,
             ))
+            _elapsed_wait = 0.0
             while not _tool_task.done():
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not _tool_task.done():
+                await _asyncio.sleep(0.2)  # Schnelles Polling — Tool kann in <1s fertig sein
+                _elapsed_wait += 0.2
+                if not _tool_task.done() and _elapsed_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _elapsed_wait = 0.0
             result, _ = _tool_task.result()
             _tool_results[tc.id] = (result, tc)
 
@@ -742,10 +748,13 @@ async def _stream_anthropic_oauth(
                 ))
                 for b in _oauth_parallel
             ]
+            _par_wait = 0.0
             while not all(t.done() for t in _par_tasks):
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(0.2)
+                _par_wait += 0.2
+                if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _par_wait = 0.0
             for block, task in zip(_oauth_parallel, _par_tasks):
                 result, is_error = task.result()
                 if is_error:
@@ -764,10 +773,13 @@ async def _stream_anthropic_oauth(
                 execution_mode=execution_mode, user_text=content,
                 file_read_cache=_oauth_file_read_cache,
             ))
+            _oauth_wait = 0.0
             while not _tool_task_oauth.done():
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not _tool_task_oauth.done():
+                await _asyncio.sleep(0.2)
+                _oauth_wait += 0.2
+                if not _tool_task_oauth.done() and _oauth_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _oauth_wait = 0.0
             result, is_error = _tool_task_oauth.result()
             if is_error:
                 any_tool_error = True
@@ -974,10 +986,13 @@ async def _stream_litellm(
                 ))
                 for tc in _lm_parallel
             ]
+            _par_wait = 0.0
             while not all(t.done() for t in _par_tasks):
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(0.2)
+                _par_wait += 0.2
+                if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _par_wait = 0.0
             for tc, task in zip(_lm_parallel, _par_tasks):
                 result, _ = task.result()
                 _lm_results[tc["id"]] = result
@@ -992,10 +1007,13 @@ async def _stream_litellm(
                 tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                 execution_mode=execution_mode,
             ))
+            _lm_wait = 0.0
             while not _tool_task_lm.done():
-                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                if not _tool_task_lm.done():
+                await _asyncio.sleep(0.2)
+                _lm_wait += 0.2
+                if not _tool_task_lm.done() and _lm_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
+                    _lm_wait = 0.0
             result, _ = _tool_task_lm.result()
             _lm_results[tc["id"]] = result
 
