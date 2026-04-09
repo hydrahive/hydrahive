@@ -115,14 +115,19 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const loadHistory = useCallback(() => {
     if (!opts.historyEndpoint) { setHistoryLoading(false); return; }
 
-    // Sofort aus Cache laden (synchron) — verhindert leeren Chat bei Navigation
+    // Sofort aus Cache laden — verhindert leeren Chat bei Navigation
     const cached = _readCache(opts.historyEndpoint);
     if (cached.length > 0) {
       setMessages(cached);
       setHistoryLoading(false);
+      // Scroll nach dem NÄCHSTEN Paint-Frame (DOM muss fertig sein)
+      setTimeout(() => {
+        const el = bottomRef.current?.parentElement;
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 50);
     }
 
-    // Dann vom Backend aktualisieren (asynchron)
+    // Dann vom Backend aktualisieren
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         const loaded = d.messages
@@ -142,7 +147,12 @@ export function useChatStream(opts: UseChatStreamOptions) {
           });
         if (loaded.length > 0) {
           setMessages(loaded);
-          _writeCache(opts.historyEndpoint, loaded);  // Cache mit frischen Daten aktualisieren
+          _writeCache(opts.historyEndpoint, loaded);
+          // Auch nach API-Load scrollen
+          setTimeout(() => {
+            const el = bottomRef.current?.parentElement;
+            if (el) el.scrollTop = el.scrollHeight;
+          }, 50);
         }
       })
       .catch((err) => { console.warn("loadHistory failed:", err); })
@@ -151,17 +161,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
 
-  const hasScrolledInitial = useRef(false);
-
   useEffect(() => {
-    if (!hasScrolledInitial.current && messages.length > 0) {
-      // Erster Load (Cache oder API): sofort ans Ende, keine Animation
-      hasScrolledInitial.current = true;
-      const container = bottomRef.current?.parentElement;
-      if (container) container.scrollTop = container.scrollHeight;
-    } else {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
