@@ -1876,6 +1876,44 @@ def get_turn_journal(project_id: str, limit: int = 100, _a=Depends(require_admin
     return {"events": events, "stats": stats}
 
 
+# ── #483: Proactive Mode API ──────────────────────────────────────────────────
+
+@admin_router.get("/admin/proactive/tasks")
+def list_proactive_tasks(_a=Depends(require_admin)):
+    """#483: Alle proaktiven Tasks auflisten."""
+    from .proactive_mode import proactive_service
+    return {"tasks": proactive_service.list_tasks()}
+
+
+@admin_router.post("/admin/proactive/tasks")
+async def create_proactive_task(body: dict, _a=Depends(require_admin)):
+    """#483: Neuen proaktiven Task erstellen."""
+    from .proactive_mode import proactive_service, ProactiveTask
+    import uuid
+    task = ProactiveTask(
+        id=body.get("id", uuid.uuid4().hex[:8]),
+        agent_id=body["agent_id"],
+        project_id=body["project_id"],
+        prompt=body["prompt"],
+        interval_seconds=body.get("interval", 3600),
+        enabled=body.get("enabled", True),
+    )
+    proactive_service.add_task(task)
+    from .settings import settings
+    proactive_service.save_to_config(settings.etc_dir)
+    return {"ok": True, "task_id": task.id}
+
+
+@admin_router.delete("/admin/proactive/tasks/{task_id}")
+def delete_proactive_task(task_id: str, _a=Depends(require_admin)):
+    """#483: Proaktiven Task löschen."""
+    from .proactive_mode import proactive_service
+    proactive_service.remove_task(task_id)
+    from .settings import settings
+    proactive_service.save_to_config(settings.etc_dir)
+    return {"ok": True}
+
+
 @admin_router.get("/admin/agents/live")
 def get_agents_live(_a=Depends(require_admin)):
     """

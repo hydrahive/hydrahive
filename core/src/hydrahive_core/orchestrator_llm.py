@@ -677,9 +677,16 @@ async def _anthropic_oauth_call(
                 filtered[idx] = {**fm, "content": new_c}
                 history_cache_count += 1
 
+    # #515: Model-spezifische max_tokens — neuere Modelle können mehr Output
+    _configured_max = agent_cfg.llm.max_tokens
+    if any(x in model for x in ("claude-opus-4", "claude-sonnet-4")):
+        _configured_max = max(_configured_max, 16384)  # Claude 4: mindestens 16k Output
+    elif "claude-3-7" in model or "claude-3-5" in model:
+        _configured_max = max(_configured_max, 8192)
+
     kwargs: dict = {
         "model":       model,
-        "max_tokens":  agent_cfg.llm.max_tokens,
+        "max_tokens":  _configured_max,
         "messages":    filtered,
         "temperature": agent_cfg.llm.temperature,
         "system":      oauth_system,
@@ -1051,11 +1058,20 @@ async def _llm_call_single(
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
     is_anthropic = model.startswith(("anthropic/", "claude-"))
     cached_messages = _apply_cache_control(messages, is_anthropic)
+
+    # #515: Model-spezifische max_tokens auch im litellm-Pfad
+    _lm_max = agent_cfg.llm.max_tokens
+    if is_anthropic:
+        if any(x in model for x in ("claude-opus-4", "claude-sonnet-4")):
+            _lm_max = max(_lm_max, 16384)
+        elif any(x in model for x in ("claude-3-7", "claude-3-5")):
+            _lm_max = max(_lm_max, 8192)
+
     kwargs: dict = {
         "model":       model,
         "messages":    cached_messages,
         "temperature": agent_cfg.llm.temperature,
-        "max_tokens":  agent_cfg.llm.max_tokens,
+        "max_tokens":  _lm_max,
     }
     if api_base:
         kwargs["api_base"] = api_base

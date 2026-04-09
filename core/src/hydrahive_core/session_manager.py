@@ -676,12 +676,51 @@ class SessionManager:
                 logger.warning("resume_session: Fehler beim Laden von %s: %s", session_id, e)
                 return None
 
+            # #525: Resume Recovery — unvollständige Tool-Chains erkennen und reparieren
+            _repaired = 0
+            _last_msg = session.messages[-1] if session.messages else None
+            if _last_msg and _last_msg.role == MessageRole.TOOL:
+                # Session endet mit Tool-Message — wahrscheinlich unterbrochen
+                # Recovery: System-Message anhängen die den Agent informiert
+                recovery_msg = Message.create(
+                    role=MessageRole.SYSTEM,
+                    content=(
+                        "[Session Recovery] Diese Session wurde nach einer Unterbrechung fortgesetzt. "
+                        "Die letzte Aktion war ein Tool-Aufruf. Das Ergebnis könnte unvollständig sein. "
+                        "Fasse zusammen was bisher erledigt wurde und frage den User wie es weitergehen soll."
+                    ),
+                )
+                session.messages.append(recovery_msg)
+                _repaired += 1
+
+            # Verwaiste SYSTEM-Messages am Ende entfernen (z.B. 🔧 Tool-Detail ohne Result)
+            while session.messages and session.messages[-1].role == MessageRole.SYSTEM:
+                if session.messages[-1].content.startswith("🔧"):
+                    session.messages.pop()
+                    _repaired += 1
+                else:
+                    break
+
+            # Turn Journal: Resume-Event aufzeichnen
+            try:
+                from .turn_journal import journal as _tj, EventType as _JE
+                _tj.append(session_id, project_id, _JE.SESSION_RESUME, {
+                    "messages": len(session.messages), "repaired": _repaired,
+                })
+            except Exception:
+                pass
+
             # Als aktiv setzen — ended_at zurücksetzen
             self._active[project_id] = session
             self._db.execute("UPDATE sessions SET ended_at = NULL WHERE id = ?", (session_id,))
             self._db.commit()
-            logger.info("Session %s als aktive Session für %s wiederhergestellt (%d Nachrichten)",
-                        session_id[:8], project_id, len(session.messages))
+            if _repaired:
+                self._persist(session)
+                logger.info("Session %s resumed mit %d Reparaturen (%d Nachrichten)",
+                            session_id[:8], _repaired, len(session.messages))
+            else:
+                logger.info("Session %s als aktive Session für %s wiederhergestellt (%d Nachrichten)",
+                            session_id[:8], project_id, len(session.messages))
             return session
 
     def list_sessions(self, project_id: str, limit: int = 20) -> list[dict]:

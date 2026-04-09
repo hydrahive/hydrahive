@@ -70,6 +70,82 @@ _TOOL_OP_TYPES: dict[str, ToolOpType] = {
 }
 
 
+# ── #528: Tool Policy Engine ──────────────────────────────────────────────────
+
+class ToolPolicy:
+    """Policy-Klasse für ein Tool: bestimmt Verhalten bei Execution und Budgeting."""
+    __slots__ = ("op_type", "parallel_safe", "cost", "max_result_chars", "log_level")
+
+    def __init__(
+        self,
+        op_type: ToolOpType = ToolOpType.READ,
+        parallel_safe: bool = False,
+        cost: str = "low",  # low / medium / high
+        max_result_chars: int = 0,  # 0 = use budget defaults
+        log_level: str = "normal",  # minimal / normal / verbose
+    ):
+        self.op_type = op_type
+        self.parallel_safe = parallel_safe
+        self.cost = cost
+        self.max_result_chars = max_result_chars
+        self.log_level = log_level
+
+
+# Default-Policies für bekannte Tools
+_TOOL_POLICIES: dict[str, ToolPolicy] = {
+    # Read-only, parallel, low cost
+    "file_read":        ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "list_directory":   ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "read_system_file": ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "read_memory":      ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "shared_memory_read": ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "user_memory_read": ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "git_status":       ToolPolicy(ToolOpType.SEARCH, parallel_safe=True, cost="low"),
+    "git_diff":         ToolPolicy(ToolOpType.SEARCH, parallel_safe=True, cost="low"),
+    "git_log":          ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="low"),
+    "git_grep":         ToolPolicy(ToolOpType.SEARCH, parallel_safe=True, cost="low"),
+    # External network, parallel, medium cost
+    "web_search":       ToolPolicy(ToolOpType.SEARCH, parallel_safe=True, cost="medium"),
+    "http_request":     ToolPolicy(ToolOpType.SEARCH, parallel_safe=False, cost="medium"),
+    "analyze_image":    ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="high"),
+    "server_file_read": ToolPolicy(ToolOpType.READ, parallel_safe=True, cost="medium"),
+    # Mutations, sequential, medium-high cost
+    "file_write":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "file_patch":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "shell_exec":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
+    "project_shell":    ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
+    "server_shell":     ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
+    "git_commit":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "git_push":         ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high"),
+    # Meta, low cost
+    "request_tools":    ToolPolicy(ToolOpType.META, parallel_safe=False, cost="low", log_level="minimal"),
+    "dispatch_task":    ToolPolicy(ToolOpType.META, parallel_safe=False, cost="high"),
+    "get_final_message": ToolPolicy(ToolOpType.META, parallel_safe=False, cost="low", log_level="minimal"),
+}
+
+
+def get_tool_policy(tool_name: str) -> ToolPolicy:
+    """Policy für ein Tool. Default: READ, nicht parallel, low cost."""
+    return _TOOL_POLICIES.get(tool_name, ToolPolicy())
+
+
+# ── #529: Memory Budget Rules ────────────────────────────────────────────────
+
+# Memory-Budget pro Turn: wie viele Zeichen Memory-Snippets maximal beitragen dürfen
+MEMORY_BUDGET_NORMAL = 6000   # Standard-Turns: 6k chars Memory
+MEMORY_BUDGET_FULL = 12000    # Full-Context-Turns: 12k chars
+MEMORY_BUDGET_COMPACT = 2000  # Nach Compaction: nur 2k chars
+
+
+def get_memory_budget(mode: str = "normal", post_compact: bool = False) -> int:
+    """Memory-Budget in Zeichen für den aktuellen Turn."""
+    if post_compact:
+        return MEMORY_BUDGET_COMPACT
+    if mode == "full":
+        return MEMORY_BUDGET_FULL
+    return MEMORY_BUDGET_NORMAL
+
+
 def get_tool_op_type(tool_name: str) -> ToolOpType:
     """Gibt den ToolOpType für einen Tool-Namen zurück. Default: READ."""
     return _TOOL_OP_TYPES.get(tool_name, ToolOpType.READ)
