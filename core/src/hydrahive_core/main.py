@@ -1933,6 +1933,49 @@ def delete_proactive_task(task_id: str, _a=Depends(require_admin)):
     return {"ok": True}
 
 
+# ── Wiki (BookStack) Config API ───────────────────────────────────────────────
+
+_WIKI_CONFIG_PATH = settings.etc_dir / "bookstack.json"
+
+
+@admin_router.get("/admin/wiki/config")
+def get_wiki_config(_a=Depends(require_admin)):
+    """BookStack Wiki Konfiguration lesen."""
+    try:
+        import json as _j
+        data = _j.loads(_WIKI_CONFIG_PATH.read_text(encoding="utf-8"))
+        # Secret nicht exponieren
+        if data.get("token_secret"):
+            data["token_secret"] = "••••••••"
+        return data
+    except (OSError, ValueError):
+        return {"base_url": "", "token_id": "", "token_secret": ""}
+
+
+@admin_router.put("/admin/wiki/config")
+def set_wiki_config(body: dict, _a=Depends(require_admin)):
+    """BookStack Wiki Konfiguration speichern."""
+    import json as _j
+    # Bestehende Config laden (um Secret zu behalten wenn nicht neu gesetzt)
+    existing = {}
+    try:
+        existing = _j.loads(_WIKI_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+
+    config = {
+        "base_url": body.get("base_url", existing.get("base_url", "")),
+        "token_id": body.get("token_id", existing.get("token_id", "")),
+        "token_secret": body.get("token_secret", existing.get("token_secret", "")),
+    }
+    try:
+        _WIKI_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _WIKI_CONFIG_PATH.write_text(_j.dumps(config, indent=2), encoding="utf-8")
+        return {"ok": True}
+    except OSError as e:
+        raise HTTPException(500, f"Config speichern fehlgeschlagen: {e}")
+
+
 @admin_router.get("/admin/agents/live")
 def get_agents_live(_a=Depends(require_admin)):
     """
