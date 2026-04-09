@@ -328,6 +328,16 @@ async def execute_tool_call(
     except Exception as _cls_err:
         logger.debug("Permission classifier error: %s", _cls_err)
 
+    # #523: Turn Journal — TOOL_USE Event
+    try:
+        from .turn_journal import journal as _tj, EventType as _JE
+        from .session_manager import SessionManager
+        _active_session = orch._sessions.get_active(project_id) if hasattr(orch, "_sessions") else None
+        _session_id = _active_session.id if _active_session else ""
+        _tj.append(_session_id, project_id, _JE.TOOL_USE, {"tool": tool_name}, tool_name=tool_name)
+    except Exception:
+        pass
+
     try:
         result = await orch._execute_tool(
             tool,
@@ -337,6 +347,11 @@ async def execute_tool_call(
             tool_input=tool_input,
             execution_mode=execution_mode,
         )
+        # #523: Turn Journal — TOOL_RESULT Event
+        try:
+            _tj.append(_session_id, project_id, _JE.TOOL_RESULT, {"tool": tool_name, "success": True}, tool_name=tool_name)
+        except Exception:
+            pass
         # #465: Erfolg → Denial-Counter resetten
         _record_success(boss_cfg.id, tool_name)
         # Cache befüllen

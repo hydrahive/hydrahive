@@ -780,6 +780,12 @@ class Orchestrator:
                     _pid = _current_project_id.get(None) if hasattr(_current_project_id, 'get') else None
                     if _pid:
                         _metrics.record_failover(_pid)
+                        # #523: Turn Journal — Failover Event
+                        try:
+                            from .turn_journal import journal as _tj, EventType as _JE
+                            _tj.append("", _pid, _JE.FAILOVER, {"from": m, "to": models[i+1]})
+                        except Exception:
+                            pass
                     logger.warning("LLM-Failover: '%s' → '%s' (%s)", m, models[i+1], str(e)[:80])
                     continue
                 raise

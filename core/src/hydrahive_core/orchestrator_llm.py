@@ -284,6 +284,12 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float
                 if _pid:
                     from .session_metrics import metrics as _m
                     _m.record_retry(_pid)
+                    # #523: Turn Journal — Retry Event
+                    try:
+                        from .turn_journal import journal as _tj, EventType as _JE
+                        _tj.append("", _pid, _JE.RETRY, {"attempt": attempt + 1, "reason": "rate_limit"})
+                    except Exception:
+                        pass
                 logger.warning(
                     "Rate-Limit (Versuch %d/%d): %s — retry in %.1fs",
                     attempt + 1, max_attempts, str(e)[:80], delay,

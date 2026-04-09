@@ -445,7 +445,12 @@ async def _stream_codex(
             await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id, tool_name=tc.function.name)
             # Klassifizierung: parallel_safe oder sequential
             tool_obj = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
-            if tool_obj and getattr(tool_obj, "parallel_safe", False):
+            # #528: Tool Policy als Fallback für parallel_safe
+            _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+            if _is_parallel is None and tool_obj:
+                from .context_lifecycle import get_tool_policy
+                _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+            if _is_parallel:
                 parallel_tcs.append(tc)
             else:
                 sequential_tcs.append(tc)
@@ -709,7 +714,12 @@ async def _stream_anthropic_oauth(
                 _oauth_request_tools.append(block)
             else:
                 tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
-                if tool_obj and getattr(tool_obj, "parallel_safe", False):
+                # #528: Tool Policy als Fallback für parallel_safe
+                _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+                if _is_parallel is None and tool_obj:
+                    from .context_lifecycle import get_tool_policy
+                    _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+                if _is_parallel:
                     _oauth_parallel.append(block)
                 else:
                     _oauth_sequential.append(block)
@@ -975,7 +985,12 @@ async def _stream_litellm(
             yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': tool_input, 'tool_detail': _tc_detail})}\n\n"
             await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id, tool_name=tc["name"])
             tool_obj = orch._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
-            if tool_obj and getattr(tool_obj, "parallel_safe", False):
+            # #528: Tool Policy als Fallback für parallel_safe
+            _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+            if _is_parallel is None and tool_obj:
+                from .context_lifecycle import get_tool_policy
+                _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+            if _is_parallel:
                 _lm_parallel.append(tc)
             else:
                 _lm_sequential.append(tc)

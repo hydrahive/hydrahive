@@ -260,6 +260,7 @@ export function AdminLayout() {
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
     { to: "/prompt-guide",   icon: Lightbulb,       label: t("nav.promptGuide"),     hint: t("navHint.promptGuide", { defaultValue: "KI-Tipps für bessere Prompts" }) },
     { to: "/playground",     icon: Code,            label: "API Playground",         hint: "API-Endpoints testen und erkunden", adminOnly: true },
+    { to: "/proactive",      icon: Bot,             label: "Proactive Tasks",        hint: "Agenten arbeiten autonom im Hintergrund", adminOnly: true },
   ];
 
   const nav = allNavItems.filter((item) => {

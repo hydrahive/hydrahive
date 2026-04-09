@@ -227,6 +227,9 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             parts.append(soul_path.read_text(encoding="utf-8").strip())
 
     # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
+    # #529: Memory Budget aus context_lifecycle
+    from .context_lifecycle import get_memory_budget
+    _mem_budget = get_memory_budget(mode)
     if boss_cfg.agent_dir:
         mem_parts = []
         memory_dir = boss_cfg.agent_dir / "memory"
@@ -247,8 +250,8 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if memory_dir.exists():
             learning_snippet = build_learning_prompt_snippet(
                 boss_cfg.agent_dir,
-                **({"max_entries": 8, "max_chars": 3000} if mode == "full"
-                   else {"max_entries": 3, "max_chars": 1500}),  # #529: Budget via get_memory_budget()
+                **({"max_entries": 8, "max_chars": _mem_budget} if mode == "full"
+                   else {"max_entries": 3, "max_chars": min(_mem_budget, 1500)}),
             )
             if learning_snippet:
                 mem_parts.append(learning_snippet)
@@ -1099,6 +1102,13 @@ async def _compact_if_needed(
 
         await sessions.compact(project_id, summary, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
         _metrics.record_compaction(project_id, stage=1)
+        # #523: Turn Journal — Compaction Event
+        try:
+            from .turn_journal import journal as _tj, EventType as _JE
+            _sid = getattr(sessions.get_active(project_id), "id", "") if sessions.get_active(project_id) else ""
+            _tj.append(_sid, project_id, _JE.COMPACTION, {"stage": 1, "tokens_after": sessions.estimated_tokens(project_id)})
+        except Exception:
+            pass
         logger.info(
             "Context kompaktiert Stufe-1 (Projekt: %s, ~%d Tokens nach Kompaktierung, %d Rounds behalten)",
             project_id, sessions.estimated_tokens(project_id), keep_last_rounds,
