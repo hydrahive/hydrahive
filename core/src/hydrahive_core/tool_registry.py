@@ -668,6 +668,10 @@ class WebSearchTool(BaseTool):
     @property
     def id(self) -> str:   return "web_search"
     @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
     def name(self) -> str: return "Web-Suche (SearXNG)"
     @property
     def description(self) -> str:
@@ -1969,6 +1973,19 @@ class WriteSystemFileTool(BaseTool):
                 p = settings.opt_dir / path
             else:
                 p = settings.opt_dir / path
+
+        # #428: Read-Before-Edit — bestehende Dateien müssen vorher gelesen worden sein
+        if p.exists() and mode == "overwrite":
+            read_files = FileWriteTool._read_state.get(agent_id, set())
+            if str(p.resolve()) not in read_files:
+                return {
+                    "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit read_system_file gelesen. "
+                             "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
+                             "dann erst überschreiben.",
+                    "path": str(p),
+                    "hint": "read_system_file zuerst aufrufen",
+                }
+
         logger.info("write_system_file [%s]: %s (%s, %d bytes)", agent_id, p, mode, len(content))
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -1995,6 +2012,10 @@ class ReadMemoryTool(BaseTool):
 
     @property
     def id(self) -> str:   return "read_memory"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
     @property
     def name(self) -> str: return "Gedächtnis lesen"
     @property
@@ -3427,6 +3448,18 @@ class FilePatchTool(BaseTool):
         if not file_path.exists():
             return {"error": f"Datei nicht gefunden: {path}"}
 
+        # #428: Read-Before-Edit — Datei muss vorher gelesen worden sein
+        resolved = str(file_path.resolve())
+        read_files = FileWriteTool._read_state.get(agent_id, set())
+        if resolved not in read_files:
+            return {
+                "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit file_read gelesen. "
+                         "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
+                         "dann erst patchen.",
+                "path": resolved,
+                "hint": "file_read zuerst aufrufen",
+            }
+
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
         except Exception as e:
@@ -4546,6 +4579,10 @@ class ServerFileReadTool(BaseTool):
     @property
     def id(self) -> str: return "server_file_read"
     @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
     def name(self) -> str: return "Remote-Server Datei lesen"
     @property
     def description(self) -> str:
@@ -5618,6 +5655,10 @@ class AnalyzeImageTool(BaseTool):
 
     @property
     def id(self) -> str:   return "analyze_image"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
     @property
     def name(self) -> str: return "Bild analysieren"
     @property

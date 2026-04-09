@@ -398,8 +398,14 @@ async def _stream_codex(
             for tc in msg.tool_calls
         ]
         cur_messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": asst_tc})
+
+        # Phase 1: SSE-Events senden + Tools in parallel/sequential splitten (#418)
+        _parsed_args: dict[str, dict] = {}
+        parallel_tcs = []
+        sequential_tcs = []
         for tc in msg.tool_calls:
             _tc_args = _json.loads(tc.function.arguments or "{}")
+            _parsed_args[tc.id] = _tc_args
             _tc_detail = format_tool_detail(tc.function.name, _tc_args)
             yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
             # #486: Destructive Command Warning
@@ -408,11 +414,42 @@ async def _stream_codex(
                 _dw = get_destructive_warning(_tc_args.get("command", ""))
                 if _dw:
                     yield f"data: {_json.dumps({'tool_warning': _dw, 'tool_name': tc.function.name})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id)
-            # Tool ausführen mit SSE-Keepalive (verhindert Timeout bei langen Befehlen)
+            await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id, tool_name=tc.function.name)
+            # Klassifizierung: parallel_safe oder sequential
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
+            if tool_obj and getattr(tool_obj, "parallel_safe", False):
+                parallel_tcs.append(tc)
+            else:
+                sequential_tcs.append(tc)
+
+        # Phase 2: Parallel-safe Tools gleichzeitig ausführen (#418)
+        _tool_results: dict[str, Any] = {}  # tc.id → (result, tc)
+        if parallel_tcs:
+            _par_tasks = [
+                _asyncio.create_task(execute_tool_call(
+                    orch, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
+                    execution_mode=execution_mode, user_text=content,
+                ))
+                for tc in parallel_tcs
+            ]
+            # Keepalive während parallel Tools laufen
+            while not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not all(t.done() for t in _par_tasks):
+                    yield ": keepalive\n\n"
+            for tc, task in zip(parallel_tcs, _par_tasks):
+                result, _ = task.result()
+                _tool_results[tc.id] = (result, tc)
+            if len(parallel_tcs) > 1:
+                logger.info("Streaming parallel: %d Tools (%s)",
+                            len(parallel_tcs), ", ".join(tc.function.name for tc in parallel_tcs))
+
+        # Phase 3: Sequentielle Tools nacheinander
+        for tc in sequential_tcs:
             _tool_task = _asyncio.create_task(execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
-                tool_name=tc.function.name, tool_input=_tc_args,
+                tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                 execution_mode=execution_mode, user_text=content,
             ))
             while not _tool_task.done():
@@ -420,6 +457,11 @@ async def _stream_codex(
                 if not _tool_task.done():
                     yield ": keepalive\n\n"
             result, _ = _tool_task.result()
+            _tool_results[tc.id] = (result, tc)
+
+        # Phase 4: Ergebnisse verarbeiten (in Original-Reihenfolge)
+        for tc in msg.tool_calls:
+            result, _ = _tool_results[tc.id]
             # #489: Session Memory — Tool-Call zählen, bei Schwelle Facts extrahieren
             try:
                 from .session_memory import record_tool_call, mark_extracted, extract_session_facts
@@ -619,53 +661,99 @@ async def _stream_anthropic_oauth(
 
         tool_results = []
         any_tool_error = False
+
+        # Phase 1: SSE-Events senden + Tools klassifizieren (#418)
+        _oauth_parallel = []
+        _oauth_sequential = []
+        _oauth_request_tools = []
         for block in tool_use_blocks:
             _tc_input = block.input or {}
             _tc_detail = format_tool_detail(block.name, _tc_input)
             yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id)
-            # request_tools: Kategorien nachladen und kwargs["tools"] aktualisieren
+            await orch._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id, tool_name=block.name)
             if block.name == "request_tools":
-                try:
-                    categories = (_tc_input).get("categories", [])
-                    # OAuth braucht Anthropic-Format für kwargs["tools"]
-                    _rt_litellm_tools = []  # Dummy für handle_request_tools
-                    _, result = handle_request_tools(
-                        orch, boss_cfg, execution_mode, categories,
-                        _oauth_loaded_cats, _rt_litellm_tools,
-                    )
-                    # Schemas in Anthropic-Format in kwargs["tools"] einfügen
-                    existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
-                    new_tool_defs = [
-                        {
-                            "name": s["function"]["name"],
-                            "description": s["function"].get("description", ""),
-                            "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
-                        }
-                        for s in _rt_litellm_tools
-                        if s["function"]["name"] not in existing_names
-                    ]
-                    if new_tool_defs:
-                        kwargs.setdefault("tools", [])
-                        kwargs["tools"].extend(new_tool_defs)
-                except Exception as te:
-                    result = {"error": f"request_tools: {te}"}
+                _oauth_request_tools.append(block)
             else:
-                # Tool ausführen mit SSE-Keepalive
-                _tool_task_oauth = _asyncio.create_task(execute_tool_call(
+                tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
+                if tool_obj and getattr(tool_obj, "parallel_safe", False):
+                    _oauth_parallel.append(block)
+                else:
+                    _oauth_sequential.append(block)
+
+        # request_tools zuerst (damit neue Tool-Schemas für nachfolgende Calls verfügbar sind)
+        _oauth_block_results: dict[str, Any] = {}  # block.id → (result, is_error)
+        for block in _oauth_request_tools:
+            _tc_input = block.input or {}
+            try:
+                categories = _tc_input.get("categories", [])
+                _rt_litellm_tools = []
+                _, result = handle_request_tools(
+                    orch, boss_cfg, execution_mode, categories,
+                    _oauth_loaded_cats, _rt_litellm_tools,
+                )
+                existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
+                new_tool_defs = [
+                    {
+                        "name": s["function"]["name"],
+                        "description": s["function"].get("description", ""),
+                        "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
+                    }
+                    for s in _rt_litellm_tools
+                    if s["function"]["name"] not in existing_names
+                ]
+                if new_tool_defs:
+                    kwargs.setdefault("tools", [])
+                    kwargs["tools"].extend(new_tool_defs)
+            except Exception as te:
+                result = {"error": f"request_tools: {te}"}
+            _oauth_block_results[block.id] = (result, False)
+
+        # Phase 2: Parallel-safe Tools gleichzeitig (#418)
+        if _oauth_parallel:
+            _par_tasks = [
+                _asyncio.create_task(execute_tool_call(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
-                    tool_name=block.name, tool_input=_tc_input,
+                    tool_name=b.name, tool_input=b.input or {},
                     execution_mode=execution_mode, user_text=content,
                     file_read_cache=_oauth_file_read_cache,
                 ))
-                while not _tool_task_oauth.done():
-                    await _asyncio.sleep(_KEEPALIVE_INTERVAL)
-                    if not _tool_task_oauth.done():
-                        yield ": keepalive\n\n"
-                result, is_error = _tool_task_oauth.result()
+                for b in _oauth_parallel
+            ]
+            while not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not all(t.done() for t in _par_tasks):
+                    yield ": keepalive\n\n"
+            for block, task in zip(_oauth_parallel, _par_tasks):
+                result, is_error = task.result()
                 if is_error:
                     any_tool_error = True
-                # #414: Bild-Event senden
+                _oauth_block_results[block.id] = (result, is_error)
+            if len(_oauth_parallel) > 1:
+                logger.info("Streaming parallel (OAuth): %d Tools (%s)",
+                            len(_oauth_parallel), ", ".join(b.name for b in _oauth_parallel))
+
+        # Phase 3: Sequentielle Tools nacheinander
+        for block in _oauth_sequential:
+            _tc_input = block.input or {}
+            _tool_task_oauth = _asyncio.create_task(execute_tool_call(
+                orch, boss_cfg=boss_cfg, project_id=project_id,
+                tool_name=block.name, tool_input=_tc_input,
+                execution_mode=execution_mode, user_text=content,
+                file_read_cache=_oauth_file_read_cache,
+            ))
+            while not _tool_task_oauth.done():
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not _tool_task_oauth.done():
+                    yield ": keepalive\n\n"
+            result, is_error = _tool_task_oauth.result()
+            if is_error:
+                any_tool_error = True
+            _oauth_block_results[block.id] = (result, is_error)
+
+        # Phase 4: Ergebnisse in Original-Reihenfolge sammeln
+        for block in tool_use_blocks:
+            result, _is_err = _oauth_block_results[block.id]
+            if block.name != "request_tools":
                 _img_evt = _extract_tool_image(result, block.name)
                 if _img_evt:
                     yield f"data: {_img_evt}\n\n"
@@ -836,16 +924,49 @@ async def _stream_litellm(
             loop_messages.append({"role": "assistant", "content": round_text})
             await orch._sessions.append(project_id, MessageRole.ASSISTANT, round_text, agent_id=boss_id)
 
-        tool_results_text = []
+        # Phase 1: SSE-Events senden + Tools klassifizieren (#418)
+        _lm_parsed: dict[str, dict] = {}
+        _lm_parallel = []
+        _lm_sequential = []
         for tc in tc_list:
             tool_input = _json.loads(_safe_args(tc["arguments"]))
+            _lm_parsed[tc["id"]] = tool_input
             _tc_detail = format_tool_detail(tc["name"], tool_input)
             yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': tool_input, 'tool_detail': _tc_detail})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id)
-            # Tool ausführen mit SSE-Keepalive
+            await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id, tool_name=tc["name"])
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
+            if tool_obj and getattr(tool_obj, "parallel_safe", False):
+                _lm_parallel.append(tc)
+            else:
+                _lm_sequential.append(tc)
+
+        # Phase 2: Parallel-safe Tools gleichzeitig (#418)
+        _lm_results: dict[str, Any] = {}  # tc["id"] → result
+        if _lm_parallel:
+            _par_tasks = [
+                _asyncio.create_task(execute_tool_call(
+                    orch, boss_cfg=boss_cfg, project_id=project_id,
+                    tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
+                    execution_mode=execution_mode,
+                ))
+                for tc in _lm_parallel
+            ]
+            while not all(t.done() for t in _par_tasks):
+                await _asyncio.sleep(_KEEPALIVE_INTERVAL)
+                if not all(t.done() for t in _par_tasks):
+                    yield ": keepalive\n\n"
+            for tc, task in zip(_lm_parallel, _par_tasks):
+                result, _ = task.result()
+                _lm_results[tc["id"]] = result
+            if len(_lm_parallel) > 1:
+                logger.info("Streaming parallel (litellm): %d Tools (%s)",
+                            len(_lm_parallel), ", ".join(tc["name"] for tc in _lm_parallel))
+
+        # Phase 3: Sequentielle Tools nacheinander
+        for tc in _lm_sequential:
             _tool_task_lm = _asyncio.create_task(execute_tool_call(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
-                tool_name=tc["name"], tool_input=tool_input,
+                tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                 execution_mode=execution_mode,
             ))
             while not _tool_task_lm.done():
@@ -853,7 +974,12 @@ async def _stream_litellm(
                 if not _tool_task_lm.done():
                     yield ": keepalive\n\n"
             result, _ = _tool_task_lm.result()
-            # #414: Bild-Event senden
+            _lm_results[tc["id"]] = result
+
+        # Phase 4: Ergebnisse in Original-Reihenfolge
+        tool_results_text = []
+        for tc in tc_list:
+            result = _lm_results[tc["id"]]
             _img_evt = _extract_tool_image(result, tc["name"])
             if _img_evt:
                 yield f"data: {_img_evt}\n\n"

@@ -66,6 +66,10 @@ class SessionMetricsData:
     retries:              int = 0
     failovers:            int = 0
 
+    # #516: Tool-Result-Budgeting
+    tool_results_budgeted: int = 0      # Wie oft wurde ein Result gekürzt
+    tool_results_bytes_saved: int = 0   # Eingespartes Volumen in Zeichen
+
     def cache_hit_rate(self) -> float:
         """Cache-Hit-Rate über alle Calls."""
         total_input = self.total_input_tokens
@@ -100,6 +104,8 @@ class SessionMetricsData:
             "max_rounds_hits":    self.max_rounds_hits,
             "retries":            self.retries,
             "failovers":          self.failovers,
+            "tool_results_budgeted": self.tool_results_budgeted,
+            "tool_results_bytes_saved": self.tool_results_bytes_saved,
             "avg_latency_ms":     round(self.avg_latency_ms(), 1),
             "last_calls":         [
                 {
@@ -214,6 +220,12 @@ class SessionMetrics:
     def record_failover(self, project_id: str) -> None:
         d = self._get(project_id)
         d.failovers += 1
+
+    def record_tool_budget(self, project_id: str, original_len: int, budgeted_len: int) -> None:
+        """#516: Tool-Result wurde durch Budgeting gekürzt."""
+        d = self._get(project_id)
+        d.tool_results_budgeted += 1
+        d.tool_results_bytes_saved += (original_len - budgeted_len)
 
     # ── Snapshots ───────────────────────────────────────────────────
 

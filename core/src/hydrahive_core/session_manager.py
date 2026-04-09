@@ -192,34 +192,49 @@ class Session:
                     break
                 window.pop(0)  # älteste Nachricht entfernen
 
-        # Tool-Results prunen: letzte N vollständig, ältere micro-compacted (#416)
-        # #468: Time-Based Micro-Compaction — Tool-Results >30min aggressiver kürzen
-        _TIME_DECAY_MINUTES = 30
-        cutoff = max(0, len(window) - prune_tool_results)
+        # #516: Tool-Result-Budgeting mit Tool-Typ-Bewusstsein
+        # Verschiedene Budgets je nach Tool-Typ (mutation/read/search/meta)
+        from .context_lifecycle import budget_tool_result
         now = datetime.now(timezone.utc)
+
+        def _extract_tool_name(msg: Message) -> str:
+            """Tool-Name aus metadata oder Content-Prefix extrahieren."""
+            tn = msg.metadata.get("tool_name", "")
+            if tn:
+                return tn
+            # Fallback: TOOL-Messages haben Format "tool_name|detail"
+            if "|" in msg.content[:80]:
+                return msg.content.split("|", 1)[0].strip()
+            return ""
+
+        # Position-from-end pro Tool-Typ berechnen (neueste zuerst zählen)
+        _tool_type_counters: dict[str, int] = {}
+        _tool_positions: list[int] = []
+        for i in range(len(window) - 1, -1, -1):
+            m = window[i]
+            if m.role == MessageRole.TOOL:
+                tn = _extract_tool_name(m)
+                pos = _tool_type_counters.get(tn, 0)
+                _tool_type_counters[tn] = pos + 1
+                _tool_positions.insert(0, pos)
+            else:
+                _tool_positions.insert(0, -1)
+
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
-                # Alter der Message berechnen
+                tool_name = _extract_tool_name(m)
                 try:
                     msg_time = datetime.fromisoformat(m.timestamp)
                     age_minutes = (now - msg_time).total_seconds() / 60
                 except (ValueError, TypeError):
                     age_minutes = 0
 
-                if i < cutoff and len(m.content) > 100:
-                    # Positions-basierte Micro-Compaction: ältere Tool-Results → 100 Chars Preview
-                    preview = m.content[:100] + f"\n…[{len(m.content)} Zeichen, micro-compacted]"
-                    result.append({"role": m.role.value, "content": preview})
-                elif age_minutes > _TIME_DECAY_MINUTES and len(m.content) > 200:
-                    # #468: Zeit-basierte Decay — >30min alte Tool-Results → 200 Chars
-                    preview = m.content[:200] + f"\n…[{len(m.content)} Zeichen, {int(age_minutes)}min alt — time-decayed]"
-                    result.append({"role": m.role.value, "content": preview})
-                elif len(m.content) > max_tool_result_chars:
-                    truncated = m.content[:max_tool_result_chars] + f"\n…[gekürzt, {len(m.content)} Zeichen total]"
-                    result.append({"role": m.role.value, "content": truncated})
-                else:
-                    result.append(m.as_llm_message())
+                pos_from_end = _tool_positions[i] if i < len(_tool_positions) else 0
+                budgeted = budget_tool_result(
+                    m.content, tool_name, pos_from_end, age_minutes,
+                )
+                result.append({"role": m.role.value, "content": budgeted})
             else:
                 result.append(m.as_llm_message())
 
