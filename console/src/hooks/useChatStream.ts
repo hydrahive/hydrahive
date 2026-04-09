@@ -157,9 +157,29 @@ export function useChatStream(opts: UseChatStreamOptions) {
   }, [opts.historyEndpoint]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
+  // Beim Streaming: scrollTop direkt (kein smooth → kein Gezucke)
+  // Nach Streaming / bei neuer Nachricht: smooth
+
+  const wasStreaming = useRef(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = bottomRef.current;
+    if (!el) return;
+    const container = el.parentElement;
+    if (!container) return;
+
+    if (sending) {
+      // Während Streaming: sofort ans Ende, keine Animation
+      container.scrollTop = container.scrollHeight;
+      wasStreaming.current = true;
+    } else if (wasStreaming.current) {
+      // Streaming gerade beendet: einmal smooth ans Ende
+      wasStreaming.current = false;
+      el.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // Normaler Fall (History geladen, neue Nachricht etc.): smooth
+      el.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
