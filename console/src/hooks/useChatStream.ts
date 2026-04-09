@@ -156,19 +156,10 @@ export function useChatStream(opts: UseChatStreamOptions) {
       .finally(() => setHistoryLoading(false));
   }, [opts.historyEndpoint]);
 
-  // ── Auto-scroll — immer zur letzten Nachricht, ohne smooth-Gezucke ──
+  // ── Auto-scroll ───────────────────────────────────────────────────────────
 
   useEffect(() => {
-    // requestAnimationFrame damit der DOM-Update fertig ist bevor wir scrollen
-    requestAnimationFrame(() => {
-      const el = bottomRef.current;
-      if (!el) return;
-      // Beim Streaming: direkt per scrollTop (kein smooth das von oben nach unten fährt)
-      const container = el.parentElement;
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
-    });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
