@@ -37,6 +37,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import i18n from "@/lib/i18n";
+import { TourProvider, TourLauncher } from "@/components/tours/TourProvider";
 
 // ANSI-Farbcodes aus Log-Zeilen entfernen
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
@@ -339,22 +340,35 @@ export function AdminLayout() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {nav.map(({ to, icon: Icon, label, hint }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={hint}
-            className={({ isActive }) => cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-              isActive
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <Icon className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{label}</span>
-          </NavLink>
-        ))}
+        {nav.map(({ to, icon: Icon, label, hint }) => {
+          // #532: data-tour Attribute für Guided Tours
+          const tourId = to === "/my-agent" ? "nav-myagent"
+            : to === "/projects" ? "nav-projects"
+            : to === "/settings" ? "nav-settings"
+            : to === "/hub" ? "nav-extensions"
+            : undefined;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              title={hint}
+              data-tour={tourId}
+              className={({ isActive }) => cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{label}</span>
+            </NavLink>
+          );
+        })}
+        {/* #532: Guided Tour Launcher */}
+        <div className="px-3 py-2">
+          <TourLauncher />
+        </div>
       </nav>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
@@ -437,6 +451,7 @@ export function AdminLayout() {
   }, [logLines]);
 
   return (
+    <TourProvider>
     <div className="app-shell lg:grid lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
       {/* Update Live-Log Modal */}
       {showLog && (
@@ -613,5 +628,6 @@ export function AdminLayout() {
       <SupportWidget />
       <FloatingCompanion />
     </div>
+    </TourProvider>
   );
 }
