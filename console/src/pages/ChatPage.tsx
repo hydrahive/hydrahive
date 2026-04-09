@@ -213,12 +213,14 @@ export function ChatPage() {
       {/* Chat + Sidebar */}
       {!chat.showHistory && !chat.viewSession && (
         <div className="flex-1 grid min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="flex flex-col min-h-0 overflow-hidden">
           <ChatView
             {...chat}
             t={t}
             showWorkers={showSwarm}
             slashCommands={SLASH_COMMANDS}
           />
+          </div>
           <aside className="hidden lg:block border-l bg-muted/10 p-4 overflow-y-auto">
             <div className="space-y-4">
               {/* Live Panel */}
