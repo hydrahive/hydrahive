@@ -133,6 +133,45 @@ def register_project_routes(
             for agent_id in cfg.all_agents
         }
 
+    @auth_router.get("/projects/{project_id}/monitor")
+    def project_monitor(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        """EKG Monitor — gebündelte Live-Daten für alle Agenten eines Projekts (#534)."""
+        _check_project_access(auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        running = runtime.status_all()
+
+        # Session-Metriken laden
+        from .session_metrics import metrics as _metrics
+        session_snap = _metrics.snapshot(project_id)
+
+        agents_data = {}
+        for agent_id in cfg.all_agents:
+            agent_cfg = discovery.get(agent_id)
+            rt = running.get(agent_id, {})
+            agents_data[agent_id] = {
+                "role": "boss" if agent_id == cfg.agents.boss else "worker",
+                "identity": getattr(agent_cfg, "identity", agent_id) if agent_cfg else agent_id,
+                "model": getattr(getattr(agent_cfg, "llm", None), "model", None) if agent_cfg else None,
+                "type": agent_cfg.type if agent_cfg else "unknown",
+                "tools": [t if isinstance(t, str) else getattr(t, "name", str(t)) for t in (agent_cfg.tools if agent_cfg else [])],
+                "status": rt.get("status", "unknown"),
+                "current_activity": rt.get("current_activity"),
+                "total_requests": rt.get("total_requests", 0),
+                "avg_response_ms": rt.get("avg_response_ms", 0),
+                "last_response_ms": rt.get("last_response_ms", 0),
+                "error_rate": rt.get("error_rate", 0),
+            }
+
+        return {
+            "project_id": project_id,
+            "project_name": getattr(getattr(cfg, "identity", None), "name", project_id) if hasattr(cfg, "identity") else project_id,
+            "agents": agents_data,
+            "metrics": session_snap,
+        }
+
     @admin_router.put("/projects/{project_id}")
     async def update_project(project_id: str, req: UpdateProjectRequest):
         import yaml as _yaml

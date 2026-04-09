@@ -301,7 +301,7 @@ export function ChatPage() {
         </aside>
       )}
       {/* EKG Monitor Overlay */}
-      {showMonitor && <EkgMonitor onClose={() => setShowMonitor(false)} />}
+      {showMonitor && id && <EkgMonitor projectId={id} onClose={() => setShowMonitor(false)} />}
     </section>
   );
 }
