@@ -321,9 +321,9 @@ export function TourLauncher() {
   return (
     <div className="relative">
       <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs hover:bg-muted transition-colors">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span>Geführte Tour</span>
+        className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-white/10">
+        <Sparkles className="w-3.5 h-3.5" />
+        <span>Tour</span>
         {availableTours.length > 0 && (
           <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground font-medium">
             {availableTours.length}
