@@ -55,14 +55,44 @@ export function mkMsg(role: ChatMessage["role"], content: string, workers?: stri
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
+// ── Session-Storage Message-Cache (#chat-persist) ───────────────────────────
+// Messages überleben Navigation (Route-Wechsel), nicht aber Tab-Close.
+function _cacheKey(endpoint: string): string {
+  return `hh_chat_${endpoint}`;
+}
+function _loadCachedMessages(endpoint: string): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(_cacheKey(endpoint));
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+function _saveCachedMessages(endpoint: string, msgs: ChatMessage[]) {
+  try {
+    // Nur letzte 100 Messages cachen um sessionStorage nicht zu sprengen
+    const slice = msgs.slice(-100);
+    sessionStorage.setItem(_cacheKey(endpoint), JSON.stringify(slice));
+  } catch { /* ignore quota errors */ }
+}
+
 export function useChatStream(opts: UseChatStreamOptions) {
   const { t } = useTranslation();
 
-  // Message state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Message state — initial aus sessionStorage laden für sofortige Anzeige
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    _loadCachedMessages(opts.historyEndpoint)
+  );
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // Messages im sessionStorage cachen wenn sie sich ändern
+  useEffect(() => {
+    if (messages.length > 0) {
+      _saveCachedMessages(opts.historyEndpoint, messages);
+    }
+  }, [messages, opts.historyEndpoint]);
 
   // UI state
   const [showEmoji, setShowEmoji] = useState(false);
@@ -101,7 +131,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
   // ── Load History ──────────────────────────────────────────────────────────
 
   const loadHistory = useCallback(() => {
-    if (!opts.historyEndpoint) return;
+    if (!opts.historyEndpoint) { setHistoryLoading(false); return; }
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         const loaded = d.messages
@@ -119,9 +149,11 @@ export function useChatStream(opts: UseChatStreamOptions) {
             }
             return msg;
           });
-        if (loaded.length > 0) setMessages(loaded);
+        // Immer setzen — auch leere Liste, damit kein stale State bleibt
+        setMessages(prev => loaded.length > 0 ? loaded : prev);
       })
-      .catch(() => {});
+      .catch((err) => { console.warn("loadHistory failed:", err); })
+      .finally(() => setHistoryLoading(false));
   }, [opts.historyEndpoint]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
@@ -331,5 +363,6 @@ export function useChatStream(opts: UseChatStreamOptions) {
     // Actions
     send, abort, loadHistory,
     handleImageUpload,
+    historyLoading,
   };
 }

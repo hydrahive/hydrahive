@@ -66,6 +66,8 @@ export interface ChatViewProps {
   headerSlot?: React.ReactNode;
   /** Custom CSS class for the outer wrapper */
   className?: string;
+  /** True while history is being loaded from API */
+  historyLoading?: boolean;
   // Translations
   t: (key: string, opts?: Record<string, string>) => string;
   // Slash commands for suggestion dropdown
@@ -85,6 +87,7 @@ export function ChatView(props: ChatViewProps) {
     send, abort, handleImageUpload,
     showWorkers, viewSession,
     showOAuthBar = true, headerSlot, className,
+    historyLoading = false,
     t,
     slashCommands = [],
   } = props;
@@ -107,10 +110,16 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
-        {displayMessages.length === 0 && (
+        {displayMessages.length === 0 && !historyLoading && (
           <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
             <Bot className="h-10 w-10" />
             <p className="text-sm">{t("chat.emptyChat", { defaultValue: "Starte eine Konversation..." })}</p>
+          </div>
+        )}
+        {displayMessages.length === 0 && historyLoading && (
+          <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
+            <Bot className="h-10 w-10 animate-pulse" />
+            <p className="text-sm">{t("chat.loading", { defaultValue: "Lade Nachrichten..." })}</p>
           </div>
         )}
         {displayMessages.map((msg) => {
