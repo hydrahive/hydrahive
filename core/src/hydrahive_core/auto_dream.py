@@ -30,8 +30,8 @@ _LOCK_FILENAME = ".dream_lock"
 
 DEFAULT_CONFIG = {
     "enabled": True,
-    "min_hours": 24,
-    "min_sessions": 3,
+    "min_hours": 12,
+    "min_sessions": 1,
     "check_interval_seconds": 600,  # alle 10 Min prüfen
     "max_transcript_chars": 60000,
     "summary_model": "claude-haiku-4-5-20251001",
