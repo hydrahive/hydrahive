@@ -55,10 +55,21 @@ export function mkMsg(role: ChatMessage["role"], content: string, workers?: stri
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
+// ── Session-Cache: Messages überleben Route-Wechsel ─────────────────────────
+function _cacheKey(ep: string) { return `hh_chat_${ep}`; }
+function _readCache(ep: string): ChatMessage[] {
+  try { const r = sessionStorage.getItem(_cacheKey(ep)); return r ? JSON.parse(r) : []; }
+  catch { return []; }
+}
+function _writeCache(ep: string, msgs: ChatMessage[]) {
+  try { sessionStorage.setItem(_cacheKey(ep), JSON.stringify(msgs.slice(-100))); }
+  catch { /* quota */ }
+}
+
 export function useChatStream(opts: UseChatStreamOptions) {
   const { t } = useTranslation();
 
-  // Message state
+  // Message state — startet leer, Cache wird in loadHistory synchron geladen
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -103,6 +114,15 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   const loadHistory = useCallback(() => {
     if (!opts.historyEndpoint) { setHistoryLoading(false); return; }
+
+    // Sofort aus Cache laden (synchron) — verhindert leeren Chat bei Navigation
+    const cached = _readCache(opts.historyEndpoint);
+    if (cached.length > 0) {
+      setMessages(cached);
+      setHistoryLoading(false);
+    }
+
+    // Dann vom Backend aktualisieren (asynchron)
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         const loaded = d.messages
@@ -120,8 +140,10 @@ export function useChatStream(opts: UseChatStreamOptions) {
             }
             return msg;
           });
-        // Immer setzen — auch leere Liste, damit kein stale State bleibt
-        setMessages(prev => loaded.length > 0 ? loaded : prev);
+        if (loaded.length > 0) {
+          setMessages(loaded);
+          _writeCache(opts.historyEndpoint, loaded);  // Cache mit frischen Daten aktualisieren
+        }
       })
       .catch((err) => { console.warn("loadHistory failed:", err); })
       .finally(() => setHistoryLoading(false));
@@ -273,6 +295,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
       }
     } finally {
       setSending(false);
+      // Cache nach Streaming-Ende aktualisieren (nicht während Streaming)
+      setMessages(ms => { _writeCache(opts.historyEndpoint, ms); return ms; });
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);
