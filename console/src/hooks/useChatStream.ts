@@ -102,16 +102,6 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   const loadHistory = useCallback(() => {
     if (!opts.historyEndpoint) return;
-
-    // Cache: Messages sofort anzeigen bei Navigation zurück
-    try {
-      const cached = sessionStorage.getItem(`hh_chat_${opts.historyEndpoint}`);
-      if (cached) {
-        const msgs = JSON.parse(cached) as ChatMessage[];
-        if (msgs.length > 0) setMessages(msgs);
-      }
-    } catch { /* ignore */ }
-
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         const loaded = d.messages
@@ -129,12 +119,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
             }
             return msg;
           });
-        if (loaded.length > 0) {
-          setMessages(loaded);
-          // Cache aktualisieren
-          try { sessionStorage.setItem(`hh_chat_${opts.historyEndpoint}`, JSON.stringify(loaded.slice(-100))); }
-          catch { /* quota */ }
-        }
+        if (loaded.length > 0) setMessages(loaded);
       })
       .catch(() => {});
   }, [opts.historyEndpoint]);
