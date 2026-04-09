@@ -120,14 +120,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
     if (cached.length > 0) {
       setMessages(cached);
       setHistoryLoading(false);
-      // Scroll nach dem NÄCHSTEN Paint-Frame (DOM muss fertig sein)
-      setTimeout(() => {
-        const el = bottomRef.current?.parentElement;
-        if (el) el.scrollTop = el.scrollHeight;
-      }, 50);
     }
 
-    // Dann vom Backend aktualisieren
+    // Vom Backend aktualisieren
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         const loaded = d.messages
@@ -148,11 +143,6 @@ export function useChatStream(opts: UseChatStreamOptions) {
         if (loaded.length > 0) {
           setMessages(loaded);
           _writeCache(opts.historyEndpoint, loaded);
-          // Auch nach API-Load scrollen
-          setTimeout(() => {
-            const el = bottomRef.current?.parentElement;
-            if (el) el.scrollTop = el.scrollHeight;
-          }, 50);
         }
       })
       .catch((err) => { console.warn("loadHistory failed:", err); })
@@ -160,9 +150,21 @@ export function useChatStream(opts: UseChatStreamOptions) {
   }, [opts.historyEndpoint]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
+  // Browser Scroll-Restoration deaktivieren (überschreibt sonst unseren Scroll)
+  useEffect(() => {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Doppeltes rAF: garantiert dass DOM gerendert UND gemalt ist
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = bottomRef.current;
+        if (!el) return;
+        const container = el.parentElement;
+        if (container) container.scrollTop = container.scrollHeight;
+      });
+    });
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
