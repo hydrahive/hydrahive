@@ -6,7 +6,8 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal, PanelRightClose, PanelRightOpen, Activity } from "lucide-react";
+import { EkgMonitor } from "@/components/EkgMonitor";
 import { useTranslation } from "react-i18next";
 import { api, type SessionPreview, type SessionFull } from "@/lib/api";
 import { ChatView } from "@/components/ChatView";
@@ -22,6 +23,7 @@ export function ChatPage() {
   const [bossModel, setBossModel] = useState<{ model?: string; temperature?: number }>({});
   const [showSwarm, setShowSwarm] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showMonitor, setShowMonitor] = useState(false);
 
   // History
   const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
@@ -134,6 +136,11 @@ export function ChatPage() {
             className={`p-1.5 rounded-md transition-colors ${chat.showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
             title="Chat-Verlauf">
             <History className="h-4 w-4" />
+          </button>
+          <button onClick={() => setShowMonitor(true)}
+            className="p-1.5 rounded-md transition-colors hover:bg-accent text-muted-foreground hover:text-emerald-500"
+            title="EKG Monitor">
+            <Activity className="h-4 w-4" />
           </button>
           <button onClick={() => setShowSidebar(s => !s)}
             className={`hidden lg:block p-1.5 rounded-md transition-colors ${showSidebar ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
@@ -293,6 +300,8 @@ export function ChatPage() {
           </div>
         </aside>
       )}
+      {/* EKG Monitor Overlay */}
+      {showMonitor && <EkgMonitor onClose={() => setShowMonitor(false)} />}
     </section>
   );
 }
