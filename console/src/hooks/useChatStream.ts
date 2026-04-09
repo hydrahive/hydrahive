@@ -156,10 +156,28 @@ export function useChatStream(opts: UseChatStreamOptions) {
       .finally(() => setHistoryLoading(false));
   }, [opts.historyEndpoint]);
 
-  // ── Auto-scroll ───────────────────────────────────────────────────────────
+  // ── Auto-scroll (nur wenn User am Ende ist, kein Gezucke beim Streaming) ──
 
+  const isNearBottom = useRef(true);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+
+  // Scroll-Position tracken: ist der User am Ende?
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = bottomRef.current?.parentElement;
+    if (!container) return;
+    scrollContainerRef.current = container;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      isNearBottom.current = scrollHeight - scrollTop - clientHeight < 80;
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Nur scrollen wenn User am Ende war — beim Streaming instant, sonst smooth
+  useEffect(() => {
+    if (!isNearBottom.current) return;
+    bottomRef.current?.scrollIntoView({ behavior: sending ? "instant" : "smooth" });
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
