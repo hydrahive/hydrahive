@@ -237,7 +237,7 @@ async def _run_builtin_worker(orch, dispatch: dict, profile: dict) -> DispatchRe
     # Tool-Schemas nur für erlaubte Tools
     allowed = set(profile.get("allowed_tools", []))
     tools = []
-    for tool_obj in orch._tool_registry.values():
+    for tool_obj in orch._reg.values():
         if hasattr(tool_obj, "id") and tool_obj.id in allowed:
             tools.append({
                 "type": "function",
