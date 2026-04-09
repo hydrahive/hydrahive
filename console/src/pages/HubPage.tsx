@@ -875,7 +875,7 @@ export function HubPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-6 pt-6 pb-0 border-b border-border flex-shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight mb-1">HydraHub</h1>
+        <h1 className="text-2xl font-bold tracking-tight mb-1">{t("nav.hydraHub")}</h1>
         <p className="text-xs text-muted-foreground mb-4">{t("pageDesc.hub", { defaultValue: "Pakete, Extensions, Plugins und Skills verwalten" })}</p>
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
           <button onClick={() => setActiveTab("hydrahub")} className={tabCls("hydrahub")}>

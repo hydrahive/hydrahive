@@ -644,18 +644,36 @@ class Orchestrator:
             _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
                                "error in input stream", "input too long", "request too large")
             if any(s in err_str for s in _context_errors):
-                logger.warning(
-                    "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
-                    project_id, e,
-                )
                 _metrics.record_overflow(project_id)
-                _metrics.record_session_reset(project_id)
-                await self._sessions.new_session(project_id)
-                return (
-                    "Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht."
-                ), []
-            logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
-            return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
+                # #499/#517: Reactive Compaction — erst compacten, dann retry
+                logger.warning(
+                    "Context-Overflow für Projekt '%s' — versuche Reactive Compaction. Fehler: %s",
+                    project_id, str(e)[:120],
+                )
+                try:
+                    await self._compact_if_needed(project_id, boss_cfg, keep_last=4)
+                    # Context neu aufbauen mit kompaktierter Session
+                    _compacted_history = self._sessions.get_context(
+                        project_id, max_history_tokens=_hist_budget,
+                    )
+                    _retry_msgs = [messages[0]] + _compacted_history  # System-Prompt + kompaktierte History
+                    response = await self._llm_call(boss_cfg, _retry_msgs, litellm_tools)
+                    logger.info("Reactive Compaction erfolgreich — Projekt '%s' recovered", project_id)
+                except Exception as retry_err:
+                    # Retry auch fehlgeschlagen → Session-Reset als letzter Ausweg
+                    logger.error(
+                        "Reactive Compaction + Retry fehlgeschlagen für '%s': %s — Session-Reset",
+                        project_id, str(retry_err)[:120],
+                    )
+                    _metrics.record_session_reset(project_id)
+                    await self._sessions.new_session(project_id)
+                    return (
+                        "Die Konversation war zu lang und konnte nicht kompaktiert werden. "
+                        "Session wurde zurückgesetzt — bitte wiederhole deine letzte Nachricht."
+                    ), []
+            else:
+                logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
+                return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
 
         # #512: LLM-Call Metriken erfassen
         _llm_latency = (_perf_time.monotonic() - _llm_start) * 1000

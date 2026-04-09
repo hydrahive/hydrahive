@@ -337,14 +337,37 @@ async def handle_message_stream(
         _context_errors = ("prompt is too long", "maximum context length", "context_length_exceeded",
                            "error in input stream", "input too long", "request too large")
         if any(s in err_str for s in _context_errors):
-            logger.warning(
-                "Kontext zu lang für Projekt '%s' — Session wird zurückgesetzt. Fehler: %s",
-                project_id, e,
-            )
             _metrics.record_overflow(project_id)
-            _metrics.record_session_reset(project_id)
-            await orch._sessions.new_session(project_id)
-            yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang. Session wurde automatisch zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
+            # #499/#517: Reactive Compaction — erst compacten, dann retry
+            logger.warning(
+                "Context-Overflow (Streaming) für Projekt '%s' — versuche Reactive Compaction. Fehler: %s",
+                project_id, str(e)[:120],
+            )
+            try:
+                from .orchestrator_context import _compact_if_needed as _compact_fn
+                await _compact_fn(orch._sessions, project_id, boss_cfg, keep_last=4)
+                yield f"data: {_json.dumps({'text': '[Kontext wurde automatisch kompaktiert — fahre fort…]\\n\\n'})}\n\n"
+                # Kompaktierten Context neu aufbauen und zweiten Streaming-Versuch starten
+                _retry_history = orch._sessions.get_context(project_id)
+                _retry_sys = await orch._build_system_prompt(boss_cfg, content)
+                _retry_msgs = [{"role": "system", "content": _retry_sys}] + _retry_history
+                # Vereinfachter Retry: non-streaming LLM-Call für die Recovery
+                _retry_resp = await orch._llm_call(boss_cfg, _retry_msgs, litellm_tools)
+                _retry_text = ""
+                if hasattr(_retry_resp, "choices") and _retry_resp.choices:
+                    _retry_text = _retry_resp.choices[0].message.content or ""
+                if _retry_text:
+                    yield f"data: {_json.dumps({'text': _retry_text})}\n\n"
+                    await orch._sessions.append(project_id, MessageRole.ASSISTANT, _retry_text, agent_id=boss_id)
+                logger.info("Reactive Compaction (Streaming) erfolgreich — Projekt '%s' recovered", project_id)
+            except Exception as retry_err:
+                logger.error(
+                    "Reactive Compaction + Retry fehlgeschlagen für '%s': %s — Session-Reset",
+                    project_id, str(retry_err)[:120],
+                )
+                _metrics.record_session_reset(project_id)
+                await orch._sessions.new_session(project_id)
+                yield f"data: {_json.dumps({'error': 'Die Konversation war zu lang und konnte nicht kompaktiert werden. Session wurde zurückgesetzt — bitte wiederhole deine letzte Nachricht.', 'session_reset': True})}\n\n"
         else:
             logger.error("Streaming-Fehler: %s", e)
             if user_msg_saved:

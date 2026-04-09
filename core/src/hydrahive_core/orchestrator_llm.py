@@ -218,8 +218,9 @@ def _set_cooldown(provider: str = "default", seconds: float = 5.0) -> None:
 
 async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float = 1.0):
     """
-    Retry-Wrapper für LLM-Calls (#423: shouldWait + Exponential Backoff).
+    Retry-Wrapper für LLM-Calls (#423: shouldWait + Exponential Backoff, #504 differenziert).
     - 429 Rate-Limit: retry mit Backoff (Cooldown setzen)
+    - 529 Overloaded: max 2 Retries, dann sofort Failover
     - 5xx Server-Fehler: retry
     - 401/403 Auth: kein Retry
     - Quota/Billing: kein Retry (→ Failover)
@@ -249,6 +250,25 @@ async def _llm_with_retry(coro_factory, max_attempts: int = 5, base_delay: float
             # Quota/Billing erschöpft → kein Retry, Failover
             if any(x in err_str for x in ["quota", "credit", "billing", "payment"]):
                 raise
+
+            # #504: 529 Overloaded — schneller failovern (max 2 Retries)
+            is_overloaded = any(x in err_str for x in ["529", "overloaded", "capacity"])
+            if is_overloaded:
+                if attempt >= 2:  # Nach 2 Versuchen sofort Failover
+                    logger.warning("Server overloaded nach %d Versuchen — Failover", attempt + 1)
+                    raise
+                delay = min(base_delay * (2 ** attempt) * 2, 30.0)  # Längere Pausen bei Overload
+                delay *= (1 + _random.uniform(-0.1, 0.1))
+                _pid = _current_project_id.get()
+                if _pid:
+                    from .session_metrics import metrics as _m
+                    _m.record_retry(_pid)
+                logger.warning(
+                    "Server overloaded (Versuch %d/3): %s — retry in %.1fs",
+                    attempt + 1, str(e)[:80], delay,
+                )
+                await asyncio.sleep(delay)
+                continue
 
             # 429 Rate-Limit → retry mit Backoff + Cooldown setzen
             is_rate_limit = any(x in err_str for x in ["rate_limit", "rate limit", "429"])

@@ -113,6 +113,63 @@ def get_budget(tool_name: str) -> dict:
     return _BUDGETS[get_tool_op_type(tool_name)]
 
 
+# ── #498: Selektive microCompact — strukturierte Summaries statt Head-Truncation ──
+
+def _micro_compact(content: str, tool_name: str) -> str:
+    """
+    Erzeugt eine kompakte, strukturierte Summary eines Tool-Results.
+    Kein LLM-Call — rein pattern-basiert, schnell.
+    """
+    lines = content.split("\n")
+    total_lines = len(lines)
+    total_chars = len(content)
+
+    if tool_name in ("shell_exec", "project_shell", "server_shell", "wks_shell_exec"):
+        # Shell-Output: Exit-Code extrahieren, erste + letzte Zeilen behalten
+        # Typisch: JSON-Result mit "exit_code", "stdout", "stderr"
+        exit_code = ""
+        if '"exit_code":' in content[:200]:
+            import re
+            m = re.search(r'"exit_code"\s*:\s*(\d+)', content[:200])
+            if m:
+                exit_code = f" (exit {m.group(1)})"
+        first_lines = "\n".join(lines[:3])
+        last_lines = "\n".join(lines[-2:]) if total_lines > 5 else ""
+        return (
+            f"[shell{exit_code}, {total_lines} Zeilen, {total_chars} Zeichen]\n"
+            f"{first_lines}\n"
+            + (f"…\n{last_lines}" if last_lines else "")
+        )
+
+    if tool_name in ("file_read", "read_system_file", "server_file_read"):
+        # File-Content: Pfad extrahieren, Zeilen/Größe angeben
+        path_info = ""
+        if '"path":' in content[:300]:
+            import re
+            m = re.search(r'"path"\s*:\s*"([^"]+)"', content[:300])
+            if m:
+                path_info = f" {m.group(1)}"
+        return f"[file_read{path_info}, {total_lines} Zeilen, {total_chars} Zeichen — Inhalt verarbeitet]"
+
+    if tool_name in ("web_search", "http_request"):
+        # Such-Ergebnisse: Erste Zeile + Anzahl Results
+        first = lines[0][:120] if lines else ""
+        return f"[{tool_name}, {total_lines} Zeilen]\n{first}\n…[{total_chars} Zeichen verarbeitet]"
+
+    if tool_name in ("git_diff", "git_log", "git_grep"):
+        # Git-Output: Stats behalten
+        stat_lines = [l for l in lines[-5:] if "file" in l.lower() or "insertion" in l.lower() or "deletion" in l.lower()]
+        first = lines[0][:100] if lines else ""
+        stats = "\n".join(stat_lines) if stat_lines else ""
+        return (
+            f"[{tool_name}, {total_lines} Zeilen]\n{first}\n"
+            + (f"…\n{stats}" if stats else f"…[{total_chars} Zeichen]")
+        )
+
+    # Default: Head-Truncation mit Info
+    return f"[{tool_name}, {total_chars} Zeichen]\n" + "\n".join(lines[:3]) + "\n…"
+
+
 def budget_tool_result(
     content: str,
     tool_name: str,
@@ -146,19 +203,25 @@ def budget_tool_result(
             )
         return content
 
-    # Time-Decay: alte Results aggressiver kürzen
+    # #498: Time-Decay mit microCompact — strukturierte Summary statt Head-Truncation
     if age_minutes > budget["age_threshold_min"]:
         limit = budget["aged_chars"]
         if len(content) > limit:
+            # Für READ/SEARCH: microCompact liefert bessere Summaries als Head-Truncation
+            if op_type in (ToolOpType.READ, ToolOpType.SEARCH):
+                return _micro_compact(content, tool_name)
             return (
                 content[:limit]
                 + f"\n…[{op_type.value}-aged: {len(content)} Zeichen, {int(age_minutes)}min alt]"
             )
         return content
 
-    # Außerhalb keep_full_count aber noch nicht alt: halbes Budget
+    # #498: Außerhalb keep_full_count — microCompact für große Results
     half_budget = budget["max_chars"] // 2
     if len(content) > half_budget:
+        if op_type in (ToolOpType.READ, ToolOpType.SEARCH) and len(content) > budget["max_chars"]:
+            # Sehr große READ/SEARCH Results: microCompact statt halbes Budget
+            return _micro_compact(content, tool_name)
         return (
             content[:half_budget]
             + f"\n…[{op_type.value}-compacted: {len(content)} → {half_budget} Zeichen]"

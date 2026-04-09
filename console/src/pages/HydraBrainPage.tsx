@@ -337,7 +337,7 @@ export function HydraBrainPage() {
       <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
         <div className="flex items-center gap-1.5 rounded-xl bg-black/60 border border-white/10 px-3 py-2 backdrop-blur">
           <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="text-xs font-semibold text-white/70">HydraBrain</span>
+          <span className="text-xs font-semibold text-white/70">{t("nav.hydraBrain")}</span>
           <span className="text-xs text-white/30 ml-1">{graphData.nodes.length} Knoten · {graphData.links.length} Verbindungen</span>
         </div>
         <button
@@ -599,7 +599,7 @@ export function HydraBrainPage() {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 text-cyan-400 animate-spin" />
-            <p className="text-sm text-white/40">HydraBrain lädt…</p>
+            <p className="text-sm text-white/40">{t("nav.hydraBrain")} lädt…</p>
           </div>
         </div>
       )}
