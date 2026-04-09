@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus } from "lucide-react";
+import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, type SessionPreview, type SessionFull } from "@/lib/api";
 import { ChatView } from "@/components/ChatView";
@@ -210,14 +210,77 @@ export function ChatPage() {
         </div>
       )}
 
-      {/* Chat */}
+      {/* Chat + Sidebar */}
       {!chat.showHistory && !chat.viewSession && (
-        <ChatView
-          {...chat}
-          t={t}
-          showWorkers={showSwarm}
-          slashCommands={SLASH_COMMANDS}
-        />
+        <div className="flex-1 grid min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <ChatView
+            {...chat}
+            t={t}
+            showWorkers={showSwarm}
+            slashCommands={SLASH_COMMANDS}
+          />
+          <aside className="hidden lg:block border-l bg-muted/10 p-4 overflow-y-auto">
+            <div className="space-y-4">
+              {/* Live Panel */}
+              <div className="rounded-2xl border bg-background/75 p-4">
+                <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.livePanel", { defaultValue: "Live" })}</p>
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="rounded-2xl bg-primary/12 p-2 text-primary"><Sparkles className="h-4 w-4" /></span>
+                    <div>
+                      <p className="text-sm font-medium">{t("chat.streaming", { defaultValue: "Streaming" })}</p>
+                      <p className="text-xs text-muted-foreground">{chat.sending ? t("chat.streamingBuilding", { defaultValue: "Antwort wird generiert …" }) : t("chat.streamingIdle", { defaultValue: "Bereit" })}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border bg-background/75 px-3 py-3">
+                    <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.activeTool", { defaultValue: "Aktives Tool" })}</p>
+                    {chat.activeTool ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm font-medium text-primary flex items-center gap-1"><Terminal className="h-3 w-3" />{chat.activeTool.name}</p>
+                        <p className="break-all text-xs text-muted-foreground">{chat.activeTool.detail || t("chat.noToolDetail", { defaultValue: "Keine Details" })}</p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted-foreground">{t("chat.noTool", { defaultValue: "Kein Tool aktiv" })}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Projekt-Info */}
+              <div className="rounded-2xl border bg-background/75 p-4">
+                <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.projectPanel", { defaultValue: "Projekt" })}</p>
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.projectPanel", { defaultValue: "Projekt" })}</p>
+                    <p className="mt-1 font-medium">{projectName}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{id}</p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.bossModel", { defaultValue: "Modell" })}</p>
+                    <p className="mt-1 break-all font-medium">{bossModel.model ?? t("chat.notConfigured", { defaultValue: "Nicht konfiguriert" })}</p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
+                    <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.history", { defaultValue: "Verlauf" })}</p>
+                    <p className="mt-1 font-medium">{chat.messages.length} {chat.messages.length === 1 ? "Nachricht" : "Nachrichten"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shortcuts */}
+              <div className="rounded-2xl border bg-background/75 p-4">
+                <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.shortcuts", { defaultValue: "Shortcuts" })}</p>
+                <div className="mt-3 space-y-2">
+                  {SLASH_COMMANDS.map(c => (
+                    <div key={c.cmd} className="rounded-2xl border bg-background/70 px-3 py-2">
+                      <p className="font-mono text-xs text-primary">{c.cmd}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{c.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       )}
     </div>
   );
