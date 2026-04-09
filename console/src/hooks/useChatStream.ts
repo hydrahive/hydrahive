@@ -287,6 +287,12 @@ export function useChatStream(opts: UseChatStreamOptions) {
       }
     } finally {
       setSending(false);
+      // Chat-Cache nach Streaming aktualisieren
+      setMessages(ms => {
+        try { sessionStorage.setItem(`hh_chat_${opts.historyEndpoint}`, JSON.stringify(ms.slice(-100))); }
+        catch { /* quota */ }
+        return ms;
+      });
       abortRef.current = null;
       if (elapsedTimerRef.current) { clearInterval(elapsedTimerRef.current); elapsedTimerRef.current = null; }
       setElapsed(0);
