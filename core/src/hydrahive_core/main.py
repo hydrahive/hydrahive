@@ -464,6 +464,25 @@ async def lifespan(app: FastAPI):
         name="folder-watcher",
     )
 
+    # #483: Proactive Mode — Background-Tasks laden und starten
+    from .proactive_mode import proactive_service as _proactive
+    _proactive.load_from_config(settings.etc_dir)
+    _proactive.start()
+
+    # #521: Worktree stale cleanup beim Start (Crash-Recovery)
+    try:
+        from .worktree_manager import worktree_manager as _wm
+        asyncio.create_task(_wm.cleanup_stale())
+    except Exception as _wt_err:
+        logger.debug("Worktree stale cleanup: %s", _wt_err)
+
+    # #523: Turn Journal — alte Events aufräumen (>30 Tage)
+    try:
+        from .turn_journal import journal as _tj
+        _tj.cleanup(max_age_days=30)
+    except Exception as _tj_err:
+        logger.debug("Turn Journal cleanup: %s", _tj_err)
+
     logger.info("HydraHive Core bereit")
     yield
     _folder_watcher_task.cancel()

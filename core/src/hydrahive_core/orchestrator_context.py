@@ -248,7 +248,7 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             learning_snippet = build_learning_prompt_snippet(
                 boss_cfg.agent_dir,
                 **({"max_entries": 8, "max_chars": 3000} if mode == "full"
-                   else {"max_entries": 3, "max_chars": 1500}),
+                   else {"max_entries": 3, "max_chars": 1500}),  # #529: Budget via get_memory_budget()
             )
             if learning_snippet:
                 mem_parts.append(learning_snippet)
