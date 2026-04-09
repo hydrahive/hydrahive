@@ -193,6 +193,9 @@ export function ChatPage() {
               </button>
             </div>
           </div>
+          <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <span>{t("chat.historyReadOnly", { defaultValue: "Du siehst eine vergangene Session — nur lesen." })}</span>
+          </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {chat.viewSession.messages.map((m, i) => (
               <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
