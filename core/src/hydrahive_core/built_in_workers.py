@@ -105,6 +105,23 @@ BUILTIN_WORKERS = {
             "web_search",
         ],
     },
+    # #484: Coordinator Worker — zerlegt komplexe Aufgaben automatisch
+    "coordinate": {
+        "name": "Coordinator Worker",
+        "description": "Zerlegt komplexe Aufgaben in Teilschritte, weist Worker zu und führt den Plan aus.",
+        "system_prompt": (
+            "Du bist ein Coordinator — du zerlegst komplexe Aufgaben in parallele Teilschritte.\n\n"
+            "## Regeln\n"
+            "- Analysiere die Aufgabe und erstelle einen strukturierten Plan\n"
+            "- Weise jedem Schritt den passenden Worker zu (explore/plan/verify/review)\n"
+            "- Maximal 5 Schritte\n"
+            "- Gib das Ergebnis als übersichtliche Zusammenfassung zurück\n"
+        ),
+        "allowed_tools": [
+            "file_read", "list_directory", "git_status", "git_diff",
+            "dispatch_task", "get_final_message",
+        ],
+    },
 }
 
 

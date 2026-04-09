@@ -22,22 +22,26 @@ from .session_metrics import metrics as _metrics
 logger = logging.getLogger(__name__)
 
 
-def _parse_dispatch_calls(tool_calls: list) -> list[dict]:
-    """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls (#415: +task_id, +depends_on)."""
+def _parse_dispatch_calls(tool_calls: list, parent_messages: list[dict] | None = None) -> list[dict]:
+    """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls (#415: +task_id, +depends_on, #505: Fork-Context)."""
     dispatches = []
     for tc in tool_calls:
         if tc.function.name != "dispatch_task":
             continue
         try:
             args = json.loads(tc.function.arguments)
-            dispatches.append({
+            d = {
                 "call_id":    tc.id,
                 "worker_id":  args["worker_id"],
                 "task":       args["task"],
                 "context":    args.get("context", ""),
-                "task_id":    args.get("task_id", tc.id),  # Fallback: LLM call_id
+                "task_id":    args.get("task_id", tc.id),
                 "depends_on": args.get("depends_on", []),
-            })
+            }
+            # #505: Fork — letzte 4 Messages als Parent-Context mitgeben
+            if parent_messages:
+                d["_parent_context"] = parent_messages[-4:]
+            dispatches.append(d)
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning("Ungültiger dispatch_task-Aufruf: %s", e)
     return dispatches
@@ -226,6 +230,28 @@ async def _run_builtin_worker(orch, dispatch: dict, profile: dict) -> DispatchRe
 
     logger.info("Built-in Worker '%s': %s", worker_id, task[:60])
 
+    # #484: Coordinator Mode — automatischen Workplan erstellen und ausführen
+    if worker_id == "coordinate":
+        try:
+            from .coordinator_mode import create_workplan, execute_workplan
+            project_id = dispatch.get("project_id", "")
+            project_cfg = None
+            if project_id and hasattr(orch, "_projects"):
+                project_cfg = orch._projects.get(project_id)
+            if project_cfg:
+                plan = await create_workplan(orch, None, task, list(project_cfg.agents.workers))
+                result = await execute_workplan(orch, project_cfg, None, plan)
+                return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
+            else:
+                plan = await create_workplan(orch, None, task, [])
+                # Ohne Projekt: nur plan anzeigen, nicht ausführen
+                return DispatchResult(worker_id=worker_id, task=task,
+                                     result=json.dumps(plan.to_dict(), indent=2), task_id=task_id)
+        except Exception as e:
+            logger.error("Coordinator Mode Fehler: %s", e)
+            return DispatchResult(worker_id=worker_id, task=task, result="",
+                                 success=False, error=str(e), task_id=task_id)
+
     messages = [
         {"role": "system", "content": profile["system_prompt"]},
     ]
@@ -338,6 +364,12 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
         )
 
     logger.info("Dispatche Task an %s: %s", worker_id, task[:60])
+
+    # #505: Fork-Subagenten — System-Prompt und letzte N Messages vom Boss erben
+    # für Prompt-Cache-Hits (gleicher Prefix = Cache-Hit bei Anthropic)
+    _parent_context = dispatch.get("_parent_context", [])
+    if _parent_context:
+        logger.info("Fork: Worker '%s' erbt %d Messages vom Boss", worker_id, len(_parent_context))
 
     # #522: Worktree-Isolation wenn Feature-Flag aktiv
     _wt_info = None

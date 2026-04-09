@@ -244,6 +244,8 @@ class Orchestrator:
         self._queue_tasks:    dict[str, asyncio.Task]   = {}
         self._queue_last_used: dict[str, float]         = {}
         self._queue_idle_timeout_s: float               = 600.0
+        # #394: Queue Pool Limits — max gleichzeitige Queues
+        self._max_queues: int = 50  # Bei >50 wird die älteste idle Queue entfernt
 
     # ---------------------------------------------------------------- Tool Resolution
 
@@ -421,6 +423,20 @@ class Orchestrator:
 
     def _get_queue(self, project_id: str) -> asyncio.Queue:
         if project_id not in self._project_queues:
+            # #394: Queue Pool — älteste idle Queue evicten wenn Limit erreicht
+            if len(self._project_queues) >= self._max_queues:
+                oldest_id = min(
+                    (pid for pid in self._project_queues if self._project_queues[pid].empty()),
+                    key=lambda pid: self._queue_last_used.get(pid, 0),
+                    default=None,
+                )
+                if oldest_id:
+                    self._project_queues.pop(oldest_id, None)
+                    task = self._queue_tasks.pop(oldest_id, None)
+                    if task and not task.done():
+                        task.cancel()
+                    self._queue_last_used.pop(oldest_id, None)
+                    logger.info("Queue Pool: evicted idle queue '%s' (limit %d)", oldest_id, self._max_queues)
             self._project_queues[project_id] = asyncio.Queue()
         return self._project_queues[project_id]
 

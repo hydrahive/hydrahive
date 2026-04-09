@@ -1976,6 +1976,41 @@ def set_wiki_config(body: dict, _a=Depends(require_admin)):
         raise HTTPException(500, f"Config speichern fehlgeschlagen: {e}")
 
 
+# ── #490: Peer Discovery API ─────────────────────────────────────────────────
+
+@auth_router.get("/peers")
+def list_peers(auth: tuple[str, str] = Depends(require_auth)):
+    """#490: Alle aktiven Peer-Agenten auflisten."""
+    from .peer_discovery import peer_registry
+    username, _ = auth
+    agent_id = f"personal_{username}"
+    return {"peers": peer_registry.list_peers(exclude=agent_id)}
+
+
+@auth_router.post("/peers/{agent_id}/message")
+def send_peer_message(agent_id: str, body: dict, auth: tuple[str, str] = Depends(require_auth)):
+    """#490: Nachricht an einen Peer-Agenten senden."""
+    from .peer_discovery import peer_registry
+    username, _ = auth
+    from_agent = f"personal_{username}"
+    content = body.get("content", "")
+    if not content:
+        raise HTTPException(400, "content ist Pflicht")
+    ok = peer_registry.send_message(from_agent, agent_id, content)
+    if not ok:
+        raise HTTPException(404, f"Peer '{agent_id}' nicht gefunden")
+    return {"ok": True, "to": agent_id}
+
+
+@auth_router.get("/peers/messages")
+def get_peer_messages(auth: tuple[str, str] = Depends(require_auth)):
+    """#490: Eigene ungelesene Peer-Messages abholen."""
+    from .peer_discovery import peer_registry
+    username, _ = auth
+    agent_id = f"personal_{username}"
+    return {"messages": peer_registry.get_messages(agent_id)}
+
+
 @admin_router.get("/admin/agents/live")
 def get_agents_live(_a=Depends(require_admin)):
     """
