@@ -331,7 +331,7 @@ export function TourLauncher() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border bg-card p-2 shadow-lg z-50">
+        <div className="fixed left-4 mt-1 w-64 rounded-xl border bg-card p-2 shadow-lg z-[9999]">
           {TOURS.map(tour => {
             const done = completedTours.includes(tour.id);
             return (
