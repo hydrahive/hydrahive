@@ -6,6 +6,12 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+interface ExtValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 interface Extension {
   id: string;
   name: string;
@@ -17,6 +23,7 @@ interface Extension {
   http_ok: boolean;
   open_url: string | null;
   has_uninstall: boolean;
+  validation?: ExtValidation;
 }
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -68,11 +75,27 @@ function ExtCard({
         </div>
       </div>
 
+      {/* #382: Validierungs-Badge */}
+      {!ext.installed && ext.validation && !ext.validation.valid && (
+        <div className="flex items-center gap-1.5 text-xs text-red-500 bg-red-50 dark:bg-red-950/50 rounded px-2 py-1">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span>{ext.validation.errors[0]}</span>
+        </div>
+      )}
+      {!ext.installed && ext.validation && ext.validation.valid && ext.validation.warnings.length > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950/50 rounded px-2 py-1">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{ext.validation.warnings.length} {ext.validation.warnings.length === 1 ? "Hinweis" : "Hinweise"}</span>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap mt-auto">
         {!ext.installed && (
           <button
             className="btn btn-primary btn-sm flex items-center gap-1.5"
             onClick={() => onAction(ext.id, "install")}
+            disabled={ext.validation && !ext.validation.valid}
+            title={ext.validation && !ext.validation.valid ? ext.validation.errors.join("; ") : undefined}
           >
             <Download className="w-3.5 h-3.5" />
             {t("extensions.install")}
