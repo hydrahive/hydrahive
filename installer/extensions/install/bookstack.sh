@@ -24,7 +24,8 @@ HH_CONF="/etc/hydrahive/bookstack.json"
 
 info "=== BookStack installieren ==="
 
-_SERVER_IP="$(hostname -I | awk '{print $1}')"
+# Tailscale-IP bevorzugen, Fallback auf erste IP
+_SERVER_IP="$(tailscale ip -4 2>/dev/null || hostname -I | awk '{print $1}')"
 
 # --- PHP-Version ermitteln ---
 detect_php() {
