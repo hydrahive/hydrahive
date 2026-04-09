@@ -316,7 +316,6 @@ export function TourLauncher() {
   const [open, setOpen] = useState(false);
 
   const availableTours = TOURS.filter(t => !completedTours.includes(t.id));
-  if (availableTours.length === 0 && !open) return null;
 
   return (
     <div className="relative">
