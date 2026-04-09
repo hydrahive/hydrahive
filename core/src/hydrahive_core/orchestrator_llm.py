@@ -690,6 +690,11 @@ async def _anthropic_oauth_call(
     elif "claude-3-7" in model or "claude-3-5" in model:
         _configured_max = max(_configured_max, 8192)
 
+    # Safety: Anthropic braucht mindestens eine Message
+    if not filtered:
+        filtered = [{"role": "user", "content": "(leere Nachricht)"}]
+        logger.warning("OAuth-Call: messages war leer — Dummy eingefügt")
+
     kwargs: dict = {
         "model":       model,
         "max_tokens":  _configured_max,
@@ -1072,6 +1077,11 @@ async def _llm_call_single(
             _lm_max = max(_lm_max, 16384)
         elif any(x in model for x in ("claude-3-7", "claude-3-5")):
             _lm_max = max(_lm_max, 8192)
+
+    # Safety: mindestens eine Message
+    if not cached_messages:
+        cached_messages = [{"role": "user", "content": "(leere Nachricht)"}]
+        logger.warning("litellm-Call: messages war leer — Dummy eingefügt")
 
     kwargs: dict = {
         "model":       model,
