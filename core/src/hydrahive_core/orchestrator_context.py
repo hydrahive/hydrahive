@@ -776,6 +776,40 @@ def _flush_summary_to_memory(agent_dir, summary: str) -> None:
 
         # #514: Learning after Compact — Fakten aus Summary extrahieren
         _extract_learnings(memory_dir, summary)
+
+        # Wiki-Integration: Summary ins BookStack Wiki schreiben (wenn konfiguriert)
+        try:
+            _wiki_config_path = Path("/etc/hydrahive/bookstack.json")
+            if _wiki_config_path.exists():
+                import httpx
+                _wiki_cfg = json.loads(_wiki_config_path.read_text())
+                _wiki_url = _wiki_cfg.get("base_url", "").rstrip("/")
+                _wiki_tid = _wiki_cfg.get("token_id", "")
+                _wiki_ts = _wiki_cfg.get("token_secret", "")
+                if _wiki_url and _wiki_tid and _wiki_ts:
+                    _wiki_headers = {
+                        "Authorization": f"Token {_wiki_tid}:{_wiki_ts}",
+                        "Content-Type": "application/json",
+                    }
+                    # "Lessons Learned" Buch finden
+                    _wb = httpx.get(f"{_wiki_url}/api/books", params={"count": 50},
+                                     headers=_wiki_headers, timeout=5)
+                    _book_id = None
+                    for _b in _wb.json().get("data", []):
+                        if "lesson" in _b.get("name", "").lower():
+                            _book_id = _b["id"]
+                            break
+                    if _book_id:
+                        import datetime as _dt
+                        _now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        httpx.post(f"{_wiki_url}/api/pages",
+                                    json={"name": f"Session Summary {_now}",
+                                          "markdown": summary[:5000], "book_id": _book_id,
+                                          "tags": [{"name": "auto-compact"}, {"name": "session-summary"}]},
+                                    headers=_wiki_headers, timeout=10)
+                        logger.debug("Wiki: Session Summary ins BookStack geschrieben")
+        except Exception as _wiki_err:
+            logger.debug("Wiki auto-write skipped: %s", _wiki_err)
     except OSError as e:
         logger.warning("Memory Flush fehlgeschlagen: %s", e)
 

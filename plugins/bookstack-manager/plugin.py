@@ -14,11 +14,55 @@ logger = logging.getLogger("bookstack-manager")
 
 
 def _load_user_config(username: str) -> dict:
+    # Per-User Config hat Priorität
     path = Path(f"/etc/hydrahive/user_app_config/{username}/bookstack-manager.json")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        pass
+    # Fallback: System-weite Config (alle Agenten haben Zugriff)
+    system_path = Path("/etc/hydrahive/bookstack.json")
+    try:
+        return json.loads(system_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return {}
+
+
+# ── Auto-Setup: Grundstruktur beim ersten Start anlegen ──────────────────────
+
+_WIKI_SHELVES = [
+    {"name": "Systeme", "description": "Dokumentation aller Systeme, Server und Dienste"},
+    {"name": "Lessons Learned", "description": "Fehler, Lösungen und was wir daraus gelernt haben"},
+    {"name": "Workflows", "description": "Erprobte Arbeitsweisen und Best Practices"},
+    {"name": "Projekte", "description": "Projekt-Dokumentation und Fortschritt"},
+]
+
+
+async def _auto_setup(client) -> dict:
+    """Erstellt die Wiki-Grundstruktur wenn noch nicht vorhanden."""
+    created = []
+    try:
+        async with client:
+            # Prüfe ob Shelves schon existieren
+            r = await client.get("/api/shelves", params={"count": 100})
+            r.raise_for_status()
+            existing = {s["name"] for s in r.json().get("data", [])}
+
+            for shelf in _WIKI_SHELVES:
+                if shelf["name"] not in existing:
+                    r = await client.post("/api/shelves", json=shelf)
+                    if r.status_code < 300:
+                        created.append(shelf["name"])
+                        shelf_id = r.json().get("id")
+                        # Erstes Buch im Shelf anlegen
+                        if shelf_id:
+                            await client.post("/api/books", json={
+                                "name": f"{shelf['name']} — Allgemein",
+                                "description": shelf["description"],
+                            })
+    except Exception as e:
+        logger.warning("Wiki auto-setup error: %s", e)
+    return {"created_shelves": created}
 
 
 def _get_client(config: dict):
@@ -306,4 +350,101 @@ def register(api):
             logger.warning("bookstack_update_page error: %s", e)
             return json.dumps({"error": str(e)})
 
-    logger.info("BookStack Manager Plugin registriert (4 Tools)")
+    @api.tool(
+        tool_id="bookstack_setup",
+        description=(
+            "BookStack-Wiki Grundstruktur anlegen: Shelves für Systeme, Lessons Learned, "
+            "Workflows und Projekte. Idempotent — erstellt nur was noch nicht existiert."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    )
+    async def bookstack_setup(**ctx) -> str:
+        config = _load_user_config(ctx.get("_username", "admin"))
+        client = _get_client(config)
+        if not client:
+            return json.dumps({"error": "BookStack nicht konfiguriert."})
+        result = await _auto_setup(client)
+        return json.dumps(result)
+
+    @api.tool(
+        tool_id="bookstack_log_lesson",
+        description=(
+            "Schnell eine Lesson Learned dokumentieren: Was passiert ist, was gelernt wurde, "
+            "welche Lösung funktioniert hat. Wird automatisch im 'Lessons Learned' Buch gespeichert."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Kurzer Titel (z.B. 'Scroll-Bug durch sessionStorage')",
+                },
+                "problem": {
+                    "type": "string",
+                    "description": "Was war das Problem?",
+                },
+                "solution": {
+                    "type": "string",
+                    "description": "Was war die Lösung?",
+                },
+                "lesson": {
+                    "type": "string",
+                    "description": "Was haben wir daraus gelernt?",
+                },
+            },
+            "required": ["title", "problem", "solution"],
+        },
+    )
+    async def bookstack_log_lesson(
+        title: str = "", problem: str = "", solution: str = "", lesson: str = "", **ctx,
+    ) -> str:
+        config = _load_user_config(ctx.get("_username", "admin"))
+        client = _get_client(config)
+        if not client:
+            return json.dumps({"error": "BookStack nicht konfiguriert."})
+        from datetime import datetime
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        markdown = f"# {title}\n\n**Datum:** {now}\n\n"
+        markdown += f"## Problem\n{problem}\n\n"
+        markdown += f"## Lösung\n{solution}\n\n"
+        if lesson:
+            markdown += f"## Lesson Learned\n{lesson}\n\n"
+        try:
+            async with client:
+                # "Lessons Learned" Buch finden
+                r = await client.get("/api/books", params={"count": 50})
+                r.raise_for_status()
+                books = r.json().get("data", [])
+                book_id = None
+                for b in books:
+                    if "lesson" in b.get("name", "").lower():
+                        book_id = b["id"]
+                        break
+                if not book_id:
+                    # Buch erstellen
+                    r_b = await client.post("/api/books", json={
+                        "name": "Lessons Learned",
+                        "description": "Fehler, Lösungen und was wir daraus gelernt haben",
+                    })
+                    if r_b.status_code < 300:
+                        book_id = r_b.json().get("id")
+                if not book_id:
+                    return json.dumps({"error": "Konnte 'Lessons Learned' Buch nicht finden/erstellen"})
+                r_p = await client.post("/api/pages", json={
+                    "name": title,
+                    "markdown": markdown,
+                    "book_id": book_id,
+                    "tags": [{"name": "lesson-learned"}, {"name": "auto-documented"}],
+                })
+                r_p.raise_for_status()
+                p = r_p.json()
+                return json.dumps({"created": True, "id": p.get("id"), "name": title, "url": p.get("url", "")})
+        except Exception as e:
+            logger.warning("bookstack_log_lesson error: %s", e)
+            return json.dumps({"error": str(e)})
+
+    logger.info("BookStack Manager Plugin registriert (6 Tools)")
