@@ -20,8 +20,6 @@ BS_DB="bookstack"
 BS_DB_USER="bookstack"
 BS_DB_PASS="$(head -c 16 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 24)"
 BS_PORT="8500"
-NGINX_CONF="/etc/nginx/sites-available/bookstack"
-NGINX_ENABLED="/etc/nginx/sites-enabled/bookstack"
 HH_CONF="/etc/hydrahive/bookstack.json"
 
 info "=== BookStack installieren ==="
@@ -46,16 +44,14 @@ detect_php() {
 info "Installiere Abhängigkeiten (PHP, nginx, MariaDB, Composer, git)..."
 apt-get update -qq
 apt-get install -y --quiet \
-    php-fpm php-cli php-mysql php-curl php-xml php-mbstring \
+    php-cli php-mysql php-curl php-xml php-mbstring \
     php-gd php-zip php-intl php-ldap php-tokenizer \
     mariadb-server mariadb-client \
-    nginx \
     git curl unzip \
     2>/dev/null | grep -E "^(Get|Entpacken|Einrichten)" || true
 
 PHP_VERSION="$(detect_php)"
 [ -n "${PHP_VERSION}" ] || error "Keine PHP-Version gefunden nach Installation"
-PHP_FPM_SERVICE="php${PHP_VERSION}-fpm"
 success "PHP ${PHP_VERSION} erkannt"
 
 # Composer installieren falls nicht vorhanden
@@ -84,7 +80,14 @@ usermod -aG "${BS_USER}" www-data 2>/dev/null || true
 # --- BookStack herunterladen / aktualisieren ---
 if [ -d "${BS_DIR}/.git" ]; then
     info "BookStack bereits geklont — aktualisiere..."
-    systemctl stop bookstack-queue 2>/dev/null || true
+    # Erkennen ob alte nginx-Installation oder neue artisan-serve
+    _USES_NGINX=false
+    [ -f /etc/nginx/sites-enabled/bookstack ] && _USES_NGINX=true
+    if $_USES_NGINX; then
+        systemctl stop bookstack-queue 2>/dev/null || true
+    else
+        systemctl stop bookstack bookstack-queue 2>/dev/null || true
+    fi
     git -C "${BS_DIR}" fetch --quiet origin
     git -C "${BS_DIR}" reset --hard origin/release --quiet 2>/dev/null \
         || git -C "${BS_DIR}" reset --hard origin/main --quiet
@@ -94,7 +97,12 @@ if [ -d "${BS_DIR}/.git" ]; then
         --working-dir="${BS_DIR}" 2>/dev/null || true
     sudo -u "${BS_USER}" php "${BS_DIR}/artisan" migrate --force --quiet 2>/dev/null || true
     success "BookStack aktualisiert"
-    systemctl start bookstack-queue 2>/dev/null || true
+    if $_USES_NGINX; then
+        systemctl reload nginx 2>/dev/null || true
+        systemctl start bookstack-queue 2>/dev/null || true
+    else
+        systemctl start bookstack bookstack-queue 2>/dev/null || true
+    fi
     exit 0
 fi
 
@@ -176,84 +184,44 @@ chown -R "${BS_USER}:${BS_USER}" "${BS_DIR}"
 chmod -R 755 "${BS_DIR}/storage" "${BS_DIR}/bootstrap/cache" 2>/dev/null || true
 success "Berechtigungen gesetzt"
 
-# --- PHP-FPM Pool ---
-PHP_POOL_DIR="/etc/php/${PHP_VERSION}/fpm/pool.d"
-PHP_FPM_SOCK="/run/php/bookstack-fpm.sock"
-if [ -d "${PHP_POOL_DIR}" ]; then
-    cat > "${PHP_POOL_DIR}/bookstack.conf" << POOLEOF
-[bookstack]
-user = ${BS_USER}
-group = ${BS_USER}
-listen = ${PHP_FPM_SOCK}
-listen.owner = www-data
-listen.group = www-data
-listen.mode = 0660
-pm = dynamic
-pm.max_children = 15
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 4
-pm.max_requests = 500
-chdir = /
-POOLEOF
-    systemctl restart "${PHP_FPM_SERVICE}" 2>/dev/null || true
-    success "PHP-FPM Pool 'bookstack' konfiguriert"
-else
-    PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
-    warn "PHP-FPM Pool-Verzeichnis nicht gefunden — nutze Standard-Socket"
-fi
+# --- PHP-Binary ermitteln ---
+PHP_BIN="$(command -v php${PHP_VERSION} 2>/dev/null || command -v php)"
 
-# --- nginx-Konfiguration ---
-info "Konfiguriere nginx (Port ${BS_PORT})..."
-cat > "${NGINX_CONF}" << NGXEOF
-server {
-    listen 0.0.0.0:${BS_PORT};
-    server_name _;
-
-    root ${BS_DIR}/public;
-    index index.php;
-
-    access_log /var/log/nginx/bookstack-access.log;
-    error_log  /var/log/nginx/bookstack-error.log;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \.php$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:${PHP_FPM_SOCK};
-        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 120;
-    }
-
-    location ~ /\.(?!well-known) {
-        deny all;
-    }
-
-    client_max_body_size 100M;
-}
-NGXEOF
-
-ln -sf "${NGINX_CONF}" "${NGINX_ENABLED}" 2>/dev/null || true
-nginx -t 2>/dev/null && systemctl reload nginx \
-    || warn "nginx-Konfigurationstest fehlgeschlagen — prüfe manuell"
-success "nginx konfiguriert und neu geladen"
-
-# --- systemd Queue-Worker Service ---
-cat > /etc/systemd/system/bookstack-queue.service << SVCEOF
+# --- systemd Service (artisan serve, wie Monica) ---
+info "Konfiguriere systemd Service (Port ${BS_PORT})..."
+cat > /etc/systemd/system/bookstack.service << SVCEOF
 [Unit]
-Description=BookStack Queue Worker
-After=network.target nginx.service ${PHP_FPM_SERVICE}.service mariadb.service
-Requires=${PHP_FPM_SERVICE}.service mariadb.service
+Description=BookStack Wiki
+After=network.target mariadb.service
 
 [Service]
 Type=simple
 User=${BS_USER}
 Group=${BS_USER}
 WorkingDirectory=${BS_DIR}
-ExecStart=/usr/bin/php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=90
+ExecStart=${PHP_BIN} artisan serve --host=0.0.0.0 --port=${BS_PORT}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+# --- Queue-Worker Service ---
+cat > /etc/systemd/system/bookstack-queue.service << SVCEOF
+[Unit]
+Description=BookStack Queue Worker
+After=network.target mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=simple
+User=${BS_USER}
+Group=${BS_USER}
+WorkingDirectory=${BS_DIR}
+ExecStart=${PHP_BIN} artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=90
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -264,10 +232,8 @@ WantedBy=multi-user.target
 SVCEOF
 
 systemctl daemon-reload
-systemctl enable nginx "${PHP_FPM_SERVICE}" bookstack-queue
-systemctl start "${PHP_FPM_SERVICE}" bookstack-queue
-systemctl reload nginx 2>/dev/null || systemctl start nginx
-success "Alle Services gestartet"
+systemctl enable --now bookstack bookstack-queue
+success "Services 'bookstack' + 'bookstack-queue' gestartet"
 
 # --- Warten auf Erreichbarkeit ---
 info "Warte auf BookStack (bis 30 s)..."
@@ -280,7 +246,7 @@ done
 if curl -sf "http://127.0.0.1:${BS_PORT}" &>/dev/null; then
     success "BookStack erreichbar"
 else
-    warn "BookStack noch nicht erreichbar — prüfe nginx + PHP-FPM Logs"
+    warn "BookStack noch nicht erreichbar — prüfe: journalctl -u bookstack"
 fi
 
 # --- HydraHive Config ---
@@ -296,7 +262,7 @@ cat > "${HH_CONF}" << CFGEOF
   "db_name": "${BS_DB}",
   "db_user": "${BS_DB_USER}",
   "db_pass": "${BS_DB_PASS}",
-  "nginx_conf": "${NGINX_CONF}"
+  "service": "bookstack"
 }
 CFGEOF
 chown hydrahive:hydrahive "${HH_CONF}" 2>/dev/null || true
