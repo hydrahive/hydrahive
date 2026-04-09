@@ -30,6 +30,7 @@ const UserManagementPage     = lazy(() => import("@/pages/UserManagementPage").t
 const PromptGuidePage        = lazy(() => import("@/pages/PromptGuidePage").then((m) => ({ default: m.PromptGuidePage })));
 const McpConfigPage          = lazy(() => import("@/pages/McpConfigPage").then((m) => ({ default: m.McpConfigPage })));
 const QuickstartPage         = lazy(() => import("@/pages/QuickstartPage").then((m) => ({ default: m.QuickstartPage })));
+const PlaygroundPage         = lazy(() => import("@/pages/PlaygroundPage").then((m) => ({ default: m.PlaygroundPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -117,6 +118,7 @@ export default function App() {
             <Route path="usermanagement"    element={<UserManagementPage />} />
             <Route path="prompt-guide"      element={<PromptGuidePage />} />
             <Route path="quickstart"        element={<QuickstartPage />} />
+            <Route path="playground"       element={<PlaygroundPage />} />
             {/* Redirects für konsolidierte Seiten */}
             <Route path="tools"             element={<Navigate to="/agents?tab=tools" replace />} />
             <Route path="tools/skill-packages" element={<Navigate to="/hub?tab=skill-packages" replace />} />

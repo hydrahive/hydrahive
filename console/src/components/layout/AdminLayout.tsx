@@ -30,6 +30,7 @@ import {
   XCircle,
   AlertTriangle,
   Plug,
+  Code,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -258,6 +259,7 @@ export function AdminLayout() {
     { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
     { to: "/prompt-guide",   icon: Lightbulb,       label: t("nav.promptGuide"),     hint: t("navHint.promptGuide", { defaultValue: "KI-Tipps für bessere Prompts" }) },
+    { to: "/playground",     icon: Code,            label: "API Playground",         hint: "API-Endpoints testen und erkunden", adminOnly: true },
   ];
 
   const nav = allNavItems.filter((item) => {

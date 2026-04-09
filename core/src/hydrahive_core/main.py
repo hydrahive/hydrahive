@@ -1863,6 +1863,19 @@ def get_session_metrics_project(project_id: str, _a=Depends(require_admin)):
     return _sm.snapshot(project_id)
 
 
+@admin_router.get("/admin/turn-journal/{project_id}")
+def get_turn_journal(project_id: str, limit: int = 100, _a=Depends(require_admin)):
+    """#523: Turn Journal Events für ein Projekt."""
+    from .turn_journal import journal as _tj
+    # Aktive Session finden
+    session = sessions.get_active(project_id)
+    if not session:
+        return {"events": [], "stats": {}}
+    events = _tj.get_session_events(session.id, limit=limit)
+    stats = _tj.get_project_stats(project_id)
+    return {"events": events, "stats": stats}
+
+
 @admin_router.get("/admin/agents/live")
 def get_agents_live(_a=Depends(require_admin)):
     """

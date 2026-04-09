@@ -770,8 +770,61 @@ def _flush_summary_to_memory(agent_dir, summary: str) -> None:
         with flush_file.open("a", encoding="utf-8") as fh:
             fh.write(entry)
         logger.debug("Memory Flush: Summary in %s geschrieben", flush_file.name)
+
+        # #514: Learning after Compact — Fakten aus Summary extrahieren
+        _extract_learnings(memory_dir, summary)
     except OSError as e:
         logger.warning("Memory Flush fehlgeschlagen: %s", e)
+
+
+def _extract_learnings(memory_dir: Path, summary: str) -> None:
+    """#514: Extrahiert wiederverwendbare Fakten aus einer Compaction-Summary.
+
+    Sucht nach konkreten Entscheidungen, technischen Details und Ergebnissen
+    und schreibt sie in eine separate Learning-Datei.
+    """
+    import re
+    learnings: list[str] = []
+
+    # Erledigt-Punkte extrahieren (aus strukturierter Summary)
+    done_pattern = re.compile(r'- \[x\]\s+(.+)', re.IGNORECASE)
+    for match in done_pattern.finditer(summary):
+        learnings.append(f"Erledigt: {match.group(1).strip()}")
+
+    # Entscheidungen extrahieren
+    decision_markers = ("entschieden", "gewählt", "festgelegt", "beschlossen", "decided", "chose")
+    for line in summary.split("\n"):
+        line = line.strip()
+        if any(m in line.lower() for m in decision_markers) and len(line) > 20:
+            learnings.append(f"Entscheidung: {line[:200]}")
+
+    # Blockiert/Problem-Punkte
+    blocked_pattern = re.compile(r'(?:blockiert|problem|fehler|bug):\s*(.+)', re.IGNORECASE)
+    for match in blocked_pattern.finditer(summary):
+        learnings.append(f"Problem: {match.group(1).strip()[:200]}")
+
+    if not learnings:
+        return
+
+    import datetime
+    learning_file = memory_dir / "_learnings.md"
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"\n### {timestamp}\n" + "\n".join(f"- {l}" for l in learnings[:10]) + "\n"
+
+    try:
+        # Append, max 50 Einträge behalten
+        existing = ""
+        if learning_file.exists():
+            existing = learning_file.read_text(encoding="utf-8")
+        combined = existing + entry
+        # Trim: nur letzte 50 Sections behalten
+        sections = combined.split("\n### ")
+        if len(sections) > 50:
+            combined = "\n### ".join(sections[-50:])
+        learning_file.write_text(combined, encoding="utf-8")
+        logger.debug("Learnings extrahiert: %d Fakten → %s", len(learnings), learning_file.name)
+    except OSError as e:
+        logger.debug("Learnings-Extraktion fehlgeschlagen: %s", e)
 
 
 def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], list[str]]:

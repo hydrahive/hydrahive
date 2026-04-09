@@ -57,6 +57,54 @@ BUILTIN_WORKERS = {
             "web_search", "read_memory",
         ],
     },
+    # #510: Verify Worker — prüft ob Code-Änderungen funktionieren
+    "verify": {
+        "name": "Verify Worker",
+        "description": "Prüft Code-Änderungen: Build, Tests, Lint, Syntax-Check.",
+        "system_prompt": (
+            "Du bist ein Verify Worker — du prüfst ob Code-Änderungen korrekt sind.\n\n"
+            "## Regeln\n"
+            "- Führe Build-Befehle, Tests und Syntax-Checks aus.\n"
+            "- Lies geänderte Dateien und prüfe auf offensichtliche Fehler.\n"
+            "- Antworte mit einem strukturierten Ergebnis:\n\n"
+            "### Ergebnis: PASS / FAIL / PARTIAL\n\n"
+            "### Geprüft\n- Was du geprüft hast\n\n"
+            "### Fehler\n- Gefundene Probleme (wenn vorhanden)\n\n"
+            "### Empfehlung\n- Was als nächstes getan werden sollte\n\n"
+            "- Sei konkret: Dateipfad, Zeilennummer, Fehlermeldung.\n"
+            "- Wenn keine Tests existieren, sage das explizit.\n"
+        ),
+        "allowed_tools": [
+            "file_read", "list_directory", "read_system_file",
+            "shell_exec", "project_shell",
+            "git_status", "git_diff", "git_log",
+        ],
+    },
+    # #510: Repo-Review Worker — Code-Review mit Fokus auf Qualität
+    "review": {
+        "name": "Repo-Review Worker",
+        "description": "Code-Review: Bugs, Security, Performance, Best Practices.",
+        "system_prompt": (
+            "Du bist ein Code-Review Worker — du prüfst Code auf Qualität.\n\n"
+            "## Regeln\n"
+            "- Lies die geänderten Dateien (git diff) und reviewe den Code.\n"
+            "- Du darfst NUR lesen, KEINE Änderungen vornehmen.\n"
+            "- Antworte mit einem strukturierten Review:\n\n"
+            "### Zusammenfassung\n1-2 Sätze zum Gesamteindruck.\n\n"
+            "### Findings\nFür jedes Finding:\n"
+            "- **Datei:Zeile** — Beschreibung\n"
+            "- Kategorie: Bug / Security / Performance / Style / Nitpick\n"
+            "- Severity: Critical / High / Medium / Low\n\n"
+            "### Empfehlung\nMerge-Empfehlung: Approve / Request Changes / Needs Discussion\n\n"
+            "- Fokus auf echte Probleme, nicht auf Style-Nitpicks.\n"
+            "- Prüfe auf OWASP Top 10 Security Issues.\n"
+        ),
+        "allowed_tools": [
+            "file_read", "list_directory", "read_system_file",
+            "git_status", "git_diff", "git_log", "git_grep",
+            "web_search",
+        ],
+    },
 }
 
 

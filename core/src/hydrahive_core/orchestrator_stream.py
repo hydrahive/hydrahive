@@ -22,6 +22,7 @@ from .orchestrator_llm import (
     _current_project_id,
 )
 from .session_metrics import metrics as _metrics
+from .turn_journal import journal as _journal, EventType as _JE
 from .orchestrator_context import (
     _history_token_budget,
     _estimate_tokens,
@@ -101,6 +102,9 @@ async def handle_message_stream(
         _save_content = f"[Bild-Nachricht] {_save_content}"
     await orch._sessions.append(project_id, MessageRole.USER, _save_content, agent_id=sender)
     user_msg_saved = True
+    # #523: Turn Journal — User-Message aufzeichnen
+    _sid = getattr(orch._sessions.get_active(project_id), "id", "unknown") if orch._sessions.get_active(project_id) else "unknown"
+    _journal.append(_sid, project_id, _JE.USER_MESSAGE, {"length": len(_save_content)})
 
     # Context-Kompaktierung vor dem LLM-Aufruf
     await orch._compact_if_needed(project_id, boss_cfg)
@@ -338,6 +342,7 @@ async def handle_message_stream(
                            "error in input stream", "input too long", "request too large")
         if any(s in err_str for s in _context_errors):
             _metrics.record_overflow(project_id)
+            _journal.append(_sid, project_id, _JE.OVERFLOW, {"error": str(e)[:200]})
             # #499/#517: Reactive Compaction — erst compacten, dann retry
             logger.warning(
                 "Context-Overflow (Streaming) für Projekt '%s' — versuche Reactive Compaction. Fehler: %s",

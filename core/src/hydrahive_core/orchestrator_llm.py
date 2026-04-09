@@ -31,6 +31,9 @@ _current_project_id: contextvars.ContextVar[str | None] = contextvars.ContextVar
 )
 
 
+# #501: Cache-Break-Detection — Fingerprints pro Agent
+_CACHE_FINGERPRINTS: dict[str, dict] = {}  # agent_id → {had_write, last_write, last_read}
+
 # ---------------------------------------------------------------- Prompt Caching
 
 def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]:
@@ -708,17 +711,42 @@ async def _anthropic_oauth_call(
     # OAuth Rate-Limit Headers auslesen → globaler State
     _extract_rate_limit_headers(raw_resp.headers)
 
-    # Cache-Usage loggen (zeigt ob Prompt Caching aktiv ist)
+    # #501: Cache-Break-Detection + Usage loggen
     if hasattr(resp, "usage") and resp.usage:
         u = resp.usage
         cache_write = getattr(u, "cache_creation_input_tokens", 0) or 0
         cache_read  = getattr(u, "cache_read_input_tokens", 0) or 0
         input_tok   = getattr(u, "input_tokens", 0) or 0
+        pct = 100 * cache_read / max(input_tok, 1)
         logger.info(
             "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
-            model, input_tok, cache_write, cache_read,
-            100 * cache_read / max(input_tok, 1),
+            model, input_tok, cache_write, cache_read, pct,
         )
+        # Cache-Break-Detection: wenn wir vorher geschrieben haben aber jetzt 0 lesen
+        _agent_id = getattr(agent_cfg, "id", "unknown")
+        _prev = _CACHE_FINGERPRINTS.get(_agent_id)
+        if _prev and _prev["had_write"] and cache_read == 0 and input_tok > 1000:
+            # Unerwarteter Cache-Break!
+            _pid = _current_project_id.get()
+            logger.warning(
+                "CACHE-BREAK [%s]: Vorheriger Call hatte %d cache_write, jetzt 0 cache_read (%d input). "
+                "System-Prompt oder Tool-Schema hat sich geändert.",
+                _agent_id, _prev["last_write"], input_tok,
+            )
+            if _pid:
+                from .session_metrics import metrics as _m
+                from .orchestrator_context import _diagnose_cache_break
+                _reason = "unknown"
+                if hasattr(agent_cfg, "agent_dir") and agent_cfg.agent_dir:
+                    _break = _diagnose_cache_break(_agent_id, agent_cfg.agent_dir, "normal")
+                    if _break:
+                        _reason = _break
+                _m.record_cache_break(_pid, f"{_reason} (write={_prev['last_write']} → read=0)")
+        _CACHE_FINGERPRINTS[_agent_id] = {
+            "had_write": cache_write > 0,
+            "last_write": cache_write,
+            "last_read": cache_read,
+        }
 
     # Anthropic Response → litellm-kompatibles SimpleNamespace
     text = ""
