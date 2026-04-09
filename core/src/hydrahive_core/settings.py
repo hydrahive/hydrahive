@@ -253,6 +253,10 @@ class HydraHiveSettings(BaseSettings):
     rate_limit_redis_url: str = ""
     rate_limit_redis_timeout_s: float = 0.5
 
+    # #520/#522: Feature-Flags für P0-Architektur
+    boss_policy_enabled: bool = False      # Auto-Verification nach Mutations
+    worktree_isolation: bool = False       # Git-Worktrees für Worker-Tasks
+
 
 # Singleton
 settings = HydraHiveSettings()

@@ -9,6 +9,7 @@ Tool nicht in Registry = existiert nicht (egal was in agent.yaml steht).
 Path-Traversal und Zugriff ausserhalb des Projekt-Verzeichnisses werden verweigert.
 """
 
+import contextvars
 import json
 import logging
 import shlex as _shlex_shell
@@ -92,6 +93,12 @@ class PathSafetyError(PermissionError):
     """Wird geworfen wenn ein Tool ausserhalb des Projekt-Verzeichnisses zugreifen wuerde."""
 
 
+# #522: ContextVar für aktiven Worktree — Worker-Tasks setzen das auf ihren Worktree-Pfad
+_active_worktree: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
+    "_active_worktree", default=None,
+)
+
+
 def assert_path_within_project(
     path: str | Path,
     project_id: str,
@@ -102,6 +109,9 @@ def assert_path_within_project(
     Prueft ob path innerhalb /projects/<project_id>/ liegt.
     Loest PathSafetyError aus wenn nicht — kein stilles Ignorieren.
 
+    #522: Wenn ein Worktree aktiv ist (via ContextVar), wird gegen dessen Pfad geprüft.
+    Worktree-Pfade müssen IMMER unter /tmp/hydrahive-git/ liegen (Safety-Assertion).
+
     Mit filesystem.read_all Permission: Zugriff auf beliebiges /projects/*-Verzeichnis erlaubt.
 
     Verhindert:
@@ -110,7 +120,17 @@ def assert_path_within_project(
     - Symlink-Escapes: wird durch resolve() aufgeloest
     """
     import os
-    project_root = (PROJECTS_ROOT / project_id).resolve()
+
+    # #522: Worktree-Override wenn aktiv
+    wt = _active_worktree.get()
+    if wt is not None:
+        # Safety: Worktree MUSS unter /tmp/hydrahive-git/ liegen
+        wt_resolved = wt.resolve()
+        assert str(wt_resolved).startswith("/tmp/hydrahive-git"), \
+            f"Worktree-Safety-Violation: {wt_resolved} liegt nicht unter /tmp/hydrahive-git/"
+        project_root = wt_resolved
+    else:
+        project_root = (PROJECTS_ROOT / project_id).resolve()
 
     # Relativer Pfad wird relativ zum Projekt-Root aufgeloest
     target = Path(path)

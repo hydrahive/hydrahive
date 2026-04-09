@@ -344,6 +344,25 @@ async def execute_tool_call(
             _rpath = tool_input.get("path", "")
             if _rpath:
                 file_read_cache[_rpath] = result
+
+        # #520: Boss Policy — Mutation tracken + ggf. Verification triggern
+        try:
+            from .settings import settings as _settings
+            if _settings.boss_policy_enabled and boss_cfg:
+                from .boss_policy import boss_policy as _bp
+                _bp.record_mutation(project_id, tool_name, tool_input)
+                if _bp.should_verify(project_id, tool_name):
+                    _affected = _bp.get_pending_files(project_id)
+                    _v_result = await _bp.trigger_verification(orch, project_id, boss_cfg, _affected)
+                    _action = _bp.handle_result(_v_result)
+                    if isinstance(result, dict):
+                        result["_verification"] = _v_result.to_dict()
+                        result["_verification_action"] = _action
+                    logger.info("Boss Policy: Verification %s (%s) → %s",
+                                _v_result.status.value, project_id, _action)
+        except Exception as _bp_err:
+            logger.debug("Boss Policy error: %s", _bp_err)
+
         return result, False
     except Exception as te:
         return {"error": str(te)}, True

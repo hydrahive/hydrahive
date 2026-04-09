@@ -251,15 +251,62 @@ async def _run_builtin_worker(orch, dispatch: dict, profile: dict) -> DispatchRe
     try:
         import litellm
         from .orchestrator_llm import _llm_with_retry
-        # Einfacher LLM-Call ohne Tool-Loop (Worker liefern Analyse, keine Aktionen)
-        resp = await _llm_with_retry(lambda: litellm.acompletion(
-            model="claude-haiku-4-5-20251001",
-            messages=messages,
-            tools=tools if tools else None,
-            max_tokens=4000,
-            drop_params=True,
-        ))
-        result = resp.choices[0].message.content or ""
+        from .orchestrator_tools import execute_tool_call, format_tool_result
+
+        # #519: Verify-Worker bekommt Mini-Tool-Loop (max 5 Runden)
+        # Andere Built-ins (explore, plan, review) bleiben Single-Shot
+        use_tool_loop = worker_id == "verify" and tools
+        max_rounds = 5 if use_tool_loop else 1
+
+        for _round in range(max_rounds):
+            resp = await _llm_with_retry(lambda: litellm.acompletion(
+                model="claude-haiku-4-5-20251001",
+                messages=messages,
+                tools=tools if tools else None,
+                max_tokens=4000,
+                drop_params=True,
+            ))
+            msg = resp.choices[0].message
+
+            # Keine Tool-Calls → fertig
+            tool_calls = getattr(msg, "tool_calls", None)
+            if not tool_calls or not use_tool_loop:
+                result = msg.content or ""
+                break
+
+            # Tool-Calls ausführen
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tool_calls
+                ],
+            })
+            for tc in tool_calls:
+                tc_args = json.loads(tc.function.arguments or "{}")
+                # Safety: Nur erlaubte Tools ausführen
+                if tc.function.name not in allowed:
+                    messages.append({"role": "tool", "tool_call_id": tc.id,
+                                     "content": f"[Tool '{tc.function.name}' nicht erlaubt für Built-in Worker]"})
+                    continue
+                try:
+                    tc_result, _ = await execute_tool_call(
+                        orch, boss_cfg=None, project_id=dispatch.get("project_id", ""),
+                        tool_name=tc.function.name, tool_input=tc_args,
+                    )
+                    messages.append({"role": "tool", "tool_call_id": tc.id,
+                                     "content": format_tool_result(tc_result)})
+                except Exception as tc_err:
+                    messages.append({"role": "tool", "tool_call_id": tc.id,
+                                     "content": f"[Fehler: {tc_err}]"})
+
+            logger.debug("Built-in Worker '%s' Runde %d/%d", worker_id, _round + 1, max_rounds)
+        else:
+            # max_rounds erreicht — letzte Antwort nehmen
+            result = msg.content or "[Max. Runden erreicht]"
+
         return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
     except Exception as e:
         logger.error("Built-in Worker '%s' Fehler: %s", worker_id, e)
@@ -292,6 +339,22 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
 
     logger.info("Dispatche Task an %s: %s", worker_id, task[:60])
 
+    # #522: Worktree-Isolation wenn Feature-Flag aktiv
+    _wt_info = None
+    try:
+        from .settings import settings as _s
+        if _s.worktree_isolation:
+            from .worktree_manager import worktree_manager as _wm
+            # Workspace des Projekts finden (wenn Git-Repo vorhanden)
+            _project_id = dispatch.get("project_id", "")
+            if _project_id:
+                _workspace = Path(f"/tmp/hydrahive-git/{_project_id}")
+                if (_workspace / ".git").exists():
+                    _wt_info = await _wm.create_worktree(_workspace, task_id or worker_id, worker_id)
+                    logger.info("Worker '%s' arbeitet in Worktree: %s", worker_id, _wt_info.path)
+    except Exception as _wt_err:
+        logger.debug("Worktree creation skipped: %s", _wt_err)
+
     # Worker-LLM-Aufruf (kein Tool-Calling für Worker — nur ausführen)
     messages = [
         {"role": "system", "content": f"Du bist {worker_cfg.identity}. Erledige den folgenden Task präzise und knapp."},
@@ -299,6 +362,12 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
     if context:
         messages.append({"role": "user", "content": f"Kontext: {context}"})
     messages.append({"role": "user", "content": task})
+
+    # #522: ContextVar setzen wenn Worktree aktiv
+    _wt_token = None
+    if _wt_info:
+        from .tool_registry import _active_worktree
+        _wt_token = _active_worktree.set(_wt_info.path)
 
     try:
         response = await orch._llm_call(worker_cfg, messages, tools=None)
@@ -319,6 +388,17 @@ async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
             worker_id=worker_id, task=task, result="",
             success=False, error=str(e), task_id=task_id,
         )
+    finally:
+        # #522: ContextVar zurücksetzen + Worktree Cleanup
+        if _wt_token is not None:
+            from .tool_registry import _active_worktree
+            _active_worktree.reset(_wt_token)
+        if _wt_info:
+            try:
+                from .worktree_manager import worktree_manager as _wm
+                await _wm.cleanup_worktree(task_id or worker_id, merge=True)
+            except Exception as _wt_clean_err:
+                logger.warning("Worktree cleanup failed: %s", _wt_clean_err)
 
 
 async def _synthesize(
