@@ -98,6 +98,19 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const abortRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Chat-Cache: Messages aus sessionStorage nach Mount laden ──────────────
+  // Eigener useEffect — feuert NACH dem ersten Render wenn DOM fertig ist.
+  // Dadurch funktioniert scrollIntoView korrekt (Container hat Dimensionen).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`hh_chat_${opts.historyEndpoint}`);
+      if (raw) {
+        const cached = JSON.parse(raw) as ChatMessage[];
+        if (cached.length > 0) setMessages(cached);
+      }
+    } catch { /* ignore */ }
+  }, [opts.historyEndpoint]);
+
   // ── Load History ──────────────────────────────────────────────────────────
 
   const loadHistory = useCallback(() => {
@@ -119,7 +132,11 @@ export function useChatStream(opts: UseChatStreamOptions) {
             }
             return msg;
           });
-        if (loaded.length > 0) setMessages(loaded);
+        if (loaded.length > 0) {
+          setMessages(loaded);
+          try { sessionStorage.setItem(`hh_chat_${opts.historyEndpoint}`, JSON.stringify(loaded.slice(-100))); }
+          catch { /* quota */ }
+        }
       })
       .catch(() => {});
   }, [opts.historyEndpoint]);
