@@ -1,0 +1,51 @@
+id: codex
+identity: Codex Code Reviewer
+type: specialist
+soul: ./soul.md
+
+llm:
+  model: openai/codex-mini
+  fallback_models:
+  - claude-sonnet-4-6
+  - claude-haiku-4-5-20251001
+  temperature: 0.1
+  max_tokens: 16384
+
+execution_modes:
+  default: safe
+  safe:
+    permissions:
+    - filesystem.read
+    - memory.read
+    - memory.write
+
+heartbeat:
+  interval: 60s
+  timeout: 300s
+  on_failure: restart
+
+tools:
+# Dateien (nur lesen)
+- file_read
+- file_search
+- list_directory
+# Web
+- web_search
+- http_request
+# Git (nur lesen + Issues)
+- git_status
+- git_diff
+- gitea_repo_inspect
+- gitea_repo_tree
+- gitea_repo_file
+- gitea_repo_commits
+- gitea_repo_diff
+- gitea_create_issue
+- gitea_comment_issue
+# GitHub
+- http_request
+# Memory
+- read_memory
+- write_memory
+# Agenten
+- ask_agent
