@@ -137,8 +137,8 @@ async def handle_message_stream(
         project_id,
         max_history_tokens=_hist_budget_s,
     )
-    # Tool-Messages (tool_calls + tool results) durchlassen
-    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant", "tool")]
+    # Tool-Messages werden von as_llm_message() zu assistant konvertiert
+    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
     # #414: Letzte User-Message mit Vision-Blocks ersetzen
     if _vision_blocks and history:
         for i in range(len(history) - 1, -1, -1):

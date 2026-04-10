@@ -585,8 +585,8 @@ class Orchestrator:
             project_id,
             max_history_tokens=_hist_budget,
         )
-        # Tool-Messages (tool_calls + tool results) durchlassen — nicht mehr rausfiltern
-        history = [m for m in _raw_history if m.get("role") in ("user", "assistant", "tool")]
+        # Tool-Messages werden von as_llm_message() zu assistant konvertiert
+        history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
         # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
         use_meta_only = "request_tools" in (boss_cfg.tools or [])

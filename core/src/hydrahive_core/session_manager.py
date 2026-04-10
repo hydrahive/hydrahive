@@ -173,27 +173,32 @@ class Message:
         )
 
     def as_llm_message(self) -> dict:
-        """Format für LLM-API (OpenAI-kompatibel via litellm).
+        """Format für LLM-API — provider-agnostisch (kein role:tool nötig).
 
-        Unterstützt drei Formate:
-        1. Assistant mit tool_calls → {"role": "assistant", "tool_calls": [...]}
-        2. Tool-Result → {"role": "tool", "tool_call_id": "...", "content": "..."}
-        3. Normal (user/assistant/system) → {"role": "...", "content": "..."}
+        Tool-Calls und Results werden als assistant-Messages formatiert,
+        damit sie mit jedem Provider funktionieren (Anthropic, OpenAI, etc.).
         """
-        # Assistant mit Tool-Calls
+        # Assistant mit Tool-Calls → als Text ausgeben welche Tools aufgerufen wurden
         if self.tool_calls and self.role == MessageRole.ASSISTANT:
-            msg: dict = {"role": "assistant", "tool_calls": self.tool_calls}
+            parts = []
             if self.content:
-                msg["content"] = self.content
-            return msg
+                parts.append(self.content)
+            for tc in self.tool_calls:
+                fn = tc.get("function", {})
+                parts.append(f"[Tool-Call: {fn.get('name', '?')}({fn.get('arguments', '{}')})]")
+            return {"role": "assistant", "content": "\n".join(parts)}
 
-        # Tool-Result
+        # Tool-Result → als assistant-Message mit Kennzeichnung
         if self.tool_call_id and self.role == MessageRole.TOOL:
+            tool_name = self.metadata.get("tool_name", "")
             return {
-                "role": "tool",
-                "tool_call_id": self.tool_call_id,
-                "content": self.content or "",
+                "role": "assistant",
+                "content": f"[Tool-Result: {tool_name}]\n{self.content or ''}",
             }
+
+        # Legacy TOOL-Messages (ohne tool_call_id) → als assistant
+        if self.role == MessageRole.TOOL:
+            return {"role": "assistant", "content": self.content}
 
         # Standard-Messages
         prefix = ""
@@ -323,7 +328,9 @@ class Session:
                 budgeted = budget_tool_result(
                     m.content, tool_name, pos_from_end, age_minutes,
                 )
-                result.append({"role": m.role.value, "content": budgeted})
+                # Tool-Results als assistant ausgeben (provider-agnostisch)
+                _tool_label = f"[Tool-Result: {tool_name}]\n" if tool_name else ""
+                result.append({"role": "assistant", "content": f"{_tool_label}{budgeted}"})
             else:
                 result.append(m.as_llm_message())
 
