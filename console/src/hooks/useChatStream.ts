@@ -219,6 +219,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
       setCoachChecking(false);
     }
 
+    // User sendet → zurück nach unten scrollen
+    userScrolledUp.current = false;
+
     const userMsg: ChatMessage = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) };
     let currentAsst = mkMsg("assistant", "");
     let asstAdded = false;
