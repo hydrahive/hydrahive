@@ -142,12 +142,14 @@ def repair_tool_pairs(messages: list[dict]) -> list[dict]:
 
 @dataclass
 class Message:
-    role:      MessageRole
-    content:   str
-    timestamp: str                  # ISO-8601
-    msg_id:    str | None = None    # Unique ID pro Message (#477)
-    agent_id:  str | None = None    # welcher Agent hat das produziert
-    metadata:  dict = field(default_factory=dict)
+    role:         MessageRole
+    content:      str
+    timestamp:    str                  # ISO-8601
+    msg_id:       str | None = None    # Unique ID pro Message (#477)
+    agent_id:     str | None = None    # welcher Agent hat das produziert
+    metadata:     dict = field(default_factory=dict)
+    tool_calls:   list[dict] | None = None   # OpenAI-Format tool_calls (assistant messages)
+    tool_call_id: str | None = None          # tool_call_id (tool result messages)
 
     @classmethod
     def create(
@@ -155,6 +157,8 @@ class Message:
         role: MessageRole,
         content: str,
         agent_id: str | None = None,
+        tool_calls: list[dict] | None = None,
+        tool_call_id: str | None = None,
         **metadata,
     ) -> "Message":
         return cls(
@@ -164,15 +168,34 @@ class Message:
             msg_id=uuid.uuid4().hex[:8],
             agent_id=agent_id,
             metadata=metadata,
+            tool_calls=tool_calls,
+            tool_call_id=tool_call_id,
         )
 
     def as_llm_message(self) -> dict:
         """Format für LLM-API (OpenAI-kompatibel via litellm).
 
-        Prefixed User-Messages mit Timestamp damit das LLM echtes
-        Zeitgefühl bekommt (#477). Assistant-Messages bleiben ohne
-        Prefix — sonst ahmt das LLM den Timestamp-Stil nach.
+        Unterstützt drei Formate:
+        1. Assistant mit tool_calls → {"role": "assistant", "tool_calls": [...]}
+        2. Tool-Result → {"role": "tool", "tool_call_id": "...", "content": "..."}
+        3. Normal (user/assistant/system) → {"role": "...", "content": "..."}
         """
+        # Assistant mit Tool-Calls
+        if self.tool_calls and self.role == MessageRole.ASSISTANT:
+            msg: dict = {"role": "assistant", "tool_calls": self.tool_calls}
+            if self.content:
+                msg["content"] = self.content
+            return msg
+
+        # Tool-Result
+        if self.tool_call_id and self.role == MessageRole.TOOL:
+            return {
+                "role": "tool",
+                "tool_call_id": self.tool_call_id,
+                "content": self.content or "",
+            }
+
+        # Standard-Messages
         prefix = ""
         if self.role == MessageRole.USER:
             try:
@@ -513,12 +536,18 @@ class SessionManager:
         role: MessageRole,
         content: str,
         agent_id: str | None = None,
+        tool_calls: list[dict] | None = None,
+        tool_call_id: str | None = None,
         **metadata,
     ) -> Message:
         """Nachricht an aktive Session anhängen (Session wird ggf. angelegt)."""
         async with self._get_lock(project_id):
             session = self.get_or_create(project_id)
-            message = Message.create(role, content, agent_id=agent_id, **metadata)
+            message = Message.create(
+                role, content, agent_id=agent_id,
+                tool_calls=tool_calls, tool_call_id=tool_call_id,
+                **metadata,
+            )
             session.append(message)
             self._db_insert_message(session.id, message, len(session.messages) - 1)
             # Preview aktualisieren bei erster User-Message
@@ -836,7 +865,12 @@ class SessionManager:
 
     def _db_insert_message(self, session_id: str, message: Message, seq: int) -> None:
         """Einzelne Message in DB einfügen."""
-        meta = message.metadata or {}
+        meta = dict(message.metadata or {})
+        # Tool-Call Daten in metadata persistieren (kein DB-Schema-Change nötig)
+        if message.tool_calls:
+            meta["_tool_calls"] = message.tool_calls
+        if message.tool_call_id:
+            meta["_tool_call_id"] = message.tool_call_id
         self._db.execute(
             "INSERT INTO messages "
             "(session_id, msg_id, role, content, timestamp, agent_id, metadata, seq, "
@@ -868,7 +902,11 @@ class SessionManager:
         """Alle Messages einer Session ersetzen (für compact/replace_messages)."""
         self._db.execute("DELETE FROM messages WHERE session_id = ?", (session.id,))
         for i, msg in enumerate(session.messages):
-            meta = msg.metadata or {}
+            meta = dict(msg.metadata or {})
+            if msg.tool_calls:
+                meta["_tool_calls"] = msg.tool_calls
+            if msg.tool_call_id:
+                meta["_tool_call_id"] = msg.tool_call_id
             self._db.execute(
                 "INSERT INTO messages "
                 "(session_id, msg_id, role, content, timestamp, agent_id, metadata, seq, "
@@ -908,14 +946,19 @@ class SessionManager:
             "SELECT * FROM messages WHERE session_id = ? ORDER BY seq",
             (session_id,),
         ).fetchall()
-        return [
-            Message(
+        result = []
+        for r in rows:
+            meta = json.loads(r["metadata"]) if r["metadata"] else {}
+            tc = meta.pop("_tool_calls", None)
+            tcid = meta.pop("_tool_call_id", None)
+            result.append(Message(
                 role=MessageRole(r["role"]),
                 content=r["content"],
                 timestamp=r["timestamp"],
                 msg_id=r["msg_id"],
                 agent_id=r["agent_id"],
-                metadata=json.loads(r["metadata"]) if r["metadata"] else {},
-            )
-            for r in rows
-        ]
+                metadata=meta,
+                tool_calls=tc,
+                tool_call_id=tcid,
+            ))
+        return result

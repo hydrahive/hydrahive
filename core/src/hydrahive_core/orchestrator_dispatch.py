@@ -17,6 +17,7 @@ from .orchestrator_tools import (
     handle_request_tools,
 )
 
+from .session_manager import MessageRole
 from .session_metrics import metrics as _metrics
 
 logger = logging.getLogger(__name__)
@@ -679,6 +680,24 @@ async def _tool_loop(
                 "tool_call_id": tc.id,
                 "content":      tool_results.get(tc.id, ""),
             })
+
+        # Tool-Calls + Results in Session persistieren (nicht nur in-memory)
+        _tc_list = [
+            {"id": tc.id, "type": "function",
+             "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+            for tc in tool_calls
+        ]
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT, "",
+            agent_id=boss_cfg.id, tool_calls=_tc_list,
+        )
+        for tc in tool_calls:
+            _result_content = tool_results.get(tc.id, "")
+            await orch._sessions.append(
+                project_id, MessageRole.TOOL, _result_content,
+                agent_id=boss_cfg.id, tool_call_id=tc.id,
+                tool_name=tc.function.name,
+            )
 
         # Nächste LLM-Runde
         try:

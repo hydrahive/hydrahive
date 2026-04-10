@@ -137,8 +137,8 @@ async def handle_message_stream(
         project_id,
         max_history_tokens=_hist_budget_s,
     )
-    # Tool-Messages aus History filtern — LLM-APIs erlauben nur user/assistant
-    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
+    # Tool-Messages (tool_calls + tool results) durchlassen
+    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant", "tool")]
     # #414: Letzte User-Message mit Vision-Blocks ersetzen
     if _vision_blocks and history:
         for i in range(len(history) - 1, -1, -1):
@@ -517,6 +517,26 @@ async def _stream_codex(
                 yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
+
+        # Tool-Calls + Results in Session persistieren (OpenAI-Format)
+        _codex_tc_list = [
+            {"id": tc.id, "type": "function",
+             "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+            for tc in msg.tool_calls
+        ]
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT, "",
+            agent_id=boss_id, tool_calls=_codex_tc_list,
+        )
+        for tc in msg.tool_calls:
+            _cr = _tool_results[tc.id][0]
+            _cr_str = format_tool_result(_cr)
+            await orch._sessions.append(
+                project_id, MessageRole.TOOL, _cr_str,
+                agent_id=boss_id, tool_call_id=tc.id,
+                tool_name=tc.function.name,
+            )
+
         next_resp = await orch._openai_codex_call(
             boss_cfg, cur_messages, litellm_tools, codex_token, model_name,
             force_tools=False,
@@ -816,6 +836,25 @@ async def _stream_anthropic_oauth(
         if any_tool_error:
             repeated_tool_signature_count = 0
 
+        # Tool-Calls + Results in Session persistieren (OpenAI-Format)
+        _oauth_tc_list = [
+            {"id": block.id, "type": "function",
+             "function": {"name": block.name, "arguments": _json.dumps(block.input) if block.input else "{}"}}
+            for block in tool_use_blocks
+        ]
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT, "",
+            agent_id=boss_id, tool_calls=_oauth_tc_list,
+        )
+        for block in tool_use_blocks:
+            _result, _ = _oauth_block_results[block.id]
+            _result_str = format_tool_result(_result)
+            await orch._sessions.append(
+                project_id, MessageRole.TOOL, _result_str,
+                agent_id=boss_id, tool_call_id=block.id,
+                tool_name=block.name,
+            )
+
         asst_content = []
         for b in final_msg.content:
             if b.type == "thinking":
@@ -1039,6 +1078,7 @@ async def _stream_litellm(
 
         # Phase 4: Ergebnisse in Original-Reihenfolge
         tool_results_text = []
+        _tc_results_for_session: list[tuple[str, str, str]] = []  # (tc_id, tc_name, result_str)
         for tc in tc_list:
             result = _lm_results[tc["id"]]
             _img_evt = _extract_tool_image(result, tc["name"])
@@ -1046,10 +1086,28 @@ async def _stream_litellm(
                 yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             tool_results_text.append(f"[Tool: {tc['name']}]\n{result_str}")
+            _tc_results_for_session.append((tc["id"], tc["name"], result_str))
 
         loop_messages.append({
             "role":    "user",
             "content": "Tool-Ergebnisse:\n" + "\n\n".join(tool_results_text),
         })
+
+        # Tool-Calls + Results in Session persistieren (OpenAI-Format)
+        _tc_calls_for_session = [
+            {"id": tc["id"], "type": "function",
+             "function": {"name": tc["name"], "arguments": tc.get("arguments", "{}")}}
+            for tc in tc_list
+        ]
+        await orch._sessions.append(
+            project_id, MessageRole.ASSISTANT, "",
+            agent_id=boss_id, tool_calls=_tc_calls_for_session,
+        )
+        for _tcid, _tcname, _tcresult in _tc_results_for_session:
+            await orch._sessions.append(
+                project_id, MessageRole.TOOL, _tcresult,
+                agent_id=boss_id, tool_call_id=_tcid,
+                tool_name=_tcname,
+            )
 
     yield {"_full_response": full_response, "_streamed_any": streamed_any}

@@ -1191,15 +1191,16 @@ async def _compact_if_needed(
                 "Full-Compaction triggered (Projekt: %s, ~%d Tokens >= 80%% von %d)",
                 project_id, current, ctx_window,
             )
-            # Tool-Messages aus den behaltenen Nachrichten entfernen
+            # Tool-Results auf Kurzform kürzen statt komplett entfernen
             session = sessions.get_active(project_id)
             if session:
-                cleaned = [
-                    m for m in session.messages
-                    if m.role != MessageRole.TOOL
-                ]
-                session.messages = cleaned
-                sessions._persist(session)
+                for m in session.messages:
+                    if m.role == MessageRole.TOOL and len(m.content) > 200:
+                        # Behalte Tool-Name + erste Zeile + Längeninfo
+                        _tool_name = m.metadata.get("tool_name", "")
+                        _first_line = m.content.split("\n", 1)[0][:120]
+                        m.content = f"[{_tool_name}] {_first_line}… [{len(m.content)} Zeichen]"
+                sessions._db_replace_messages(session)
             # Nochmal kompaktieren mit weniger keep_last (1 Round in Notfall)
             await sessions.compact(project_id, summary, keep_last=4, keep_last_rounds=1)
             _metrics.record_compaction(project_id, stage=3)
@@ -1223,7 +1224,7 @@ async def _compact_if_needed(
                     reinject_msg = _Msg.create(role=MessageRole.SYSTEM, content=reinject)
                     # Nach Summary (Index 0), vor den behaltenen Messages einfügen
                     session.messages.insert(1, reinject_msg)
-                    sessions._persist(session)
+                    sessions._db_replace_messages(session)
                     logger.info(
                         "Post-compact reinject: %d Files reinjiziert (Projekt: %s)",
                         len(_edited_files), project_id,
