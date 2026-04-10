@@ -363,14 +363,14 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
 
       {/* Middle: Left Box | EKG | Right Box */}
       <div className="flex flex-1 min-h-0 gap-2 px-3 overflow-hidden">
-        {/* Left info box */}
+        {/* Left info box — items aligned to EKG rows */}
         <InfoBox title="Tool-Chain" className="w-52 flex-shrink-0">
-          <div className="space-y-3 overflow-y-auto h-full">
+          <div className="flex flex-col h-full">
             {agentList.map(agent => (
-              <div key={agent.id}>
+              <div key={agent.id} className="flex-1 flex flex-col justify-center border-b border-white/5 last:border-0 px-1">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: agent.color }} />
-                  <span className="text-[10px] text-white/60">{agent.name}</span>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: agent.color }} />
+                  <span className="text-[10px] text-white/60 truncate">{agent.name}</span>
                 </div>
                 <div className="flex flex-wrap gap-1 pl-3">
                   {agent.tools.length === 0 && <span className="text-[9px] text-white/15">—</span>}
@@ -391,15 +391,15 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
           <EkgCanvas agentsRef={pointsRef} agentList={agentList} />
         </div>
 
-        {/* Right info box */}
+        {/* Right info box — items aligned to EKG rows */}
         <InfoBox title="Agent-Details" className="w-52 flex-shrink-0">
-          <div className="space-y-3 overflow-y-auto h-full">
+          <div className="flex flex-col h-full">
             {agentList.map(agent => (
-              <div key={agent.id} className="pb-2 border-b border-white/5 last:border-0">
+              <div key={agent.id} className="flex-1 flex flex-col justify-center border-b border-white/5 last:border-0 px-1">
                 <div className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${agent.active ? "animate-pulse" : ""}`}
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${agent.active ? "animate-pulse" : ""}`}
                     style={{ backgroundColor: agent.color, boxShadow: agent.active ? `0 0 6px ${agent.glowColor}` : "none" }} />
-                  <span className="text-[11px] font-medium text-white/85">{agent.name}</span>
+                  <span className="text-[11px] font-medium text-white/85 truncate">{agent.name}</span>
                 </div>
                 <div className="pl-4 mt-1 space-y-0.5 text-[9px]">
                   <div className="flex justify-between"><span className="text-white/30">Modell</span><span className="text-white/60 font-mono truncate ml-2">{agent.model}</span></div>
