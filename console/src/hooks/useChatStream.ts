@@ -93,10 +93,12 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const userScrolledUp = useRef(false);
 
   // ── Chat-Cache: Messages aus sessionStorage nach Mount laden ──────────────
   // Eigener useEffect — feuert NACH dem ersten Render wenn DOM fertig ist.
@@ -141,10 +143,24 @@ export function useChatStream(opts: UseChatStreamOptions) {
       .catch(() => {});
   }, [opts.historyEndpoint]);
 
-  // ── Auto-scroll ───────────────────────────────────────────────────────────
-
+  // ── Scroll-Tracking: User scrollt hoch → kein auto-scroll ─────────────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    function onScroll() {
+      if (!el) return;
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      userScrolledUp.current = !atBottom;
+    }
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ── Auto-scroll: nur wenn User am Ende ist ───────────────────────────────
+  useEffect(() => {
+    if (!userScrolledUp.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
@@ -350,7 +366,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     sessions, setSessions,
     viewSession, setViewSession,
     // Refs
-    bottomRef, textareaRef, fileInputRef,
+    bottomRef, scrollContainerRef, textareaRef, fileInputRef,
     // Actions
     send, abort, loadHistory,
     handleImageUpload,

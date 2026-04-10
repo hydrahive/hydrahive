@@ -51,6 +51,7 @@ export interface ChatViewProps {
   coachChecking: boolean;
   // Refs
   bottomRef: React.RefObject<HTMLDivElement>;
+  scrollContainerRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
   // Actions
@@ -83,7 +84,7 @@ export function ChatView(props: ChatViewProps) {
     lightboxSrc, setLightboxSrc, pendingImages, setPendingImages,
     activeTool, streamingMsgId, doneMsgId, elapsed,
     coachEnabled, toggleCoach, coachFeedback, setCoachFeedback, coachChecking,
-    bottomRef, textareaRef, fileInputRef,
+    bottomRef, scrollContainerRef, textareaRef, fileInputRef,
     send, abort, handleImageUpload,
     showWorkers, viewSession,
     showOAuthBar = true, headerSlot, className,
@@ -109,7 +110,7 @@ export function ChatView(props: ChatViewProps) {
       {showOAuthBar && <OAuthUsageBar />}
 
       {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
         {displayMessages.length === 0 && !historyLoading && (
           <div className="flex h-full flex-col items-center justify-center space-y-3 text-center text-muted-foreground">
             <Bot className="h-10 w-10" />
