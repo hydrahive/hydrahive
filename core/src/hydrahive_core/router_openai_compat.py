@@ -16,7 +16,7 @@ import os
 import time
 import uuid
 
-from fastapi import Header, HTTPException, Request
+from fastapi import File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 _OPENAI_API_KEY = os.environ.get("HYDRAHIVE_OPENAI_API_KEY", "hydrahive")
@@ -160,6 +160,34 @@ def register_openai_compat_routes(app, *, discovery, orchestrator):
                 }],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             }
+
+    @app.post("/v1/audio/transcriptions")
+    async def openai_audio_transcriptions(
+        file: UploadFile = File(...),
+        model: str = Form("whisper-1"),
+        language: str = Form("de"),
+        authorization: str | None = Header(default=None),
+    ):
+        """OpenAI-kompatible Whisper API — leitet an Wyoming STT weiter."""
+        _check_bearer(authorization)
+
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(400, "Leere Audio-Datei")
+
+        from .router_voice import _wyoming_stt, _load_voice_config
+
+        cfg = _load_voice_config()
+        try:
+            text = await _wyoming_stt(
+                audio_bytes,
+                cfg.get("stt_host", "127.0.0.1"),
+                cfg.get("stt_port", 10300),
+            )
+        except (ConnectionRefusedError, OSError):
+            raise HTTPException(503, "STT-Service nicht erreichbar — Voice-Extension installiert?")
+
+        return {"text": text or ""}
 
     @app.get("/v1/models")
     async def openai_list_models(
