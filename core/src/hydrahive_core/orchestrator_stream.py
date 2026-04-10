@@ -623,6 +623,13 @@ async def _stream_anthropic_oauth(
                 ]}
                 _hcc += 1
 
+    # Safety: Anthropic erfordert mindestens eine Message
+    if not filtered:
+        filtered = [{"role": "user", "content": content or "Hallo"}]
+    # Anthropic erfordert dass die erste Message role:user ist
+    if filtered[0].get("role") != "user":
+        filtered.insert(0, {"role": "user", "content": content or "Hallo"})
+
     kwargs: dict = {
         "model":      model,
         "max_tokens": boss_cfg.llm.max_tokens,
