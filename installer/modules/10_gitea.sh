@@ -172,18 +172,18 @@ fi
 
 if [ "${_GITEA_SKIP}" -eq 0 ]; then
     GITEA_OK=0
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-        sleep 4
-        if curl -sf "http://127.0.0.1:${GITEA_PORT}/api/v1/version" &>/dev/null; then
+    for i in $(seq 1 20); do
+        sleep 3
+        if curl -sf --max-time 5 "http://127.0.0.1:${GITEA_PORT}/api/v1/version" &>/dev/null; then
             GITEA_OK=1
             break
         fi
-        info "Warte auf Gitea... (${i}/10)"
+        info "Warte auf Gitea... (${i}/20)"
     done
 
     if [ "${GITEA_OK}" -eq 0 ]; then
-        warn "Gitea antwortet nicht — pruefe: journalctl -u ${GITEA_SERVICE} -n 20"
-        warn "Git-Tools stehen möglicherweise nicht zur Verfügung"
+        warn "Gitea antwortet nicht nach 60s — pruefe: journalctl -u ${GITEA_SERVICE} -n 20"
+        warn "Admin-User und Token werden übersprungen — bei Neuinstall erneut versuchen"
         _GITEA_SKIP=1
     else
         success "Gitea läuft auf http://127.0.0.1:${GITEA_PORT}"
@@ -257,8 +257,9 @@ GITCFG
 fi
 
 # ────────────────────────────────────────────────── nginx-Proxy (Port 3002)
+# nginx-Config wird immer angelegt wenn Binary vorhanden (unabhängig von Health-Check)
 
-if [ "${_GITEA_SKIP}" -eq 0 ]; then
+if [ -f "${GITEA_BINARY}" ]; then
     cat > "${NGINX_GITEA_CONF}" << NGINXCONF
 server {
     listen ${GITEA_NGINX_PORT};
