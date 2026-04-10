@@ -174,9 +174,10 @@ export function MyAgentPage() {
       const agentId = agentInfo?.agent_id;
       if (cmd === "/help") { sysMsg("**Commands:**\n\n" + SLASH_COMMANDS.map(c=>`\`${c.cmd}\` — ${c.desc}`).join("\n")); return true; }
       if (cmd === "/clear") {
-        chat.setMessages([]);
         api.delete("/me/agent/session").catch(() => {});
-        sysMsg("Chat-Verlauf geleert."); return true;
+        chat.setMessages([mkMsg("system", "Chat-Verlauf geleert.")]);
+        try { sessionStorage.removeItem(`hh_chat_${"/api/me/agent/session/history"}`); } catch {}
+        return true;
       }
       if (cmd === "/model") {
         sysMsg(`**Modell:** \`${agentInfo?.config?.llm?.model ?? "?"}\`\n**Temperatur:** ${agentInfo?.config?.llm?.temperature ?? "?"}`);
