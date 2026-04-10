@@ -72,7 +72,7 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         agent_data["soul"] = "./soul.md"
     if req.max_tool_rounds is not None:
         agent_data["max_tool_rounds"] = req.max_tool_rounds
-    if not req.role and req.execution_mode_default in ("safe", "elevated", "root", "unrestricted"):
+    if req.execution_mode_default in ("safe", "elevated", "root", "unrestricted"):
         agent_data.setdefault("execution_modes", {})["default"] = req.execution_mode_default
     return agent_data
 

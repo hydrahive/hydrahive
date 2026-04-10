@@ -1548,7 +1548,7 @@ class ShellExecTool(BaseTool):
                 logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
                 return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
 
-        max_timeout = 600 if unrestricted else 120
+        max_timeout = 1800 if unrestricted else 120
         timeout = min(max(timeout, 1), max_timeout)
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
 

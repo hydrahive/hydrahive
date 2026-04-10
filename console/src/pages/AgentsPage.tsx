@@ -632,8 +632,8 @@ function AgentsCrudTab() {
                   min={1} max={50} placeholder="Standard (6)"
                 />
               </Field>
-              {/* Execution Mode nur bei Custom */}
-              {form.role === null && (
+              {/* Execution Mode */}
+              {(
                 <Field label="Execution Mode" hint={t("agents.executionModeHint", { defaultValue: "Standard-Modus für diesen Agenten" })} tooltip={t("agents.executionModeTip", { defaultValue: "safe = Shell-Blocklist aktiv, nur ungefährliche Befehle. elevated = erweiterte Rechte, Blocklist gelockert. root = voller Systemzugriff. unrestricted = keine Einschränkungen, keine Blocklists. Für die meisten Agenten reicht 'safe'." })}>
                   <select
                     value={form.execution_mode_default}
