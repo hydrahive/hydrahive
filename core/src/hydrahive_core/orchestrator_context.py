@@ -1099,14 +1099,22 @@ async def _compact_if_needed(
     # #349: Strukturierte Summary im OpenClaw-Format
     _structured_format = (
         "Erstelle eine strukturierte Zusammenfassung in diesem Format:\n\n"
+        "## Aktueller Arbeitskontext (WICHTIGSTER ABSCHNITT)\n"
+        "Was wird GERADE gemacht? Welche konkrete Aufgabe ist offen?\n"
+        "Welche Datei/welches Verzeichnis wird bearbeitet?\n"
+        "Was war die LETZTE Aktion und was wurde als nächstes erwartet?\n"
+        "Beispiel: 'Bearbeite /home/till/monopoly — bootstrap.gd gefixt, "
+        "User soll F5 drücken und Godot-Output melden.'\n\n"
         "## Ziel\nWas ist das übergeordnete Ziel der Konversation?\n\n"
-        "## Kontext & Entscheidungen\nWichtige Fakten, Constraints, getroffene Entscheidungen.\n\n"
+        "## Kontext & Entscheidungen\nWichtige Fakten, Constraints, Pfade, getroffene Entscheidungen.\n\n"
         "## Tool-Nutzung\nWelche Tools wurden aufgerufen und was war das Ergebnis? "
         "(z.B. shell_exec: apt update → 121 Pakete verfügbar). "
         "NUR tatsächlich ausgeführte Tool-Calls mit echten Ergebnissen auflisten.\n\n"
         "## Fortschritt\n### Erledigt\n- [x] Was wurde abgeschlossen?\n\n"
-        "### In Arbeit\n- [ ] Woran wird gerade gearbeitet?\n\n"
+        "### In Arbeit\n- [ ] Woran wird gerade gearbeitet? (Dateipfade, konkreter Stand)\n\n"
         "### Blockiert\n- **Problem**: Was blockiert und warum?\n\n"
+        "KRITISCH: Der 'Aktueller Arbeitskontext' Abschnitt ist das Wichtigste. "
+        "Ohne ihn weiß der Agent nach dem Laden der Zusammenfassung nicht woran er war.\n"
         "Antworte NUR mit der Zusammenfassung, keine Einleitung oder Erklärung."
     )
 
