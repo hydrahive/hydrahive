@@ -256,15 +256,13 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             if learning_snippet:
                 mem_parts.append(learning_snippet)
 
-        # #500: Memory-Prefetch — Index-Update und BM25-Suche parallel ausführen
+        # #500: Memory-Prefetch — Index-Update, dann BM25-Suche
         loop = asyncio.get_event_loop()
         k = 8 if mode == "full" else 4
-        _index_task = loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
-        _search_task = loop.run_in_executor(
+        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        snippets = await loop.run_in_executor(
             None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
         )
-        await _index_task  # Index fertig → Suche kann davon profitieren
-        snippets = await _search_task
 
         if snippets:
             mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
@@ -518,21 +516,19 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     dynamic_parts = []
 
     if boss_cfg.agent_dir:
-        # #500: Prefetch — Memory-Index und BM25-Suche parallel
+        # #500: Prefetch — Memory-Index erst fertig, dann BM25-Suche
         k = 8 if mode == "full" else 4
-        _idx_task = loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
-        _mem_task = loop.run_in_executor(
-            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
-        )
-        # Skills parallel laden
+        # Skills parallel zum Index-Update laden
         all_skills = load_skills(boss_cfg.agent_dir)
         _skill_task = None
         if all_skills:
             skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
             _skill_task = loop.run_in_executor(None, score_texts, skill_texts, user_text)
 
-        await _idx_task
-        snippets = await _mem_task
+        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
+        snippets = await loop.run_in_executor(
+            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
+        )
         if snippets:
             dynamic_parts.append("### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets))
 
