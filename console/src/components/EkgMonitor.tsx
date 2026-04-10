@@ -231,6 +231,8 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
   const [agentList, setAgentList] = useState<AgentData[]>([]);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<any>(null);
+  const [oauth, setOauth] = useState<Record<string, any> | null>(null);
+  const [codex, setCodex] = useState<any>(null);
 
   const pointsRef = useRef<Map<string, { color: string; glow: string; active: boolean; points: number[] }>>(new Map());
   const prevActivityRef = useRef<Record<string, string | null>>({});
@@ -240,8 +242,14 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
     let alive = true;
     async function poll() {
       try {
-        const data = await api.get<any>(`/projects/${projectId}/monitor`);
+        const [data, oauthData, codexData] = await Promise.all([
+          api.get<any>(`/projects/${projectId}/monitor`),
+          api.oauthUsage().catch(() => null),
+          api.openaiCodexStatus().catch(() => null),
+        ]);
         if (!alive) return;
+        if (oauthData) setOauth(oauthData as Record<string, any>);
+        if (codexData) setCodex(codexData);
         const agentsData = data.agents || {};
         setMetrics(data.metrics || {});
 
@@ -329,34 +337,84 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
 
       {/* Header: 3 Info-Boxen */}
       <div className="grid grid-cols-3 gap-2 p-3 flex-shrink-0">
-        <InfoBox title="Claude Tokens">
-          <div className="space-y-1.5">
-            <div className="flex justify-between"><span className="text-white/40">Input</span><span className="text-blue-400 font-mono">{totalIn.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Output</span><span className="text-emerald-400 font-mono">{totalOut.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Cache Read</span><span className="text-cyan-400 font-mono">{cacheRead.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Cache Hit</span><span className="text-cyan-400 font-mono">{cacheHit}%</span></div>
-            <div className="h-1.5 rounded-full bg-white/5 mt-1">
-              <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all" style={{ width: `${Math.min(parseFloat(cacheHit), 100)}%` }} />
+        {/* Claude OAuth */}
+        <InfoBox title="Claude">
+          {oauth?.available ? (
+            <div className="space-y-1.5">
+              {["5h", "7d"].map(w => {
+                const d = oauth[w] as { utilization_pct?: number; reset?: string } | undefined;
+                const pct = d?.utilization_pct ?? 0;
+                const color = pct >= 90 ? "from-red-500 to-red-600" : pct >= 70 ? "from-orange-500 to-orange-600" : pct >= 40 ? "from-yellow-500 to-yellow-600" : "from-emerald-500 to-emerald-600";
+                return (
+                  <div key={w}>
+                    <div className="flex justify-between mb-0.5">
+                      <span className="text-white/40">{w}</span>
+                      <span className={`font-mono ${pct >= 90 ? "text-red-400" : pct >= 70 ? "text-orange-400" : "text-emerald-400"}`}>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/5">
+                      <div className={`h-full rounded-full bg-gradient-to-r ${color} transition-all`} style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                    {d?.reset && <div className="text-[9px] text-white/25 mt-0.5">Reset: {new Date(d.reset).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</div>}
+                  </div>
+                );
+              })}
+              <div className="flex justify-between mt-1">
+                <span className="text-white/40">Status</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${
+                  oauth.status === "allowed" ? "bg-emerald-500/15 text-emerald-400" :
+                  oauth.status === "allowed_warning" ? "bg-orange-500/15 text-orange-400" :
+                  "bg-red-500/15 text-red-400"
+                }`}>{String(oauth.status)}</span>
+              </div>
             </div>
-          </div>
+          ) : <span className="text-white/20">Nicht konfiguriert</span>}
         </InfoBox>
 
-        <InfoBox title="Codex / LLM">
-          <div className="space-y-1.5">
-            <div className="flex justify-between"><span className="text-white/40">LLM Calls</span><span className="text-purple-400 font-mono">{llmCalls}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Tool Calls</span><span className="text-yellow-400 font-mono">{toolCalls}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Ø Latenz</span><span className="text-yellow-400 font-mono">{avgLatency}ms</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Compactions</span><span className="text-orange-400 font-mono">{compactions}</span></div>
-          </div>
+        {/* Codex */}
+        <InfoBox title="Codex">
+          {codex?.configured ? (() => {
+            const rl = codex?.rate_limits || {};
+            const primary = parseInt(rl["x-codex-primary-used-percent"] ?? "", 10);
+            const secondary = parseInt(rl["x-codex-secondary-used-percent"] ?? "", 10);
+            const plan = rl["x-codex-plan-type"] || "plus";
+            const resetPrimary = rl["x-codex-primary-reset"];
+            const resetSecondary = rl["x-codex-secondary-reset"];
+            return (
+              <div className="space-y-1.5">
+                {[{ label: "5h", pct: isNaN(primary) ? 0 : primary, reset: resetPrimary },
+                  { label: "7d", pct: isNaN(secondary) ? 0 : secondary, reset: resetSecondary }].map(b => {
+                  const color = b.pct >= 90 ? "from-red-500 to-red-600" : b.pct >= 70 ? "from-orange-500 to-orange-600" : b.pct >= 40 ? "from-yellow-500 to-yellow-600" : "from-blue-500 to-blue-600";
+                  return (
+                    <div key={b.label}>
+                      <div className="flex justify-between mb-0.5">
+                        <span className="text-white/40">{b.label}</span>
+                        <span className={`font-mono ${b.pct >= 90 ? "text-red-400" : b.pct >= 70 ? "text-orange-400" : "text-blue-400"}`}>{b.pct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/5">
+                        <div className={`h-full rounded-full bg-gradient-to-r ${color} transition-all`} style={{ width: `${Math.min(100, b.pct)}%` }} />
+                      </div>
+                      {b.reset && <div className="text-[9px] text-white/25 mt-0.5">Reset: {new Date(b.reset).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</div>}
+                    </div>
+                  );
+                })}
+                <div className="flex justify-between mt-1">
+                  <span className="text-white/40">Plan</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-500/15 text-blue-400">{plan}</span>
+                </div>
+              </div>
+            );
+          })() : <span className="text-white/20">Nicht konfiguriert</span>}
         </InfoBox>
 
+        {/* Projekt-Status */}
         <InfoBox title="Projekt-Status">
           <div className="space-y-1.5">
             <div className="flex justify-between"><span className="text-white/40">Agenten</span><span className="text-white/80 font-mono">{agentList.length}</span></div>
             <div className="flex justify-between"><span className="text-white/40">Aktiv</span><span className="text-emerald-400 font-mono">{activeCount}</span></div>
+            <div className="flex justify-between"><span className="text-white/40">LLM Calls</span><span className="text-purple-400 font-mono">{llmCalls}</span></div>
+            <div className="flex justify-between"><span className="text-white/40">Tool Calls</span><span className="text-yellow-400 font-mono">{toolCalls}</span></div>
+            <div className="flex justify-between"><span className="text-white/40">Ø Latenz</span><span className="text-yellow-400 font-mono">{avgLatency}ms</span></div>
             <div className="flex justify-between"><span className="text-white/40">Errors</span><span className={`font-mono ${errorCount > 0 ? "text-red-400" : "text-white/30"}`}>{errorCount}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Retries</span><span className="text-orange-400 font-mono">{metrics?.retries || 0}</span></div>
-            <div className="flex justify-between"><span className="text-white/40">Failovers</span><span className="text-orange-400 font-mono">{metrics?.failovers || 0}</span></div>
           </div>
         </InfoBox>
       </div>
