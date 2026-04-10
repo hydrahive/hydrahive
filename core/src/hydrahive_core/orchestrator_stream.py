@@ -116,10 +116,10 @@ async def handle_message_stream(
     # Cache-Optimierung: Split in static (cacheable) + dynamic (query-abhängig)
     from .orchestrator_context import _build_system_prompt_split
     try:
-        _static_prompt, _dynamic_prompt = await _build_system_prompt_split(boss_cfg, content, invalidate=_refresh)
+        _static_prompt, _dynamic_prompt = await _build_system_prompt_split(boss_cfg, _content_str, invalidate=_refresh)
     except Exception:
         # Fallback auf alten Pfad
-        _static_prompt = await orch._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+        _static_prompt = await orch._build_system_prompt(boss_cfg, _content_str, invalidate=_refresh)
         _dynamic_prompt = ""
     worker_ctx = _build_worker_context(project_cfg, orch._discovery)
     if worker_ctx:
