@@ -1080,16 +1080,30 @@ async def _compact_if_needed(
     # #467: File-Pfade VOR Compaction extrahieren (Messages werden gleich entfernt)
     _edited_files = _extract_edited_files(session.messages)
 
-    history_lines = "\n".join(
-        f"{m.role.value.upper()}: {m.content[:1500]}"
-        for m in to_summarize
-    )
+    # Tool-Interaktionen explizit miterfassen damit die Summary weiß
+    # welche Tools aufgerufen wurden und was sie zurückgegeben haben
+    _history_parts = []
+    for m in to_summarize:
+        role = m.role.value.upper()
+        content = m.content[:1500] if m.content else ""
+        if m.role == MessageRole.TOOL:
+            # TOOL Messages enthalten "tool_name|output" — klar kennzeichnen
+            _history_parts.append(f"TOOL-RESULT: {content}")
+        elif m.role == MessageRole.SYSTEM and content.startswith("🔧"):
+            # System-Messages mit Tool-Marker = Tool-Call-Info
+            _history_parts.append(f"TOOL-CALL: {content}")
+        else:
+            _history_parts.append(f"{role}: {content}")
+    history_lines = "\n".join(_history_parts)
 
     # #349: Strukturierte Summary im OpenClaw-Format
     _structured_format = (
         "Erstelle eine strukturierte Zusammenfassung in diesem Format:\n\n"
         "## Ziel\nWas ist das übergeordnete Ziel der Konversation?\n\n"
         "## Kontext & Entscheidungen\nWichtige Fakten, Constraints, getroffene Entscheidungen.\n\n"
+        "## Tool-Nutzung\nWelche Tools wurden aufgerufen und was war das Ergebnis? "
+        "(z.B. shell_exec: apt update → 121 Pakete verfügbar). "
+        "NUR tatsächlich ausgeführte Tool-Calls mit echten Ergebnissen auflisten.\n\n"
         "## Fortschritt\n### Erledigt\n- [x] Was wurde abgeschlossen?\n\n"
         "### In Arbeit\n- [ ] Woran wird gerade gearbeitet?\n\n"
         "### Blockiert\n- **Problem**: Was blockiert und warum?\n\n"
