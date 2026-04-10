@@ -473,8 +473,8 @@ export function EkgMonitor({ projectId, onClose }: EkgMonitorProps) {
 
       {/* Log Boxes */}
       <div className="grid gap-2 p-3 flex-shrink-0"
-        style={{ gridTemplateColumns: `repeat(${Math.min(agentList.length || 1, 4)}, 1fr)`, height: expandedLog ? "auto" : "11rem" }}>
-        {agentList.slice(0, 4).map(agent => (
+        style={{ gridTemplateColumns: `repeat(${Math.min(agentList.length || 1, 6)}, 1fr)`, height: expandedLog ? "auto" : "11rem" }}>
+        {agentList.map(agent => (
           <LogBox key={agent.id} agent={agent} expanded={expandedLog === agent.id}
             onToggle={() => setExpandedLog(expandedLog === agent.id ? null : agent.id)} />
         ))}
