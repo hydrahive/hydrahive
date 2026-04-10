@@ -109,9 +109,10 @@ async def handle_message_stream(
     # Context-Kompaktierung vor dem LLM-Aufruf
     await orch._compact_if_needed(project_id, boss_cfg)
 
-    _refresh = content.strip().startswith("!refresh")
+    _content_str = _text_content if isinstance(_text_content, str) else str(_text_content)
+    _refresh = _content_str.strip().startswith("!refresh")
     if _refresh:
-        content = content.strip()[8:].strip()
+        content = _content_str.strip()[8:].strip()
     # Cache-Optimierung: Split in static (cacheable) + dynamic (query-abhängig)
     from .orchestrator_context import _build_system_prompt_split
     try:
