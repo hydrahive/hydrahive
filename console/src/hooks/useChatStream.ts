@@ -198,6 +198,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     // Built-in slash commands
     if (content === "/clear") {
       setMessages([]);
+      try { sessionStorage.removeItem(`hh_chat_${opts.historyEndpoint}`); } catch {}
       return;
     }
 
