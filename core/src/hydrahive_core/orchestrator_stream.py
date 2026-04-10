@@ -442,7 +442,7 @@ async def _stream_codex(
                 _dw = get_destructive_warning(_tc_args.get("command", ""))
                 if _dw:
                     yield f"data: {_json.dumps({'tool_warning': _dw, 'tool_name': tc.function.name})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.SYSTEM, f"🔧 {_tc_detail}", agent_id=boss_id, tool_name=tc.function.name)
+            # Tool-Call Info nur als SSE-Event, nicht in Session (wird am Ende der Runde strukturiert gespeichert)
             # Klassifizierung: parallel_safe oder sequential
             tool_obj = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
             # #528: Tool Policy als Fallback für parallel_safe
@@ -736,7 +736,7 @@ async def _stream_anthropic_oauth(
             _tc_input = block.input or {}
             _tc_detail = format_tool_detail(block.name, _tc_input)
             yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.TOOL, f"{block.name}|{_tc_detail}", agent_id=boss_id, tool_name=block.name)
+            # Tool-Call Info nur als SSE-Event (wird am Ende der Runde strukturiert gespeichert)
             if block.name == "request_tools":
                 _oauth_request_tools.append(block)
             else:
@@ -1029,7 +1029,7 @@ async def _stream_litellm(
             _lm_parsed[tc["id"]] = tool_input
             _tc_detail = format_tool_detail(tc["name"], tool_input)
             yield f"data: {_json.dumps({'tool_call': tc['name'], 'tool_input': tool_input, 'tool_detail': _tc_detail})}\n\n"
-            await orch._sessions.append(project_id, MessageRole.TOOL, f"{tc['name']}|{_tc_detail}", agent_id=boss_id, tool_name=tc["name"])
+            # Tool-Call Info nur als SSE-Event (wird am Ende der Runde strukturiert gespeichert)
             tool_obj = orch._resolve_allowed_tool(boss_cfg, tc["name"], execution_mode)
             # #528: Tool Policy als Fallback für parallel_safe
             _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
