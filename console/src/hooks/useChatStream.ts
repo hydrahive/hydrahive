@@ -199,6 +199,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
     if (content === "/clear") {
       setMessages([]);
       try { sessionStorage.removeItem(`hh_chat_${opts.historyEndpoint}`); } catch {}
+      // Server-Session beenden (DELETE /agents/{id}/session oder /projects/{id}/session/end)
+      const sessionEndpoint = opts.historyEndpoint.replace(/\/history$/, "");
+      api.delete(sessionEndpoint).catch(() => {});
       return;
     }
 
