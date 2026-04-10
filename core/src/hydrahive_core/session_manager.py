@@ -140,6 +140,30 @@ def repair_tool_pairs(messages: list[dict]) -> list[dict]:
     return result
 
 
+def _merge_consecutive_roles(messages: list[dict]) -> list[dict]:
+    """Consecutive Messages mit gleicher Role mergen.
+
+    Anthropic erfordert strikten user/assistant Wechsel.
+    Tool-Call + Tool-Result erzeugen sonst zwei assistant-Messages
+    hintereinander → 400 Error.
+    """
+    if not messages:
+        return messages
+    merged: list[dict] = [messages[0]]
+    for msg in messages[1:]:
+        if msg.get("role") == merged[-1].get("role") and msg.get("role") in ("assistant", "user"):
+            # Content zusammenfügen
+            prev_content = merged[-1].get("content", "") or ""
+            new_content = msg.get("content", "") or ""
+            if prev_content and new_content:
+                merged[-1]["content"] = prev_content + "\n" + new_content
+            elif new_content:
+                merged[-1]["content"] = new_content
+        else:
+            merged.append(msg)
+    return merged
+
+
 @dataclass
 class Message:
     role:         MessageRole
@@ -338,6 +362,8 @@ class Session:
         result = redact_thinking_blocks(result)
         # #507: Verwaiste tool_use/tool_result Paare reparieren
         result = repair_tool_pairs(result)
+        # Consecutive same-role Messages mergen (Anthropic erfordert user/assistant Wechsel)
+        result = _merge_consecutive_roles(result)
         return result
 
     def history_context(self, max_messages: int = 50) -> list[dict]:
