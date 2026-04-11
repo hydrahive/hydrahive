@@ -16,6 +16,8 @@ import {
   Shield,
   Volume2,
   Play,
+  MessageCircle,
+  Hash,
 } from "lucide-react";
 
 interface ProjectSettingsPanelProps {
@@ -92,6 +94,14 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [waSuccess, setWaSuccess] = useState("");
   const [waPreviewPlaying, setWaPreviewPlaying] = useState(false);
 
+  // Discord + Telegram (#569)
+  const [discordBotTokenEnv, setDiscordBotTokenEnv] = useState("");
+  const [discordChannels, setDiscordChannels] = useState("");
+  const [telegramBotTokenEnv, setTelegramBotTokenEnv] = useState("");
+  const [telegramChatIds, setTelegramChatIds] = useState("");
+  const [messengerSaving, setMessengerSaving] = useState(false);
+  const [messengerSuccess, setMessengerSuccess] = useState("");
+
   useEffect(() => {
     loadSettings();
     loadKeys();
@@ -150,6 +160,40 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setError(e?.message || "WhatsApp-Config speichern fehlgeschlagen");
     } finally {
       setWaSaving(false);
+    }
+  }
+
+  async function saveMessengerConfig() {
+    setMessengerSaving(true);
+    setMessengerSuccess("");
+    try {
+      const lines = (s: string) => s.split("\n").map(l => l.trim()).filter(Boolean);
+      const messenger: Record<string, any> = {};
+      if (discordBotTokenEnv || discordChannels.trim()) {
+        messenger.discord = {
+          bot_token_env: discordBotTokenEnv || undefined,
+          channels: lines(discordChannels),
+        };
+      }
+      if (telegramBotTokenEnv || telegramChatIds.trim()) {
+        messenger.telegram = {
+          bot_token_env: telegramBotTokenEnv || undefined,
+          chat_ids: lines(telegramChatIds),
+        };
+      }
+      // WhatsApp aus bestehender Config beibehalten
+      const res = await api.get<any>(`/projects/${projectId}/settings`);
+      const existing = (res as any).messenger || {};
+      if (existing.whatsapp) messenger.whatsapp = existing.whatsapp;
+      if (existing.matrix) messenger.matrix = existing.matrix;
+
+      await api.put(`/projects/${projectId}/settings`, { messenger });
+      setMessengerSuccess("Gespeichert!");
+      setTimeout(() => setMessengerSuccess(""), 3000);
+    } catch (e: any) {
+      setError(e?.message || "Messenger-Config speichern fehlgeschlagen");
+    } finally {
+      setMessengerSaving(false);
     }
   }
 
@@ -231,6 +275,12 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setApiKeyEnv(d.llm?.api_key_env || "");
       setAgentMd(d.agent_md || "");
       setExecutionMode(d.execution_mode || "safe");
+      // Messenger-Config laden (#569)
+      const m = d.messenger || {};
+      setDiscordBotTokenEnv(m.discord?.bot_token_env || "");
+      setDiscordChannels((m.discord?.channels || []).join("\n"));
+      setTelegramBotTokenEnv(m.telegram?.bot_token_env || "");
+      setTelegramChatIds((m.telegram?.chat_ids || []).join("\n"));
     } catch (e: any) {
       setError(e?.message || "Fehler beim Laden");
     } finally {
@@ -529,6 +579,77 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             </div>
           </div>
         )}
+      </div>
+
+      {/* Discord + Telegram (#569) */}
+      <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <MessageCircle className="h-3.5 w-3.5 text-indigo-500" />
+          Messenger-Routing
+          <span className="text-[10px] text-muted-foreground font-normal ml-1">
+            Welche Messenger-Kanaele leiten Nachrichten an dieses Projekt?
+          </span>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Discord */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-400">
+              <Hash className="h-3 w-3" /> Discord
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Bot-Token (Env-Variable)</label>
+              <select value={discordBotTokenEnv} onChange={e => setDiscordBotTokenEnv(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+                <option value="">Nicht konfiguriert</option>
+                {availableKeys.map(k => (
+                  <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Channel-IDs (eine pro Zeile)</label>
+              <textarea value={discordChannels} onChange={e => setDiscordChannels(e.target.value)}
+                placeholder="123456789012345678"
+                rows={3}
+                className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
+            </div>
+          </div>
+
+          {/* Telegram */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-sky-400">
+              <MessageCircle className="h-3 w-3" /> Telegram
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Bot-Token (Env-Variable)</label>
+              <select value={telegramBotTokenEnv} onChange={e => setTelegramBotTokenEnv(e.target.value)}
+                className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+                <option value="">Nicht konfiguriert</option>
+                {availableKeys.map(k => (
+                  <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Chat-IDs (eine pro Zeile)</label>
+              <textarea value={telegramChatIds} onChange={e => setTelegramChatIds(e.target.value)}
+                placeholder="-1001234567890"
+                rows={3}
+                className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
+            </div>
+          </div>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center gap-2">
+          <button onClick={saveMessengerConfig} disabled={messengerSaving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white transition hover:bg-indigo-700 disabled:opacity-50">
+            {messengerSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            Messenger-Config speichern
+          </button>
+          {messengerSuccess && <span className="text-xs text-green-600">{messengerSuccess}</span>}
+        </div>
       </div>
     </div>
   );

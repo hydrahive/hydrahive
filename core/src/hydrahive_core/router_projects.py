@@ -85,6 +85,7 @@ class UpdateProjectSettingsRequest(BaseModel):
     agent_md: str | None = None
     members: list[str] | None = None
     execution_mode: str | None = None  # safe | elevated | unrestricted (#568)
+    messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
 
 
 class GitCloneRequest(BaseModel):
@@ -437,6 +438,20 @@ def register_project_routes(
         if req.agent_md is not None:
             agent_md_path = project_dir / "AGENT.md"
             agent_md_path.write_text(req.agent_md, encoding="utf-8")
+
+        # messenger.yaml schreiben wenn im Request (#569)
+        if req.messenger is not None:
+            messenger_path = project_dir / "messenger.yaml"
+            messenger_path.write_text(
+                _yaml.dump(req.messenger, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+            # Messenger-Router neu laden
+            try:
+                from .messenger_router import messenger_router as _mr
+                _mr.rebuild()
+            except Exception:
+                pass
 
         # ProjectLoader neu laden
         projects.register(project_dir)
