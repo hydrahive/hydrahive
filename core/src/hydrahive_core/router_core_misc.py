@@ -469,10 +469,12 @@ def register_core_misc_routes(
 
     @admin_router.get("/secrets/keys")
     def list_secret_keys():
-        """v2: Listet verfügbare Key-Namen aus /etc/hydrahive/llm_env auf.
+        """v2: Listet verfügbare Key-Namen aus llm_env + agent_secrets.json.
         Gibt NUR die Namen zurück, nie die Werte. Für den Projekt-Wizard."""
         from .settings import settings
+        seen: set[str] = set()
         keys: list[dict] = []
+        # 1. llm_env lesen
         env_file = settings.llm_env
         if env_file.exists():
             try:
@@ -481,14 +483,22 @@ def register_core_misc_routes(
                     if not line or line.startswith("#") or "=" not in line:
                         continue
                     key_name = line.split("=", 1)[0].strip()
-                    # Wert nur als Hinweis: Länge + Anfang (4 Zeichen)
                     key_value = line.split("=", 1)[1].strip()
                     preview = key_value[:4] + "..." if len(key_value) > 4 else "***"
-                    keys.append({
-                        "name": key_name,
-                        "preview": preview,
-                        "length": len(key_value),
-                    })
+                    keys.append({"name": key_name, "preview": preview, "length": len(key_value)})
+                    seen.add(key_name)
+            except Exception:
+                pass
+        # 2. agent_secrets.json lesen (nur Keys die noch nicht in llm_env sind)
+        secrets_file = settings.agent_secrets_config
+        if secrets_file.exists():
+            try:
+                import json
+                data = json.loads(secrets_file.read_text(encoding="utf-8"))
+                for key_name, key_value in data.items():
+                    if key_name not in seen:
+                        preview = key_value[:4] + "..." if len(key_value) > 4 else "***"
+                        keys.append({"name": key_name, "preview": preview, "length": len(key_value)})
             except Exception:
                 pass
         return {"keys": keys, "source": str(env_file)}

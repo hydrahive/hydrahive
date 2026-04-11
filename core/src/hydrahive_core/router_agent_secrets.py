@@ -1,12 +1,17 @@
 """
-router_agent_secrets.py — Agent Secret-Store (#54)
+router_agent_secrets.py — Unified Secret-Store (#54, #569)
 
-Einfacher Key/Value-Store in /etc/hydrahive/agent_secrets.json.
-Nur für Root lesbar (chmod 600). Agents lesen via get_secret Tool.
+Vereint zwei Quellen:
+  1. /etc/hydrahive/agent_secrets.json — Agent-Secrets (get_secret Tool)
+  2. /etc/hydrahive/llm_env — LLM API-Keys + Bot-Tokens (os.environ)
+
+Die Secrets-Seite zeigt beide. Neue Secrets werden in BEIDE geschrieben,
+damit sowohl das Settings-Panel-Dropdown als auch get_secret sie findet.
 """
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,9 +20,11 @@ from pydantic import BaseModel
 from .settings import settings
 
 _SECRETS_PATH = settings.agent_secrets_config
+_LLM_ENV_PATH = settings.llm_env
 
 
 def _load() -> dict[str, str]:
+    """Lädt Secrets aus agent_secrets.json."""
     if _SECRETS_PATH.exists():
         try:
             return json.loads(_SECRETS_PATH.read_text(encoding="utf-8"))
@@ -26,12 +33,60 @@ def _load() -> dict[str, str]:
     return {}
 
 
+def _load_llm_env() -> dict[str, str]:
+    """Lädt Keys aus llm_env (.env Format)."""
+    result: dict[str, str] = {}
+    if _LLM_ENV_PATH.exists():
+        try:
+            for line in _LLM_ENV_PATH.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                result[key.strip()] = val.strip()
+        except Exception:
+            pass
+    return result
+
+
 def _save(data: dict[str, str]) -> None:
     _SECRETS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         _SECRETS_PATH.chmod(0o600)
     except Exception:
         pass
+
+
+def _save_to_llm_env(name: str, value: str) -> None:
+    """Fügt einen Key zur llm_env Datei hinzu oder aktualisiert ihn."""
+    lines: list[str] = []
+    found = False
+    if _LLM_ENV_PATH.exists():
+        for line in _LLM_ENV_PATH.read_text().splitlines():
+            if line.strip().startswith(f"{name}="):
+                lines.append(f"{name}={value}")
+                found = True
+            else:
+                lines.append(line)
+    if not found:
+        lines.append(f"{name}={value}")
+    _LLM_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        _LLM_ENV_PATH.chmod(0o600)
+    except Exception:
+        pass
+    # Auch in os.environ setzen damit sofort verfügbar
+    os.environ[name] = value
+
+
+def _delete_from_llm_env(name: str) -> None:
+    """Entfernt einen Key aus der llm_env Datei."""
+    if not _LLM_ENV_PATH.exists():
+        return
+    lines = [l for l in _LLM_ENV_PATH.read_text().splitlines()
+             if not l.strip().startswith(f"{name}=")]
+    _LLM_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.environ.pop(name, None)
 
 
 class SecretIn(BaseModel):
@@ -44,36 +99,59 @@ def register_agent_secret_routes(app, get_current_admin):
 
     @router.get("")
     async def list_secrets(_user=Depends(get_current_admin)):
-        data = _load()
-        # Wert wird maskiert zurückgegeben — UI zeigt nur Namen
+        # Beide Quellen mergen — llm_env als Basis, agent_secrets überschreibt
+        merged: dict[str, str] = {}
+        merged.update(_load_llm_env())
+        merged.update(_load())
         return [
-            {"name": k, "masked": "•" * min(len(v), 8), "has_value": bool(v)}
-            for k, v in data.items()
+            {
+                "name": k,
+                "masked": "•" * min(len(v), 8),
+                "has_value": bool(v),
+                "source": "both" if k in _load() and k in _load_llm_env()
+                    else "secrets" if k in _load()
+                    else "env",
+            }
+            for k, v in sorted(merged.items())
         ]
 
     @router.put("/{name}")
     async def upsert_secret(name: str, body: SecretIn, _user=Depends(get_current_admin)):
         if not name or not name.replace("_", "").replace("-", "").isalnum():
             raise HTTPException(400, "Name darf nur Buchstaben, Zahlen, _ und - enthalten")
+        # In BEIDE Stores schreiben
         data = _load()
         data[name] = body.value
         _save(data)
+        _save_to_llm_env(name, body.value)
         return {"ok": True, "name": name}
 
     @router.get("/{name}/reveal")
     async def reveal_secret(name: str, _user=Depends(get_current_admin)):
+        # Aus beiden Quellen suchen
         data = _load()
-        if name not in data:
-            raise HTTPException(404, "Secret nicht gefunden")
-        return {"name": name, "value": data[name]}
+        if name in data:
+            return {"name": name, "value": data[name]}
+        env_data = _load_llm_env()
+        if name in env_data:
+            return {"name": name, "value": env_data[name]}
+        raise HTTPException(404, "Secret nicht gefunden")
 
     @router.delete("/{name}")
     async def delete_secret(name: str, _user=Depends(get_current_admin)):
         data = _load()
-        if name not in data:
+        deleted = False
+        if name in data:
+            del data[name]
+            _save(data)
+            deleted = True
+        # Auch aus llm_env entfernen
+        env_data = _load_llm_env()
+        if name in env_data:
+            _delete_from_llm_env(name)
+            deleted = True
+        if not deleted:
             raise HTTPException(404, "Secret nicht gefunden")
-        del data[name]
-        _save(data)
         return {"ok": True}
 
     app.include_router(router)
