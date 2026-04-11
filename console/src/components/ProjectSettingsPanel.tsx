@@ -35,6 +35,11 @@ interface SettingsData {
   };
   agent_md: string;
   members: string[];
+  messenger: {
+    whatsapp?: { session_ids?: string[]; enabled?: boolean };
+    discord?: { channels?: string[]; bot_token_env?: string };
+    telegram?: { chat_ids?: string[]; bot_token_env?: string };
+  };
 }
 
 const PROVIDERS = ["anthropic", "openai", "google", "ollama", "deepseek"];
@@ -63,10 +68,72 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [agentMd, setAgentMd] = useState("");
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
 
+  // WhatsApp
+  const [waStatus, setWaStatus] = useState<string>("unknown");
+  const [waQr, setWaQr] = useState<string>("");
+  const [waPhone, setWaPhone] = useState<string>("");
+  const [waConnecting, setWaConnecting] = useState(false);
+
   useEffect(() => {
     loadSettings();
     loadKeys();
+    loadWhatsAppStatus();
   }, [projectId]);
+
+  async function loadWhatsAppStatus() {
+    try {
+      const res = await api.get<any>("/me/whatsapp");
+      const d = res as any;
+      setWaStatus(d.status || "unknown");
+      setWaQr(d.qr || "");
+      setWaPhone(d.phone || "");
+    } catch {
+      setWaStatus("unavailable");
+    }
+  }
+
+  async function connectWhatsApp() {
+    setWaConnecting(true);
+    try {
+      const res = await api.post<any>("/me/whatsapp/connect", {});
+      const d = res as any;
+      setWaStatus(d.status || "connecting");
+      setWaQr(d.qr || "");
+      // Polling starten für QR-Update
+      const poll = setInterval(async () => {
+        try {
+          const s = await api.get<any>("/me/whatsapp");
+          const sd = s as any;
+          setWaStatus(sd.status || "unknown");
+          setWaQr(sd.qr || "");
+          setWaPhone(sd.phone || "");
+          if (sd.status === "connected" || sd.status === "error") {
+            clearInterval(poll);
+            setWaConnecting(false);
+          }
+        } catch {
+          clearInterval(poll);
+          setWaConnecting(false);
+        }
+      }, 3000);
+      // Timeout nach 2 Minuten
+      setTimeout(() => { clearInterval(poll); setWaConnecting(false); }, 120000);
+    } catch (e: any) {
+      setError(e?.message || "WhatsApp-Verbindung fehlgeschlagen");
+      setWaConnecting(false);
+    }
+  }
+
+  async function disconnectWhatsApp() {
+    try {
+      await api.post<any>("/me/whatsapp/disconnect", {});
+      setWaStatus("disconnected");
+      setWaQr("");
+      setWaPhone("");
+    } catch (e: any) {
+      setError(e?.message || "Trennen fehlgeschlagen");
+    }
+  }
 
   async function loadSettings() {
     setLoading(true);
@@ -226,6 +293,48 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono leading-relaxed resize-y"
             placeholder="# Agent&#10;&#10;Beschreibe hier das Fachgebiet, die Regeln und den Kontext."
           />
+        </div>
+      </div>
+
+      {/* WhatsApp */}
+      <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <Shield className="h-3.5 w-3.5 text-green-600" />
+          WhatsApp
+          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            waStatus === "connected" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+            waStatus === "connecting" || waConnecting ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+            "bg-muted text-muted-foreground"
+          }`}>
+            {waStatus === "connected" ? `Verbunden${waPhone ? ` (${waPhone})` : ""}` :
+             waConnecting ? "Verbinde..." :
+             waStatus === "unavailable" ? "Bridge nicht erreichbar" :
+             "Nicht verbunden"}
+          </span>
+        </div>
+
+        {/* QR-Code */}
+        {waQr && waStatus !== "connected" && (
+          <div className="flex flex-col items-center gap-2 p-2">
+            <p className="text-xs text-muted-foreground">QR-Code mit WhatsApp scannen:</p>
+            <img src={`data:image/png;base64,${waQr}`} alt="WhatsApp QR" className="w-48 h-48 rounded-lg border" />
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div className="flex gap-2">
+          {waStatus !== "connected" ? (
+            <button onClick={connectWhatsApp} disabled={waConnecting}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs text-white transition hover:bg-green-700 disabled:opacity-50">
+              {waConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {waConnecting ? "Warte auf QR-Scan..." : "WhatsApp verbinden"}
+            </button>
+          ) : (
+            <button onClick={disconnectWhatsApp}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs text-destructive transition hover:bg-destructive/10">
+              WhatsApp trennen
+            </button>
+          )}
         </div>
       </div>
     </div>
