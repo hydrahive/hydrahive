@@ -161,6 +161,10 @@ main() {
         _installed=0
         for _src in "${TMPDIR_BASE}/installer/default-agents"/*/; do
             _id="$(basename "${_src}")"
+            # Gelöschte Projekte nicht als Agent reinstallieren (#566)
+            if [ -f "/projects/${_id}/.deleted" ]; then
+                continue
+            fi
             if [ ! -d "/agents/${_id}" ]; then
                 cp -r "${_src}" "/agents/${_id}"
                 mkdir -p "/agents/${_id}/memory"
@@ -310,6 +314,10 @@ for agent_dir in sorted(agents_dir.iterdir()):
     project_dir = projects_dir / agent_id
     if (project_dir / "config.yaml").exists():
         continue  # Schon migriert
+
+    # Gelöschte Projekte nicht neu erstellen (#566)
+    if (project_dir / ".deleted").exists():
+        continue
 
     # agent.yaml lesen
     try:
