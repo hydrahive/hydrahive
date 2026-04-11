@@ -86,6 +86,19 @@ main() {
         > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
 
     # --- 1. Repo klonen ---
+    # Branch-Override: /etc/hydrahive/update_branch kann einen Branch-Namen enthalten
+    # (z.B. "v2/project-architecture"). Ohne Datei oder leer → Default-Branch (main).
+    local _BRANCH_FLAG=""
+    local _BRANCH_OVERRIDE_FILE="/etc/hydrahive/update_branch"
+    if [ -f "${_BRANCH_OVERRIDE_FILE}" ]; then
+        local _BRANCH_NAME
+        _BRANCH_NAME=$(tr -d '[:space:]' < "${_BRANCH_OVERRIDE_FILE}")
+        if [ -n "${_BRANCH_NAME}" ]; then
+            _BRANCH_FLAG="-b ${_BRANCH_NAME}"
+            info "Branch-Override aktiv: ${_BRANCH_NAME}"
+        fi
+    fi
+
     info "Klone aktuellen Stand..."
     # Token per GIT_ASKPASS übergeben (transient, nicht in Prozessliste/Config)
     local _CLONE_ENV=""
@@ -96,11 +109,11 @@ main() {
         chmod +x "${_ASKPASS_SCRIPT}"
         # URL mit Username-Platzhalter für ASKPASS
         local _AUTH_URL="${CLONE_URL/https:\/\//https:\/\/hydrahive@}"
-        GIT_ASKPASS="${_ASKPASS_SCRIPT}" timeout 300 git clone --depth 1 --single-branch --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
+        GIT_ASKPASS="${_ASKPASS_SCRIPT}" timeout 300 git clone --depth 1 --single-branch ${_BRANCH_FLAG} --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
             || { rm -f "${_ASKPASS_SCRIPT}"; error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"; }
         rm -f "${_ASKPASS_SCRIPT}"
     else
-        timeout 300 git clone --depth 1 --single-branch --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
+        timeout 300 git clone --depth 1 --single-branch ${_BRANCH_FLAG} --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
             || error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"
     fi
     success "Repo geklont"
