@@ -74,13 +74,19 @@ class ProjectLoader:
             return None
         with self._lock:
             self._projects[config.id] = config
-        logger.info(
-            "Projekt registriert: %s ('%s') | Boss: %s | Worker: %s",
-            config.id,
-            config.identity.name,
-            config.agents.boss,
-            ", ".join(config.agents.workers) or "—",
-        )
+        if getattr(config, "is_v2", False):
+            logger.info(
+                "Projekt registriert: %s ('%s') | v2 | LLM: %s/%s",
+                config.id, config.identity.name,
+                config.llm.provider, config.llm.model,
+            )
+        else:
+            logger.info(
+                "Projekt registriert: %s ('%s') | Boss: %s | Worker: %s",
+                config.id, config.identity.name,
+                config.agents.boss,
+                ", ".join(config.agents.workers) or "—",
+            )
         return config
 
     def _unregister_dir(self, project_dir: Path) -> None:
