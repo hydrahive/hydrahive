@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import re
 
@@ -485,18 +486,84 @@ def register_project_routes(
             _content_blocks.append({"type": "text", "text": req.content or "Was siehst du auf diesem Bild?"})
             _user_content = _content_blocks
 
+        # v2: Shared Sessions — Turn-Lock + Broadcast
+        from .shared_session import shared_sessions as _ss
+
+        if not _ss.acquire_turn(project_id, sender):
+            _turn_owner = _ss.turn_owner(project_id)
+            raise HTTPException(
+                409, f"Projekt ist gerade belegt von '{_turn_owner}'. Bitte warten."
+            )
+
         async def event_stream():
-            async for chunk in orchestrator.handle_message_stream(
-                project_id=project_id,
-                project_cfg=cfg,
-                content=_user_content,
-                sender=sender,
-                execution_mode=execution_mode,
-            ):
-                yield chunk
+            try:
+                async for chunk in orchestrator.handle_message_stream(
+                    project_id=project_id,
+                    project_cfg=cfg,
+                    content=_user_content,
+                    sender=sender,
+                    execution_mode=execution_mode,
+                ):
+                    # Chunk an den sendenden Client
+                    yield chunk
+                    # Chunk an alle anderen Subscriber broadcasten
+                    # SSE-Format: "data: {...}\n\n" → JSON extrahieren
+                    if chunk.startswith("data: "):
+                        _ss.broadcast(project_id, chunk[6:].strip())
+            finally:
+                _ss.release_turn(project_id, sender)
 
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @auth_router.get("/projects/{project_id}/subscribe")
+    async def subscribe_project_stream(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Shared Session — passiv zuschauen was im Projekt passiert.
+        Empfängt alle SSE-Events die andere User auslösen.
+        Für Multi-User: User A sendet, User B sieht in Echtzeit mit."""
+        from fastapi.responses import StreamingResponse as _SR
+        from starlette.requests import Request
+        from .shared_session import shared_sessions as _ss
+
+        _check_project_access(auth, project_id)
+        username = auth[0]
+
+        queue = _ss.subscribe(project_id, username)
+
+        async def event_stream():
+            try:
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=30)
+                        yield f"data: {event}\n\n"
+                    except asyncio.TimeoutError:
+                        # Keepalive
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                _ss.unsubscribe(project_id, queue, username)
+
+        return _SR(event_stream(), media_type="text/event-stream",
+                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @auth_router.get("/projects/{project_id}/presence")
+    def project_presence(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Wer ist gerade in diesem Projekt online?"""
+        from .shared_session import shared_sessions as _ss
+        _check_project_access(_auth, project_id)
+        return {
+            "project_id": project_id,
+            "online": _ss.online_users(project_id),
+            "subscribers": _ss.subscriber_count(project_id),
+            "turn_owner": _ss.turn_owner(project_id),
+        }
 
     @auth_router.post("/projects/{project_id}/interrupt")
     async def interrupt_project_stream(
