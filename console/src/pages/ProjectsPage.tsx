@@ -316,7 +316,7 @@ function ProjectsContent() {
                 </button>
                 {isAdmin && (
                   <button
-                    onClick={() => setShowForm(true)}
+                    onClick={() => navigate("/projects/new")}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -480,7 +480,7 @@ function ProjectsContent() {
           <FolderKanban className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-4 text-sm text-muted-foreground">{t("projects.noProjects")}</p>
           {isAdmin && (
-            <button onClick={() => setShowForm(true)} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90">
+            <button onClick={() => navigate("/projects/new")} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:bg-primary/90">
               <Plus className="h-4 w-4" />
               {t("projects.firstProject")}
             </button>
