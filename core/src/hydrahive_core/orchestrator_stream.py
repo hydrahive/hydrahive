@@ -155,8 +155,11 @@ async def handle_message_stream(
                 break
     # v2: Immer alle 9 Core-Tools laden — keine Meta-Phase mehr
     boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content)
+    logger.info("v2-debug-1 boss_tools=%d", len(boss_tools))
     litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
+    logger.info("v2-debug-2 litellm_tools=%d", len(litellm_tools))
     _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
+    logger.info("v2-debug-3 mcp=%d", len(_mcp_s) if _mcp_s else 0)
     if _mcp_s:
         litellm_tools = (litellm_tools or []) + _mcp_s
     # Plugin-Tools (#110)
