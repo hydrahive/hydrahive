@@ -26,6 +26,8 @@ import {
   Code2,
   GitBranch,
   Calendar,
+  Settings,
+  Phone,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
@@ -535,8 +537,15 @@ function ProjectsContent() {
                     onClick={() => setSettingsProject((p) => (p === id ? null : id))}
                     className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${settingsProject === id ? "border-primary/30 bg-primary/10 text-primary" : "hover:bg-accent"}`}
                   >
-                    <Bot className="h-3.5 w-3.5" />
-                    Agent
+                    <Settings className="h-3.5 w-3.5" />
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => navigate(`/butler?project=${id}`)}
+                    className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                  >
+                    <Workflow className="h-3.5 w-3.5" />
+                    Butler
                   </button>
                   <button
                     onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}

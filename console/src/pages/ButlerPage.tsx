@@ -1078,6 +1078,14 @@ function genId(type: string) { return `${type}-${++_nSeq}-${Date.now()}`; }
 
 function ButlerPageInner() {
   const { t } = useTranslation();
+
+  // Projekt-Kontext aus URL Query-Parameter (#566)
+  const projectId = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("project") || null;
+  }, []);
+  const apiBase = projectId ? `/projects/${projectId}/butler/flows` : "/butler/flows";
+
   const [flows, setFlows]           = useState<ButlerFlow[]>([]);
   const [activeFlowId, setActiveId] = useState<string | null>(null);
   const [flowName, setFlowName]     = useState(() => t("butler.newFlowName"));
@@ -1100,7 +1108,7 @@ function ButlerPageInner() {
 
   // Load flows + agents
   useEffect(() => {
-    api.get<ButlerFlow[]>("/butler/flows")
+    api.get<ButlerFlow[]>(apiBase)
       .then(setFlows)
       .catch(e => console.error("Failed to load butler flows", e));
 
@@ -1147,10 +1155,10 @@ function ButlerPageInner() {
         })),
       };
       if (activeFlowId) {
-        const updated = await api.put<ButlerFlow>(`/butler/flows/${activeFlowId}`, payload);
+        const updated = await api.put<ButlerFlow>(`${apiBase}/${activeFlowId}`, payload);
         setFlows(fs => fs.map(f => f.id === activeFlowId ? updated : f));
       } else {
-        const created = await api.post<ButlerFlow>("/butler/flows", payload);
+        const created = await api.post<ButlerFlow>(apiBase, payload);
         setFlows(fs => [...fs, created]);
         setActiveId(created.id);
       }
@@ -1169,7 +1177,7 @@ function ButlerPageInner() {
       message: t("common.confirmDelete", { name: flowName }),
       action: async () => {
         try {
-          await api.delete(`/butler/flows/${activeFlowId}`);
+          await api.delete(`${apiBase}/${activeFlowId}`);
           setFlows(fs => fs.filter(f => f.id !== activeFlowId));
           newFlow();
           showToast(t("common.deleted"));
@@ -1183,7 +1191,7 @@ function ButlerPageInner() {
   const toggleFlow = async () => {
     if (!activeFlowId) { setEnabled(e => !e); return; }
     try {
-      const res = await api.patch<{ enabled: boolean }>(`/butler/flows/${activeFlowId}/toggle`, {});
+      const res = await api.patch<{ enabled: boolean }>(`${apiBase}/${activeFlowId}/toggle`, {});
       setEnabled(res.enabled);
       setFlows(fs => fs.map(f => f.id === activeFlowId ? { ...f, enabled: res.enabled } : f));
     } catch (e) {
@@ -1248,6 +1256,11 @@ function ButlerPageInner() {
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-2.5 shrink-0">
         <Workflow className="h-5 w-5 text-indigo-400 shrink-0" />
         <h1 className="text-base font-semibold text-white mr-1">Butler</h1>
+        {projectId && (
+          <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[11px] font-medium text-indigo-300">
+            {projectId}
+          </span>
+        )}
 
         {/* Flow selector */}
         <select
