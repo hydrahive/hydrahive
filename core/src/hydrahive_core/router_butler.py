@@ -19,7 +19,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .butler_rule import ButlerFlow, delete_flow, get_flow, load_flows, save_flow
+from .butler_rule import (
+    ButlerFlow, delete_flow, get_flow, load_flows, save_flow,
+    load_flows_for_project, get_flow_for_project,
+    save_flow_for_project, delete_flow_for_project,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,5 +100,93 @@ def register_butler_routes(router: APIRouter, require_auth) -> None:
         username, _ = auth
         _check_id(flow_id)
         if not delete_flow(flow_id, username):
+            raise HTTPException(404, "Flow nicht gefunden")
+        return {"ok": True}
+
+    # ── Projekt-scoped Butler-Flows (#566) ──────────────────────────────
+
+    def _check_project_butler_access(auth: tuple, project_id: str) -> None:
+        """Prüft ob das Projekt existiert und der User darauf zugreifen darf."""
+        from pathlib import Path as _Path
+        from .settings import settings as _s
+        project_dir = _Path(_s.projects_dir) / project_id
+        if not project_dir.exists():
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        # Admins haben immer Zugang
+        role = auth[1] if len(auth) > 1 else ""
+        if role == "admin":
+            return
+        # Members-Check via config.yaml
+        config_path = project_dir / "config.yaml"
+        if config_path.exists():
+            import yaml
+            try:
+                cfg = yaml.safe_load(config_path.read_text())
+                members = cfg.get("members", [])
+                if members and auth[0] not in members:
+                    raise HTTPException(403, "Kein Zugang zu diesem Projekt")
+            except Exception:
+                pass
+
+    @router.get("/projects/{project_id}/butler/flows")
+    async def list_project_flows(project_id: str, auth=Depends(require_auth)):
+        _check_project_butler_access(auth, project_id)
+        return [f.model_dump() for f in load_flows_for_project(project_id)]
+
+    @router.post("/projects/{project_id}/butler/flows")
+    async def create_project_flow(
+        project_id: str, req: FlowSaveRequest, auth=Depends(require_auth)
+    ):
+        _check_project_butler_access(auth, project_id)
+        flow = ButlerFlow(
+            id=str(uuid.uuid4()),
+            name=req.name,
+            owner=f"project:{project_id}",
+            enabled=req.enabled,
+            nodes=req.nodes,
+            edges=req.edges,
+        )
+        save_flow_for_project(flow, project_id)
+        return flow.model_dump()
+
+    @router.put("/projects/{project_id}/butler/flows/{flow_id}")
+    async def update_project_flow(
+        project_id: str, flow_id: str, req: FlowSaveRequest, auth=Depends(require_auth)
+    ):
+        _check_project_butler_access(auth, project_id)
+        _check_id(flow_id)
+        if get_flow_for_project(flow_id, project_id) is None:
+            raise HTTPException(404, "Flow nicht gefunden")
+        flow = ButlerFlow(
+            id=flow_id,
+            name=req.name,
+            owner=f"project:{project_id}",
+            enabled=req.enabled,
+            nodes=req.nodes,
+            edges=req.edges,
+        )
+        save_flow_for_project(flow, project_id)
+        return flow.model_dump()
+
+    @router.patch("/projects/{project_id}/butler/flows/{flow_id}/toggle")
+    async def toggle_project_flow(
+        project_id: str, flow_id: str, auth=Depends(require_auth)
+    ):
+        _check_project_butler_access(auth, project_id)
+        _check_id(flow_id)
+        flow = get_flow_for_project(flow_id, project_id)
+        if not flow:
+            raise HTTPException(404, "Flow nicht gefunden")
+        flow.enabled = not flow.enabled
+        save_flow_for_project(flow, project_id)
+        return {"enabled": flow.enabled}
+
+    @router.delete("/projects/{project_id}/butler/flows/{flow_id}")
+    async def delete_project_flow_endpoint(
+        project_id: str, flow_id: str, auth=Depends(require_auth)
+    ):
+        _check_project_butler_access(auth, project_id)
+        _check_id(flow_id)
+        if not delete_flow_for_project(flow_id, project_id):
             raise HTTPException(404, "Flow nicht gefunden")
         return {"ok": True}

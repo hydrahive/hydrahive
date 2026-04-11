@@ -94,3 +94,50 @@ def delete_flow(flow_id: str, owner: str) -> bool:
         p.unlink()
         return True
     return False
+
+
+# ── Projekt-scoped Flows (#566) ─────────────────────────────────────────────
+
+def _project_butler_dir(project_id: str) -> Path:
+    return BUTLER_DIR / f"project_{project_id}"
+
+
+def load_flows_for_project(project_id: str) -> list[ButlerFlow]:
+    """Lädt Butler-Flows für ein Projekt (aus butler/project_{id}/*.json)."""
+    d = _project_butler_dir(project_id)
+    if not d.exists():
+        return []
+    flows: list[ButlerFlow] = []
+    for f in sorted(d.glob("*.json")):
+        try:
+            flows.append(ButlerFlow.model_validate_json(f.read_text()))
+        except Exception:
+            pass
+    return flows
+
+
+def get_flow_for_project(flow_id: str, project_id: str) -> ButlerFlow | None:
+    p = _project_butler_dir(project_id) / f"{flow_id}.json"
+    if not p.exists():
+        return None
+    try:
+        return ButlerFlow.model_validate_json(p.read_text())
+    except Exception:
+        return None
+
+
+def save_flow_for_project(flow: ButlerFlow, project_id: str) -> None:
+    d = _project_butler_dir(project_id)
+    d.mkdir(parents=True, exist_ok=True)
+    flow.owner = f"project:{project_id}"
+    (d / f"{flow.id}.json").write_text(
+        flow.model_dump_json(indent=2), encoding="utf-8"
+    )
+
+
+def delete_flow_for_project(flow_id: str, project_id: str) -> bool:
+    p = _project_butler_dir(project_id) / f"{flow_id}.json"
+    if p.exists():
+        p.unlink()
+        return True
+    return False

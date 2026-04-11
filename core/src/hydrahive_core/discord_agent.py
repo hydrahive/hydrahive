@@ -637,6 +637,28 @@ class AgentDiscordClient(DiscordAgentClient):
         from .messenger_router import messenger_router as _mr
         _project_id = _mr.resolve_discord(channel_id) or _agent_id
 
+        # v2: Projekt-scoped Butler-Flows prüfen (#566)
+        try:
+            from .butler_executor import check_flows_for_project as _butler_project
+            _proj_actions = await _butler_project(_bevent, _project_id)
+            if _proj_actions:
+                _aio.create_task(_butler_generic(_proj_actions, _bevent))
+                for _pact in _proj_actions:
+                    _psub = _pact.get("subtype")
+                    if _psub == "ignore":
+                        return
+                    if _psub == "reply_fixed":
+                        _pft = str(_pact.get("params", {}).get("text", "")).strip()
+                        if _pft:
+                            await self.send_message(channel_id, _pft)
+                        return
+                    if _psub in ("agent_reply", "agent_reply_guided", "forward"):
+                        _paid = str(_pact.get("params", {}).get("agent_id", "")).strip()
+                        if _paid:
+                            _project_id = _paid
+        except Exception as _pbe:
+            logger.debug("Projekt-Butler check Discord: %s", _pbe)
+
         # Antwort sammeln und senden
         response_parts: list[str] = []
         try:
