@@ -1246,7 +1246,6 @@ function SettingsPanel({
   const [fbInput,        setFbInput]        = useState("");
   const [role,           setRole]           = useState<string | null>((cfg as any).role ?? null);
   const [tools,          setTools]          = useState<string[]>(cfg.tools ?? []);
-  const [allowedAgents,  setAllowedAgents]  = useState<string[]>(cfg.allowed_agents ?? []);
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
   const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string;wks_base_url?:string}[]>([]);
@@ -1272,14 +1271,10 @@ function SettingsPanel({
     setFallbacks(c.llm?.fallback_models ?? []);
     setRole((c as any).role ?? null);
     setTools(c.tools ?? []);
-    setAllowedAgents(c.allowed_agents ?? []);
   }, [agentInfo]);
 
   function toggleTool(id: string) {
     setTools(t => t.includes(id) ? t.filter(x => x!==id) : [...t, id]);
-  }
-  function toggleAgent(id: string) {
-    setAllowedAgents(a => a.includes(id) ? a.filter(x => x!==id) : [...a, id]);
   }
   function addFallback() {
     const v = fbInput.trim();
@@ -1306,7 +1301,6 @@ function SettingsPanel({
         fallback_models: allFallbacks,
         role: role || undefined,
         tools: role ? [] : tools,
-        allowed_agents: allowedAgents,
         ollama_base_url,
       });
       setSaveMsg(t("myAgent.settingsSaved"));
@@ -1436,32 +1430,6 @@ function SettingsPanel({
           )}
         </section>
 
-        {/* Delegation */}
-        {agents.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionDelegation")}</h2>
-              <button type="button" onClick={() => setAllowedAgents([...agents])}
-                className="text-xs text-muted-foreground hover:text-foreground transition">
-                Alle
-              </button>
-              <button type="button" onClick={() => setAllowedAgents([])}
-                className="text-xs text-muted-foreground hover:text-foreground transition">
-                Keine
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("myAgent.settingsDelegationHint")}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {agents.map(id => (
-                <label key={id} className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                  <input type="checkbox" checked={allowedAgents.includes(id)} onChange={() => toggleAgent(id)}
-                    className="rounded" />
-                  <span className="text-xs font-mono">{id}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Backup & Import */}
         <AgentBackupSection />

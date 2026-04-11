@@ -100,7 +100,7 @@ class AgentConfig(BaseModel):
     tools_extra:     list[str] = Field(default_factory=list)  # #492: zusätzliche Tools on top of role
     tools_deny:      list[str] = Field(default_factory=list)  # #492: Tools explizit verbieten
     tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
-    allowed_agents:  list[str] = Field(default_factory=list)
+    allowed_agents:  list[str] = Field(default_factory=list)  # v1 deprecated — wird ignoriert
     mcp_servers:     list[str] = Field(default_factory=list)
     sources:         list[AgentSource] = Field(default_factory=list)
     max_tool_rounds: int       = 20

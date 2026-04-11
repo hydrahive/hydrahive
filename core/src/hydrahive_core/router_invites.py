@@ -57,7 +57,6 @@ class CreateInviteRequest(BaseModel):
     role: str = "user"
     group: str = "standard"
     allowed_projects: list[str] = []
-    allowed_agents: list[str] = []
     note: str = ""                    # optionale Admin-Notiz (z.B. "für Max Mustermann")
     ttl_days: int = 7
 
@@ -90,7 +89,6 @@ def register_invite_routes(
             "role": req.role,
             "group": req.group,
             "allowed_projects": req.allowed_projects,
-            "allowed_agents": req.allowed_agents,
             "note": req.note,
             "created_at": now,
             "expires_at": now + req.ttl_days * 24 * 3600,
@@ -176,8 +174,7 @@ def register_invite_routes(
                 password=req.password,
                 role=inv["role"],
                 group=inv["group"],
-                allowed_projects=inv["allowed_projects"],
-                allowed_agents=inv["allowed_agents"],
+                allowed_projects=inv.get("allowed_projects", []),
             ))
         except HTTPException:
             raise
