@@ -211,6 +211,217 @@ def register_project_routes(
         logger.info("Projekt aktualisiert: %s", project_id)
         return {"updated": True, "project_id": project_id}
 
+    # ── v2: Projekt-Erstellung mit Template ──────────────────────────────
+
+    class CreateProjectV2Request(BaseModel):
+        id: str
+        name: str
+        description: str = ""
+        template: str = "general"          # code-project, server-admin, chat-bot, data-analysis, general, blank
+        provider: str = "anthropic"
+        model: str = "claude-sonnet-4-6"
+        temperature: float = 0.5
+        max_tokens: int = 4096
+        api_key_env: str = ""
+        failover: list[dict] = []          # [{provider, model}, ...]
+        agent_md: str = ""                 # Eigener Text, überschreibt Template
+        members: list[str] = []
+
+    @admin_router.post("/projects/v2", status_code=201)
+    async def create_project_v2(req: CreateProjectV2Request):
+        """v2: Projekt erstellen mit Template + config.yaml + AGENT.md."""
+        import yaml as _yaml
+
+        if not re.match(r"^[a-z0-9_-]+$", req.id):
+            raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
+        if projects.get(req.id):
+            raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
+
+        project_dir = Path(projects_dir) / req.id
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "memory").mkdir(exist_ok=True)
+
+        # config.yaml aus Request-Daten
+        config_data = {
+            "id": req.id,
+            "version": "2.0.0",
+            "identity": {"name": req.name, "description": req.description},
+            "llm": {
+                "provider": req.provider,
+                "model": req.model,
+                "temperature": req.temperature,
+                "max_tokens": req.max_tokens,
+                "api_key_env": req.api_key_env,
+                "failover": req.failover,
+            },
+            "plugins": [],
+            "repos": [],
+            "sources": [],
+            "members": req.members or ["admin"],
+        }
+        config_path = project_dir / "config.yaml"
+        config_path.write_text(
+            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        # AGENT.md — eigener Text oder aus Template
+        agent_md_text = req.agent_md.strip() if req.agent_md else ""
+        if not agent_md_text:
+            template_dir = Path("/opt/hydrahive/installer/templates") / req.template
+            template_md = template_dir / "AGENT.md"
+            if template_md.exists():
+                agent_md_text = template_md.read_text(encoding="utf-8")
+            else:
+                agent_md_text = f"# {req.name}\n\nBeschreibe hier das Fachgebiet."
+
+        agent_md_path = project_dir / "AGENT.md"
+        agent_md_path.write_text(agent_md_text, encoding="utf-8")
+
+        # Berechtigungen
+        import subprocess
+        subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(project_dir)],
+                       capture_output=True, timeout=5)
+
+        # Im ProjectLoader registrieren
+        import asyncio as _asyncio
+        await _asyncio.sleep(0.2)
+        cfg = projects.get(req.id) or projects.register(project_dir)
+
+        audit_log("project.create_v2", target=req.id, project_id=req.id,
+                  details={"template": req.template, "model": req.model})
+        logger.info("v2-Projekt erstellt: %s (Template: %s, LLM: %s/%s)",
+                    req.id, req.template, req.provider, req.model)
+
+        return {
+            "created": True,
+            "project_id": req.id,
+            "version": "2.0.0",
+            "template": req.template,
+            "model": f"{req.provider}/{req.model}",
+        }
+
+    # ── v2: Projekt-Settings lesen/schreiben ──────────────────────────
+
+    @auth_router.get("/projects/{project_id}/settings")
+    def get_project_settings(project_id: str, _auth: tuple[str, str] = Depends(require_auth)):
+        """v2: Projekt-Config + AGENT.md laden für Settings-Seite."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        project_dir = Path(projects_dir) / project_id
+        agent_md = ""
+        agent_md_path = project_dir / "AGENT.md"
+        if agent_md_path.exists():
+            agent_md = agent_md_path.read_text(encoding="utf-8")
+
+        return {
+            "project_id": project_id,
+            "is_v2": getattr(cfg, "is_v2", False),
+            "identity": {"name": cfg.identity.name, "description": cfg.identity.description},
+            "llm": {
+                "provider": getattr(cfg.llm, "provider", "anthropic"),
+                "model": getattr(cfg.llm, "model", ""),
+                "temperature": getattr(cfg.llm, "temperature", 0.5),
+                "max_tokens": getattr(cfg.llm, "max_tokens", 4096),
+                "api_key_env": getattr(cfg.llm, "api_key_env", ""),
+                "failover": getattr(cfg.llm, "failover", []),
+            },
+            "agent_md": agent_md,
+            "members": cfg.members,
+            "plugins": getattr(cfg, "plugins", []),
+            "repos": getattr(cfg, "repos", []),
+            "sources": getattr(cfg, "sources", []),
+        }
+
+    class UpdateProjectSettingsRequest(BaseModel):
+        name: str | None = None
+        description: str | None = None
+        provider: str | None = None
+        model: str | None = None
+        temperature: float | None = None
+        max_tokens: int | None = None
+        api_key_env: str | None = None
+        failover: list[dict] | None = None
+        agent_md: str | None = None
+        members: list[str] | None = None
+
+    @auth_router.put("/projects/{project_id}/settings")
+    def update_project_settings(
+        project_id: str,
+        req: UpdateProjectSettingsRequest,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Projekt-Config + AGENT.md speichern."""
+        import yaml as _yaml
+
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        project_dir = Path(projects_dir) / project_id
+        config_path = project_dir / "config.yaml"
+
+        # Bestehende config.yaml laden oder neu erstellen
+        if config_path.exists():
+            try:
+                config_data = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                config_data = {}
+        else:
+            config_data = {"id": project_id, "version": "2.0.0"}
+
+        # Felder aktualisieren (nur wenn im Request gesetzt)
+        if req.name is not None or req.description is not None:
+            config_data.setdefault("identity", {})
+            if req.name is not None:
+                config_data["identity"]["name"] = req.name
+            if req.description is not None:
+                config_data["identity"]["description"] = req.description
+
+        llm = config_data.setdefault("llm", {})
+        if req.provider is not None:
+            llm["provider"] = req.provider
+        if req.model is not None:
+            llm["model"] = req.model
+        if req.temperature is not None:
+            llm["temperature"] = req.temperature
+        if req.max_tokens is not None:
+            llm["max_tokens"] = req.max_tokens
+        if req.api_key_env is not None:
+            llm["api_key_env"] = req.api_key_env
+        if req.failover is not None:
+            llm["failover"] = req.failover
+
+        if req.members is not None:
+            config_data["members"] = req.members
+
+        config_data["version"] = "2.0.0"
+
+        # config.yaml schreiben
+        config_path.write_text(
+            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        # AGENT.md schreiben wenn im Request
+        if req.agent_md is not None:
+            agent_md_path = project_dir / "AGENT.md"
+            agent_md_path.write_text(req.agent_md, encoding="utf-8")
+
+        # ProjectLoader neu laden
+        projects.register(project_dir)
+
+        audit_log("project.settings_update", target=project_id, project_id=project_id)
+        logger.info("v2-Projekt Settings aktualisiert: %s", project_id)
+
+        return {"updated": True, "project_id": project_id}
+
+    # ── v1: Projekt-Erstellung (Legacy) ────────────────────────────────
+
     @admin_router.post("/projects", status_code=201)
     async def create_project(req: CreateProjectRequest):
         import asyncio as _asyncio
