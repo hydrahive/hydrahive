@@ -167,6 +167,11 @@ async def handle_message_stream(
     #     litellm_tools = (litellm_tools or []) + _plg_s
     litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
 
+    # v2 Debug: Tool-Anzahl loggen
+    _tool_count = len(litellm_tools) if litellm_tools else 0
+    _tool_names = [t.get("function", {}).get("name", "?") for t in (litellm_tools or [])]
+    logger.info("v2-tools proj=%s count=%d names=%s", project_id, _tool_count, _tool_names[:15])
+
     # Anti-Halluzinations-Guard: System-Prompt ergänzen mit tatsächlich verfügbaren Tools
     # Verhindert dass der Agent Tools als Text schreibt statt sie echt aufzurufen
     _active_tool_names = [t["function"]["name"] for t in (litellm_tools or [])] if litellm_tools else []
