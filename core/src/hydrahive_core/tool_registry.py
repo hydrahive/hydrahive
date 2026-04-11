@@ -1032,9 +1032,11 @@ class ReadMemoryTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Liest Dateien aus dem persistenten Gedächtnis. "
+            "Liest aus dem persistenten Gedächtnis. "
+            "scope='project' (Standard): lokales Projekt-Memory. "
+            "scope='global': globale Wissensdatenbank (A-MEM). "
             "Ohne filename: listet alle vorhandenen Dateien auf. "
-            "Mit filename: gibt den Inhalt zurück."
+            "Mit filename/query: gibt den Inhalt zurück."
         )
 
     @property
@@ -1043,11 +1045,17 @@ class ReadMemoryTool(BaseTool):
             "type": "object",
             "properties": {
                 "filename": {"type": "string", "description": "Dateiname (z.B. 'facts.md'). Leer = alle auflisten."},
+                "query": {"type": "string", "description": "Suchanfrage für scope=global (A-MEM Suche)."},
+                "scope": {"type": "string", "enum": ["project", "global"], "description": "project=lokal (Standard), global=A-MEM Wissensdatenbank."},
             },
             "required": [],
         }
 
-    async def execute(self, agent_id: str, project_id: str, filename: str = "", **kwargs) -> dict:
+    async def execute(self, agent_id: str, project_id: str, filename: str = "", query: str = "", scope: str = "project", **kwargs) -> dict:
+        # v2: scope=global → A-MEM Suche via MCP
+        if scope == "global":
+            return await self._amem_search(query or filename)
+
         import sqlite3 as _sqlite3
         from .memory_decay import touch_recall as _touch_recall
 
@@ -1087,6 +1095,28 @@ class ReadMemoryTool(BaseTool):
 
         return {"filename": safe, "content": content}
 
+    @staticmethod
+    async def _amem_search(query: str) -> dict:
+        """A-MEM globale Suche via MCP."""
+        if not query or len(query.strip()) < 2:
+            return {"error": "query darf nicht leer sein", "scope": "global"}
+        try:
+            from .mcp_client import call_mcp_tool
+            _amem_cfg = {
+                "url": "http://127.0.0.1:8020/sse",
+                "transport": "sse",
+                "headers": {},
+            }
+            result = await asyncio.wait_for(
+                call_mcp_tool("amem", _amem_cfg, "amem_search", {"query": query, "k": 5}),
+                timeout=10.0,
+            )
+            return {"scope": "global", "query": query, "result": result or "(keine Treffer)"}
+        except asyncio.TimeoutError:
+            return {"error": "A-MEM Timeout (10s)", "scope": "global"}
+        except Exception as e:
+            return {"error": f"A-MEM nicht erreichbar: {e}", "scope": "global"}
+
 
 # =========================================================================
 # Core Tool #8: write_memory
@@ -1102,6 +1132,8 @@ class WriteMemoryTool(BaseTool):
     def description(self) -> str:
         return (
             "Speichert Text dauerhaft im Gedächtnis. "
+            "scope='project' (Standard): lokales Projekt-Memory. "
+            "scope='global': globale Wissensdatenbank (A-MEM). "
             "mode=overwrite ersetzt, append hängt an. "
             "importance (0-1) und category steuern Lebensdauer."
         )
@@ -1116,17 +1148,23 @@ class WriteMemoryTool(BaseTool):
                 "mode": {"type": "string", "enum": ["overwrite", "append"]},
                 "importance": {"type": "number", "description": "Wichtigkeit 0.0-1.0 (Standard: 0.5)"},
                 "category": {"type": "string", "enum": ["strategy", "fact", "assumption", "failure"], "description": "Kategorie (Standard: fact)"},
+                "scope": {"type": "string", "enum": ["project", "global"], "description": "project=lokal (Standard), global=A-MEM Wissensdatenbank."},
             },
             "required": ["filename", "content"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        filename: str, content: str, mode: str = "overwrite",
+        filename: str = "", content: str = "", mode: str = "overwrite",
         importance: float = 0.5, category: str = "fact",
+        scope: str = "project",
         **kwargs,
     ) -> dict:
         import sqlite3 as _sqlite3
+        # v2: scope=global → A-MEM via MCP
+        if scope == "global":
+            return await self._amem_add_note(content, filename)
+
         from .memory_decay import (
             set_file_meta as _set_file_meta,
             dedup_decision as _dedup_decision,
@@ -1198,6 +1236,31 @@ class WriteMemoryTool(BaseTool):
             "saved": True, "filename": safe, "bytes": len(content.encode()),
             "importance": importance, "category": category, "action": dedup_action,
         }
+
+    @staticmethod
+    async def _amem_add_note(content: str, title: str = "") -> dict:
+        """Globalen Eintrag in A-MEM speichern via MCP."""
+        if not content or len(content.strip()) < 3:
+            return {"error": "content darf nicht leer sein", "scope": "global"}
+        try:
+            from .mcp_client import call_mcp_tool
+            _amem_cfg = {
+                "url": "http://127.0.0.1:8020/sse",
+                "transport": "sse",
+                "headers": {},
+            }
+            args = {"content": content}
+            if title:
+                args["title"] = title
+            result = await asyncio.wait_for(
+                call_mcp_tool("amem", _amem_cfg, "amem_add_note", args),
+                timeout=10.0,
+            )
+            return {"saved": True, "scope": "global", "result": result or "OK"}
+        except asyncio.TimeoutError:
+            return {"error": "A-MEM Timeout (10s)", "scope": "global"}
+        except Exception as e:
+            return {"error": f"A-MEM nicht erreichbar: {e}", "scope": "global"}
 
 
 # =========================================================================
