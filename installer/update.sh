@@ -263,6 +263,130 @@ main() {
     done
     info "Git Performance-Config für Projekt-Repos gesetzt"
 
+    # --- 5h. v2-Migration: Agents → Projekte (einmalig) ---
+    # Prüft ob Migration nötig ist und führt sie automatisch durch.
+    # Flag-Datei /etc/hydrahive/.v2-migrated verhindert wiederholte Ausführung.
+    if [ ! -f "/etc/hydrahive/.v2-migrated" ]; then
+        # Prüfe ob es Agents gibt die noch kein v2-Projekt haben
+        _needs_migrate=false
+        for _agent_dir in /agents/*/; do
+            [ ! -d "$_agent_dir" ] && continue
+            _aid="$(basename "$_agent_dir")"
+            [ "$_aid" = "sessions.db" ] && continue
+            [ "$_aid" = "sessions.db-shm" ] && continue
+            [ "$_aid" = "sessions.db-wal" ] && continue
+            # Hat der Agent eine agent.yaml und das Projekt noch keine config.yaml?
+            if [ -f "$_agent_dir/agent.yaml" ] && [ ! -f "/projects/$_aid/config.yaml" ]; then
+                _needs_migrate=true
+                break
+            fi
+        done
+
+        if $_needs_migrate; then
+            info "v2-Migration: Konvertiere Agents zu Projekten..."
+            # Migration per Python — sicher und mit YAML-Parsing
+            "${VENV}/bin/python3" - << 'MIGRATE_EOF'
+import yaml, sys
+from pathlib import Path
+
+agents_dir = Path("/agents")
+projects_dir = Path("/projects")
+migrated = 0
+
+for agent_dir in sorted(agents_dir.iterdir()):
+    if not agent_dir.is_dir():
+        continue
+    agent_id = agent_dir.name
+    if agent_id.startswith("sessions"):
+        continue
+
+    agent_yaml = agent_dir / "agent.yaml"
+    if not agent_yaml.exists():
+        continue
+
+    project_dir = projects_dir / agent_id
+    if (project_dir / "config.yaml").exists():
+        continue  # Schon migriert
+
+    # agent.yaml lesen
+    try:
+        raw = yaml.safe_load(agent_yaml.read_text())
+    except Exception:
+        continue
+
+    llm = raw.get("llm", {})
+    model = llm.get("model", "claude-sonnet-4-6")
+    temperature = llm.get("temperature", 0.7)
+    max_tokens = llm.get("max_tokens", 4096)
+    fallback = llm.get("fallback_models", [])
+
+    provider = "anthropic"
+    if "gpt" in model.lower():
+        provider = "openai"
+
+    config = {
+        "id": agent_id,
+        "version": "2.0.0",
+        "identity": {
+            "name": raw.get("identity", agent_id),
+            "description": f"Migriert von Agent {agent_id}",
+        },
+        "llm": {
+            "provider": provider,
+            "model": model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "failover": [{"provider": "anthropic", "model": m} for m in fallback],
+        },
+        "plugins": [],
+        "repos": [],
+        "sources": [],
+        "members": ["admin"],
+    }
+
+    # Projekt-Verzeichnis + config.yaml
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "memory").mkdir(exist_ok=True)
+    (project_dir / "config.yaml").write_text(
+        yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    )
+
+    # soul.md → AGENT.md
+    soul_path = agent_dir / "soul.md"
+    if soul_path.exists():
+        (project_dir / "AGENT.md").write_text(soul_path.read_text())
+    else:
+        (project_dir / "AGENT.md").write_text(f"# {agent_id}\n\nMigriert von Agent {agent_id}.\n")
+
+    # Memory kopieren
+    memory_src = agent_dir / "memory"
+    if memory_src.is_dir():
+        memory_dst = project_dir / "memory"
+        for mf in memory_src.glob("*.md"):
+            (memory_dst / mf.name).write_text(mf.read_text())
+
+    # Altes project.yaml backup falls vorhanden
+    old_project_yaml = project_dir / "project.yaml"
+    if old_project_yaml.exists():
+        old_project_yaml.rename(project_dir / "project.yaml.v1-backup")
+
+    migrated += 1
+
+print(f"v2-Migration: {migrated} Agents → Projekte konvertiert")
+MIGRATE_EOF
+
+            # Berechtigungen setzen
+            chown -R hydrahive:hydrahive /projects/ 2>/dev/null || true
+
+            # Flag setzen — Migration nicht nochmal ausführen
+            touch /etc/hydrahive/.v2-migrated
+            success "v2-Migration abgeschlossen"
+        else
+            info "v2-Migration: nicht nötig (alle Agents haben bereits Projekte)"
+            touch /etc/hydrahive/.v2-migrated
+        fi
+    fi
+
     # --- 6. Service neustarten ---
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
