@@ -299,6 +299,9 @@ for agent_dir in sorted(agents_dir.iterdir()):
     agent_id = agent_dir.name
     if agent_id.startswith("sessions"):
         continue
+    # Disabled Agents überspringen
+    if agent_id.startswith("_") and agent_id.endswith("_disabled"):
+        continue
 
     agent_yaml = agent_dir / "agent.yaml"
     if not agent_yaml.exists():
