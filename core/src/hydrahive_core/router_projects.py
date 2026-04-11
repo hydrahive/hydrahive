@@ -350,7 +350,19 @@ def register_project_routes(
             "plugins": getattr(cfg, "plugins", []),
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
+            "messenger": _load_messenger_config(project_dir),
         }
+
+    def _load_messenger_config(project_dir: Path) -> dict:
+        """messenger.yaml laden wenn vorhanden."""
+        import yaml as _yaml
+        mp = project_dir / "messenger.yaml"
+        if not mp.exists():
+            return {}
+        try:
+            return _yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
 
     @auth_router.put("/projects/{project_id}/settings")
     def update_project_settings(

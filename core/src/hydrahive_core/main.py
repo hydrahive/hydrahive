@@ -225,6 +225,11 @@ async def lifespan(app: FastAPI):
 
     discovery.start()
     projects.start()
+
+    # v2: Messenger-Routing initialisieren (messenger.yaml aus allen Projekten)
+    from .messenger_router import messenger_router as _messenger_router
+    _messenger_router.rebuild()
+
     sessions.start()
     agent_sessions.start()
     await runtime.start(list(discovery.agents.values()))
