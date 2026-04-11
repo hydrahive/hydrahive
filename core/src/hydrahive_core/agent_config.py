@@ -131,21 +131,10 @@ class AgentConfig(BaseModel):
         self,
         execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
     ) -> list[str] | None:
-        """Permissions fuer den aktiven Modus.
-
-        None bedeutet Legacy-Verhalten: keine technische Permission-Filterung.
-        'unrestricted' gibt immer None zurück — kein Tool wird gefiltert.
+        """v2: Keine Permission-Filterung mehr — gibt immer None zurück.
+        execution_mode wird nur noch von shell_exec genutzt (sudo vs. Blocklist).
         """
-        mode = self.effective_execution_mode(execution_mode)
-        if mode is None or self.execution_modes is None:
-            return None
-        # unrestricted = alles erlaubt, kein Filter
-        if mode == "unrestricted":
-            return None
-        profile = getattr(self.execution_modes, mode, None)
-        if profile is None:
-            return []
-        return list(profile.permissions)
+        return None
 
 
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
@@ -174,26 +163,8 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
         logger.warning("Validierungsfehler in %s:\n%s", yaml_path, e)
         return None
 
-    # #492: Rolle auflösen → tools + execution_modes setzen
-    if config.role:
-        from .agent_roles import resolve_role, ROLE_PRESETS
-        resolved = resolve_role(
-            config.role,
-            tools_extra=config.tools_extra or None,
-            tools_deny=config.tools_deny or None,
-        )
-        if resolved:
-            role_tools, role_exec_modes = resolved
-            # Nur überschreiben wenn nicht explizit in YAML gesetzt
-            if not raw.get("tools"):
-                config.tools = role_tools
-            if not raw.get("execution_modes"):
-                config.execution_modes = ExecutionModesConfig.model_validate(role_exec_modes)
-            # tool_selection aus Rolle (z.B. admin → always)
-            if not raw.get("tool_selection"):
-                role_preset = ROLE_PRESETS.get(config.role)  # type: ignore[arg-type]
-                if role_preset and "tool_selection" in role_preset:
-                    config.tool_selection = role_preset["tool_selection"]
+    # v2: Rollen-System entfernt — Tools sind fix (9 Core-Tools).
+    # role-Feld wird ignoriert, execution_modes nur für shell_exec relevant.
 
     config.agent_dir = agent_dir
     return config

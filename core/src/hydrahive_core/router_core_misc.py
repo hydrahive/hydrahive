@@ -369,19 +369,8 @@ def register_core_misc_routes(
 
     @auth_router.get("/agent-roles")
     def list_agent_roles():
-        """#492: Rollen-Presets für Frontend."""
-        from .agent_roles import ROLE_PRESETS, ALL_ROLES
-        return {
-            "roles": {
-                role: {
-                    "description": ROLE_PRESETS[role]["description"],
-                    "tools": ROLE_PRESETS[role]["tools"],
-                    "execution_mode": ROLE_PRESETS[role]["execution_modes"]["default"],
-                    "tool_count": len(ROLE_PRESETS[role]["tools"]) if isinstance(ROLE_PRESETS[role]["tools"], list) else -1,
-                }
-                for role in ALL_ROLES
-            },
-        }
+        """v2: Rollen-System entfernt — alle Agents haben 9 Core-Tools."""
+        return {"roles": {}, "info": "v2: Rollen-System entfernt. Alle Agents nutzen 9 Core-Tools."}
 
     @auth_router.get("/agents")
     def list_agents():
@@ -473,7 +462,7 @@ def register_core_misc_routes(
                 result[tool_id] = {
                     "name": tool.name,
                     "description": tool.description,
-                    "permissions_required": tool.permissions_required,
+                    "type": "core",
                     "parameters": tool.parameters,
                 }
         return result
