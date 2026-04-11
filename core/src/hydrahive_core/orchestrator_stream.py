@@ -29,7 +29,7 @@ from .orchestrator_context import (
 )
 from .orchestrator_tools import (
     _truncate_tool_result, check_repeated_signature, execute_tool_call,
-    format_tool_detail, format_tool_result, handle_request_tools,
+    format_tool_detail, format_tool_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,9 +146,8 @@ async def handle_message_stream(
             if history[i].get("role") == "user":
                 history[i] = {"role": "user", "content": _vision_blocks}
                 break
-    # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
-    _use_meta = "request_tools" in (boss_cfg.tools or [])
-    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content, meta_only=_use_meta)
+    # v2: Immer alle 9 Core-Tools laden — keine Meta-Phase mehr
+    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content)
     litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
     _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
     if _mcp_s:
@@ -168,8 +167,8 @@ async def handle_message_stream(
             "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
             + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
             "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
-            "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
-            "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+            "Für alles was kein eigenes Tool hat (Git, System, Pakete, SSH, etc.) nutze `shell_exec`. "
+            "Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
             "nutze IMMER den echten Tool-Aufruf-Mechanismus."
         )
         system_prompt = system_prompt + _tool_guard
@@ -686,7 +685,7 @@ async def _stream_anthropic_oauth(
         # Zwischentext persistent speichern (vor Tool-Ausführung)
         if _round_text.strip():
             await orch._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
-        _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
+        _LOOP_EXCLUDE_OAUTH = {"file_write"}
         signature = tuple(
             f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
             for block in tool_use_blocks
@@ -732,53 +731,20 @@ async def _stream_anthropic_oauth(
         # Phase 1: SSE-Events senden + Tools klassifizieren (#418)
         _oauth_parallel = []
         _oauth_sequential = []
-        _oauth_request_tools = []
+        _oauth_block_results: dict[str, Any] = {}  # block.id → (result, is_error)
         for block in tool_use_blocks:
             _tc_input = block.input or {}
             _tc_detail = format_tool_detail(block.name, _tc_input)
             yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
-            # Tool-Call Info nur als SSE-Event (wird am Ende der Runde strukturiert gespeichert)
-            if block.name == "request_tools":
-                _oauth_request_tools.append(block)
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
+            _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+            if _is_parallel is None and tool_obj:
+                from .context_lifecycle import get_tool_policy
+                _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+            if _is_parallel:
+                _oauth_parallel.append(block)
             else:
-                tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
-                # #528: Tool Policy als Fallback für parallel_safe
-                _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
-                if _is_parallel is None and tool_obj:
-                    from .context_lifecycle import get_tool_policy
-                    _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
-                if _is_parallel:
-                    _oauth_parallel.append(block)
-                else:
-                    _oauth_sequential.append(block)
-
-        # request_tools zuerst (damit neue Tool-Schemas für nachfolgende Calls verfügbar sind)
-        _oauth_block_results: dict[str, Any] = {}  # block.id → (result, is_error)
-        for block in _oauth_request_tools:
-            _tc_input = block.input or {}
-            try:
-                categories = _tc_input.get("categories", [])
-                _rt_litellm_tools = []
-                _, result = handle_request_tools(
-                    orch, boss_cfg, execution_mode, categories,
-                    _oauth_loaded_cats, _rt_litellm_tools,
-                )
-                existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
-                new_tool_defs = [
-                    {
-                        "name": s["function"]["name"],
-                        "description": s["function"].get("description", ""),
-                        "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
-                    }
-                    for s in _rt_litellm_tools
-                    if s["function"]["name"] not in existing_names
-                ]
-                if new_tool_defs:
-                    kwargs.setdefault("tools", [])
-                    kwargs["tools"].extend(new_tool_defs)
-            except Exception as te:
-                result = {"error": f"request_tools: {te}"}
-            _oauth_block_results[block.id] = (result, False)
+                _oauth_sequential.append(block)
 
         # Phase 2: Parallel-safe Tools gleichzeitig (#418)
         if _oauth_parallel:
@@ -831,8 +797,8 @@ async def _stream_anthropic_oauth(
         # Phase 4: Ergebnisse in Original-Reihenfolge sammeln
         for block in tool_use_blocks:
             result, _is_err = _oauth_block_results[block.id]
-            if block.name != "request_tools":
-                _img_evt = _extract_tool_image(result, block.name)
+            _img_evt = _extract_tool_image(result, block.name)
+            if _img_evt:
                 if _img_evt:
                     yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)

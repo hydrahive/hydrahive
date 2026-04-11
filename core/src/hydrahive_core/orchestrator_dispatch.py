@@ -14,7 +14,6 @@ from .project_config import ProjectConfig
 from .orchestrator_tools import (
     DispatchResult, _truncate_tool_result,
     check_repeated_signature, execute_tool_call, format_tool_result,
-    handle_request_tools,
 )
 
 from .session_manager import MessageRole
@@ -503,7 +502,7 @@ async def _tool_loop(
         (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
         "",
     )
-    # Im _tool_loop immer alle Tools (Kategorien wurden ggf. schon per request_tools nachgeladen)
+    # v2: Immer alle 9 Core-Tools
     boss_tools = orch._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
     litellm_tools: list[dict] = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
     _mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
@@ -593,25 +592,10 @@ async def _tool_loop(
         })
 
         # dispatch_task separat → paralleles Worker-Dispatch
-        # request_tools separat → on-demand Tool-Kategorien nachladen
         dispatch_tcs     = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
-        request_tool_tcs = [tc for tc in tool_calls if tc.function.name == "request_tools"]
-        other_tcs        = [tc for tc in tool_calls if tc.function.name not in ("dispatch_task", "request_tools")]
+        other_tcs        = [tc for tc in tool_calls if tc.function.name != "dispatch_task"]
 
         tool_results: dict[str, str] = {}
-
-        # On-Demand Tool-Kategorien nachladen
-        for tc in request_tool_tcs:
-            try:
-                args = json.loads(tc.function.arguments)
-                categories = args.get("categories", [])
-                _, result_dict = handle_request_tools(
-                    orch, boss_cfg, execution_mode, categories,
-                    _loaded_categories, litellm_tools,
-                )
-                tool_results[tc.id] = json.dumps(result_dict, ensure_ascii=False)
-            except Exception as e:
-                tool_results[tc.id] = f"[Fehler] request_tools: {e}"
 
         if dispatch_tcs:
             dispatches = _parse_dispatch_calls(dispatch_tcs)

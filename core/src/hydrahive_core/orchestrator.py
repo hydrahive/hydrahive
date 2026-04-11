@@ -263,27 +263,8 @@ class Orchestrator:
         user_text: str = "",
         meta_only: bool = False,
     ) -> list:
-        from .tool_groups import select_tools
-        from .tool_loader import META_TOOLS
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        if meta_only:
-            ids = [t for t in META_TOOLS if t in (agent_cfg.tools or [])]
-            if "request_tools" in (agent_cfg.tools or []) and "request_tools" not in ids:
-                ids.insert(0, "request_tools")
-            return self._reg.tools_for_agent(ids, agent_permissions=permissions)
-        if getattr(agent_cfg, "tool_selection", "auto") == "always":
-            base_ids = [t.id for t in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)]
-        else:
-            base_ids = [t.id for t in self._reg.tools_for_agent(
-                select_tools(agent_cfg.tools, user_text), agent_permissions=permissions
-            )]
-        if user_text:
-            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
-            if skill_allowed or skill_blocked:
-                from .skill_loader import Skill as _Skill
-                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
-                base_ids = dummy.apply_tool_constraints(base_ids)
-        return self._reg.tools_for_agent(base_ids, agent_permissions=permissions)
+        """v2: Gibt immer alle 9 Core-Tools zurück — keine Filterung mehr."""
+        return self._reg.all_tools()
 
     def _category_tools_schema(
         self,
@@ -291,13 +272,8 @@ class Orchestrator:
         execution_mode: str | None,
         categories: list[str],
     ) -> list[dict]:
-        """Gibt litellm-Tool-Schemas für angegebene Kategorien zurück."""
-        from .tool_loader import tools_for_categories
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        tool_objects = tools_for_categories(
-            self._reg, agent_cfg.tools or [], permissions, categories
-        )
-        return self._reg.as_litellm_tools(tool_objects)
+        """v2: Stub — Kategorien gibt es nicht mehr, alle Tools sind immer geladen."""
+        return []
 
     def _allowed_tool_map(
         self,
@@ -305,21 +281,11 @@ class Orchestrator:
         execution_mode: str | None = None,
         user_text: str = "",
     ) -> dict[str, object]:
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        all_tools = {
-            tool.id: tool
-            for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
-        }
+        """v2: Alle Core-Tools + Plugin-Tools."""
+        all_tools = {tool.id: tool for tool in self._reg.all_tools()}
         from .plugin_manager import plugin_manager as _pm
         for pt in _pm.get_plugin_tools_for_agent(agent_cfg.id):
             all_tools[pt.id] = pt
-        if user_text:
-            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
-            if skill_allowed or skill_blocked:
-                from .skill_loader import Skill as _Skill
-                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
-                filtered_ids = dummy.apply_tool_constraints(list(all_tools.keys()))
-                return {k: v for k, v in all_tools.items() if k in filtered_ids}
         return all_tools
 
     def _resolve_allowed_tool(
@@ -624,8 +590,8 @@ class Orchestrator:
                 "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
                 + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
                 "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
-                "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
-                "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+                "Für alles was kein eigenes Tool hat (Git, System, Pakete, SSH, etc.) nutze `shell_exec`. "
+                "Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
                 "nutze IMMER den echten Tool-Aufruf-Mechanismus."
             )
             messages[0]["content"] = messages[0]["content"] + _tool_guard

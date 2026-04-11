@@ -480,23 +480,20 @@ def register_core_misc_routes(
 
     @auth_router.get("/tool-groups")
     def list_tool_groups():
-        from .tool_registry import TOOL_GROUPS, registry
+        """v2: Gibt die 9 Core-Tools als eine Gruppe zurück."""
+        from .tool_registry import registry
 
-        all_ids = set(registry.all_ids())
-        groups = []
-        grouped_ids: set[str] = set()
-        for gid, g in TOOL_GROUPS.items():
-            tools = [t for t in g["tools"] if t in all_ids]
-            grouped_ids.update(tools)
-            entry: dict = {"id": gid, "label": g["label"], "icon": g["icon"], "tools": tools}
-            if g.get("unrestricted"):
-                entry["unrestricted"] = True
-            groups.append(entry)
-        # Ungroupierte Tools als "Sonstige"
-        ungrouped = sorted(all_ids - grouped_ids)
-        if ungrouped:
-            groups.append({"id": "other", "label": "Sonstige", "icon": "puzzle", "tools": ungrouped})
-        return {"groups": groups}
+        all_ids = registry.all_ids()
+        return {
+            "groups": [
+                {
+                    "id": "core",
+                    "label": "Core-Tools",
+                    "icon": "wrench",
+                    "tools": all_ids,
+                }
+            ]
+        }
 
     # ── Erweiterte Logs & System-Info (#129) ─────────────────────────────
 

@@ -64,7 +64,6 @@ _TOOL_OP_TYPES: dict[str, ToolOpType] = {
     "git_grep":             ToolOpType.SEARCH,
 
     # Meta — minimaler Informationsgehalt nach Verarbeitung
-    "request_tools":        ToolOpType.META,
     "dispatch_task":        ToolOpType.META,
     "get_final_message":    ToolOpType.META,
 }
@@ -118,7 +117,6 @@ _TOOL_POLICIES: dict[str, ToolPolicy] = {
     "git_commit":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
     "git_push":         ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high"),
     # Meta, low cost
-    "request_tools":    ToolPolicy(ToolOpType.META, parallel_safe=False, cost="low", log_level="minimal"),
     "dispatch_task":    ToolPolicy(ToolOpType.META, parallel_safe=False, cost="high"),
     "get_final_message": ToolPolicy(ToolOpType.META, parallel_safe=False, cost="low", log_level="minimal"),
 }

@@ -28,11 +28,9 @@ class RiskLevel(str, Enum):
 
 # Tools die immer sicher sind (read-only, keine Seiteneffekte)
 _ALWAYS_ALLOW = {
-    "file_read", "list_directory", "read_system_file", "read_memory",
-    "shared_memory_read", "user_memory_read", "server_file_read",
-    "git_status", "git_diff", "git_log", "git_grep",
-    "web_search", "analyze_image", "receive_mail",
-    "request_tools", "get_final_message",
+    "file_read", "file_search", "read_memory",
+    "web_search",
+    "get_final_message",
 }
 
 # Tools die immer Bestätigung brauchen (destructive)
