@@ -2052,6 +2052,30 @@ def get_agents_live(_a=Depends(require_admin)):
                 "tokens_1h":        rate_limiter.get_token_usage_hour(cfg.id),
                 "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
             })
+    # v2: Projekte als "Agenten" anzeigen die kein eigenes Agent-Verzeichnis haben
+    for pid, pcfg in projects.projects.items():
+        if pid in seen:
+            continue
+        seen.add(pid)
+        result.append({
+            "id":               pid,
+            "identity":         pcfg.identity.name,
+            "type":             "v2-project",
+            "model":            getattr(pcfg.llm, "model", None),
+            "status":           "ready",
+            "current_activity": None,
+            "restart_count":    0,
+            "last_heartbeat_age":  None,
+            "heartbeat_timeout":   None,
+            "heartbeat_interval":  None,
+            "tokens_1h":        rate_limiter.get_token_usage_hour(pid),
+            "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            "token_history":    rate_limiter.get_token_history(pid, minutes=60, bucket_minutes=5),
+            "total_requests":   0,
+            "avg_response_ms":  0,
+            "last_response_ms": 0,
+            "error_rate":       0,
+        })
     return {"agents": result, "count": len(result)}
 
 app.include_router(public_router)
