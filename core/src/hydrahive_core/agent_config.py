@@ -25,6 +25,7 @@ class LlmConfig(BaseModel):
     thinking_budget: int = 0          # Extended Thinking Token-Budget (0 = deaktiviert)
     fallback_models: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None   # WKS-Ollama: z.B. "http://192.168.1.101:11434"
+    api_key_env: str = ""              # v2: Env-Variable für API-Key (z.B. "ANTHROPIC_KEY")
 
 
 class HeartbeatRaw(BaseModel):
@@ -196,6 +197,7 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         max_tokens=pcfg.llm.max_tokens,
         thinking_budget=pcfg.llm.thinking_budget,
         fallback_models=[f.get("model", "") for f in pcfg.llm.failover if f.get("model")],
+        api_key_env=pcfg.llm.api_key_env,
     )
 
     # v2 Core-Tools — immer diese 9

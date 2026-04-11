@@ -467,6 +467,32 @@ def register_core_misc_routes(
                 }
         return result
 
+    @admin_router.get("/secrets/keys")
+    def list_secret_keys():
+        """v2: Listet verfügbare Key-Namen aus /etc/hydrahive/llm_env auf.
+        Gibt NUR die Namen zurück, nie die Werte. Für den Projekt-Wizard."""
+        from .settings import settings
+        keys: list[dict] = []
+        env_file = settings.llm_env
+        if env_file.exists():
+            try:
+                for line in env_file.read_text().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key_name = line.split("=", 1)[0].strip()
+                    # Wert nur als Hinweis: Länge + Anfang (4 Zeichen)
+                    key_value = line.split("=", 1)[1].strip()
+                    preview = key_value[:4] + "..." if len(key_value) > 4 else "***"
+                    keys.append({
+                        "name": key_name,
+                        "preview": preview,
+                        "length": len(key_value),
+                    })
+            except Exception:
+                pass
+        return {"keys": keys, "source": str(env_file)}
+
     @auth_router.get("/tool-groups")
     def list_tool_groups():
         """v2: Gibt die 9 Core-Tools als eine Gruppe zurück."""

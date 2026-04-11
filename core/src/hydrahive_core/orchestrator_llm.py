@@ -1092,6 +1092,14 @@ async def _llm_call_single(
     if api_base:
         kwargs["api_base"] = api_base
 
+    # v2: Projekt-spezifischer API-Key über api_key_env (z.B. "OPENAI_KEY")
+    # Wird zur Runtime aus dem Environment aufgelöst, nie in Config gespeichert.
+    _api_key_env = getattr(agent_cfg.llm, "api_key_env", "")
+    if _api_key_env:
+        _resolved_key = os.environ.get(_api_key_env, "")
+        if _resolved_key:
+            kwargs["api_key"] = _resolved_key
+
     # Extended Thinking via litellm (für API-Key-basierte Calls)
     _thinking_budget = getattr(agent_cfg.llm, "thinking_budget", 0) or 0
     if _thinking_budget > 0 and is_anthropic:
