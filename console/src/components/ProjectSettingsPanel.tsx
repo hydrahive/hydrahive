@@ -126,7 +126,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
   async function disconnectWhatsApp() {
     try {
-      await api.post<any>("/me/whatsapp/disconnect", {});
+      await api.delete<any>("/me/whatsapp");
       setWaStatus("disconnected");
       setWaQr("");
       setWaPhone("");
