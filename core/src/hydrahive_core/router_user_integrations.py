@@ -1231,11 +1231,17 @@ def register_user_integration_routes(
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
+        # v2: Messenger-Router für Projekt-Lookup nutzen
+        from .messenger_router import messenger_router as _mr
+        _routed_project_id = _mr.resolve_whatsapp(agent_id) or agent_id
+
         # Echte Projekt-Config laden (inkl. Identity/Soul), Fallback auf Minimal-Config
-        real_cfg = projects.get(agent_id) if projects else None
+        real_cfg = projects.get(_routed_project_id) if projects else None
+        if not real_cfg:
+            real_cfg = projects.get(agent_id) if projects else None  # Fallback: alte agent_id
         virtual_cfg = real_cfg or _PC(
-            id=agent_id,
-            identity=_PI(name=agent_id),
+            id=_routed_project_id,
+            identity=_PI(name=_routed_project_id),
             agents=_PA(boss=agent_id, workers=[]),
         )
 
@@ -1262,14 +1268,14 @@ def register_user_integration_routes(
             )
 
         logger.info(
-            "WhatsApp incoming: agent=%s sender=%s is_owner=%s is_group=%s msg_len=%d",
-            agent_id, sender, is_owner, is_group, len(message),
+            "WhatsApp incoming: agent=%s → project=%s sender=%s is_owner=%s is_group=%s msg_len=%d",
+            agent_id, _routed_project_id, sender, is_owner, is_group, len(message),
         )
 
         response_parts: list[str] = []
         try:
             async for chunk in orchestrator.handle_message_stream(
-                project_id   = agent_id,
+                project_id   = _routed_project_id,
                 project_cfg  = virtual_cfg,
                 content      = enriched_msg,
                 sender       = f"whatsapp:{sender}",
