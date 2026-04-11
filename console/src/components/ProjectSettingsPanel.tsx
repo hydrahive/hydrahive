@@ -1,0 +1,233 @@
+/**
+ * ProjectSettingsPanel.tsx — v2 Agent-Settings für ein Projekt
+ *
+ * Zeigt und editiert: LLM-Config, AGENT.md, Execution-Mode.
+ * Nutzt GET/PUT /projects/{id}/settings Endpoints.
+ */
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import {
+  Save,
+  X,
+  Loader2,
+  Bot,
+  Cpu,
+  FileText,
+  Shield,
+} from "lucide-react";
+
+interface ProjectSettingsPanelProps {
+  projectId: string;
+  onClose?: () => void;
+}
+
+interface SettingsData {
+  project_id: string;
+  is_v2: boolean;
+  identity: { name: string; description: string };
+  llm: {
+    provider: string;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+    api_key_env: string;
+    failover: { provider: string; model: string }[];
+  };
+  agent_md: string;
+  members: string[];
+}
+
+const PROVIDERS = ["anthropic", "openai", "google", "ollama", "deepseek"];
+
+const MODELS: Record<string, string[]> = {
+  anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
+  google: ["gemini-2.0-flash", "gemini-2.5-pro"],
+  ollama: ["llama3.1", "qwen2.5:7b", "mistral"],
+  deepseek: ["deepseek-r1"],
+};
+
+export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPanelProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [data, setData] = useState<SettingsData | null>(null);
+
+  // Editable fields
+  const [provider, setProvider] = useState("anthropic");
+  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [temperature, setTemperature] = useState(0.5);
+  const [maxTokens, setMaxTokens] = useState(4096);
+  const [apiKeyEnv, setApiKeyEnv] = useState("");
+  const [agentMd, setAgentMd] = useState("");
+  const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
+
+  useEffect(() => {
+    loadSettings();
+    loadKeys();
+  }, [projectId]);
+
+  async function loadSettings() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.get<SettingsData>(`/projects/${projectId}/settings`);
+      const d = res as SettingsData;
+      setData(d);
+      setProvider(d.llm?.provider || "anthropic");
+      setModel(d.llm?.model || "claude-sonnet-4-6");
+      setTemperature(d.llm?.temperature ?? 0.5);
+      setMaxTokens(d.llm?.max_tokens ?? 4096);
+      setApiKeyEnv(d.llm?.api_key_env || "");
+      setAgentMd(d.agent_md || "");
+    } catch (e: any) {
+      setError(e?.message || "Fehler beim Laden");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadKeys() {
+    try {
+      const res = await api.get<{ keys: { name: string; preview: string }[] }>("/secrets/keys");
+      setAvailableKeys((res as any).keys || []);
+    } catch {
+      // nicht kritisch
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      await api.put(`/projects/${projectId}/settings`, {
+        provider,
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        api_key_env: apiKeyEnv,
+        agent_md: agentMd,
+      });
+      setSuccess("Gespeichert!");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (e: any) {
+      setError(e?.message || "Fehler beim Speichern");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return <div className="p-4 text-sm text-destructive">{error || "Keine Daten"}</div>;
+  }
+
+  return (
+    <div className="border-t px-4 pb-4 pt-3 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Bot className="h-4 w-4 text-primary" />
+          Agent-Settings
+          {data.is_v2 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">v2</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {success && <span className="text-xs text-green-600">{success}</span>}
+          {error && <span className="text-xs text-destructive">{error}</span>}
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+            Speichern
+          </button>
+          {onClose && (
+            <button onClick={onClose} className="rounded-lg border px-2 py-1 text-xs transition hover:bg-accent">
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* LLM-Config */}
+        <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <Cpu className="h-3.5 w-3.5 text-primary" />
+            LLM-Konfiguration
+          </div>
+
+          {/* Provider */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">Provider</label>
+            <select value={provider} onChange={e => { setProvider(e.target.value); setModel(MODELS[e.target.value]?.[0] || ""); }}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+              {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          {/* Model */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">Modell</label>
+            <select value={model} onChange={e => setModel(e.target.value)}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+              {(MODELS[provider] || []).map(m => <option key={m} value={m}>{m}</option>)}
+              {!MODELS[provider]?.includes(model) && model && <option value={model}>{model}</option>}
+            </select>
+          </div>
+
+          {/* Temperature */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">Temperature: {temperature}</label>
+            <input type="range" min="0" max="1" step="0.1" value={temperature}
+              onChange={e => setTemperature(parseFloat(e.target.value))}
+              className="mt-0.5 w-full" />
+          </div>
+
+          {/* Max Tokens */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">Max Tokens</label>
+            <input type="number" value={maxTokens} onChange={e => setMaxTokens(parseInt(e.target.value) || 4096)}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs" />
+          </div>
+
+          {/* API Key */}
+          <div>
+            <label className="text-[11px] text-muted-foreground">API-Key (Env-Variable)</label>
+            <select value={apiKeyEnv} onChange={e => setApiKeyEnv(e.target.value)}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+              <option value="">Standard (aus Environment)</option>
+              {availableKeys.map(k => (
+                <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* AGENT.md */}
+        <div className="rounded-2xl border bg-background/55 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <FileText className="h-3.5 w-3.5 text-primary" />
+            AGENT.md — Persönlichkeit &amp; Regeln
+          </div>
+          <textarea
+            value={agentMd}
+            onChange={e => setAgentMd(e.target.value)}
+            rows={14}
+            className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono leading-relaxed resize-y"
+            placeholder="# Agent&#10;&#10;Beschreibe hier das Fachgebiet, die Regeln und den Kontext."
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

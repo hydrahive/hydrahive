@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Bot,
   FolderKanban,
   Plus,
   RefreshCw,
@@ -29,6 +30,7 @@ import {
 import { api } from "@/lib/api";
 import { WebhooksPanel } from "@/components/WebhooksPanel";
 import { AgentLinkPanel } from "@/components/AgentLinkPanel";
+import { ProjectSettingsPanel } from "@/components/ProjectSettingsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -83,6 +85,7 @@ function ProjectsContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [webhookProject, setWebhookProject] = useState<string | null>(null);
   const [agentlinkProject, setAgentlinkProject] = useState<string | null>(null);
+  const [settingsProject, setSettingsProject] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<string | null>(null);
@@ -529,6 +532,13 @@ function ProjectsContent() {
                     {t("projects.codeEditor")}
                   </a>
                   <button
+                    onClick={() => setSettingsProject((p) => (p === id ? null : id))}
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${settingsProject === id ? "border-primary/30 bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    Agent
+                  </button>
+                  <button
                     onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}
                     className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${agentlinkProject === id ? "border-primary/30 bg-primary/10 text-primary" : "hover:bg-accent"}`}
                   >
@@ -723,6 +733,7 @@ function ProjectsContent() {
                 </div>
               )}
 
+              {settingsProject === id && <ProjectSettingsPanel projectId={id} onClose={() => setSettingsProject(null)} />}
               {agentlinkProject === id && <AgentLinkPanel projectId={id} />}
               {webhookProject === id && <WebhooksPanel projectId={id} />}
             </div>
