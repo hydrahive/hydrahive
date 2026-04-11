@@ -317,7 +317,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         {waQr && waStatus !== "connected" && (
           <div className="flex flex-col items-center gap-2 p-2">
             <p className="text-xs text-muted-foreground">QR-Code mit WhatsApp scannen:</p>
-            <img src={`data:image/png;base64,${waQr}`} alt="WhatsApp QR" className="w-48 h-48 rounded-lg border" />
+            <img src={waQr.startsWith("data:") ? waQr : `data:image/png;base64,${waQr}`} alt="WhatsApp QR" className="w-48 h-48 rounded-lg border" />
           </div>
         )}
 
