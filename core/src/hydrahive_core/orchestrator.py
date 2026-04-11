@@ -56,7 +56,6 @@ from .orchestrator_context import (
     _compact_if_needed as _compact_if_needed_fn,
     _history_token_budget,
     _estimate_tokens,
-    get_skill_tool_constraints,
 )
 from .orchestrator_tools import (
     DispatchResult,
@@ -261,7 +260,6 @@ class Orchestrator:
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
         user_text: str = "",
-        meta_only: bool = False,
     ) -> list:
         """v2: Gibt immer alle 9 Core-Tools zurück — keine Filterung mehr."""
         return self._reg.all_tools()
@@ -554,9 +552,8 @@ class Orchestrator:
         # Tool-Messages werden von as_llm_message() zu assistant konvertiert
         history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
-        # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
-        use_meta_only = "request_tools" in (boss_cfg.tools or [])
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=use_meta_only)
+        # 5. Verfügbare Tools — v2: immer alle 9 Core-Tools
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:

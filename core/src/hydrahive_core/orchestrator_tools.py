@@ -400,34 +400,5 @@ def check_repeated_signature(
     return signature, repeated_count, repeated_count >= threshold
 
 
-def handle_request_tools(
-    orch,
-    boss_cfg,
-    execution_mode: str | None,
-    categories: list[str],
-    loaded_categories: set[str],
-    current_tools: list[dict],
-) -> tuple[int, dict]:
-    """
-    On-Demand Tool-Kategorien nachladen.
-    Returns: (added_count, result_dict)
-    """
-    new_cats = [c for c in categories if c not in loaded_categories]
-    added_count = 0
-    if new_cats:
-        new_schemas = orch._category_tools_schema(boss_cfg, execution_mode, new_cats)
-        existing = {t.get("function", {}).get("name") or t.get("name", "") for t in current_tools}
-        added = [s for s in new_schemas if s["function"]["name"] not in existing]
-        current_tools.extend(added)
-        added_count = len(added)
-        loaded_categories.update(new_cats)
-        logger.info(
-            "request_tools: +%d Tools (Kategorien: %s, Agent: %s)",
-            added_count, new_cats, boss_cfg.id,
-        )
-    return added_count, {
-        "ok": True,
-        "categories": categories,
-        "tools_added": added_count,
-        "note": "Tools geladen — direkt verwendbar.",
-    }
+
+# v2: handle_request_tools entfernt — alle 9 Core-Tools sind immer geladen.
