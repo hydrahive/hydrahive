@@ -633,12 +633,16 @@ class AgentDiscordClient(DiscordAgentClient):
         except Exception as _be:
             logger.warning("Butler check Discord fehlgeschlagen: %s", _be)
 
+        # v2: Messenger-Router für Projekt-Lookup
+        from .messenger_router import messenger_router as _mr
+        _project_id = _mr.resolve_discord(channel_id) or _agent_id
+
         # Antwort sammeln und senden
         response_parts: list[str] = []
         try:
             async for chunk in self._orchestrator.handle_message_stream(
-                project_id  = _agent_id,
-                project_cfg = _build_virtual_cfg(_agent_id),
+                project_id  = _project_id,
+                project_cfg = _build_virtual_cfg(_project_id),
                 content     = content,
                 sender      = sender,
                 execution_mode = "safe",

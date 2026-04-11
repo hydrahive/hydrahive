@@ -424,7 +424,9 @@ class BossMatrixAgent(MatrixAgent):
 
     async def on_user_message(self, room: MatrixRoom, text: str, sender: str) -> None:
         """User schickt Nachricht → Orchestrator → Antwort in Room posten."""
-        project_id = self._project_cfg.id
+        # v2: Messenger-Router für Projekt-Lookup (Matrix room_id → project_id)
+        from .messenger_router import messenger_router as _mr
+        project_id = _mr.resolve_matrix(room.room_id) or self._project_cfg.id
         logger.info("Boss %s empfängt Nachricht in %s von %s", self._mxid, room.room_id, sender)
 
         try:

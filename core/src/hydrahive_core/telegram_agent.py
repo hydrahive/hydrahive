@@ -180,17 +180,28 @@ async def start_telegram_bot(
         except Exception as _be:
             logger.debug("Butler check Telegram: %s", _be)
 
+        # v2: Messenger-Router für Projekt-Lookup
+        from .messenger_router import messenger_router as _mr
+        _project_id = _mr.resolve_telegram(str(chat_id)) or agent_id
+
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
-        virtual_cfg = _PC(
-            id=agent_id,
-            identity=_PI(name=agent_id),
+        _real_cfg = None
+        try:
+            from .project_loader import ProjectLoader
+            # projects ist im Closure der register-Funktion
+            _real_cfg = projects.get(_project_id) if projects else None
+        except Exception:
+            pass
+        virtual_cfg = _real_cfg or _PC(
+            id=_project_id,
+            identity=_PI(name=_project_id),
             agents=_PA(boss=agent_id, workers=[]),
         )
 
         try:
             response_parts: list[str] = []
             async for chunk in orchestrator.handle_message_stream(
-                project_id=agent_id,
+                project_id=_project_id,
                 project_cfg=virtual_cfg,
                 content=enriched,
                 sender=f"telegram:{user_id}",
