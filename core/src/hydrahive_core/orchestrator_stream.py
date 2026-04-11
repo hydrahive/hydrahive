@@ -153,9 +153,11 @@ async def handle_message_stream(
     if _mcp_s:
         litellm_tools = (litellm_tools or []) + _mcp_s
     # Plugin-Tools (#110)
-    _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
-    if _plg_s:
-        litellm_tools = (litellm_tools or []) + _plg_s
+    # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
+    # TODO: Plugins später pro Projekt konfigurierbar nachladen
+    # _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
+    # if _plg_s:
+    #     litellm_tools = (litellm_tools or []) + _plg_s
     litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
 
     # Anti-Halluzinations-Guard: System-Prompt ergänzen mit tatsächlich verfügbaren Tools

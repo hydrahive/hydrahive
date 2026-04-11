@@ -561,14 +561,16 @@ class Orchestrator:
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + mcp_schemas)
-        plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
-        if plugin_schemas:
-            litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
+        # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
+        # TODO: Plugins später pro Projekt konfigurierbar nachladen
+        # plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
+        # if plugin_schemas:
+        #     litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
         # Plan Mode: nur read-only Tools + enter/exit_plan_mode + file_write (für Plan-Datei)
         from .tool_registry import is_plan_mode as _is_plan_mode
         if _is_plan_mode(project_id) and litellm_tools:
             _PLAN_MODE_ALLOWED = {"enter_plan_mode", "exit_plan_mode", "file_write",
-                                  "request_tools"}
+                                  "file_read", "file_search"}
             litellm_tools = [
                 t for t in litellm_tools
                 if t.get("function", {}).get("name", "") in _PLAN_MODE_ALLOWED

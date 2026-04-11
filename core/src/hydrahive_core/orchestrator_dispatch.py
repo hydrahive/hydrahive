@@ -508,10 +508,11 @@ async def _tool_loop(
     _mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
     if _mcp_schemas:
         litellm_tools = litellm_tools + _mcp_schemas
-    # Plugin-Tools (#110)
-    _plugin_schemas = orch._plugin_schemas_for_agent(boss_cfg)
-    if _plugin_schemas:
-        litellm_tools = litellm_tools + _plugin_schemas
+    # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
+    # TODO: Plugins später pro Projekt konfigurierbar nachladen
+    # _plugin_schemas = orch._plugin_schemas_for_agent(boss_cfg)
+    # if _plugin_schemas:
+    #     litellm_tools = litellm_tools + _plugin_schemas
     # Dedup über alles (MCP + Plugins können Duplikate erzeugen)
     from .orchestrator import _dedup_tools
     litellm_tools = _dedup_tools(litellm_tools)
