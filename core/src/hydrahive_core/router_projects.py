@@ -28,6 +28,10 @@ class CreateProjectRequest(BaseModel):
     boss: str
     workers: list[str] = []
     samba: bool = True
+
+
+class TypingRequest(BaseModel):
+    active: bool = True
     nfs: bool = False
     show_swarm: bool = False
     members: list[str] = []   # HydraHive-Usernames die sofort eingeladen werden
@@ -791,6 +795,20 @@ def register_project_routes(
             "subscribers": _ss.subscriber_count(project_id),
             "turn_owner": _ss.turn_owner(project_id),
         }
+
+    @auth_router.post("/projects/{project_id}/typing")
+    async def project_typing(
+        project_id: str,
+        req: TypingRequest,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Typing-Indicator an alle Subscriber broadcasten (#553)."""
+        _check_project_access(auth, project_id)
+        username = auth[0]
+        from .shared_session import shared_sessions as _ss
+        import json as _json
+        _ss.broadcast(project_id, _json.dumps({"_typing": {"user": username, "active": req.active}}))
+        return {"ok": True}
 
     @auth_router.post("/projects/{project_id}/interrupt")
     async def interrupt_project_stream(

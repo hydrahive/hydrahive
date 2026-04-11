@@ -4,7 +4,7 @@
  * Nutzt shared ChatView + useChatStream Hook.
  * Page-spezifisch: Projekt-Header, Swarm-Toggle, History, Live-Polling, Info-Sidebar.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal, PanelRightClose, PanelRightOpen, Activity } from "lucide-react";
 import { EkgMonitor } from "@/components/EkgMonitor";
@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { api, type SessionPreview, type SessionFull } from "@/lib/api";
 import { ChatView } from "@/components/ChatView";
 import { useChatStream, mkMsg } from "@/hooks/useChatStream";
+import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 
 export function ChatPage() {
   const { t } = useTranslation();
@@ -27,6 +28,22 @@ export function ChatPage() {
 
   // History
   const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
+
+  // Subscribe fuer Typing-Indicator (#553)
+  const subscribe = useProjectSubscribe(id);
+  const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTyping = useCallback((active: boolean) => {
+    if (!id) return;
+    // Debounce: max alle 2s ein POST
+    if (typingDebounce.current && active) return;
+    api.post(`/projects/${id}/typing`, { active }).catch(() => {});
+    if (active) {
+      typingDebounce.current = setTimeout(() => { typingDebounce.current = null; }, 2000);
+    } else {
+      if (typingDebounce.current) { clearTimeout(typingDebounce.current); typingDebounce.current = null; }
+    }
+  }, [id]);
 
   const SLASH_COMMANDS = [
     { cmd: "/help",     desc: t("slashCommands.help") },
@@ -231,6 +248,8 @@ export function ChatPage() {
             t={t}
             showWorkers={showSwarm}
             slashCommands={SLASH_COMMANDS}
+            typingUsers={subscribe.typingUsers}
+            onTyping={handleTyping}
           />
         )}
       </div>

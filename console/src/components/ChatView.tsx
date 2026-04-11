@@ -4,7 +4,7 @@
  * Rendert Messages, Tool-Badges, Input-Area, Lightbox, Suggestions.
  * Wird von ChatPage, AgentChatPage und MyAgentPage eingebettet.
  */
-import { memo, useEffect } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { Bot, User, Terminal, Send, Square, Smile, Plus, RotateCcw, ImagePlus, RefreshCw, X, Loader2, Network } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
@@ -69,6 +69,9 @@ export interface ChatViewProps {
   className?: string;
   /** True while history is being loaded from API */
   historyLoading?: boolean;
+  // Typing indicator (#553)
+  typingUsers?: Map<string, boolean>;
+  onTyping?: (active: boolean) => void;
   // Translations
   t: (key: string, opts?: Record<string, string>) => string;
   // Slash commands for suggestion dropdown
@@ -89,6 +92,7 @@ export function ChatView(props: ChatViewProps) {
     showWorkers, viewSession,
     showOAuthBar = true, headerSlot, className,
     historyLoading = false,
+    typingUsers, onTyping,
     t,
     slashCommands = [],
   } = props;
@@ -101,8 +105,41 @@ export function ChatView(props: ChatViewProps) {
     : [];
   const showSuggestDropdown = suggestions.length > 0 && input.length > 0;
 
+  // ── Typing-Indicator Debounce (#553) ──────────────────────────────
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSent = useRef(false);
+
+  const fireTyping = useCallback((active: boolean) => {
+    if (!onTyping) return;
+    // Nicht doppelt senden
+    if (active && lastTypingSent.current) return;
+    if (!active && !lastTypingSent.current) return;
+    lastTypingSent.current = active;
+    onTyping(active);
+  }, [onTyping]);
+
+  const handleInputChange = useCallback((value: string) => {
+    setInput(value);
+    // Typing-Event debounced senden
+    if (onTyping) {
+      fireTyping(true);
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      typingTimer.current = setTimeout(() => fireTyping(false), 2000);
+    }
+  }, [setInput, onTyping, fireTyping]);
+
+  // Bei Send oder Blur: Typing sofort stoppen
+  const wrappedSend = useCallback((contentOverride?: string) => {
+    fireTyping(false);
+    if (typingTimer.current) { clearTimeout(typingTimer.current); typingTimer.current = null; }
+    send(contentOverride);
+  }, [send, fireTyping]);
+
+  // Typing-Label aus Map bauen
+  const typingNames = typingUsers ? Array.from(typingUsers.keys()) : [];
+
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); wrappedSend(); }
   }
 
   return (
@@ -277,6 +314,22 @@ export function ChatView(props: ChatViewProps) {
         <div ref={bottomRef} />
       </div>
 
+      {/* Typing Indicator (#553) */}
+      {typingNames.length > 0 && (
+        <div className="mx-4 mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex gap-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </span>
+          <span>
+            {typingNames.length === 1
+              ? `${typingNames[0]} tippt gerade\u2026`
+              : `${typingNames.join(" und ")} tippen gerade\u2026`}
+          </span>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="mx-4 mb-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive flex items-center gap-2">
@@ -293,7 +346,7 @@ export function ChatView(props: ChatViewProps) {
             <p className="font-medium text-orange-500">{coachFeedback.reason}</p>
             {coachFeedback.suggestion && <p className="text-muted-foreground mt-1">{coachFeedback.suggestion}</p>}
             <div className="flex gap-2 mt-2">
-              <button onClick={() => { setCoachFeedback(null); send(input); }} className="text-xs text-primary hover:underline">{t("chat.sendAnyway", { defaultValue: "Trotzdem senden" })}</button>
+              <button onClick={() => { setCoachFeedback(null); wrappedSend(input); }} className="text-xs text-primary hover:underline">{t("chat.sendAnyway", { defaultValue: "Trotzdem senden" })}</button>
               <button onClick={() => setCoachFeedback(null)} className="text-xs text-muted-foreground hover:underline">{t("common.cancel", { defaultValue: "Abbrechen" })}</button>
             </div>
           </div>
@@ -335,7 +388,8 @@ export function ChatView(props: ChatViewProps) {
         {/* Textarea + buttons */}
         <div className="flex gap-2 items-end">
           <textarea ref={textareaRef} value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => handleInputChange(e.target.value)}
+            onBlur={() => fireTyping(false)}
             onKeyDown={onKeyDown}
             placeholder={t("chat.messagePlaceholder", { defaultValue: "Nachricht schreiben..." })}
             rows={1}
@@ -355,7 +409,7 @@ export function ChatView(props: ChatViewProps) {
               <Square className="h-4 w-4" />
             </button>
           ) : (
-            <button onClick={() => send()} disabled={!input.trim() && pendingImages.length === 0}
+            <button onClick={() => wrappedSend()} disabled={!input.trim() && pendingImages.length === 0}
               className="p-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50" type="button">
               <Send className="h-4 w-4" />
             </button>
