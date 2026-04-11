@@ -572,14 +572,11 @@ async def _stream_anthropic_oauth(
     import anthropic as _anthropic
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
 
+    from .provider_config import ANTHROPIC_OAUTH_HEADERS
     client = _anthropic.AsyncAnthropic(
         api_key="",
         auth_token=oauth_token,
-        default_headers={
-            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
-            "user-agent":     "claude-cli/2.1.62",
-            "x-app":          "cli",
-        },
+        default_headers=ANTHROPIC_OAUTH_HEADERS,
     )
     system_msg = ""
     raw: list[dict] = []
@@ -604,8 +601,9 @@ async def _stream_anthropic_oauth(
     if not model.startswith("claude-"):
         model = "claude-haiku-4-5-20251001"
 
+    from .provider_config import ANTHROPIC_OAUTH_IDENTITY
     oauth_system = [
-        {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+        {"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY},
     ]
     # Cache-Optimierung: Static-Block mit cache_control, Dynamic-Block ohne
     if static_prompt:
@@ -614,7 +612,6 @@ async def _stream_anthropic_oauth(
     if dynamic_prompt:
         oauth_system.append({"type": "text", "text": dynamic_prompt})
     elif system_msg and not static_prompt:
-        # Fallback: alter Pfad
         oauth_system.append({"type": "text", "text": system_msg,
                              "cache_control": {"type": "ephemeral"}})
 

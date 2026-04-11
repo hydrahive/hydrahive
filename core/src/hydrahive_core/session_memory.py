@@ -75,14 +75,11 @@ async def extract_session_facts(
 
     try:
         import anthropic
+        from .provider_config import ANTHROPIC_OAUTH_HEADERS
         client = anthropic.AsyncAnthropic(
             api_key="",
             auth_token=oauth_token,
-            default_headers={
-                "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
-                "user-agent": "claude-cli/2.1.62",
-                "x-app": "cli",
-            },
+            default_headers=ANTHROPIC_OAUTH_HEADERS,
         )
         resp = await client.messages.create(
             model="claude-haiku-4-5-20251001",

@@ -270,19 +270,16 @@ def register_agent_chat_routes(
         if oauth_token:
             try:
                 import anthropic as _anthropic
+                from .provider_config import ANTHROPIC_OAUTH_HEADERS, ANTHROPIC_OAUTH_IDENTITY
                 client = _anthropic.AsyncAnthropic(
                     api_key="",
                     auth_token=oauth_token,
-                    default_headers={
-                        "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
-                        "user-agent": "claude-cli/2.1.62",
-                        "x-app": "cli",
-                    },
+                    default_headers=ANTHROPIC_OAUTH_HEADERS,
                 )
                 resp = await client.messages.create(
                     model="claude-haiku-4-5-20251001",
                     max_tokens=1200,
-                    system=[{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}],
+                    system=[{"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY}],
                     messages=[{"role": "user", "content": summary_prompt}],
                 )
                 summary = resp.content[0].text if resp.content else ""
@@ -468,11 +465,7 @@ def register_agent_chat_routes(
             client = _anthropic.AsyncAnthropic(
                 api_key="",
                 auth_token=oauth_token,
-                default_headers={
-                    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
-                    "user-agent": "claude-cli/2.1.62",
-                    "x-app": "cli",
-                },
+                default_headers=ANTHROPIC_OAUTH_HEADERS,
             )
             resp = await client.messages.create(
                 model="claude-haiku-4-5-20251001",

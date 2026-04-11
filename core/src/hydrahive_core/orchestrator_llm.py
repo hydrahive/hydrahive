@@ -579,15 +579,12 @@ async def _anthropic_oauth_call(
     from types import SimpleNamespace
 
     # api_key="" verhindert dass der SDK ANTHROPIC_API_KEY aus env liest
+    from .provider_config import ANTHROPIC_OAUTH_HEADERS
     client = _anthropic.AsyncAnthropic(
         api_key="",
         auth_token=token,
         timeout=300.0,
-        default_headers={
-            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
-            "user-agent":     "claude-cli/2.1.62",
-            "x-app":          "cli",
-        },
+        default_headers=ANTHROPIC_OAUTH_HEADERS,
     )
 
     # System-Message extrahieren + OpenAI→Anthropic-Format konvertieren
@@ -656,12 +653,9 @@ async def _anthropic_oauth_call(
     if not model.startswith("claude-"):
         model = "claude-haiku-4-5"
 
-    # OAuth erfordert Claude-Code-Identity als ersten System-Block
-    # Letzter Block bekommt cache_control → gesamter System-Prompt wird gecacht
-    oauth_system = [{"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}]
-    if system_msg:
-        oauth_system.append({"type": "text", "text": system_msg,
-                              "cache_control": {"type": "ephemeral"}})
+    # OAuth erfordert Identity-Block als erstes System-Element
+    from .provider_config import get_oauth_system_blocks
+    oauth_system = get_oauth_system_blocks(system_msg)
 
     # Ältere History-Messages cachen (alle außer den letzten 4 User/Assistant-Turns)
     # Max 3 History-Blöcke (+ 1 System-Block = 4 total, Anthropic-Limit)
