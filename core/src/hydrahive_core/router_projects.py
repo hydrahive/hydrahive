@@ -84,6 +84,7 @@ class UpdateProjectSettingsRequest(BaseModel):
     failover: list[dict] | None = None
     agent_md: str | None = None
     members: list[str] | None = None
+    execution_mode: str | None = None  # safe | elevated | unrestricted (#568)
 
 
 class GitCloneRequest(BaseModel):
@@ -351,6 +352,7 @@ def register_project_routes(
             },
             "agent_md": agent_md,
             "members": cfg.members,
+            "execution_mode": getattr(cfg, "execution_mode", "safe"),
             "plugins": getattr(cfg, "plugins", []),
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
@@ -418,6 +420,10 @@ def register_project_routes(
 
         if req.members is not None:
             config_data["members"] = req.members
+
+        if req.execution_mode is not None:
+            if req.execution_mode in ("safe", "elevated", "unrestricted"):
+                config_data["execution_mode"] = req.execution_mode
 
         config_data["version"] = "2.0.0"
 
@@ -696,9 +702,11 @@ def register_project_routes(
         if not getattr(cfg, "is_v2", False):
             if not discovery.get(cfg.agents.boss):
                 raise HTTPException(503, "Boss-Agent nicht verfügbar")
+        # v2: Projekt-Default execution_mode als Fallback (#568)
+        _req_mode = req.execution_mode or getattr(cfg, "execution_mode", None)
         execution_mode = resolve_request_execution_mode(
             auth,
-            req.execution_mode,
+            _req_mode,
             audit_log=audit_log,
             audit_target=project_id,
             audit_source="projects.message.stream",
@@ -840,9 +848,10 @@ def register_project_routes(
             boss_id = cfg.agents.boss
             if not discovery.get(boss_id):
                 raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+        _req_mode2 = req.execution_mode or getattr(cfg, "execution_mode", None)
         execution_mode = resolve_request_execution_mode(
             auth,
-            req.execution_mode,
+            _req_mode2,
             audit_log=audit_log,
             audit_target=project_id,
             audit_source="projects.message",

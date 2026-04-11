@@ -37,6 +37,7 @@ interface SettingsData {
   };
   agent_md: string;
   members: string[];
+  execution_mode: string;
   messenger: {
     whatsapp?: { session_ids?: string[]; enabled?: boolean };
     discord?: { channels?: string[]; bot_token_env?: string };
@@ -68,6 +69,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [maxTokens, setMaxTokens] = useState(4096);
   const [apiKeyEnv, setApiKeyEnv] = useState("");
   const [agentMd, setAgentMd] = useState("");
+  const [executionMode, setExecutionMode] = useState("safe");
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
 
   // WhatsApp
@@ -228,6 +230,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setMaxTokens(d.llm?.max_tokens ?? 4096);
       setApiKeyEnv(d.llm?.api_key_env || "");
       setAgentMd(d.agent_md || "");
+      setExecutionMode(d.execution_mode || "safe");
     } catch (e: any) {
       setError(e?.message || "Fehler beim Laden");
     } finally {
@@ -256,6 +259,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         max_tokens: maxTokens,
         api_key_env: apiKeyEnv,
         agent_md: agentMd,
+        execution_mode: executionMode,
       });
       setSuccess("Gespeichert!");
       setTimeout(() => setSuccess(""), 3000);
@@ -356,6 +360,19 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               {availableKeys.map(k => (
                 <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
               ))}
+            </select>
+          </div>
+
+          {/* Execution Mode (#568) */}
+          <div>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Shield className="h-3 w-3" /> Berechtigungen
+            </label>
+            <select value={executionMode} onChange={e => setExecutionMode(e.target.value)}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+              <option value="safe">Safe — Blocklist aktiv, kein sudo</option>
+              <option value="elevated">Elevated — erweiterte Rechte</option>
+              <option value="unrestricted">Unrestricted — volle Rechte, sudo erlaubt</option>
             </select>
           </div>
         </div>

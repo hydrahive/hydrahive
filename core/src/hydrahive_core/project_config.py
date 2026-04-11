@@ -133,6 +133,9 @@ class ProjectConfig(BaseModel):
     members:    list[str]         = Field(default_factory=list)
     github_repo: str              = ""
 
+    # v2: Default Execution-Mode für dieses Projekt (#568)
+    execution_mode: str = "safe"  # safe | elevated | unrestricted
+
     # Wird nach dem Laden gesetzt
     project_dir: Path | None = Field(default=None, exclude=True)
 
