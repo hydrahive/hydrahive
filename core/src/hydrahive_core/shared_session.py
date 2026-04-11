@@ -69,9 +69,8 @@ class SharedSessionManager:
 
         Returns: asyncio.Queue die der SSE-Endpoint lesen kann.
         """
-        if project_id not in self._subscribers:
-            self._subscribers[project_id] = set()
-            self._presence[project_id] = ProjectPresence()
+        self._subscribers.setdefault(project_id, set())
+        self._presence.setdefault(project_id, ProjectPresence())
 
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         self._subscribers[project_id].add(queue)

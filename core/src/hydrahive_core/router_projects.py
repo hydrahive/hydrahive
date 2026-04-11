@@ -734,6 +734,10 @@ def register_project_routes(
                 409, f"Projekt ist gerade belegt von '{_turn_owner}'. Bitte warten."
             )
 
+        # User-Nachricht an alle Subscriber broadcasten (fuer Multi-Browser-Sync)
+        import json as _json
+        _ss.broadcast(project_id, _json.dumps({"_user_message": req.content, "_sender": sender}))
+
         async def event_stream():
             try:
                 async for chunk in orchestrator.handle_message_stream(

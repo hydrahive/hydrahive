@@ -29,8 +29,8 @@ export function ChatPage() {
   // History
   const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
 
-  // Subscribe fuer Typing-Indicator (#553)
-  const subscribe = useProjectSubscribe(id);
+  const broadcastBuf = useRef<string>("");
+  const broadcastMsgId = useRef<string | null>(null);
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTyping = useCallback((active: boolean) => {
@@ -79,6 +79,35 @@ export function ChatPage() {
       return false;
     },
   });
+
+  // Subscribe fuer Typing-Indicator + Broadcast-Sync (#553)
+  const handleBroadcast = useCallback((raw: Record<string, unknown>) => {
+    if (chat.sending) return;
+
+    if (raw.text !== undefined) {
+      if (!broadcastMsgId.current) {
+        broadcastMsgId.current = `broadcast-${Date.now()}`;
+        broadcastBuf.current = "";
+        chat.setMessages(ms => [...ms, mkMsg("assistant", "")]);
+      }
+      broadcastBuf.current += String(raw.text);
+      const txt = broadcastBuf.current;
+      chat.setMessages(ms => {
+        const last = ms[ms.length - 1];
+        if (last && last.role === "assistant") {
+          return [...ms.slice(0, -1), { ...last, content: txt }];
+        }
+        return ms;
+      });
+    } else if (raw.done) {
+      broadcastMsgId.current = null;
+      broadcastBuf.current = "";
+    } else if (raw._user_message) {
+      chat.setMessages(ms => [...ms, mkMsg("user", String(raw._user_message))]);
+    }
+  }, [chat.sending]);
+
+  const subscribe = useProjectSubscribe(id, handleBroadcast);
 
   // Load project info + history
   useEffect(() => {

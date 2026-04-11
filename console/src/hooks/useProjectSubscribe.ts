@@ -20,6 +20,9 @@ export interface SubscribeState {
   isConnected: boolean;
 }
 
+/** Callback fuer regulaere SSE-Events (text, done, etc.) aus dem Broadcast */
+export type OnBroadcastEvent = (raw: Record<string, unknown>) => void;
+
 // ── Stale-Timeout fuer Typing ──────────────────────────────────────────────
 
 const TYPING_STALE_MS = 4_000;  // 4s ohne Update -> nicht mehr "tippt"
@@ -28,11 +31,15 @@ const RECONNECT_MAX_MS = 30_000;
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
-export function useProjectSubscribe(projectId: string | undefined): SubscribeState {
+export function useProjectSubscribe(projectId: string | undefined, onBroadcast?: OnBroadcastEvent): SubscribeState {
   const [typingUsers, setTypingUsers] = useState<Map<string, boolean>>(() => new Map());
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [turnOwner, setTurnOwner] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  // Broadcast-Callback Ref (stabil fuer useEffect)
+  const onBroadcastRef = useRef(onBroadcast);
+  onBroadcastRef.current = onBroadcast;
 
   // Typing-Stale-Timers pro User
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -133,9 +140,10 @@ export function useProjectSubscribe(projectId: string | undefined): SubscribeSta
                   setOnlineUsers(raw._presence.users || []);
                 } else if (raw._turn !== undefined) {
                   setTurnOwner(raw._turn?.owner ?? null);
+                } else if (onBroadcastRef.current) {
+                  // Regulaere Stream-Events (text, done, etc.) an den Callback weiterleiten
+                  onBroadcastRef.current(raw);
                 }
-                // Regulaere Stream-Events (text, tool_call etc.) ignorieren wir hier —
-                // die kommen ueber den eigenen /message/stream Kanal
               } catch {
                 // JSON-Parse-Fehler bei Keepalive-Comments ignorieren
               }
