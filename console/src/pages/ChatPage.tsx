@@ -100,6 +100,23 @@ export function ChatPage() {
         return ms;
       });
     } else if (raw.done) {
+      // Token-Usage + Model-Info auf letzte Assistant-Message setzen
+      const usage = raw.usage as any;
+      const model = raw.model as string | undefined;
+      if (usage || model) {
+        chat.setMessages(ms => {
+          const last = ms[ms.length - 1];
+          if (last && last.role === "assistant") {
+            return [...ms.slice(0, -1), {
+              ...last,
+              tokenUsage: usage ? { input: usage.input, output: usage.output, rounds: usage.rounds, cache_read: usage.cache_read, cache_write: usage.cache_write } : undefined,
+              model: model,
+              isFallback: !!raw.is_fallback,
+            }];
+          }
+          return ms;
+        });
+      }
       broadcastMsgId.current = null;
       broadcastBuf.current = "";
     } else if (raw._user_message) {

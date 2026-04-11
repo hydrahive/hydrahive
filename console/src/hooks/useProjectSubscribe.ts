@@ -101,10 +101,13 @@ export function useProjectSubscribe(projectId: string | undefined, onBroadcast?:
       abortRef.current = controller;
 
       try {
-        const res = await fetch(`/api/projects/${projectId}/subscribe`, {
+        // URL vom aktuellen Origin ableiten (HTTP/HTTPS automatisch korrekt)
+        const subscribeUrl = `${window.location.origin}/api/projects/${projectId}/subscribe`;
+        const res = await fetch(subscribeUrl, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
+          redirect: "follow",
         });
 
         if (!res.ok) {
