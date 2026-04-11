@@ -66,12 +66,12 @@ from .router_user_integrations import register_user_integration_routes, setup_di
 from .whatsapp_agent import setup_whatsapp_sessions
 from .router_invites import register_invite_routes
 from .router_github import register_github_routes
-from .router_plugins import register_plugin_routes
+# v2: Plugin-System entfernt — alles über shell_exec
 from .router_tailscale import register_tailscale_routes
 from .router_servers import register_server_routes
 from .router_repos import register_repo_routes
 from .router_config_map import register_config_map_routes
-from .plugin_manager import plugin_manager
+# v2: plugin_manager entfernt
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
 from .group_service import GroupService
 from .router_groups import register_group_routes
@@ -398,20 +398,7 @@ async def lifespan(app: FastAPI):
     except Exception as _ge:
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
-    # Manifest-Plugins aus /plugins/ laden (#110)
-    try:
-        from .tool_registry import registry as _tool_registry
-        plugin_manager.init(tool_registry=_tool_registry)
-    except Exception as _pe:
-        logger.warning("Manifest-Plugin-System fehlgeschlagen: %s", _pe)
-
-    # Legacy-Plugins aus /agents/*/plugins/ laden (#49)
-    try:
-        _plugin_count = plugin_manager.load_all_agent_plugins(AGENTS_DIR)
-        if _plugin_count:
-            logger.info("Legacy-Plugins: %d geladen", _plugin_count)
-    except Exception as _pe:
-        logger.warning("Legacy-Plugin-Laden fehlgeschlagen: %s", _pe)
+    # v2: Plugin-System entfernt — alle Funktionalität über shell_exec
 
     notification_service.start()
     scheduler_service.start(
@@ -1563,7 +1550,7 @@ register_brain_routes(auth_router, discovery=discovery, runtime=runtime, project
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
 register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
-register_plugin_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, agents_dir=AGENTS_DIR)
+# v2: register_plugin_routes entfernt
 register_tailscale_routes(admin_router, require_admin=require_admin)
 register_repo_routes(admin_router, require_admin=require_admin)
 register_config_map_routes(admin_router, require_admin=require_admin)

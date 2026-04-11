@@ -109,6 +109,7 @@ class AgentConfig(BaseModel):
     execution_modes: ExecutionModesConfig | None = None
     ephemeral: bool = False   # Wenn True: Agent wird beim nächsten Core-Start gelöscht
     hooks: dict | None = None  # #472: Hook-System (before_tool, after_tool)
+    # v2: Plugin-System entfernt — alles über shell_exec
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)

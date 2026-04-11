@@ -66,7 +66,6 @@ from .orchestrator_tools import (
 from .orchestrator_mcp import (
     _load_mcp_server_map as _load_mcp_server_map_fn,
     _mcp_schemas_for_agent as _mcp_schemas_for_agent_fn,
-    _plugin_schemas_for_agent as _plugin_schemas_for_agent_fn,
     _execute_mcp_tool as _execute_mcp_tool_fn,
 )
 from .orchestrator_stream import handle_message_stream as _handle_message_stream_fn
@@ -287,12 +286,8 @@ class Orchestrator:
         execution_mode: str | None = None,
         user_text: str = "",
     ) -> dict[str, object]:
-        """v2: Alle Core-Tools + Plugin-Tools."""
-        all_tools = {tool.id: tool for tool in self._reg.all_tools()}
-        from .plugin_manager import plugin_manager as _pm
-        for pt in _pm.get_plugin_tools_for_agent(agent_cfg.id):
-            all_tools[pt.id] = pt
-        return all_tools
+        """v2: Nur Core-Tools."""
+        return {tool.id: tool for tool in self._reg.all_tools() if tool.id in self._V2_CORE_TOOL_IDS}
 
     def _resolve_allowed_tool(
         self,
@@ -360,7 +355,8 @@ class Orchestrator:
         return await _mcp_schemas_for_agent_fn(agent_cfg, self._mcp_servers_file)
 
     def _plugin_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
-        return _plugin_schemas_for_agent_fn(agent_cfg)
+        """v2: Plugin-System entfernt."""
+        return []
 
     async def _execute_mcp_tool(self, boss_cfg, prefixed_name, args):
         return await _execute_mcp_tool_fn(

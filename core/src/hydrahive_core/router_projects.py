@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .session_manager import MessageRole
-from .plugin_manager import plugin_manager
+# v2: plugin_manager entfernt
 
 
 class UpdateProjectRequest(BaseModel):
@@ -536,7 +536,8 @@ def register_project_routes(
             audit_source="projects.message",
         )
 
-        await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=sender)
+        # v2: plugin_manager.emit entfernt
+        # await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=sender)
         response, workers = await orchestrator.handle_message(
             project_id=project_id,
             project_cfg=cfg,
@@ -544,7 +545,8 @@ def register_project_routes(
             sender=sender,
             execution_mode=execution_mode,
         )
-        await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)
+        # v2: plugin_manager.emit entfernt
+        # await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)
         session = sessions.get_active(project_id)
         return {
             "response": response,
