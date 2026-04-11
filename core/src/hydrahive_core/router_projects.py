@@ -460,8 +460,10 @@ def register_project_routes(
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, "Projekt nicht gefunden")
-        if not discovery.get(cfg.agents.boss):
-            raise HTTPException(503, "Boss-Agent nicht verfügbar")
+        # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+        if not getattr(cfg, "is_v2", False):
+            if not discovery.get(cfg.agents.boss):
+                raise HTTPException(503, "Boss-Agent nicht verfügbar")
         execution_mode = resolve_request_execution_mode(
             auth,
             req.execution_mode,
@@ -521,9 +523,11 @@ def register_project_routes(
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
-        boss_id = cfg.agents.boss
-        if not discovery.get(boss_id):
-            raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+        # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+        if not getattr(cfg, "is_v2", False):
+            boss_id = cfg.agents.boss
+            if not discovery.get(boss_id):
+                raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
         execution_mode = resolve_request_execution_mode(
             auth,
             req.execution_mode,

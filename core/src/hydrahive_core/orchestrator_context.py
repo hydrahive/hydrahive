@@ -219,12 +219,18 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
                 )
                 _startup_active = True
 
-    # Soul laden wenn vorhanden (immer — klein und identitätskritisch)
-    # Bei aktivem Onboarding trotzdem laden (für Kontext), aber startup.md hat Vorrang.
-    if boss_cfg.soul and boss_cfg.agent_dir:
-        soul_path = boss_cfg.agent_dir / boss_cfg.soul
-        if soul_path.exists():
-            parts.append(soul_path.read_text(encoding="utf-8").strip())
+    # Soul / AGENT.md laden (identitätskritisch)
+    # v2: AGENT.md im Projekt-Verzeichnis. v1: soul.md aus agent.yaml.
+    if boss_cfg.agent_dir:
+        agent_md_path = boss_cfg.agent_dir / "AGENT.md"
+        if agent_md_path.exists():
+            # v2: AGENT.md als Persönlichkeit/Fachgebiet
+            parts.append(agent_md_path.read_text(encoding="utf-8").strip())
+        elif boss_cfg.soul:
+            # v1: soul.md aus agent.yaml
+            soul_path = boss_cfg.agent_dir / boss_cfg.soul
+            if soul_path.exists():
+                parts.append(soul_path.read_text(encoding="utf-8").strip())
 
     # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
     # #529: Memory Budget aus context_lifecycle

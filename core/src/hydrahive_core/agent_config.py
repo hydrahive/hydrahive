@@ -168,3 +168,57 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
 
     config.agent_dir = agent_dir
     return config
+
+
+def agent_config_from_project(project_cfg) -> AgentConfig:
+    """v2 Bridge: Erzeugt eine AgentConfig aus einer ProjectConfig.
+
+    Ermöglicht v2-Projekten (config.yaml + AGENT.md) den bestehenden
+    Orchestrator-Pipeline zu nutzen, ohne dass ein separater Boss-Agent
+    in /agents/ existieren muss.
+
+    Die erzeugte AgentConfig hat:
+    - id: project_id (statt agent_id)
+    - LLM-Config aus config.yaml
+    - Soul/AGENT.md als System-Prompt
+    - 9 Core-Tools (v2 Standard)
+    - agent_dir zeigt auf das Projekt-Verzeichnis
+    """
+    from .project_config import ProjectConfig
+
+    pcfg: ProjectConfig = project_cfg
+
+    # LLM-Config aus Projekt übernehmen
+    llm = LlmConfig(
+        model=pcfg.llm.model,
+        temperature=pcfg.llm.temperature,
+        max_tokens=pcfg.llm.max_tokens,
+        thinking_budget=pcfg.llm.thinking_budget,
+        fallback_models=[f.get("model", "") for f in pcfg.llm.failover if f.get("model")],
+    )
+
+    # v2 Core-Tools — immer diese 9
+    core_tools = [
+        "shell_exec", "file_read", "file_write", "file_patch",
+        "file_search", "web_search", "read_memory", "write_memory",
+        "ask_agent",
+    ]
+
+    # execution_modes: Standard safe, unrestricted für Admins konfigurierbar
+    exec_modes = ExecutionModesConfig(
+        default="safe",
+        safe=ExecutionModeProfile(permissions=[]),
+    )
+
+    return AgentConfig(
+        id=pcfg.id,
+        type="boss",
+        identity=pcfg.identity.name,
+        llm=llm,
+        soul=None,                       # AGENT.md wird separat injiziert
+        tools=core_tools,
+        tool_selection="always",          # Alle 9 Tools immer laden
+        max_tool_rounds=20,
+        execution_modes=exec_modes,
+        agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
+    )

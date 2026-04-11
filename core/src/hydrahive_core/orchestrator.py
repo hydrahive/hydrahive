@@ -500,10 +500,14 @@ class Orchestrator:
         # 1. Nachricht in Session speichern
         await self._sessions.append(project_id, MessageRole.USER, content)
 
-        # 2. Boss-Agent-Config holen
-        boss_cfg = self._discovery.get(project_cfg.agents.boss)
+        # 2. Boss-Agent-Config holen — v2: direkt aus Projekt, v1: aus Discovery
+        if getattr(project_cfg, "is_v2", False):
+            from .agent_config import agent_config_from_project
+            boss_cfg = agent_config_from_project(project_cfg)
+        else:
+            boss_cfg = self._discovery.get(project_cfg.agents.boss)
         if not boss_cfg:
-            return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden.", []
+            return f"[Fehler] Boss-Agent '{getattr(project_cfg.agents, 'boss', project_cfg.id)}' nicht gefunden.", []
 
         # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache
         _refresh = content.strip().startswith("!refresh")

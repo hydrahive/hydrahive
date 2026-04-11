@@ -75,8 +75,15 @@ async def handle_message_stream(
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
     from . import tool_registry as _tool_reg
 
-    boss_id  = project_cfg.agents.boss
-    boss_cfg = orch._discovery.get(boss_id)
+    # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+    if getattr(project_cfg, "is_v2", False):
+        from .agent_config import agent_config_from_project
+        boss_id = project_cfg.id
+        boss_cfg = agent_config_from_project(project_cfg)
+    else:
+        # v1: Boss-Agent aus Discovery laden
+        boss_id = project_cfg.agents.boss
+        boss_cfg = orch._discovery.get(boss_id)
     if not boss_cfg:
         yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
         return
