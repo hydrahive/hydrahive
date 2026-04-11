@@ -255,14 +255,22 @@ class Orchestrator:
     ) -> str | None:
         return agent_cfg.effective_execution_mode(execution_mode)  # type: ignore[arg-type]
 
+    # v2: Die 9 Core-Tool-IDs — Plugins registrieren sich auch in der Registry,
+    # deshalb können wir nicht blind all_tools() nehmen.
+    _V2_CORE_TOOL_IDS = frozenset({
+        "shell_exec", "file_read", "file_write", "file_patch",
+        "file_search", "web_search", "read_memory", "write_memory",
+        "ask_agent",
+    })
+
     def _allowed_tools(
         self,
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
         user_text: str = "",
     ) -> list:
-        """v2: Gibt immer alle 9 Core-Tools zurück — keine Filterung mehr."""
-        return self._reg.all_tools()
+        """v2: Gibt nur die 9 Core-Tools zurück — Plugins werden separat geladen."""
+        return [t for t in self._reg.all_tools() if t.id in self._V2_CORE_TOOL_IDS]
 
     def _category_tools_schema(
         self,
