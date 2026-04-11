@@ -43,6 +43,7 @@ interface ProjectEntry {
   description: string;
   boss: string;
   workers: string[];
+  members: string[];
   matrix_room: string;
   filesystem: string;
   system_user: string;
@@ -65,9 +66,7 @@ interface CreateForm {
 interface EditForm {
   name: string;
   description: string;
-  boss: string;
-  workers: string;
-  show_swarm: boolean;
+  members: string;
 }
 
 const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
@@ -91,7 +90,7 @@ function ProjectsContent() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ name: "", description: "", boss: "", workers: "", show_swarm: false });
+  const [editForm, setEditForm] = useState<EditForm>({ name: "", description: "", members: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editErr, setEditErr] = useState("");
   const [sambaCreds, setSambaCreds] = useState<Record<string, {username: string; password: string} | null>>({});
@@ -238,7 +237,7 @@ function ProjectsContent() {
   function openEdit(id: string) {
     const p = projects[id];
     if (!p) return;
-    setEditForm({ name: p.name, description: p.description, boss: p.boss, workers: p.workers.join(", "), show_swarm: p.show_swarm });
+    setEditForm({ name: p.name, description: p.description, members: (p.members || []).join(", ") });
     setEditErr("");
     setEditProject(id);
   }
@@ -248,12 +247,10 @@ function ProjectsContent() {
     if (!editProject) return;
     setEditSaving(true); setEditErr("");
     try {
-      await api.updateProject(editProject, {
+      await api.put(`/projects/${editProject}/settings`, {
         name: editForm.name,
         description: editForm.description,
-        boss: editForm.boss,
-        workers: editForm.workers.split(",").map(w => w.trim()).filter(Boolean),
-        show_swarm: editForm.show_swarm,
+        members: editForm.members.split(",").map(m => m.trim()).filter(Boolean),
       });
       setEditProject(null);
       await load();
@@ -505,12 +502,10 @@ function ProjectsContent() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-semibold">{proj.name}</span>
                     <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground">{id}</span>
-                    {proj.show_swarm && <span className="status-pill status-pill-ok">{t("projects.swarmVisible2")}</span>}
                     {proj.matrix_room && <span className="status-pill">{t("projects.matrixActive")}</span>}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{proj.boss}</span>
-                    <span className="flex items-center gap-1"><Boxes className="h-3 w-3" />{t("projects.workerCount", { count: proj.workers.length })}</span>
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{(proj.members || []).length || 1} {(proj.members || []).length === 1 ? "Mitglied" : "Mitglieder"}</span>
                     <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" />{proj.system_user}</span>
                     {proj.description && <span className="hidden sm:inline truncate max-w-xs">{proj.description}</span>}
                   </div>
@@ -687,22 +682,17 @@ function ProjectsContent() {
 
                     {/* Team */}
                     <div className="rounded-2xl border bg-background/55 p-3 md:col-span-1">
-                      <p className="metric-kicker">{t("projects.team")}</p>
+                      <p className="metric-kicker">Mitglieder</p>
                       <div className="mt-2 space-y-2 text-sm">
                         <div className="rounded-xl bg-secondary/60 px-2.5 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t("projects.bossLabel")}</p>
-                          <p className="mt-0.5 text-sm font-medium">{proj.boss}</p>
-                        </div>
-                        <div className="rounded-xl bg-secondary/40 px-2.5 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t("projects.workerLabel")}</p>
-                          {proj.workers.length > 0 ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {proj.workers.map((worker) => (
-                                <span key={worker} className="rounded-full bg-background px-2 py-0.5 text-xs">{worker}</span>
+                          {(proj.members || []).length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {(proj.members || []).map((m) => (
+                                <span key={m} className="rounded-full bg-background px-2 py-0.5 text-xs">{m}</span>
                               ))}
                             </div>
                           ) : (
-                            <p className="mt-0.5 text-xs text-muted-foreground">{t("projects.noWorkers")}</p>
+                            <p className="text-xs text-muted-foreground">Alle User haben Zugriff</p>
                           )}
                         </div>
                       </div>
@@ -770,27 +760,15 @@ function ProjectsContent() {
                 className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Boss-Agent</label>
-              <select value={editForm.boss} onChange={e => setEditForm(f => ({...f, boss: e.target.value}))} required
-                className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                <option value="">— Agent wählen —</option>
-                {agents.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Worker-Agenten</label>
-              <input value={editForm.workers} onChange={e => setEditForm(f => ({...f, workers: e.target.value}))}
-                placeholder="agent1, agent2, agent3"
+              <label className="text-sm font-medium">Mitglieder</label>
+              <input value={editForm.members} onChange={e => setEditForm(f => ({...f, members: e.target.value}))}
+                placeholder="admin, bianca, till"
                 className="w-full rounded-xl border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-              <p className="text-xs text-muted-foreground">Kommagetrennt</p>
+              <p className="text-xs text-muted-foreground">Usernames kommagetrennt — wer Zugriff auf dieses Projekt hat</p>
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={editForm.show_swarm} onChange={e => setEditForm(f => ({...f, show_swarm: e.target.checked}))} className="rounded" />
-              Swarm-Ansicht anzeigen
-            </label>
             {editErr && <p className="text-sm text-destructive">{editErr}</p>}
             <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={editSaving || !editForm.boss}
+              <button type="submit" disabled={editSaving}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 <Save className="h-4 w-4" />
                 {editSaving ? t("common.saving") : t("common.save")}
