@@ -6,7 +6,6 @@ import { SupportWidget } from "@/components/SupportWidget";
 import { FloatingCompanion, useCompanionActivation, BlobCreature } from "@/components/FloatingCompanion";
 import {
   LayoutDashboard,
-  Bot,
   FolderKanban,
   Monitor,
   LogOut,
@@ -18,10 +17,7 @@ import {
   X,
   Settings,
   Loader2,
-  Workflow,
-  Package,
   Brain,
-  Users,
   Shield,
   Lightbulb,
   Rocket,
@@ -245,13 +241,10 @@ export function AdminLayout() {
 
   type NavItem = { to: string; icon: React.ElementType; label: string; hint: string; adminOnly?: boolean };
 
+  // v2: Vereinfachte Navigation — Projekte als Haupteinstieg
   const allNavItems: NavItem[] = [
     { to: "/dashboard",      icon: LayoutDashboard, label: t("nav.dashboard"),       hint: t("navHint.dashboard") },
-    { to: "/my-agent",       icon: Bot,             label: t("nav.myAgent"),         hint: t("navHint.myAgent") },
-    { to: "/agents",         icon: Users,           label: t("nav.agents"),          hint: t("navHint.agents") },
     { to: "/projects",       icon: FolderKanban,    label: t("nav.projects"),        hint: t("navHint.projects") },
-    { to: "/blueprint",      icon: Workflow,        label: t("nav.blueprint"),       hint: t("navHint.blueprint") },
-    { to: "/hub",            icon: Package,         label: t("nav.hydraHub"),        hint: t("navHint.hydraHub") },
     { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
     { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },
     { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
@@ -260,7 +253,6 @@ export function AdminLayout() {
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },
     { to: "/prompt-guide",   icon: Lightbulb,       label: t("nav.promptGuide"),     hint: t("navHint.promptGuide", { defaultValue: "KI-Tipps für bessere Prompts" }) },
     { to: "/playground",     icon: Code,            label: "API Playground",         hint: "API-Endpoints testen und erkunden", adminOnly: true },
-    { to: "/proactive",      icon: Bot,             label: "Proactive Tasks",        hint: "Agenten arbeiten autonom im Hintergrund", adminOnly: true },
   ];
 
   const nav = allNavItems.filter((item) => {
@@ -437,11 +429,12 @@ export function AdminLayout() {
   );
 
   // Bottom-Nav für Mobile
+  // v2: Vereinfachte Bottom-Nav — nur Dashboard + Projekte
   const bottomNavItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: t("nav.dashboard") },
-    { to: "/my-agent",  icon: Bot,             label: t("nav.myAgent") },
-    { to: "/agents",    icon: Users,           label: t("nav.agents") },
     { to: "/projects",  icon: FolderKanban,    label: t("nav.projects") },
+    { to: "/system",    icon: Monitor,         label: t("nav.system") },
+    { to: "/settings",  icon: Settings,        label: t("nav.settings") },
   ];
 
   // Auto-scroll für Update-Log
