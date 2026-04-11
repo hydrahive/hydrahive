@@ -156,26 +156,7 @@ main() {
         info "System-Agenten aktualisiert"
     fi
 
-    # --- 2c. Default-Agenten installieren (nur neue, bestehende nicht überschreiben) ---
-    if [ -d "${TMPDIR_BASE}/installer/default-agents" ]; then
-        _installed=0
-        for _src in "${TMPDIR_BASE}/installer/default-agents"/*/; do
-            _id="$(basename "${_src}")"
-            # Gelöschte Projekte nicht als Agent reinstallieren (#566)
-            if [ -f "/projects/${_id}/.deleted" ]; then
-                continue
-            fi
-            if [ ! -d "/agents/${_id}" ]; then
-                cp -r "${_src}" "/agents/${_id}"
-                mkdir -p "/agents/${_id}/memory"
-                _installed=$((_installed + 1))
-            fi
-        done
-        chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
-        if [ $_installed -gt 0 ]; then
-            info "${_installed} neue Standard-Agenten installiert"
-        fi
-    fi
+    # v2: Default-Agents entfernt — Projekte werden ueber den Wizard erstellt
 
     # --- 3. Python-Dependencies ---
     info "Installiere Python-Dependencies..."

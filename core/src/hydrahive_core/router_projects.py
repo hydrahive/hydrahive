@@ -13,29 +13,26 @@ from .session_manager import MessageRole
 
 
 class UpdateProjectRequest(BaseModel):
+    """v1 Legacy — wird nur noch fuer PUT /projects/{id} genutzt."""
     name: str | None = None
     description: str | None = None
-    boss: str | None = None
-    workers: list[str] | None = None
-    show_swarm: bool | None = None
-    members: list[str] | None = None   # HydraHive-Usernames mit Zugang zum Projekt-Room
+    members: list[str] | None = None
 
 
 class CreateProjectRequest(BaseModel):
     id: str
     name: str
     description: str = ""
-    boss: str
-    workers: list[str] = []
+    boss: str = ""  # v1 deprecated — wird ignoriert, Projekt ist sein eigener Agent
+    workers: list[str] = []  # v1 deprecated
     samba: bool = True
+    nfs: bool = False
+    members: list[str] = []
+    github_repo: str = ""
 
 
 class TypingRequest(BaseModel):
     active: bool = True
-    nfs: bool = False
-    show_swarm: bool = False
-    members: list[str] = []   # HydraHive-Usernames die sofort eingeladen werden
-    github_repo: str = ""    # z.B. "org/repo" oder vollständige GitHub-URL
 
 
 class MessageRequest(BaseModel):
@@ -127,12 +124,9 @@ def register_project_routes(
             pid: {
                 "name": cfg.identity.name,
                 "description": cfg.identity.description,
-                "boss": cfg.agents.boss,
-                "workers": cfg.agents.workers,
                 "matrix_room": cfg.matrix.room,
                 "filesystem": cfg.effective_filesystem_path(),
                 "system_user": cfg.effective_system_user(),
-                "show_swarm": cfg.chat.show_swarm,
                 "members": list(getattr(cfg, "members", [])),
             }
             for pid, cfg in projects.projects.items()
@@ -217,27 +211,19 @@ def register_project_routes(
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
-        if req.boss and not discovery.get(req.boss):
-            raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht gefunden")
-        if req.workers:
-            missing = [w for w in req.workers if not discovery.get(w)]
-            if missing:
-                raise HTTPException(422, f"Worker-Agenten nicht gefunden: {missing}")
-
         project_dir = Path(projects_dir) / project_id
-        yaml_path = project_dir / "project.yaml"
+        # v2: config.yaml bevorzugen, Fallback auf project.yaml
+        yaml_path = project_dir / "config.yaml"
+        if not yaml_path.exists():
+            yaml_path = project_dir / "project.yaml"
+        if not yaml_path.exists():
+            raise HTTPException(404, "Keine Config-Datei gefunden")
         data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
 
         if req.name is not None:
-            data["identity"]["name"] = req.name
+            data.setdefault("identity", {})["name"] = req.name
         if req.description is not None:
-            data["identity"]["description"] = req.description
-        if req.boss is not None:
-            data["agents"]["boss"] = req.boss
-        if req.workers is not None:
-            data["agents"]["workers"] = req.workers
-        if req.show_swarm is not None:
-            data.setdefault("chat", {})["show_swarm"] = req.show_swarm
+            data.setdefault("identity", {})["description"] = req.description
         if req.members is not None:
             data["members"] = req.members
 
@@ -494,28 +480,31 @@ def register_project_routes(
             except Exception as e:
                 logger.warning("Gitea-Retro-Check fehlgeschlagen für '%s': %s", req.id, e)
             raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
-        if not discovery.get(req.boss):
-            raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht in Discovery")
-
         project_dir = Path(projects_dir) / req.id
         project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "memory").mkdir(exist_ok=True)
 
-        project_data = {
+        # v2: config.yaml statt project.yaml
+        config_data = {
             "id": req.id,
-            "version": "1.0.0",
+            "version": "2.0.0",
             "identity": {"name": req.name, "description": req.description},
-            "agents": {"boss": req.boss, "workers": req.workers},
-            "matrix": {"room": ""},
+            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-6", "temperature": 0.7, "max_tokens": 4096},
             "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
             "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
-            "chat": {"show_swarm": req.show_swarm},
             "members": req.members,
             "github_repo": req.github_repo,
         }
-        yaml_path = project_dir / "project.yaml"
-        yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-        logger.info("project.yaml geschrieben: %s", yaml_path)
-        audit_log("project.create", target=req.id, project_id=req.id, details={"boss": req.boss})
+        config_path = project_dir / "config.yaml"
+        config_path.write_text(_yaml.dump(config_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+
+        # AGENT.md Grundgeruest
+        agent_md_path = project_dir / "AGENT.md"
+        if not agent_md_path.exists():
+            agent_md_path.write_text(f"# {req.name}\n\nBeschreibe hier das Fachgebiet, die Regeln und den Kontext.\n")
+
+        logger.info("v2-Projekt erstellt: %s", config_path)
+        audit_log("project.create", target=req.id, project_id=req.id)
 
         await _asyncio.sleep(0.3)
 
