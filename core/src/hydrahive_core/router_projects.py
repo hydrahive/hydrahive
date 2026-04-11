@@ -52,6 +52,36 @@ class ProjectWorkflowRequest(BaseModel):
     edges: list = []
 
 
+# v2: Projekt-Erstellung mit Template
+class CreateProjectV2Request(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    template: str = "general"
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-6"
+    temperature: float = 0.5
+    max_tokens: int = 4096
+    api_key_env: str = ""
+    failover: list[dict] = []
+    agent_md: str = ""
+    members: list[str] = []
+
+
+# v2: Projekt-Settings aktualisieren
+class UpdateProjectSettingsRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    api_key_env: str | None = None
+    failover: list[dict] | None = None
+    agent_md: str | None = None
+    members: list[str] | None = None
+
+
 class GitCloneRequest(BaseModel):
     url: str
     branch: str = "main"
@@ -213,20 +243,6 @@ def register_project_routes(
 
     # ── v2: Projekt-Erstellung mit Template ──────────────────────────────
 
-    class CreateProjectV2Request(BaseModel):
-        id: str
-        name: str
-        description: str = ""
-        template: str = "general"          # code-project, server-admin, chat-bot, data-analysis, general, blank
-        provider: str = "anthropic"
-        model: str = "claude-sonnet-4-6"
-        temperature: float = 0.5
-        max_tokens: int = 4096
-        api_key_env: str = ""
-        failover: list[dict] = []          # [{provider, model}, ...]
-        agent_md: str = ""                 # Eigener Text, überschreibt Template
-        members: list[str] = []
-
     @admin_router.post("/projects/v2", status_code=201)
     async def create_project_v2(req: CreateProjectV2Request):
         """v2: Projekt erstellen mit Template + config.yaml + AGENT.md."""
@@ -335,18 +351,6 @@ def register_project_routes(
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
         }
-
-    class UpdateProjectSettingsRequest(BaseModel):
-        name: str | None = None
-        description: str | None = None
-        provider: str | None = None
-        model: str | None = None
-        temperature: float | None = None
-        max_tokens: int | None = None
-        api_key_env: str | None = None
-        failover: list[dict] | None = None
-        agent_md: str | None = None
-        members: list[str] | None = None
 
     @auth_router.put("/projects/{project_id}/settings")
     def update_project_settings(
