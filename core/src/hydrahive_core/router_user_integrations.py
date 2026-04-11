@@ -947,6 +947,8 @@ def register_user_integration_routes(
             "allowed_numbers":       cfg.get("allowed_numbers", []),
             "blocked_numbers":       cfg.get("blocked_numbers", []),
             "owner_numbers":         cfg.get("owner_numbers", []),
+            "voice_mode":            cfg.get("voice_mode", "never"),
+            "voice_name":            cfg.get("voice_name", "de-DE-KatjaNeural"),
         }
 
     @auth_router.put("/me/whatsapp/config")
@@ -1234,6 +1236,23 @@ def register_user_integration_routes(
         # v2: Messenger-Router für Projekt-Lookup nutzen
         from .messenger_router import messenger_router as _mr
         _routed_project_id = _mr.resolve_whatsapp(agent_id) or agent_id
+
+        # v2: Projekt-scoped Butler-Flows prüfen (#566)
+        try:
+            from .butler_executor import check_flows_for_project as _butler_project
+            _proj_actions = await _butler_project(_event, _routed_project_id)
+            if _proj_actions:
+                _aio.create_task(_butler_generic(_proj_actions, _event))
+                for _pact in _proj_actions:
+                    _psub = _pact.get("subtype")
+                    if _psub == "ignore":
+                        return {"ok": True, "filtered": "project_butler_ignore"}
+                    if _psub in ("agent_reply", "agent_reply_guided", "forward"):
+                        _new = _pact.get("params", {}).get("agent_id", "").strip()
+                        if _new:
+                            _routed_project_id = _new
+        except Exception as _pbe:
+            logger.debug("Projekt-Butler-Check fehlgeschlagen: %s", _pbe)
 
         # Echte Projekt-Config laden (inkl. Identity/Soul), Fallback auf Minimal-Config
         real_cfg = projects.get(_routed_project_id) if projects else None

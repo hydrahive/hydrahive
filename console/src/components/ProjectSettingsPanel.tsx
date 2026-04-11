@@ -14,6 +14,8 @@ import {
   Cpu,
   FileText,
   Shield,
+  Volume2,
+  Play,
 } from "lucide-react";
 
 interface ProjectSettingsPanelProps {
@@ -74,10 +76,25 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [waPhone, setWaPhone] = useState<string>("");
   const [waConnecting, setWaConnecting] = useState(false);
 
+  // WhatsApp Filter-Config (#567)
+  const [waPrivateChats, setWaPrivateChats] = useState(true);
+  const [waGroupChats, setWaGroupChats] = useState(false);
+  const [waRequireKeyword, setWaRequireKeyword] = useState("");
+  const [waOwnerNumbers, setWaOwnerNumbers] = useState("");
+  const [waAllowedNumbers, setWaAllowedNumbers] = useState("");
+  const [waBlockedNumbers, setWaBlockedNumbers] = useState("");
+  const [waVoiceMode, setWaVoiceMode] = useState("never");
+  const [waVoiceName, setWaVoiceName] = useState("de-DE-KatjaNeural");
+  const [waVoices, setWaVoices] = useState<{ id: string; label: string; lang: string }[]>([]);
+  const [waSaving, setWaSaving] = useState(false);
+  const [waSuccess, setWaSuccess] = useState("");
+  const [waPreviewPlaying, setWaPreviewPlaying] = useState(false);
+
   useEffect(() => {
     loadSettings();
     loadKeys();
     loadWhatsAppStatus();
+    loadVoices();
   }, [projectId]);
 
   async function loadWhatsAppStatus() {
@@ -87,8 +104,71 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setWaStatus(d.status || "unknown");
       setWaQr(d.qr || "");
       setWaPhone(d.phone || "");
+      // Filter-Config laden (#567)
+      setWaPrivateChats(d.private_chats_enabled ?? true);
+      setWaGroupChats(d.group_chats_enabled ?? false);
+      setWaRequireKeyword(d.require_keyword ?? "");
+      setWaOwnerNumbers((d.owner_numbers ?? []).join("\n"));
+      setWaAllowedNumbers((d.allowed_numbers ?? []).join("\n"));
+      setWaBlockedNumbers((d.blocked_numbers ?? []).join("\n"));
+      setWaVoiceMode(d.voice_mode ?? "never");
+      setWaVoiceName(d.voice_name ?? "de-DE-KatjaNeural");
     } catch {
       setWaStatus("unavailable");
+    }
+  }
+
+  async function loadVoices() {
+    try {
+      const res = await api.get<any>("/me/whatsapp/voices");
+      setWaVoices(Array.isArray(res) ? res : (res as any).voices || []);
+    } catch {
+      // nicht kritisch
+    }
+  }
+
+  async function saveWhatsAppConfig() {
+    setWaSaving(true);
+    setWaSuccess("");
+    try {
+      const nums = (s: string) => s.split("\n").map(n => n.trim()).filter(Boolean);
+      await api.put("/me/whatsapp/config", {
+        private_chats_enabled: waPrivateChats,
+        group_chats_enabled: waGroupChats,
+        require_keyword: waRequireKeyword || null,
+        owner_numbers: nums(waOwnerNumbers),
+        allowed_numbers: nums(waAllowedNumbers),
+        blocked_numbers: nums(waBlockedNumbers),
+        voice_mode: waVoiceMode,
+        voice_name: waVoiceName,
+      });
+      setWaSuccess("Gespeichert!");
+      setTimeout(() => setWaSuccess(""), 3000);
+    } catch (e: any) {
+      setError(e?.message || "WhatsApp-Config speichern fehlgeschlagen");
+    } finally {
+      setWaSaving(false);
+    }
+  }
+
+  async function previewVoice() {
+    setWaPreviewPlaying(true);
+    try {
+      const token = localStorage.getItem("hydrahive_token") || "";
+      const res = await fetch("/api/me/whatsapp/voice-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ voice: waVoiceName, text: "Hallo, ich bin dein HydraHive Assistent." }),
+      });
+      if (!res.ok) throw new Error("Preview fehlgeschlagen");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => { URL.revokeObjectURL(url); setWaPreviewPlaying(false); };
+      audio.onerror = () => { URL.revokeObjectURL(url); setWaPreviewPlaying(false); };
+      await audio.play();
+    } catch {
+      setWaPreviewPlaying(false);
     }
   }
 
@@ -336,6 +416,102 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             </button>
           )}
         </div>
+
+        {/* Filter-Config — nur wenn verbunden (#567) */}
+        {waStatus === "connected" && (
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-[10px] text-muted-foreground">
+              Diese Einstellungen gelten fuer deine persoenliche WhatsApp-Verbindung.
+            </p>
+
+            {/* Checkboxen */}
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" checked={waPrivateChats} onChange={e => setWaPrivateChats(e.target.checked)} className="h-3 w-3 rounded" />
+                Private Nachrichten
+              </label>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" checked={waGroupChats} onChange={e => setWaGroupChats(e.target.checked)} className="h-3 w-3 rounded" />
+                Gruppen-Nachrichten
+              </label>
+            </div>
+
+            {/* Keyword */}
+            <div>
+              <label className="text-[11px] text-muted-foreground">Aktivierungs-Keyword (leer = immer antworten)</label>
+              <input type="text" value={waRequireKeyword} onChange={e => setWaRequireKeyword(e.target.value)}
+                placeholder="z.B. !bot"
+                className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs" />
+            </div>
+
+            {/* Nummern-Listen */}
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground">Eigene Nummern (elevated)</label>
+                <textarea value={waOwnerNumbers} onChange={e => setWaOwnerNumbers(e.target.value)}
+                  placeholder="+49123456789"
+                  rows={3}
+                  className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Whitelist (leer = alle)</label>
+                <textarea value={waAllowedNumbers} onChange={e => setWaAllowedNumbers(e.target.value)}
+                  placeholder="+49123456789"
+                  rows={3}
+                  className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Blacklist</label>
+                <textarea value={waBlockedNumbers} onChange={e => setWaBlockedNumbers(e.target.value)}
+                  placeholder="+49123456789"
+                  rows={3}
+                  className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
+              </div>
+            </div>
+
+            {/* Voice */}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Volume2 className="h-3 w-3" /> Sprachnachrichten
+                </label>
+                <select value={waVoiceMode} onChange={e => setWaVoiceMode(e.target.value)}
+                  className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
+                  <option value="never">Nie (nur Text)</option>
+                  <option value="echo">Nur Antwort auf Sprachnachrichten</option>
+                  <option value="always">Immer als Audio</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">TTS-Stimme</label>
+                <div className="flex gap-1.5 mt-0.5">
+                  <select value={waVoiceName} onChange={e => setWaVoiceName(e.target.value)}
+                    className="flex-1 rounded-lg border bg-background px-2 py-1.5 text-xs">
+                    {waVoices.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    {!waVoices.find(v => v.id === waVoiceName) && waVoiceName && (
+                      <option value={waVoiceName}>{waVoiceName}</option>
+                    )}
+                  </select>
+                  <button onClick={previewVoice} disabled={waPreviewPlaying}
+                    className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+                    title="Vorhoeren">
+                    {waPreviewPlaying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex items-center gap-2">
+              <button onClick={saveWhatsAppConfig} disabled={waSaving}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs text-white transition hover:bg-green-700 disabled:opacity-50">
+                {waSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                WhatsApp-Config speichern
+              </button>
+              {waSuccess && <span className="text-xs text-green-600">{waSuccess}</span>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
