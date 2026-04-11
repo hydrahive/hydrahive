@@ -54,8 +54,6 @@ interface CreateForm {
   id: string;
   name: string;
   description: string;
-  boss: string;
-  workers: string;
   samba: boolean;
   githubRepo: string;
   gitClone: boolean;
@@ -69,14 +67,13 @@ interface EditForm {
   members: string;
 }
 
-const EMPTY: CreateForm = { id: "", name: "", description: "", boss: "", workers: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
+const EMPTY: CreateForm = { id: "", name: "", description: "", samba: true, githubRepo: "", gitClone: false, gitBranch: "main", gitToken: "" };
 
 function ProjectsContent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [projects, setProjects] = useState<Record<string, ProjectEntry>>({});
-  const [agents, setAgents] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -107,9 +104,8 @@ function ProjectsContent() {
 
   async function load() {
     try {
-      const [p, a] = await Promise.all([api.projects(), api.agents()]);
+      const p = await api.projects();
       setProjects(p as Record<string, ProjectEntry>);
-      setAgents(Object.keys(a as Record<string, unknown>));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("common.error"));
@@ -177,8 +173,8 @@ function ProjectsContent() {
         id: form.id,
         name: form.name,
         description: form.description,
-        boss: form.boss,
-        workers: form.workers.split(",").map((w) => w.trim()).filter(Boolean),
+        boss: form.id,
+        workers: [],
         samba: form.samba,
         github_repo: form.githubRepo.trim(),
       });
@@ -261,14 +257,10 @@ function ProjectsContent() {
 
   const projectList = Object.entries(projects);
   const stats = useMemo(() => {
-    const swarm = projectList.filter(([, proj]) => proj.show_swarm).length;
-    const workers = projectList.reduce((acc, [, proj]) => acc + proj.workers.length, 0);
-    const matrix = projectList.filter(([, proj]) => !!proj.matrix_room).length;
+    const totalMembers = projectList.reduce((acc, [, proj]) => acc + (proj.members || []).length, 0);
     return [
       { label: t("projects.projectsLabel"), value: projectList.length, note: t("projects.configuredWorkspaces") },
-      { label: t("projects.swarm"), value: swarm, note: t("projects.swarmVisible") },
-      { label: t("projects.worker"), value: workers, note: t("projects.boundAgents") },
-      { label: t("projects.matrix"), value: matrix, note: t("projects.connectedRoom") },
+      { label: "Mitglieder", value: totalMembers, note: "Zugewiesene User" },
     ];
   }, [projectList, t]);
 
@@ -386,31 +378,6 @@ function ProjectsContent() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.bossAgent")}</label>
-              <select
-                value={form.boss}
-                onChange={(e) => setForm({ ...form, boss: e.target.value })}
-                required
-                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">{t("projects.selectAgent")}</option>
-                {agents.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.workerAgents")}</label>
-              <input
-                value={form.workers}
-                onChange={(e) => setForm({ ...form, workers: e.target.value })}
-                placeholder={t("projects.workerPlaceholder")}
-                className="w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1.5 md:col-span-2">
               <label className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("projects.description")}</label>
               <input
                 value={form.description}
