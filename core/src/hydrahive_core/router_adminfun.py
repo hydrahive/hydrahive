@@ -28,7 +28,7 @@ from pydantic import BaseModel
 _ADMINFUN_DIR = Path("/etc/hydrahive/adminfun")
 _ADMINFUN_STATE = _ADMINFUN_DIR / ".state.json"
 _ALLOWED_EXT = {".mp3", ".ogg", ".wav", ".m4a", ".opus"}
-_MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB pro File
+_MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB pro File (auch 2h+ 320kbps Mixes)
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._\- ]+$")
 
 

@@ -92,6 +92,7 @@ else
 fi
 
 # --- 3. client_max_body_size ---
+# AdminFun (#AdminFun) kann 200MB MP3s hochladen → Limit entsprechend hochsetzen
 HAS_MAX_BODY=$(grep -c "client_max_body_size" "${TARGET}" 2>/dev/null || true)
 
 if [ "${HAS_MAX_BODY}" -eq 0 ]; then
@@ -102,14 +103,21 @@ content = target.read_text()
 lines = content.splitlines()
 for i, line in enumerate(lines):
     if 'server {' in line:
-        lines.insert(i + 1, '    client_max_body_size   50M;')
+        lines.insert(i + 1, '    client_max_body_size   200M;')
         break
 target.write_text('\n'.join(lines) + '\n')
 PYEOF
     CHANGED=1
-    echo "client_max_body_size 50M eingefügt"
+    echo "client_max_body_size 200M eingefügt"
 else
-    echo "client_max_body_size bereits vorhanden"
+    # Bestehenden Wert auf 200M hochziehen (für alte Installationen mit 50M oder niedriger)
+    if ! grep -qE "client_max_body_size\s+200M" "${TARGET}"; then
+        sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[KMG]?;/client_max_body_size   200M;/g' "${TARGET}"
+        CHANGED=1
+        echo "client_max_body_size auf 200M hochgesetzt"
+    else
+        echo "client_max_body_size bereits 200M"
+    fi
 fi
 
 # --- 4. www-data in hydrahive-Gruppe ---
