@@ -12,7 +12,8 @@ const SLEEP_GAP_MS        = 60_000;  // 60s+ Pause → Sleep
 
 export type SSEEvent =
   | { type: "text"; text: string }
-  | { type: "tool_call"; tool_call: string; tool_input?: Record<string, unknown>; tool_detail?: string }
+  | { type: "tool_call"; tool_call: string; tool_call_id?: string; tool_input?: Record<string, unknown>; tool_detail?: string }
+  | { type: "tool_result"; tool_call_id?: string; tool_result: string }
   | { type: "tool_image"; tool_image: string; tool_name?: string }
   | { type: "context_info"; system_tokens: number; history_tokens: number; tool_tokens: number; history_messages: number; history_budget: number }
   | { type: "info"; info: string }
@@ -109,8 +110,10 @@ export async function sseStream(opts: SSEStreamOptions): Promise<void> {
               opts.onEvent({ type: "tool_warning", tool_warning: raw.tool_warning, tool_name: raw.tool_name ?? "" });
             } else if (raw.tool_image !== undefined) {
               opts.onEvent({ type: "tool_image", tool_image: raw.tool_image, tool_name: raw.tool_name });
+            } else if (raw.tool_result !== undefined) {
+              opts.onEvent({ type: "tool_result", tool_call_id: raw.tool_call_id, tool_result: raw.tool_result });
             } else if (raw.tool_call !== undefined) {
-              opts.onEvent({ type: "tool_call", tool_call: raw.tool_call, tool_input: raw.tool_input, tool_detail: raw.tool_detail });
+              opts.onEvent({ type: "tool_call", tool_call: raw.tool_call, tool_call_id: raw.tool_call_id, tool_input: raw.tool_input, tool_detail: raw.tool_detail });
             } else if (raw.done) {
               opts.onEvent({ type: "done", usage: raw.usage, is_fallback: raw.is_fallback, model: raw.model });
               // Suggestions may follow — stream continues until server closes

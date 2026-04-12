@@ -442,7 +442,7 @@ async def _stream_codex(
             _tc_args = _json.loads(tc.function.arguments or "{}")
             _parsed_args[tc.id] = _tc_args
             _tc_detail = format_tool_detail(tc.function.name, _tc_args)
-            yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
+            yield f"data: {_json.dumps({'tool_call': tc.function.name, 'tool_call_id': tc.id, 'tool_input': _tc_args, 'tool_detail': _tc_detail})}\n\n"
             # #486: Destructive Command Warning
             if tc.function.name in ("shell_exec", "wks_shell_exec"):
                 from .destructive_warning import get_destructive_warning
@@ -524,6 +524,9 @@ async def _stream_codex(
                 yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
+            # #612: Tool-Output ans Frontend senden (max 3000 Zeichen für Anzeige)
+            _result_preview = result_str[:3000] + ("…" if len(result_str) > 3000 else "")
+            yield f"data: {_json.dumps({'type': 'tool_result', 'tool_call_id': tc.id, 'tool_result': _result_preview})}\n\n"
 
         # Tool-Calls + Results in Session persistieren (OpenAI-Format)
         _codex_tc_list = [

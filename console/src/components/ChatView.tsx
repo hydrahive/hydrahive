@@ -4,8 +4,8 @@
  * Rendert Messages, Tool-Badges, Input-Area, Lightbox, Suggestions.
  * Wird von ChatPage, AgentChatPage und MyAgentPage eingebettet.
  */
-import { memo, useCallback, useEffect, useRef } from "react";
-import { Bot, User, Terminal, Send, Square, Smile, Plus, RotateCcw, ImagePlus, RefreshCw, X, Loader2, Network } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Bot, User, Terminal, Send, Square, Smile, Plus, RotateCcw, ImagePlus, RefreshCw, X, Loader2, Network, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import VoiceChatButton from "@/components/VoiceChatButton";
@@ -99,6 +99,16 @@ export function ChatView(props: ChatViewProps) {
 
   const displayMessages = viewSession ? viewSession.messages : messages;
 
+  // Expanded state für Tool-Blöcke (#612)
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const toggleTool = useCallback((id: string) => {
+    setExpandedTools(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
   // Slash command suggestions
   const suggestions = input.startsWith("/")
     ? slashCommands.filter(c => c.cmd.startsWith(input.split(" ")[0]))
@@ -161,31 +171,56 @@ export function ChatView(props: ChatViewProps) {
           </div>
         )}
         {displayMessages.map((msg) => {
-          // Tool messages: group consecutive
+          // Tool messages: group consecutive, Claude-Code-Style (#612)
           if (msg.role === "tool") {
             const msgIdx = displayMessages.indexOf(msg);
             if (msgIdx > 0 && displayMessages[msgIdx - 1]?.role === "tool") return null;
             const toolGroup: ChatMessage[] = [msg];
             for (let i = msgIdx + 1; i < displayMessages.length && displayMessages[i].role === "tool"; i++) toolGroup.push(displayMessages[i]);
-            const badges = toolGroup.filter(tm => !tm.content.startsWith("__IMG__"));
+            const regularTools = toolGroup.filter(tm => !tm.content.startsWith("__IMG__") && !tm.content.startsWith("⚠️"));
+            const warnings = toolGroup.filter(tm => tm.content.startsWith("⚠️"));
             const images = toolGroup.filter(tm => tm.content.startsWith("__IMG__"));
             return (
-              <div key={msg.id} className="flex flex-col items-center gap-2">
-                {badges.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 max-w-[85%] justify-center">
-                    {badges.map(tm => {
-                      const [toolName, ...detailParts] = tm.content.split("|");
-                      const detail = detailParts.join("|");
-                      return (
-                        <span key={tm.id} title={detail || toolName}
-                          className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary/70 font-mono cursor-default hover:bg-primary/10 transition-colors">
-                          <Terminal className="h-2.5 w-2.5" />
-                          {toolName}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
+              <div key={msg.id} className="flex flex-col gap-1.5 my-0.5 px-4">
+                {/* Reguläre Tool-Calls als aufklappbare Blöcke */}
+                {regularTools.map(tm => {
+                  const [toolName, ...detailParts] = tm.content.split("|");
+                  const detail = detailParts.join("|");
+                  const hasResult = tm.toolResult !== undefined;
+                  const isExpanded = expandedTools.has(tm.id);
+                  return (
+                    <div key={tm.id} className="rounded-lg border border-border/50 bg-muted/20 overflow-hidden font-mono text-xs max-w-[90%]">
+                      <button
+                        onClick={() => hasResult && toggleTool(tm.id)}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${hasResult ? "hover:bg-muted/40 cursor-pointer" : "cursor-default"}`}
+                      >
+                        <Terminal className="h-3 w-3 text-primary/60 flex-shrink-0" />
+                        <span className="font-semibold text-primary/80">{toolName}</span>
+                        {detail && <span className="text-muted-foreground/70 truncate flex-1 text-[10px] pl-1">{detail}</span>}
+                        {hasResult && (
+                          <ChevronDown className={`h-3 w-3 text-muted-foreground/50 flex-shrink-0 transition-transform duration-150 ${isExpanded ? "rotate-180" : ""}`} />
+                        )}
+                      </button>
+                      {hasResult && isExpanded && (
+                        <div className="border-t border-border/40 bg-muted/10 px-3 py-2">
+                          <pre className="whitespace-pre-wrap text-[10px] text-muted-foreground leading-relaxed max-h-[300px] overflow-y-auto">{tm.toolResult}</pre>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Warnings */}
+                {warnings.map(tm => {
+                  const [, ...detailParts] = tm.content.split("|");
+                  const detail = detailParts.join("|") || tm.content;
+                  return (
+                    <div key={tm.id} className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-mono max-w-[90%]">
+                      <span className="flex-shrink-0">⚠️</span>
+                      <span>{detail}</span>
+                    </div>
+                  );
+                })}
+                {/* Screenshots / Bilder */}
                 {images.map(tm => {
                   const [label, ...srcParts] = tm.content.replace("__IMG__", "").split("|");
                   const src = srcParts.join("|");

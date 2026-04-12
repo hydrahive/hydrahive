@@ -21,6 +21,10 @@ export interface ChatMessage {
   isFallback?: boolean;
   ts?: string;
   _images?: string[];
+  /** Tool-Call-ID (tc.id vom Backend) für tool_result Matching */
+  toolCallId?: string;
+  /** Tool-Output nach Ausführung — wird via tool_result Event gesetzt */
+  toolResult?: string;
 }
 
 export interface DebugEvent {
@@ -294,9 +298,27 @@ export function useChatStream(opts: UseChatStreamOptions) {
             setMessages(ms => [...ms, warnMsg]);
           } else if (evt.type === "tool_call") {
             setActiveTool({ name: evt.tool_call, detail: evt.tool_detail ?? evt.tool_call });
-            const toolMsg = mkMsg("tool", `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`);
+            const toolMsg: ChatMessage = {
+              ...mkMsg("tool", `${evt.tool_call}|${evt.tool_detail || evt.tool_call}`),
+              toolCallId: evt.tool_call_id,
+            };
             setMessages(ms => [...ms, toolMsg]);
             hadToolCalls = true;
+          } else if (evt.type === "tool_result") {
+            // Tool-Output nachträglich in die passende Tool-Message eintragen
+            const callId = evt.tool_call_id as string | undefined;
+            const resultText = (evt.tool_result as string) || "";
+            setMessages(ms => {
+              if (callId) {
+                // Exaktes Match via tool_call_id
+                return ms.map(m => m.toolCallId === callId ? { ...m, toolResult: resultText } : m);
+              }
+              // Fallback: letzte Tool-Message ohne Result updaten
+              const lastIdx = [...ms].reverse().findIndex(m => m.role === "tool" && !m.content.startsWith("__IMG__") && m.toolResult === undefined);
+              if (lastIdx < 0) return ms;
+              const realIdx = ms.length - 1 - lastIdx;
+              return ms.map((m, i) => i === realIdx ? { ...m, toolResult: resultText } : m);
+            });
           } else if (evt.type === "done") {
             const updates: Partial<ChatMessage> = {};
             if (evt.usage && (evt.usage.input > 0 || evt.usage.output > 0))
