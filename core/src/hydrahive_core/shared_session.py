@@ -38,11 +38,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProjectPresence:
-    """Tracking welche User gerade in einem Projekt online sind."""
-    users: dict[str, float] = field(default_factory=dict)  # username → last_seen timestamp
+    """Tracking welche User gerade in einem Projekt online sind.
+
+    #608: User ist online solange mindestens eine Client-Queue aktiv ist.
+    Multi-Tab sicher — unsubscribe eines Tabs entfernt User nicht wenn
+    andere Tabs noch offen sind.
+    """
+    users: dict[str, float] = field(default_factory=dict)        # username → last_seen
+    refcount: dict[str, int] = field(default_factory=dict)       # username → aktive Queues
 
     def add(self, username: str) -> None:
+        """User meldet sich an (Tab geoeffnet). Refcount hochziehen."""
         self.users[username] = time.time()
+        self.refcount[username] = self.refcount.get(username, 0) + 1
 
     def refresh(self, username: str) -> None:
         """#587: Timestamp erneuern waehrend Client verbunden ist."""
@@ -50,12 +58,19 @@ class ProjectPresence:
             self.users[username] = time.time()
 
     def remove(self, username: str) -> None:
-        self.users.pop(username, None)
+        """User meldet sich ab (Tab geschlossen). Refcount runter, erst bei 0 entfernen."""
+        if username not in self.refcount:
+            return
+        self.refcount[username] -= 1
+        if self.refcount[username] <= 0:
+            self.refcount.pop(username, None)
+            self.users.pop(username, None)
 
     def online_users(self) -> list[str]:
-        """Alle User die in den letzten 60s aktiv waren."""
+        """Alle User die aktiv sind (Refcount > 0 UND last_seen < 60s)."""
         cutoff = time.time() - 60
-        return [u for u, ts in self.users.items() if ts > cutoff]
+        return [u for u, ts in self.users.items()
+                if ts > cutoff and self.refcount.get(u, 0) > 0]
 
 
 class SharedSessionManager:
@@ -68,6 +83,8 @@ class SharedSessionManager:
         self._turn_owner: dict[str, str | None] = {}
         # project_id → Presence-Tracking
         self._presence: dict[str, ProjectPresence] = {}
+        # #608: Queue → username-Mapping fuer Cleanup bei Queue-Drops
+        self._queue_user: dict[asyncio.Queue, tuple[str, str]] = {}  # queue → (project_id, username)
 
     def subscribe(self, project_id: str, username: str) -> asyncio.Queue:
         """Client meldet sich an — bekommt eine Queue für SSE-Events.
@@ -80,6 +97,7 @@ class SharedSessionManager:
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         self._subscribers[project_id].add(queue)
         self._presence[project_id].add(username)
+        self._queue_user[queue] = (project_id, username)  # #608
 
         # Presence-Update an alle Clients broadcasten
         self._broadcast_presence(project_id)
@@ -96,10 +114,12 @@ class SharedSessionManager:
             if not subs:
                 del self._subscribers[project_id]
                 self._turn_owner.pop(project_id, None)
+        # #608: Queue aus Mapping entfernen
+        self._queue_user.pop(queue, None)
 
         presence = self._presence.get(project_id)
         if presence:
-            presence.remove(username)
+            presence.remove(username)  # Refcount runter — entfernt nur wenn 0
             if not presence.online_users():
                 del self._presence[project_id]
             else:
@@ -132,9 +152,22 @@ class SharedSessionManager:
                 dead_queues.add(queue)
                 logger.warning("SharedSession: Queue full for %s, dropping client", project_id)
 
-        # Tote Queues aufräumen
+        # Tote Queues aufräumen — #608: inkl. Presence-Cleanup
+        presence_changed = False
         for dq in dead_queues:
             subs.discard(dq)
+            _queue_info = self._queue_user.pop(dq, None)
+            if _queue_info:
+                _, _dead_user = _queue_info
+                presence = self._presence.get(project_id)
+                if presence:
+                    presence.remove(_dead_user)
+                    presence_changed = True
+        if presence_changed:
+            if self._presence.get(project_id) and not self._presence[project_id].online_users():
+                del self._presence[project_id]
+            else:
+                self._broadcast_presence(project_id)
 
     def subscriber_count(self, project_id: str) -> int:
         """Anzahl verbundener Clients für ein Projekt."""

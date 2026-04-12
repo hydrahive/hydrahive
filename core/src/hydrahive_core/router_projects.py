@@ -317,7 +317,10 @@ def register_project_routes(
         # AGENT.md — eigener Text oder aus Template
         agent_md_text = req.agent_md.strip() if req.agent_md else ""
         if not agent_md_text:
-            template_dir = Path("/opt/hydrahive/installer/templates") / req.template
+            # #609: settings.installer_dir statt hardcoded /opt/... — konsistent
+            # mit der GET /templates API (router_core_misc.py)
+            from .settings import settings as _s
+            template_dir = _s.installer_dir / "templates" / req.template
             template_md = template_dir / "AGENT.md"
             if template_md.exists():
                 agent_md_text = template_md.read_text(encoding="utf-8")

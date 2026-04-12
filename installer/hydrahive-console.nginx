@@ -56,6 +56,8 @@ server {
 
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
     location /.well-known/ {
+        # v2 (#610): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/.well-known/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
@@ -66,6 +68,8 @@ server {
     }
 
     location /a2a/ {
+        # v2 (#610): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/a2a/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;

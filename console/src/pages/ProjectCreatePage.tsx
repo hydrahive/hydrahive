@@ -115,8 +115,11 @@ export function ProjectCreatePage() {
   // AGENT.md aus Template laden wenn noch nicht manuell bearbeitet
   useEffect(() => {
     if (step === 3 && !agentMdLoaded) {
-      // Template-AGENT.md vom Server laden
-      fetch(`/api/templates/${template}/agent-md`)
+      // #609: fetch mit Auth-Header — Endpoint ist auth-geschuetzt
+      const token = localStorage.getItem("hydrahive_token") || "";
+      fetch(`/api/templates/${template}/agent-md`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
         .then(r => r.ok ? r.text() : "")
         .then(text => {
           if (text) setAgentMd(text);

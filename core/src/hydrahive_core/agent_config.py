@@ -207,9 +207,12 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         "ask_agent",
     ]
 
-    # execution_modes: Standard safe, unrestricted für Admins konfigurierbar
+    # #611: execution_mode aus Projekt-Config uebernehmen (war hart auf "safe")
+    _default_mode = getattr(pcfg, "execution_mode", "safe") or "safe"
+    if _default_mode not in ("safe", "elevated", "unrestricted"):
+        _default_mode = "safe"
     exec_modes = ExecutionModesConfig(
-        default="safe",
+        default=_default_mode,
         safe=ExecutionModeProfile(permissions=[]),
     )
 
