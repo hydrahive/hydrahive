@@ -535,6 +535,41 @@ class SessionManager:
             return session
         return self._active[project_id]
 
+    def _write_session_memory(self, project_id: str, session: "Session") -> None:
+        """Schreibt eine Zusammenfassung der Session in die Projekt-Memory.
+
+        Wird beim Session-Ende aufgerufen wenn die Session >= MIN_MSGS Nachrichten hat.
+        Die letzte Zusammenfassung überschreibt die vorherige (nur 1 Datei pro Projekt).
+        """
+        MIN_MSGS = 4  # Mindestanzahl Nachrichten für einen Memory-Eintrag
+        MAX_CONTENT = 800  # Zeichen pro Nachricht (gekürzt)
+
+        msgs = [m for m in session.messages if m.role in ("user", "assistant")]
+        if len(msgs) < MIN_MSGS:
+            return
+
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+            lines = [f"# Letzte Session — {now}\n"]
+            # Letzte 10 User+Assistant-Nachrichten als Kontext
+            for m in msgs[-10:]:
+                role_label = "User" if m.role == "user" else "Assistent"
+                content = (m.content or "").strip()
+                if len(content) > MAX_CONTENT:
+                    content = content[:MAX_CONTENT] + "…"
+                lines.append(f"**{role_label}:** {content}\n")
+
+            memory_dir = self._projects_dir / project_id / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            memory_file = memory_dir / "last_session.md"
+            memory_file.write_text("\n".join(lines), encoding="utf-8")
+            logger.info("Session-Memory gespeichert: %s (%d Msgs → %s)",
+                        session.id[:8], len(msgs), memory_file)
+        except Exception as e:
+            logger.warning("Session-Memory konnte nicht gespeichert werden: %s", e)
+
     async def new_session(self, project_id: str) -> Session:
         """Neue Session starten — alte wird automatisch beendet und gespeichert."""
         async with self._get_lock(project_id):
@@ -542,6 +577,7 @@ class SessionManager:
                 old = self._active[project_id]
                 old.end()
                 self._db_end_session(old)
+                self._write_session_memory(project_id, old)
                 logger.info("Session beendet: %s (Projekt: %s, %d Nachrichten)",
                             old.id[:8], project_id, len(old.messages))
 
@@ -558,6 +594,7 @@ class SessionManager:
             if session:
                 session.end()
                 self._db_end_session(session)
+                self._write_session_memory(project_id, session)
                 logger.info("Session %s beendet", session.id[:8])
             if project_id in self._locks:
                 del self._locks[project_id]
