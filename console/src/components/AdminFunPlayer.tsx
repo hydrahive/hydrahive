@@ -140,7 +140,8 @@ export function AdminFunPlayer() {
       hist.push(bass);
       if (hist.length > 43) hist.shift(); // ~1s Historie bei 43fps
       const histAvg = hist.reduce((a, b) => a + b, 0) / hist.length;
-      const isBeat = bass > histAvg * 1.35 * sens && bass > 0.15;
+      // Sensitivity intuitiv: hoch = mehr Beats (niedrigerer Threshold)
+      const isBeat = bass > histAvg * (1.35 / sens) && bass > (0.25 / sens);
 
       // CSS-Variablen setzen — werden global auf :root vererbt
       const root = document.documentElement;

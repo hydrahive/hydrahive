@@ -261,43 +261,77 @@
   --adminfun-active: 0;
 }
 
-/* Sidebar-Icons pulsieren mit Bass wenn AdminFun aktiv */
-.adminfun-react aside [data-nav-item] svg,
-.adminfun-react nav [data-nav-item] svg {
-  transition: transform 0.08s ease-out, filter 0.08s ease-out;
-  transform: scale(calc(1 + var(--adminfun-bass, 0) * 0.15 * var(--adminfun-active, 0)));
-  filter: drop-shadow(0 0 calc(var(--adminfun-bass, 0) * 8px * var(--adminfun-active, 0)) rgba(168, 85, 247, calc(var(--adminfun-bass, 0) * 0.8)));
-}
-
-/* Beat-Pulse: alle Buttons mit einer subtilen Chromatic-Aberration bei Beats */
-body:not(.adminfun-disabled) [class*="rounded-full"],
-body:not(.adminfun-disabled) .adminfun-beat-target {
-  transition: box-shadow 0.1s ease-out;
-}
-body:not(.adminfun-disabled) [class*="rounded-full"] {
-  box-shadow: 0 0 calc(var(--adminfun-beat, 0) * 20px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.6 * var(--adminfun-active, 0)));
-}
-
-/* Body-Border glüht mit Mid-Range + Beat-Flash */
-body {
-  transition: box-shadow 0.06s ease-out;
-}
-body {
+/* Body-Border — inner glow der mit Mid atmet, kräftiger Pink-Flash bei Beats.
+   Via fixed overlay weil inset box-shadow am body nicht zuverlässig greift. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: var(--adminfun-active, 0);
+  transition: opacity 0.3s ease-out;
   box-shadow:
-    inset 0 0 calc(var(--adminfun-mid, 0) * 80px * var(--adminfun-active, 0)) rgba(168, 85, 247, calc(var(--adminfun-mid, 0) * 0.2 * var(--adminfun-active, 0))),
-    inset 0 0 calc(var(--adminfun-beat, 0) * 40px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.4 * var(--adminfun-active, 0)));
+    inset 0 0 calc(var(--adminfun-mid, 0) * 120px) rgba(168, 85, 247, calc(var(--adminfun-mid, 0) * 0.5)),
+    inset 0 0 calc(var(--adminfun-beat, 0) * 80px) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.7)),
+    inset 0 0 calc(var(--adminfun-bass, 0) * 60px) rgba(59, 130, 246, calc(var(--adminfun-bass, 0) * 0.4));
 }
 
-/* Logo / Hauptelemente bumpen mit Beats */
+/* Sidebar (alle aside-Elemente) bekommt einen lila Rand der mit Bass pulsiert */
+aside {
+  transition: border-color 0.08s ease-out, box-shadow 0.08s ease-out;
+}
+body[style*="--adminfun-active"] aside,
+:root aside {
+  box-shadow:
+    inset 0 0 calc(var(--adminfun-bass, 0) * 30px * var(--adminfun-active, 0)) rgba(168, 85, 247, calc(var(--adminfun-bass, 0) * 0.6 * var(--adminfun-active, 0))),
+    0 0 calc(var(--adminfun-beat, 0) * 20px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.5 * var(--adminfun-active, 0)));
+}
+
+/* Sidebar-Links pulsieren mit Bass — alle a-Tags in aside */
+aside a {
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
+  transform: scale(calc(1 + var(--adminfun-bass, 0) * 0.08 * var(--adminfun-active, 0)));
+  filter: drop-shadow(0 0 calc(var(--adminfun-bass, 0) * 6px * var(--adminfun-active, 0)) rgba(168, 85, 247, 0.8));
+}
+
+/* Alle SVG-Icons pulsieren (Sidebar, Buttons, Header) */
+svg {
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
+  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.12 * var(--adminfun-active, 0)));
+  filter: drop-shadow(0 0 calc(var(--adminfun-treble, 0) * 4px * var(--adminfun-active, 0)) rgba(236, 72, 153, 0.7));
+}
+
+/* Buttons mit runden Rahmen bekommen Pink-Pulse bei Beats */
+button[class*="rounded"], a[class*="rounded"] {
+  transition: box-shadow 0.08s ease-out;
+}
+button[class*="rounded"] {
+  box-shadow: 0 0 calc(var(--adminfun-beat, 0) * 18px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.7 * var(--adminfun-active, 0)));
+}
+
+/* H1/H2 + alles mit .font-bold bekommt Chromatic-Shift bei Treble */
+h1, h2, .font-bold, .font-semibold {
+  transition: text-shadow 0.08s ease-out;
+  text-shadow:
+    calc(var(--adminfun-treble, 0) * 3px * var(--adminfun-active, 0)) 0 rgba(236, 72, 153, calc(var(--adminfun-treble, 0) * 0.8)),
+    calc(var(--adminfun-treble, 0) * -3px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, calc(var(--adminfun-treble, 0) * 0.8));
+}
+
+/* Main-Content scalet minimal mit Beat */
+main {
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.005 * var(--adminfun-active, 0)));
+}
+
+/* Explizite Opt-in-Klassen bleiben erhalten für spezielle Spots */
 .adminfun-bump {
   transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.08 * var(--adminfun-active, 0)));
+  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.15 * var(--adminfun-active, 0)));
 }
-
-/* Chromatic-Shift bei Treble (subtile RGB-Split auf Text) */
 .adminfun-chroma {
-  text-shadow:
-    calc(var(--adminfun-treble, 0) * 2px * var(--adminfun-active, 0)) 0 rgba(236, 72, 153, 0.5),
-    calc(var(--adminfun-treble, 0) * -2px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, 0.5);
   transition: text-shadow 0.08s ease-out;
+  text-shadow:
+    calc(var(--adminfun-treble, 0) * 4px * var(--adminfun-active, 0)) 0 rgba(236, 72, 153, 0.8),
+    calc(var(--adminfun-treble, 0) * -4px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, 0.8);
 }
