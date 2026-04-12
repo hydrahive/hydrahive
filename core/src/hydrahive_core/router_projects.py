@@ -786,6 +786,17 @@ def register_project_routes(
             "message_count": len(session.messages),
         }
 
+    @auth_router.delete("/projects/{project_id}/session")
+    async def delete_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
+        """Beendet die aktive Session — wird von /clear im Frontend aufgerufen."""
+        _check_project_access(auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        session = await sessions.end_session(project_id)
+        if not session:
+            return {"ended": False}
+        return {"ended": True, "session_id": session.id, "message_count": len(session.messages)}
+
     @auth_router.post("/projects/{project_id}/session/start")
     async def start_session(project_id: str, auth: tuple[str, str] = Depends(require_auth)):
         _check_project_access(auth, project_id)
