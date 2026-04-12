@@ -28,6 +28,10 @@ from typing import Any
 
 from .settings import settings
 
+# Discord-Client-Registry — wird von router_user_integrations + butler_executor genutzt.
+# Dict {personal_agent_id: AgentDiscordClient}
+_discord_clients: dict = {}
+
 logger = logging.getLogger(__name__)
 
 PROJECTS_ROOT = settings.projects_dir

@@ -87,7 +87,11 @@ class ProjectLoader:
         if config is None:
             return None
         with self._lock:
+            existing = self._projects.get(config.id)
             self._projects[config.id] = config
+        # Nur loggen wenn neu oder LLM/Boss geändert (Watchdog-Debounce gegen Spam)
+        if existing is not None:
+            return config
         if getattr(config, "is_v2", False):
             logger.info(
                 "Projekt registriert: %s ('%s') | v2 | LLM: %s/%s",
