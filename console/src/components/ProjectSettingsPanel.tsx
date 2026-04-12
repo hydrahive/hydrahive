@@ -104,11 +104,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [messengerSaving, setMessengerSaving] = useState(false);
   const [messengerSuccess, setMessengerSuccess] = useState("");
 
+  // Members (#570)
+  const [members, setMembers] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<string[]>([]);
+  const [newMember, setNewMember] = useState("");
+
   useEffect(() => {
     loadSettings();
     loadKeys();
     loadWhatsAppStatus();
     loadVoices();
+    // Alle registrierten User laden (#570)
+    api.get<Record<string, unknown>>("/users").then(d => {
+      setAllUsers(Object.keys(d || {}));
+    }).catch(() => {});
   }, [projectId]);
 
   async function loadWhatsAppStatus() {
@@ -278,6 +287,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setAgentMd(d.agent_md || "");
       setExecutionMode(d.execution_mode || "safe");
       setMaxToolRounds(d.max_tool_rounds ?? 50);
+      setMembers(d.members || []);
       // Messenger-Config laden (#569)
       const m = d.messenger || {};
       setDiscordBotTokenEnv(m.discord?.bot_token_env || "");
@@ -314,6 +324,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         agent_md: agentMd,
         execution_mode: executionMode,
         max_tool_rounds: maxToolRounds,
+        members,
       });
       setSuccess("Gespeichert!");
       setTimeout(() => setSuccess(""), 3000);
@@ -442,6 +453,44 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               onChange={e => setMaxToolRounds(Number(e.target.value))}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
             />
+          </div>
+        </div>
+
+        {/* Members (#570) */}
+        <div>
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
+            <Hash className="h-3 w-3" /> Members (Zugriff auf dieses Projekt)
+          </label>
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
+            {members.map(m => (
+              <span key={m} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-[10px] font-mono">
+                {m}
+                <button onClick={() => setMembers(prev => prev.filter(x => x !== m))}
+                  className="text-muted-foreground hover:text-destructive transition-colors ml-0.5">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            ))}
+            {members.length === 0 && <span className="text-[10px] text-muted-foreground">Keine Members — nur Admins haben Zugriff</span>}
+          </div>
+          <div className="flex gap-1.5">
+            <select
+              value={newMember}
+              onChange={e => setNewMember(e.target.value)}
+              className="flex-1 rounded-lg border bg-background px-2 py-1 text-xs"
+            >
+              <option value="">User auswählen...</option>
+              {allUsers.filter(u => !members.includes(u)).map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => { if (newMember && !members.includes(newMember)) { setMembers(p => [...p, newMember]); setNewMember(""); } }}
+              disabled={!newMember}
+              className="rounded-lg border bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
+            >
+              Hinzufügen
+            </button>
           </div>
         </div>
 
