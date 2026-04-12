@@ -488,8 +488,14 @@ class Orchestrator:
             if wf_text:
                 system_prompt = system_prompt + "\n\n" + wf_text
 
-        # 3c. Plan Mode Injection
-        from .tool_registry import is_plan_mode as _is_plan_mode, get_plan_file as _get_plan_file
+        # 3c. Plan Mode Injection — v2: is_plan_mode/get_plan_file existieren nicht
+        # (v1-Reste, bereits im Tool-Registry-Cleanup entfernt). Plan-Mode
+        # laeuft jetzt via enter_plan_mode Tool ohne separaten Modus-State.
+        try:
+            from .tool_registry import is_plan_mode as _is_plan_mode, get_plan_file as _get_plan_file
+        except ImportError:
+            _is_plan_mode = lambda _pid: False
+            _get_plan_file = lambda _pid: None
         if _is_plan_mode(project_id):
             _pf = _get_plan_file(project_id) or "plan.md"
             system_prompt += (
@@ -532,7 +538,10 @@ class Orchestrator:
         # if plugin_schemas:
         #     litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
         # Plan Mode: nur read-only Tools + enter/exit_plan_mode + file_write (für Plan-Datei)
-        from .tool_registry import is_plan_mode as _is_plan_mode
+        try:
+            from .tool_registry import is_plan_mode as _is_plan_mode
+        except ImportError:
+            _is_plan_mode = lambda _pid: False
         if _is_plan_mode(project_id) and litellm_tools:
             _PLAN_MODE_ALLOWED = {"enter_plan_mode", "exit_plan_mode", "file_write",
                                   "file_read", "file_search"}
