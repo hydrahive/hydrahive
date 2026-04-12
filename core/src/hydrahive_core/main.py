@@ -300,9 +300,9 @@ async def lifespan(app: FastAPI):
             except Exception as _e:
                 logger.debug("system_topology für %s: %s", _agent_dir.name, _e)
 
-    # WhatsApp-Sessions für User mit konfiguriertem Account wiederherstellen
+    # WhatsApp-Sessions für alle Projekte mit aktiver Config wiederherstellen (#615)
     try:
-        await setup_whatsapp_sessions(load_users=_load_users, logger_=logger)
+        await setup_whatsapp_sessions(logger_=logger)
     except Exception as e:
         logger.warning("WhatsApp-Setup fehlgeschlagen: %s", e)
 

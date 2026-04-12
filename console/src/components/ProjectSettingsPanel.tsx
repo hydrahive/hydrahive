@@ -127,7 +127,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
   async function loadWhatsAppStatus() {
     try {
-      const res = await api.get<any>("/me/whatsapp");
+      const res = await api.get<any>(`/projects/${projectId}/whatsapp`);
       const d = res as any;
       setWaStatus(d.status || "unknown");
       setWaQr(d.qr || "");
@@ -160,7 +160,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     setWaSuccess("");
     try {
       const nums = (s: string) => s.split("\n").map(n => n.trim()).filter(Boolean);
-      await api.put("/me/whatsapp/config", {
+      await api.put(`/projects/${projectId}/whatsapp/config`, {
         private_chats_enabled: waPrivateChats,
         group_chats_enabled: waGroupChats,
         require_keyword: waRequireKeyword || null,
@@ -237,14 +237,14 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   async function connectWhatsApp() {
     setWaConnecting(true);
     try {
-      const res = await api.post<any>("/me/whatsapp/connect", {});
+      const res = await api.post<any>(`/projects/${projectId}/whatsapp/connect`, {});
       const d = res as any;
       setWaStatus(d.status || "connecting");
       setWaQr(d.qr || "");
       // Polling starten für QR-Update
       const poll = setInterval(async () => {
         try {
-          const s = await api.get<any>("/me/whatsapp");
+          const s = await api.get<any>(`/projects/${projectId}/whatsapp`);
           const sd = s as any;
           setWaStatus(sd.status || "unknown");
           setWaQr(sd.qr || "");
@@ -268,7 +268,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
   async function disconnectWhatsApp() {
     try {
-      await api.delete<any>("/me/whatsapp");
+      await api.delete<any>(`/projects/${projectId}/whatsapp`);
       setWaStatus("disconnected");
       setWaQr("");
       setWaPhone("");

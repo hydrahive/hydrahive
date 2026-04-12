@@ -297,7 +297,8 @@ def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> 
     user = users.get(username, {})
     wks = user.get("wks", {})
     discord_cfg  = load_discord_config(username)
-    whatsapp_cfg = load_whatsapp_config(username)
+    # #615: WhatsApp-Config ist projekt-scoped — für /me-Overview das persönliche Projekt
+    whatsapp_cfg = load_whatsapp_config(f"personal_{username}")
     matrix_id = user.get("matrix_id", "")
 
     overview = [
@@ -915,9 +916,16 @@ def register_user_integration_routes(
 
     @auth_router.get("/me/whatsapp")
     async def get_my_whatsapp(auth: tuple = Depends(require_auth)):
+        """Legacy-Endpoint: liefert WhatsApp-Status des persönlichen Projekts.
+
+        Seit #615 ist WhatsApp projekt-scoped. Dieser Endpoint ist ein
+        Alias auf /projects/personal_{username}/whatsapp und bleibt
+        für die alte MyAgentPage erhalten.
+        """
         username = _username_from_auth(auth)
+        project_id = f"personal_{username}"
         from .whatsapp_agent import bridge_get_status, load_whatsapp_config
-        cfg = load_whatsapp_config(username)
+        cfg = load_whatsapp_config(project_id)
         if not cfg or not cfg.get("enabled"):
             return {"configured": False, "status": "disconnected", "qr": None, "phone": None,
                     "private_chats_enabled": cfg.get("private_chats_enabled", True) if cfg else True,
@@ -926,14 +934,13 @@ def register_user_integration_routes(
                     "allowed_numbers":       cfg.get("allowed_numbers", []) if cfg else [],
                     "blocked_numbers":       cfg.get("blocked_numbers", []) if cfg else [],
                     "owner_numbers":         cfg.get("owner_numbers", []) if cfg else []}
-        agent_id = f"personal_{username}"
-        bridge = await bridge_get_status(agent_id)
+        bridge = await bridge_get_status(project_id)
         # Telefonnummer in Config speichern (für Loop-Schutz)
         bridge_phone = bridge.get("phone") or ""
         if bridge_phone and cfg.get("phone") != bridge_phone:
             from .whatsapp_agent import save_whatsapp_config as _save_wa
             cfg["phone"] = bridge_phone
-            _save_wa(username, cfg)
+            _save_wa(project_id, cfg)
 
         return {
             "configured": True,
@@ -954,11 +961,12 @@ def register_user_integration_routes(
     @auth_router.put("/me/whatsapp/config")
     async def update_my_whatsapp_config(req: WhatsAppConfigRequest, auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)
+        project_id = f"personal_{username}"
         from .whatsapp_agent import load_whatsapp_config, save_whatsapp_config
-        cfg = load_whatsapp_config(username) or {"enabled": True}
+        cfg = load_whatsapp_config(project_id) or {"enabled": True}
         for k, v in req.model_dump(exclude_none=True).items():
             cfg[k] = v
-        save_whatsapp_config(username, cfg)
+        save_whatsapp_config(project_id, cfg)
         return {"updated": True}
 
     @auth_router.post("/me/whatsapp/voice-preview")
@@ -1003,12 +1011,12 @@ def register_user_integration_routes(
     @auth_router.post("/me/whatsapp/connect")
     async def connect_my_whatsapp(auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)
+        project_id = f"personal_{username}"
         from .whatsapp_agent import bridge_start_session, load_whatsapp_config, save_whatsapp_config
-        existing = load_whatsapp_config(username) or {}
+        existing = load_whatsapp_config(project_id) or {}
         existing["enabled"] = True
-        save_whatsapp_config(username, existing)
-        agent_id = f"personal_{username}"
-        result = await bridge_start_session(agent_id)
+        save_whatsapp_config(project_id, existing)
+        result = await bridge_start_session(project_id)
         audit_log("whatsapp.connect", details={"user": username})
         return {"configured": True, "status": result.get("status"), "qr": result.get("qr"), "phone": result.get("phone")}
 
@@ -1027,10 +1035,10 @@ def register_user_integration_routes(
     @auth_router.delete("/me/whatsapp")
     async def delete_my_whatsapp(auth: tuple = Depends(require_auth)):
         username = _username_from_auth(auth)
+        project_id = f"personal_{username}"
         from .whatsapp_agent import bridge_disconnect, delete_whatsapp_config
-        agent_id = f"personal_{username}"
-        await bridge_disconnect(agent_id)
-        delete_whatsapp_config(username)
+        await bridge_disconnect(project_id)
+        delete_whatsapp_config(project_id)
         audit_log("whatsapp.removed", details={"user": username})
         return {"disconnected": True}
 
@@ -1048,21 +1056,24 @@ def register_user_integration_routes(
         if request.headers.get("X-Bridge-Secret", "") != secret:
             raise HTTPException(403, "Ungültiges Bridge-Secret")
 
-        from .whatsapp_agent import bridge_start_session, load_whatsapp_config as _load_wa_cfg
+        # #615: Bridge-Restart → alle Projekte mit aktiver WhatsApp-Config neu starten
+        from .whatsapp_agent import (
+            bridge_start_session,
+            load_whatsapp_config as _load_wa_cfg,
+            list_whatsapp_projects as _list_wa,
+        )
 
-        users = load_users()
         restarted = []
-        for username in users:
-            cfg = _load_wa_cfg(username)
+        for project_id in _list_wa():
+            cfg = _load_wa_cfg(project_id)
             if not cfg or not cfg.get("enabled"):
                 continue
-            agent_id = f"personal_{username}"
             try:
-                result = await bridge_start_session(agent_id)
-                logger.info("WhatsApp-Session nach Bridge-Neustart: %s → %s", agent_id, result.get("status"))
-                restarted.append(agent_id)
+                result = await bridge_start_session(project_id)
+                logger.info("WhatsApp-Session nach Bridge-Neustart: %s → %s", project_id, result.get("status"))
+                restarted.append(project_id)
             except Exception as e:
-                logger.warning("WhatsApp-Session Reconnect fehlgeschlagen für %s: %s", agent_id, e)
+                logger.warning("WhatsApp-Session Reconnect fehlgeschlagen für %s: %s", project_id, e)
 
         return {"ok": True, "restarted": restarted}
 
@@ -1121,17 +1132,23 @@ def register_user_integration_routes(
         sender = from_jid.split("@")[0] if "@" in from_jid else from_jid
         is_group = from_jid.endswith("@g.us")
 
-        # Filterkonfiguration laden
-        username = agent_id.removeprefix("personal_")
-        from .whatsapp_agent import load_whatsapp_config as _load_wa
-        wa_cfg = _load_wa(username) or {}
+        # #615: Projekt-Auflösung ZUERST — Session-ID = Projekt-ID (via Router-Fallback)
+        from .messenger_router import messenger_router as _mr
+        _routed_project_id = _mr.resolve_whatsapp(agent_id) or agent_id
 
-        # Agent-Loop-Schutz: Nachrichten von anderen HydraHive-Agenten ignorieren
-        all_users = load_users()
-        for _uname, _udata in all_users.items():
-            if _uname == username:
+        # Filterkonfiguration aus der Projekt-Config des ROUTETEN Projekts laden
+        from .whatsapp_agent import load_whatsapp_config as _load_wa, list_whatsapp_projects as _list_wa
+        wa_cfg = _load_wa(_routed_project_id) or {}
+
+        # Für Butler-Owner-Check: username aus agent_id extrahieren (nur bei personal_*)
+        # Nicht-personale Projekte haben keinen direkten Owner — leer lassen
+        username = agent_id.removeprefix("personal_") if agent_id.startswith("personal_") else ""
+
+        # Agent-Loop-Schutz: Nachrichten die von einer ANDEREN HydraHive-Session kommen ignorieren
+        for _other_pid in _list_wa():
+            if _other_pid == _routed_project_id:
                 continue
-            _other_cfg = _load_wa(_uname)
+            _other_cfg = _load_wa(_other_pid)
             if not _other_cfg:
                 continue
             _other_phone = _other_cfg.get("phone", "").lstrip("+")
@@ -1228,14 +1245,13 @@ def register_user_integration_routes(
         except Exception as _be:
             logger.warning("Butler-Check fehlgeschlagen: %s", _be)
 
-        # #320: Original WhatsApp-Session-ID für Bridge-Sends (Butler kann agent_id umrouten)
-        wa_session_id = f"personal_{username}"
+        # #615: Bridge-Session-ID = ursprüngliche Session (Butler kann agent_id/project umrouten,
+        # aber die Antwort geht über die Session auf der die Nachricht reinkam)
+        wa_session_id = agent_id
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
-        # v2: Messenger-Router für Projekt-Lookup nutzen
-        from .messenger_router import messenger_router as _mr
-        _routed_project_id = _mr.resolve_whatsapp(agent_id) or agent_id
+        # _routed_project_id wurde oben bereits aus agent_id bestimmt
 
         # v2: Projekt-scoped Butler-Flows prüfen (#566)
         try:

@@ -1213,3 +1213,136 @@ def register_project_routes(
             "file_count": len(files_info),
             "files": files_info,
         }
+
+    # ── WhatsApp pro Projekt (#615) ────────────────────────────────────────────
+
+    from pydantic import BaseModel as _BM
+
+    class _WhatsAppCfgReq(_BM):
+        private_chats_enabled: bool | None = None
+        group_chats_enabled: bool | None = None
+        require_keyword: str | None = None
+        allowed_numbers: list[str] | None = None
+        blocked_numbers: list[str] | None = None
+        owner_numbers: list[str] | None = None
+        voice_mode: str | None = None
+        voice_name: str | None = None
+
+    @auth_router.get("/projects/{project_id}/whatsapp")
+    async def get_project_whatsapp(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Status + Config der WhatsApp-Session des Projekts."""
+        _check_project_access(_auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .whatsapp_agent import bridge_get_status, load_whatsapp_config
+        cfg = load_whatsapp_config(project_id)
+        if not cfg or not cfg.get("enabled"):
+            return {
+                "project_id": project_id,
+                "configured": False,
+                "status": "disconnected",
+                "qr": None,
+                "phone": None,
+                "private_chats_enabled": (cfg or {}).get("private_chats_enabled", True),
+                "group_chats_enabled":   (cfg or {}).get("group_chats_enabled", False),
+                "require_keyword":       (cfg or {}).get("require_keyword", ""),
+                "allowed_numbers":       (cfg or {}).get("allowed_numbers", []),
+                "blocked_numbers":       (cfg or {}).get("blocked_numbers", []),
+                "owner_numbers":         (cfg or {}).get("owner_numbers", []),
+                "voice_mode":            (cfg or {}).get("voice_mode", "never"),
+                "voice_name":            (cfg or {}).get("voice_name", "de-DE-KatjaNeural"),
+            }
+
+        bridge = await bridge_get_status(project_id)
+        bridge_phone = bridge.get("phone") or ""
+        # Telefonnummer in Config speichern (Loop-Schutz)
+        if bridge_phone and cfg.get("phone") != bridge_phone:
+            from .whatsapp_agent import save_whatsapp_config as _save_wa
+            cfg["phone"] = bridge_phone
+            _save_wa(project_id, cfg)
+
+        return {
+            "project_id": project_id,
+            "configured": True,
+            "status": bridge.get("status", "disconnected"),
+            "qr": bridge.get("qr"),
+            "bridge_error": bridge.get("error") or None,
+            "phone": bridge_phone or cfg.get("phone", ""),
+            "private_chats_enabled": cfg.get("private_chats_enabled", True),
+            "group_chats_enabled":   cfg.get("group_chats_enabled", False),
+            "require_keyword":       cfg.get("require_keyword", ""),
+            "allowed_numbers":       cfg.get("allowed_numbers", []),
+            "blocked_numbers":       cfg.get("blocked_numbers", []),
+            "owner_numbers":         cfg.get("owner_numbers", []),
+            "voice_mode":            cfg.get("voice_mode", "never"),
+            "voice_name":            cfg.get("voice_name", "de-DE-KatjaNeural"),
+        }
+
+    @auth_router.post("/projects/{project_id}/whatsapp/connect")
+    async def connect_project_whatsapp(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Startet eine eigene WhatsApp-Session für dieses Projekt.
+
+        Jedes Projekt bekommt damit seine eigene Handynummer — keine
+        geteilten Sessions mehr zwischen Projekten (#615).
+        """
+        _check_project_access(_auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .whatsapp_agent import (
+            bridge_start_session,
+            load_whatsapp_config,
+            save_whatsapp_config,
+        )
+        existing = load_whatsapp_config(project_id) or {}
+        existing["enabled"] = True
+        save_whatsapp_config(project_id, existing)
+        result = await bridge_start_session(project_id)
+        audit_log("whatsapp.connect", target=project_id, project_id=project_id)
+        return {
+            "configured": True,
+            "status": result.get("status"),
+            "qr": result.get("qr"),
+            "phone": result.get("phone"),
+        }
+
+    @auth_router.delete("/projects/{project_id}/whatsapp")
+    async def disconnect_project_whatsapp(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Trennt die WhatsApp-Session des Projekts und löscht die Config."""
+        _check_project_access(_auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .whatsapp_agent import bridge_disconnect, delete_whatsapp_config
+        result = await bridge_disconnect(project_id)
+        delete_whatsapp_config(project_id)
+        audit_log("whatsapp.disconnect", target=project_id, project_id=project_id)
+        return {"disconnected": True, "bridge_result": result}
+
+    @auth_router.put("/projects/{project_id}/whatsapp/config")
+    async def update_project_whatsapp_config(
+        project_id: str,
+        req: _WhatsAppCfgReq,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Filter- und Voice-Config des Projekts aktualisieren."""
+        _check_project_access(_auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .whatsapp_agent import load_whatsapp_config, save_whatsapp_config
+        cfg = load_whatsapp_config(project_id) or {"enabled": True}
+        for k, v in req.model_dump(exclude_none=True).items():
+            cfg[k] = v
+        save_whatsapp_config(project_id, cfg)
+        return {"updated": True}
