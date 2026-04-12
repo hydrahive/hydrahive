@@ -576,19 +576,85 @@ class ShellExecTool(BaseTool):
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
 
         import shutil
-        _use_sandbox = not unrestricted and shutil.which("bwrap") is not None
+        # bwrap-Funktionstest: einmalig cachen ob Sandbox lauffaehig ist
+        if not hasattr(ShellExecTool, "_bwrap_works"):
+            ShellExecTool._bwrap_works = False
+            if shutil.which("bwrap"):
+                try:
+                    import subprocess as _sp
+                    _test = _sp.run(
+                        ["bwrap", "--ro-bind", "/usr", "/usr", "--proc", "/proc",
+                         "--dev", "/dev", "--die-with-parent", "--", "/bin/true"],
+                        capture_output=True, timeout=5, check=False,
+                    )
+                    ShellExecTool._bwrap_works = (_test.returncode == 0)
+                    if not ShellExecTool._bwrap_works:
+                        logger.warning("bwrap ist installiert aber nicht funktionsfaehig: %s",
+                                       _test.stderr.decode(errors='replace')[:200])
+                except Exception as _e:
+                    logger.warning("bwrap-Funktionstest fehlgeschlagen: %s", _e)
+
+        _use_sandbox = not unrestricted and ShellExecTool._bwrap_works
+        # Fail-closed: Safe-Mode ohne funktionierende Sandbox → verweigern (#593)
+        if kwargs.get("_execution_mode") == "safe" and not _use_sandbox:
+            return {
+                "error": "shell_exec im safe-Modus verweigert: Sandbox (bwrap) nicht funktionsfaehig. "
+                         "Administrator muss bwrap mit subuid/subgid einrichten oder "
+                         "execution_mode auf 'unrestricted' setzen (Admin-only).",
+                "command": command, "exit_code": -1, "blocked": True,
+            }
         if _use_sandbox and kwargs.get("_execution_mode") == "safe":
-            _quoted = __import__('shlex').quote(command)
+            import shlex as _shlex
+            _quoted = _shlex.quote(command)
+            # Projekt-Verzeichnis ermitteln (fuer Scope)
+            _project_dir = f"/projects/{project_id}" if project_id else ""
+            # Sicherstellen dass cwd im Projekt-Dir oder /tmp liegt
+            _cwd_resolved = str(Path(safe_cwd).resolve())
+            _cwd_in_scope = (
+                _cwd_resolved.startswith("/tmp") or
+                (_project_dir and _cwd_resolved.startswith(_project_dir))
+            )
+            if not _cwd_in_scope:
+                # Fallback auf Projekt-Dir oder /tmp
+                safe_cwd = _project_dir if _project_dir and Path(_project_dir).exists() else "/tmp"
+                _cwd_resolved = safe_cwd
+
+            # Minimale Sandbox — nur System-Binaries/Libs + Projekt + /tmp
+            # NICHT `/` komplett mounten (#593: verhindert Host-Leak)
+            _bind_args = [
+                "--ro-bind", "/usr", "/usr",
+                "--ro-bind", "/bin", "/bin",
+                "--ro-bind", "/lib", "/lib",
+                "--ro-bind", "/lib64", "/lib64",
+                "--ro-bind", "/sbin", "/sbin",
+                "--ro-bind-try", "/etc/alternatives", "/etc/alternatives",
+                "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
+                "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
+                "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
+                "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
+                "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
+                "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
+                "--bind", "/tmp", "/tmp",
+                "--dev", "/dev",
+                "--proc", "/proc",
+                "--setenv", "HOME", "/tmp",
+                "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            ]
+            # Projekt-Dir read-write binden (wenn vorhanden)
+            if _project_dir and Path(_project_dir).exists():
+                _bind_args += ["--bind", _project_dir, _project_dir]
+            # cwd read-write binden falls ausserhalb /tmp/Projekt
+            if safe_cwd not in {"/tmp", _project_dir} and Path(safe_cwd).exists():
+                _bind_args += ["--bind", safe_cwd, safe_cwd]
+
+            _bind_cmd = " ".join(_shlex.quote(a) for a in _bind_args)
             exec_command = (
-                f"bwrap --ro-bind / / "
-                f"--bind {__import__('shlex').quote(safe_cwd)} {__import__('shlex').quote(safe_cwd)} "
-                f"--bind /tmp /tmp "
-                f"--dev /dev --proc /proc "
-                f"--unshare-net "
+                f"bwrap {_bind_cmd} "
                 f"--die-with-parent "
                 f"-- bash -c {_quoted}"
             )
-            logger.info("shell_exec [%s] (SANDBOX/bwrap): %s", agent_id, command[:120])
+            logger.info("shell_exec [%s] (SANDBOX/bwrap scope=%s): %s",
+                        agent_id, _project_dir or "/tmp", command[:120])
         elif unrestricted:
             exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
             logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
