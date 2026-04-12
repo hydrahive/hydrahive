@@ -526,6 +526,35 @@ class Orchestrator:
         # Tool-Messages werden von as_llm_message() zu assistant konvertiert
         history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
+
+        # ── Confirmation-Injection (#616) ────────────────────────────────────
+        # Wenn der User nur kurz bestätigt (ja/ok/mach das/...) und die letzte
+        # Assistent-Nachricht eine Rückfrage enthielt ("Soll ich...?"),
+        # wird ein Hinweis injiziert: direkt loslegen, keine erneuten Reads.
+        _CONFIRM_WORDS = {"ja", "ok", "yes", "mach das", "mach es", "go", "weiter",
+                          "los", "bitte", "klar", "jep", "jap", "yep", "yup", "sure",
+                          "mach", "tu es", "do it", "proceed"}
+        _QUESTION_MARKERS = ("soll ich", "soll ich das", "implementiere ich", "lege ich los",
+                             "machen?", "anfangen?", "starten?", "umsetzen?", "fortfahren?")
+        _user_short = content.strip().lower().rstrip("!.,?")
+        _last_asst = next(
+            (m["content"] for m in reversed(history) if m.get("role") == "assistant"),
+            ""
+        ) or ""
+        _is_confirmation = _user_short in _CONFIRM_WORDS and len(content.strip()) <= 20
+        _was_question = any(marker in _last_asst.lower() for marker in _QUESTION_MARKERS)
+        if _is_confirmation and _was_question:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "[Hinweis] Der User hat bestätigt. Du hast in diesem Gespräch bereits "
+                    "alle relevanten Dateien gelesen und eine Analyse erstellt. "
+                    "Führe die geplanten Änderungen JETZT direkt aus — lies keine Dateien "
+                    "erneut die du bereits in diesem Gespräch gelesen hast."
+                ),
+            })
+            logger.debug("Confirmation-Injection: User bestätigte nach Rückfrage")
+
         # 5. Verfügbare Tools — v2: immer alle 9 Core-Tools
         boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
