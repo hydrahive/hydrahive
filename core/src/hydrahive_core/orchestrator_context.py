@@ -345,16 +345,30 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
 
-        # Memory-Schreib-Anweisung: Agent soll write_memory aktiv nutzen
+        # Memory-Schreib-Anweisung: Agent soll write_memory aktiv nutzen (wie Claude Code)
         parts.append(
-            "## Gedächtnis-Regel\n\n"
-            "Nutze `write_memory` aktiv nach abgeschlossenen Aufgaben:\n"
-            "- Nach jedem implementierten Feature: Dateiname, was geändert wurde, warum\n"
-            "- Nach jedem Debug/Fix: Problem, Ursache, Lösung\n"
-            "- Nach jeder Analyse: Projektstruktur, wichtige Pfade, offene Punkte\n"
-            "- Schreibe kurz und präzise (max. 300 Wörter pro Eintrag)\n"
-            "- Kontext-ID = Thema (z.B. 'ship_defense_implementation')\n\n"
-            "So kannst du in der nächsten Session sofort weiterarbeiten ohne alles neu einzulesen."
+            "## Gedächtnis-Regel (Memory-System)\n\n"
+            "Nutze `write_memory` aktiv — genau wie ein erfahrener Entwickler Notizen macht.\n\n"
+            "**Wann schreiben:**\n"
+            "- Nach jedem implementierten Feature oder Fix\n"
+            "- Nach jeder wichtigen Analyse (Projektstruktur, Pfade, Abhängigkeiten)\n"
+            "- Nach Entscheidungen die du später begründen können möchtest\n"
+            "- Immer wenn du denkst 'das werde ich in der nächsten Session wieder brauchen'\n\n"
+            "**Format (Frontmatter + Inhalt):**\n"
+            "```\n"
+            "---\n"
+            "name: Kurzer Titel\n"
+            "description: Ein Satz was drin steht\n"
+            "type: project | feedback | reference\n"
+            "---\n\n"
+            "## Was wurde gemacht\n"
+            "...\n\n"
+            "**Why:** Warum war das nötig\n"
+            "**Status:** done | in_progress | blocked\n"
+            "```\n\n"
+            "**Kontext-IDs:** thematisch benennen, z.B. `ship_defense_packet`, `project_structure`, `open_issues`\n\n"
+            "**Wichtig:** Schreibe auch einen Index-Eintrag in `MEMORY.md` (context_id: `memory_index`) "
+            "damit du beim nächsten `read_memory` sofort weißt was du weißt."
         )
 
     # v2: A-MEM Globaler Wissens-Prefetch (#563)
