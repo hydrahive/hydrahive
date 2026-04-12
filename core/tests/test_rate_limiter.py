@@ -98,17 +98,5 @@ def test_ask_agent_tool_check_agent_call():
         mock_rl.check_agent_call.assert_called_once_with("agent-src")
 
 
-def test_delegate_agent_tool_check_agent_call():
-    """DelegateAgentTool ruft check_agent_call auf wenn _rate_limiter gesetzt ist."""
-    from unittest.mock import MagicMock, patch
-    from hydrahive_core import tool_registry as tr
-
-    mock_rl = MagicMock()
-    mock_rl.check_agent_call.side_effect = RuntimeError("blockiert")
-
-    with patch.object(tr, "_rate_limiter", mock_rl):
-        tool = tr.DelegateAgentTool()
-        import asyncio
-        with pytest.raises(RuntimeError, match="blockiert"):
-            asyncio.run(tool.execute("agent-src", "proj-1", target="agent-dst", task="mach was"))
-        mock_rl.check_agent_call.assert_called_once_with("agent-src")
+# v2 (#588): DelegateAgentTool wurde entfernt (war v1 Worker-Dispatch).
+# Ersatz: AskAgentTool (ask_agent) — testen wir in #590 mit v2-Fixtures.

@@ -56,12 +56,8 @@ async def _mcp_schemas_for_agent(
 
 
 def _plugin_schemas_for_agent(agent_cfg: AgentConfig) -> list[dict]:
-    """Holt litellm-Tool-Schemas von Plugins die dem Agent zugewiesen sind (#110)."""
-    from .plugin_manager import plugin_manager as _pm
-    tools = _pm.get_plugin_tools_for_agent(agent_cfg.id)
-    if not tools:
-        return []
-    return [t.as_litellm_tool() for t in tools]
+    """v2: Plugin-System entfernt — gibt immer leere Liste zurück."""
+    return []
 
 
 async def _execute_mcp_tool(

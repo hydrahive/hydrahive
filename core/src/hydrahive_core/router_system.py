@@ -125,8 +125,11 @@ def register_system_routes(
                 run_env["GIT_CONFIG_COUNT"] = "1"
                 run_env["GIT_CONFIG_KEY_0"] = "credential.helper"
                 run_env["GIT_CONFIG_VALUE_0"] = cred_helper
+            # Branch aus update_branch lesen (Fallback: main)
+            _branch_file = Path("/etc/hydrahive/update_branch")
+            _check_branch = _branch_file.read_text().strip() if _branch_file.exists() else "main"
             proc = subprocess.run(
-                ["git", "ls-remote", "--heads", remote_url, "main"],
+                ["git", "ls-remote", "--heads", remote_url, _check_branch],
                 capture_output=True,
                 text=True,
                 timeout=10,

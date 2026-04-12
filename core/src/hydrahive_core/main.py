@@ -66,12 +66,12 @@ from .router_user_integrations import register_user_integration_routes, setup_di
 from .whatsapp_agent import setup_whatsapp_sessions
 from .router_invites import register_invite_routes
 from .router_github import register_github_routes
-from .router_plugins import register_plugin_routes
+# v2: Plugin-System entfernt — alles über shell_exec
 from .router_tailscale import register_tailscale_routes
 from .router_servers import register_server_routes
 from .router_repos import register_repo_routes
 from .router_config_map import register_config_map_routes
-from .plugin_manager import plugin_manager
+# v2: plugin_manager entfernt
 from .router_pipelines import register_pipeline_routes, load_all_pipelines, load_pipeline
 from .group_service import GroupService
 from .router_groups import register_group_routes
@@ -205,6 +205,9 @@ def _ensure_personal_project_manifest(username: str):
 discovery        = AgentDiscovery(AGENTS_DIR)
 runtime          = AgentRuntime()
 projects         = ProjectLoader(PROJECTS_DIR)
+# v2 (#585): Global registrieren damit messenger-adapter ohne zyklischen Import drankommen
+from .project_loader import set_global_loader as _set_global_loader
+_set_global_loader(projects)
 sessions         = SessionManager(PROJECTS_DIR)
 orchestrator     = Orchestrator(discovery, runtime, sessions)
 group_service    = GroupService(users_fn=lambda: _load_users())
@@ -225,6 +228,11 @@ async def lifespan(app: FastAPI):
 
     discovery.start()
     projects.start()
+
+    # v2: Messenger-Routing initialisieren (messenger.yaml aus allen Projekten)
+    from .messenger_router import messenger_router as _messenger_router
+    _messenger_router.rebuild()
+
     sessions.start()
     agent_sessions.start()
     await runtime.start(list(discovery.agents.values()))
@@ -398,20 +406,7 @@ async def lifespan(app: FastAPI):
     except Exception as _ge:
         logger.warning("Gitea nicht erreichbar beim Start: %s — Git-Tools nur eingeschränkt verfügbar", _ge)
 
-    # Manifest-Plugins aus /plugins/ laden (#110)
-    try:
-        from .tool_registry import registry as _tool_registry
-        plugin_manager.init(tool_registry=_tool_registry)
-    except Exception as _pe:
-        logger.warning("Manifest-Plugin-System fehlgeschlagen: %s", _pe)
-
-    # Legacy-Plugins aus /agents/*/plugins/ laden (#49)
-    try:
-        _plugin_count = plugin_manager.load_all_agent_plugins(AGENTS_DIR)
-        if _plugin_count:
-            logger.info("Legacy-Plugins: %d geladen", _plugin_count)
-    except Exception as _pe:
-        logger.warning("Legacy-Plugin-Laden fehlgeschlagen: %s", _pe)
+    # v2: Plugin-System entfernt — alle Funktionalität über shell_exec
 
     notification_service.start()
     scheduler_service.start(
@@ -650,18 +645,35 @@ def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) 
 def _get_user_allowed_projects(username: str, role: str) -> set[str] | None:
     """
     Gibt die erlaubten Projekt-IDs zurück.
-    None = unbegrenzt (admin oder leere Liste als Wildcard).
-    Eigenes personal_<username> Projekt ist immer erlaubt.
+    None = unbegrenzt (nur admin).
+
+    #607: members (config.yaml) ist jetzt die kanonische Quelle. Wir scannen alle
+    geladenen Projekte nach members. allowed_projects aus users.json wird als
+    Legacy-Fallback dazugemerged.
     """
     if role == "admin":
         return None  # unbegrenzt
-    users = _load_users()
-    user = users.get(username, {})
-    allowed = user.get("allowed_projects") or []
-    if not allowed:
-        return None  # leere Liste = kein Projekt-Filtering (Altverhalten)
-    result = set(allowed)
-    result.add(f"personal_{username}")  # eigenes Personal-Projekt immer erlaubt
+    result: set[str] = set()
+    # Aus allen geladenen Projekten: User in members?
+    try:
+        from .project_loader import get_project_loader as _gpl
+        loader = _gpl()
+        if loader is not None:
+            for pid, pcfg in loader.projects.items():
+                members = list(getattr(pcfg, "members", []) or [])
+                if username in members:
+                    result.add(pid)
+    except Exception as _e:
+        logger.warning("Project-Member-Scan fehlgeschlagen: %s", _e)
+    # Personal-Projekt immer erlaubt
+    result.add(f"personal_{username}")
+    # Legacy-Fallback: users.json.allowed_projects (falls vor #607 gepflegt)
+    try:
+        users = _load_users()
+        legacy = users.get(username, {}).get("allowed_projects") or []
+        result.update(legacy)
+    except Exception:
+        pass
     return result
 
 
@@ -1563,7 +1575,7 @@ register_brain_routes(auth_router, discovery=discovery, runtime=runtime, project
 register_usage_routes(admin_router, sessions=sessions, agent_sessions=agent_sessions)
 register_github_routes(admin_router, require_admin=require_admin)
 register_group_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, group_service=group_service)
-register_plugin_routes(admin_router, auth_router, require_admin=require_admin, require_auth=require_auth, agents_dir=AGENTS_DIR)
+# v2: register_plugin_routes entfernt
 register_tailscale_routes(admin_router, require_admin=require_admin)
 register_repo_routes(admin_router, require_admin=require_admin)
 register_config_map_routes(admin_router, require_admin=require_admin)
@@ -2060,6 +2072,30 @@ def get_agents_live(_a=Depends(require_admin)):
                 "tokens_1h":        rate_limiter.get_token_usage_hour(cfg.id),
                 "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
             })
+    # v2: Projekte als "Agenten" anzeigen die kein eigenes Agent-Verzeichnis haben
+    for pid, pcfg in projects.projects.items():
+        if pid in seen:
+            continue
+        seen.add(pid)
+        result.append({
+            "id":               pid,
+            "identity":         pcfg.identity.name,
+            "type":             "v2-project",
+            "model":            getattr(pcfg.llm, "model", None),
+            "status":           "ready",
+            "current_activity": None,
+            "restart_count":    0,
+            "last_heartbeat_age":  None,
+            "heartbeat_timeout":   None,
+            "heartbeat_interval":  None,
+            "tokens_1h":        rate_limiter.get_token_usage_hour(pid),
+            "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            "token_history":    rate_limiter.get_token_history(pid, minutes=60, bucket_minutes=5),
+            "total_requests":   0,
+            "avg_response_ms":  0,
+            "last_response_ms": 0,
+            "error_rate":       0,
+        })
     return {"agents": result, "count": len(result)}
 
 app.include_router(public_router)

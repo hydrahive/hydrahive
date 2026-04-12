@@ -424,8 +424,23 @@ class BossMatrixAgent(MatrixAgent):
 
     async def on_user_message(self, room: MatrixRoom, text: str, sender: str) -> None:
         """User schickt Nachricht → Orchestrator → Antwort in Room posten."""
-        project_id = self._project_cfg.id
+        # v2: Messenger-Router für Projekt-Lookup (Matrix room_id → project_id)
+        from .messenger_router import messenger_router as _mr
+        project_id = _mr.resolve_matrix(room.room_id) or self._project_cfg.id
         logger.info("Boss %s empfängt Nachricht in %s von %s", self._mxid, room.room_id, sender)
+
+        # v2 (#585): Echte Projekt-Config fuer resolved project_id laden
+        resolved_cfg = self._project_cfg
+        if project_id != self._project_cfg.id:
+            try:
+                from .project_loader import get_project_loader as _gpl
+                _loader = _gpl()
+                if _loader is not None:
+                    _real_cfg = _loader.get(project_id)
+                    if _real_cfg is not None:
+                        resolved_cfg = _real_cfg
+            except Exception as _cfg_err:
+                logger.debug("Matrix: Konnte echte Projekt-Config nicht laden (%s)", _cfg_err)
 
         try:
             # Typing-Indikator setzen während LLM denkt
@@ -438,7 +453,7 @@ class BossMatrixAgent(MatrixAgent):
             try:
                 response, _workers = await self._orchestrator.handle_message(
                     project_id  = project_id,
-                    project_cfg = self._project_cfg,
+                    project_cfg = resolved_cfg,
                     content     = text,
                     sender      = sender,
                     execution_mode = "safe",

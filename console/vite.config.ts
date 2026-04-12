@@ -15,6 +15,9 @@ export default defineConfig({
   plugins,
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   build: {
+    // #604: react-force-graph-3d ist bewusst ~1.3MB (nutzt three.js), wird via
+    // lazy()-Import nur bei /brain nachgeladen. Warning hochsetzen, Splitting bleibt.
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
         manualChunks(id) {

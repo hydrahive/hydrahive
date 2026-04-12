@@ -25,6 +25,7 @@ class LlmConfig(BaseModel):
     thinking_budget: int = 0          # Extended Thinking Token-Budget (0 = deaktiviert)
     fallback_models: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None   # WKS-Ollama: z.B. "http://192.168.1.101:11434"
+    api_key_env: str = ""              # v2: Env-Variable für API-Key (z.B. "ANTHROPIC_KEY")
 
 
 class HeartbeatRaw(BaseModel):
@@ -99,7 +100,7 @@ class AgentConfig(BaseModel):
     tools_extra:     list[str] = Field(default_factory=list)  # #492: zusätzliche Tools on top of role
     tools_deny:      list[str] = Field(default_factory=list)  # #492: Tools explizit verbieten
     tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
-    allowed_agents:  list[str] = Field(default_factory=list)
+    allowed_agents:  list[str] = Field(default_factory=list)  # v1 deprecated — wird ignoriert
     mcp_servers:     list[str] = Field(default_factory=list)
     sources:         list[AgentSource] = Field(default_factory=list)
     max_tool_rounds: int       = 20
@@ -109,6 +110,7 @@ class AgentConfig(BaseModel):
     execution_modes: ExecutionModesConfig | None = None
     ephemeral: bool = False   # Wenn True: Agent wird beim nächsten Core-Start gelöscht
     hooks: dict | None = None  # #472: Hook-System (before_tool, after_tool)
+    # v2: Plugin-System entfernt — alles über shell_exec
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
@@ -131,21 +133,10 @@ class AgentConfig(BaseModel):
         self,
         execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
     ) -> list[str] | None:
-        """Permissions fuer den aktiven Modus.
-
-        None bedeutet Legacy-Verhalten: keine technische Permission-Filterung.
-        'unrestricted' gibt immer None zurück — kein Tool wird gefiltert.
+        """v2: Keine Permission-Filterung mehr — gibt immer None zurück.
+        execution_mode wird nur noch von shell_exec genutzt (sudo vs. Blocklist).
         """
-        mode = self.effective_execution_mode(execution_mode)
-        if mode is None or self.execution_modes is None:
-            return None
-        # unrestricted = alles erlaubt, kein Filter
-        if mode == "unrestricted":
-            return None
-        profile = getattr(self.execution_modes, mode, None)
-        if profile is None:
-            return []
-        return list(profile.permissions)
+        return None
 
 
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
@@ -174,26 +165,66 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
         logger.warning("Validierungsfehler in %s:\n%s", yaml_path, e)
         return None
 
-    # #492: Rolle auflösen → tools + execution_modes setzen
-    if config.role:
-        from .agent_roles import resolve_role, ROLE_PRESETS
-        resolved = resolve_role(
-            config.role,
-            tools_extra=config.tools_extra or None,
-            tools_deny=config.tools_deny or None,
-        )
-        if resolved:
-            role_tools, role_exec_modes = resolved
-            # Nur überschreiben wenn nicht explizit in YAML gesetzt
-            if not raw.get("tools"):
-                config.tools = role_tools
-            if not raw.get("execution_modes"):
-                config.execution_modes = ExecutionModesConfig.model_validate(role_exec_modes)
-            # tool_selection aus Rolle (z.B. admin → always)
-            if not raw.get("tool_selection"):
-                role_preset = ROLE_PRESETS.get(config.role)  # type: ignore[arg-type]
-                if role_preset and "tool_selection" in role_preset:
-                    config.tool_selection = role_preset["tool_selection"]
+    # v2: Rollen-System entfernt — Tools sind fix (9 Core-Tools).
+    # role-Feld wird ignoriert, execution_modes nur für shell_exec relevant.
 
     config.agent_dir = agent_dir
     return config
+
+
+def agent_config_from_project(project_cfg) -> AgentConfig:
+    """v2 Bridge: Erzeugt eine AgentConfig aus einer ProjectConfig.
+
+    Ermöglicht v2-Projekten (config.yaml + AGENT.md) den bestehenden
+    Orchestrator-Pipeline zu nutzen, ohne dass ein separater Boss-Agent
+    in /agents/ existieren muss.
+
+    Die erzeugte AgentConfig hat:
+    - id: project_id (statt agent_id)
+    - LLM-Config aus config.yaml
+    - Soul/AGENT.md als System-Prompt
+    - 9 Core-Tools (v2 Standard)
+    - agent_dir zeigt auf das Projekt-Verzeichnis
+    """
+    from .project_config import ProjectConfig
+
+    pcfg: ProjectConfig = project_cfg
+
+    # LLM-Config aus Projekt übernehmen
+    llm = LlmConfig(
+        model=pcfg.llm.model,
+        temperature=pcfg.llm.temperature,
+        max_tokens=pcfg.llm.max_tokens,
+        thinking_budget=pcfg.llm.thinking_budget,
+        fallback_models=[f.get("model", "") for f in pcfg.llm.failover if f.get("model")],
+        api_key_env=pcfg.llm.api_key_env,
+    )
+
+    # v2 Core-Tools — immer diese 9
+    core_tools = [
+        "shell_exec", "file_read", "file_write", "file_patch",
+        "file_search", "web_search", "read_memory", "write_memory",
+        "ask_agent",
+    ]
+
+    # #611: execution_mode aus Projekt-Config uebernehmen (war hart auf "safe")
+    _default_mode = getattr(pcfg, "execution_mode", "safe") or "safe"
+    if _default_mode not in ("safe", "elevated", "unrestricted"):
+        _default_mode = "safe"
+    exec_modes = ExecutionModesConfig(
+        default=_default_mode,
+        safe=ExecutionModeProfile(permissions=[]),
+    )
+
+    return AgentConfig(
+        id=pcfg.id,
+        type="boss",
+        identity=pcfg.identity.name,
+        llm=llm,
+        soul=None,                       # AGENT.md wird separat injiziert
+        tools=core_tools,
+        tool_selection="always",          # Alle 9 Tools immer laden
+        max_tool_rounds=20,
+        execution_modes=exec_modes,
+        agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
+    )

@@ -54,6 +54,11 @@ def _make_project_cfg(boss_id="test-boss"):
     cfg.agents = MagicMock()
     cfg.agents.boss = boss_id
     cfg.agents.workers = []
+    # #588: v1-Pfad erzwingen — is_v2 sonst auto-MagicMock (truthy) →
+    # agent_config_from_project crasht an Pydantic-Validation.
+    # Echte v2-Tests kommen in #590 mit ProjectConfig statt MagicMock.
+    cfg.is_v2 = False
+    cfg.id = "test-project"
     return cfg
 
 

@@ -1,17 +1,26 @@
 """
-tool_registry.py — Zentrales Tool-Registry (#8, #54, TL1-TL5)
+tool_registry.py — HydraHive v2 Core Tool Registry
 
-BaseTool ABC definiert das Interface. ToolRegistry haelt alle verfuegbaren Tools.
-Was ein Agent nutzen darf: agent.yaml ∩ Registry ∩ permissions = LLM-sichtbar.
-Tool nicht in Registry = existiert nicht (egal was in agent.yaml steht).
+9 Core-Tools analog zu Claude Code:
+  1. shell_exec   — Bash (Swiss Army Knife)
+  2. file_read    — Read (Zeilennummern, Offset/Limit)
+  3. file_write   — Write (Atomares Schreiben)
+  4. file_patch   — Edit (Präzises String-Replacement)
+  5. file_search  — Grep (Strukturierte Suche)
+  6. web_search   — WebSearch (SearXNG/DDG)
+  7. read_memory  — Projekt-/Global-Memory lesen
+  8. write_memory — Projekt-/Global-Memory schreiben
+  9. ask_agent    — Subagent spawnen / andere Agents fragen
 
-#54: Filesystem-Tools pruefen ob angeforderter Pfad innerhalb /projects/<id>/ liegt.
-Path-Traversal und Zugriff ausserhalb des Projekt-Verzeichnisses werden verweigert.
+Alles andere (Git, Discord, Server, Mail, etc.) geht über shell_exec.
+~990 Schema-Tokens statt ~8.800. Fixer Prefix → Cache-Hit 80-90%.
 """
 
+import asyncio
 import contextvars
 import json
 import logging
+import re as _re_shell
 import shlex as _shlex_shell
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -24,42 +33,42 @@ logger = logging.getLogger(__name__)
 PROJECTS_ROOT = settings.projects_dir
 AGENTS_ROOT   = settings.agents_dir
 
-# Wird von main.py im Lifespan gesetzt; ermöglicht interne Core-Calls ohne IP-Bypass
+# Wird von main.py im Lifespan gesetzt
 _internal_secret: str = ""
-
-# Wird von main.py im Lifespan gesetzt; None = Rate-Limiting deaktiviert
 _rate_limiter: Any = None
 
 # Interrupt-Flags für laufende ask_agent-Requests (#34)
-# project_id (oder agent_id) → True wenn Nutzer Abbruch angefordert hat
 _interrupt_flags: dict[str, bool] = {}
 
 
 def set_interrupt(context_id: str) -> None:
-    """Interrupt-Flag setzen — bricht den nächsten ask_agent-Polling-Zyklus ab."""
     _interrupt_flags[context_id] = True
 
 
 def clear_interrupt(context_id: str) -> None:
-    """Interrupt-Flag löschen (nach Abbruch oder am Ende des Streams)."""
     _interrupt_flags.pop(context_id, None)
 
 
 # Admin-Tool-Globals — gesetzt von main.py im Lifespan
 _discovery: Any = None
+_projects_registry: Any = None
+_get_provisioner: Any = None
+_load_users_fn: Any = None
+_audit_log_fn: Any = None
+_admin_agents_dir: str = str(settings.agents_dir)
+_admin_projects_dir: str = str(settings.projects_dir)
+_admin_runtime: Any = None
 
-# ---------------------------------------------------------------------------
-# Notification-Helper — project_id → User(s) ermitteln und push aufrufen
-# ---------------------------------------------------------------------------
-import asyncio
-import asyncio as _asyncio_notif
+
+# =========================================================================
+# Notification-Helper
+# =========================================================================
 
 def _notify(project_id: str, type: str, title: str, body: str, link: str | None = None) -> None:
-    """Feuert eine Notification ohne den aufrufenden Code zu blockieren."""
     try:
         from .notification_service import notification_service as _ns
+        import asyncio as _asyncio_notif
 
-        # Empfänger: personal_X → User X, sonst alle Admins
         users: list[str] = []
         if project_id and project_id.startswith("personal_"):
             users = [project_id[len("personal_"):]]
@@ -77,23 +86,17 @@ def _notify(project_id: str, type: str, title: str, body: str, link: str | None 
                 _ns.push(user=user, type=type, title=title, body=body, link=link)
             )
     except Exception:
-        pass  # Notifications nie fatal
-_projects_registry: Any = None
-_get_provisioner: Any = None
-_load_users_fn: Any = None
-_audit_log_fn: Any = None
-_admin_agents_dir: str = str(settings.agents_dir)
-_admin_projects_dir: str = str(settings.projects_dir)
-_admin_runtime: Any = None
+        pass
 
 
-# ============================================================= Path Safety (#54)
+# =========================================================================
+# Path Safety (#54)
+# =========================================================================
 
 class PathSafetyError(PermissionError):
-    """Wird geworfen wenn ein Tool ausserhalb des Projekt-Verzeichnisses zugreifen wuerde."""
+    pass
 
 
-# #522: ContextVar für aktiven Worktree — Worker-Tasks setzen das auf ihren Worktree-Pfad
 _active_worktree: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
     "_active_worktree", default=None,
 )
@@ -105,26 +108,10 @@ def assert_path_within_project(
     *,
     agent_permissions: list[str] | None = None,
 ) -> Path:
-    """
-    Prueft ob path innerhalb /projects/<project_id>/ liegt.
-    Loest PathSafetyError aus wenn nicht — kein stilles Ignorieren.
-
-    #522: Wenn ein Worktree aktiv ist (via ContextVar), wird gegen dessen Pfad geprüft.
-    Worktree-Pfade müssen IMMER unter /tmp/hydrahive-git/ liegen (Safety-Assertion).
-
-    Mit filesystem.read_all Permission: Zugriff auf beliebiges /projects/*-Verzeichnis erlaubt.
-
-    Verhindert:
-    - Path-Traversal: ../../etc/passwd  (durch resolve + normpath)
-    - Absolute Pfade ausserhalb: /etc/passwd
-    - Symlink-Escapes: wird durch resolve() aufgeloest
-    """
     import os
 
-    # #522: Worktree-Override wenn aktiv
     wt = _active_worktree.get()
     if wt is not None:
-        # Safety: Worktree MUSS unter /tmp/hydrahive-git/ liegen
         wt_resolved = wt.resolve()
         assert str(wt_resolved).startswith("/tmp/hydrahive-git"), \
             f"Worktree-Safety-Violation: {wt_resolved} liegt nicht unter /tmp/hydrahive-git/"
@@ -132,107 +119,77 @@ def assert_path_within_project(
     else:
         project_root = (PROJECTS_ROOT / project_id).resolve()
 
-    # Relativer Pfad wird relativ zum Projekt-Root aufgeloest
     target = Path(path)
     if not target.is_absolute():
         target = project_root / target
 
-    # os.path.normpath loest .. auf ohne Filesystem-Zugriff (Path-Traversal-Schutz)
-    # resolve() loest zusaetzlich Symlinks auf wenn die Datei existiert
     normalized = Path(os.path.normpath(target))
     try:
         normalized = normalized.resolve()
     except OSError:
-        pass  # Datei existiert noch nicht — normpath reicht
+        pass
 
-    # filesystem.read_all: Zugriff auf beliebiges /projects/*-Verzeichnis erlaubt
     if agent_permissions is not None and "filesystem.read_all" in agent_permissions:
         try:
             normalized.relative_to(PROJECTS_ROOT.resolve())
         except ValueError:
             raise PathSafetyError(
-                f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{PROJECTS_ROOT}'. "
-                f"Agenten duerfen nur auf /projects/ zugreifen."
+                f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{PROJECTS_ROOT}'."
             )
         return normalized
 
-    # Sicherheitscheck: muss mit project_root beginnen
     try:
         normalized.relative_to(project_root)
     except ValueError:
         raise PathSafetyError(
-            f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{project_root}'. "
-            f"Agenten duerfen nur auf /projects/{project_id}/ zugreifen."
+            f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{project_root}'."
         )
 
     return normalized
 
 
-# ============================================================= BaseTool
+# =========================================================================
+# BaseTool & ToolRegistry
+# =========================================================================
 
 class BaseTool(ABC):
-    """
-    Einheitliches Interface fuer alle HydraHive-Tools (TL2).
-    parameters = Function-Calling-Schema direkt fuer litellm (TL3).
-
-    execute() bekommt agent_id und project_id — Filesystem-Tools muessen
-    assert_path_within_project() aufrufen bevor sie auf Dateien zugreifen.
-    """
 
     @property
     @abstractmethod
-    def id(self) -> str:
-        """Eindeutiger Bezeichner, z.B. 'file_read'."""
+    def id(self) -> str: ...
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        """Lesbarer Name fuer Logs und UI."""
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def description(self) -> str:
-        """Beschreibung fuer das LLM (erscheint im Tool-Schema)."""
+    def description(self) -> str: ...
 
     @property
     def permissions_required(self) -> list[str]:
-        """Berechtigungen die ein Agent braucht um dieses Tool zu nutzen."""
         return []
 
     @property
     def parallel_safe(self) -> bool:
-        """True wenn das Tool parallel mit anderen ausgeführt werden kann (#418).
-        Read-only Tools ohne Seiteneffekte sollten True zurückgeben."""
         return False
 
     @property
     def is_read_only(self) -> bool:
-        """True wenn das Tool nur liest und nichts verändert (#419)."""
         return False
 
     @property
     def is_destructive(self) -> bool:
-        """True wenn das Tool Daten unwiderruflich löschen/überschreiben kann (#419)."""
         return False
 
     @property
     @abstractmethod
-    def parameters(self) -> dict:
-        """
-        JSON-Schema fuer litellm function calling (TL3).
-        Format: {"type": "object", "properties": {...}, "required": [...]}
-        """
+    def parameters(self) -> dict: ...
 
     @abstractmethod
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        """
-        Tool ausfuehren.
-        agent_id:   Welcher Agent ruft das Tool auf.
-        project_id: Projekt-Kontext fuer Path-Safety (#54).
-        """
+    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any: ...
 
     def as_litellm_tool(self) -> dict:
-        """Schema-Format das litellm fuer function calling erwartet."""
         return {
             "type": "function",
             "function": {
@@ -243,13 +200,7 @@ class BaseTool(ABC):
         }
 
 
-# ============================================================= ToolRegistry
-
 class ToolRegistry:
-    """
-    Singleton-Registry aller verfuegbaren Tools (TL1).
-    Tools werden beim Core-Start registriert.
-    """
 
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
@@ -264,11 +215,9 @@ class ToolRegistry:
     def all_ids(self) -> list[str]:
         return list(self._tools.keys())
 
-    # Aliases für Hub-Kompatibilität (hub verwendet andere Namen als interne IDs)
     _ALIASES: dict[str, str] = {
-        "read_file":       "file_read",
-        "write_file":      "file_write",
-        "list_directory":  "list_directory",  # eigenes Tool, kein Alias
+        "read_file":  "file_read",
+        "write_file": "file_write",
     }
 
     def tools_for_agent(
@@ -276,21 +225,11 @@ class ToolRegistry:
         agent_tool_ids: list[str],
         agent_permissions: list[str] | None = None,
     ) -> list[BaseTool]:
-        """
-        Schnittmenge: agent.yaml ∩ Registry ∩ permissions (TL4).
-        Tools die nicht in der Registry sind werden stillschweigend ignoriert (TL5).
-        Hub-Aliases (read_file, write_file, list_directory) werden aufgelöst.
-        """
-        perms  = set(agent_permissions) if agent_permissions is not None else None
         result = []
         for tool_id in agent_tool_ids:
             resolved = self._ALIASES.get(tool_id, tool_id)
             tool = self._tools.get(resolved)
             if tool is None:
-                logger.debug("Tool '%s' nicht in Registry — ignoriert", tool_id)
-                continue
-            if perms is not None and tool.permissions_required and not perms.issuperset(tool.permissions_required):
-                logger.debug("Tool '%s' fehlen Berechtigungen — ignoriert", tool_id)
                 continue
             result.append(tool)
         return result
@@ -298,24 +237,297 @@ class ToolRegistry:
     def as_litellm_tools(self, tools: list[BaseTool]) -> list[dict]:
         return [t.as_litellm_tool() for t in tools]
 
+    def all_tools(self) -> list[BaseTool]:
+        """Gibt alle 9 Core-Tools zurück — keine Filterung nötig."""
+        return list(self._tools.values())
 
-# ============================================================= Built-in Tools
 
-class DispatchTaskTool(BaseTool):
-    """Boss-Agent delegiert Tasks an Worker-Agenten."""
+registry = ToolRegistry()
+
+
+# =========================================================================
+# Shell Blocklist & Security
+# =========================================================================
+
+_PIPE_DANGEROUS_COMMANDS: frozenset[str] = frozenset({
+    "rm", "rmdir", "dd", "mkfs", "fdisk", "parted", "shred", "wipefs",
+    "kill", "killall", "pkill", "reboot", "shutdown", "poweroff", "halt", "init",
+    "systemctl", "chmod", "chown", "chattr",
+})
+
+_ESCALATION_WRAPPERS: frozenset[str] = frozenset({
+    "sudo", "pkexec", "doas", "su", "runuser", "machinectl",
+})
+
+_DANGEROUS_ENV_VARS: frozenset[str] = frozenset({
+    "LD_PRELOAD", "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH",
+    "NODE_OPTIONS", "NODE_TLS_REJECT_UNAUTHORIZED",
+    "GOFLAGS", "RUSTFLAGS",
+    "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+    "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT",
+})
+
+_ENV_VAR_PATTERN = _re_shell.compile(
+    r'\$\{?(' + '|'.join(_re_shell.escape(v) for v in _DANGEROUS_ENV_VARS) + r')\}?'
+)
+
+_OBFUSCATION_PATTERNS: list[tuple[_re_shell.Pattern, str]] = [
+    (_re_shell.compile(r'''(?:^|[\s;|&])([a-z]{0,3}["'][a-z]{1,3}["'][a-z]{0,3})\s+-[a-zA-Z]*[rf]''', _re_shell.IGNORECASE),
+     "Obfuskierter Befehl (Anführungszeichen-Verkettung) verboten"),
+    (_re_shell.compile(r"\$'[^']*\\x[0-9a-fA-F]{2}"),
+     "Hex-Escape ($'\\x..') in Befehlen verboten"),
+    (_re_shell.compile(r"\$'[^']*\\[0-7]{3}"),
+     "Octal-Escape ($'\\NNN') in Befehlen verboten"),
+    (_re_shell.compile(r'\bprintf\b.*\\x[0-9a-fA-F].*\|\s*(sh|bash|dash|zsh|ksh)\b'),
+     "printf mit hex-escape nach Shell gepipet — verboten"),
+    (_re_shell.compile(r'\b(base64|b64decode)\b.*\|\s*(sh|bash|dash|zsh|ksh|source)\b'),
+     "base64-decode nach Shell gepipet — verboten"),
+    (_re_shell.compile(r'\{[a-z],[a-z]\}'),
+     "Brace-Expansion als Verschleierung verboten"),
+    (_re_shell.compile(r'\b(eval|source)\s+["\$]'),
+     "eval/source mit Variable/Substitution verboten"),
+]
+
+
+def _ast_check_command(command: str) -> str | None:
+    for ch in command:
+        cp = ord(ch)
+        if cp < 0x20 and cp not in (0x09, 0x0A, 0x0D):
+            return f"Kontrollzeichen U+{cp:04X} im Befehl verboten"
+        if cp in (0x00A0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
+                  0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x200B,
+                  0x202F, 0x205F, 0x2060, 0x3000, 0xFEFF):
+            return f"Unicode-Whitespace U+{cp:04X} im Befehl verboten"
+
+    for pattern, reason in _OBFUSCATION_PATTERNS:
+        if pattern.search(command):
+            return reason
+
+    if '$(' in command:
+        return "Command Substitution $(...) verboten"
+    if '`' in command:
+        return "Backticks (Command Substitution) verboten"
+    if _re_shell.search(r'[<>]\(', command):
+        return "Process Substitution <()/> () verboten"
+    if _re_shell.search(r'\bzmodload\b', command):
+        return "zmodload verboten"
+    if _re_shell.search(r'\bemulate\b.*-c\b', command):
+        return "emulate -c verboten"
+    if _re_shell.search(r'(?:^|\s)=[a-zA-Z]', command):
+        return "Zsh =cmd Expansion verboten"
+    if _re_shell.search(r'\bIFS=', command):
+        return "IFS-Manipulation verboten"
+    if _re_shell.search(r'/proc/[0-9]+/environ\b|/proc/self/environ\b', command):
+        return "/proc/environ Zugriff verboten"
+    if _re_shell.search(r'\\-\\-[a-z]', command):
+        return "Obfuskierte Flags (\\-\\-) verboten"
+
+    env_match = _ENV_VAR_PATTERN.search(command)
+    if env_match:
+        return f"Zugriff auf gefährliche Variable ${env_match.group(1)} verboten"
+
+    try:
+        tokens = _shlex_shell.split(command)
+    except ValueError as e:
+        return f"Befehl konnte nicht sicher geparst werden (shlex: {e}) — FAIL-CLOSED"
+
+    if not tokens:
+        return None
+
+    segments = _re_shell.split(r'\s*(?:\|(?!\|)|\|\||&&|;)\s*', command)
+    for segment in segments:
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            seg_tokens = _shlex_shell.split(segment)
+        except ValueError:
+            return f"Segment konnte nicht geparst werden: {segment[:60]} — FAIL-CLOSED"
+        if not seg_tokens:
+            continue
+
+        resolved = _resolve_escalation(seg_tokens)
+        first_exe = _re_shell.sub(r'^.*/', '', seg_tokens[0]).lower() if seg_tokens else ""
+        if first_exe in _ESCALATION_WRAPPERS:
+            if resolved and resolved != seg_tokens:
+                resolved_cmd = " ".join(resolved)
+                inner_block = _check_shell_blocklist(resolved_cmd)
+                if inner_block:
+                    return f"Escalation-Wrapper ({seg_tokens[0]}) um blockierten Befehl: {inner_block}"
+
+    return None
+
+
+def _resolve_escalation(tokens: list[str]) -> list[str]:
+    result = tokens[:]
+    for _ in range(5):
+        if not result:
+            break
+        exe = _re_shell.sub(r'^.*/', '', result[0]).lower()
+        if exe not in _ESCALATION_WRAPPERS:
+            break
+        rest = result[1:]
+        while rest and rest[0].startswith('-'):
+            if exe == 'su' and rest[0] == '-c' and len(rest) > 1:
+                try:
+                    return _shlex_shell.split(rest[1])
+                except ValueError:
+                    return rest[1:]
+            rest = rest[1:]
+        if exe in ('su', 'runuser') and rest and not rest[0].startswith('-'):
+            rest = rest[1:]
+        result = rest
+    return result
+
+
+_SHELL_BLOCKLIST: list[tuple[str, str]] = [
+    (r"\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-[a-zA-Z]*f[a-zA-Z]*r|--recursive)\b", "rm -r / rm -rf verboten"),
+    (r"\brm\b.*\s/opt/",            "rm auf /opt/ verboten"),
+    (r"\brmdir\s+--parents\b",      "rmdir --parents verboten"),
+    (r"\bdd\b.*\bof=/dev/",         "dd auf Blockdevice verboten"),
+    (r"\bmkfs\b",                   "mkfs verboten"),
+    (r"\bfdisk\b",                  "fdisk verboten"),
+    (r"\bparted\b",                 "parted verboten"),
+    (r"\bshred\b",                  "shred verboten"),
+    (r"\bwipefs\b",                 "wipefs verboten"),
+    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+(hydrahive|octopos)", "systemctl stop/disable hydrahive verboten"),
+    (r"\bkillall\s+uvicorn\b",      "killall uvicorn verboten"),
+    (r"\bkill\b.*\buvicorn\b",      "kill uvicorn verboten"),
+    (r":\(\)\s*\{",                 "Fork-Bombe verboten"),
+    (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
+    (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
+    (r">\s*/opt/(hydrahive|octopos)/", "Redirect nach /opt/hydrahive/ verboten"),
+    (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
+    (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
+    (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
+    (r">\s*/lib",                   "Redirect nach /lib verboten"),
+    (r">\s*/boot/",                 "Redirect nach /boot/ verboten"),
+    (r">\s*/dev/",                  "Redirect nach /dev/ verboten"),
+    (r">\s*/sys/",                  "Redirect nach /sys/ verboten"),
+    (r">\s*/proc/",                 "Redirect nach /proc/ verboten"),
+    (r"\btee\s+(/etc/|/opt/|/usr/|/bin/|/boot/|/lib|/sys/|/proc/)", "tee auf Systempfad verboten"),
+    (r"\bcp\b.+\s(/etc/|/opt/(hydrahive|octopos)/|/usr/|/bin/|/boot/)", "cp nach Systempfad verboten"),
+    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/etc/", "Download nach /etc/ verboten"),
+    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/opt/(hydrahive|octopos)/", "Download nach /opt/hydrahive/ verboten"),
+    (r"\b(chmod|chown)\b.*/opt/",   "chmod/chown auf /opt/ verboten"),
+    (r"\b(chmod|chown)\b.*/etc/",   "chmod/chown auf /etc/ verboten"),
+    (r"\b(chmod|chown)\b.*/bin/",   "chmod/chown auf /bin/ verboten"),
+    (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
+    (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
+    (r"cd\s+/opt/(hydrahive|octopos)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
+    (r"\bperl\s+-[a-zA-Z]*e\b",     "perl -e (Inline-Code) verboten"),
+    (r"\bruby\s+-[a-zA-Z]*e\b",     "ruby -e (Inline-Code) verboten"),
+    (r"\bnode\s+-[a-zA-Z]*e\b",     "node -e (Inline-Code) verboten"),
+    (r"\bnodejs\s+-[a-zA-Z]*e\b",   "nodejs -e (Inline-Code) verboten"),
+    (r"\bsudo\b",                   "sudo verboten — Agenten laufen ohne Root"),
+    (r"\$\(",                       "Command Substitution $(...) verboten"),
+    (r"`",                          "Backticks verboten"),
+    (r"\bcd\s+(/etc|/opt/(hydrahive|octopos)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
+    (r"\bLD_PRELOAD=",              "LD_PRELOAD verboten"),
+    (r"\bLD_LIBRARY_PATH=",         "LD_LIBRARY_PATH verboten"),
+    (r"\bDYLD_",                    "DYLD_* verboten"),
+    (r"\bNODE_OPTIONS=",            "NODE_OPTIONS verboten"),
+    (r"\bGOFLAGS=",                "GOFLAGS verboten"),
+    (r"\bRUSTFLAGS=",              "RUSTFLAGS verboten"),
+    (r"\bNODE_TLS_REJECT_UNAUTHORIZED=", "NODE_TLS_REJECT_UNAUTHORIZED verboten"),
+    (r"\bHTTP_PROXY=",             "HTTP_PROXY verboten"),
+    (r"\bHTTPS_PROXY=",            "HTTPS_PROXY verboten"),
+    (r"\bhttp_proxy=",             "http_proxy verboten"),
+    (r"\bhttps_proxy=",            "https_proxy verboten"),
+    (r"\bPYTHONSTARTUP=",         "PYTHONSTARTUP verboten"),
+    (r"\bPERL5OPT=",              "PERL5OPT verboten"),
+    (r"\bRUBYOPT=",               "RUBYOPT verboten"),
+]
+
+_SHELL_WRAPPERS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
+_EXEC_WRAPPERS  = {"env", "nohup", "nice", "ionice", "timeout", "xargs", "sudo", "su"}
+
+
+def _check_shell_blocklist(command: str) -> str | None:
+    ast_block = _ast_check_command(command)
+    if ast_block:
+        return ast_block
+
+    for pattern, reason in _SHELL_BLOCKLIST:
+        if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
+            return reason
+
+    try:
+        tokens = _shlex_shell.split(command)
+    except ValueError:
+        return "Befehl konnte nicht sicher geparst werden — FAIL-CLOSED"
+
+    if not tokens:
+        return None
+
+    for token in tokens:
+        if token == "eval":
+            return "eval verboten"
+
+    exe = Path(tokens[0]).name.lower()
+
+    if exe in _SHELL_WRAPPERS:
+        for idx, token in enumerate(tokens[1:], start=1):
+            if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+                if idx + 1 < len(tokens):
+                    return _check_shell_blocklist(tokens[idx + 1])
+                break
+
+    if exe in _EXEC_WRAPPERS:
+        rest = tokens[1:]
+        while rest and (rest[0].startswith("-") or "=" in rest[0]):
+            rest = rest[1:]
+        if rest:
+            return _check_shell_blocklist(" ".join(rest))
+
+    return None
+
+
+_ALLOWED_CWD_PREFIXES = ("/tmp", str(settings.projects_dir), "/home", str(settings.agents_dir), "/var/tmp")
+
+
+def _validate_shell_cwd(cwd: str) -> str | None:
+    try:
+        import os
+        normalized = os.path.normpath(cwd)
+        for prefix in _ALLOWED_CWD_PREFIXES:
+            if normalized == prefix or normalized.startswith(prefix + "/"):
+                return None
+        return f"CWD '{cwd}' nicht erlaubt — nur {', '.join(_ALLOWED_CWD_PREFIXES)}"
+    except Exception:
+        return None
+
+
+# =========================================================================
+# Memory Helper
+# =========================================================================
+
+def _safe_memory_filename(filename: str) -> str:
+    base = filename.removesuffix(".md").strip()
+    if not _re_shell.match(r"^[a-zA-Z0-9_-]+$", base):
+        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, A-Z, 0-9, _ und - erlaubt.")
+    return base + ".md"
+
+
+# =========================================================================
+# Core Tool #1: shell_exec
+# =========================================================================
+
+class ShellExecTool(BaseTool):
 
     @property
-    def id(self) -> str:       return "dispatch_task"
+    def id(self) -> str: return "shell_exec"
     @property
-    def name(self) -> str:     return "Task an Worker delegieren"
+    def is_destructive(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Shell-Befehl ausführen"
     @property
     def description(self) -> str:
         return (
-            "Delegiert einen spezifischen Task an einen Worker-Agenten. "
-            "Nutze dies wenn du eine Aufgabe an einen spezialisierten Agenten "
-            "weitergeben willst. Der Worker erledigt den Task und gibt das Ergebnis zurueck. "
-            "Mit task_id und depends_on kannst du Abhängigkeiten zwischen Tasks definieren — "
-            "ein Task startet erst wenn alle Tasks in depends_on abgeschlossen sind."
+            "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). "
+            "Nutze dieses Tool für: Git, System-Befehle, Pakete, SSH, curl, etc. "
+            "Timeout bis 600s. cwd Standard: /tmp."
         )
 
     @property
@@ -323,44 +535,184 @@ class DispatchTaskTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "worker_id": {
-                    "type":        "string",
-                    "description": "ID des Worker-Agenten aus der Projekt-Konfiguration",
+                "command": {
+                    "type": "string",
+                    "description": "Bash-Befehl der ausgeführt werden soll",
                 },
-                "task": {
-                    "type":        "string",
-                    "description": "Klare Beschreibung des Tasks den der Worker erledigen soll",
+                "timeout": {
+                    "type": "integer",
+                    "description": "Timeout in Sekunden (Standard: 30, max: 120)",
                 },
-                "context": {
-                    "type":        "string",
-                    "description": "Optionaler Kontext den der Worker fuer den Task braucht",
-                },
-                "task_id": {
-                    "type":        "string",
-                    "description": "Eindeutige ID für diesen Task (damit andere Tasks mit depends_on darauf verweisen können)",
-                },
-                "depends_on": {
-                    "type":  "array",
-                    "items": {"type": "string"},
-                    "description": "Liste von task_ids die abgeschlossen sein müssen bevor dieser Task startet",
+                "cwd": {
+                    "type": "string",
+                    "description": "Arbeitsverzeichnis (Standard: /tmp)",
                 },
             },
-            "required": ["worker_id", "task"],
+            "required": ["command"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        worker_id: str, task: str, context: str = "",
+        command: str, timeout: int = 30, cwd: str = "/tmp",
+        **kwargs,
     ) -> dict:
-        # Wird vom Orchestrator ueberschrieben
-        return {"worker_id": worker_id, "task": task, "context": context}
+        _mode = kwargs.get("_execution_mode")
+        unrestricted = _mode == "unrestricted"
+        # v2 (#606): safe UND elevated werden sandboxed. Nur safe hat Blocklist.
+        # elevated erlaubt freie Commands aber im bwrap-Scope (kein Host-Escape).
+        is_sandboxed = _mode in ("safe", "elevated")
 
+        # Blocklist nur fuer safe — elevated darf npm/git/apt-get etc. nutzen
+        if _mode == "safe":
+            blocked = _check_shell_blocklist(command)
+            if blocked:
+                logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
+                return {
+                    "error": f"Befehl blockiert: {blocked}",
+                    "command": command, "exit_code": -1, "blocked": True,
+                }
+            cwd_error = _validate_shell_cwd(cwd)
+            if cwd_error:
+                logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
+                return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
+
+        max_timeout = 1800 if unrestricted else 120
+        timeout = min(max(timeout, 1), max_timeout)
+        safe_cwd = cwd if Path(cwd).exists() else "/tmp"
+
+        import shutil
+        # bwrap-Funktionstest: einmalig cachen ob Sandbox lauffaehig ist.
+        # #605: Nutzt dieselbe Mount-Topologie wie die echte Sandbox unten,
+        # damit der Test nicht "ok-wenn-/bin-Symlink-auf-/usr/bin"-faelschlich
+        # positiv oder negativ ausfaellt.
+        if not hasattr(ShellExecTool, "_bwrap_works"):
+            ShellExecTool._bwrap_works = False
+            if shutil.which("bwrap"):
+                try:
+                    import subprocess as _sp
+                    _test_bind: list[str] = ["bwrap",
+                        "--ro-bind", "/usr", "/usr",
+                        "--ro-bind-try", "/bin", "/bin",
+                        "--ro-bind-try", "/lib", "/lib",
+                        "--ro-bind-try", "/lib64", "/lib64",
+                        "--ro-bind-try", "/sbin", "/sbin",
+                        "--proc", "/proc",
+                        "--dev", "/dev",
+                        "--die-with-parent",
+                        "--", "/usr/bin/true",  # garantiert in /usr
+                    ]
+                    _test = _sp.run(_test_bind, capture_output=True, timeout=5, check=False)
+                    ShellExecTool._bwrap_works = (_test.returncode == 0)
+                    if not ShellExecTool._bwrap_works:
+                        logger.warning("bwrap ist installiert aber nicht funktionsfaehig: %s",
+                                       _test.stderr.decode(errors='replace')[:200])
+                except Exception as _e:
+                    logger.warning("bwrap-Funktionstest fehlgeschlagen: %s", _e)
+
+        _use_sandbox = not unrestricted and ShellExecTool._bwrap_works
+        # Fail-closed: safe + elevated ohne funktionierende Sandbox → verweigern (#593, #606)
+        if is_sandboxed and not _use_sandbox:
+            return {
+                "error": f"shell_exec im {_mode}-Modus verweigert: Sandbox (bwrap) nicht funktionsfaehig. "
+                         "Administrator muss bwrap mit subuid/subgid einrichten oder "
+                         "execution_mode auf 'unrestricted' setzen (Admin-only).",
+                "command": command, "exit_code": -1, "blocked": True,
+            }
+        if _use_sandbox and is_sandboxed:
+            import shlex as _shlex
+            _quoted = _shlex.quote(command)
+            # Projekt-Verzeichnis ermitteln (fuer Scope)
+            _project_dir = f"/projects/{project_id}" if project_id else ""
+            # Sicherstellen dass cwd im Projekt-Dir oder /tmp liegt
+            _cwd_resolved = str(Path(safe_cwd).resolve())
+            _cwd_in_scope = (
+                _cwd_resolved.startswith("/tmp") or
+                (_project_dir and _cwd_resolved.startswith(_project_dir))
+            )
+            if not _cwd_in_scope:
+                # Fallback auf Projekt-Dir oder /tmp
+                safe_cwd = _project_dir if _project_dir and Path(_project_dir).exists() else "/tmp"
+                _cwd_resolved = safe_cwd
+
+            # Minimale Sandbox — nur System-Binaries/Libs + Projekt + /tmp
+            # NICHT `/` komplett mounten (#593: verhindert Host-Leak)
+            _bind_args = [
+                "--ro-bind", "/usr", "/usr",
+                "--ro-bind", "/bin", "/bin",
+                "--ro-bind", "/lib", "/lib",
+                "--ro-bind", "/lib64", "/lib64",
+                "--ro-bind", "/sbin", "/sbin",
+                "--ro-bind-try", "/etc/alternatives", "/etc/alternatives",
+                "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
+                "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
+                "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
+                "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
+                "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
+                "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
+                "--bind", "/tmp", "/tmp",
+                "--dev", "/dev",
+                "--proc", "/proc",
+                "--setenv", "HOME", "/tmp",
+                "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            ]
+            # Projekt-Dir read-write binden (wenn vorhanden)
+            if _project_dir and Path(_project_dir).exists():
+                _bind_args += ["--bind", _project_dir, _project_dir]
+            # cwd read-write binden falls ausserhalb /tmp/Projekt
+            if safe_cwd not in {"/tmp", _project_dir} and Path(safe_cwd).exists():
+                _bind_args += ["--bind", safe_cwd, safe_cwd]
+
+            _bind_cmd = " ".join(_shlex.quote(a) for a in _bind_args)
+            exec_command = (
+                f"bwrap {_bind_cmd} "
+                f"--die-with-parent "
+                f"-- bash -c {_quoted}"
+            )
+            logger.info("shell_exec [%s] (SANDBOX/bwrap mode=%s scope=%s): %s",
+                        agent_id, _mode or "safe", _project_dir or "/tmp", command[:120])
+        elif unrestricted:
+            exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
+            logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
+        else:
+            exec_command = command
+            logger.info("shell_exec [%s]: %s", agent_id, command[:120])
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                exec_command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=safe_cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
+
+            out = stdout.decode(errors="replace")
+            err = stderr.decode(errors="replace")
+            max_out = 32000
+            if len(out) > max_out:
+                out = out[:max_out] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
+            if len(err) > max_out:
+                err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
+            return {
+                "stdout": out, "stderr": err,
+                "exit_code": proc.returncode, "command": command,
+            }
+        except Exception as e:
+            return {"error": str(e), "command": command, "exit_code": -1}
+
+
+# =========================================================================
+# Core Tool #2: file_read
+# =========================================================================
 
 class FileReadTool(BaseTool):
-    """Liest eine Datei aus dem Projekt-Verzeichnis. (#18, #54)"""
 
     @property
-    def id(self) -> str:   return "file_read"
+    def id(self) -> str: return "file_read"
     @property
     def parallel_safe(self) -> bool: return True
     @property
@@ -371,32 +723,18 @@ class FileReadTool(BaseTool):
     def description(self) -> str:
         return (
             "Liest den Inhalt einer Datei aus dem Projekt-Verzeichnis. "
-            "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
-            "Mit filesystem.read_all Permission: absoluter Pfad zu beliebiger Datei unter /projects/ erlaubt. "
-            "Bei großen Dateien offset+limit nutzen um seitenweise zu lesen — "
-            "has_more=true im Ergebnis zeigt an dass weitere Zeichen folgen."
+            "Pfad relativ zum Projekt-Root. "
+            "Bei großen Dateien offset+limit nutzen — has_more=true zeigt weitere Daten an."
         )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.read"]
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "path": {
-                    "type":        "string",
-                    "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis",
-                },
-                "offset": {
-                    "type":        "integer",
-                    "description": "Zeichen-Offset ab dem gelesen wird (Standard: 0)",
-                },
-                "limit": {
-                    "type":        "integer",
-                    "description": "Maximale Zeichen die zurückgegeben werden (Standard: 8000, Max: 32000)",
-                },
+                "path": {"type": "string", "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis"},
+                "offset": {"type": "integer", "description": "Zeichen-Offset (Standard: 0)"},
+                "limit": {"type": "integer", "description": "Max. Zeichen (Standard: 8000, Max: 32000)"},
             },
             "required": ["path"],
         }
@@ -414,20 +752,16 @@ class FileReadTool(BaseTool):
         if not safe_path.exists():
             return {"error": f"Datei nicht gefunden: {path}", "path": str(safe_path)}
         if not safe_path.is_file():
-            return {"error": f"Kein regulaere Datei: {path}", "path": str(safe_path)}
+            return {"error": f"Keine reguläre Datei: {path}", "path": str(safe_path)}
 
         try:
             content = safe_path.read_text(encoding="utf-8", errors="replace")
-            total   = len(content)
-            limit   = min(max(1, limit), 32000)
-            offset  = max(0, offset)
-            chunk   = content[offset:offset + limit]
+            total = len(content)
+            limit = min(max(1, limit), 32000)
+            offset = max(0, offset)
+            chunk = content[offset:offset + limit]
             has_more = (offset + limit) < total
-            logger.info(
-                "file_read: %s liest %s offset=%d limit=%d (Projekt: %s)",
-                agent_id, safe_path, offset, limit, project_id,
-            )
-            # #428: Read-Before-Edit State tracken
+            logger.info("file_read: %s liest %s offset=%d limit=%d", agent_id, safe_path, offset, limit)
             FileWriteTool.mark_read(agent_id, str(safe_path))
             result = {"content": chunk, "path": str(safe_path), "total_size": total, "offset": offset}
             if has_more:
@@ -438,29 +772,27 @@ class FileReadTool(BaseTool):
             return {"error": f"Lesefehler: {e}", "path": str(safe_path)}
 
 
+# =========================================================================
+# Core Tool #3: file_write
+# =========================================================================
+
 class FileWriteTool(BaseTool):
-    """Schreibt eine Datei ins Projekt-Verzeichnis. (#19, #54, #428 Read-Before-Edit)"""
 
-    # #428 + #432: Tracking welche Dateien pro Agent gelesen wurden (LRU-Eviction)
-    _read_state: dict[str, set[str]] = {}  # agent_id → {resolved_path, ...}
-    _MAX_READ_STATE_PER_AGENT = 500  # LRU-Cap pro Agent
-
-    # #426: Checkpoint-Stack pro Agent (max 50)
-    _checkpoints: dict[str, list[tuple[str, str]]] = {}  # agent_id → [(path, old_content), ...]
+    _read_state: dict[str, set[str]] = {}
+    _MAX_READ_STATE_PER_AGENT = 500
+    _checkpoints: dict[str, list[tuple[str, str]]] = {}
     _MAX_CHECKPOINTS = 50
 
     @classmethod
     def mark_read(cls, agent_id: str, path: str) -> None:
-        """Wird von FileReadTool aufgerufen wenn eine Datei gelesen wird."""
         paths = cls._read_state.setdefault(agent_id, set())
         paths.add(path)
-        # #432: LRU-Eviction — bei Overflow älteste Hälfte entfernen
         if len(paths) > cls._MAX_READ_STATE_PER_AGENT:
             to_keep = list(paths)[cls._MAX_READ_STATE_PER_AGENT // 2:]
             cls._read_state[agent_id] = set(to_keep)
 
     @property
-    def id(self) -> str:   return "file_write"
+    def id(self) -> str: return "file_write"
     @property
     def is_destructive(self) -> bool: return True
     @property
@@ -469,35 +801,18 @@ class FileWriteTool(BaseTool):
     def description(self) -> str:
         return (
             "Schreibt Inhalt in eine Datei im Projekt-Verzeichnis. "
-            "Erstellt die Datei (und fehlende Unterordner) wenn sie nicht existiert. "
-            "Pfad relativ zum Projekt-Root (z.B. 'game.js' oder 'src/main.py'). "
-            "Absoluter Pfad innerhalb /projects/<projekt>/ ist auch erlaubt. "
-            "WICHTIG für große Dateien (>100 Zeilen): Erst den Anfang mit mode='overwrite' schreiben, "
-            "dann weitere Abschnitte mit mode='append' anhängen. "
-            "Niemals versuchen mehr als ~200 Zeilen auf einmal zu schreiben."
+            "Erstellt Datei und Unterordner wenn nötig. "
+            "WICHTIG für große Dateien (>100 Zeilen): Erst overwrite, dann append."
         )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.write"]
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "path": {
-                    "type":        "string",
-                    "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis",
-                },
-                "content": {
-                    "type":        "string",
-                    "description": "Inhalt der geschrieben werden soll",
-                },
-                "mode": {
-                    "type":        "string",
-                    "enum":        ["overwrite", "append"],
-                    "description": "overwrite (Standard) oder append",
-                },
+                "path": {"type": "string", "description": "Pfad zur Datei, relativ zum Projekt-Verzeichnis"},
+                "content": {"type": "string", "description": "Inhalt der geschrieben werden soll"},
+                "mode": {"type": "string", "enum": ["overwrite", "append"], "description": "overwrite (Standard) oder append"},
             },
             "required": ["path", "content"],
         }
@@ -507,28 +822,23 @@ class FileWriteTool(BaseTool):
         path: str, content: str = "", mode: str = "overwrite", **kwargs,
     ) -> dict:
         if content is None or content == "":
-            return {"error": "content darf nicht leer sein — bitte Dateiinhalt übergeben", "path": path}
+            return {"error": "content darf nicht leer sein", "path": path}
         try:
             safe_path = assert_path_within_project(path, project_id)
         except PathSafetyError as e:
             return {"error": str(e), "allowed": False}
 
-        # #428: Read-Before-Edit — Datei muss vorher gelesen worden sein (außer bei neuen Dateien)
         if safe_path.exists() and mode == "overwrite":
             read_files = self._read_state.get(agent_id, set())
             if str(safe_path) not in read_files:
                 return {
-                    "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit file_read gelesen. "
-                             "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
-                             "dann erst überschreiben.",
-                    "path": str(safe_path),
-                    "hint": "file_read zuerst aufrufen",
+                    "error": f"Read-Before-Edit: '{path}' nicht vorher gelesen.",
+                    "path": str(safe_path), "hint": "file_read zuerst aufrufen",
                 }
 
         try:
             safe_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # #426: Checkpoint vor Overwrite speichern
             if safe_path.exists() and mode == "overwrite":
                 try:
                     old_content = safe_path.read_text(encoding="utf-8", errors="replace")
@@ -537,258 +847,265 @@ class FileWriteTool(BaseTool):
                     if len(stack) > self._MAX_CHECKPOINTS:
                         stack[:] = stack[-self._MAX_CHECKPOINTS:]
                 except OSError:
-                    pass  # Checkpoint fehlgeschlagen → trotzdem schreiben
+                    pass
 
             write_mode = "a" if mode == "append" else "w"
             with safe_path.open(write_mode, encoding="utf-8") as handle:
                 handle.write(content)
-            logger.info(
-                "file_write: %s schreibt %s (%s, Projekt: %s)",
-                agent_id, safe_path, mode, project_id,
-            )
+            logger.info("file_write: %s schreibt %s (%s)", agent_id, safe_path, mode)
             return {"written": True, "path": str(safe_path), "bytes": len(content.encode())}
         except OSError as e:
             return {"error": f"Schreibfehler: {e}", "path": str(safe_path)}
 
 
-class FileUndoTool(BaseTool):
-    """#426: Letzte Datei-Änderung rückgängig machen (Checkpoint-System)."""
+# =========================================================================
+# Core Tool #4: file_patch
+# =========================================================================
+
+class FilePatchTool(BaseTool):
 
     @property
-    def id(self) -> str:   return "file_undo"
+    def id(self) -> str: return "file_patch"
     @property
-    def name(self) -> str: return "Datei-Undo"
+    def name(self) -> str: return "Datei patchen (Suchen & Ersetzen)"
     @property
     def description(self) -> str:
         return (
-            "Macht die letzte file_write-Änderung rückgängig (Undo). "
-            "Stellt den vorherigen Dateiinhalt aus dem Checkpoint-Stack wieder her. "
-            "Kann mehrfach aufgerufen werden um mehrere Änderungen rückgängig zu machen (max 50)."
+            "Sucht einen Text-Abschnitt in einer Datei und ersetzt ihn. "
+            "Ideal für gezielte Änderungen ohne die ganze Datei zu lesen. "
+            "Unterstützt mehrzeilige Suche und Ersetzung."
         )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        stack = FileWriteTool._checkpoints.get(agent_id, [])
-        if not stack:
-            return {"error": "Kein Checkpoint vorhanden — nichts zum Rückgängigmachen"}
-        path, old_content = stack.pop()
-        try:
-            Path(path).write_text(old_content, encoding="utf-8")
-            logger.info("file_undo: %s restored %s (%d checkpoints remaining)", agent_id, path, len(stack))
-            return {"restored": True, "path": path, "bytes": len(old_content.encode()), "remaining_checkpoints": len(stack)}
-        except OSError as e:
-            return {"error": f"Undo fehlgeschlagen: {e}", "path": path}
-
-
-class ListDirectoryTool(BaseTool):
-    """Listet Dateien und Verzeichnisse im Projekt-Verzeichnis auf."""
-
-    @property
-    def id(self) -> str:   return "list_directory"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Verzeichnis auflisten"
-    @property
-    def description(self) -> str:
-        return (
-            "Listet alle Dateien und Unterverzeichnisse in einem Verzeichnis des Projekts auf. "
-            "Pfad relativ zum Projekt-Root (z.B. '.' für Root, 'src/' für Unterordner). "
-            "Gibt Namen, Typ (file/dir), Größe und Änderungsdatum zurück."
-        )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.read"]
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "path": {
-                    "type":        "string",
-                    "description": "Verzeichnis-Pfad relativ zum Projekt-Root (Standard: '.' = Root)",
-                },
-                "max_entries": {
-                    "type":        "integer",
-                    "description": "Maximale Anzahl Einträge (Standard: 200, Max: 500). Bei großen Repos mit offset paginieren.",
-                },
-                "offset": {
-                    "type":        "integer",
-                    "description": "Einträge überspringen (Standard: 0). Für Paginierung bei großen Verzeichnissen.",
-                },
+                "path": {"type": "string", "description": "Dateipfad (relativ zum Projekt oder absolut)"},
+                "search": {"type": "string", "description": "Text der gesucht werden soll (exakt)"},
+                "replace": {"type": "string", "description": "Ersetzungstext"},
+                "count": {"type": "integer", "description": "Max. Ersetzungen (0=alle, Standard: 1)"},
             },
-            "required": [],
+            "required": ["path", "search", "replace"],
         }
 
-    async def execute(
-        self, agent_id: str, project_id: str,
-        path: str = ".", max_entries: int = 200, offset: int = 0, **kwargs,
-    ) -> dict:
-        agent_permissions = kwargs.pop("_agent_permissions", None)
-        try:
-            safe_path = assert_path_within_project(path or ".", project_id, agent_permissions=agent_permissions)
-        except PathSafetyError as e:
-            return {"error": str(e), "allowed": False}
+    async def execute(self, agent_id: str, project_id: str, path: str, search: str, replace: str, count: int = 1, **kwargs) -> dict:
+        file_path = Path(path)
+        if not file_path.is_absolute():
+            file_path = Path(f"/projects/{project_id}/files") / path
+            if not file_path.exists():
+                file_path = Path(f"/projects/{project_id}") / path
 
-        if not safe_path.exists():
-            return {"error": f"Verzeichnis nicht gefunden: {path}"}
-        if not safe_path.is_dir():
-            return {"error": f"Kein Verzeichnis: {path} — für Dateien file_read verwenden"}
+        if not file_path.exists():
+            return {"error": f"Datei nicht gefunden: {path}"}
+
+        resolved = str(file_path.resolve())
+        read_files = FileWriteTool._read_state.get(agent_id, set())
+        if resolved not in read_files:
+            return {
+                "error": f"Read-Before-Edit: '{path}' nicht vorher gelesen.",
+                "path": resolved, "hint": "file_read zuerst aufrufen",
+            }
 
         try:
-            max_entries = min(max(1, max_entries), 500)
-            offset = max(0, offset)
-            all_entries = sorted(safe_path.iterdir())
-            total = len(all_entries)
-            page = all_entries[offset:offset + max_entries]
-            entries = []
-            for entry in page:
-                try:
-                    stat = entry.stat()
-                    entries.append({
-                        "name": entry.name,
-                        "type": "dir" if entry.is_dir() else "file",
-                        "size": stat.st_size if entry.is_file() else None,
-                        "path": str(entry.relative_to(Path(f"/projects/{project_id}"))),
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            return {"error": f"Datei nicht lesbar: {e}"}
+
+        occurrences = content.count(search)
+        if occurrences == 0:
+            lines = content.split("\n")
+            snippet = "\n".join(lines[:30]) if len(lines) > 30 else content[:2000]
+            return {
+                "error": "Suchtext nicht gefunden",
+                "occurrences": 0, "file_lines": len(lines),
+                "file_size": len(content), "first_30_lines": snippet,
+            }
+
+        if count == 0:
+            new_content = content.replace(search, replace)
+            replaced = occurrences
+        else:
+            new_content = content.replace(search, replace, count)
+            replaced = min(count, occurrences)
+
+        try:
+            file_path.write_text(new_content, encoding="utf-8")
+        except PermissionError:
+            import subprocess, tempfile
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmp", delete=False, encoding="utf-8") as tmp:
+                tmp.write(new_content)
+                tmp_path = tmp.name
+            r = await asyncio.to_thread(lambda: subprocess.run(
+                ["sudo", "cp", tmp_path, str(file_path)], capture_output=True, timeout=10))
+            Path(tmp_path).unlink(missing_ok=True)
+            if r.returncode != 0:
+                return {"error": f"Schreibfehler (auch mit sudo): {r.stderr.decode()[:200]}"}
+
+        new_lines = new_content.split("\n")
+        context_lines = []
+        for i, line in enumerate(new_lines):
+            if replace in line or (i > 0 and replace in new_lines[i-1]):
+                start = max(0, i - 3)
+                end = min(len(new_lines), i + 4)
+                context_lines = [f"{start+j+1:4d} | {new_lines[start+j]}" for j in range(end - start)]
+                break
+
+        return {
+            "ok": True, "path": str(file_path),
+            "occurrences_found": occurrences, "replaced": replaced,
+            "context": "\n".join(context_lines) if context_lines else "(keine Kontextzeilen)",
+        }
+
+
+# =========================================================================
+# Core Tool #5: file_search
+# =========================================================================
+
+class FileSearchTool(BaseTool):
+
+    @property
+    def id(self) -> str: return "file_search"
+    @property
+    def parallel_safe(self) -> bool: return True
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
+    def name(self) -> str: return "In Dateien suchen (grep)"
+    @property
+    def description(self) -> str:
+        return (
+            "Durchsucht alle Dateien im Projektverzeichnis nach einem Text oder Pattern. "
+            "Gibt Dateinamen, Zeilennummern und Kontext zurück."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string", "description": "Suchtext oder Pattern"},
+                "path": {"type": "string", "description": "Verzeichnis oder Datei (optional)"},
+                "file_pattern": {"type": "string", "description": "Dateiname-Filter z.B. '*.py' (optional)"},
+                "max_results": {"type": "integer", "description": "Max. Treffer (Standard: 20)"},
+            },
+            "required": ["pattern"],
+        }
+
+    async def execute(self, agent_id: str, project_id: str, pattern: str, path: str = "", file_pattern: str = "", max_results: int = 20, **kwargs) -> dict:
+        import subprocess
+
+        # #597: Path-Validation — niemals ausserhalb des Projekt-Roots suchen
+        project_root = Path(f"/projects/{project_id}").resolve()
+        if path and Path(path).is_absolute():
+            requested = Path(path).resolve()
+            try:
+                requested.relative_to(project_root)
+                search_dir = requested
+            except ValueError:
+                return {
+                    "error": f"Pfad ausserhalb des Projekts nicht erlaubt: {path}",
+                    "blocked": True,
+                }
+        else:
+            # Relativer Pfad — gegen Projekt-Root aufloesen und pruefen
+            candidate = (project_root / (path or "")).resolve()
+            try:
+                candidate.relative_to(project_root)
+                search_dir = candidate
+            except ValueError:
+                return {
+                    "error": f"Pfad traversiert das Projekt-Root: {path}",
+                    "blocked": True,
+                }
+        if not search_dir.exists():
+            return {"error": f"Verzeichnis nicht gefunden: {search_dir}"}
+
+        cmd = ["grep", "-rn", "--include", file_pattern or "*", "-m", str(max_results * 3), pattern, str(search_dir)]
+        try:
+            r = await asyncio.to_thread(lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=30))
+        except subprocess.TimeoutExpired:
+            return {"error": "Suche dauerte zu lange (>30s)"}
+
+        if r.returncode == 1:
+            return {"matches": [], "count": 0, "pattern": pattern}
+
+        lines = r.stdout.strip().split("\n")[:max_results]
+        matches = []
+        for line in lines:
+            if ":" in line:
+                parts = line.split(":", 2)
+                if len(parts) >= 3:
+                    matches.append({
+                        "file": parts[0].replace(str(search_dir) + "/", ""),
+                        "line": int(parts[1]) if parts[1].isdigit() else 0,
+                        "text": parts[2][:200].strip(),
                     })
-                except OSError:
-                    entries.append({"name": entry.name, "type": "unknown", "size": None})
-            result: dict = {"path": str(safe_path), "entries": entries, "count": len(entries), "total": total}
-            if offset + max_entries < total:
-                result["has_more"] = True
-                result["next_offset"] = offset + max_entries
-                result["hint"] = f"Zeige {len(entries)} von {total} Einträgen. Nutze offset={offset + max_entries} für weitere."
-            return result
-        except OSError as e:
-            return {"error": f"Lesefehler: {e}"}
 
+        return {"matches": matches, "count": len(matches), "pattern": pattern, "search_dir": str(search_dir)}
+
+
+# =========================================================================
+# Core Tool #6: web_search
+# =========================================================================
 
 class WebSearchTool(BaseTool):
-    """
-    Web-Suche via lokalem SearXNG (#51).
-    Fallback auf DuckDuckGo Instant Answer wenn SearXNG nicht läuft.
-    SearXNG läuft auf 127.0.0.1:8888 (nativ, kein Docker).
-    """
 
     SEARXNG_URL = "http://127.0.0.1:8888/search"
 
     @property
-    def id(self) -> str:   return "web_search"
+    def id(self) -> str: return "web_search"
     @property
     def parallel_safe(self) -> bool: return True
     @property
     def is_read_only(self) -> bool: return True
     @property
-    def name(self) -> str: return "Web-Suche (SearXNG)"
+    def name(self) -> str: return "Web-Suche"
     @property
     def description(self) -> str:
-        return (
-            "Sucht im Web nach aktuellen Informationen via SearXNG. "
-            "Nutzt mehrere Suchmaschinen gleichzeitig. "
-            "Gibt Ergebnisse mit Titel, URL und Zusammenfassung zurück."
-        )
+        return "Sucht im Web nach aktuellen Informationen. Gibt Ergebnisse mit Titel, URL und Zusammenfassung zurück."
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "query": {
-                    "type":        "string",
-                    "description": "Suchanfrage",
-                },
-                "engines": {
-                    "type":        "string",
-                    "description": "Komma-getrennte Engine-Liste (z.B. 'duckduckgo,wikipedia'). Standard: alle konfigurierten Engines.",
-                },
-                "max_results": {
-                    "type":        "integer",
-                    "description": "Maximale Anzahl Ergebnisse (Standard: 8)",
-                },
+                "query": {"type": "string", "description": "Suchanfrage"},
+                "max_results": {"type": "integer", "description": "Max. Ergebnisse (Standard: 8)"},
             },
             "required": ["query"],
         }
 
-    async def execute(
-        self,
-        agent_id:    str,
-        project_id:  str,
-        query:       str,
-        engines:     str = "",
-        max_results: int = 8,
-        **kwargs,
-    ) -> dict:
+    async def execute(self, agent_id: str, project_id: str, query: str, max_results: int = 8, **kwargs) -> dict:
         import aiohttp
         from urllib.parse import urlencode
 
-        # --- SearXNG versuchen ---
         params: dict = {"q": query, "format": "json"}
-        if engines:
-            params["engines"] = engines
         searxng_url = f"{self.SEARXNG_URL}?{urlencode(params)}"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    searxng_url,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
+                async with session.get(searxng_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
                         results = [
-                            {
-                                "title":   r.get("title", ""),
-                                "url":     r.get("url", ""),
-                                "snippet": r.get("content", ""),
-                                "engine":  r.get("engine", ""),
-                            }
-                            for r in data.get("results", [])
-                            if r.get("url")
+                            {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("content", ""), "engine": r.get("engine", "")}
+                            for r in data.get("results", []) if r.get("url")
                         ]
-                        logger.info(
-                            "web_search [searxng]: %s sucht '%s' → %d Ergebnisse",
-                            agent_id, query, len(results),
-                        )
-                        return {
-                            "query":   query,
-                            "engine":  "searxng",
-                            "results": results[:max_results],
-                        }
+                        return {"query": query, "engine": "searxng", "results": results[:max_results]}
         except Exception as e:
             logger.debug("web_search: SearXNG nicht erreichbar (%s) — Fallback auf DDG", e)
 
-        # --- Fallback: DuckDuckGo Instant Answer ---
         ddg_params = urlencode({"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"})
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"https://api.duckduckgo.com/?{ddg_params}",
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
+                async with session.get(f"https://api.duckduckgo.com/?{ddg_params}", timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     data = await resp.json(content_type=None)
         except Exception as e:
-            return {"error": f"Suche fehlgeschlagen (SearXNG + DDG): {e}", "results": []}
+            return {"error": f"Suche fehlgeschlagen: {e}", "results": []}
 
         results = []
         if data.get("AbstractText"):
-            results.append({
-                "title":   data.get("Heading", "Direkte Antwort"),
-                "url":     data.get("AbstractURL", ""),
-                "snippet": data["AbstractText"],
-                "engine":  "duckduckgo",
-            })
+            results.append({"title": data.get("Heading", "Direkte Antwort"), "url": data.get("AbstractURL", ""), "snippet": data["AbstractText"], "engine": "duckduckgo"})
         for topic in data.get("RelatedTopics", []):
             if len(results) >= max_results:
                 break
@@ -797,1241 +1114,18 @@ class WebSearchTool(BaseTool):
             text = topic.get("Text", "")
             link = topic.get("FirstURL", "")
             if text and link:
-                results.append({
-                    "title":   link.split("/")[-1].replace("_", " "),
-                    "url":     link,
-                    "snippet": text,
-                    "engine":  "duckduckgo",
-                })
-        logger.info(
-            "web_search [ddg-fallback]: %s sucht '%s' → %d Ergebnisse",
-            agent_id, query, len(results),
-        )
+                results.append({"title": link.split("/")[-1].replace("_", " "), "url": link, "snippet": text, "engine": "duckduckgo"})
         return {"query": query, "engine": "duckduckgo_fallback", "results": results[:max_results]}
 
 
-class HttpRequestTool(BaseTool):
-    """HTTP-Request an externe URLs (#20). GET/POST/PUT/PATCH/DELETE mit optionalem JSON-Body."""
-
-    @property
-    def id(self) -> str:   return "http_request"
-    @property
-    def name(self) -> str: return "HTTP-Request"
-    @property
-    def description(self) -> str:
-        return (
-            "Sendet einen HTTP-Request an eine URL und gibt Status-Code und Body zurueck. "
-            "Nuetzlich um externe APIs abzufragen oder Webhooks auszuloesen."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "url":     {"type": "string", "description": "Ziel-URL"},
-                "method": {
-                    "type":        "string",
-                    "enum":        ["GET", "POST", "PUT", "PATCH", "DELETE"],
-                    "description": "HTTP-Methode (Standard: GET)",
-                },
-                "json_body": {
-                    "type":                 "object",
-                    "description":          "JSON-Body fuer POST/PUT/PATCH (optional)",
-                    "properties":           {},
-                    "additionalProperties": True,
-                },
-                "headers": {
-                    "type":                 "object",
-                    "description":          "Zusaetzliche Headers als Key-Value (optional)",
-                    "properties":           {},
-                    "additionalProperties": True,
-                },
-                "timeout": {
-                    "type":        "integer",
-                    "description": "Timeout in Sekunden (Standard: 15)",
-                },
-            },
-            "required": ["url"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        url: str, method: str = "GET",
-        json_body: dict | None = None,
-        headers: dict | None = None,
-        timeout: int = 15,
-    ) -> dict:
-        import aiohttp
-        from urllib.parse import urlparse
-
-        # #429: Preapproved Hosts — interne Services immer erlaubt
-        _PREAPPROVED_HOSTS = {
-            "127.0.0.1", "localhost",
-            "192.168.178.181", "192.168.178.5", "192.168.178.220",  # HydraHive Instanzen
-            "192.168.178.102", "192.168.178.203",  # AgentLink, Gitea
-        }
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        is_preapproved = host in _PREAPPROVED_HOSTS or host.endswith(".local")
-
-        logger.info("http_request: %s -> %s %s%s", agent_id, method, url,
-                     " (preapproved)" if is_preapproved else "")
-        try:
-            async with aiohttp.ClientSession() as session:
-                kwargs: dict = {
-                    "timeout": aiohttp.ClientTimeout(total=timeout),
-                    "headers": headers or {},
-                    "allow_redirects": True,  # #429: Redirect-Handling
-                    "max_redirects": 5,
-                }
-                if json_body is not None:
-                    kwargs["json"] = json_body
-
-                async with session.request(method, url, **kwargs) as resp:
-                    # #429: Redirect-Info melden
-                    redirected = str(resp.url) != url
-                    try:
-                        body = await resp.json(content_type=None)
-                        body_type = "json"
-                    except Exception:
-                        body = await resp.text()
-                        body_type = "text"
-                    result = {"status": resp.status, "body": body, "body_type": body_type}
-                    if redirected:
-                        result["redirected_to"] = str(resp.url)
-                    return result
-        except aiohttp.ClientError as e:
-            return {"error": f"HTTP-Fehler: {e}"}
-        except Exception as e:
-            return {"error": f"Request fehlgeschlagen: {e}"}
-
-
-
-class SpawnAgentTool(BaseTool):
-    """
-    Boss-Agent spawnt einen Task-Agenten on-demand. (#21)
-    Der gespawnte Agent erbt den Projekt-Kontext und erledigt einen Task.
-    """
-
-    @property
-    def id(self) -> str:   return "spawn_agent"
-    @property
-    def name(self) -> str: return "Task-Agent spawnen"
-    @property
-    def description(self) -> str:
-        return (
-            "Spawnt einen spezialisierten Task-Agenten fuer eine einmalige Aufgabe. "
-            "Der Agent wird nach Abschluss automatisch beendet. "
-            "Nutze dies fuer komplexe Teilaufgaben die einen eigenen Kontext benoetigen."
-        )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["spawn_agents"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type":        "string",
-                    "description": "ID des zu spawnenden Agenten aus dem Agent-Pool",
-                },
-                "task": {
-                    "type":        "string",
-                    "description": "Aufgabe die der gespawnte Agent erledigen soll",
-                },
-                "context": {
-                    "type":        "string",
-                    "description": "Kontext und Daten die der Agent benoetigt",
-                },
-            },
-            "required": ["agent_id", "task"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        agent_id_to_spawn: str, task: str, context: str = "",  # type: ignore[override]
-    ) -> dict:
-        """
-        Wird vom Orchestrator abgefangen und an AgentRuntime.spawn_task_agent() weitergeleitet.
-        Stub gibt Intention zurueck — Orchestrator uebernimmt die echte Ausfuehrung.
-        """
-        return {
-            "spawning":  agent_id_to_spawn,
-            "task":      task,
-            "context":   context,
-            "initiated_by": agent_id,
-            "project":   project_id,
-        }
-
-# ============================================================= AgentLink Tools
-
-def _handoff_dir(project_id: str):
-    """
-    Gibt das Handoff-Basisverzeichnis zurück.
-    Normale Projekte: /projects/{id}/
-    Persönliche Agenten (personal_*) und direkte Agent-Chats: /agents/{id}/
-    """
-    from pathlib import Path as _P
-    project_path = settings.projects_dir / project_id
-    if project_path.exists():
-        return project_path
-    agent_path = settings.agents_dir / project_id
-    if agent_path.exists():
-        return agent_path
-    return project_path  # Fallback — wird ggf. angelegt
-
-
-class WriteHandoffTool(BaseTool):
-    """Schreibt einen AgentLink-Handoff — State-Transfer an anderen Agenten."""
-
-    @property
-    def id(self) -> str:   return "write_handoff"
-    @property
-    def name(self) -> str: return "AgentLink Handoff schreiben"
-    @property
-    def description(self) -> str:
-        return (
-            "Speichert einen Handoff im AgentLink-System damit ein anderer Agent "
-            "den Auftrag und den Kontext uebernehmen kann. "
-            "to_agent leer lassen damit jeder Agent lesen kann."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["handoff.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "to_agent": {
-                    "type":        "string",
-                    "description": "Ziel-Agent-ID (leer = any)",
-                },
-                "context": {
-                    "type":        "string",
-                    "description": "Freitext-Kontext fuer den empfangenden Agenten",
-                },
-                "data": {
-                    "type":        "object",
-                    "description": "Strukturierte Daten (JSON) die uebergeben werden",
-                },
-                "ttl_seconds": {
-                    "type":        "integer",
-                    "description": "Gueltigkeit in Sekunden (Standard: 3600)",
-                },
-            },
-            "required": [],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        to_agent: str = "",
-        context: str = "",
-        data: dict | None = None,
-        ttl_seconds: int = 3600,
-    ) -> dict:
-        from . import agentlink_client as _alc
-        if _alc.is_available():
-            try:
-                return await _alc.write_handoff_remote(
-                    from_agent=agent_id,
-                    to_agent=to_agent or None,
-                    context=context,
-                    data=data or {},
-                )
-            except Exception as e:
-                logger.warning("AgentLink write_handoff remote fehlgeschlagen, Fallback: %s", e)
-        # Fallback: file-basiert
-        from .agentlink import write_handoff as _wh
-        project_dir = _handoff_dir(project_id)
-        return _wh(
-            project_dir,
-            from_agent=agent_id,
-            to_agent=to_agent or None,
-            context=context,
-            data=data or {},
-            ttl_seconds=ttl_seconds,
-        )
-
-
-class ReadHandoffTool(BaseTool):
-    """Liest den naechsten AgentLink-Handoff fuer diesen Agenten."""
-
-    @property
-    def id(self) -> str:   return "read_handoff"
-    @property
-    def name(self) -> str: return "AgentLink Handoff lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest den naechsten Handoff aus dem AgentLink-System der fuer diesen "
-            "Agenten bestimmt ist. consume=true loescht den Handoff nach dem Lesen "
-            "(Standard). Gibt null zurueck wenn kein Handoff vorhanden."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["handoff.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "consume": {
-                    "type":        "boolean",
-                    "description": "Handoff nach dem Lesen loeschen (Standard: true)",
-                },
-            },
-            "required": [],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        consume: bool = True,
-    ) -> dict:
-        from . import agentlink_client as _alc
-        if _alc.is_available():
-            try:
-                entry = await _alc.read_handoff_remote(agent_id=agent_id, consume=consume)
-                if entry is not None:
-                    return {"handoff": entry, "found": True}
-                # Kein Handoff remote → auch file-basiert prüfen
-            except Exception as e:
-                logger.warning("AgentLink read_handoff remote fehlgeschlagen, Fallback: %s", e)
-        # Fallback: file-basiert
-        from .agentlink import read_handoff as _rh
-        project_dir = _handoff_dir(project_id)
-        entry = _rh(project_dir, to_agent=agent_id, consume=consume)
-        if entry is None:
-            return {"handoff": None, "found": False}
-        return {"handoff": entry, "found": True}
-
-
-# ============================================================= System Tools (Superagent)
-
-import re as _re_shell
-
-# ---------------------------------------------------------------------------
-# #474: AST-basiertes Bash-Command-Parsing (shlex + heuristische Analyse)
-# Läuft VOR der Regex-Blocklist und fängt Umgehungen ab, die reine Regex
-# nicht erkennen kann: Command Substitution, Pipe-Chains, Variable Injection,
-# Privilege Escalation Wrapper, String-Verkettung/Obfuskation.
-# FAIL-CLOSED: Wenn shlex.split() fehlschlägt, wird der Befehl blockiert.
-# ---------------------------------------------------------------------------
-
-# Befehle, die in Pipe-Chains / nach Semikolons blockiert sind
-_PIPE_DANGEROUS_COMMANDS: frozenset[str] = frozenset({
-    "rm", "rmdir", "dd", "mkfs", "fdisk", "parted", "shred", "wipefs",
-    "kill", "killall", "pkill", "reboot", "shutdown", "poweroff", "halt", "init",
-    "systemctl", "chmod", "chown", "chattr",
-})
-
-# Privilege-Escalation-Wrapper (werden rekursiv aufgelöst)
-_ESCALATION_WRAPPERS: frozenset[str] = frozenset({
-    "sudo", "pkexec", "doas", "su", "runuser", "machinectl",
-})
-
-# Gefährliche Umgebungsvariablen (auch via ${VAR} oder $VAR Zugriff)
-_DANGEROUS_ENV_VARS: frozenset[str] = frozenset({
-    "LD_PRELOAD", "LD_LIBRARY_PATH",
-    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH",
-    "NODE_OPTIONS", "NODE_TLS_REJECT_UNAUTHORIZED",
-    "GOFLAGS", "RUSTFLAGS",
-    "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
-    "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT",
-})
-
-# Kompiliertes Pattern für $VAR und ${VAR} Erkennung
-_ENV_VAR_PATTERN = _re_shell.compile(
-    r'\$\{?(' + '|'.join(_re_shell.escape(v) for v in _DANGEROUS_ENV_VARS) + r')\}?'
-)
-
-# Obfuskation-Patterns: String-Verkettung, hex/octal escapes für gefährliche Befehle
-_OBFUSCATION_PATTERNS: list[tuple[_re_shell.Pattern, str]] = [
-    # r"m" -rf  oder  "r"m -rf  (Anführungszeichen mitten im kurzen Befehlsnamen, <=6 Zeichen)
-    (_re_shell.compile(r'''(?:^|[\s;|&])([a-z]{0,3}["'][a-z]{1,3}["'][a-z]{0,3})\s+-[a-zA-Z]*[rf]''', _re_shell.IGNORECASE),
-     "Obfuskierter Befehl (Anführungszeichen-Verkettung) verboten"),
-    # $'\x72\x6d' = rm  (hex/octal escape)
-    (_re_shell.compile(r"\$'[^']*\\x[0-9a-fA-F]{2}"),
-     "Hex-Escape ($'\\x..') in Befehlen verboten"),
-    (_re_shell.compile(r"\$'[^']*\\[0-7]{3}"),
-     "Octal-Escape ($'\\NNN') in Befehlen verboten"),
-    # printf '\x72\x6d' | sh  (printf-Piped-to-Shell)
-    (_re_shell.compile(r'\bprintf\b.*\\x[0-9a-fA-F].*\|\s*(sh|bash|dash|zsh|ksh)\b'),
-     "printf mit hex-escape nach Shell gepipet — verboten"),
-    # base64 decode piped to shell
-    (_re_shell.compile(r'\b(base64|b64decode)\b.*\|\s*(sh|bash|dash|zsh|ksh|source)\b'),
-     "base64-decode nach Shell gepipet — verboten"),
-    # Brace expansion as obfuscation: {r,m} → rm, /dev/{s,d}a
-    (_re_shell.compile(r'\{[a-z],[a-z]\}'),
-     "Brace-Expansion als Verschleierung verboten"),
-    # eval/source with variable: eval "$cmd", source <(...)
-    (_re_shell.compile(r'\b(eval|source)\s+["\$]'),
-     "eval/source mit Variable/Substitution verboten"),
-]
-
-
-def _ast_check_command(command: str) -> str | None:
-    """
-    AST-level Analyse eines Shell-Befehls.
-    Gibt Fehlermeldung zurück wenn blockiert, sonst None.
-    FAIL-CLOSED: bei Parse-Fehlern wird blockiert.
-    """
-    # 0. Unicode/Control-Character-Angriffe (vor allem anderen)
-    for ch in command:
-        cp = ord(ch)
-        # Control chars (außer \t \n \r) und Unicode-Whitespace-Tricks
-        if cp < 0x20 and cp not in (0x09, 0x0A, 0x0D):
-            return f"Kontrollzeichen U+{cp:04X} im Befehl verboten"
-        # Unicode-Whitespace der wie Space aussieht aber keiner ist
-        if cp in (0x00A0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
-                  0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x200B,
-                  0x202F, 0x205F, 0x2060, 0x3000, 0xFEFF):
-            return f"Unicode-Whitespace U+{cp:04X} im Befehl verboten"
-
-    # 1. Obfuskation erkennen (vor dem Parsen, da shlex diese nicht auflöst)
-    for pattern, reason in _OBFUSCATION_PATTERNS:
-        if pattern.search(command):
-            return reason
-
-    # 2. Command Substitution: $( ), $(( )), Backticks
-    #    (Auch die Regex-Blocklist prüft das — hier als AST-Layer-Redundanz)
-    if '$(' in command:
-        return "Command Substitution $(...) verboten"
-    if '`' in command:
-        return "Backticks (Command Substitution) verboten"
-
-    # 2b. Process Substitution: <( ), >( )
-    if _re_shell.search(r'[<>]\(', command):
-        return "Process Substitution <()/> () verboten"
-
-    # 2c. Zsh-spezifische Angriffe
-    if _re_shell.search(r'\bzmodload\b', command):
-        return "zmodload verboten"
-    if _re_shell.search(r'\bemulate\b.*-c\b', command):
-        return "emulate -c verboten"
-    if _re_shell.search(r'(?:^|\s)=[a-zA-Z]', command):
-        return "Zsh =cmd Expansion verboten"
-
-    # 2d. IFS Injection
-    if _re_shell.search(r'\bIFS=', command):
-        return "IFS-Manipulation verboten"
-
-    # 2e. /proc Zugriff auf sensitive Pfade
-    if _re_shell.search(r'/proc/[0-9]+/environ\b|/proc/self/environ\b', command):
-        return "/proc/environ Zugriff verboten"
-
-    # 2f. Obfuskierte Flags: \-\-help statt --help (Backslash in Flags)
-    if _re_shell.search(r'\\-\\-[a-z]', command):
-        return "Obfuskierte Flags (\\-\\-) verboten"
-
-    # 3. Dangerous variable expansion: $LD_PRELOAD, ${NODE_OPTIONS}, etc.
-    env_match = _ENV_VAR_PATTERN.search(command)
-    if env_match:
-        return f"Zugriff auf gefährliche Variable ${env_match.group(1)} verboten"
-
-    # 4. Parse mit shlex — FAIL-CLOSED bei Fehler
-    try:
-        tokens = _shlex_shell.split(command)
-    except ValueError as e:
-        return f"Befehl konnte nicht sicher geparst werden (shlex: {e}) — FAIL-CLOSED"
-
-    if not tokens:
-        return None
-
-    # 5. Pipe-Chain-Analyse: Aufsplitten an | ; && ||
-    #    Jedes Segment wird einzeln auf gefährliche Befehle geprüft
-    segments = _re_shell.split(r'\s*(?:\|(?!\|)|\|\||&&|;)\s*', command)
-    for segment in segments:
-        segment = segment.strip()
-        if not segment:
-            continue
-        try:
-            seg_tokens = _shlex_shell.split(segment)
-        except ValueError:
-            return f"Segment konnte nicht geparst werden: {segment[:60]} — FAIL-CLOSED"
-        if not seg_tokens:
-            continue
-
-        # Escalation-Wrapper auflösen: sudo rm -rf → prüfe rm -rf
-        resolved = _resolve_escalation(seg_tokens)
-        exe_name = _re_shell.sub(r'^.*/', '', resolved[0]).lower() if resolved else ""
-
-        # 5a. Pipe-Chain: gefährliche Befehle in jedem Segment erkennen
-        if exe_name in _PIPE_DANGEROUS_COMMANDS:
-            # Der Befehl selbst ist gefährlich — die Regex-Blocklist
-            # prüft das auch, aber hier fangen wir es auch nach Pipe auf
-            pass  # Regex-Layer fängt die konkreten Patterns
-
-        # 5b. Prüfe ob ein Escalation-Wrapper einen blockierten Befehl umschließt
-        first_exe = _re_shell.sub(r'^.*/', '', seg_tokens[0]).lower() if seg_tokens else ""
-        if first_exe in _ESCALATION_WRAPPERS:
-            if resolved and resolved != seg_tokens:
-                # Rekursiv den aufgelösten Befehl prüfen
-                resolved_cmd = " ".join(resolved)
-                inner_block = _check_shell_blocklist(resolved_cmd)
-                if inner_block:
-                    return f"Escalation-Wrapper ({seg_tokens[0]}) um blockierten Befehl: {inner_block}"
-
-    return None
-
-
-def _resolve_escalation(tokens: list[str]) -> list[str]:
-    """
-    Löst Privilege-Escalation-Wrapper rekursiv auf.
-    sudo -u root rm -rf /  →  rm -rf /
-    pkexec rm -rf /  →  rm -rf /
-    doas -u user sudo rm  →  rm
-    Max. 5 Iterationen gegen Endlosschleifen.
-    """
-    result = tokens[:]
-    for _ in range(5):
-        if not result:
-            break
-        exe = _re_shell.sub(r'^.*/', '', result[0]).lower()
-        if exe not in _ESCALATION_WRAPPERS:
-            break
-        # Optionen überspringen
-        rest = result[1:]
-        while rest and rest[0].startswith('-'):
-            # su -c "command" → den Command extrahieren
-            if exe == 'su' and rest[0] == '-c' and len(rest) > 1:
-                try:
-                    return _shlex_shell.split(rest[1])
-                except ValueError:
-                    return rest[1:]
-            rest = rest[1:]
-        # Username-Argument bei su/runuser überspringen
-        if exe in ('su', 'runuser') and rest and not rest[0].startswith('-'):
-            rest = rest[1:]
-        result = rest
-    return result
-
-
-# Kommandos die niemals ausgeführt werden dürfen — unabhängig vom Agenten
-_SHELL_BLOCKLIST: list[tuple[str, str]] = [
-    # Rekursives Löschen
-    (r"\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-[a-zA-Z]*f[a-zA-Z]*r|--recursive)\b", "rm -r / rm -rf verboten"),
-    (r"\brm\b.*\s/opt/",            "rm auf /opt/ verboten"),
-    (r"\brmdir\s+--parents\b",      "rmdir --parents verboten"),
-    # Disk-Destruktion
-    (r"\bdd\b.*\bof=/dev/",         "dd auf Blockdevice verboten"),
-    (r"\bmkfs\b",                   "mkfs verboten"),
-    (r"\bfdisk\b",                  "fdisk verboten"),
-    (r"\bparted\b",                 "parted verboten"),
-    (r"\bshred\b",                  "shred verboten"),
-    (r"\bwipefs\b",                 "wipefs verboten"),
-    # Service-Sabotage (HydraHive selbst killen)
-    (r"\bsystemctl\s+(stop|disable|mask|kill)\s+(hydrahive|hydrahive)",  "systemctl stop/disable hydrahive/hydrahive verboten"),
-    (r"\bkillall\s+uvicorn\b",      "killall uvicorn verboten"),
-    (r"\bkill\b.*\buvicorn\b",      "kill uvicorn verboten"),
-    # Fork-Bombe / Wildcard-Gefahr
-    (r":\(\)\s*\{",                 "Fork-Bombe verboten"),
-    (r"\brm\s+(-[a-zA-Z]+ +)?/\s", "rm / verboten"),
-    (r"\brm\s+(-[a-zA-Z]+ +)?/$",  "rm / verboten"),
-    # Schreiben in geschützte Systempfade via Redirects / tee / install / cp
-    (r">\s*/opt/(hydrahive|hydrahive)/", "Redirect nach /opt/hydrahive/ verboten"),
-    (r">\s*/etc/",                  "Redirect nach /etc/ verboten"),
-    (r">\s*/bin/",                  "Redirect nach /bin/ verboten"),
-    (r">\s*/usr/",                  "Redirect nach /usr/ verboten"),
-    (r">\s*/lib",                   "Redirect nach /lib verboten"),
-    (r">\s*/boot/",                 "Redirect nach /boot/ verboten"),
-    (r">\s*/dev/",                  "Redirect nach /dev/ verboten"),
-    (r">\s*/sys/",                  "Redirect nach /sys/ verboten"),
-    (r">\s*/proc/",                 "Redirect nach /proc/ verboten"),
-    (r"\btee\s+(/etc/|/opt/|/usr/|/bin/|/boot/|/lib|/sys/|/proc/)", "tee auf Systempfad verboten"),
-    (r"\bcp\b.+\s(/etc/|/opt/(hydrahive|hydrahive)/|/usr/|/bin/|/boot/)", "cp nach Systempfad verboten"),
-    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/etc/", "Download nach /etc/ verboten"),
-    (r"\b(wget|curl)\b.*\s-[a-zA-Z]*[oO]\s+/opt/(hydrahive|hydrahive)/", "Download nach /opt/hydrahive/ verboten"),
-    # chmod/chown auf Systempfade
-    (r"\b(chmod|chown)\b.*/opt/",   "chmod/chown auf /opt/ verboten"),
-    (r"\b(chmod|chown)\b.*/etc/",   "chmod/chown auf /etc/ verboten"),
-    (r"\b(chmod|chown)\b.*/bin/",   "chmod/chown auf /bin/ verboten"),
-    # git clone/reset --hard auf /opt/
-    (r"\bgit\b.*--hard\b.*\s/opt/", "git reset --hard auf /opt/ verboten"),
-    (r"\bgit\s+clone\b.*\s/opt/",   "git clone nach /opt/ verboten"),
-    (r"cd\s+/opt/(hydrahive|hydrahive)\b.*&&.*\bgit\b", "git in /opt/hydrahive/ verboten"),
-    # Inline-Code-Ausführung in Interpreter (perl -e, ruby -e etc. — python3 -c erlaubt für File-Patching)
-    (r"\bperl\s+-[a-zA-Z]*e\b",     "perl -e (Inline-Code) verboten"),
-    (r"\bruby\s+-[a-zA-Z]*e\b",     "ruby -e (Inline-Code) verboten"),
-    (r"\bnode\s+-[a-zA-Z]*e\b",     "node -e (Inline-Code) verboten"),
-    (r"\bnodejs\s+-[a-zA-Z]*e\b",   "nodejs -e (Inline-Code) verboten"),
-    # sudo — Agenten brauchen keine Root-Rechte
-    (r"\bsudo\b",                   "sudo verboten — Agenten laufen ohne Root"),
-    # Subshell-/Command-Substitution-Gefahr
-    (r"\$\(",                       "Command Substitution $(...) verboten"),
-    (r"`",                          "Backticks verboten"),
-    # CWD-Manipulation zu Systempfaden
-    (r"\bcd\s+(/etc|/opt/(hydrahive|hydrahive)|/bin|/usr|/boot|/lib|/sys|/proc)\b", "cd in Systempfad verboten"),
-    # #480: Dangerous Environment Variables (Code Injection, TLS Bypass, Proxy Redirect)
-    (r"\bLD_PRELOAD=",              "LD_PRELOAD verboten (Code Injection)"),
-    (r"\bLD_LIBRARY_PATH=",         "LD_LIBRARY_PATH verboten (Code Injection)"),
-    (r"\bDYLD_",                    "DYLD_* verboten (macOS Code Injection)"),
-    (r"\bNODE_OPTIONS=",            "NODE_OPTIONS verboten (Code Injection)"),
-    (r"\bGOFLAGS=",                "GOFLAGS verboten (Build Injection)"),
-    (r"\bRUSTFLAGS=",              "RUSTFLAGS verboten (Build Injection)"),
-    (r"\bNODE_TLS_REJECT_UNAUTHORIZED=", "NODE_TLS_REJECT_UNAUTHORIZED verboten (TLS Bypass)"),
-    (r"\bHTTP_PROXY=",             "HTTP_PROXY verboten (Traffic Redirect)"),
-    (r"\bHTTPS_PROXY=",            "HTTPS_PROXY verboten (Traffic Redirect)"),
-    (r"\bhttp_proxy=",             "http_proxy verboten (Traffic Redirect)"),
-    (r"\bhttps_proxy=",            "https_proxy verboten (Traffic Redirect)"),
-    (r"\bPYTHONSTARTUP=",         "PYTHONSTARTUP verboten (Code Injection)"),
-    (r"\bPERL5OPT=",              "PERL5OPT verboten (Code Injection)"),
-    (r"\bRUBYOPT=",               "RUBYOPT verboten (Code Injection)"),
-]
-
-# Shell-Wrapper-Programme: erste Token prüfen, ob -c folgt
-_SHELL_WRAPPERS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
-# Wrapper-Programme die weitere Befehle einleiten (env, nohup, etc.)
-_EXEC_WRAPPERS  = {"env", "nohup", "nice", "ionice", "timeout", "xargs", "sudo", "su"}
-
-
-def _check_shell_blocklist(command: str) -> str | None:
-    """
-    Gibt die Fehlermeldung zurück wenn der Befehl blockiert ist, sonst None.
-
-    Zweischichtiger Schutz:
-      1. AST-Level-Analyse (#474): Command Substitution, Pipe-Chains, Variable
-         Injection, Escalation Wrapper, Obfuskation. FAIL-CLOSED.
-      2. Regex-Blocklist (Original): Pattern-Matching als Fallback-Layer.
-      3. Token-Level: eval, Shell-Wrapper (-c), Exec-Wrapper.
-    """
-    # --- Layer 1: AST-Level-Analyse (#474) ---
-    ast_block = _ast_check_command(command)
-    if ast_block:
-        return ast_block
-
-    # --- Layer 2: Regex-Blocklist ---
-    for pattern, reason in _SHELL_BLOCKLIST:
-        if _re_shell.search(pattern, command, _re_shell.IGNORECASE):
-            return reason
-
-    # --- Layer 3: Token-Level-Analyse ---
-    try:
-        tokens = _shlex_shell.split(command)
-    except ValueError:
-        # #474 FAIL-CLOSED: Parse-Fehler = blockieren (nicht durchlassen)
-        return "Befehl konnte nicht sicher geparst werden — FAIL-CLOSED"
-
-    if not tokens:
-        return None
-
-    for token in tokens:
-        if token == "eval":
-            return "eval verboten"
-
-    exe = Path(tokens[0]).name.lower()
-
-    # Shell-Wrapper: bash -c "...", sh -c "..."
-    if exe in _SHELL_WRAPPERS:
-        for idx, token in enumerate(tokens[1:], start=1):
-            if token == "-c" or (token.startswith("-") and "c" in token[1:]):
-                if idx + 1 < len(tokens):
-                    return _check_shell_blocklist(tokens[idx + 1])
-                break
-
-    # Exec-Wrapper: env bash -c "...", nohup rm -rf ..., timeout 30 rm -rf ...
-    if exe in _EXEC_WRAPPERS:
-        # Überspringe Optionen und env-Variablen (VAR=value), prüfe den echten Befehl
-        rest = tokens[1:]
-        while rest and (rest[0].startswith("-") or "=" in rest[0]):
-            rest = rest[1:]
-        if rest:
-            return _check_shell_blocklist(" ".join(rest))
-
-    return None
-
-
-# Erlaubte CWD-Präfixe für shell_exec (verhindert Ausführung aus Systempfaden)
-_ALLOWED_CWD_PREFIXES = ("/tmp", str(settings.projects_dir), "/home", str(settings.agents_dir), "/var/tmp")
-
-
-def _validate_shell_cwd(cwd: str) -> str | None:
-    """Gibt Fehlermeldung zurück wenn CWD nicht in einem erlaubten Verzeichnis liegt."""
-    try:
-        import os
-        normalized = os.path.normpath(cwd)
-        for prefix in _ALLOWED_CWD_PREFIXES:
-            if normalized == prefix or normalized.startswith(prefix + "/"):
-                return None
-        return f"CWD '{cwd}' nicht erlaubt — nur {', '.join(_ALLOWED_CWD_PREFIXES)}"
-    except Exception:
-        return None  # Im Zweifel: nicht blockieren
-
-
-def _validate_gitea_issue_text(title: str, body: str = "") -> str | None:
-    title = title.strip()
-    if len(title) > 256:
-        return "Issue-Titel zu lang (max. 256 Zeichen)"
-    if len(body) > 20000:
-        return "Issue-Body zu lang (max. 20000 Zeichen)"
-    return None
-
-
-class ShellExecTool(BaseTool):
-    """
-    Fuehrt einen Shell-Befehl aus und gibt stdout/stderr zurueck.
-    Nur fuer Superagenten — kein Sandbox, voller Systemzugriff.
-    Destruktive Kommandos (rm -rf, dd, mkfs, ...) und Zugriffe auf
-    /opt/hydrahive/ (bzw. /opt/hydrahive/) werden blockiert.
-    """
-
-    @property
-    def id(self) -> str:   return "shell_exec"
-    @property
-    def is_destructive(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Shell-Befehl ausführen"
-    @property
-    def description(self) -> str:
-        return (
-            "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). "
-            "Du hast VOLLEN ROOT-ZUGANG — alle Befehle werden automatisch als root ausgeführt. "
-            "Keine Einschränkungen: sudo, apt, systemctl, rm, chmod, mount, alles erlaubt. "
-            "Du kannst JEDEN Pfad lesen/schreiben (/root, /etc, /opt, überall). "
-            "Timeout bis 600s. Kein sudo-Prefix nötig — wird automatisch hinzugefügt."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["shell.exec"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type":        "string",
-                    "description": "Bash-Befehl der ausgeführt werden soll",
-                },
-                "timeout": {
-                    "type":        "integer",
-                    "description": "Timeout in Sekunden (Standard: 30, max: 120)",
-                },
-                "cwd": {
-                    "type":        "string",
-                    "description": "Arbeitsverzeichnis (Standard: /tmp)",
-                },
-            },
-            "required": ["command"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        command: str, timeout: int = 30, cwd: str = "/tmp",
-        **kwargs,
-    ) -> dict:
-        import asyncio
-
-        unrestricted = kwargs.get("_execution_mode") == "unrestricted"
-
-        if not unrestricted:
-            blocked = _check_shell_blocklist(command)
-            if blocked:
-                logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
-                return {
-                    "error":     f"Befehl blockiert: {blocked}",
-                    "command":   command,
-                    "exit_code": -1,
-                    "blocked":   True,
-                }
-
-            cwd_error = _validate_shell_cwd(cwd)
-            if cwd_error:
-                logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
-                return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
-
-        max_timeout = 1800 if unrestricted else 120
-        timeout = min(max(timeout, 1), max_timeout)
-        safe_cwd = cwd if Path(cwd).exists() else "/tmp"
-
-        # #439: Bubblewrap Sandbox im safe Mode (wenn bwrap verfügbar)
-        import shutil
-        _use_sandbox = not unrestricted and shutil.which("bwrap") is not None
-        if _use_sandbox and kwargs.get("_execution_mode") == "safe":
-            _quoted = __import__('shlex').quote(command)
-            exec_command = (
-                f"bwrap --ro-bind / / "
-                f"--bind {__import__('shlex').quote(safe_cwd)} {__import__('shlex').quote(safe_cwd)} "
-                f"--bind /tmp /tmp "
-                f"--dev /dev --proc /proc "
-                f"--unshare-net "
-                f"--die-with-parent "
-                f"-- bash -c {_quoted}"
-            )
-            logger.info("shell_exec [%s] (SANDBOX/bwrap): %s", agent_id, command[:120])
-        elif unrestricted:
-            exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
-            logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
-        else:
-            exec_command = command
-            logger.info("shell_exec [%s]: %s", agent_id, command[:120])
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                exec_command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=safe_cwd,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            except asyncio.TimeoutError:
-                proc.kill()
-                return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
-
-            out = stdout.decode(errors="replace")
-            err = stderr.decode(errors="replace")
-            # Limit output to prevent context overflow on large repos
-            max_out = 32000
-            if len(out) > max_out:
-                out = out[:max_out] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
-            if len(err) > max_out:
-                err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
-            return {
-                "stdout":    out,
-                "stderr":    err,
-                "exit_code": proc.returncode,
-                "command":   command,
-            }
-        except Exception as e:
-            return {"error": str(e), "command": command, "exit_code": -1}
-
-
-# ============================================================= project_shell helpers
-
-# Befehle die in project_shell erlaubt sind (Whitelist-Ansatz)
-_PROJECT_SHELL_WHITELIST: frozenset[str] = frozenset({
-    # Suchen / Lesen
-    "grep", "egrep", "fgrep", "rg",
-    "find", "locate",
-    "cat", "less", "more",
-    "head", "tail",
-    "wc",
-    "ls", "ll", "tree",
-    # Textverarbeitung
-    "awk", "sed", "sort", "uniq", "cut", "tr", "jq",
-    "echo", "printf",
-    # Datei-Info
-    "stat", "file", "md5sum", "sha256sum", "du", "pwd", "realpath",
-    # Vergleich / Patch
-    "diff", "patch",
-    # Git (Subkommando wird separat geprüft)
-    "git",
-    # Datei-Management innerhalb des Projekts
-    "mkdir", "cp", "mv", "touch", "chmod", "chown",
-    "rm",   # ohne -rf — blockiert via _check_shell_blocklist
-    "tee",
-    # Hilfsprogramme
-    "xargs",  # nur mit whitelisted Befehlen nach Pipe
-    "which", "type",
-    # Encoding / Scripting (für Gitea API Uploads, File-Patching etc.)
-    "base64",
-    "python3", "python",
-    "curl",
-})
-
-# git-Subkommandos die in project_shell BLOCKIERT sind (Netzwerk / Destruktiv)
-_GIT_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({
-    "push",                              # Netzwerk-Schreib-Zugriff
-    "submodule", "subtree",             # komplex, kaum nötig
-    "gc", "prune", "fsck",              # intern, nicht nötig
-    "remote",                           # Netzwerk-Konfig
-    "archive",                          # Export
-})
-
-
-def _split_pipeline_segments(command: str) -> list[str]:
-    """
-    Splittet Shell-Befehl in Pipeline-Segmente auf — respektiert Quotes.
-    'grep "foo|bar" | wc' → ['grep "foo|bar"', 'wc']
-    'grep "foo|bar"'      → ['grep "foo|bar"']   (kein False-Split)
-    """
-    segments: list[str] = []
-    current: list[str] = []
-    in_double = False
-    in_single = False
-    i = 0
-    while i < len(command):
-        ch = command[i]
-        # Backslash-Escape außerhalb von Single-Quotes
-        if ch == '\\' and not in_single:
-            current.append(ch)
-            if i + 1 < len(command):
-                current.append(command[i + 1])
-                i += 2
-            else:
-                i += 1
-            continue
-        # Quote-Tracking
-        if ch == '"' and not in_single:
-            in_double = not in_double
-        elif ch == "'" and not in_double:
-            in_single = not in_single
-        # Operatoren nur außerhalb von Quotes auswerten
-        if not in_double and not in_single:
-            rest = command[i:]
-            if rest.startswith('&&') or rest.startswith('||'):
-                segments.append(''.join(current).strip())
-                current = []
-                i += 2
-                continue
-            if ch in ('|', ';'):
-                segments.append(''.join(current).strip())
-                current = []
-                i += 1
-                continue
-        current.append(ch)
-        i += 1
-    if current:
-        segments.append(''.join(current).strip())
-    return [s for s in segments if s]
-
-
-def _project_shell_check_command(command: str, project_id: str) -> str | None:
-    """
-    Prüft ob der Befehl für project_shell erlaubt ist.
-    Gibt Fehlermeldung zurück wenn nicht, sonst None.
-
-    Sicherheits-Schichten:
-    1. Bekannte Shell-Gefahren via _check_shell_blocklist (rm -rf, sudo, $(), etc.)
-    2. Whitelist: jeder Segment-Befehl muss in _PROJECT_SHELL_WHITELIST sein
-    3. git-Subkommando-Blacklist (push, clone, etc.)
-    4. Kein Redirect nach außerhalb /projects/{project_id}/
-    """
-    # Schicht 1: Globale Blocklist (rm -rf, sudo, $(), backticks, etc.)
-    blocked = _check_shell_blocklist(command)
-    if blocked:
-        return blocked
-
-    # Schicht 2: Pipeline-Segmente parsen und Whitelist prüfen
-    # Quote-aware Split — | innerhalb von "..." oder '...' wird nicht als Trenner gewertet
-    for segment in _split_pipeline_segments(command):
-        segment = segment.strip()
-        if not segment:
-            continue
-        try:
-            tokens = _shlex_shell.split(segment)
-        except ValueError:
-            # shlex scheitert an komplexen Quoting-Mustern wie grep "foo\|bar"
-            # Fallback: ersten Token per Regex extrahieren — Blocklist hat bereits geprüft
-            m = _re_shell.match(r'\s*(\S+)', segment)
-            if not m:
-                continue
-            tokens = [m.group(1)]
-        if not tokens:
-            continue
-        exe = Path(tokens[0]).name.lower()
-        if exe not in _PROJECT_SHELL_WHITELIST:
-            return (
-                f"Befehl '{exe}' nicht erlaubt in project_shell. "
-                f"Erlaubt: {', '.join(sorted(_PROJECT_SHELL_WHITELIST))}"
-            )
-        # Schicht 3: git-Subkommando prüfen
-        if exe == "git" and len(tokens) > 1:
-            sub = tokens[1].lower()
-            if sub in _GIT_BLOCKED_SUBCOMMANDS:
-                return f"git {sub} ist in project_shell nicht erlaubt (Netzwerk/Destruktiv)"
-
-    # Schicht 4: Redirects auf absolute Pfade außerhalb /projects/{project_id}/ blockieren
-    # Einfacher Heuristik-Check: > /pfad der nicht /projects/{project_id}/ ist
-    project_root = f"/projects/{project_id}"
-    redirect_matches = _re_shell.findall(r'(?:>>?|2>>?|&>>?)\s*(/[^\s;|&]+)', command)
-    for target in redirect_matches:
-        norm = str(Path(target).resolve()) if Path(target).exists() else str(Path(target))
-        if not norm.startswith(project_root):
-            return f"Redirect nach '{target}' außerhalb von {project_root}/ verboten"
-
-    return None
-
-
-class ProjectShellTool(BaseTool):
-    """
-    Shell-Zugang für Agenten, beschränkt auf /projects/{project_id}/.
-    Whitelist-Ansatz: nur sichere Lese-/Bearbeitungsbefehle erlaubt.
-    Kein sudo, kein git push/clone, kein rm -rf, keine Shell-Wrapper.
-    """
-
-    @property
-    def id(self) -> str:   return "project_shell"
-    @property
-    def name(self) -> str: return "Projekt-Shell"
-    @property
-    def description(self) -> str:
-        allowed = "grep, find, cat, head, tail, wc, ls, tree, diff, patch, git (kein push/clone), " \
-                  "sed, awk, sort, uniq, mkdir, cp, mv, touch, rm (kein -rf), stat, jq u.a."
-        return (
-            "Führt Shell-Befehle im Projekt-Verzeichnis /projects/{project_id}/ aus. "
-            f"Erlaubte Befehle: {allowed}. "
-            "Kein sudo, kein git push/clone, kein rm -rf, keine Shell-Wrapper (bash -c). "
-            "CWD ist immer innerhalb /projects/{project_id}/ — Pfad-Escapes werden blockiert. "
-            "Pipes zwischen erlaubten Befehlen sind erlaubt (z.B. grep pattern . | wc -l). "
-            "Timeout max 60s."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type":        "string",
-                    "description": "Shell-Befehl (nur Whitelist-Befehle, Pipes erlaubt)",
-                },
-                "subpath": {
-                    "type":        "string",
-                    "description": "Optionaler Unterordner innerhalb des Projekts als CWD (z.B. 'src' oder 'src/components'). Standard: Projekt-Root.",
-                },
-                "timeout": {
-                    "type":        "integer",
-                    "description": "Timeout in Sekunden (Standard: 30, max: 60)",
-                },
-            },
-            "required": ["command"],
-        }
-
-    async def execute(
-        self,
-        agent_id: str,
-        project_id: str,
-        command: str,
-        subpath: str = "",
-        timeout: int = 30,
-    ) -> dict:
-        import asyncio, os
-
-        if not project_id:
-            return {"error": "project_shell braucht einen Projekt-Kontext — bitte im Projekt-Chat aufrufen"}
-
-        # CWD berechnen und auf Projekt einschränken
-        project_root = PROJECTS_ROOT / project_id
-        if not project_root.exists():
-            return {"error": f"Projekt-Verzeichnis /projects/{project_id}/ existiert nicht"}
-
-        if subpath:
-            try:
-                cwd_path = assert_path_within_project(subpath, project_id)
-            except PathSafetyError as e:
-                return {"error": str(e), "command": command, "exit_code": -1, "blocked": True}
-            if not cwd_path.exists():
-                return {"error": f"Unterordner '{subpath}' existiert nicht in /projects/{project_id}/"}
-            cwd = str(cwd_path)
-        else:
-            cwd = str(project_root)
-
-        # Sicherheitscheck: Whitelist + Blocklist
-        block_reason = _project_shell_check_command(command, project_id)
-        if block_reason:
-            logger.warning("project_shell BLOCKED [%s/%s]: %s — %s", agent_id, project_id, command[:120], block_reason)
-            return {
-                "error":     f"Befehl blockiert: {block_reason}",
-                "command":   command,
-                "exit_code": -1,
-                "blocked":   True,
-            }
-
-        timeout = min(max(timeout, 1), 60)
-        logger.info("project_shell [%s/%s] cwd=%s: %s", agent_id, project_id, cwd, command[:120])
-
-        try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=cwd,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            except asyncio.TimeoutError:
-                proc.kill()
-                return {"error": f"Timeout nach {timeout}s", "command": command, "exit_code": -1}
-
-            return {
-                "stdout":    stdout.decode(errors="replace"),
-                "stderr":    stderr.decode(errors="replace"),
-                "exit_code": proc.returncode,
-                "command":   command,
-                "cwd":       cwd,
-            }
-        except Exception as e:
-            return {"error": str(e), "command": command, "exit_code": -1}
-
-
-class ReadSystemFileTool(BaseTool):
-    """Liest eine beliebige Datei auf dem System — kein Pfad-Sandboxing."""
-
-    @property
-    def id(self) -> str:   return "read_system_file"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Systemdatei lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest den Inhalt einer beliebigen Datei auf dem System. "
-            "Kein Pfad-Sandboxing — Zugriff auf Sourcen, Configs, Logs etc. "
-            "Für große Dateien: offset und limit nutzen."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["system.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type":        "string",
-                    "description": "Absoluter oder relativer Dateipfad",
-                },
-                "offset": {
-                    "type":        "integer",
-                    "description": "Zeile ab der gelesen wird (0-basiert, Standard: 0)",
-                },
-                "limit": {
-                    "type":        "integer",
-                    "description": "Maximale Anzahl Zeilen (Standard: 200, max: 1000)",
-                },
-            },
-            "required": ["path"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        path: str, offset: int = 0, limit: int = 200,
-    ) -> dict:
-        limit = min(limit, 1000)
-        p = Path(path)
-        if not p.is_absolute():
-            if settings.opt_dir.exists():
-                p = settings.opt_dir / path
-            else:
-                p = settings.opt_dir / path
-        logger.info("read_system_file [%s]: %s (offset=%d limit=%d)", agent_id, p, offset, limit)
-        if not p.exists():
-            return {"error": f"Datei nicht gefunden: {p}"}
-        if not p.is_file():
-            return {"error": f"Kein reguläre Datei: {p}"}
-        try:
-            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-            total = len(lines)
-            sliced = lines[offset:offset + limit]
-            # #428: Read-Before-Edit State tracken
-            FileWriteTool.mark_read(agent_id, str(p))
-            return {
-                "content":      "\n".join(sliced),
-                "path":         str(p),
-                "total_lines":  total,
-                "offset":       offset,
-                "returned":     len(sliced),
-            }
-        except OSError as e:
-            return {"error": str(e)}
-
-
-class WriteSystemFileTool(BaseTool):
-    """Schreibt eine beliebige Datei auf dem System — kein Pfad-Sandboxing."""
-
-    @property
-    def id(self) -> str:   return "write_system_file"
-    @property
-    def is_destructive(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Systemdatei schreiben"
-    @property
-    def description(self) -> str:
-        return (
-            "Schreibt Inhalt in eine beliebige Datei auf dem System. "
-            "Erstellt die Datei und fehlende Verzeichnisse wenn nötig. "
-            "mode=overwrite (Standard) oder append."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["system.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type":        "string",
-                    "description": "Absoluter Dateipfad",
-                },
-                "content": {
-                    "type":        "string",
-                    "description": "Inhalt der geschrieben werden soll",
-                },
-                "mode": {
-                    "type":        "string",
-                    "enum":        ["overwrite", "append"],
-                    "description": "overwrite (Standard) oder append",
-                },
-            },
-            "required": ["path", "content"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        path: str, content: str, mode: str = "overwrite",
-    ) -> dict:
-        p = Path(path)
-        if not p.is_absolute():
-            if settings.opt_dir.exists():
-                p = settings.opt_dir / path
-            else:
-                p = settings.opt_dir / path
-
-        # #428: Read-Before-Edit — bestehende Dateien müssen vorher gelesen worden sein
-        if p.exists() and mode == "overwrite":
-            read_files = FileWriteTool._read_state.get(agent_id, set())
-            if str(p.resolve()) not in read_files:
-                return {
-                    "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit read_system_file gelesen. "
-                             "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
-                             "dann erst überschreiben.",
-                    "path": str(p),
-                    "hint": "read_system_file zuerst aufrufen",
-                }
-
-        logger.info("write_system_file [%s]: %s (%s, %d bytes)", agent_id, p, mode, len(content))
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            write_mode = "a" if mode == "append" else "w"
-            with p.open(write_mode, encoding="utf-8") as handle:
-                handle.write(content)
-            return {"written": True, "path": str(p), "bytes": len(content.encode())}
-        except OSError as e:
-            return {"error": str(e)}
-
-
-# ============================================================= Memory Tools (#85)
-
-def _safe_memory_filename(filename: str) -> str:
-    """Normalisiert Dateinamen: a-z, A-Z, 0-9, _ und - erlaubt, erzwingt .md Extension."""
-    base = filename.removesuffix(".md").strip()
-    if not _re_shell.match(r"^[a-zA-Z0-9_-]+$", base):
-        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, A-Z, 0-9, _ und - erlaubt.")
-    return base + ".md"
-
+# =========================================================================
+# Core Tool #7: read_memory
+# =========================================================================
 
 class ReadMemoryTool(BaseTool):
-    """Liest Dateien aus dem persönlichen Gedächtnis-Verzeichnis des Agenten."""
 
     @property
-    def id(self) -> str:   return "read_memory"
+    def id(self) -> str: return "read_memory"
     @property
     def parallel_safe(self) -> bool: return True
     @property
@@ -2041,29 +1135,30 @@ class ReadMemoryTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Liest Dateien aus dem eigenen persistenten Gedächtnis. "
-            "Ohne filename: listet alle vorhandenen Gedächtnis-Dateien auf. "
-            "Mit filename: gibt den Inhalt dieser Datei zurück."
+            "Liest aus dem persistenten Gedächtnis. "
+            "scope='project' (Standard): lokales Projekt-Memory. "
+            "scope='global': globale Wissensdatenbank (A-MEM). "
+            "Ohne filename: listet alle vorhandenen Dateien auf. "
+            "Mit filename/query: gibt den Inhalt zurück."
         )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["memory.read"]
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "filename": {
-                    "type":        "string",
-                    "description": "Dateiname (ohne Pfad, z.B. 'facts' oder 'facts.md'). Leer lassen um alle Dateien aufzulisten.",
-                },
+                "filename": {"type": "string", "description": "Dateiname (z.B. 'facts.md'). Leer = alle auflisten."},
+                "query": {"type": "string", "description": "Suchanfrage für scope=global (A-MEM Suche)."},
+                "scope": {"type": "string", "enum": ["project", "global"], "description": "project=lokal (Standard), global=A-MEM Wissensdatenbank."},
             },
             "required": [],
         }
 
-    async def execute(self, agent_id: str, project_id: str, filename: str = "") -> dict:
+    async def execute(self, agent_id: str, project_id: str, filename: str = "", query: str = "", scope: str = "project", **kwargs) -> dict:
+        # v2: scope=global → A-MEM Suche via MCP
+        if scope == "global":
+            return await self._amem_search(query or filename)
+
         import sqlite3 as _sqlite3
         from .memory_decay import touch_recall as _touch_recall
 
@@ -2083,7 +1178,6 @@ class ReadMemoryTool(BaseTool):
 
         content = p.read_text(encoding="utf-8")
 
-        # recall_count für alle Chunks dieser Datei erhöhen
         db_path = AGENTS_ROOT / agent_id / "memory_index.db"
         if db_path.exists():
             try:
@@ -2100,67 +1194,80 @@ class ReadMemoryTool(BaseTool):
                 finally:
                     _conn.close()
             except Exception:
-                pass  # recall-touch ist nicht kritisch
+                pass
 
         return {"filename": safe, "content": content}
 
+    @staticmethod
+    async def _amem_search(query: str) -> dict:
+        """A-MEM globale Suche via MCP."""
+        if not query or len(query.strip()) < 2:
+            return {"error": "query darf nicht leer sein", "scope": "global"}
+        try:
+            from .mcp_client import call_mcp_tool
+            _amem_cfg = {
+                "url": "http://127.0.0.1:8020/sse",
+                "transport": "sse",
+                "headers": {},
+            }
+            result = await asyncio.wait_for(
+                call_mcp_tool("amem", _amem_cfg, "amem_search", {"query": query, "k": 5}),
+                timeout=10.0,
+            )
+            return {"scope": "global", "query": query, "result": result or "(keine Treffer)"}
+        except asyncio.TimeoutError:
+            return {"error": "A-MEM Timeout (10s)", "scope": "global"}
+        except Exception as e:
+            return {"error": f"A-MEM nicht erreichbar: {e}", "scope": "global"}
+
+
+# =========================================================================
+# Core Tool #8: write_memory
+# =========================================================================
 
 class WriteMemoryTool(BaseTool):
-    """Schreibt in das persönliche Gedächtnis-Verzeichnis des Agenten."""
 
     @property
-    def id(self) -> str:   return "write_memory"
+    def id(self) -> str: return "write_memory"
     @property
     def name(self) -> str: return "Gedächtnis schreiben"
     @property
     def description(self) -> str:
         return (
-            "Speichert Text dauerhaft im Gedächtnis. mode=overwrite ersetzt, append hängt an. "
-            "importance (0–1) und category steuern wie lange die Erinnerung erhalten bleibt."
+            "Speichert Text dauerhaft im Gedächtnis. "
+            "scope='project' (Standard): lokales Projekt-Memory. "
+            "scope='global': globale Wissensdatenbank (A-MEM). "
+            "mode=overwrite ersetzt, append hängt an. "
+            "importance (0-1) und category steuern Lebensdauer."
         )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["memory.write"]
 
     @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "filename": {
-                    "type":        "string",
-                    "description": "Dateiname (z.B. 'learned-facts')",
-                },
-                "content": {
-                    "type":        "string",
-                    "description": "Inhalt (Markdown)",
-                },
-                "mode": {
-                    "type":        "string",
-                    "enum":        ["overwrite", "append"],
-                },
-                "importance": {
-                    "type":        "number",
-                    "minimum":     0.0,
-                    "maximum":     1.0,
-                    "description": "Wichtigkeit 0.0–1.0. 1.0 = vergisst nie, 0.0 = vergisst schnell. Standard: 0.5",
-                },
-                "category": {
-                    "type":        "string",
-                    "enum":        ["strategy", "fact", "assumption", "failure"],
-                    "description": "strategy=38 Tage, fact=24 Tage, assumption=19 Tage, failure=11 Tage. Standard: fact",
-                },
+                "filename": {"type": "string", "description": "Dateiname (z.B. 'learned-facts')"},
+                "content": {"type": "string", "description": "Inhalt (Markdown)"},
+                "mode": {"type": "string", "enum": ["overwrite", "append"]},
+                "importance": {"type": "number", "description": "Wichtigkeit 0.0-1.0 (Standard: 0.5)"},
+                "category": {"type": "string", "enum": ["strategy", "fact", "assumption", "failure"], "description": "Kategorie (Standard: fact)"},
+                "scope": {"type": "string", "enum": ["project", "global"], "description": "project=lokal (Standard), global=A-MEM Wissensdatenbank."},
             },
             "required": ["filename", "content"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        filename: str, content: str, mode: str = "overwrite",
+        filename: str = "", content: str = "", mode: str = "overwrite",
         importance: float = 0.5, category: str = "fact",
+        scope: str = "project",
+        **kwargs,
     ) -> dict:
         import sqlite3 as _sqlite3
+        # v2: scope=global → A-MEM via MCP
+        if scope == "global":
+            return await self._amem_add_note(content, filename)
+
         from .memory_decay import (
             set_file_meta as _set_file_meta,
             dedup_decision as _dedup_decision,
@@ -2169,7 +1276,6 @@ class WriteMemoryTool(BaseTool):
         )
         from .semantic_index import find_similar_chunk as _find_similar
 
-        # Eingabe validieren
         importance = max(0.0, min(1.0, float(importance)))
         if category not in VALID_CATEGORIES:
             category = "fact"
@@ -2179,11 +1285,10 @@ class WriteMemoryTool(BaseTool):
         except ValueError as e:
             return {"error": str(e)}
 
-        agent_dir  = AGENTS_ROOT / agent_id
+        agent_dir = AGENTS_ROOT / agent_id
         memory_dir = agent_dir / "memory"
         memory_dir.mkdir(parents=True, exist_ok=True)
 
-        # file_meta in DB persistieren (für späteres Reindexieren)
         db_path = agent_dir / "memory_index.db"
         if db_path.exists():
             try:
@@ -2197,13 +1302,10 @@ class WriteMemoryTool(BaseTool):
             except Exception:
                 pass
 
-        # Semantische Dedup: ähnlichen Chunk im FAISS-Index suchen
-        # run_in_executor: _find_similar → litellm Embedding ist blocking I/O
         dedup_action = "new"
         similar_text = ""
         try:
-            import asyncio as _asyncio
-            _loop = _asyncio.get_event_loop()
+            _loop = asyncio.get_event_loop()
             similar = await _loop.run_in_executor(
                 None, lambda: _find_similar(agent_dir, content, threshold=0.65)
             )
@@ -2212,532 +1314,106 @@ class WriteMemoryTool(BaseTool):
                 is_contra = _detect_contradiction(similar_text, content)
                 dedup_action = _dedup_decision(sim_score, is_contra)
         except Exception:
-            pass  # Dedup-Fehler sind nicht kritisch
+            pass
 
         if dedup_action == "reinforce":
-            # Ähnlicher Chunk existiert — nicht neu speichern, nur recall erhöhen
-            logger.info(
-                "write_memory [%s]: %s reinforced (similarity hoch, kein Widerspruch)",
-                agent_id, safe,
-            )
             return {
-                "saved": False,
-                "action": "reinforce",
-                "filename": safe,
+                "saved": False, "action": "reinforce", "filename": safe,
                 "hint": "Ähnliche Erinnerung existiert bereits — recall_count erhöht.",
             }
 
         if dedup_action == "merge" and similar_text:
-            # Inhalte zusammenführen: existing + new
             p = memory_dir / safe
             existing = p.read_text(encoding="utf-8").strip() if p.exists() else ""
             if existing and existing != content.strip():
                 content = existing + "\n\n---\n\n" + content
-            logger.info("write_memory [%s]: %s merged", agent_id, safe)
 
-        # Datei schreiben
         p = memory_dir / safe
         write_mode = "a" if mode == "append" else "w"
         with p.open(write_mode, encoding="utf-8") as handle:
             handle.write(content)
 
-        logger.info(
-            "write_memory [%s]: %s (%s, importance=%.1f, category=%s, action=%s, %d bytes)",
-            agent_id, safe, mode, importance, category, dedup_action, len(content),
-        )
+        logger.info("write_memory [%s]: %s (%s, importance=%.1f, category=%s, action=%s)",
+                     agent_id, safe, mode, importance, category, dedup_action)
         return {
-            "saved":      True,
-            "filename":   safe,
-            "bytes":      len(content.encode()),
-            "importance": importance,
-            "category":   category,
-            "action":     dedup_action,
+            "saved": True, "filename": safe, "bytes": len(content.encode()),
+            "importance": importance, "category": category, "action": dedup_action,
         }
 
-
-# ============================================================= Shared Memory (#435)
-
-import json as _json_shared
-
-def _shared_memory_path(project_id: str) -> Path:
-    return settings.projects_dir / project_id / ".shared_memory.json"
-
-def _load_shared_memory(project_id: str) -> dict:
-    p = _shared_memory_path(project_id)
-    try:
-        return _json_shared.loads(p.read_text()) if p.exists() else {}
-    except (OSError, ValueError):
-        return {}
-
-def _save_shared_memory(project_id: str, data: dict) -> None:
-    p = _shared_memory_path(project_id)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(_json_shared.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-class SharedMemoryReadTool(BaseTool):
-    """#435: Liest einen Wert aus dem geteilten Projekt-Memory (alle Agenten können lesen)."""
-
-    @property
-    def id(self) -> str:   return "shared_memory_read"
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Shared Memory lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest einen Wert aus dem geteilten Projekt-Memory. "
-            "Alle Agenten im Projekt können lesen und schreiben. "
-            "Ohne key: gibt alle Keys zurück. Mit key: gibt den Wert zurück."
-        )
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "key": {"type": "string", "description": "Key zum Lesen (leer = alle Keys auflisten)"},
-            },
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, key: str = "", **kwargs) -> dict:
-        data = _load_shared_memory(project_id)
-        if not key:
-            return {"keys": list(data.keys()), "count": len(data)}
-        val = data.get(key)
-        if val is None:
-            return {"error": f"Key '{key}' nicht gefunden", "available_keys": list(data.keys())[:20]}
-        return {"key": key, "value": val}
-
-
-class SharedMemoryWriteTool(BaseTool):
-    """#435: Schreibt einen Wert in das geteilte Projekt-Memory."""
-
-    @property
-    def id(self) -> str:   return "shared_memory_write"
-    @property
-    def name(self) -> str: return "Shared Memory schreiben"
-    @property
-    def description(self) -> str:
-        return (
-            "Schreibt einen Key-Value-Eintrag in das geteilte Projekt-Memory. "
-            "Alle Agenten im Projekt können darauf zugreifen. "
-            "Nutze Namespaces wie 'agent_name/key' um Kollisionen zu vermeiden."
-        )
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "key":   {"type": "string", "description": "Key (z.B. 'coder/last_file' oder 'status')"},
-                "value": {"type": "string", "description": "Wert zum Speichern"},
-            },
-            "required": ["key", "value"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, key: str = "", value: str = "", **kwargs) -> dict:
-        if not key:
-            return {"error": "key ist erforderlich"}
-        data = _load_shared_memory(project_id)
-        data[key] = value
-        _save_shared_memory(project_id, data)
-        logger.info("shared_memory_write: %s setzte '%s' (Projekt: %s)", agent_id, key, project_id)
-        return {"written": True, "key": key, "total_keys": len(data)}
-
-
-# ============================================================= User-Scope Memory (#442)
-
-_USER_MEMORY_TYPES = {"user", "feedback", "project", "reference"}
-
-
-def _user_memory_dir(username: str) -> Path:
-    d = settings.etc_dir / "user_memory" / username
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-class UserMemoryReadTool(BaseTool):
-    """#442: Liest aus dem User-übergreifenden Gedächtnis (nicht Agent-spezifisch)."""
-
-    @property
-    def id(self) -> str:   return "user_memory_read"
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def name(self) -> str: return "User-Memory lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest aus dem User-übergreifenden Gedächtnis. "
-            "Dieses Memory ist für ALLE Agenten des Users zugänglich. "
-            "Ohne filename: listet alle Dateien. Mit filename: gibt Inhalt zurück. "
-            "Memory-Typen: user (Profil), feedback (Arbeitsweise), project (laufende Arbeit), reference (externe Quellen)."
-        )
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "filename": {"type": "string", "description": "Dateiname (ohne .md) oder leer für Listing"},
-            },
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, filename: str = "", **kwargs) -> dict:
-        # Username aus agent_id oder project_id ableiten
-        username = project_id.removeprefix("personal_") if project_id.startswith("personal_") else "admin"
-        mem_dir = _user_memory_dir(username)
-        if not filename:
-            files = sorted(f.name for f in mem_dir.glob("*.md"))
-            return {"files": files, "count": len(files), "scope": "user", "username": username}
-        safe = _safe_memory_filename(filename)
-        p = mem_dir / safe
-        if not p.exists():
-            return {"error": f"Datei '{safe}' nicht gefunden", "available": sorted(f.name for f in mem_dir.glob("*.md"))[:20]}
-        return {"filename": safe, "content": p.read_text(encoding="utf-8"), "scope": "user"}
-
-
-class UserMemoryWriteTool(BaseTool):
-    """#442: Schreibt ins User-übergreifende Gedächtnis mit Typ-Klassifikation."""
-
-    @property
-    def id(self) -> str:   return "user_memory_write"
-    @property
-    def name(self) -> str: return "User-Memory schreiben"
-    @property
-    def description(self) -> str:
-        return (
-            "Schreibt ins User-übergreifende Gedächtnis. "
-            "Typ bestimmt die Kategorie: user (Profil/Rolle), feedback (Arbeitsweise), "
-            "project (laufende Arbeit), reference (externe Quellen). "
-            "YAML-Frontmatter mit name, type, description wird automatisch eingefügt."
-        )
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "filename":    {"type": "string", "description": "Dateiname (ohne .md)"},
-                "content":     {"type": "string", "description": "Inhalt der Memory-Datei"},
-                "memory_type": {"type": "string", "enum": ["user", "feedback", "project", "reference"], "description": "Typ der Erinnerung"},
-                "description": {"type": "string", "description": "Kurzbeschreibung (für Relevanz-Ranking)"},
-            },
-            "required": ["filename", "content", "memory_type"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, filename: str = "",
-                      content: str = "", memory_type: str = "project", description: str = "", **kwargs) -> dict:
-        if not filename or not content:
-            return {"error": "filename und content sind erforderlich"}
-        if memory_type not in _USER_MEMORY_TYPES:
-            memory_type = "project"
-        username = project_id.removeprefix("personal_") if project_id.startswith("personal_") else "admin"
-        mem_dir = _user_memory_dir(username)
-        safe = _safe_memory_filename(filename)
-        # YAML-Frontmatter
-        frontmatter = f"---\nname: {filename}\ntype: {memory_type}\ndescription: {description or filename}\n---\n\n"
-        p = mem_dir / safe
-        p.write_text(frontmatter + content, encoding="utf-8")
-        p.chmod(0o600)
-        logger.info("user_memory_write: %s → %s [%s] (user: %s)", agent_id, safe, memory_type, username)
-        return {"written": True, "filename": safe, "type": memory_type, "scope": "user", "username": username}
-
-
-# ============================================================= Self-Learning Skills (#7)
-
-def _safe_skill_filename(filename: str) -> str:
-    """Normalisiert Skill-Dateinamen: a-z, A-Z, 0-9, _ und - erlaubt, erzwingt .md Extension."""
-    base = filename.removesuffix(".md").strip()
-    if not _re_shell.match(r"^[a-zA-Z0-9_-]+$", base):
-        raise ValueError(f"Ungültiger Dateiname: '{filename}'. Nur a-z, A-Z, 0-9, _ und - erlaubt.")
-    return base + ".md"
-
-
-_SKILL_FRONTMATTER_TEMPLATE = """\
----
-skill: {skill_id}
-version: "1.0"
-scope: {scope}
-author: agent
-triggers:
-{triggers_yaml}priority: {priority}
----
-
-{content}"""
-
-
-class CreateSkillTool(BaseTool):
-    """Erstellt oder aktualisiert einen eigenen Skill im persönlichen Skill-Verzeichnis."""
-
-    @property
-    def id(self) -> str:   return "create_skill"
-    @property
-    def name(self) -> str: return "Skill erstellen"
-    @property
-    def description(self) -> str:
-        return (
-            "Erstellt/aktualisiert einen Skill (wiederverwendbares Wissen). "
-            "on-demand: bei Keyword-Match geladen; always: immer geladen."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["memory.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "filename": {
-                    "type":        "string",
-                    "description": "Dateiname (z.B. 'deploy-prozess')",
-                },
-                "skill_id": {
-                    "type":        "string",
-                    "description": "Skill-Bezeichner",
-                },
-                "triggers": {
-                    "type":        "array",
-                    "items":       {"type": "string"},
-                    "description": "Aktivierungs-Keywords",
-                },
-                "content": {
-                    "type":        "string",
-                    "description": "Skill-Inhalt (Markdown)",
-                },
-                "scope": {
-                    "type":        "string",
-                    "enum":        ["on-demand", "always"],
-                },
-                "priority": {
-                    "type":        "integer",
-                    "description": "Sortierung (Standard: 50)",
-                },
-            },
-            "required": ["filename", "skill_id", "triggers", "content"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        filename: str, skill_id: str, triggers: list, content: str,
-        scope: str = "on-demand", priority: int = 50,
-    ) -> dict:
+    @staticmethod
+    async def _amem_add_note(content: str, title: str = "") -> dict:
+        """Globalen Eintrag in A-MEM speichern via MCP."""
+        if not content or len(content.strip()) < 3:
+            return {"error": "content darf nicht leer sein", "scope": "global"}
         try:
-            safe = _safe_skill_filename(filename)
-        except ValueError as e:
-            return {"error": str(e)}
-
-        skills_dir = AGENTS_ROOT / agent_id / "skills"
-        skills_dir.mkdir(parents=True, exist_ok=True)
-
-        triggers_yaml = "".join(f"  - {t}\n" for t in triggers)
-        text = _SKILL_FRONTMATTER_TEMPLATE.format(
-            skill_id=skill_id,
-            scope=scope,
-            triggers_yaml=triggers_yaml,
-            priority=priority,
-            content=content.strip(),
-        )
-
-        p = skills_dir / safe
-        p.write_text(text, encoding="utf-8")
-        try:
-            p.chmod(0o600)
-        except Exception:
-            pass
-
-        logger.info("create_skill [%s]: %s (triggers=%s)", agent_id, safe, triggers)
-        return {"created": True, "filename": safe, "skill_id": skill_id, "triggers": triggers}
+            from .mcp_client import call_mcp_tool
+            _amem_cfg = {
+                "url": "http://127.0.0.1:8020/sse",
+                "transport": "sse",
+                "headers": {},
+            }
+            args = {"content": content}
+            if title:
+                args["title"] = title
+            result = await asyncio.wait_for(
+                call_mcp_tool("amem", _amem_cfg, "amem_add_note", args),
+                timeout=10.0,
+            )
+            return {"saved": True, "scope": "global", "result": result or "OK"}
+        except asyncio.TimeoutError:
+            return {"error": "A-MEM Timeout (10s)", "scope": "global"}
+        except Exception as e:
+            return {"error": f"A-MEM nicht erreichbar: {e}", "scope": "global"}
 
 
-class ListSkillsTool(BaseTool):
-    """Listet alle eigenen Skills mit Metadaten auf."""
-
-    @property
-    def id(self) -> str:   return "list_skills"
-    @property
-    def name(self) -> str: return "Skills auflisten"
-    @property
-    def description(self) -> str:
-        return (
-            "Listet alle vorhandenen Skills des Agenten auf (Dateiname, Skill-ID, Scope, Triggers, Author). "
-            "Hilft zu entscheiden ob ein neuer Skill nötig ist oder ein bestehender aktualisiert werden soll."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["memory.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def execute(self, agent_id: str, project_id: str) -> dict:
-        import yaml as _yaml
-        import re as _re
-        skills_dir = AGENTS_ROOT / agent_id / "skills"
-        if not skills_dir.exists():
-            return {"skills": [], "count": 0}
-
-        FRONTMATTER_RE = _re.compile(r"^---\s*\n(.*?)\n---\s*\n", _re.DOTALL)
-        skills = []
-        for p in sorted(skills_dir.glob("*.md")):
-            entry: dict = {"filename": p.name, "skill_id": "", "scope": "", "triggers": [], "author": "system"}
-            try:
-                text = p.read_text(encoding="utf-8")
-                m = FRONTMATTER_RE.match(text)
-                if m:
-                    fm = _yaml.safe_load(m.group(1)) or {}
-                    entry["skill_id"] = fm.get("skill", "")
-                    entry["scope"]    = fm.get("scope", "")
-                    entry["triggers"] = fm.get("triggers", [])
-                    entry["author"]   = fm.get("author", "system")
-            except Exception:
-                pass
-            skills.append(entry)
-
-        return {"skills": skills, "count": len(skills)}
-
-
-class DeleteSkillTool(BaseTool):
-    """Löscht einen selbst angelegten Skill. Nur Skills mit author=agent können gelöscht werden."""
-
-    @property
-    def id(self) -> str:   return "delete_skill"
-    @property
-    def name(self) -> str: return "Skill löschen"
-    @property
-    def description(self) -> str:
-        return (
-            "Löscht einen eigenen Skill aus dem Skill-Verzeichnis. "
-            "Nur Skills die mit create_skill angelegt wurden (author=agent) können gelöscht werden. "
-            "System-Skills (author=system oder kein author) sind geschützt."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["memory.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "filename": {
-                    "type":        "string",
-                    "description": "Dateiname des zu löschenden Skills (z.B. 'deploy-prozess.md')",
-                },
-            },
-            "required": ["filename"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, filename: str) -> dict:
-        import yaml as _yaml
-        import re as _re
-
-        try:
-            safe = _safe_skill_filename(filename)
-        except ValueError as e:
-            return {"error": str(e)}
-
-        p = AGENTS_ROOT / agent_id / "skills" / safe
-        if not p.exists():
-            return {"error": f"Skill '{safe}' nicht gefunden."}
-
-        # Author-Prüfung: nur agent-erstellte Skills dürfen gelöscht werden
-        FRONTMATTER_RE = _re.compile(r"^---\s*\n(.*?)\n---\s*\n", _re.DOTALL)
-        try:
-            text = p.read_text(encoding="utf-8")
-            m = FRONTMATTER_RE.match(text)
-            author = "system"
-            if m:
-                fm = _yaml.safe_load(m.group(1)) or {}
-                author = fm.get("author", "system")
-        except Exception:
-            author = "system"
-
-        if author != "agent":
-            return {"error": f"Skill '{safe}' ist ein System-Skill (author={author}) und kann nicht gelöscht werden."}
-
-        p.unlink()
-        logger.info("delete_skill [%s]: %s gelöscht", agent_id, safe)
-        return {"deleted": True, "filename": safe}
-
-
-# ============================================================= Agenten-Delegation (#107)
+# =========================================================================
+# Core Tool #9: ask_agent
+# =========================================================================
 
 class AskAgentTool(BaseTool):
-    """
-    Synchrone Frage / Aufgabe an einen anderen Agenten.
-    Der Ziel-Agent antwortet direkt — ideal für kurze Delegationen.
-    Ruft intern POST /agents/{target}/message auf (localhost:8765).
-    """
 
     @property
-    def id(self) -> str:   return "ask_agent"
+    def id(self) -> str: return "ask_agent"
     @property
-    def name(self) -> str: return "Agenten fragen (sync)"
+    def name(self) -> str: return "Agenten fragen"
     @property
     def description(self) -> str:
         return "Synchrone Frage/Task an einen anderen Agenten — antwortet direkt."
 
     @property
-    def permissions_required(self) -> list[str]:
-        return ["agents.ask"]
-
-    @property
     def parameters(self) -> dict:
         return {
             "type": "object",
             "properties": {
-                "target": {
-                    "type":        "string",
-                    "description": "Ziel-Agent-ID",
-                },
-                "question": {
-                    "type":        "string",
-                    "description": "Frage/Task",
-                },
-                "context": {
-                    "type":        "string",
-                    "description": "Zusätzlicher Kontext (optional)",
-                },
-                "project_id": {
-                    "type":        "string",
-                    "description": "Projekt-ID in dessen Kontext der Ziel-Agent arbeiten soll (optional). Standardmäßig bekommt der Agent eine eigene Sandbox. Übergib die eigene project_id damit der Ziel-Agent auf dieselben Projektdateien zugreifen kann.",
-                },
+                "target": {"type": "string", "description": "Ziel-Agent-ID"},
+                "question": {"type": "string", "description": "Frage/Task"},
+                "context": {"type": "string", "description": "Zusätzlicher Kontext (optional)"},
+                "project_id": {"type": "string", "description": "Projekt-ID für den Ziel-Agent (optional)"},
             },
             "required": ["target", "question"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        target: str, question: str, context: str = "", **kwargs
+        target: str, question: str, context: str = "", **kwargs,
     ) -> dict:
         import aiohttp as _aio
-
         import hmac as _hmac
         import time as _time
+        import uuid as _uuid
 
         if _rate_limiter is not None:
             _rate_limiter.check_agent_call(agent_id)
 
-        import uuid as _uuid
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
+
         headers: dict = {}
         if _internal_secret:
             ts = str(int(_time.time()))
             sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
             headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
-        # project_id: wenn explizit angegeben → nehmen. Sonst: Caller-Projekt erben
-        # (außer personal_* Agenten — die haben kein echtes Projektverzeichnis)
+
         explicit_project_id = kwargs.get("project_id", "")
         if explicit_project_id.strip():
             session_id = explicit_project_id.strip()
@@ -2745,9 +1421,8 @@ class AskAgentTool(BaseTool):
             session_id = project_id
         else:
             session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
-        try:
-            import asyncio as _asyncio
 
+        try:
             async def _do_post():
                 async with _aio.ClientSession() as _s:
                     async with _s.post(
@@ -2758,3966 +1433,62 @@ class AskAgentTool(BaseTool):
                     ) as _resp:
                         return _resp.status, await _resp.json()
 
-            task = _asyncio.create_task(_do_post())
+            task = asyncio.create_task(_do_post())
             while not task.done():
                 try:
-                    await _asyncio.wait_for(_asyncio.shield(task), timeout=2.0)
-                except _asyncio.TimeoutError:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                except asyncio.TimeoutError:
                     pass
                 if _interrupt_flags.get(project_id) or _interrupt_flags.get(agent_id):
                     task.cancel()
                     clear_interrupt(project_id)
                     clear_interrupt(agent_id)
                     _notify(project_id, "task_failed", f"Abgebrochen: {target}",
-                            f"Delegierter Agent '{target}' wurde vom Nutzer unterbrochen.",
-                            link=f"/chat/{project_id}")
+                            f"Agent '{target}' wurde unterbrochen.", link=f"/chat/{project_id}")
                     return {
-                        "interrupted": True,
-                        "agent_id":    target,
-                        "directive":   (
-                            f"WICHTIG: Der Nutzer hat den Request abgebrochen. "
-                            f"Beende die aktuelle Aufgabe und teile dem Nutzer mit dass der Vorgang abgebrochen wurde."
-                        ),
+                        "interrupted": True, "agent_id": target,
+                        "directive": "Der Nutzer hat den Request abgebrochen.",
                     }
 
             status, data = task.result()
             if status == 404:
-                return {
-                    "error": f"Agent '{target}' nicht gefunden",
-                    "agent_id": target,
-                    "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer mit dass Agent '{target}' nicht gefunden wurde.",
-                }
+                return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
             response = data.get("response", "")
             if not response or not response.strip():
                 return {
-                    "agent_id":      target,
-                    "worker_failed": True,
-                    "directive":     (
-                        f"WICHTIG: Agent '{target}' hat keine Antwort geliefert (leer oder Loop-Abbruch). "
-                        f"Übernimm diese Aufgabe NICHT selbst. "
-                        f"Teile dem Nutzer mit dass die Delegation fehlgeschlagen ist und frage wie weiter verfahren werden soll."
-                    ),
+                    "agent_id": target, "worker_failed": True,
+                    "directive": f"Agent '{target}' hat keine Antwort geliefert.",
                 }
-            # Fehler-Indikatoren in Worker-Response erkennen
+
             _error_keywords = (
                 "konnte nicht", "fehlgeschlagen", "fehler:", "error:", "permission denied",
                 "nicht abgeschlossen", "nicht möglich", "nicht erlaubt", "nicht gefunden",
-                "gescheitert", "abgebrochen", "konnte keine",
             )
             response_lower = response.lower()
             worker_errors = [kw for kw in _error_keywords if kw in response_lower]
             result: dict = {"agent_id": target, "response": response, "success": True}
             if worker_errors:
                 result["worker_reported_errors"] = True
-                result["hint"] = (
-                    "Der Worker hat Fehler oder Blocker gemeldet (siehe response). "
-                    "Informiere den Nutzer über die gemeldeten Probleme damit sie behoben werden können."
-                )
-                _notify(project_id, "task_failed", f"Fehler: {target}",
-                        response[:120], link=f"/chat/{project_id}")
+                result["hint"] = "Der Worker hat Fehler gemeldet (siehe response)."
+                _notify(project_id, "task_failed", f"Fehler: {target}", response[:120], link=f"/chat/{project_id}")
             else:
-                _notify(project_id, "task_done", f"Fertig: {target}",
-                        response[:120], link=f"/chat/{project_id}")
+                _notify(project_id, "task_done", f"Fertig: {target}", response[:120], link=f"/chat/{project_id}")
             return result
         except Exception as e:
-            _notify(project_id, "task_failed", f"Kommunikationsfehler: {target}",
-                    str(e)[:120], link=f"/chat/{project_id}")
-            return {
-                "error":     f"Fehler bei Kommunikation mit '{target}': {e}",
-                "agent_id":  target,
-                "directive": f"WICHTIG: Übernimm diese Aufgabe NICHT selbst. Teile dem Nutzer den Fehler mit.",
-            }
+            _notify(project_id, "task_failed", f"Kommunikationsfehler: {target}", str(e)[:120], link=f"/chat/{project_id}")
+            return {"error": f"Fehler bei Kommunikation mit '{target}': {e}", "agent_id": target}
 
 
-class DelegateAgentTool(BaseTool):
-    """
-    Asynchrone Delegation: schreibt einen AgentLink-Handoff an den Ziel-Agenten.
-    Nützlich für lange Tasks die im Hintergrund laufen sollen.
-    Das Ergebnis wird via read_handoff abgerufen wenn fertig.
-    """
+# =========================================================================
+# Register all 9 Core Tools
+# =========================================================================
 
-    @property
-    def id(self) -> str:   return "delegate_agent"
-    @property
-    def name(self) -> str: return "Agenten beauftragen (async)"
-    @property
-    def description(self) -> str:
-        return "Beauftragt einen Agenten asynchron via Handoff — kein direktes Warten auf Ergebnis."
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["agents.delegate"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "target": {
-                    "type":        "string",
-                    "description": "Ziel-Agent-ID",
-                },
-                "task": {
-                    "type":        "string",
-                    "description": "Task für den Agenten",
-                },
-                "context": {
-                    "type":        "string",
-                    "description": "Kontext (optional)",
-                },
-                "ttl_seconds": {
-                    "type":        "integer",
-                    "description": "Gültigkeit in Sekunden (Standard: 3600)",
-                },
-            },
-            "required": ["target", "task"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        target: str, task: str, context: str = "", ttl_seconds: int = 3600,
-    ) -> dict:
-        from pathlib import Path as _Path
-        from .agentlink import write_handoff as _wh
-
-        if _rate_limiter is not None:
-            _rate_limiter.check_agent_call(agent_id)
-
-        # Handoff im /agents-Verzeichnis des Ziel-Agenten ablegen
-        # (agent_id hier = aufrufender Agent, target = Ziel-Agent)
-        handoff_base = settings.agents_dir / target
-        handoff_base.mkdir(parents=True, exist_ok=True)
-
-        entry = _wh(
-            handoff_base,
-            from_agent=agent_id,
-            to_agent=target,
-            context=context or task,
-            data={"task": task, "from": agent_id},
-            ttl_seconds=ttl_seconds,
-        )
-        logger.info("delegate_agent [%s] → %s: %s…", agent_id, target, task[:60])
-        return {
-            "delegated":   True,
-            "target":      target,
-            "handoff_id":  entry.get("id", ""),
-            "ttl_seconds": ttl_seconds,
-        }
-
-
-# ============================================================= Git Tools (#gitea)
-
-class GitStatusTool(BaseTool):
-    """Zeigt den Git-Status des Projekt-Workspaces."""
-
-    @property
-    def id(self) -> str:   return "git_status"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Git Status"
-    @property
-    def description(self) -> str:
-        return (
-            "Zeigt den aktuellen Git-Status des Projekt-Workspaces: "
-            "geänderte, neue und gelöschte Dateien, aktueller Branch. "
-            "repo: optionales Ziel-Repo als URL, owner/repo oder Repo-Name, "
-            "wenn das Ziel nicht dem aktuellen Projektkontext entspricht."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
-            },
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
-            ws = await GiteaClient.git_workspace(
-                target["workspace_key"],
-                owner=target["owner"],
-                repo=target["repo"],
-            )
-        except Exception as e:
-            return {"error": str(e)}
-        stdout, stderr, rc = await GiteaClient._git(["status", "--short", "--branch"], ws)
-        branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
-        return {
-            "project_id": pid,
-            "repo":      target["repo"],
-            "owner":     target["owner"],
-            "full_name": target["full_name"],
-            "status":    stdout.strip(),
-            "branch":    branch_out.strip(),
-            "clean":     stdout.strip() == "" or stdout.strip().startswith("##") and "\n" not in stdout.strip(),
-            "exit_code": rc,
-        }
-
-
-class GiteaRepoInspectTool(BaseTool):
-    """Liest Repo-Metadaten und letzte Commits direkt via Gitea-API."""
-
-    @property
-    def id(self) -> str:   return "gitea_repo_inspect"
-    @property
-    def name(self) -> str: return "Gitea Repo pruefen"
-    @property
-    def description(self) -> str:
-        return (
-            "Prueft ein Gitea-Repository per URL oder owner/repo. "
-            "Liefert Repo-Metadaten, Branch-Infos und die letzten Commits. "
-            "Nutze dieses Tool fuer Repo-, Review- und Aenderungsfragen statt eines rohen URL-GET."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {
-                    "type": "string",
-                    "description": "Repo-Referenz als URL, owner/repo oder repo-Name",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Anzahl letzter Commits (Standard: 5)",
-                },
-            },
-            "required": ["repo"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 5, **kwargs) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-        except ValueError as e:
-            return {"error": str(e), "repo": repo}
-
-        try:
-            info = await client.get_repo_by_full_name(owner, name)
-            commits = await client.list_commits(owner, name, limit=max(1, min(limit, 10)))
-        except Exception as e:
-            return {"error": str(e), "owner": owner, "repo": name}
-
-        recent_commits = []
-        for item in commits:
-            commit = item.get("commit", {})
-            author = commit.get("author", {}) or {}
-            recent_commits.append(
-                {
-                    "sha": (item.get("sha") or "")[:12],
-                    "message": (commit.get("message") or "").splitlines()[0],
-                    "author": author.get("name") or item.get("author", {}).get("login"),
-                    "date": author.get("date"),
-                }
-            )
-
-        return {
-            "owner": owner,
-            "repo": name,
-            "full_name": info.get("full_name"),
-            "html_url": info.get("html_url"),
-            "default_branch": info.get("default_branch"),
-            "private": info.get("private"),
-            "updated_at": info.get("updated_at"),
-            "description": info.get("description") or "",
-            "open_pr_count": info.get("open_pr_counter"),
-            "recent_commits": recent_commits,
-        }
-
-
-class GiteaRepoTreeTool(BaseTool):
-    """Listet eine Repo-Struktur oder einen Unterordner via Gitea-API."""
-
-    @property
-    def id(self) -> str:   return "gitea_repo_tree"
-    @property
-    def name(self) -> str: return "Gitea Repo Struktur"
-    @property
-    def description(self) -> str:
-        return (
-            "Listet Dateien und Ordner eines Gitea-Repositories. "
-            "Nutze dieses Tool fuer Deep-Dives in die Repo-Struktur."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "path": {"type": "string", "description": "Optionaler Unterpfad im Repo"},
-                "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
-            },
-            "required": ["repo"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, repo: str, path: str = "", ref: str = "", **kwargs) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            entries = await client.list_repo_tree(owner, name, path=path, ref=ref)
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "path": path, "ref": ref}
-
-        normalized = entries if isinstance(entries, list) else [entries]
-        return {
-            "owner": owner,
-            "repo": name,
-            "path": path.strip("/"),
-            "ref": ref or "",
-            "entries": [
-                {
-                    "name": item.get("name"),
-                    "path": item.get("path"),
-                    "type": item.get("type"),
-                    "size": item.get("size"),
-                    "sha": (item.get("sha") or "")[:12],
-                }
-                for item in normalized
-            ],
-        }
-
-
-class GiteaRepoFileTool(BaseTool):
-    """Liest eine konkrete Datei aus einem Gitea-Repo."""
-
-    @property
-    def id(self) -> str:   return "gitea_repo_file"
-    @property
-    def name(self) -> str: return "Gitea Repo Datei"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest eine konkrete Datei aus einem Gitea-Repository. "
-            "Nutze dieses Tool fuer gezielte Dateiansichten bei Reviews oder Deep-Dives."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "path": {"type": "string", "description": "Dateipfad im Repo"},
-                "ref": {"type": "string", "description": "Optionaler Branch, Tag oder Commit"},
-            },
-            "required": ["repo", "path"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, repo: str, path: str, ref: str = "", **kwargs) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            content = await client.get_repo_file(owner, name, path, ref=ref)
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "path": path, "ref": ref}
-
-        return {
-            "owner": owner,
-            "repo": name,
-            "path": path.strip("/"),
-            "ref": ref or "",
-            "content": content[:20000],
-            "truncated": len(content) > 20000,
-        }
-
-
-class GiteaRepoCommitsTool(BaseTool):
-    """Listet Commits eines Repositories fuer Review-/Deep-Dive-Arbeit."""
-
-    @property
-    def id(self) -> str:   return "gitea_repo_commits"
-    @property
-    def name(self) -> str: return "Gitea Repo Commits"
-    @property
-    def description(self) -> str:
-        return (
-            "Listet die letzten Commits eines Gitea-Repositories. "
-            "Nutze dieses Tool fuer Aenderungsserien, Review-Kontext und Verlauf."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "limit": {"type": "integer", "description": "Anzahl der Commits (Standard: 10, max: 30)"},
-            },
-            "required": ["repo"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, repo: str, limit: int = 10, **kwargs) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            commits = await client.list_commits(owner, name, limit=max(1, min(limit, 30)))
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "limit": limit}
-
-        items = []
-        for item in commits:
-            commit = item.get("commit", {})
-            author = commit.get("author", {}) or {}
-            items.append(
-                {
-                    "sha": (item.get("sha") or "")[:12],
-                    "message": (commit.get("message") or "").splitlines()[0],
-                    "author": author.get("name") or item.get("author", {}).get("login"),
-                    "date": author.get("date"),
-                }
-            )
-
-        return {
-            "owner": owner,
-            "repo": name,
-            "count": len(items),
-            "commits": items,
-        }
-
-
-class GiteaRepoDiffTool(BaseTool):
-    """Zeigt einen Diff fuer ein Repository ueber den lokalen Repo-Workspace."""
-
-    @property
-    def id(self) -> str:   return "gitea_repo_diff"
-    @property
-    def name(self) -> str: return "Gitea Repo Diff"
-    @property
-    def description(self) -> str:
-        return (
-            "Zeigt einen Diff fuer ein Gitea-Repository. "
-            "Standardmaessig wird der letzte Commit gegen seinen Vorgaenger verglichen. "
-            "Optional mit base, head und path eingrenzbar."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "base": {"type": "string", "description": "Basis-Ref oder Commit (optional)"},
-                "head": {"type": "string", "description": "Ziel-Ref oder Commit (optional)"},
-                "path": {"type": "string", "description": "Optionaler Pfad im Repo"},
-                "stat_only": {"type": "boolean", "description": "Nur Diff-Stat statt vollem Patch"},
-            },
-            "required": ["repo"],
-        }
-
-    async def execute(
-        self,
-        agent_id: str,
-        project_id: str,
-        repo: str,
-        base: str = "",
-        head: str = "",
-        path: str = "",
-        stat_only: bool = False,
-        **kwargs,
-    ) -> dict:
-        from .gitea import GiteaClient, get_gitea_client, resolve_repo_ref, repo_workspace_key
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            ws = await GiteaClient.git_workspace(repo_workspace_key(owner, name), owner=owner, repo=name)
-            await GiteaClient._git(["fetch", "--all", "--prune"], ws)
-
-            diff_head = head or "origin/main"
-            diff_base = base
-            if not diff_base:
-                commits = await client.list_commits(owner, name, limit=2)
-                if len(commits) >= 2:
-                    diff_head = commits[0].get("sha") or diff_head
-                    diff_base = commits[1].get("sha") or f"{diff_head}~1"
-                else:
-                    diff_base = f"{diff_head}~1"
-
-            stat_args = ["diff", "--stat", f"{diff_base}..{diff_head}"]
-            patch_args = ["diff", f"{diff_base}..{diff_head}"]
-            if path:
-                stat_args += ["--", path]
-                patch_args += ["--", path]
-
-            stat_out, stat_err, stat_rc = await GiteaClient._git(stat_args, ws)
-            patch_out, patch_err, patch_rc = await GiteaClient._git(patch_args, ws)
-        except Exception as e:
-            return {
-                "error": str(e),
-                "repo": repo,
-                "base": base,
-                "head": head,
-                "path": path,
-            }
-
-        patch_text = patch_out[:20000]
-        return {
-            "owner": owner,
-            "repo": name,
-            "base": diff_base,
-            "head": diff_head,
-            "path": path.strip("/"),
-            "stat": stat_out.strip(),
-            "diff": "" if stat_only else patch_text,
-            "truncated": (not stat_only) and len(patch_out) > 20000,
-            "stat_exit_code": stat_rc,
-            "diff_exit_code": patch_rc,
-            "stderr": (stat_err or patch_err)[:500],
-        }
-
-
-class FixPermissionsTool(BaseTool):
-    """Repariert Dateiberechtigungen eines Projekts (nach Samba-Upload etc.)."""
-
-    @property
-    def id(self) -> str: return "fix_permissions"
-    @property
-    def name(self) -> str: return "Dateiberechtigungen reparieren"
-    @property
-    def description(self) -> str:
-        return ("Repariert Dateiberechtigungen für das aktuelle Projekt. "
-                "Setzt Ownership auf hydrahive:hydrahive und Gruppe-Schreibrechte. "
-                "Räumt auch git index.lock auf. "
-                "Nutze dieses Tool bei 'Permission denied', nach Samba-Uploads, "
-                "oder wenn git add/commit/push fehlschlägt.")
-
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        import subprocess
-        proj_dir = Path(f"/projects/{project_id}")
-        if not proj_dir.is_dir():
-            return {"error": f"Projektverzeichnis /projects/{project_id} nicht gefunden"}
-        try:
-            # Ownership: alles dem hydrahive User/Gruppe zuweisen (löst Samba + git Probleme)
-            await asyncio.to_thread(lambda: subprocess.run(
-                ["sudo", "chown", "-R", "hydrahive:hydrahive", str(proj_dir)],
-                capture_output=True, check=True, timeout=120))
-            # Gruppe-Schreibrechte setzen
-            await asyncio.to_thread(lambda: subprocess.run(
-                ["sudo", "chmod", "-R", "g+rw", str(proj_dir)],
-                capture_output=True, check=True, timeout=120))
-            # Git index.lock aufräumen falls vorhanden
-            git_lock = proj_dir / ".git" / "index.lock"
-            if git_lock.exists():
-                git_lock.unlink(missing_ok=True)
-            # Auch in Unterverzeichnissen nach .git suchen (Submodules, verschachtelte Repos)
-            for sub_lock in proj_dir.rglob(".git/index.lock"):
-                sub_lock.unlink(missing_ok=True)
-            return {"ok": True, "project_id": project_id, "message": "Ownership + Berechtigungen korrigiert, git index.lock aufgeräumt"}
-        except Exception as e:
-            return {"error": f"Berechtigungen konnten nicht gesetzt werden: {e}"}
-
-
-class FileSearchTool(BaseTool):
-    """Durchsucht alle Dateien im Projekt nach einem Text — wie grep -rn."""
-
-    @property
-    def id(self) -> str: return "file_search"
-    @property
-    def name(self) -> str: return "In Dateien suchen (grep)"
-    @property
-    def description(self) -> str:
-        return (
-            "Durchsucht alle Dateien im Projektverzeichnis nach einem Text oder Pattern. "
-            "Gibt Dateinamen, Zeilennummern und Kontext zurück. "
-            "Nutze dieses Tool um die richtige Datei zu finden bevor du sie mit file_patch änderst."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "pattern": {"type": "string", "description": "Suchtext oder Pattern"},
-                "path": {"type": "string", "description": "Verzeichnis oder Datei (optional, Standard: Projektroot)"},
-                "file_pattern": {"type": "string", "description": "Dateiname-Filter z.B. '*.cpp' oder '*.py' (optional)"},
-                "max_results": {"type": "integer", "description": "Max. Treffer (Standard: 20)"},
-            },
-            "required": ["pattern"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, pattern: str, path: str = "", file_pattern: str = "", max_results: int = 20, **kwargs) -> dict:
-        import subprocess
-
-        search_dir = Path(path) if path and Path(path).is_absolute() else Path(f"/projects/{project_id}") / (path or "")
-        if not search_dir.exists():
-            return {"error": f"Verzeichnis nicht gefunden: {search_dir}"}
-
-        cmd = ["grep", "-rn", "--include", file_pattern or "*", "-m", str(max_results * 3), pattern, str(search_dir)]
-        try:
-            r = await asyncio.to_thread(lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=30))
-        except subprocess.TimeoutExpired:
-            return {"error": "Suche dauerte zu lange (>30s) — verwende file_pattern um einzugrenzen"}
-
-        if r.returncode == 1:
-            return {"matches": [], "count": 0, "pattern": pattern}
-
-        lines = r.stdout.strip().split("\n")[:max_results]
-        matches = []
-        for line in lines:
-            if ":" in line:
-                parts = line.split(":", 2)
-                if len(parts) >= 3:
-                    matches.append({
-                        "file": parts[0].replace(str(search_dir) + "/", ""),
-                        "line": int(parts[1]) if parts[1].isdigit() else 0,
-                        "text": parts[2][:200].strip(),
-                    })
-
-        return {
-            "matches": matches,
-            "count": len(matches),
-            "pattern": pattern,
-            "search_dir": str(search_dir),
-        }
-
-
-class FilePatchTool(BaseTool):
-    """Sucht und ersetzt Text in einer Datei — ohne die ganze Datei lesen zu müssen."""
-
-    @property
-    def id(self) -> str: return "file_patch"
-    @property
-    def name(self) -> str: return "Datei patchen (Suchen & Ersetzen)"
-    @property
-    def description(self) -> str:
-        return (
-            "Sucht einen Text-Abschnitt in einer Datei und ersetzt ihn. "
-            "Ideal für gezielte Änderungen in großen Dateien ohne die ganze Datei lesen zu müssen. "
-            "Gibt Kontext um die Stelle zurück (5 Zeilen davor/danach). "
-            "Unterstützt mehrzeilige Suche und Ersetzung."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["filesystem.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Dateipfad (relativ zum Projekt oder absolut)"},
-                "search": {"type": "string", "description": "Text der gesucht werden soll (exakt, mehrzeilig möglich)"},
-                "replace": {"type": "string", "description": "Ersetzungstext"},
-                "count": {"type": "integer", "description": "Max. Anzahl Ersetzungen (0 = alle, Standard: 1)"},
-            },
-            "required": ["path", "search", "replace"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, path: str, search: str, replace: str, count: int = 1, **kwargs) -> dict:
-        # Pfad auflösen
-        file_path = Path(path)
-        if not file_path.is_absolute():
-            file_path = Path(f"/projects/{project_id}/files") / path
-            if not file_path.exists():
-                file_path = Path(f"/projects/{project_id}") / path
-
-        if not file_path.exists():
-            return {"error": f"Datei nicht gefunden: {path}"}
-
-        # #428: Read-Before-Edit — Datei muss vorher gelesen worden sein
-        resolved = str(file_path.resolve())
-        read_files = FileWriteTool._read_state.get(agent_id, set())
-        if resolved not in read_files:
-            return {
-                "error": f"Read-Before-Edit: '{path}' wurde nicht vorher mit file_read gelesen. "
-                         "Bitte erst die Datei lesen um den aktuellen Inhalt zu kennen, "
-                         "dann erst patchen.",
-                "path": resolved,
-                "hint": "file_read zuerst aufrufen",
-            }
-
-        try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-        except Exception as e:
-            return {"error": f"Datei nicht lesbar: {e}"}
-
-        occurrences = content.count(search)
-        if occurrences == 0:
-            # Zeige einen Ausschnitt der Datei damit der Agent den richtigen Text finden kann
-            lines = content.split("\n")
-            snippet = "\n".join(lines[:30]) if len(lines) > 30 else content[:2000]
-            return {
-                "error": "Suchtext nicht gefunden",
-                "occurrences": 0,
-                "file_lines": len(lines),
-                "file_size": len(content),
-                "first_30_lines": snippet,
-            }
-
-        if count == 0:
-            new_content = content.replace(search, replace)
-            replaced = occurrences
-        else:
-            new_content = content.replace(search, replace, count)
-            replaced = min(count, occurrences)
-
-        try:
-            file_path.write_text(new_content, encoding="utf-8")
-        except PermissionError:
-            # Fallback: sudo über temp file
-            import subprocess, tempfile
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".tmp", delete=False, encoding="utf-8") as tmp:
-                tmp.write(new_content)
-                tmp_path = tmp.name
-            r = await asyncio.to_thread(lambda: subprocess.run(
-                ["sudo", "cp", tmp_path, str(file_path)], capture_output=True, timeout=10))
-            Path(tmp_path).unlink(missing_ok=True)
-            if r.returncode != 0:
-                return {"error": f"Schreibfehler (auch mit sudo): {r.stderr.decode()[:200]}"}
-
-        # Kontext um die erste Ersetzung zeigen
-        new_lines = new_content.split("\n")
-        context_lines = []
-        for i, line in enumerate(new_lines):
-            if replace in line or (i > 0 and replace in new_lines[i-1]):
-                start = max(0, i - 3)
-                end = min(len(new_lines), i + 4)
-                context_lines = [f"{start+j+1:4d} | {new_lines[start+j]}" for j in range(end - start)]
-                break
-
-        return {
-            "ok": True,
-            "path": str(file_path),
-            "occurrences_found": occurrences,
-            "replaced": replaced,
-            "context": "\n".join(context_lines) if context_lines else "(keine Kontextzeilen)",
-        }
-
-
-class GiteaCreateIssueTool(BaseTool):
-    """Erstellt ein Gitea-Issue in einem Ziel-Repository."""
-
-    @property
-    def id(self) -> str:   return "gitea_create_issue"
-    @property
-    def name(self) -> str: return "Gitea Issue erstellen"
-    @property
-    def description(self) -> str:
-        return (
-            "Erstellt ein neues Issue in einem Gitea-Repository. "
-            "Nutze dieses Tool fuer Findings, Review-Ergebnisse, Features oder Aufgaben."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.issue"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "title": {"type": "string", "description": "Issue-Titel"},
-                "body": {"type": "string", "description": "Issue-Beschreibung in Markdown"},
-                "labels": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Optionale Labels",
-                },
-            },
-            "required": ["repo", "title"],
-        }
-
-    async def execute(
-        self,
-        agent_id: str,
-        project_id: str,
-        repo: str,
-        title: str,
-        body: str = "",
-        labels: list[str] | None = None,
-        **kwargs,
-    ) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        invalid = _validate_gitea_issue_text(title, body)
-        if invalid:
-            return {"error": invalid, "repo": repo, "title": title}
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            issue = await client.create_issue_for_repo(owner, name, title, body=body, labels=labels or [])
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "title": title}
-
-        return {
-            "created": True,
-            "owner": owner,
-            "repo": name,
-            "full_name": f"{owner}/{name}",
-            "issue_number": issue.get("number"),
-            "issue_url": issue.get("html_url"),
-            "title": issue.get("title"),
-        }
-
-
-class GiteaCommentIssueTool(BaseTool):
-    """Kommentiert ein bestehendes Gitea-Issue."""
-
-    @property
-    def id(self) -> str:   return "gitea_comment_issue"
-    @property
-    def name(self) -> str: return "Gitea Issue kommentieren"
-    @property
-    def description(self) -> str:
-        return "Schreibt einen Kommentar in ein bestehendes Gitea-Issue."
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.issue"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
-                "body": {"type": "string", "description": "Kommentar in Markdown"},
-            },
-            "required": ["repo", "issue_number", "body"],
-        }
-
-    async def execute(
-        self,
-        agent_id: str,
-        project_id: str,
-        repo: str,
-        issue_number: int,
-        body: str,
-        **kwargs,
-    ) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        invalid = _validate_gitea_issue_text("", body)
-        if invalid:
-            return {"error": invalid, "repo": repo, "issue_number": issue_number}
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            comment = await client.comment_issue_for_repo(owner, name, issue_number, body)
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "issue_number": issue_number}
-
-        return {
-            "commented": True,
-            "owner": owner,
-            "repo": name,
-            "full_name": f"{owner}/{name}",
-            "issue_number": issue_number,
-            "comment_id": comment.get("id"),
-            "comment_url": comment.get("html_url"),
-        }
-
-
-class GiteaUpdateIssueTool(BaseTool):
-    """Aktualisiert oder schliesst ein bestehendes Gitea-Issue."""
-
-    @property
-    def id(self) -> str:   return "gitea_update_issue"
-    @property
-    def name(self) -> str: return "Gitea Issue aktualisieren"
-    @property
-    def description(self) -> str:
-        return "Aktualisiert Titel/Body/Labels oder schliesst ein bestehendes Gitea-Issue."
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.issue"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "repo": {"type": "string", "description": "Repo (URL/owner/repo/Name)"},
-                "issue_number": {"type": "integer", "description": "Nummer des Ziel-Issues"},
-                "title": {"type": "string", "description": "Neuer Titel (optional)"},
-                "body": {"type": "string", "description": "Neuer Body (optional)"},
-                "state": {
-                    "type": "string",
-                    "enum": ["open", "closed"],
-                    "description": "Issue-Status (optional)",
-                },
-                "labels": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Optionale Label-Liste",
-                },
-            },
-            "required": ["repo", "issue_number"],
-        }
-
-    async def execute(
-        self,
-        agent_id: str,
-        project_id: str,
-        repo: str,
-        issue_number: int,
-        title: str = "",
-        body: str = "",
-        state: str = "",
-        labels: list[str] | None = None,
-        **kwargs,
-    ) -> dict:
-        from .gitea import get_gitea_client, resolve_repo_ref
-
-        invalid = _validate_gitea_issue_text(title or "", body or "")
-        if invalid:
-            return {"error": invalid, "repo": repo, "issue_number": issue_number}
-
-        client = get_gitea_client()
-        try:
-            owner, name = resolve_repo_ref(repo, default_owner=client.org)
-            issue = await client.update_issue_for_repo(
-                owner,
-                name,
-                issue_number,
-                title=title or None,
-                body=body or None,
-                state=state or None,
-                labels=labels,
-            )
-        except Exception as e:
-            return {"error": str(e), "repo": repo, "issue_number": issue_number}
-
-        return {
-            "updated": True,
-            "owner": owner,
-            "repo": name,
-            "full_name": f"{owner}/{name}",
-            "issue_number": issue.get("number"),
-            "issue_url": issue.get("html_url"),
-            "state": issue.get("state"),
-            "title": issue.get("title"),
-        }
-
-
-class GitDiffTool(BaseTool):
-    """Zeigt Änderungen im Workspace verglichen mit dem letzten Commit."""
-
-    @property
-    def id(self) -> str:   return "git_diff"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Git Diff"
-    @property
-    def description(self) -> str:
-        return (
-            "Zeigt die Unterschiede zwischen dem aktuellen Workspace und dem letzten Commit. "
-            "path: optional — nur Diff für diese Datei/Verzeichnis. "
-            "repo: optionales Ziel-Repo wenn es vom Projektkontext abweicht."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
-                "path": {
-                    "type":        "string",
-                    "description": "Optionaler Pfad (relativ zum Workspace-Root)",
-                },
-                "staged": {
-                    "type":        "boolean",
-                    "description": "True um gestagete Änderungen zu zeigen (Standard: False)",
-                },
-            },
-            "required": [],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        path: str = "", staged: bool = False, **kwargs,
-    ) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
-            ws = await GiteaClient.git_workspace(
-                target["workspace_key"],
-                owner=target["owner"],
-                repo=target["repo"],
-            )
-        except Exception as e:
-            return {"error": str(e)}
-        # #422: Shortstat-Probe vor Full-Diff (Memory-Schutz)
-        stat_args = ["diff", "--shortstat"]
-        if staged:
-            stat_args.append("--cached")
-        if path:
-            stat_args += ["--", path]
-        stat_out, _, _ = await GiteaClient._git(stat_args, ws)
-
-        # Parse shortstat: "3 files changed, 120 insertions(+), 45 deletions(-)"
-        import re
-        files_changed = 0
-        lines_changed = 0
-        m_files = re.search(r"(\d+) file", stat_out)
-        m_ins = re.search(r"(\d+) insertion", stat_out)
-        m_del = re.search(r"(\d+) deletion", stat_out)
-        if m_files:
-            files_changed = int(m_files.group(1))
-        if m_ins:
-            lines_changed += int(m_ins.group(1))
-        if m_del:
-            lines_changed += int(m_del.group(1))
-
-        # Bei riesigen Diffs: nur Summary statt Full-Diff
-        if files_changed > 50 or lines_changed > 10000:
-            return {
-                "project_id": pid,
-                "repo":      target["repo"],
-                "owner":     target["owner"],
-                "full_name": target["full_name"],
-                "diff":      f"[Diff zu groß für Full-Output: {files_changed} Dateien, {lines_changed} Zeilen]\n{stat_out.strip()}",
-                "shortstat": stat_out.strip(),
-                "truncated": True,
-                "exit_code": 0,
-            }
-
-        args = ["diff"]
-        if staged:
-            args.append("--cached")
-        if path:
-            args += ["--", path]
-        stdout, stderr, rc = await GiteaClient._git(args, ws)
-        diff = stdout[:10000]
-        return {
-            "project_id": pid,
-            "repo":      target["repo"],
-            "owner":     target["owner"],
-            "full_name": target["full_name"],
-            "diff":      diff,
-            "shortstat": stat_out.strip(),
-            "truncated": len(stdout) > 10000,
-            "exit_code": rc,
-        }
-
-
-class GitWorktreeTool(BaseTool):
-    """#450: Git Worktree Isolation — riskante Operationen in temporärem Branch."""
-
-    @property
-    def id(self) -> str:   return "git_worktree"
-    @property
-    def name(self) -> str: return "Git Worktree (Isolation)"
-    @property
-    def description(self) -> str:
-        return (
-            "Erstellt einen temporären Git Worktree für riskante Operationen. "
-            "Arbeitet auf einem eigenen Branch — bei Erfolg mergen, bei Fehler cleanup. "
-            "action: 'create' (neuen Worktree erstellen), 'merge' (Worktree mergen), "
-            "'cleanup' (Worktree löschen ohne merge)."
-        )
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "action":  {"type": "string", "enum": ["create", "merge", "cleanup"], "description": "create/merge/cleanup"},
-                "branch":  {"type": "string", "description": "Branch-Name für den Worktree (bei create)"},
-                "repo":    {"type": "string", "description": "Optionales Ziel-Repo"},
-            },
-            "required": ["action"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, action: str = "create", branch: str = "", **kwargs) -> dict:
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
-        repo_ref = kwargs.get("repo", "")
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=project_id, repo=repo_ref)
-            ws = await GiteaClient.git_workspace(target["workspace_key"], owner=target["owner"], repo=target["repo"])
-        except Exception as e:
-            return {"error": str(e)}
-
-        if action == "create":
-            branch = branch or f"worktree/{agent_id}/{int(__import__('time').time())}"
-            wt_path = ws.parent / f".worktree-{branch.replace('/', '-')}"
-            stdout, stderr, rc = await GiteaClient._git(["worktree", "add", str(wt_path), "-b", branch], ws)
-            if rc != 0:
-                return {"error": f"Worktree erstellen fehlgeschlagen: {stderr}", "exit_code": rc}
-            return {"created": True, "branch": branch, "worktree_path": str(wt_path)}
-
-        elif action == "merge":
-            if not branch:
-                return {"error": "branch ist für merge erforderlich"}
-            stdout, stderr, rc = await GiteaClient._git(["merge", branch], ws)
-            if rc != 0:
-                return {"error": f"Merge fehlgeschlagen: {stderr}", "exit_code": rc}
-            # Cleanup nach Merge
-            await GiteaClient._git(["worktree", "prune"], ws)
-            await GiteaClient._git(["branch", "-d", branch], ws)
-            return {"merged": True, "branch": branch}
-
-        elif action == "cleanup":
-            if not branch:
-                return {"error": "branch ist für cleanup erforderlich"}
-            await GiteaClient._git(["worktree", "prune"], ws)
-            await GiteaClient._git(["branch", "-D", branch], ws)
-            return {"cleaned": True, "branch": branch}
-
-        return {"error": f"Unbekannte action: {action}"}
-
-
-class GitCommitTool(BaseTool):
-    """
-    Erstellt einen Git-Commit aus Dateiinhalten im Projekt-Workspace.
-    Schreibt die Dateien in den Workspace, staged sie und committet.
-    """
-
-    @property
-    def id(self) -> str:   return "git_commit"
-    @property
-    def name(self) -> str: return "Git Commit"
-    @property
-    def description(self) -> str:
-        return (
-            "Schreibt Dateien in den Git-Workspace und erstellt einen Commit. "
-            "Pusht danach automatisch auf Gitea (auto_push=True). "
-            "files: Liste von {path, content} Objekten. "
-            "message: Commit-Nachricht. "
-            "branch: Branch-Name (Standard: feature/agent-<agent_id>). "
-            "auto_push: False um Push zu überspringen (Standard: True)."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "files": {
-                    "type":        "array",
-                    "description": "Liste von Dateien die commitet werden sollen",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "path":    {"type": "string", "description": "Pfad relativ zum Repo-Root"},
-                            "content": {"type": "string", "description": "Dateiinhalt"},
-                        },
-                        "required": ["path", "content"],
-                    },
-                },
-                "message": {
-                    "type":        "string",
-                    "description": "Commit-Nachricht",
-                },
-                "branch": {
-                    "type":        "string",
-                    "description": "Branch-Name (Standard: feature/agent-<agent_id>)",
-                },
-                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
-                "auto_push": {"type": "boolean", "description": "Nach Commit automatisch auf Gitea pushen (Standard: True)"},
-            },
-            "required": ["files", "message"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        files: list, message: str, branch: str = "", auto_push: bool = True, **kwargs,
-    ) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target, _load_config
-
-        if not branch:
-            safe_id = agent_id.replace("_", "-").replace(" ", "-")[:30]
-            branch = f"feature/agent-{safe_id}"
-
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
-            ws = await GiteaClient.git_workspace(
-                target["workspace_key"],
-                owner=target["owner"],
-                repo=target["repo"],
-            )
-        except Exception as e:
-            return {"error": str(e)}
-
-        # Branch anlegen/wechseln
-        out, err, rc = await GiteaClient._git(["checkout", "-B", branch], ws)
-        if rc != 0:
-            return {"error": f"Branch-Wechsel fehlgeschlagen: {err[:200]}"}
-
-        # Dateien schreiben
-        written = []
-        for f in files:
-            fpath = ws / f["path"].lstrip("/")
-            fpath.parent.mkdir(parents=True, exist_ok=True)
-            fpath.write_text(f["content"], encoding="utf-8")
-            written.append(f["path"])
-            logger.info("git_commit [%s]: schreibe %s", agent_id, f["path"])
-
-        # git add + commit
-        _, err, rc = await GiteaClient._git(["add", "-A"], ws)
-        if rc != 0:
-            return {"error": f"git add fehlgeschlagen: {err[:200]}"}
-
-        # Prüfen ob es was zu committen gibt
-        stat_out, _, _ = await GiteaClient._git(["status", "--porcelain"], ws)
-        if not stat_out.strip():
-            return {"committed": False, "reason": "Keine Änderungen zu committen", "branch": branch}
-
-        _, err, rc = await GiteaClient._git(["commit", "-m", message], ws)
-        if rc != 0:
-            return {"error": f"git commit fehlgeschlagen: {err[:200]}"}
-
-        # letzte Commit-Hash
-        hash_out, _, _ = await GiteaClient._git(["rev-parse", "--short", "HEAD"], ws)
-
-        result: dict = {
-            "committed": True,
-            "project_id": pid,
-            "repo":      target["repo"],
-            "owner":     target["owner"],
-            "full_name": target["full_name"],
-            "branch":    branch,
-            "files":     written,
-            "commit":    hash_out.strip(),
-            "message":   message,
-        }
-
-        # Auto-Push auf Remote (Standard: True)
-        if auto_push:
-            cfg = _load_config()
-            remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
-            await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
-            git_username = cfg.get("org", "hydrahive")
-            _, push_err, push_rc = await GiteaClient._git(
-                ["push", "-u", "origin", branch], ws,
-                token=cfg.get("token", ""), username=git_username,
-            )
-            if push_rc == 0:
-                result["pushed"] = True
-            else:
-                logger.warning("git_commit auto-push fehlgeschlagen [%s]: %s", agent_id, push_err[:200])
-                return {
-                    "error": f"Commit erfolgreich, aber Push fehlgeschlagen: {push_err[:300]}",
-                    "committed": True,
-                    "pushed": False,
-                    **{k: v for k, v in result.items() if k not in ("pushed",)},
-                }
-
-        return result
-
-
-class GitPushTool(BaseTool):
-    """Pusht den aktuellen Branch auf Gitea."""
-
-    @property
-    def id(self) -> str:   return "git_push"
-    @property
-    def name(self) -> str: return "Git Push"
-    @property
-    def description(self) -> str:
-        return (
-            "Pusht auf Gitea/Git Remote. "
-            "Standard: aktuellen Branch pushen (nach git_commit). "
-            "Für große Repos: commit_ref + path nutzen um einen Commit-Hash direkt zu pushen "
-            "OHNE Checkout (z.B. git_push(commit_ref='abc123', path='/projects/x/repo', target_branch='main')). "
-            "create_pr=True erstellt automatisch einen Pull Request nach main."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.push"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "create_pr": {
-                    "type":        "boolean",
-                    "description": "True um automatisch einen PR nach main zu erstellen",
-                },
-                "pr_title": {
-                    "type":        "string",
-                    "description": "Titel des PRs (nur wenn create_pr=True)",
-                },
-                "pr_body": {
-                    "type":        "string",
-                    "description": "Beschreibung des PRs (optional)",
-                },
-                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
-                "commit_ref": {
-                    "type":        "string",
-                    "description": "Commit-Hash direkt pushen (ohne Checkout). Für große Repos wo git checkout timeoutet.",
-                },
-                "target_branch": {
-                    "type":        "string",
-                    "description": "Ziel-Branch auf dem Remote (Standard: main). Nur mit commit_ref.",
-                },
-                "path": {
-                    "type":        "string",
-                    "description": "Lokaler Pfad zum Git-Repo (statt Workspace). Für Repos die schon lokal existieren.",
-                },
-            },
-            "required": [],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        create_pr: bool = False, pr_title: str = "", pr_body: str = "", **kwargs,
-    ) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        commit_ref = kwargs.get("commit_ref", "")
-        target_branch = kwargs.get("target_branch", "main")
-        local_path = kwargs.get("path", "")
-        from .gitea import GiteaClient, get_gitea_client, _load_config, resolve_git_target
-        cfg = _load_config()
-
-        # Direkter Push: commit_ref → refs/heads/target_branch (kein Checkout nötig)
-        if commit_ref and local_path:
-            ws = Path(local_path)
-            if not (ws / ".git").exists():
-                return {"error": f"Kein Git-Repo unter {local_path}"}
-            _, err, rc = await GiteaClient._git(
-                ["push", "origin", f"{commit_ref}:refs/heads/{target_branch}"],
-                str(ws), token=cfg.get("token", ""),
-            )
-            if rc != 0:
-                return {"error": f"git push fehlgeschlagen: {err[:300]}", "commit_ref": commit_ref}
-            return {
-                "pushed": True, "commit_ref": commit_ref,
-                "target_branch": target_branch, "path": local_path,
-            }
-
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
-        except Exception as e:
-            return {"error": str(e)}
-
-        # Direkter Push mit commit_ref über Workspace (ohne Checkout)
-        if commit_ref:
-            try:
-                ws = await GiteaClient.git_workspace(
-                    target["workspace_key"],
-                    owner=target["owner"],
-                    repo=target["repo"],
-                )
-            except Exception as e:
-                return {"error": str(e)}
-            remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
-            await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
-            _, err, rc = await GiteaClient._git(
-                ["push", "origin", f"{commit_ref}:refs/heads/{target_branch}"],
-                ws, token=cfg.get("token", ""),
-            )
-            if rc != 0:
-                return {"error": f"git push fehlgeschlagen: {err[:300]}", "commit_ref": commit_ref}
-            return {
-                "pushed": True, "commit_ref": commit_ref,
-                "target_branch": target_branch,
-                "repo": target["repo"], "owner": target["owner"],
-            }
-
-        # Standard-Flow: Workspace auschecken + Branch pushen
-        try:
-            ws = await GiteaClient.git_workspace(
-                target["workspace_key"],
-                owner=target["owner"],
-                repo=target["repo"],
-            )
-        except Exception as e:
-            return {"error": str(e)}
-
-        # Remote-URL sauber setzen (kein Token in URL — Auth via GIT_ASKPASS)
-        remote_url = f"{cfg['url']}/{target['owner']}/{target['repo']}.git"
-        await GiteaClient._git(["remote", "set-url", "origin", remote_url], ws)
-
-        # Branch ermitteln
-        branch_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
-        branch = branch_out.strip()
-        if not branch:
-            return {"error": "Kein aktiver Branch"}
-
-        # Push mit Token via GIT_ASKPASS (Token landet nicht in URL oder History)
-        _, err, rc = await GiteaClient._git(
-            ["push", "-u", "origin", branch], ws, token=cfg.get("token", "")
-        )
-        if rc != 0:
-            return {"error": f"git push fehlgeschlagen: {err[:300]}", "branch": branch}
-
-        result: dict = {
-            "pushed": True,
-            "branch": branch,
-            "project_id": pid,
-            "repo": target["repo"],
-            "owner": target["owner"],
-            "full_name": target["full_name"],
-        }
-
-        if create_pr and branch != "main":
-            title = pr_title or f"Agent-Änderung: {branch}"
-            try:
-                client = get_gitea_client()
-                pr = await client.create_pr_for_repo(target["owner"], target["repo"], title, branch, body=pr_body)
-                result["pr"] = {
-                    "number": pr.get("number"),
-                    "url":    pr.get("html_url"),
-                    "title":  pr.get("title"),
-                }
-            except Exception as e:
-                result["pr_error"] = str(e)
-
-        return result
-
-
-class GitCreatePRTool(BaseTool):
-    """Erstellt einen Pull Request auf Gitea."""
-
-    @property
-    def id(self) -> str:   return "git_create_pr"
-    @property
-    def name(self) -> str: return "Pull Request erstellen"
-    @property
-    def description(self) -> str:
-        return (
-            "Erstellt einen Pull Request von einem Feature-Branch nach main. "
-            "Nutze dies nach git_push wenn du Änderungen zur Review einreichen möchtest."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.pr"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type":        "string",
-                    "description": "Titel des Pull Requests",
-                },
-                "head": {
-                    "type":        "string",
-                    "description": "Quell-Branch (z.B. feature/agent-xyz)",
-                },
-                "base": {
-                    "type":        "string",
-                    "description": "Ziel-Branch (Standard: main)",
-                },
-                "body": {
-                    "type":        "string",
-                    "description": "Beschreibung / Changelog des PRs",
-                },
-                "project_id": {"type": "string", "description": "Projekt-ID (z.B. 'testprojekt')"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo als URL, owner/repo oder Repo-Name"},
-            },
-            "required": ["title", "head"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        title: str, head: str, base: str = "main", body: str = "", **kwargs,
-    ) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        from .gitea import get_gitea_client, resolve_git_target
-        try:
-            client = get_gitea_client()
-            target = await resolve_git_target(client, project_id=pid, repo=repo_ref)
-            pr = await client.create_pr_for_repo(target["owner"], target["repo"], title, head, base, body)
-            return {
-                "created": True,
-                "project_id": pid,
-                "repo": target["repo"],
-                "owner": target["owner"],
-                "full_name": target["full_name"],
-                "pr_number": pr.get("number"),
-                "pr_url":    pr.get("html_url"),
-                "title":     pr.get("title"),
-            }
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class GitMergeTool(BaseTool):
-    """Merged einen Branch in den aktuellen Branch (lokales Git-Merge)."""
-
-    @property
-    def id(self) -> str:   return "git_merge"
-    @property
-    def name(self) -> str: return "Git Merge"
-    @property
-    def description(self) -> str:
-        return (
-            "Merged einen anderen Branch in den aktuellen Branch im Projekt-Repository. "
-            "Nutze dies um Feature-Branches zusammenzuführen. "
-            "Bei Konflikten wird ein Fehler zurückgegeben."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["git.push"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "branch": {
-                    "type": "string",
-                    "description": "Branch-Name der gemergt werden soll (z.B. 'feature/xyz')",
-                },
-                "message": {
-                    "type": "string",
-                    "description": "Optionale Merge-Commit-Nachricht",
-                },
-                "project_id": {"type": "string", "description": "Projekt-ID"},
-                "repo": {"type": "string", "description": "Optionales Ziel-Repo (URL, owner/repo oder Name)"},
-            },
-            "required": ["branch"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        branch: str, message: str = "", **kwargs,
-    ) -> dict:
-        pid = kwargs.get("project_id") or project_id
-        repo_ref = kwargs.get("repo", "")
-        from .gitea import GiteaClient, get_gitea_client, resolve_git_target
-
-        try:
-            target = await resolve_git_target(get_gitea_client(), project_id=pid, repo=repo_ref)
-            ws = await GiteaClient.git_workspace(
-                target["workspace_key"],
-                owner=target["owner"],
-                repo=target["repo"],
-            )
-        except Exception as e:
-            return {"error": str(e)}
-
-        cmd = ["merge", branch]
-        if message:
-            cmd += ["-m", message]
-        else:
-            cmd += ["--no-edit"]
-
-        out, err, rc = await GiteaClient._git(cmd, ws)
-        if rc != 0:
-            return {
-                "error": f"git merge fehlgeschlagen: {(err or out)[:400]}",
-                "branch": branch,
-                "hint": "Möglicherweise gibt es Konflikte — bitte manuell auflösen.",
-            }
-
-        # Aktuellen Branch ermitteln
-        cur_out, _, _ = await GiteaClient._git(["branch", "--show-current"], ws)
-        return {
-            "merged": True,
-            "source_branch": branch,
-            "target_branch": cur_out.strip(),
-            "project_id": pid,
-            "repo": target["repo"],
-            "output": out.strip()[:200] if out.strip() else "Already up to date.",
-        }
-
-
-# ============================================================= WKS Tools (Workstation-Zugriff via SSH)
-
-def _get_wks_config(project_id: str) -> dict | None:
-    """WKS-Config des Users laden, der zum project_id gehört.
-    Persönliche Agenten heißen personal_<username> → username extrahieren."""
-    import json as _j
-    USERS_FILE = settings.users_config
-    if not project_id.startswith("personal_"):
-        return None
-    username = project_id[len("personal_"):]
-    try:
-        users = _j.loads(USERS_FILE.read_text())
-        wks = users.get(username, {}).get("wks", {})
-        if wks.get("ip"):
-            return wks
-    except Exception:
-        pass
-    return None
-
-
-def _make_ssh_client(wks: dict):
-    """Erstellt einen paramiko SSHClient mit Host-Key-Verifikation (RejectPolicy)."""
-    import paramiko
-    client = paramiko.SSHClient()
-    client.load_system_host_keys()
-    known_hosts = Path.home() / ".ssh" / "known_hosts"
-    if known_hosts.exists():
-        client.load_host_keys(str(known_hosts))
-    client.set_missing_host_key_policy(paramiko.RejectPolicy())
-    connect_kw: dict = {
-        "hostname": wks["ip"],
-        "username": wks.get("ssh_user", ""),
-        "timeout":  30,
-    }
-    key_path = wks.get("ssh_key_path", "")
-    if key_path and Path(key_path).exists():
-        connect_kw["key_filename"] = key_path
-    client.connect(**connect_kw)
-    return client
-
-
-class WksShellExecTool(BaseTool):
-    """Führt einen Shell-Befehl auf der Workstation des Users aus (via SSH)."""
-
-    @property
-    def id(self) -> str:   return "wks_shell_exec"
-    @property
-    def name(self) -> str: return "WKS Shell-Befehl"
-    @property
-    def description(self) -> str:
-        return (
-            "Führt einen Shell-Befehl auf der eigenen Workstation des Users aus (SSH). "
-            "Funktioniert mit Linux UND Windows WKS. "
-            "Windows: nutze cmd/PowerShell-Befehle (dir, type, Get-Content etc.). "
-            "Linux: nutze bash-Befehle (ls, cat etc.)."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["workstation.shell"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "command": {"type": "string", "description": "Der auszuführende Shell-Befehl"},
-                "cwd":     {"type": "string", "description": "Arbeitsverzeichnis (optional)"},
-            },
-            "required": ["command"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, command: str, cwd: str = "", **kwargs) -> dict:
-        import asyncio, shlex
-        wks = _get_wks_config(project_id)
-        if not wks:
-            return {"error": "Keine WKS-Konfiguration für diesen Agenten — bitte in Mein Agent → WKS einrichten"}
-
-        blocked = _check_shell_blocklist(command)
-        if blocked:
-            logger.warning("wks_shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
-            return {
-                "error": f"Befehl blockiert: {blocked}",
-                "command": command,
-                "exit_code": -1,
-                "blocked": True,
-            }
-
-        def _run():
-            client = _make_ssh_client(wks)
-            full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
-            _, stdout, stderr = client.exec_command(full_cmd, timeout=300)
-            out      = stdout.read().decode("utf-8", errors="replace")
-            err      = stderr.read().decode("utf-8", errors="replace")
-            exit_code = stdout.channel.recv_exit_status()
-            client.close()
-            return {"stdout": out, "stderr": err, "exit_code": exit_code}
-
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class ServerShellTool(BaseTool):
-    """Führt einen Shell-Befehl auf einem registrierten Remote-Server aus (via SSH)."""
-
-    @property
-    def id(self) -> str:   return "server_shell"
-    @property
-    def name(self) -> str: return "Remote-Server Shell"
-    @property
-    def description(self) -> str:
-        return (
-            "Führt einen Shell-Befehl auf einem registrierten Remote-Server aus (SSH). "
-            "Nutze server_id um den Zielserver auszuwählen. "
-            "Verfügbare Server werden dem Agenten zugewiesen."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers (aus Server-Verwaltung)"},
-                "command":   {"type": "string", "description": "Der auszuführende Shell-Befehl"},
-                "cwd":       {"type": "string", "description": "Arbeitsverzeichnis (optional)"},
-            },
-            "required": ["server_id", "command"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", command: str = "", cwd: str = "", **kwargs) -> dict:
-        import asyncio, shlex
-        from .router_servers import get_server_for_agent
-
-        if not server_id or not command:
-            return {"error": "server_id und command sind Pflicht"}
-
-        srv = get_server_for_agent(agent_id, server_id)
-        if not srv:
-            # Auch project_id als Agent-ID versuchen (Projekt-Agents)
-            srv = get_server_for_agent(project_id, server_id)
-        if not srv:
-            return {"error": f"Server '{server_id}' nicht zugewiesen oder nicht gefunden. Verfügbare Server per /agents/{agent_id}/servers abfragen."}
-
-        if not srv.get("ssh_key_path"):
-            return {"error": f"Kein SSH-Key für Server '{server_id}' vorhanden"}
-
-        # Server-Shell hat KEINE Blocklist — der Admin hat bewusst SSH-Zugang gegeben
-        # Die Blocklist ist nur für lokale shell_exec (schützt den HydraHive-Server selbst)
-
-        def _run():
-            import paramiko
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                hostname=srv["ip"],
-                port=srv.get("ssh_port", 22),
-                username=srv["ssh_user"],
-                key_filename=srv["ssh_key_path"],
-                timeout=10,
-            )
-            full_cmd = f"cd {shlex.quote(cwd)} && {command}" if cwd else command
-            _, stdout, stderr = client.exec_command(full_cmd, timeout=300)
-            out       = stdout.read().decode("utf-8", errors="replace")
-            err       = stderr.read().decode("utf-8", errors="replace")
-            exit_code = stdout.channel.recv_exit_status()
-            client.close()
-            return {
-                "server": server_id,
-                "stdout": out[-10000:] if len(out) > 10000 else out,
-                "stderr": err[-5000:] if len(err) > 5000 else err,
-                "exit_code": exit_code,
-            }
-
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler ({server_id}): {e}"}
-
-
-def _get_server_ssh(agent_id: str, project_id: str, server_id: str):
-    """Helper: Server-Config + paramiko-Client für Server-Tools."""
-    from .router_servers import get_server_for_agent
-    srv = get_server_for_agent(agent_id, server_id) or get_server_for_agent(project_id, server_id)
-    if not srv:
-        return None, None, f"Server '{server_id}' nicht zugewiesen"
-    if not srv.get("ssh_key_path"):
-        return None, None, f"Kein SSH-Key für Server '{server_id}'"
-    import paramiko
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        hostname=srv["ip"], port=srv.get("ssh_port", 22),
-        username=srv["ssh_user"], key_filename=srv["ssh_key_path"], timeout=10,
-    )
-    return srv, client, None
-
-
-class ServerFileReadTool(BaseTool):
-    """Liest eine Datei von einem registrierten Remote-Server (SFTP)."""
-
-    @property
-    def id(self) -> str: return "server_file_read"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Remote-Server Datei lesen"
-    @property
-    def description(self) -> str:
-        return "Liest eine Datei von einem Remote-Server via SFTP. Linux- und Windows-Pfade. Nutze server_id für den Zielserver."
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers"},
-                "path": {"type": "string", "description": "Absoluter Pfad zur Datei (Linux: /etc/... oder Windows: C:/...)"},
-                "offset": {"type": "integer", "description": "Ab Zeile (optional, default 0)"},
-                "limit": {"type": "integer", "description": "Max Zeilen (optional, default 500)"},
-            },
-            "required": ["server_id", "path"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", offset: int = 0, limit: int = 500, **kwargs) -> dict:
-        import asyncio, io
-        def _run():
-            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
-            if err: return {"error": err}
-            try:
-                sftp = client.open_sftp()
-                buf = io.BytesIO()
-                sftp.getfo(path, buf)
-                content = buf.getvalue().decode("utf-8", errors="replace")
-                lines = content.splitlines()
-                total = len(lines)
-                selected = lines[offset:offset + limit]
-                sftp.close(); client.close()
-                return {"content": "\n".join(selected), "path": path, "total_lines": total, "offset": offset, "lines_returned": len(selected)}
-            except Exception as e:
-                client.close()
-                return {"error": str(e)}
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler: {e}"}
-
-
-class ServerFileWriteTool(BaseTool):
-    """Schreibt eine Datei auf einen Remote-Server (SFTP)."""
-
-    @property
-    def id(self) -> str: return "server_file_write"
-    @property
-    def name(self) -> str: return "Remote-Server Datei schreiben"
-    @property
-    def description(self) -> str:
-        return "Schreibt/überschreibt eine Datei auf einem Remote-Server via SFTP."
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers"},
-                "path": {"type": "string", "description": "Absoluter Pfad (Linux oder Windows)"},
-                "content": {"type": "string", "description": "Dateiinhalt"},
-            },
-            "required": ["server_id", "path", "content"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", content: str = "", **kwargs) -> dict:
-        import asyncio, io
-        def _run():
-            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
-            if err: return {"error": err}
-            try:
-                sftp = client.open_sftp()
-                buf = io.BytesIO(content.encode("utf-8"))
-                sftp.putfo(buf, path)
-                sftp.close(); client.close()
-                return {"written": True, "path": path, "bytes": len(content.encode("utf-8"))}
-            except Exception as e:
-                client.close()
-                return {"error": str(e)}
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler: {e}"}
-
-
-class ServerFileListTool(BaseTool):
-    """Listet Dateien/Verzeichnisse auf einem Remote-Server."""
-
-    @property
-    def id(self) -> str: return "server_file_list"
-    @property
-    def name(self) -> str: return "Remote-Server Verzeichnis listen"
-    @property
-    def description(self) -> str:
-        return "Listet Dateien und Verzeichnisse auf einem Remote-Server via SFTP."
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers"},
-                "path": {"type": "string", "description": "Verzeichnispfad (default: Home-Dir)"},
-            },
-            "required": ["server_id"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = ".", **kwargs) -> dict:
-        import asyncio
-        def _run():
-            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
-            if err: return {"error": err}
-            try:
-                sftp = client.open_sftp()
-                entries = []
-                for attr in sftp.listdir_attr(path):
-                    import stat
-                    is_dir = stat.S_ISDIR(attr.st_mode) if attr.st_mode else False
-                    entries.append({
-                        "name": attr.filename,
-                        "type": "dir" if is_dir else "file",
-                        "size": attr.st_size,
-                    })
-                sftp.close(); client.close()
-                return {"path": path, "entries": entries, "count": len(entries)}
-            except Exception as e:
-                client.close()
-                return {"error": str(e)}
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler: {e}"}
-
-
-class ServerFileSearchTool(BaseTool):
-    """Sucht in Dateien auf einem Remote-Server (grep)."""
-
-    @property
-    def id(self) -> str: return "server_file_search"
-    @property
-    def name(self) -> str: return "Remote-Server Dateisuche"
-    @property
-    def description(self) -> str:
-        return "Sucht nach Text in Dateien auf einem Remote-Server (grep/findstr). Nutzt SSH shell."
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers"},
-                "pattern": {"type": "string", "description": "Suchbegriff oder Regex"},
-                "path": {"type": "string", "description": "Verzeichnis oder Datei zum Durchsuchen"},
-                "file_pattern": {"type": "string", "description": "Dateiname-Filter (z.B. *.py, *.conf)"},
-            },
-            "required": ["server_id", "pattern", "path"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", pattern: str = "", path: str = ".", file_pattern: str = "", **kwargs) -> dict:
-        import asyncio, shlex
-        def _run():
-            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
-            if err: return {"error": err}
-            try:
-                if file_pattern:
-                    cmd = f"grep -rn {shlex.quote(pattern)} {shlex.quote(path)} --include={shlex.quote(file_pattern)} 2>/dev/null | head -50"
-                else:
-                    cmd = f"grep -rn {shlex.quote(pattern)} {shlex.quote(path)} 2>/dev/null | head -50"
-                _, stdout, stderr = client.exec_command(cmd, timeout=30)
-                out = stdout.read().decode("utf-8", errors="replace")
-                client.close()
-                lines = [l for l in out.strip().splitlines() if l]
-                return {"matches": lines, "count": len(lines), "pattern": pattern, "path": path}
-            except Exception as e:
-                client.close()
-                return {"error": str(e)}
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler: {e}"}
-
-
-class ServerFilePatchTool(BaseTool):
-    """Suchen & Ersetzen in einer Datei auf einem Remote-Server."""
-
-    @property
-    def id(self) -> str: return "server_file_patch"
-    @property
-    def name(self) -> str: return "Remote-Server Datei patchen"
-    @property
-    def description(self) -> str:
-        return "Sucht einen String in einer Datei auf dem Remote-Server und ersetzt ihn. Wie file_patch, aber remote."
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "server_id": {"type": "string", "description": "ID des Zielservers"},
-                "path": {"type": "string", "description": "Absoluter Pfad zur Datei"},
-                "search": {"type": "string", "description": "Text der gesucht wird"},
-                "replace": {"type": "string", "description": "Text der eingesetzt wird"},
-            },
-            "required": ["server_id", "path", "search", "replace"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, server_id: str = "", path: str = "", search: str = "", replace: str = "", **kwargs) -> dict:
-        import asyncio, io
-        if not search:
-            return {"error": "search darf nicht leer sein"}
-        def _run():
-            srv, client, err = _get_server_ssh(agent_id, project_id, server_id)
-            if err: return {"error": err}
-            try:
-                sftp = client.open_sftp()
-                buf = io.BytesIO()
-                sftp.getfo(path, buf)
-                content = buf.getvalue().decode("utf-8", errors="replace")
-                if search not in content:
-                    sftp.close(); client.close()
-                    return {"error": f"String nicht gefunden in {path}", "patched": False}
-                new_content = content.replace(search, replace, 1)
-                sftp.putfo(io.BytesIO(new_content.encode("utf-8")), path)
-                sftp.close(); client.close()
-                return {"patched": True, "path": path, "replacements": 1}
-            except Exception as e:
-                client.close()
-                return {"error": str(e)}
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": f"SSH-Fehler: {e}"}
-
-
-class WksFileReadTool(BaseTool):
-    """Liest eine Datei von der Workstation des Users (via SFTP)."""
-
-    @property
-    def id(self) -> str:   return "wks_file_read"
-    @property
-    def name(self) -> str: return "WKS Datei lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest eine Datei von der eigenen Workstation des Users via SFTP. "
-            "Funktioniert mit Linux UND Windows WKS. "
-            "Windows-Pfade: C:/Users/Name/Desktop/datei.txt (Schrägstriche oder Backslashes). "
-            "Linux-Pfade: /home/user/datei.txt"
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["workstation.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string", "description": "Absoluter Pfad zur Datei (Linux: /home/... oder Windows: C:/Users/...)"},
-            },
-            "required": ["path"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, path: str, **kwargs) -> dict:
-        import asyncio, io
-        wks = _get_wks_config(project_id)
-        if not wks:
-            return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
-
-        def _run():
-            client = _make_ssh_client(wks)
-            sftp = client.open_sftp()
-            buf = io.BytesIO()
-            sftp.getfo(path, buf)
-            content = buf.getvalue().decode("utf-8", errors="replace")
-            sftp.close(); client.close()
-            return {"content": content, "path": path}
-
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class WksFileWriteTool(BaseTool):
-    """Schreibt eine Datei auf die Workstation des Users (via SFTP)."""
-
-    @property
-    def id(self) -> str:   return "wks_file_write"
-    @property
-    def name(self) -> str: return "WKS Datei schreiben"
-    @property
-    def description(self) -> str:
-        return "Schreibt/überschreibt eine Datei auf der eigenen Workstation des Users via SFTP. Funktioniert mit Linux UND Windows (C:/Users/... Pfade)."
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["workstation.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "path":    {"type": "string", "description": "Absoluter Pfad zur Datei auf der WKS"},
-                "content": {"type": "string", "description": "Dateiinhalt"},
-            },
-            "required": ["path", "content"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, path: str, content: str, **kwargs) -> dict:
-        import asyncio, io
-        wks = _get_wks_config(project_id)
-        if not wks:
-            return {"error": "Keine WKS-Konfiguration für diesen Agenten"}
-
-        def _run():
-            client = _make_ssh_client(wks)
-            sftp = client.open_sftp()
-            buf = io.BytesIO(content.encode("utf-8"))
-            sftp.putfo(buf, path)
-            sftp.close(); client.close()
-            return {"written": True, "path": path, "bytes": len(content.encode())}
-
-        try:
-            return await asyncio.get_event_loop().run_in_executor(None, _run)
-        except Exception as e:
-            return {"error": str(e)}
-
-
-# ============================================================= Discord-Tools
-
-# _discord_clients: {agent_id: AgentDiscordClient} — wird von main.py befüllt
-_discord_clients: dict[str, object] = {}
-
-
-def _get_discord_client(agent_id: str) -> object | None:
-    """Discord-Client für agent_id — fällt auf ersten verfügbaren Client zurück.
-    Ermöglicht Spezialisten-Agenten den Discord-Zugriff ohne eigenen Bot-Token."""
-    return _discord_clients.get(agent_id) or (next(iter(_discord_clients.values()), None))
-
-
-class SendMailTool(BaseTool):
-    """E-Mail über den konfigurierten Agenten-Mailaccount senden."""
-
-    @property
-    def id(self) -> str:          return "send_mail"
-    @property
-    def name(self) -> str:        return "Send Mail"
-    @property
-    def description(self) -> str: return "Sendet eine E-Mail vom konfigurierten Agenten-Mailaccount."
-    @property
-    def permissions_required(self) -> list[str]: return ["mail"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "to":      {"type": "string",  "description": "Empfänger-Adresse"},
-                "subject": {"type": "string",  "description": "Betreff"},
-                "body":    {"type": "string",  "description": "Nachrichtentext (plain text)"},
-                "cc":      {"type": "string",  "description": "CC-Adresse (optional)"},
-            },
-            "required": ["to", "subject", "body"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str,
-                      to: str, subject: str, body: str, cc: str = "", **kwargs) -> dict:
-        import json, smtplib
-        from email.mime.text import MIMEText
-        from pathlib import Path
-        from .main import AGENTS_DIR
-
-        cfg_path = Path(AGENTS_DIR) / agent_id / "mail.json"
-        if not cfg_path.exists():
-            return {"error": "Kein Mailaccount konfiguriert für diesen Agenten"}
-        try:
-            cfg = json.loads(cfg_path.read_text())
-        except Exception:
-            return {"error": "Mail-Config konnte nicht gelesen werden"}
-
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["From"]    = cfg["mail_address"]
-        msg["To"]      = to
-        msg["Subject"] = subject
-        if cc:
-            msg["Cc"] = cc
-
-        try:
-            with smtplib.SMTP(cfg["smtp_host"], cfg.get("smtp_port", 587), timeout=15) as s:
-                s.starttls()
-                s.login(cfg["smtp_user"], cfg["smtp_password"])
-                recipients = [to] + ([cc] if cc else [])
-                s.sendmail(cfg["mail_address"], recipients, msg.as_string())
-            return {"sent": True, "from": cfg["mail_address"], "to": to}
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class ReceiveMailTool(BaseTool):
-    """E-Mails vom konfigurierten Agenten-Mailaccount abrufen (IMAP)."""
-
-    @property
-    def id(self) -> str:          return "receive_mail"
-    @property
-    def name(self) -> str:        return "Receive Mail"
-    @property
-    def description(self) -> str: return "Ruft E-Mails vom konfigurierten Agenten-Mailaccount ab (IMAP). Gibt Betreff, Absender, Datum und Text zurück."
-    @property
-    def permissions_required(self) -> list[str]: return ["mail"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "folder":  {"type": "string",  "description": "IMAP-Ordner (default: INBOX)"},
-                "limit":   {"type": "integer", "description": "Maximale Anzahl Mails (default: 10, max: 50)"},
-                "unread_only": {"type": "boolean", "description": "Nur ungelesene Mails (default: false)"},
-            },
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str,
-                      folder: str = "INBOX", limit: int = 10, unread_only: bool = False, **kwargs) -> dict:
-        import json, imaplib, email
-        from email.header import decode_header
-        from pathlib import Path
-        from .main import AGENTS_DIR
-
-        cfg_path = Path(AGENTS_DIR) / agent_id / "mail.json"
-        if not cfg_path.exists():
-            return {"error": "Kein Mailaccount konfiguriert für diesen Agenten"}
-        try:
-            cfg = json.loads(cfg_path.read_text())
-        except Exception:
-            return {"error": "Mail-Config konnte nicht gelesen werden"}
-
-        imap_host = cfg.get("imap_host", cfg.get("smtp_host", "").replace("smtp.", "imap."))
-        imap_port = cfg.get("imap_port", 993)
-        limit = min(int(limit), 50)
-
-        def _decode_header(value: str) -> str:
-            parts = decode_header(value)
-            result = []
-            for part, enc in parts:
-                if isinstance(part, bytes):
-                    result.append(part.decode(enc or "utf-8", errors="replace"))
-                else:
-                    result.append(part)
-            return "".join(result)
-
-        def _get_body(msg) -> str:
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
-                        payload = part.get_payload(decode=True)
-                        if payload:
-                            return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-            else:
-                payload = msg.get_payload(decode=True)
-                if payload:
-                    return payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
-            return ""
-
-        try:
-            with imaplib.IMAP4_SSL(imap_host, imap_port) as imap:
-                imap.login(cfg["smtp_user"], cfg["smtp_password"])
-                imap.select(folder)
-                search = "UNSEEN" if unread_only else "ALL"
-                _, data = imap.search(None, search)
-                ids = data[0].split()
-                ids = ids[-limit:]  # neueste zuerst
-                mails = []
-                for mid in reversed(ids):
-                    _, raw = imap.fetch(mid, "(RFC822)")
-                    msg = email.message_from_bytes(raw[0][1])
-                    mails.append({
-                        "id":      mid.decode(),
-                        "from":    _decode_header(msg.get("From", "")),
-                        "subject": _decode_header(msg.get("Subject", "")),
-                        "date":    msg.get("Date", ""),
-                        "body":    _get_body(msg)[:2000],
-                    })
-            return {"mails": mails, "count": len(mails), "folder": folder}
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class DiscordSendTool(BaseTool):
-    """Nachricht in einen Discord-Channel senden."""
-
-    @property
-    def id(self) -> str:          return "discord_send"
-    @property
-    def name(self) -> str:        return "Discord Send"
-    @property
-    def description(self) -> str: return "Sendet eine Textnachricht in einen Discord-Channel."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "channel_id": {"type": "string", "description": "Discord Channel-ID"},
-                "text":       {"type": "string", "description": "Nachrichtentext"},
-            },
-            "required": ["channel_id", "text"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str,
-                      channel_id: str, text: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client:
-            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
-        try:
-            await client.send_message(channel_id, text)
-            return {"sent": True, "channel_id": channel_id}
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class DiscordReadTool(BaseTool):
-    """Letzte Nachrichten aus einem Discord-Channel lesen."""
-
-    @property
-    def id(self) -> str:          return "discord_read"
-    @property
-    def name(self) -> str:        return "Discord Read"
-    @property
-    def description(self) -> str: return "Liest die letzten Nachrichten aus einem Discord-Channel."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "channel_id": {"type": "string", "description": "Discord Channel-ID"},
-                "limit":      {"type": "integer", "description": "Anzahl Nachrichten (max 50)", "default": 20},
-            },
-            "required": ["channel_id"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str,
-                      channel_id: str, limit: int = 20, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client:
-            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
-        try:
-            messages = await client.read_messages(channel_id, limit=min(limit, 50))
-            return {"messages": messages}
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class DiscordListChannelsTool(BaseTool):
-    """Alle Text-Channels der konfigurierten Discord-Guild auflisten."""
-
-    @property
-    def id(self) -> str:          return "discord_list_channels"
-    @property
-    def name(self) -> str:        return "Discord List Channels"
-    @property
-    def description(self) -> str: return "Listet alle Text-Channels der konfigurierten Discord-Guild auf."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client:
-            return {"error": "Discord nicht konfiguriert für diesen Agenten"}
-        try:
-            channels = await client.list_channels()
-            return {"channels": channels}
-        except Exception as e:
-            return {"error": str(e)}
-
-
-class DiscordListAllChannelsTool(BaseTool):
-    """Alle Discord-Channels inkl. Kategorien und Voice auflisten."""
-    @property
-    def id(self) -> str:          return "discord_list_all_channels"
-    @property
-    def name(self) -> str:        return "Discord List All Channels"
-    @property
-    def description(self) -> str: return "Listet alle Channels der Guild auf inkl. Kategorien, Voice-Channels und deren Positionen."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict: return {"type": "object", "properties": {}, "required": []}
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return {"channels": await client.list_all_channels()}
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordCreateCategoryTool(BaseTool):
-    """Neue Kategorie in der Discord-Guild erstellen."""
-    @property
-    def id(self) -> str:          return "discord_create_category"
-    @property
-    def name(self) -> str:        return "Discord Create Category"
-    @property
-    def description(self) -> str: return "Erstellt eine neue Kategorie im Discord-Server."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"name": {"type": "string", "description": "Name der Kategorie"}}, "required": ["name"]}
-    async def execute(self, agent_id: str, project_id: str, name: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.create_category(name)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordCreateChannelTool(BaseTool):
-    """Neuen Text-Channel im Discord-Server erstellen."""
-    @property
-    def id(self) -> str:          return "discord_create_channel"
-    @property
-    def name(self) -> str:        return "Discord Create Channel"
-    @property
-    def description(self) -> str: return "Erstellt einen neuen Text-Channel, optional in einer Kategorie."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "name":        {"type": "string",  "description": "Channel-Name (lowercase, keine Leerzeichen)"},
-                "category_id": {"type": "string",  "description": "ID der Eltern-Kategorie (optional)"},
-                "topic":       {"type": "string",  "description": "Channel-Beschreibung (optional)"},
-            },
-            "required": ["name"],
-        }
-    async def execute(self, agent_id: str, project_id: str, name: str, category_id: str = "", topic: str = "", **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.create_channel(name, category_id=category_id, topic=topic)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordDeleteChannelTool(BaseTool):
-    """Channel oder Kategorie aus der Discord-Guild löschen."""
-    @property
-    def id(self) -> str:          return "discord_delete_channel"
-    @property
-    def name(self) -> str:        return "Discord Delete Channel"
-    @property
-    def description(self) -> str: return "Löscht einen Channel oder eine Kategorie aus dem Discord-Server."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"channel_id": {"type": "string", "description": "ID des zu löschenden Channels/der Kategorie"}}, "required": ["channel_id"]}
-    async def execute(self, agent_id: str, project_id: str, channel_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.delete_channel(channel_id)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordSetTopicTool(BaseTool):
-    """Channel-Topic/Beschreibung setzen."""
-    @property
-    def id(self) -> str:          return "discord_set_topic"
-    @property
-    def name(self) -> str:        return "Discord Set Topic"
-    @property
-    def description(self) -> str: return "Setzt das Topic (Beschreibung) eines Discord-Channels."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "topic": {"type": "string", "description": "Neues Channel-Topic"}}, "required": ["channel_id", "topic"]}
-    async def execute(self, agent_id: str, project_id: str, channel_id: str, topic: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.set_channel_topic(channel_id, topic)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordRenameChannelTool(BaseTool):
-    """Channel umbenennen."""
-    @property
-    def id(self) -> str:          return "discord_rename_channel"
-    @property
-    def name(self) -> str:        return "Discord Rename Channel"
-    @property
-    def description(self) -> str: return "Benennt einen Discord-Channel um."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "name": {"type": "string", "description": "Neuer Channel-Name"}}, "required": ["channel_id", "name"]}
-    async def execute(self, agent_id: str, project_id: str, channel_id: str, name: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.rename_channel(channel_id, name)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordListMembersTool(BaseTool):
-    """Mitglieder der Discord-Guild auflisten."""
-    @property
-    def id(self) -> str:          return "discord_list_members"
-    @property
-    def name(self) -> str:        return "Discord List Members"
-    @property
-    def description(self) -> str: return "Listet Mitglieder der Discord-Guild mit ihren Rollen auf."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"limit": {"type": "integer", "description": "Max. Anzahl Mitglieder", "default": 100}}, "required": []}
-    async def execute(self, agent_id: str, project_id: str, limit: int = 100, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return {"members": await client.list_members(limit=min(limit, 200))}
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordListRolesTool(BaseTool):
-    """Alle Rollen der Discord-Guild auflisten."""
-    @property
-    def id(self) -> str:          return "discord_list_roles"
-    @property
-    def name(self) -> str:        return "Discord List Roles"
-    @property
-    def description(self) -> str: return "Listet alle Rollen des Discord-Servers auf."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict: return {"type": "object", "properties": {}, "required": []}
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return {"roles": await client.list_roles()}
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordDeleteMessageTool(BaseTool):
-    """Nachricht in einem Discord-Channel löschen."""
-    @property
-    def id(self) -> str:          return "discord_delete_message"
-    @property
-    def name(self) -> str:        return "Discord Delete Message"
-    @property
-    def description(self) -> str: return "Löscht eine bestimmte Nachricht aus einem Discord-Channel."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "message_id": {"type": "string", "description": "ID der zu löschenden Nachricht"}}, "required": ["channel_id", "message_id"]}
-    async def execute(self, agent_id: str, project_id: str, channel_id: str, message_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.delete_message(channel_id, message_id)
-        except Exception as e: return {"error": str(e)}
-
-
-class DiscordPinMessageTool(BaseTool):
-    """Nachricht in einem Discord-Channel anpinnen."""
-    @property
-    def id(self) -> str:          return "discord_pin_message"
-    @property
-    def name(self) -> str:        return "Discord Pin Message"
-    @property
-    def description(self) -> str: return "Pinnt eine Nachricht in einem Discord-Channel an."
-    @property
-    def permissions_required(self) -> list[str]: return ["discord"]
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {"channel_id": {"type": "string"}, "message_id": {"type": "string"}}, "required": ["channel_id", "message_id"]}
-    async def execute(self, agent_id: str, project_id: str, channel_id: str, message_id: str, **kwargs) -> dict:
-        client = _get_discord_client(agent_id)
-        if not client: return {"error": "Discord nicht konfiguriert"}
-        try: return await client.pin_message(channel_id, message_id)
-        except Exception as e: return {"error": str(e)}
-
-
-# ============================================================= RemoteAgentTool (#50)
-
-class RemoteAgentTool(BaseTool):
-    """
-    Sendet eine Nachricht an einen Agenten auf einer anderen HydraHive-Instanz (FastA2A).
-    Peers werden in /etc/hydrahive/a2a_peers.json konfiguriert.
-    """
-
-    A2A_CONFIG = settings.a2a_peers_config
-
-    @property
-    def id(self) -> str:   return "remote_agent"
-    @property
-    def name(self) -> str: return "Remote-Agent (A2A)"
-    @property
-    def description(self) -> str:
-        return (
-            "Sendet eine Aufgabe oder Frage an einen Agenten auf einer anderen HydraHive-Instanz. "
-            "Nutze dies wenn ein Peer-System einen spezialisierten Agenten hat den du erreichen willst. "
-            "Gibt die Antwort des Remote-Agenten zurück."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "peer": {
-                    "type":        "string",
-                    "description": "Name des Peers wie in der A2A-Konfiguration (z.B. 'prod', 'test')",
-                },
-                "target": {
-                    "type":        "string",
-                    "description": "ID des Ziel-Agenten auf dem Remote-Peer",
-                },
-                "message": {
-                    "type":        "string",
-                    "description": "Aufgabe oder Frage für den Remote-Agenten",
-                },
-            },
-            "required": ["peer", "target", "message"],
-        }
-
-    def _load_peers(self) -> dict:
-        try:
-            import json as _j
-            return _j.loads(self.A2A_CONFIG.read_text(encoding="utf-8"))
-        except (FileNotFoundError, Exception):
-            return {"peers": []}
-
-    async def execute(
-        self,
-        agent_id:   str,
-        project_id: str,
-        peer:       str,
-        target:     str,
-        message:    str,
-        **kwargs,
-    ) -> dict:
-        return await self._do_call(agent_id, project_id, peer, target, message)
-
-    async def _do_call(
-        self, caller: str, project_id: str, peer_name: str, target: str, message: str
-    ) -> dict:
-        import asyncio as _asyncio
-        import json as _j
-        import urllib.request as _req
-        import urllib.error
-
-        cfg = self._load_peers()
-        peers = cfg.get("peers", [])
-        peer_cfg = next((p for p in peers if p.get("name") == peer_name), None)
-        if not peer_cfg:
-            return {
-                "error": f"Peer '{peer_name}' nicht in A2A-Konfiguration gefunden",
-                "available_peers": [p.get("name") for p in peers],
-            }
-
-        url    = peer_cfg["url"].rstrip("/") + "/a2a/tasks/send"
-        secret = peer_cfg.get("secret", "")
-        body   = _j.dumps({
-            "agent_id":    target,
-            "message":     message,
-            "sender_name": f"{caller}@local",
-        }).encode()
-
-        def _post():
-            import urllib.request as _u, urllib.error as _ue
-            req = _u.Request(
-                url, data=body,
-                headers={"Content-Type": "application/json", "X-A2A-Secret": secret},
-                method="POST",
-            )
-            try:
-                with _u.urlopen(req, timeout=120) as resp:
-                    return resp.getcode(), _j.loads(resp.read().decode())
-            except _ue.HTTPError as e:
-                try:
-                    detail = _j.loads(e.read().decode()).get("detail", str(e))
-                except Exception:
-                    detail = str(e)
-                return e.code, {"error": detail}
-            except Exception as e:
-                return 0, {"error": str(e)}
-
-        status, data = await _asyncio.to_thread(_post)
-        if status != 200:
-            return {
-                "error":     f"Remote-Fehler HTTP {status}: {data.get('error', '')}",
-                "peer":      peer_name,
-                "agent_id":  target,
-            }
-        return {
-            "peer":      peer_name,
-            "agent_id":  target,
-            "response":  data.get("response", ""),
-        }
-
-
-# ── Scratchpad Tools ─────────────────────────────────────────────────────────
-
-SCRATCHPADS_DIR = settings.etc_dir / "scratchpads"
-
-
-class ReadScratchpadTool(BaseTool):
-    """Liest Scratchpad-Notizen (visuelles Whiteboard aus dem Blueprint-Tab)."""
-
-    @property
-    def id(self) -> str:   return "read_scratchpad"
-    @property
-    def name(self) -> str: return "Scratchpad lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest ein Scratchpad (visuelles Whiteboard). "
-            "Ohne name: listet alle vorhandenen Scratchpads auf. "
-            "Mit name: gibt die Nodes und deren Inhalte zurück."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["system.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type":        "string",
-                    "description": "Name des Scratchpads (ohne .json). Leer lassen um alle aufzulisten.",
-                },
-            },
-            "required": [],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, name: str = "") -> dict:
-        if not SCRATCHPADS_DIR.exists():
-            return {"pads": [], "count": 0} if not name else {"error": "Kein Scratchpad-Verzeichnis vorhanden."}
-
-        if not name:
-            pads = sorted(p.stem for p in SCRATCHPADS_DIR.glob("*.json"))
-            return {"pads": pads, "count": len(pads)}
-
-        safe = name.replace("/", "").replace("..", "").strip()
-        if not safe:
-            return {"error": "Ungültiger Name."}
-        p = SCRATCHPADS_DIR / f"{safe}.json"
-        if not p.exists():
-            return {"error": f"Scratchpad '{safe}' nicht gefunden."}
-
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return {"error": f"Scratchpad '{safe}' konnte nicht gelesen werden."}
-
-        nodes = data.get("nodes", [])
-        summary = []
-        for node in nodes:
-            d = node.get("data", {})
-            label = d.get("label", "")
-            body = d.get("body", "")
-            color = d.get("color", "")
-            if label or body:
-                summary.append({"label": label, "body": body, "color": color})
-
-        return {"name": safe, "nodes": len(nodes), "content": summary}
-
-
-class WriteScratchpadTool(BaseTool):
-    """Schreibt oder aktualisiert Nodes in einem Scratchpad."""
-
-    @property
-    def id(self) -> str:   return "write_scratchpad"
-    @property
-    def name(self) -> str: return "Scratchpad schreiben"
-    @property
-    def description(self) -> str:
-        return (
-            "Fügt eine Notiz (Node) zu einem Scratchpad hinzu oder aktualisiert eine bestehende. "
-            "Das Scratchpad wird automatisch angelegt wenn es nicht existiert."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["system.write"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type":        "string",
-                    "description": "Name des Scratchpads (ohne .json).",
-                },
-                "label": {
-                    "type":        "string",
-                    "description": "Überschrift der Notiz.",
-                },
-                "body": {
-                    "type":        "string",
-                    "description": "Inhalt der Notiz (Markdown).",
-                },
-                "color": {
-                    "type":        "string",
-                    "description": "Farbe: zinc, blue, emerald, amber, rose, violet, cyan, orange, lime (default: zinc).",
-                },
-            },
-            "required": ["name", "label"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, name: str = "", label: str = "", body: str = "", color: str = "zinc") -> dict:
-        safe = name.replace("/", "").replace("..", "").strip()
-        if not safe:
-            return {"error": "Name fehlt."}
-        if not label:
-            return {"error": "Label fehlt."}
-
-        SCRATCHPADS_DIR.mkdir(parents=True, exist_ok=True)
-        p = SCRATCHPADS_DIR / f"{safe}.json"
-
-        data: dict = {"nodes": [], "edges": []}
-        if p.exists():
-            try:
-                data = json.loads(p.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-
-        nodes = data.get("nodes", [])
-
-        # Bestehenden Node mit gleichem Label updaten oder neuen anlegen
-        existing = next((n for n in nodes if n.get("data", {}).get("label") == label), None)
-        if existing:
-            existing["data"]["body"] = body
-            existing["data"]["color"] = color
-        else:
-            import time as _time
-            node_id = f"agent-{int(_time.time() * 1000)}"
-            y_offset = len(nodes) * 120
-            nodes.append({
-                "id": node_id,
-                "type": "scratch",
-                "position": {"x": 100, "y": 100 + y_offset},
-                "data": {"label": label, "body": body, "color": color},
-            })
-
-        data["nodes"] = nodes
-        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-        return {"saved": True, "name": safe, "total_nodes": len(nodes)}
-
-
-class AnalyzeImageTool(BaseTool):
-    """Analysiert Bilder (PNG, JPG, WebP, GIF) via Claude Vision API."""
-
-    @property
-    def id(self) -> str:   return "analyze_image"
-    @property
-    def parallel_safe(self) -> bool: return True
-    @property
-    def is_read_only(self) -> bool: return True
-    @property
-    def name(self) -> str: return "Bild analysieren"
-    @property
-    def description(self) -> str:
-        return (
-            "Analysiert ein oder mehrere Bilder aus dem Dateisystem via Claude Vision. "
-            "Unterstützt PNG, JPG, WebP, GIF. Liest die Datei(en), kodiert sie als base64 "
-            "und schickt sie an die Vision-API. Gibt die Analyse als Text zurück. "
-            "Für Screenshots, Diagramme, Fotos, Code-Screenshots etc."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["system.read"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "paths": {
-                    "type":        "array",
-                    "items":       {"type": "string"},
-                    "description": "Liste von Dateipfaden zu den Bildern (absolut oder relativ zu /projects/)",
-                },
-                "question": {
-                    "type":        "string",
-                    "description": "Was soll analysiert werden? Z.B. 'Was zeigt dieses Bild?', 'Extrahiere den Text', 'Beschreibe die UI'",
-                },
-            },
-            "required": ["paths"],
-        }
-
-    async def execute(
-        self, agent_id: str, project_id: str,
-        paths: list[str], question: str = "Analysiere dieses Bild detailliert. Beschreibe was du siehst.",
-        **kwargs,
-    ) -> dict:
-        import base64
-
-        MIME_MAP = {
-            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".webp": "image/webp", ".gif": "image/gif",
-        }
-        MAX_IMAGES = 12
-        MAX_SIZE = 10 * 1024 * 1024  # 10 MB pro Bild
-
-        # Bilder laden
-        image_blocks = []
-        errors = []
-        for raw_path in paths[:MAX_IMAGES]:
-            p = Path(raw_path)
-            if not p.is_absolute():
-                for base in [PROJECTS_ROOT / project_id, settings.opt_dir, Path("/tmp")]:
-                    candidate = base / raw_path
-                    if candidate.exists():
-                        p = candidate
-                        break
-            if not p.exists():
-                errors.append(f"Nicht gefunden: {raw_path}")
-                continue
-            suffix = p.suffix.lower()
-            mime = MIME_MAP.get(suffix)
-            if not mime:
-                errors.append(f"Kein Bildformat: {raw_path} ({suffix})")
-                continue
-            if p.stat().st_size > MAX_SIZE:
-                errors.append(f"Zu groß (>10MB): {raw_path}")
-                continue
-
-            data = base64.standard_b64encode(p.read_bytes()).decode("ascii")
-            image_blocks.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": mime, "data": data},
-            })
-
-        if not image_blocks:
-            return {"error": "Keine gültigen Bilder gefunden", "details": errors}
-
-        # Claude Vision API Call über OAuth
-        from .orchestrator_llm import _load_claude_oauth_token
-        token = _load_claude_oauth_token()
-        if not token:
-            return {"error": "Kein Claude OAuth Token verfügbar — Vision-Analyse nicht möglich"}
-
-        try:
-            import anthropic as _anthropic
-            client = _anthropic.AsyncAnthropic(
-                api_key="",
-                auth_token=token,
-                timeout=120.0,
-                default_headers={
-                    "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,prompt-caching-2024-07-31",
-                    "user-agent":     "claude-cli/2.1.62",
-                    "x-app":          "cli",
-                },
-            )
-
-            content = image_blocks + [{"type": "text", "text": question}]
-            resp = await client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=4096,
-                messages=[{"role": "user", "content": content}],
-            )
-
-            analysis = resp.content[0].text if resp.content else ""
-            return {
-                "analysis": analysis,
-                "images_analyzed": len(image_blocks),
-                "errors": errors if errors else None,
-                "model": "claude-haiku-4-5",
-                "tokens": {"input": resp.usage.input_tokens, "output": resp.usage.output_tokens},
-            }
-
-        except Exception as e:
-            logger.error("analyze_image Fehler: %s", e)
-            return {"error": f"Vision-API Fehler: {e}", "details": errors}
-
-
-# ============================================================= Tool-Gruppen
-
-TOOL_GROUPS: dict[str, dict] = {
-    "web": {
-        "label": "Chat & Web",
-        "icon": "globe",
-        "tools": ["web_search", "http_request"],
-    },
-    "memory": {
-        "label": "Memory & Scratchpad",
-        "icon": "brain",
-        "tools": ["read_memory", "write_memory", "read_scratchpad", "write_scratchpad"],
-    },
-    "files": {
-        "label": "Dateien",
-        "icon": "folder",
-        "tools": ["file_read", "file_write", "list_directory", "file_search", "file_patch", "fix_permissions"],
-    },
-    "shell": {
-        "label": "Shell",
-        "icon": "terminal",
-        "tools": ["shell_exec", "project_shell"],
-    },
-    "git": {
-        "label": "Git",
-        "icon": "git-branch",
-        "tools": ["git_status", "git_diff", "git_commit", "git_push", "git_create_pr", "git_merge"],
-    },
-    "gitea": {
-        "label": "Gitea",
-        "icon": "server",
-        "tools": ["gitea_repo_inspect", "gitea_repo_tree", "gitea_repo_file", "gitea_repo_commits", "gitea_repo_diff", "gitea_create_issue", "gitea_comment_issue", "gitea_update_issue"],
-    },
-    "agents": {
-        "label": "Agenten",
-        "icon": "bot",
-        "tools": ["ask_agent", "delegate_agent", "dispatch_task", "spawn_agent"],
-    },
-    "system": {
-        "label": "System & WKS",
-        "icon": "monitor",
-        "tools": ["read_system_file", "write_system_file", "analyze_image", "wks_shell_exec", "wks_file_read", "wks_file_write"],
-    },
-    "remote_server": {
-        "label": "Remote-Server (SSH)",
-        "icon": "server",
-        "tools": ["server_shell", "server_file_read", "server_file_write", "server_file_list", "server_file_search", "server_file_patch"],
-    },
-    "communication": {
-        "label": "Kommunikation",
-        "icon": "mail",
-        "tools": ["send_mail", "receive_mail", "write_handoff", "read_handoff", "remote_agent"],
-    },
-    "discord": {
-        "label": "Discord",
-        "icon": "message-circle",
-        "tools": ["discord_send", "discord_read", "discord_list_channels", "discord_list_all_channels",
-                  "discord_create_category", "discord_create_channel", "discord_delete_channel",
-                  "discord_set_topic", "discord_rename_channel", "discord_list_members",
-                  "discord_list_roles", "discord_delete_message", "discord_pin_message"],
-    },
-    "skills": {
-        "label": "Skills",
-        "icon": "book-open",
-        "tools": ["create_skill", "list_skills", "delete_skill"],
-    },
-    "secrets": {
-        "label": "Secrets",
-        "icon": "key",
-        "tools": ["get_secret"],
-    },
-    "root": {
-        "label": "⚠ Root (voller Systemzugang)",
-        "icon": "shield-off",
-        "tools": ["shell_exec", "read_system_file", "write_system_file"],
-        "unrestricted": True,
-    },
-}
-
-
-# ============================================================= Globale Registry
-
-registry = ToolRegistry()
-registry.register(DispatchTaskTool())
+registry.register(ShellExecTool())
 registry.register(FileReadTool())
 registry.register(FileWriteTool())
-registry.register(FileUndoTool())
+registry.register(FilePatchTool())
+registry.register(FileSearchTool())
 registry.register(WebSearchTool())
-registry.register(HttpRequestTool())
-registry.register(SpawnAgentTool())
-registry.register(WriteHandoffTool())
-registry.register(ReadHandoffTool())
-registry.register(ShellExecTool())
-registry.register(ProjectShellTool())
-registry.register(ReadSystemFileTool())
-registry.register(WriteSystemFileTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
-registry.register(SharedMemoryReadTool())
-registry.register(SharedMemoryWriteTool())
-registry.register(UserMemoryReadTool())
-registry.register(UserMemoryWriteTool())
-registry.register(ReadScratchpadTool())
-registry.register(WriteScratchpadTool())
-registry.register(CreateSkillTool())
-registry.register(ListSkillsTool())
-registry.register(DeleteSkillTool())
 registry.register(AskAgentTool())
-registry.register(DelegateAgentTool())
-registry.register(GitStatusTool())
-registry.register(GiteaRepoInspectTool())
-registry.register(GiteaRepoTreeTool())
-registry.register(GiteaRepoFileTool())
-registry.register(GiteaRepoCommitsTool())
-registry.register(GiteaRepoDiffTool())
-registry.register(FixPermissionsTool())
-registry.register(FileSearchTool())
-registry.register(FilePatchTool())
-registry.register(GiteaCreateIssueTool())
-registry.register(GiteaCommentIssueTool())
-registry.register(GiteaUpdateIssueTool())
-registry.register(GitDiffTool())
-registry.register(GitWorktreeTool())
-registry.register(GitCommitTool())
-registry.register(GitPushTool())
-registry.register(GitMergeTool())
-registry.register(GitCreatePRTool())
-registry.register(WksShellExecTool())
-registry.register(ServerShellTool())
-registry.register(ServerFileReadTool())
-registry.register(ServerFileWriteTool())
-registry.register(ServerFileListTool())
-registry.register(ServerFileSearchTool())
-registry.register(ServerFilePatchTool())
-registry.register(WksFileReadTool())
-registry.register(WksFileWriteTool())
-registry.register(SendMailTool())
-registry.register(ReceiveMailTool())
-registry.register(DiscordSendTool())
-registry.register(DiscordReadTool())
-registry.register(DiscordListChannelsTool())
-registry.register(DiscordListAllChannelsTool())
-registry.register(DiscordCreateCategoryTool())
-registry.register(DiscordCreateChannelTool())
-registry.register(DiscordDeleteChannelTool())
-registry.register(DiscordSetTopicTool())
-registry.register(DiscordRenameChannelTool())
-registry.register(DiscordListMembersTool())
-registry.register(DiscordListRolesTool())
-registry.register(DiscordDeleteMessageTool())
-registry.register(DiscordPinMessageTool())
-registry.register(RemoteAgentTool())
-
-
-# #427: Agent Teams Tool
-class ManageTeamTool(BaseTool):
-    """#427: Multi-Agent Team Koordination."""
-
-    @property
-    def id(self) -> str:   return "manage_team"
-    @property
-    def name(self) -> str: return "Team verwalten"
-    @property
-    def description(self) -> str:
-        return (
-            "Erstellt und verwaltet Agent-Teams für koordinierte Multi-Agent-Arbeit. "
-            "Aktionen: create (Team erstellen + Mitglieder hinzufügen), "
-            "status (Team-Status anzeigen), broadcast (Nachricht an alle), "
-            "list (alle Teams auflisten)."
-        )
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "action":  {"type": "string", "enum": ["create", "status", "broadcast", "list"], "description": "Aktion"},
-                "team":    {"type": "string", "description": "Team-Name"},
-                "members": {"type": "array", "items": {"type": "object", "properties": {"agent_id": {"type": "string"}, "role": {"type": "string"}}}, "description": "Mitglieder (für create)"},
-                "message": {"type": "string", "description": "Broadcast-Nachricht"},
-            },
-            "required": ["action"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, action: str = "list", **kwargs) -> dict:
-        from .agent_teams import get_or_create_team, list_teams, get_team
-        if action == "list":
-            return {"teams": list_teams()}
-        team_name = kwargs.get("team", project_id)
-        if action == "create":
-            team = get_or_create_team(team_name)
-            for m in kwargs.get("members", []):
-                team.add_member(m.get("agent_id", ""), role=m.get("role", "worker"))
-            return team.summary()
-        if action == "status":
-            team = get_team(team_name)
-            return team.summary() if team else {"error": f"Team '{team_name}' nicht gefunden"}
-        if action == "broadcast":
-            team = get_team(team_name)
-            if not team:
-                return {"error": f"Team '{team_name}' nicht gefunden"}
-            team.broadcast(kwargs.get("message", ""), sender=agent_id)
-            return {"broadcast": True, "recipients": len(team.members)}
-        return {"error": f"Unbekannte Aktion: {action}"}
-
-registry.register(ManageTeamTool())
-
-
-# ============================================================= VaultwardenTool (#54)
-
-class GetSecretTool(BaseTool):
-    """
-    Liest ein Secret (Passwort, API-Key, Token) aus dem HydraHive Agent Secret-Store.
-    Secrets werden von Admins über die Console unter /secrets verwaltet und in
-    /etc/hydrahive/agent_secrets.json gespeichert (chmod 600).
-    """
-
-    _SECRETS_PATH = settings.agent_secrets_config
-
-    @property
-    def id(self) -> str:   return "get_secret"
-    @property
-    def name(self) -> str: return "Secret lesen"
-    @property
-    def description(self) -> str:
-        return (
-            "Liest ein Secret (Passwort, API-Key, Token) aus dem sicheren Agent Secret-Store. "
-            "Verwende dies um gespeicherte Zugangsdaten abzurufen ohne sie hardcoded zu hinterlegen. "
-            "Secrets werden vom Admin über die Console unter /secrets verwaltet."
-        )
-    @property
-    def permissions_required(self) -> list[str]: return ["vault"]
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type":        "string",
-                    "description": "Genauer Name des Secrets (z.B. 'github_token', 'openai_key')",
-                },
-            },
-            "required": ["name"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, name: str, **kwargs) -> dict:
-        if not self._SECRETS_PATH.exists():
-            return {"error": "Kein Secret-Store vorhanden — Admin muss Secrets unter /secrets anlegen"}
-        try:
-            data = json.loads(self._SECRETS_PATH.read_text(encoding="utf-8"))
-        except Exception as e:
-            return {"error": f"Secret-Store nicht lesbar: {e}"}
-
-        if name in data:
-            return {"found": True, "name": name, "value": data[name]}
-
-        # Teilübereinstimmung als Fallback
-        name_lower = name.lower()
-        matches = [k for k in data if name_lower in k.lower()]
-        if matches:
-            best = matches[0]
-            return {"found": True, "name": best, "value": data[best],
-                    "note": f"Exakter Name '{name}' nicht gefunden, nächste Übereinstimmung: '{best}'"}
-
-        available = list(data.keys())
-        return {"found": False, "message": f"Secret '{name}' nicht gefunden",
-                "available": available}
-
-
-registry.register(ListDirectoryTool())
-registry.register(GetSecretTool())
-registry.register(AnalyzeImageTool())
-
-
-# ============================================================= Admin Tools (Danger)
-
-def _verify_admin_permission(calling_agent_id: str) -> None:
-    """
-    Sicherheits-Gate für Admin-Tools.
-    Personal-Agenten (personal_{username}): prüft ob Owner Admin ist.
-    Andere Agenten: vertraut dem permissions_required-Filter in tools_for_agent().
-    """
-    if _load_users_fn is None:
-        raise PermissionError("Admin-Tools nicht konfiguriert (kein User-Store gesetzt)")
-    if calling_agent_id.startswith("personal_"):
-        username = calling_agent_id[len("personal_"):]
-        users = _load_users_fn()
-        if users.get(username, {}).get("role") != "admin":
-            raise PermissionError(f"User '{username}' hat keine Admin-Berechtigung für dieses Tool")
-
-
-class CreateAgentTool(BaseTool):
-    """Legt einen neuen Agenten an (Verzeichnis, agent.yaml, soul.md)."""
-
-    @property
-    def id(self) -> str:
-        return "create_agent"
-
-    @property
-    def name(self) -> str:
-        return "Create Agent"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Legt einen neuen Agenten an. "
-            "Erstellt Verzeichnis, agent.yaml und soul.md. "
-            "Agent-ID: nur Kleinbuchstaben, Ziffern, _ und - erlaubt."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["admin.manage"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "Eindeutige Agent-ID (a-z, 0-9, _, -)",
-                },
-                "type": {
-                    "type": "string",
-                    "enum": ["boss", "specialist", "worker"],
-                    "description": "Agent-Typ",
-                },
-                "identity": {
-                    "type": "string",
-                    "description": "Anzeigename / Persönlichkeit des Agenten",
-                },
-                "model": {
-                    "type": "string",
-                    "description": "LLM-Modell, z.B. claude-haiku-4-5-20251001",
-                },
-                "soul": {
-                    "type": "string",
-                    "description": "System-Prompt / Charakter (Markdown), optional",
-                },
-                "tools": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Liste der Tool-IDs für diesen Agenten",
-                },
-                "ephemeral": {
-                    "type": "boolean",
-                    "description": "Wenn true: Agent wird beim nächsten Core-Neustart automatisch gelöscht (für temporäre Task-Agenten)",
-                },
-            },
-            "required": ["id", "type", "identity", "model"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        import re as _re
-        import yaml as _yaml
-
-        _verify_admin_permission(agent_id)
-
-        new_id    = kwargs.get("id", "").strip()
-        agent_type = kwargs.get("type", "worker")
-        identity  = kwargs.get("identity", new_id)
-        model     = kwargs.get("model", "claude-haiku-4-5-20251001")
-        soul_text = kwargs.get("soul", "")
-        tools     = list(kwargs.get("tools") or [])
-        ephemeral = bool(kwargs.get("ephemeral", False))
-
-        if not _re.match(r"^[a-z0-9_-]+$", new_id):
-            return {"error": "Agent-ID darf nur a-z, 0-9, _ und - enthalten"}
-        if agent_type not in {"boss", "specialist", "worker"}:
-            return {"error": f"Ungültiger Typ: {agent_type}"}
-        if _discovery and _discovery.get(new_id):
-            return {"error": f"Agent '{new_id}' existiert bereits"}
-
-        agent_dir = Path(_admin_agents_dir) / new_id
-        agent_dir.mkdir(parents=True, exist_ok=True)
-        (agent_dir / "skills").mkdir(exist_ok=True)
-        (agent_dir / "memory").mkdir(exist_ok=True)
-
-        agent_data = {
-            "id": new_id,
-            "type": agent_type,
-            "identity": identity,
-            "llm": {"model": model, "temperature": 0.7, "max_tokens": 4096, "fallback_models": []},
-            "tools": tools,
-            "allowed_agents": [],
-            "mcp_servers": [],
-            "heartbeat": {"interval": "30s", "timeout": "90s", "on_failure": "restart"},
-        }
-        if ephemeral:
-            agent_data["ephemeral"] = True
-        if soul_text:
-            agent_data["soul"] = "./soul.md"
-
-        (agent_dir / "agent.yaml").write_text(
-            _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False),
-            encoding="utf-8",
-        )
-        (agent_dir / "soul.md").write_text(
-            soul_text or f"# {identity}\n\nDu bist {identity}, ein KI-Agent.\n",
-            encoding="utf-8",
-        )
-
-        if _audit_log_fn:
-            _audit_log_fn("agent.create", target=new_id, details={"type": agent_type, "model": model, "by_agent": agent_id})
-
-        if _discovery:
-            try:
-                import asyncio as _asyncio
-                await _asyncio.sleep(0.2)
-                from .agent_config import load_agent_config as _lac
-                cfg = _lac(agent_dir)
-                if cfg:
-                    with _discovery._lock:
-                        _discovery._agents[cfg.id] = cfg
-            except Exception as _e:
-                logger.warning("Discovery-Update nach create_agent fehlgeschlagen: %s", _e)
-
-        logger.info("create_agent tool: %s (%s) angelegt von %s", new_id, agent_type, agent_id)
-        return {"created": True, "agent_id": new_id, "agent_dir": str(agent_dir)}
-
-
-class DeleteAgentTool(BaseTool):
-    """Deaktiviert einen Agenten (umbenennen in _{id}_disabled)."""
-
-    @property
-    def id(self) -> str:
-        return "delete_agent"
-
-    @property
-    def name(self) -> str:
-        return "Delete Agent"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Deaktiviert einen Agenten durch Umbenennen des Verzeichnisses. "
-            "Kein Datenverlust — Verzeichnis bleibt als _{id}_disabled erhalten."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["admin.manage"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "string",
-                    "description": "ID des zu deaktivierenden Agenten",
-                },
-            },
-            "required": ["agent_id"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        _verify_admin_permission(agent_id)
-
-        target_id = kwargs.get("agent_id", "").strip()
-        if not target_id:
-            return {"error": "agent_id fehlt"}
-        if target_id == agent_id:
-            return {"error": "Du kannst dich nicht selbst deaktivieren"}
-
-        agent_dir = Path(_admin_agents_dir) / target_id
-        if not agent_dir.exists():
-            return {"error": f"Agent '{target_id}' nicht gefunden"}
-
-        disabled_dir = Path(_admin_agents_dir) / f"_{target_id}_disabled"
-        agent_dir.rename(disabled_dir)
-
-        if _audit_log_fn:
-            _audit_log_fn("agent.delete", target=target_id, details={"by_agent": agent_id})
-
-        logger.info("delete_agent tool: %s deaktiviert von %s", target_id, agent_id)
-        return {"disabled": True, "agent_id": target_id, "moved_to": str(disabled_dir)}
-
-
-class CreateProjectTool(BaseTool):
-    """Legt ein neues Projekt an inkl. Provisioning (Linux-User, Samba, Matrix)."""
-
-    @property
-    def id(self) -> str:
-        return "create_project"
-
-    @property
-    def name(self) -> str:
-        return "Create Project"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Legt ein neues Projekt an und führt das vollständige Provisioning durch: "
-            "Linux-User, Verzeichnisse, Samba-Share, Matrix-Room, Gitea-Repo. "
-            "Projekt-ID: nur Kleinbuchstaben, Ziffern, _ und - erlaubt."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["admin.manage"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "description": "Eindeutige Projekt-ID (a-z, 0-9, _, -)",
-                },
-                "name": {
-                    "type": "string",
-                    "description": "Anzeigename des Projekts",
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Kurze Projektbeschreibung",
-                },
-                "boss": {
-                    "type": "string",
-                    "description": "ID des Boss-Agenten für dieses Projekt",
-                },
-                "workers": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Liste weiterer Agenten-IDs (optional)",
-                },
-                "samba": {
-                    "type": "boolean",
-                    "description": "Samba-Share anlegen (Standard: true)",
-                },
-            },
-            "required": ["id", "name", "boss"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        import re as _re
-        import yaml as _yaml
-
-        _verify_admin_permission(agent_id)
-
-        new_id = kwargs.get("id", "").strip()
-        name = kwargs.get("name", new_id)
-        description = kwargs.get("description", "")
-        boss = kwargs.get("boss", "").strip()
-        workers = list(kwargs.get("workers") or [])
-        samba = kwargs.get("samba", True)
-
-        if not _re.match(r"^[a-z0-9_-]+$", new_id):
-            return {"error": "Projekt-ID darf nur a-z, 0-9, _ und - enthalten"}
-        if not boss:
-            return {"error": "boss-Agent fehlt"}
-        if _projects_registry and _projects_registry.get(new_id):
-            return {"error": f"Projekt '{new_id}' existiert bereits"}
-        if _discovery and not _discovery.get(boss):
-            return {"error": f"Boss-Agent '{boss}' nicht in Discovery gefunden"}
-
-        project_dir = Path(_admin_projects_dir) / new_id
-        project_dir.mkdir(parents=True, exist_ok=True)
-
-        project_data = {
-            "id": new_id,
-            "version": "1.0.0",
-            "identity": {"name": name, "description": description},
-            "agents": {"boss": boss, "workers": workers},
-            "matrix": {"room": ""},
-            "filesystem": {"path": f"/projects/{new_id}", "samba": samba, "nfs": False},
-            "system": {"user": f"proj_{new_id}", "group": f"proj_{new_id}"},
-            "chat": {"show_swarm": False},
-        }
-        (project_dir / "project.yaml").write_text(
-            _yaml.dump(project_data, allow_unicode=True, default_flow_style=False),
-            encoding="utf-8",
-        )
-
-        if _audit_log_fn:
-            _audit_log_fn("project.create", target=new_id, project_id=new_id, details={"boss": boss, "by_agent": agent_id})
-
-        import asyncio as _asyncio
-        await _asyncio.sleep(0.3)
-
-        cfg = None
-        if _projects_registry:
-            cfg = _projects_registry.get(new_id) or _projects_registry.register(project_dir)
-        if cfg is None:
-            return {"error": "Projekt konnte nach Anlage nicht geladen werden", "project_id": new_id}
-
-        provisioner = _get_provisioner() if _get_provisioner else None
-        if provisioner is None:
-            logger.warning("create_project tool: Provisioner nicht verfügbar für %s", new_id)
-            return {"warning": "Provisioner nicht verfügbar — Projekt angelegt aber nicht provisioniert", "project_id": new_id}
-
-        result = await provisioner.provision(cfg)
-        if _audit_log_fn:
-            _audit_log_fn("project.provision", target=new_id, project_id=new_id)
-
-        if result.matrix_room and not cfg.matrix.room:
-            try:
-                from .router_project_lifecycle import update_project_matrix_room as _upmr
-                _upmr(_admin_projects_dir, new_id, result.matrix_room, logger=logger)
-            except Exception as _e:
-                logger.warning("Matrix-Room konnte nicht gespeichert werden: %s", _e)
-
-        gitea_repo_url = ""
-        gitea_error = ""
-        try:
-            from .gitea import get_gitea_client
-            gitea = get_gitea_client()
-            repo = await gitea.create_repo(new_id, description=description or "")
-            gitea_repo_url = repo.get("html_url", "")
-            webhook_url = f"http://127.0.0.1:8765/webhooks/gitea/{new_id}"
-            await gitea.create_webhook(new_id, webhook_url)
-        except Exception as _e:
-            gitea_error = str(_e)
-            logger.warning("Gitea-Repo für '%s' fehlgeschlagen: %s", new_id, _e)
-
-        logger.info("create_project tool: %s angelegt von %s", new_id, agent_id)
-        return {
-            "created": True,
-            "project_id": new_id,
-            "linux_user": result.linux_user,
-            "files_dir": result.files_dir,
-            "samba_share": result.samba_share,
-            "matrix_room": result.matrix_room,
-            "warnings": result.warnings,
-            "ok": result.ok,
-            "gitea_repo": gitea_repo_url,
-            "gitea_error": gitea_error,
-        }
-
-
-class DeleteProjectTool(BaseTool):
-    """Löscht ein Projekt (stoppt Agenten, entfernt Samba, verschiebt Verzeichnis)."""
-
-    @property
-    def id(self) -> str:
-        return "delete_project"
-
-    @property
-    def name(self) -> str:
-        return "Delete Project"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Löscht ein Projekt: stoppt laufende Agenten, entfernt Samba-Share, "
-            "verschiebt das Projektverzeichnis (kein Datenverlust, nur umbenannt). "
-            "Muss mit confirm=true aufgerufen werden."
-        )
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return ["admin.manage"]
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "project_id": {
-                    "type": "string",
-                    "description": "ID des zu löschenden Projekts",
-                },
-                "confirm": {
-                    "type": "boolean",
-                    "description": "Muss true sein um den Löschvorgang zu bestätigen",
-                },
-            },
-            "required": ["project_id", "confirm"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        import time as _time
-
-        _verify_admin_permission(agent_id)
-
-        target_id = kwargs.get("project_id", "").strip()
-        confirm = kwargs.get("confirm", False)
-
-        if not target_id:
-            return {"error": "project_id fehlt"}
-        if not confirm:
-            return {"error": "confirm muss true sein um das Projekt zu löschen"}
-
-        cfg = _projects_registry.get(target_id) if _projects_registry else None
-        if not cfg:
-            return {"error": f"Projekt '{target_id}' nicht gefunden"}
-
-        proj_dir = Path(_admin_projects_dir) / target_id
-        if not proj_dir.exists():
-            return {"error": "Projektverzeichnis nicht gefunden"}
-
-        stopped_agents = []
-        if _admin_runtime and cfg:
-            boss_id = cfg.agents.boss
-            if await _admin_runtime.stop_agent_task(boss_id):
-                stopped_agents.append(boss_id)
-
-        smb_conf = Path("/etc/samba/smb.conf")
-        if smb_conf.exists():
-            try:
-                import re as _re
-                import subprocess as _sub
-                smb_content = smb_conf.read_text(encoding="utf-8")
-                smb_content = _re.sub(rf"\[{_re.escape(target_id)}\][^\[]*", "", smb_content, flags=_re.DOTALL)
-                smb_conf.write_text(smb_content, encoding="utf-8")
-                _sub.run(["systemctl", "reload", "smbd"], check=False, timeout=5)
-            except Exception as _e:
-                logger.warning("Samba-Share Entfernung fehlgeschlagen: %s", _e)
-
-        timestamp = int(_time.time())
-        deleted_dir = Path(_admin_projects_dir) / f"_deleted_{target_id}_{timestamp}"
-        proj_dir.rename(deleted_dir)
-
-        # Aus In-Memory-Registry entfernen (#106)
-        if _projects_registry:
-            try:
-                _projects_registry._unregister_dir(proj_dir)
-            except Exception as _e:
-                logger.warning("_unregister_dir fehlgeschlagen: %s", _e)
-
-        if _audit_log_fn:
-            _audit_log_fn("project.delete", target=target_id, project_id=target_id, details={"by_agent": agent_id})
-
-        logger.info("delete_project tool: %s gelöscht von %s", target_id, agent_id)
-        return {
-            "deleted": True,
-            "project_id": target_id,
-            "moved_to": str(deleted_dir),
-            "stopped_agents": stopped_agents,
-        }
-
-
-# ============================================================= Meta-Tools
-
-class RequestToolsTool(BaseTool):
-    """Meta-Tool: Lädt Tool-Kategorien on-demand nach."""
-
-    @property
-    def id(self) -> str:
-        return "request_tools"
-
-    @property
-    def name(self) -> str:
-        return "Request Tools"
-
-    @property
-    def description(self) -> str:
-        from .tool_loader import TOOL_CATEGORIES
-        cats = ", ".join(sorted(TOOL_CATEGORIES.keys()))
-        return (
-            "Request additional tools by category when you need capabilities beyond memory/coordination. "
-            "Call this BEFORE using any tool in the requested category. "
-            f"Available categories: {cats}. "
-            "Example: request_tools(categories=['discord']) before using discord_send."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "categories": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Tool categories to load, e.g. ['discord', 'git']",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Brief reason why these tools are needed",
-                },
-            },
-            "required": ["categories"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> Any:
-        # Actual loading is handled by the orchestrator — this is just a stub
-        categories = kwargs.get("categories", [])
-        return {"ok": True, "categories": categories}
-
-
-registry.register(CreateAgentTool())
-registry.register(DeleteAgentTool())
-registry.register(CreateProjectTool())
-registry.register(DeleteProjectTool())
-registry.register(RequestToolsTool())
-
-# Browser-Tools (#43)
-try:
-    from .browser_tools import (
-        BrowserNavigateTool,
-        BrowserScreenshotTool,
-        BrowserClickTool,
-        BrowserFillTool,
-        BrowserEvaluateTool,
-        BrowserCloseTool,
-    )
-    registry.register(BrowserNavigateTool())
-    registry.register(BrowserScreenshotTool())
-    registry.register(BrowserClickTool())
-    registry.register(BrowserFillTool())
-    registry.register(BrowserEvaluateTool())
-    registry.register(BrowserCloseTool())
-    logger.info("Browser-Tools (Playwright) registriert")
-except Exception as _bt_err:
-    logger.warning("Browser-Tools nicht verfügbar: %s", _bt_err)
-
-
-# ============================================================= Plan Mode (#477)
-
-# Globaler Plan-Mode State pro Projekt
-_plan_mode_state: dict[str, dict] = {}  # project_id → {"active": bool, "plan_file": str}
-
-
-def is_plan_mode(project_id: str) -> bool:
-    return _plan_mode_state.get(project_id, {}).get("active", False)
-
-
-def get_plan_file(project_id: str) -> str | None:
-    return _plan_mode_state.get(project_id, {}).get("plan_file")
-
-
-class EnterPlanModeTool(BaseTool):
-    """Aktiviert den Plan Mode: Agent wechselt in Read-Only und erstellt einen Plan."""
-
-    @property
-    def id(self) -> str: return "enter_plan_mode"
-    @property
-    def name(self) -> str: return "Plan Mode aktivieren"
-    @property
-    def description(self) -> str:
-        return (
-            "Aktiviert den Plan Mode. Im Plan Mode kannst du NUR lesen (Dateien, Code, Repos) "
-            "und einen Plan schreiben. Nutze dies bei komplexen Aufgaben um erst zu analysieren "
-            "und einen strukturierten Plan zu erstellen, bevor du Änderungen vornimmst. "
-            "Der Plan wird als Markdown-Datei gespeichert. Rufe exit_plan_mode auf wenn der Plan fertig ist."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Kurzer Titel für den Plan (z.B. 'Refactoring Auth-Modul')",
-                },
-            },
-            "required": ["title"],
-        }
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        if is_plan_mode(project_id):
-            return {"error": "Plan Mode ist bereits aktiv."}
-
-        title = kwargs.get("title", "Plan")
-        import uuid as _uuid
-        slug = _uuid.uuid4().hex[:6]
-        plan_file = f"/tmp/hydrahive-plans/{project_id}_{slug}.md"
-
-        from pathlib import Path
-        Path(plan_file).parent.mkdir(parents=True, exist_ok=True)
-        Path(plan_file).write_text(
-            f"# Plan: {title}\n\n"
-            f"*Erstellt von Agent {agent_id}*\n\n"
-            f"## Analyse\n\n\n## Schritte\n\n1. \n\n## Risiken\n\n\n",
-            encoding="utf-8",
-        )
-
-        _plan_mode_state[project_id] = {"active": True, "plan_file": plan_file, "title": title}
-        logger.info("Plan Mode aktiviert: %s (Projekt: %s)", title, project_id)
-        return {
-            "status": "Plan Mode aktiviert",
-            "plan_file": plan_file,
-            "info": (
-                "Du bist jetzt im Plan Mode. Du kannst NUR lesen (file_read, list_directory, "
-                "shell_exec für read-only Befehle, web_search etc.) und den Plan schreiben. "
-                "Nutze file_write mit dem Plan-Pfad um deinen Plan zu aktualisieren. "
-                "Rufe exit_plan_mode auf wenn der Plan fertig ist."
-            ),
-        }
-
-
-class ExitPlanModeTool(BaseTool):
-    """Beendet den Plan Mode und gibt den fertigen Plan zurück."""
-
-    @property
-    def id(self) -> str: return "exit_plan_mode"
-    @property
-    def name(self) -> str: return "Plan Mode beenden"
-    @property
-    def description(self) -> str:
-        return (
-            "Beendet den Plan Mode. Der fertige Plan wird zurückgegeben und der Agent "
-            "wechselt zurück in den normalen Modus wo er Änderungen vornehmen kann."
-        )
-
-    @property
-    def parameters(self) -> dict:
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def execute(self, agent_id: str, project_id: str, **kwargs) -> dict:
-        if not is_plan_mode(project_id):
-            return {"error": "Plan Mode ist nicht aktiv."}
-
-        state = _plan_mode_state.pop(project_id, {})
-        plan_file = state.get("plan_file", "")
-        plan_content = ""
-        from pathlib import Path
-        if plan_file and Path(plan_file).exists():
-            plan_content = Path(plan_file).read_text(encoding="utf-8")
-
-        logger.info("Plan Mode beendet (Projekt: %s)", project_id)
-        return {
-            "status": "Plan Mode beendet — du kannst jetzt implementieren.",
-            "plan": plan_content,
-            "plan_file": plan_file,
-        }
-
-
-registry.register(EnterPlanModeTool())
-registry.register(ExitPlanModeTool())

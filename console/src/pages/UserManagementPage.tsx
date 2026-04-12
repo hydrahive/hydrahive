@@ -1,24 +1,22 @@
 import { useCallback, useState } from "react";
 import type { ElementType } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Users, Shield, KeyRound, Lock } from "lucide-react";
+import { Users, Shield, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserPage } from "@/pages/UserPage";
 import { GroupsPage } from "@/pages/GroupsPage";
 import { SecretsPage } from "@/pages/SecretsPage";
-import { PermissionsTab } from "@/pages/blueprint/PermissionsTab";
 import { useTranslation } from "react-i18next";
 
-const TABS: { id: "users" | "groups" | "secrets" | "permissions"; labelKey: string; icon: ElementType }[] = [
+const TABS: { id: "users" | "groups" | "secrets"; labelKey: string; icon: ElementType }[] = [
   { id: "users",       labelKey: "usermanagement.tabUsers",       icon: Users },
   { id: "groups",      labelKey: "usermanagement.tabGroups",      icon: Shield },
   { id: "secrets",     labelKey: "usermanagement.tabSecrets",     icon: KeyRound },
-  { id: "permissions", labelKey: "usermanagement.tabPermissions", icon: Lock },
 ];
 
 type TabId = typeof TABS[number]["id"];
 
-const VALID_UM_TABS: TabId[] = ["users", "groups", "secrets", "permissions"];
+const VALID_UM_TABS: TabId[] = ["users", "groups", "secrets"];
 
 export function UserManagementPage() {
   const { t } = useTranslation();
@@ -65,7 +63,6 @@ export function UserManagementPage() {
         {active === "users" && <UserPage />}
         {active === "groups" && <GroupsPage />}
         {active === "secrets" && <SecretsPage />}
-        {active === "permissions" && <PermissionsTab />}
       </div>
     </div>
   );

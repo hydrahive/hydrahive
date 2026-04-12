@@ -633,12 +633,49 @@ class AgentDiscordClient(DiscordAgentClient):
         except Exception as _be:
             logger.warning("Butler check Discord fehlgeschlagen: %s", _be)
 
+        # v2: Messenger-Router für Projekt-Lookup
+        from .messenger_router import messenger_router as _mr
+        _project_id = _mr.resolve_discord(channel_id) or _agent_id
+
+        # v2: Projekt-scoped Butler-Flows prüfen (#566)
+        try:
+            from .butler_executor import check_flows_for_project as _butler_project
+            _proj_actions = await _butler_project(_bevent, _project_id)
+            if _proj_actions:
+                _aio.create_task(_butler_generic(_proj_actions, _bevent))
+                for _pact in _proj_actions:
+                    _psub = _pact.get("subtype")
+                    if _psub == "ignore":
+                        return
+                    if _psub == "reply_fixed":
+                        _pft = str(_pact.get("params", {}).get("text", "")).strip()
+                        if _pft:
+                            await self.send_message(channel_id, _pft)
+                        return
+                    if _psub in ("agent_reply", "agent_reply_guided", "forward"):
+                        _paid = str(_pact.get("params", {}).get("agent_id", "")).strip()
+                        if _paid:
+                            _project_id = _paid
+        except Exception as _pbe:
+            logger.debug("Projekt-Butler check Discord: %s", _pbe)
+
+        # v2 (#585): echte Projekt-Config laden statt Virtual-Fallback
+        _real_cfg = None
+        try:
+            from .project_loader import get_project_loader as _gpl
+            _loader = _gpl()
+            if _loader is not None:
+                _real_cfg = _loader.get(_project_id)
+        except Exception as _cfg_err:
+            logger.debug("Discord: Konnte echte Projekt-Config nicht laden (%s) — Fallback Virtual", _cfg_err)
+        _resolved_cfg = _real_cfg or _build_virtual_cfg(_project_id)
+
         # Antwort sammeln und senden
         response_parts: list[str] = []
         try:
             async for chunk in self._orchestrator.handle_message_stream(
-                project_id  = _agent_id,
-                project_cfg = _build_virtual_cfg(_agent_id),
+                project_id  = _project_id,
+                project_cfg = _resolved_cfg,
                 content     = content,
                 sender      = sender,
                 execution_mode = "safe",

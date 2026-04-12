@@ -96,6 +96,21 @@ async def check_flows(event: ButlerEvent, owner: str | None = None) -> list[dict
     return result
 
 
+async def check_flows_for_project(event: ButlerEvent, project_id: str) -> list[dict[str, Any]]:
+    """Prüft projekt-scoped Butler-Flows gegen ein Event (#566)."""
+    from .butler_rule import load_flows_for_project
+    result: list[dict[str, Any]] = []
+    for flow in load_flows_for_project(project_id):
+        if not flow.enabled:
+            continue
+        try:
+            actions = _evaluate_flow(flow, event)
+            result.extend(actions)
+        except Exception as exc:
+            logger.warning("Butler project flow %s evaluation error: %s", flow.id, exc)
+    return result
+
+
 def _evaluate_flow(flow: ButlerFlow, event: ButlerEvent) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     nodes_by_id: dict[str, dict] = {n["id"]: n for n in flow.nodes}

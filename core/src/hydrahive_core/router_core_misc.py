@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -369,19 +370,8 @@ def register_core_misc_routes(
 
     @auth_router.get("/agent-roles")
     def list_agent_roles():
-        """#492: Rollen-Presets für Frontend."""
-        from .agent_roles import ROLE_PRESETS, ALL_ROLES
-        return {
-            "roles": {
-                role: {
-                    "description": ROLE_PRESETS[role]["description"],
-                    "tools": ROLE_PRESETS[role]["tools"],
-                    "execution_mode": ROLE_PRESETS[role]["execution_modes"]["default"],
-                    "tool_count": len(ROLE_PRESETS[role]["tools"]) if isinstance(ROLE_PRESETS[role]["tools"], list) else -1,
-                }
-                for role in ALL_ROLES
-            },
-        }
+        """v2: Rollen-System entfernt — alle Agents haben 9 Core-Tools."""
+        return {"roles": {}, "info": "v2: Rollen-System entfernt. Alle Agents nutzen 9 Core-Tools."}
 
     @auth_router.get("/agents")
     def list_agents():
@@ -473,30 +463,99 @@ def register_core_misc_routes(
                 result[tool_id] = {
                     "name": tool.name,
                     "description": tool.description,
-                    "permissions_required": tool.permissions_required,
+                    "type": "core",
                     "parameters": tool.parameters,
                 }
         return result
 
+    @auth_router.get("/templates")
+    def list_templates(_a: tuple[str, str] = Depends(require_auth)):
+        """v2 (#601): Listet verfuegbare Projekt-Templates aus installer/templates/."""
+        from .settings import settings
+        tpl_dir = settings.installer_dir / "templates"
+        if not tpl_dir.exists():
+            return {"templates": []}
+        templates = []
+        for d in sorted(tpl_dir.iterdir()):
+            if not d.is_dir():
+                continue
+            agent_md = d / "AGENT.md"
+            config = d / "config.yaml"
+            templates.append({
+                "id": d.name,
+                "has_agent_md": agent_md.exists(),
+                "has_config": config.exists(),
+            })
+        return {"templates": templates}
+
+    @auth_router.get("/templates/{template_id}/agent-md", response_class=PlainTextResponse)
+    def get_template_agent_md(template_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        """v2 (#601): AGENT.md eines Templates als Plain-Text.
+        Wird vom Projekt-Wizard zur Preview geladen."""
+        import re as _re
+        from .settings import settings
+        if not _re.match(r"^[a-z0-9_-]+$", template_id):
+            raise HTTPException(400, "Ungueltige template_id")
+        agent_md = settings.installer_dir / "templates" / template_id / "AGENT.md"
+        if not agent_md.exists():
+            raise HTTPException(404, f"Template '{template_id}' hat keine AGENT.md")
+        try:
+            return agent_md.read_text(encoding="utf-8")
+        except Exception as e:
+            raise HTTPException(500, f"AGENT.md nicht lesbar: {e}")
+
+    @admin_router.get("/secrets/keys")
+    def list_secret_keys():
+        """v2: Listet verfügbare Key-Namen aus llm_env + agent_secrets.json.
+        Gibt NUR die Namen zurück, nie die Werte. Für den Projekt-Wizard."""
+        from .settings import settings
+        seen: set[str] = set()
+        keys: list[dict] = []
+        # 1. llm_env lesen
+        env_file = settings.llm_env
+        if env_file.exists():
+            try:
+                for line in env_file.read_text().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key_name = line.split("=", 1)[0].strip()
+                    key_value = line.split("=", 1)[1].strip()
+                    preview = key_value[:4] + "..." if len(key_value) > 4 else "***"
+                    keys.append({"name": key_name, "preview": preview, "length": len(key_value)})
+                    seen.add(key_name)
+            except Exception:
+                pass
+        # 2. agent_secrets.json lesen (nur Keys die noch nicht in llm_env sind)
+        secrets_file = settings.agent_secrets_config
+        if secrets_file.exists():
+            try:
+                import json
+                data = json.loads(secrets_file.read_text(encoding="utf-8"))
+                for key_name, key_value in data.items():
+                    if key_name not in seen:
+                        preview = key_value[:4] + "..." if len(key_value) > 4 else "***"
+                        keys.append({"name": key_name, "preview": preview, "length": len(key_value)})
+            except Exception:
+                pass
+        return {"keys": keys, "source": str(env_file)}
+
     @auth_router.get("/tool-groups")
     def list_tool_groups():
-        from .tool_registry import TOOL_GROUPS, registry
+        """v2: Gibt die 9 Core-Tools als eine Gruppe zurück."""
+        from .tool_registry import registry
 
-        all_ids = set(registry.all_ids())
-        groups = []
-        grouped_ids: set[str] = set()
-        for gid, g in TOOL_GROUPS.items():
-            tools = [t for t in g["tools"] if t in all_ids]
-            grouped_ids.update(tools)
-            entry: dict = {"id": gid, "label": g["label"], "icon": g["icon"], "tools": tools}
-            if g.get("unrestricted"):
-                entry["unrestricted"] = True
-            groups.append(entry)
-        # Ungroupierte Tools als "Sonstige"
-        ungrouped = sorted(all_ids - grouped_ids)
-        if ungrouped:
-            groups.append({"id": "other", "label": "Sonstige", "icon": "puzzle", "tools": ungrouped})
-        return {"groups": groups}
+        all_ids = registry.all_ids()
+        return {
+            "groups": [
+                {
+                    "id": "core",
+                    "label": "Core-Tools",
+                    "icon": "wrench",
+                    "tools": all_ids,
+                }
+            ]
+        }
 
     # ── Erweiterte Logs & System-Info (#129) ─────────────────────────────
 

@@ -4,7 +4,7 @@
  * Nutzt shared ChatView + useChatStream Hook.
  * Page-spezifisch: Projekt-Header, Swarm-Toggle, History, Live-Polling, Info-Sidebar.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal, PanelRightClose, PanelRightOpen, Activity } from "lucide-react";
 import { EkgMonitor } from "@/components/EkgMonitor";
@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { api, type SessionPreview, type SessionFull } from "@/lib/api";
 import { ChatView } from "@/components/ChatView";
 import { useChatStream, mkMsg } from "@/hooks/useChatStream";
+import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 
 export function ChatPage() {
   const { t } = useTranslation();
@@ -27,6 +28,22 @@ export function ChatPage() {
 
   // History
   const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
+
+  const broadcastBuf = useRef<string>("");
+  const broadcastMsgId = useRef<string | null>(null);
+  const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTyping = useCallback((active: boolean) => {
+    if (!id) return;
+    // Debounce: max alle 2s ein POST
+    if (typingDebounce.current && active) return;
+    api.post(`/projects/${id}/typing`, { active }).catch(() => {});
+    if (active) {
+      typingDebounce.current = setTimeout(() => { typingDebounce.current = null; }, 2000);
+    } else {
+      if (typingDebounce.current) { clearTimeout(typingDebounce.current); typingDebounce.current = null; }
+    }
+  }, [id]);
 
   const SLASH_COMMANDS = [
     { cmd: "/help",     desc: t("slashCommands.help") },
@@ -63,6 +80,52 @@ export function ChatPage() {
     },
   });
 
+  // Subscribe fuer Typing-Indicator + Broadcast-Sync (#553)
+  const handleBroadcast = useCallback((raw: Record<string, unknown>) => {
+    if (chat.sending) return;
+
+    if (raw.text !== undefined) {
+      if (!broadcastMsgId.current) {
+        broadcastMsgId.current = `broadcast-${Date.now()}`;
+        broadcastBuf.current = "";
+        chat.setMessages(ms => [...ms, mkMsg("assistant", "")]);
+      }
+      broadcastBuf.current += String(raw.text);
+      const txt = broadcastBuf.current;
+      chat.setMessages(ms => {
+        const last = ms[ms.length - 1];
+        if (last && last.role === "assistant") {
+          return [...ms.slice(0, -1), { ...last, content: txt }];
+        }
+        return ms;
+      });
+    } else if (raw.done) {
+      // Token-Usage + Model-Info auf letzte Assistant-Message setzen
+      const usage = raw.usage as any;
+      const model = raw.model as string | undefined;
+      if (usage || model) {
+        chat.setMessages(ms => {
+          const last = ms[ms.length - 1];
+          if (last && last.role === "assistant") {
+            return [...ms.slice(0, -1), {
+              ...last,
+              tokenUsage: usage ? { input: usage.input, output: usage.output, rounds: usage.rounds, cache_read: usage.cache_read, cache_write: usage.cache_write } : undefined,
+              model: model,
+              isFallback: !!raw.is_fallback,
+            }];
+          }
+          return ms;
+        });
+      }
+      broadcastMsgId.current = null;
+      broadcastBuf.current = "";
+    } else if (raw._user_message) {
+      chat.setMessages(ms => [...ms, mkMsg("user", String(raw._user_message))]);
+    }
+  }, [chat.sending]);
+
+  const subscribe = useProjectSubscribe(id, handleBroadcast);
+
   // Load project info + history
   useEffect(() => {
     if (!id) return;
@@ -81,14 +144,16 @@ export function ChatPage() {
     chat.loadHistory();
   }, [id]);
 
-  // Live-Sync: History alle 3s refreshen wenn nicht am Streamen
+  // v2 (#602): 3s-Polling entfernt — Real-Time Sync laeuft ueber useProjectSubscribe.
+  // Recovery-Polling NUR wenn SSE-Verbindung tot ist (mit Backoff).
   useEffect(() => {
     if (!id || chat.sending) return;
+    if (subscribe.isConnected) return;  // SSE laeuft → kein Polling
     const poll = setInterval(() => {
       chat.loadHistory();
-    }, 3000);
+    }, 10000);  // Nur Fallback bei Disconnect — 10s statt 3s
     return () => clearInterval(poll);
-  }, [id, chat.sending]);
+  }, [id, chat.sending, subscribe.isConnected]);
 
   // Past Sessions laden wenn History-Panel geöffnet wird
   useEffect(() => {
@@ -231,6 +296,8 @@ export function ChatPage() {
             t={t}
             showWorkers={showSwarm}
             slashCommands={SLASH_COMMANDS}
+            typingUsers={subscribe.typingUsers}
+            onTyping={handleTyping}
           />
         )}
       </div>

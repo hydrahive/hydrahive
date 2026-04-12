@@ -1,16 +1,16 @@
 """
-orchestrator.py — Boss-Agent Task-Dispatching (#8, AG2, AG5)
+orchestrator.py — v2 Projekt-Agent Orchestrator (#8, AG2, AG5)
 
-Boss-Agent empfängt User-Nachricht, baut LLM-Kontext auf,
-delegiert Tasks an Worker-Agenten (parallel), aggregiert Ergebnis.
+v2: Projekt = Agent. Kein Worker-Dispatch mehr. Projekt empfängt User-
+Nachricht, baut LLM-Kontext auf, führt Tool-Loop mit den 9 Core-Tools
+durch, gibt Final-Antwort zurück.
 
 Ablauf:
 1. User-Nachricht an Session anhängen
-2. Soul + aktive Skills laden → System-Prompt
+2. AGENT.md + Memory laden → System-Prompt
 3. Session-History + System-Prompt → LLM (litellm)
-4. LLM ruft dispatch_task Tool auf → Worker spawnen + parallel ausführen
-5. Worker-Ergebnisse an Boss zurückgeben → Final-Antwort
-6. Antwort in Session speichern
+4. LLM ruft Core-Tools auf → Tool-Loop executed → wiederholt
+5. Final-Antwort in Session speichern
 
 Teilmodule:
 - orchestrator_llm.py      — LLM-Call-Maschinerie (Failover, OAuth, Retry)
@@ -56,7 +56,6 @@ from .orchestrator_context import (
     _compact_if_needed as _compact_if_needed_fn,
     _history_token_budget,
     _estimate_tokens,
-    get_skill_tool_constraints,
 )
 from .orchestrator_tools import (
     DispatchResult,
@@ -67,17 +66,10 @@ from .orchestrator_tools import (
 from .orchestrator_mcp import (
     _load_mcp_server_map as _load_mcp_server_map_fn,
     _mcp_schemas_for_agent as _mcp_schemas_for_agent_fn,
-    _plugin_schemas_for_agent as _plugin_schemas_for_agent_fn,
     _execute_mcp_tool as _execute_mcp_tool_fn,
 )
 from .orchestrator_stream import handle_message_stream as _handle_message_stream_fn
-from .orchestrator_dispatch import (
-    _tool_loop as _tool_loop_fn,
-    _parse_dispatch_calls as _parse_dispatch_calls_fn,
-    _dispatch_parallel as _dispatch_parallel_fn,
-    _run_worker_task as _run_worker_task_fn,
-    _synthesize as _synthesize_fn,
-)
+from .orchestrator_dispatch import _tool_loop as _tool_loop_fn
 from .session_metrics import metrics as _metrics
 
 logger = logging.getLogger(__name__)
@@ -197,30 +189,6 @@ def _load_workflow_prompt(project_dir) -> str:
     return "\n".join(lines)
 
 
-def _build_worker_context(project_cfg, discovery) -> str:
-    """
-    Baut einen kurzen System-Prompt-Block mit den verfügbaren Worker-IDs
-    und deren Beschreibungen. Verhindert, dass der Boss Worker-Namen halluziniert.
-    """
-    workers = getattr(getattr(project_cfg, "agents", None), "workers", []) or []
-    if not workers:
-        return ""
-    lines = ["## Verfügbare Worker-Agenten",
-             "",
-             "Delegiere Aufgaben mit `dispatch_task(worker_id=..., task=...)`. "
-             "Nur diese Worker-IDs sind gültig:"]
-    for wid in workers:
-        cfg = discovery.get(wid)
-        if cfg:
-            desc = getattr(cfg, "description", "") or getattr(cfg, "identity", wid)
-            lines.append(f"- `{wid}`: {desc}")
-        else:
-            lines.append(f"- `{wid}`")
-    lines.append("")
-    lines.append("Verwende KEINE anderen Worker-IDs — sie existieren nicht.")
-    return "\n".join(lines)
-
-
 class Orchestrator:
     """
     Einer pro Core-Instanz.
@@ -256,34 +224,22 @@ class Orchestrator:
     ) -> str | None:
         return agent_cfg.effective_execution_mode(execution_mode)  # type: ignore[arg-type]
 
+    # v2: Die 9 Core-Tool-IDs — Plugins registrieren sich auch in der Registry,
+    # deshalb können wir nicht blind all_tools() nehmen.
+    _V2_CORE_TOOL_IDS = frozenset({
+        "shell_exec", "file_read", "file_write", "file_patch",
+        "file_search", "web_search", "read_memory", "write_memory",
+        "ask_agent",
+    })
+
     def _allowed_tools(
         self,
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
         user_text: str = "",
-        meta_only: bool = False,
     ) -> list:
-        from .tool_groups import select_tools
-        from .tool_loader import META_TOOLS
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        if meta_only:
-            ids = [t for t in META_TOOLS if t in (agent_cfg.tools or [])]
-            if "request_tools" in (agent_cfg.tools or []) and "request_tools" not in ids:
-                ids.insert(0, "request_tools")
-            return self._reg.tools_for_agent(ids, agent_permissions=permissions)
-        if getattr(agent_cfg, "tool_selection", "auto") == "always":
-            base_ids = [t.id for t in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)]
-        else:
-            base_ids = [t.id for t in self._reg.tools_for_agent(
-                select_tools(agent_cfg.tools, user_text), agent_permissions=permissions
-            )]
-        if user_text:
-            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
-            if skill_allowed or skill_blocked:
-                from .skill_loader import Skill as _Skill
-                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
-                base_ids = dummy.apply_tool_constraints(base_ids)
-        return self._reg.tools_for_agent(base_ids, agent_permissions=permissions)
+        """v2: Gibt nur die 9 Core-Tools zurück — Plugins werden separat geladen."""
+        return [t for t in self._reg.all_tools() if t.id in self._V2_CORE_TOOL_IDS]
 
     def _category_tools_schema(
         self,
@@ -291,13 +247,8 @@ class Orchestrator:
         execution_mode: str | None,
         categories: list[str],
     ) -> list[dict]:
-        """Gibt litellm-Tool-Schemas für angegebene Kategorien zurück."""
-        from .tool_loader import tools_for_categories
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        tool_objects = tools_for_categories(
-            self._reg, agent_cfg.tools or [], permissions, categories
-        )
-        return self._reg.as_litellm_tools(tool_objects)
+        """v2: Stub — Kategorien gibt es nicht mehr, alle Tools sind immer geladen."""
+        return []
 
     def _allowed_tool_map(
         self,
@@ -305,22 +256,8 @@ class Orchestrator:
         execution_mode: str | None = None,
         user_text: str = "",
     ) -> dict[str, object]:
-        permissions = agent_cfg.effective_permissions(execution_mode)  # type: ignore[arg-type]
-        all_tools = {
-            tool.id: tool
-            for tool in self._reg.tools_for_agent(agent_cfg.tools or [], agent_permissions=permissions)
-        }
-        from .plugin_manager import plugin_manager as _pm
-        for pt in _pm.get_plugin_tools_for_agent(agent_cfg.id):
-            all_tools[pt.id] = pt
-        if user_text:
-            skill_allowed, skill_blocked = get_skill_tool_constraints(agent_cfg, user_text)
-            if skill_allowed or skill_blocked:
-                from .skill_loader import Skill as _Skill
-                dummy = _Skill(skill="__filter__", allowed_tools=skill_allowed, blocked_tools=skill_blocked)
-                filtered_ids = dummy.apply_tool_constraints(list(all_tools.keys()))
-                return {k: v for k, v in all_tools.items() if k in filtered_ids}
-        return all_tools
+        """v2: Nur Core-Tools."""
+        return {tool.id: tool for tool in self._reg.all_tools() if tool.id in self._V2_CORE_TOOL_IDS}
 
     def _resolve_allowed_tool(
         self,
@@ -333,7 +270,6 @@ class Orchestrator:
         return allowed.get(tool_name)
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):
-        from .plugin_manager import plugin_manager as _pm
         from .hooks import parse_hooks_config, run_hooks
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
 
@@ -352,18 +288,12 @@ class Orchestrator:
                 self._runtime.set_activity(boss_cfg.id, "Denkt…")
                 return {"error": f"Tool '{tool_name}' blockiert durch Hook (before_tool)", "blocked": True}
 
-        # #421: Blockierende Plugin Pre-Hooks (Legacy)
-        hook_result = await _pm.emit("tool.before", project_id=project_id, tool_name=tool_name, tool_input=tool_input)
-        if isinstance(hook_result, dict) and hook_result.get("block"):
-            self._runtime.set_activity(boss_cfg.id, "Denkt…")
-            return {"error": f"Tool blockiert: {hook_result.get('reason', 'Pre-Hook')}", "blocked": True}
         try:
             result = await _execute_tool_fn(
                 tool, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tool_name, tool_input=tool_input,
                 execution_mode=execution_mode,
             )
-            await _pm.emit("tool.after", project_id=project_id, tool_name=tool_name, result=result)
 
             # #472: Agent-YAML Hook-System (after_tool)
             after_hooks = parsed_hooks.get("after_tool", [])
@@ -388,7 +318,8 @@ class Orchestrator:
         return await _mcp_schemas_for_agent_fn(agent_cfg, self._mcp_servers_file)
 
     def _plugin_schemas_for_agent(self, agent_cfg: AgentConfig) -> list[dict]:
-        return _plugin_schemas_for_agent_fn(agent_cfg)
+        """v2: Plugin-System entfernt."""
+        return []
 
     async def _execute_mcp_tool(self, boss_cfg, prefixed_name, args):
         return await _execute_mcp_tool_fn(
@@ -536,10 +467,14 @@ class Orchestrator:
         # 1. Nachricht in Session speichern
         await self._sessions.append(project_id, MessageRole.USER, content)
 
-        # 2. Boss-Agent-Config holen
-        boss_cfg = self._discovery.get(project_cfg.agents.boss)
+        # 2. Boss-Agent-Config holen — v2: direkt aus Projekt, v1: aus Discovery
+        if getattr(project_cfg, "is_v2", False):
+            from .agent_config import agent_config_from_project
+            boss_cfg = agent_config_from_project(project_cfg)
+        else:
+            boss_cfg = self._discovery.get(project_cfg.agents.boss)
         if not boss_cfg:
-            return f"[Fehler] Boss-Agent '{project_cfg.agents.boss}' nicht gefunden.", []
+            return f"[Fehler] Boss-Agent '{getattr(project_cfg.agents, 'boss', project_cfg.id)}' nicht gefunden.", []
 
         # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache
         _refresh = content.strip().startswith("!refresh")
@@ -553,8 +488,14 @@ class Orchestrator:
             if wf_text:
                 system_prompt = system_prompt + "\n\n" + wf_text
 
-        # 3c. Plan Mode Injection
-        from .tool_registry import is_plan_mode as _is_plan_mode, get_plan_file as _get_plan_file
+        # 3c. Plan Mode Injection — v2: is_plan_mode/get_plan_file existieren nicht
+        # (v1-Reste, bereits im Tool-Registry-Cleanup entfernt). Plan-Mode
+        # laeuft jetzt via enter_plan_mode Tool ohne separaten Modus-State.
+        try:
+            from .tool_registry import is_plan_mode as _is_plan_mode, get_plan_file as _get_plan_file
+        except ImportError:
+            _is_plan_mode = lambda _pid: False
+            _get_plan_file = lambda _pid: None
         if _is_plan_mode(project_id):
             _pf = _get_plan_file(project_id) or "plan.md"
             system_prompt += (
@@ -571,10 +512,7 @@ class Orchestrator:
                 "- Diese Instruktion überschreibt alle anderen Regeln bezüglich Code-Änderungen."
             )
 
-        # 3d. Worker-Kontext injizieren (verhindert Halluzination von Worker-IDs, #107)
-        worker_ctx = _build_worker_context(project_cfg, self._discovery)
-        if worker_ctx:
-            system_prompt = system_prompt + "\n\n" + worker_ctx
+        # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
@@ -588,21 +526,25 @@ class Orchestrator:
         # Tool-Messages werden von as_llm_message() zu assistant konvertiert
         history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
         messages.extend(history)
-        # 5. Verfügbare Tools für Boss ermitteln — Phase 1: nur Meta-Tools
-        use_meta_only = "request_tools" in (boss_cfg.tools or [])
-        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content, meta_only=use_meta_only)
+        # 5. Verfügbare Tools — v2: immer alle 9 Core-Tools
+        boss_tools = self._allowed_tools(boss_cfg, execution_mode, user_text=content)
         litellm_tools = self._reg.as_litellm_tools(boss_tools) if boss_tools else []
         mcp_schemas = await self._mcp_schemas_for_agent(boss_cfg)
         if mcp_schemas:
             litellm_tools = _dedup_tools((litellm_tools or []) + mcp_schemas)
-        plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
-        if plugin_schemas:
-            litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
+        # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
+        # TODO: Plugins später pro Projekt konfigurierbar nachladen
+        # plugin_schemas = self._plugin_schemas_for_agent(boss_cfg)
+        # if plugin_schemas:
+        #     litellm_tools = _dedup_tools((litellm_tools or []) + plugin_schemas)
         # Plan Mode: nur read-only Tools + enter/exit_plan_mode + file_write (für Plan-Datei)
-        from .tool_registry import is_plan_mode as _is_plan_mode
+        try:
+            from .tool_registry import is_plan_mode as _is_plan_mode
+        except ImportError:
+            _is_plan_mode = lambda _pid: False
         if _is_plan_mode(project_id) and litellm_tools:
             _PLAN_MODE_ALLOWED = {"enter_plan_mode", "exit_plan_mode", "file_write",
-                                  "request_tools"}
+                                  "file_read", "file_search"}
             litellm_tools = [
                 t for t in litellm_tools
                 if t.get("function", {}).get("name", "") in _PLAN_MODE_ALLOWED
@@ -624,8 +566,8 @@ class Orchestrator:
                 "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
                 + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
                 "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
-                "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
-                "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+                "Für alles was kein eigenes Tool hat (Git, System, Pakete, SSH, etc.) nutze `shell_exec`. "
+                "Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
                 "nutze IMMER den echten Tool-Aufruf-Mechanismus."
             )
             messages[0]["content"] = messages[0]["content"] + _tool_guard
@@ -838,14 +780,6 @@ class Orchestrator:
             max_rounds, execution_mode,
         )
 
-    def _parse_dispatch_calls(self, tool_calls):
-        return _parse_dispatch_calls_fn(tool_calls)
-
-    async def _dispatch_parallel(self, project_cfg, dispatches, context):
-        return await _dispatch_parallel_fn(self, project_cfg, dispatches, context)
-
-    async def _run_worker_task(self, dispatch):
-        return await _run_worker_task_fn(self, dispatch)
-
-    async def _synthesize(self, boss_cfg, messages, tool_calls, results):
-        return await _synthesize_fn(self, boss_cfg, messages, tool_calls, results)
+    # v2 (#589): Dispatch-Wrapper entfernt —
+    # _parse_dispatch_calls, _dispatch_parallel, _run_worker_task, _synthesize
+    # waren v1-Reste. In v2 laeuft alles direkt im Tool-Loop.

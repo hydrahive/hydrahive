@@ -947,6 +947,8 @@ def register_user_integration_routes(
             "allowed_numbers":       cfg.get("allowed_numbers", []),
             "blocked_numbers":       cfg.get("blocked_numbers", []),
             "owner_numbers":         cfg.get("owner_numbers", []),
+            "voice_mode":            cfg.get("voice_mode", "never"),
+            "voice_name":            cfg.get("voice_name", "de-DE-KatjaNeural"),
         }
 
     @auth_router.put("/me/whatsapp/config")
@@ -1231,11 +1233,34 @@ def register_user_integration_routes(
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
 
+        # v2: Messenger-Router für Projekt-Lookup nutzen
+        from .messenger_router import messenger_router as _mr
+        _routed_project_id = _mr.resolve_whatsapp(agent_id) or agent_id
+
+        # v2: Projekt-scoped Butler-Flows prüfen (#566)
+        try:
+            from .butler_executor import check_flows_for_project as _butler_project
+            _proj_actions = await _butler_project(_event, _routed_project_id)
+            if _proj_actions:
+                _aio.create_task(_butler_generic(_proj_actions, _event))
+                for _pact in _proj_actions:
+                    _psub = _pact.get("subtype")
+                    if _psub == "ignore":
+                        return {"ok": True, "filtered": "project_butler_ignore"}
+                    if _psub in ("agent_reply", "agent_reply_guided", "forward"):
+                        _new = _pact.get("params", {}).get("agent_id", "").strip()
+                        if _new:
+                            _routed_project_id = _new
+        except Exception as _pbe:
+            logger.debug("Projekt-Butler-Check fehlgeschlagen: %s", _pbe)
+
         # Echte Projekt-Config laden (inkl. Identity/Soul), Fallback auf Minimal-Config
-        real_cfg = projects.get(agent_id) if projects else None
+        real_cfg = projects.get(_routed_project_id) if projects else None
+        if not real_cfg:
+            real_cfg = projects.get(agent_id) if projects else None  # Fallback: alte agent_id
         virtual_cfg = real_cfg or _PC(
-            id=agent_id,
-            identity=_PI(name=agent_id),
+            id=_routed_project_id,
+            identity=_PI(name=_routed_project_id),
             agents=_PA(boss=agent_id, workers=[]),
         )
 
@@ -1262,14 +1287,14 @@ def register_user_integration_routes(
             )
 
         logger.info(
-            "WhatsApp incoming: agent=%s sender=%s is_owner=%s is_group=%s msg_len=%d",
-            agent_id, sender, is_owner, is_group, len(message),
+            "WhatsApp incoming: agent=%s → project=%s sender=%s is_owner=%s is_group=%s msg_len=%d",
+            agent_id, _routed_project_id, sender, is_owner, is_group, len(message),
         )
 
         response_parts: list[str] = []
         try:
             async for chunk in orchestrator.handle_message_stream(
-                project_id   = agent_id,
+                project_id   = _routed_project_id,
                 project_cfg  = virtual_cfg,
                 content      = enriched_msg,
                 sender       = f"whatsapp:{sender}",

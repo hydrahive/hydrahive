@@ -251,9 +251,14 @@ def register_project_integration_routes(
 
         message = data.get("message", "Wake-up call")
         sender = data.get("sender", "webhook")
-        boss_id = cfg.agents.boss
-        if not discovery.get(boss_id):
-            raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht verfuegbar")
+
+        # v2 (#600): Kein Boss-Discovery-Check mehr — v2-Projekt ist sein eigener Agent
+        # Bei v1-Legacy-Projekten (agents.boss gesetzt) weiterhin Discovery pruefen
+        is_v2 = getattr(cfg, "is_v2", False) or not getattr(cfg.agents, "boss", "")
+        if not is_v2:
+            boss_id = cfg.agents.boss
+            if not discovery.get(boss_id):
+                raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht verfuegbar")
 
         asyncio.create_task(
             orchestrator.handle_message(project_id, cfg, message, sender),

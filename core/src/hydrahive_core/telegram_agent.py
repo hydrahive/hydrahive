@@ -180,17 +180,52 @@ async def start_telegram_bot(
         except Exception as _be:
             logger.debug("Butler check Telegram: %s", _be)
 
+        # v2: Messenger-Router für Projekt-Lookup
+        from .messenger_router import messenger_router as _mr
+        _project_id = _mr.resolve_telegram(str(chat_id)) or agent_id
+
+        # v2: Projekt-scoped Butler-Flows prüfen (#566)
+        try:
+            from .butler_executor import check_flows_for_project as _butler_project
+            _proj_actions = await _butler_project(_bevent, _project_id)
+            if _proj_actions:
+                _aio.create_task(_butler_generic(_proj_actions, _bevent))
+                for _pact in _proj_actions:
+                    _psub = _pact.get("subtype")
+                    if _psub == "ignore":
+                        return
+                    if _psub == "reply_fixed":
+                        _pft = str(_pact.get("params", {}).get("text", "")).strip()
+                        if _pft:
+                            await context.bot.send_message(chat_id=chat_id, text=_pft)
+                        return
+                    if _psub in ("agent_reply", "agent_reply_guided", "forward"):
+                        _paid = str(_pact.get("params", {}).get("agent_id", "")).strip()
+                        if _paid:
+                            _project_id = _paid
+        except Exception as _pbe:
+            logger.debug("Projekt-Butler check Telegram: %s", _pbe)
+
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
-        virtual_cfg = _PC(
-            id=agent_id,
-            identity=_PI(name=agent_id),
+        # v2 (#585): echte Projekt-Config via global registriertem Loader laden
+        _real_cfg = None
+        try:
+            from .project_loader import get_project_loader as _gpl
+            _loader = _gpl()
+            if _loader is not None:
+                _real_cfg = _loader.get(_project_id)
+        except Exception as _cfg_err:
+            logger.debug("Telegram: Konnte echte Projekt-Config nicht laden (%s)", _cfg_err)
+        virtual_cfg = _real_cfg or _PC(
+            id=_project_id,
+            identity=_PI(name=_project_id),
             agents=_PA(boss=agent_id, workers=[]),
         )
 
         try:
             response_parts: list[str] = []
             async for chunk in orchestrator.handle_message_stream(
-                project_id=agent_id,
+                project_id=_project_id,
                 project_cfg=virtual_cfg,
                 content=enriched,
                 sender=f"telegram:{user_id}",

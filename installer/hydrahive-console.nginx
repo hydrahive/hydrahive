@@ -1,28 +1,48 @@
+# HydraHive Console — nginx Konfiguration
+# - Port 80: HTTPS-Redirect
+# - Port 443: SSL mit Self-Signed Cert (aus Installer) oder Let's-Encrypt
+# - /api/ → FastAPI Core (127.0.0.1:8765)
+# - /code/ → code-server (127.0.0.1:8766)
+# - /vault/ → Vaultwarden (127.0.0.1:8768)
+# - /projects/ → 404 (v2 Security-Fix #594, Zugriff nur via /api/)
+
 server {
     listen 80;
     server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/hydrahive/tls/hydrahive.crt;
+    ssl_certificate_key /etc/hydrahive/tls/hydrahive.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
 
     root /opt/hydrahive/console;
     index index.html;
 
     # 502/503 nur für Browser-Navigationen → auto-refreshende Wartungsseite
     error_page 502 503 /502.html;
-    location = /502.html {
-        internal;
-    }
+    location = /502.html { internal; }
 
     location / {
+        # v2 (#603): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-store, no-cache";
     }
 
     location /api/ {
+        # v2 (#603): Security-Header (add_header erbt nicht vom server-Block)
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        # Connection-Header leeren fuer sauberes HTTP/1.1 Keep-Alive zu uvicorn
+        # Connection-Header leeren für sauberes HTTP/1.1 Keep-Alive zu uvicorn
         # ("upgrade" liess uvicorn die Verbindung schliessen → 502-Loop)
         proxy_set_header   Connection        "";
         proxy_read_timeout    300s;
@@ -31,11 +51,13 @@ server {
         proxy_next_upstream   error timeout;
         # API-Fehler nicht durch error_page umleiten — JS behandelt 502 selbst
         proxy_intercept_errors off;
-        client_max_body_size   10M;
+        client_max_body_size   50M;
     }
 
     # A2A Federation: Agent Card + Task-Eingang direkt proxyen (kein /api-Prefix)
     location /.well-known/ {
+        # v2 (#610): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/.well-known/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
@@ -46,6 +68,8 @@ server {
     }
 
     location /a2a/ {
+        # v2 (#610): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/a2a/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
@@ -57,14 +81,39 @@ server {
     }
 
     location /assets/ {
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
 
-    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar (Auth über API)
-    location /projects/ {
-        alias /projects/;
-        autoindex off;
-        add_header Cache-Control "no-store";
+    # v2 (#594): /projects/ NICHT mehr direkt exposed — war Security-Luecke
+    # (Auth ueber API wurde nie durchgesetzt). Zugriff auf Projekt-Dateien
+    # laeuft jetzt ausschliesslich ueber API-Endpoints /api/projects/{id}/files
+    location = /projects/ { return 404; }
+    location /projects/ { return 404; }
+
+    # code-server (Browser-IDE)
+    location /code/ {
+        proxy_pass         http://127.0.0.1:8766/;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host       $host;
+        proxy_read_timeout 3600s;
+    }
+
+    # Vaultwarden (Password-Manager)
+    location /vault/ {
+        proxy_pass http://127.0.0.1:8768;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /vault/notifications/hub {
+        proxy_pass http://127.0.0.1:8768/vault/notifications/hub;
+        proxy_set_header Upgrade   $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host      $host;
     }
 }

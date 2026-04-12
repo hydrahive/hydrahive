@@ -32,6 +32,37 @@ _PRICING: dict[str, dict[str, float]] = {
         "input": 15.00, "output": 75.00,
         "cache_write": 18.75, "cache_read": 1.50,
     },
+    # OpenAI Pricing Stand 2026-04
+    "gpt-4o": {
+        "input": 2.50, "output": 10.00,
+        "cache_write": 2.50, "cache_read": 1.25,
+    },
+    "gpt-4o-mini": {
+        "input": 0.15, "output": 0.60,
+        "cache_write": 0.15, "cache_read": 0.075,
+    },
+    "o3": {
+        "input": 10.00, "output": 40.00,
+        "cache_write": 10.00, "cache_read": 5.00,
+    },
+    "o3-mini": {
+        "input": 1.10, "output": 4.40,
+        "cache_write": 1.10, "cache_read": 0.55,
+    },
+    # Google Gemini Pricing Stand 2026-04
+    "gemini-2.0-flash": {
+        "input": 0.10, "output": 0.40,
+        "cache_write": 0.10, "cache_read": 0.025,
+    },
+    "gemini-2.5-pro": {
+        "input": 1.25, "output": 10.00,
+        "cache_write": 1.25, "cache_read": 0.315,
+    },
+    # DeepSeek
+    "deepseek-r1": {
+        "input": 0.55, "output": 2.19,
+        "cache_write": 0.55, "cache_read": 0.14,
+    },
 }
 
 _PRICING_FALLBACK = {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30}

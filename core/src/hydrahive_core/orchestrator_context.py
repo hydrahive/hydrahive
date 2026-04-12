@@ -26,6 +26,75 @@ from .skill_loader import load_skills, select_skills, skills_to_system_prompt, S
 
 logger = logging.getLogger(__name__)
 
+
+# ── A-MEM Globaler Wissens-Prefetch (#563) ────────────────────────────────────
+
+# A-MEM MCP-Server Config (SSE auf localhost)
+_AMEM_SERVER_CFG: dict = {
+    "url": "http://127.0.0.1:8020/sse",
+    "transport": "sse",
+    "headers": {},
+}
+_AMEM_ENABLED: bool | None = None  # None = noch nicht geprüft
+
+
+async def _amem_check_available() -> bool:
+    """Prüft einmalig ob A-MEM erreichbar ist. Cached das Ergebnis."""
+    global _AMEM_ENABLED
+    if _AMEM_ENABLED is not None:
+        return _AMEM_ENABLED
+    try:
+        from .mcp_client import list_mcp_tools
+        tools = await list_mcp_tools("amem", _AMEM_SERVER_CFG)
+        _AMEM_ENABLED = any(t.get("name") == "amem_search" for t in tools)
+        if _AMEM_ENABLED:
+            logger.info("A-MEM verfügbar: %d Tools", len(tools))
+        else:
+            logger.info("A-MEM erreichbar aber amem_search nicht gefunden")
+    except Exception as e:
+        _AMEM_ENABLED = False
+        logger.debug("A-MEM nicht verfügbar: %s", e)
+    return _AMEM_ENABLED
+
+
+async def _amem_global_search(query: str, k: int = 3, max_chars: int = 2000) -> str:
+    """Sucht in A-MEM nach globalem Wissen. Gibt formatierten String zurück.
+
+    Timeout: 5 Sekunden. Wenn A-MEM nicht erreichbar → leerer String.
+    Ergebnis wird auf max_chars begrenzt.
+    """
+    if not query or len(query.strip()) < 3:
+        return ""
+    if not await _amem_check_available():
+        return ""
+
+    try:
+        from .mcp_client import call_mcp_tool
+        result = await asyncio.wait_for(
+            call_mcp_tool("amem", _AMEM_SERVER_CFG, "amem_search", {"query": query, "k": k}),
+            timeout=5.0,
+        )
+        if not result or not result.strip():
+            return ""
+        # Auf max_chars begrenzen
+        if len(result) > max_chars:
+            result = result[:max_chars] + "\n…[A-MEM Ergebnis gekürzt]"
+        logger.debug("A-MEM Prefetch: %d Zeichen für '%s'", len(result), query[:50])
+        return result
+    except asyncio.TimeoutError:
+        logger.debug("A-MEM Prefetch Timeout (5s) für '%s'", query[:50])
+        return ""
+    except Exception as e:
+        logger.debug("A-MEM Prefetch Fehler: %s", e)
+        return ""
+
+
+def amem_invalidate() -> None:
+    """A-MEM Verfügbarkeits-Cache zurücksetzen (z.B. nach Service-Restart)."""
+    global _AMEM_ENABLED
+    _AMEM_ENABLED = None
+
+
 # Python-seitiger System-Prompt-Cache (ergänzt Anthropic Server-Side-Caching)
 # Format: agent_id → (prompt_str, timestamp, cache_hash)
 _PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
@@ -219,12 +288,18 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
                 )
                 _startup_active = True
 
-    # Soul laden wenn vorhanden (immer — klein und identitätskritisch)
-    # Bei aktivem Onboarding trotzdem laden (für Kontext), aber startup.md hat Vorrang.
-    if boss_cfg.soul and boss_cfg.agent_dir:
-        soul_path = boss_cfg.agent_dir / boss_cfg.soul
-        if soul_path.exists():
-            parts.append(soul_path.read_text(encoding="utf-8").strip())
+    # Soul / AGENT.md laden (identitätskritisch)
+    # v2: AGENT.md im Projekt-Verzeichnis. v1: soul.md aus agent.yaml.
+    if boss_cfg.agent_dir:
+        agent_md_path = boss_cfg.agent_dir / "AGENT.md"
+        if agent_md_path.exists():
+            # v2: AGENT.md als Persönlichkeit/Fachgebiet
+            parts.append(agent_md_path.read_text(encoding="utf-8").strip())
+        elif boss_cfg.soul:
+            # v1: soul.md aus agent.yaml
+            soul_path = boss_cfg.agent_dir / boss_cfg.soul
+            if soul_path.exists():
+                parts.append(soul_path.read_text(encoding="utf-8").strip())
 
     # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
     # #529: Memory Budget aus context_lifecycle
@@ -269,6 +344,16 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
 
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
+
+    # v2: A-MEM Globaler Wissens-Prefetch (#563)
+    # Sucht in der zentralen Wissensdatenbank nach relevanten Einträgen.
+    # Graceful: wenn A-MEM nicht erreichbar → überspringen, nicht blockieren.
+    try:
+        amem_snippets = await _amem_global_search(user_text)
+        if amem_snippets:
+            parts.append("## Globales Wissen (A-MEM)\n\n" + amem_snippets)
+    except Exception as _amem_err:
+        logger.debug("A-MEM Prefetch fehlgeschlagen (nicht kritisch): %s", _amem_err)
 
     # #350: Session-Continuity — letzte Session nach /clear automatisch injizieren
     if boss_cfg.agent_dir:

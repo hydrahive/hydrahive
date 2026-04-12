@@ -86,6 +86,19 @@ main() {
         > "${UPDATE_STATUS_FILE}" 2>/dev/null || true
 
     # --- 1. Repo klonen ---
+    # Branch-Override: /etc/hydrahive/update_branch kann einen Branch-Namen enthalten
+    # (z.B. "v2/project-architecture"). Ohne Datei oder leer → Default-Branch (main).
+    local _BRANCH_FLAG=""
+    local _BRANCH_OVERRIDE_FILE="/etc/hydrahive/update_branch"
+    if [ -f "${_BRANCH_OVERRIDE_FILE}" ]; then
+        local _BRANCH_NAME
+        _BRANCH_NAME=$(tr -d '[:space:]' < "${_BRANCH_OVERRIDE_FILE}")
+        if [ -n "${_BRANCH_NAME}" ]; then
+            _BRANCH_FLAG="-b ${_BRANCH_NAME}"
+            info "Branch-Override aktiv: ${_BRANCH_NAME}"
+        fi
+    fi
+
     info "Klone aktuellen Stand..."
     # Token per GIT_ASKPASS übergeben (transient, nicht in Prozessliste/Config)
     local _CLONE_ENV=""
@@ -96,11 +109,11 @@ main() {
         chmod +x "${_ASKPASS_SCRIPT}"
         # URL mit Username-Platzhalter für ASKPASS
         local _AUTH_URL="${CLONE_URL/https:\/\//https:\/\/hydrahive@}"
-        GIT_ASKPASS="${_ASKPASS_SCRIPT}" timeout 300 git clone --depth 1 --single-branch --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
+        GIT_ASKPASS="${_ASKPASS_SCRIPT}" timeout 300 git clone --depth 1 --single-branch ${_BRANCH_FLAG} --quiet "${_AUTH_URL}" "${TMPDIR_BASE}" \
             || { rm -f "${_ASKPASS_SCRIPT}"; error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"; }
         rm -f "${_ASKPASS_SCRIPT}"
     else
-        timeout 300 git clone --depth 1 --single-branch --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
+        timeout 300 git clone --depth 1 --single-branch ${_BRANCH_FLAG} --quiet "${CLONE_URL}" "${TMPDIR_BASE}" \
             || error "git clone fehlgeschlagen (Timeout nach 5 Minuten oder Netzwerkfehler)"
     fi
     success "Repo geklont"
@@ -143,22 +156,7 @@ main() {
         info "System-Agenten aktualisiert"
     fi
 
-    # --- 2c. Default-Agenten installieren (nur neue, bestehende nicht überschreiben) ---
-    if [ -d "${TMPDIR_BASE}/installer/default-agents" ]; then
-        _installed=0
-        for _src in "${TMPDIR_BASE}/installer/default-agents"/*/; do
-            _id="$(basename "${_src}")"
-            if [ ! -d "/agents/${_id}" ]; then
-                cp -r "${_src}" "/agents/${_id}"
-                mkdir -p "/agents/${_id}/memory"
-                _installed=$((_installed + 1))
-            fi
-        done
-        chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
-        if [ $_installed -gt 0 ]; then
-            info "${_installed} neue Standard-Agenten installiert"
-        fi
-    fi
+    # v2: Default-Agents entfernt — Projekte werden ueber den Wizard erstellt
 
     # --- 3. Python-Dependencies ---
     info "Installiere Python-Dependencies..."
@@ -189,7 +187,8 @@ main() {
     fi
 
     # --- 3b. System-Dependencies nachrüsten (idempotent) ---
-    for pkg in ffmpeg jq tree; do
+    # bubblewrap (bwrap) ist PFLICHT fuer shell_exec safe/elevated-Sandbox (#605)
+    for pkg in ffmpeg jq tree bubblewrap; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
             info "Installiere fehlende Abhängigkeit: $pkg"
             apt-get install -y -qq "$pkg" || warn "$pkg konnte nicht installiert werden"
@@ -215,6 +214,25 @@ main() {
     if [ -f "${TMPDIR_BASE}/installer/system_handbook.md" ]; then
         install -m 644 -o hydrahive -g hydrahive "${TMPDIR_BASE}/installer/system_handbook.md" /etc/hydrahive/system_handbook.md
         info "System Handbook deployed"
+    fi
+
+    # --- 5a3. sysctl fuer bwrap-Sandbox (#605) ---
+    # Ubuntu 24.04+ AppArmor-Restriction fuer unprivileged user namespaces aushebeln
+    # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann.
+    # Codex-3 LOW: Fehler bei sysctl -p NICHT verschlucken — klare Fehlermeldung
+    if [ -f "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" ]; then
+        install -m 644 "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" /etc/sysctl.d/60-hydrahive-bwrap.conf
+        if sysctl -p /etc/sysctl.d/60-hydrahive-bwrap.conf >/dev/null 2>&1; then
+            # Verifizieren dass Wert wirklich 0 ist
+            _unp_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo "unset")
+            if [ "${_unp_userns}" = "0" ]; then
+                info "sysctl: bwrap-Sandbox aktiviert (#605)"
+            else
+                warn "bwrap-sysctl geschrieben, aber kernel.apparmor_restrict_unprivileged_userns=${_unp_userns} (erwartet: 0). shell_exec safe-Mode wird faktisch nicht laufen bis Host manuell konfiguriert ist."
+            fi
+        else
+            warn "sysctl -p fehlgeschlagen fuer bwrap-Sandbox. shell_exec safe-Mode wird fail-closed greifen. Admin muss manuell: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
+        fi
     fi
 
     # --- 5b. sudoers: alle sudoers-Dateien synchronisieren (#298) ---
@@ -249,6 +267,137 @@ main() {
         fi
     done
     info "Git Performance-Config für Projekt-Repos gesetzt"
+
+    # --- 5h. v2-Migration: Agents → Projekte (einmalig) ---
+    # Prüft ob Migration nötig ist und führt sie automatisch durch.
+    # Flag-Datei /etc/hydrahive/.v2-migrated verhindert wiederholte Ausführung.
+    if [ ! -f "/etc/hydrahive/.v2-migrated" ]; then
+        # Prüfe ob es Agents gibt die noch kein v2-Projekt haben
+        _needs_migrate=false
+        for _agent_dir in /agents/*/; do
+            [ ! -d "$_agent_dir" ] && continue
+            _aid="$(basename "$_agent_dir")"
+            [ "$_aid" = "sessions.db" ] && continue
+            [ "$_aid" = "sessions.db-shm" ] && continue
+            [ "$_aid" = "sessions.db-wal" ] && continue
+            # Hat der Agent eine agent.yaml und das Projekt noch keine config.yaml?
+            if [ -f "$_agent_dir/agent.yaml" ] && [ ! -f "/projects/$_aid/config.yaml" ]; then
+                _needs_migrate=true
+                break
+            fi
+        done
+
+        if $_needs_migrate; then
+            info "v2-Migration: Konvertiere Agents zu Projekten..."
+            # Migration per Python — sicher und mit YAML-Parsing
+            "${VENV}/bin/python3" - << 'MIGRATE_EOF'
+import yaml, sys
+from pathlib import Path
+
+agents_dir = Path("/agents")
+projects_dir = Path("/projects")
+migrated = 0
+
+for agent_dir in sorted(agents_dir.iterdir()):
+    if not agent_dir.is_dir():
+        continue
+    agent_id = agent_dir.name
+    if agent_id.startswith("sessions"):
+        continue
+    # Disabled Agents überspringen
+    if agent_id.startswith("_") and agent_id.endswith("_disabled"):
+        continue
+
+    agent_yaml = agent_dir / "agent.yaml"
+    if not agent_yaml.exists():
+        continue
+
+    project_dir = projects_dir / agent_id
+    if (project_dir / "config.yaml").exists():
+        continue  # Schon migriert
+
+    # Gelöschte Projekte nicht neu erstellen (#566)
+    if (project_dir / ".deleted").exists():
+        continue
+
+    # agent.yaml lesen
+    try:
+        raw = yaml.safe_load(agent_yaml.read_text())
+    except Exception:
+        continue
+
+    llm = raw.get("llm", {})
+    model = llm.get("model", "claude-sonnet-4-6")
+    temperature = llm.get("temperature", 0.7)
+    max_tokens = llm.get("max_tokens", 4096)
+    fallback = llm.get("fallback_models", [])
+
+    provider = "anthropic"
+    if "gpt" in model.lower():
+        provider = "openai"
+
+    config = {
+        "id": agent_id,
+        "version": "2.0.0",
+        "identity": {
+            "name": raw.get("identity", agent_id),
+            "description": f"Migriert von Agent {agent_id}",
+        },
+        "llm": {
+            "provider": provider,
+            "model": model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "failover": [{"provider": "anthropic", "model": m} for m in fallback],
+        },
+        "plugins": [],
+        "repos": [],
+        "sources": [],
+        "members": ["admin"],
+    }
+
+    # Projekt-Verzeichnis + config.yaml
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "memory").mkdir(exist_ok=True)
+    (project_dir / "config.yaml").write_text(
+        yaml.dump(config, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    )
+
+    # soul.md → AGENT.md
+    soul_path = agent_dir / "soul.md"
+    if soul_path.exists():
+        (project_dir / "AGENT.md").write_text(soul_path.read_text())
+    else:
+        (project_dir / "AGENT.md").write_text(f"# {agent_id}\n\nMigriert von Agent {agent_id}.\n")
+
+    # Memory kopieren
+    memory_src = agent_dir / "memory"
+    if memory_src.is_dir():
+        memory_dst = project_dir / "memory"
+        for mf in memory_src.glob("*.md"):
+            (memory_dst / mf.name).write_text(mf.read_text())
+
+    # Altes project.yaml backup falls vorhanden
+    old_project_yaml = project_dir / "project.yaml"
+    if old_project_yaml.exists():
+        old_project_yaml.rename(project_dir / "project.yaml.v1-backup")
+
+    migrated += 1
+
+print(f"v2-Migration: {migrated} Agents → Projekte konvertiert")
+MIGRATE_EOF
+
+            # Berechtigungen setzen
+            chown -R hydrahive:hydrahive /projects/ 2>/dev/null || true
+
+            # Flag setzen — Migration nicht nochmal ausführen
+            touch /etc/hydrahive/.v2-migrated
+            success "v2-Migration abgeschlossen"
+        else
+            info "v2-Migration: nicht nötig (alle Agents haben bereits Projekte)"
+            touch /etc/hydrahive/.v2-migrated
+        fi
+    fi
 
     # --- 6. Service neustarten ---
     info "Starte hydrahive-core neu..."
@@ -373,6 +522,55 @@ main() {
             cp "${TMPDIR_BASE}/installer/${_asset}" "${HYDRAHIVE_DIR}/installer/${_asset}"
         fi
     done
+
+    # #603/#610: nginx Security-Header Snippet nach /etc/nginx/snippets/ deployen.
+    # Haupt-Config wird MINIMAL-INVASIV gepatcht (include-Zeile in location / und
+    # location /api/) — mit Backup + nginx-t-Validation + Rollback bei Fehler.
+    if [ -f "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" ]; then
+        mkdir -p /etc/nginx/snippets
+        install -m 644 "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" \
+            /etc/nginx/snippets/hydrahive-security-headers.conf
+        info "nginx Security-Header Snippet deployed (#603)"
+        # Nginx-Config auto-patchen wenn vorhanden und Snippet noch nicht included
+        _nginx_cfg=""
+        for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+            if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then
+                _nginx_cfg="${_cand}"
+                break
+            elif [ -f "${_cand}" ]; then
+                # Symlink → sites-available lesen
+                _nginx_cfg=$(readlink -f "${_cand}")
+                break
+            fi
+        done
+        if [ -n "${_nginx_cfg}" ] && ! grep -q "hydrahive-security-headers" "${_nginx_cfg}"; then
+            info "nginx-Config patchen: include in location / + /api/ einfuegen"
+            _backup="${_nginx_cfg}.bak-$(date +%s)"
+            cp "${_nginx_cfg}" "${_backup}"
+            python3 <<PYEOF
+import re
+p = "${_nginx_cfg}"
+txt = open(p).read()
+inc = "        include /etc/nginx/snippets/hydrahive-security-headers.conf;\n"
+if "hydrahive-security-headers" not in txt:
+    txt = re.sub(r"(location / \{\n)(\s+try_files)", r"\1" + inc + r"\2", txt, count=1)
+    txt = re.sub(r"(location /api/ \{\n)(\s+proxy_pass)", r"\1" + inc + r"\2", txt, count=1)
+    open(p, "w").write(txt)
+PYEOF
+            # Validate + reload oder rollback
+            if nginx -t >/dev/null 2>&1; then
+                systemctl reload nginx >/dev/null 2>&1 && \
+                    info "nginx-Config gepatcht + reloaded — CSP aktiv" || \
+                    warn "nginx reload fehlgeschlagen — Config ist gepatcht, aber nicht aktiv. systemctl status nginx pruefen."
+            else
+                warn "nginx -t nach CSP-Patch fehlgeschlagen — Rollback aus Backup ${_backup}"
+                cp "${_backup}" "${_nginx_cfg}"
+            fi
+        elif [ -n "${_nginx_cfg}" ]; then
+            # Include schon drin — nur noch reloaden falls Snippet aktualisiert wurde
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
+        fi
+    fi
 
     # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then

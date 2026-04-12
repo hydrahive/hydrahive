@@ -1,3 +1,14 @@
+/**
+ * HydraBrainPage — 3D-Graph aller Agenten & Verbindungen.
+ *
+ * PERFORMANCE NOTE (#604):
+ * Diese Seite laedt zusaetzlich ca. 1.3MB (gzip 352kB) nach — react-force-graph-3d
+ * + three.js. Das passiert ON-DEMAND via lazy(): erst beim Navigieren nach /brain.
+ * Hauptbundle bleibt unbelastet. Nutzer die /brain nie oeffnen zahlen nichts.
+ *
+ * Falls 1.3MB on-demand zu viel sind: Wechsel auf react-force-graph-2d (~200kB)
+ * als separates Issue moeglich.
+ */
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import type ForceGraph3DType from "react-force-graph-3d";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

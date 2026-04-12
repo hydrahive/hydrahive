@@ -173,18 +173,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         except Exception:
             pass
 
-        # Plugin sofort laden — erst discover, dann enable
-        from .plugin_manager import plugin_manager, PluginManifest, LoadedPlugin
-        try:
-            manifest = PluginManifest.from_yaml(target / "plugin.yaml")
-            lp = LoadedPlugin(manifest=manifest, path=target, enabled=False)
-            plugin_manager._plugins[manifest.id] = lp
-            if not plugin_manager._tool_registry:
-                from .tool_registry import registry
-                plugin_manager._tool_registry = registry
-            plugin_manager.enable_plugin(plugin_id)
-        except Exception as e:
-            logger.warning("Plugin '%s' konnte nicht direkt geladen werden: %s", plugin_id, e)
+        # v2: Plugin-System entfernt — Plugins werden nicht mehr geladen
+        logger.info("Hub-Plugin '%s' heruntergeladen (nicht aktiviert — v2 nutzt shell_exec)", plugin_id)
 
         logger.info("Hub-Plugin '%s' installiert", plugin_id)
         return {
@@ -323,15 +313,8 @@ def register_hub_routes(router: APIRouter, require_admin, agents_dir: str, disco
         target = Path("/plugins") / plugin_id
         if not target.exists():
             raise HTTPException(404, "Plugin nicht gefunden")
-        # Plugin deaktivieren
-        from .plugin_manager import plugin_manager
-        try:
-            plugin_manager.disable_plugin(plugin_id)
-        except Exception:
-            pass
+        # v2: Plugin-System entfernt — nur Dateien löschen
         shutil.rmtree(target)
-        # Aus _plugins dict entfernen
-        plugin_manager._plugins.pop(plugin_id, None)
         logger.info("Hub-Plugin '%s' deinstalliert", plugin_id)
         return {"uninstalled": True, "plugin_id": plugin_id}
 

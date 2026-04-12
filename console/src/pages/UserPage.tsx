@@ -34,7 +34,6 @@ interface EditForm {
   role:             string;
   group:            string;
   allowed_projects: string[];
-  allowed_agents:   string[];
   datasources:      string[];
   wks_ip:           string;
   discord_user_id:  string;
@@ -58,12 +57,11 @@ export function UserPage() {
   const [pwSaving,   setPwSaving]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editUser,   setEditUser]   = useState<string|null>(null);
-  const [editForm,   setEditForm]   = useState<EditForm>({ role: "user", group: "standard", allowed_projects: [], allowed_agents: [], datasources: [], wks_ip: "", discord_user_id: "" });
+  const [editForm,   setEditForm]   = useState<EditForm>({ role: "user", group: "standard", allowed_projects: [], datasources: [], wks_ip: "", discord_user_id: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editErr,    setEditErr]    = useState("");
   const [dsInput,    setDsInput]    = useState("");
   const [allProjects, setAllProjects] = useState<{id:string;name:string}[]>([]);
-  const [allAgents,   setAllAgents]   = useState<{id:string;identity:string}[]>([]);
   const [invites,     setInvites]     = useState<Invite[]>([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteForm,  setInviteForm]  = useState({ ...INVITE_EMPTY });
@@ -129,22 +127,15 @@ export function UserPage() {
       role: u.role,
       group: u.group ?? "standard",
       allowed_projects: u.allowed_projects ?? [],
-      allowed_agents: u.allowed_agents ?? [],
       datasources: u.datasources ?? [],
       wks_ip: u.wks_ip ?? "",
       discord_user_id: u.discord_user_id ?? "",
     });
-    // Load projects + agents for multi-select
-    const [pData, aData] = await Promise.allSettled([
-      api.get<Record<string,{name:string}>>("/projects"),
-      api.get<Record<string,{config:{identity:string}}>>("/agents"),
-    ]);
-    if (pData.status === "fulfilled") {
-      setAllProjects(Object.entries(pData.value).map(([id, v]) => ({ id, name: v.name })));
-    }
-    if (aData.status === "fulfilled") {
-      setAllAgents(Object.entries(aData.value).filter(([id]) => !id.startsWith("personal_")).map(([id, v]) => ({ id, identity: v.config?.identity || id })));
-    }
+    // Load projects for multi-select
+    try {
+      const pData = await api.get<Record<string,{name:string}>>("/projects");
+      setAllProjects(Object.entries(pData).map(([id, v]) => ({ id, name: v.name })));
+    } catch { /* ignore */ }
     setEditUser(u.username);
   }
 
@@ -424,28 +415,6 @@ export function UserPage() {
                         }))}
                         className={`rounded-full border px-3 py-1.5 text-xs transition ${editForm.allowed_projects.includes(p.id) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
                         {p.name || p.id}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Erlaubte Agenten */}
-              {allAgents.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Erlaubte Agenten</label>
-                  <p className="text-xs text-muted-foreground">Leer = Zugriff auf alle Agenten</p>
-                  <div className="flex flex-wrap gap-2">
-                    {allAgents.map(a => (
-                      <button key={a.id} type="button"
-                        onClick={() => setEditForm(f => ({
-                          ...f,
-                          allowed_agents: f.allowed_agents.includes(a.id)
-                            ? f.allowed_agents.filter(x => x !== a.id)
-                            : [...f.allowed_agents, a.id]
-                        }))}
-                        className={`rounded-full border px-3 py-1.5 text-xs transition ${editForm.allowed_agents.includes(a.id) ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"}`}>
-                        {a.identity || a.id}
                       </button>
                     ))}
                   </div>

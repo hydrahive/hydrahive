@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import re
 
@@ -8,29 +9,30 @@ from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .session_manager import MessageRole
-from .plugin_manager import plugin_manager
+# v2: plugin_manager entfernt
 
 
 class UpdateProjectRequest(BaseModel):
+    """v1 Legacy — wird nur noch fuer PUT /projects/{id} genutzt."""
     name: str | None = None
     description: str | None = None
-    boss: str | None = None
-    workers: list[str] | None = None
-    show_swarm: bool | None = None
-    members: list[str] | None = None   # HydraHive-Usernames mit Zugang zum Projekt-Room
+    members: list[str] | None = None
 
 
 class CreateProjectRequest(BaseModel):
     id: str
     name: str
     description: str = ""
-    boss: str
-    workers: list[str] = []
+    boss: str = ""  # v1 deprecated — wird ignoriert, Projekt ist sein eigener Agent
+    workers: list[str] = []  # v1 deprecated
     samba: bool = True
     nfs: bool = False
-    show_swarm: bool = False
-    members: list[str] = []   # HydraHive-Usernames die sofort eingeladen werden
-    github_repo: str = ""    # z.B. "org/repo" oder vollständige GitHub-URL
+    members: list[str] = []
+    github_repo: str = ""
+
+
+class TypingRequest(BaseModel):
+    active: bool = True
 
 
 class MessageRequest(BaseModel):
@@ -49,6 +51,47 @@ class ProjectIncomingMessage(BaseModel):
 class ProjectWorkflowRequest(BaseModel):
     nodes: list = []
     edges: list = []
+
+
+# v2: Projekt-Erstellung mit Template (#592 erweitert: Provisioning + Messenger)
+class CreateProjectV2Request(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    template: str = "general"
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-6"
+    temperature: float = 0.5
+    max_tokens: int = 4096
+    api_key_env: str = ""
+    failover: list[dict] = []
+    agent_md: str = ""
+    members: list[str] = []
+    # #592: Provisioning + Messenger
+    samba: bool = True                    # Samba-Share + Linux-User anlegen
+    nfs: bool = False
+    execution_mode: str = "safe"
+    github_repo: str = ""                 # "user/repo" oder Full-URL (leer = kein Repo)
+    git_clone: bool = False               # Clone direkt nach Erstellung
+    git_branch: str = "main"
+    git_token: str = ""                   # Optional fuer private Repos
+    messenger: dict = {}                  # {discord: {...}, telegram: {...}, whatsapp: {...}}
+
+
+# v2: Projekt-Settings aktualisieren
+class UpdateProjectSettingsRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    api_key_env: str | None = None
+    failover: list[dict] | None = None
+    agent_md: str | None = None
+    members: list[str] | None = None
+    execution_mode: str | None = None  # safe | elevated | unrestricted (#568)
+    messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
 
 
 class GitCloneRequest(BaseModel):
@@ -90,12 +133,9 @@ def register_project_routes(
             pid: {
                 "name": cfg.identity.name,
                 "description": cfg.identity.description,
-                "boss": cfg.agents.boss,
-                "workers": cfg.agents.workers,
                 "matrix_room": cfg.matrix.room,
                 "filesystem": cfg.effective_filesystem_path(),
                 "system_user": cfg.effective_system_user(),
-                "show_swarm": cfg.chat.show_swarm,
                 "members": list(getattr(cfg, "members", [])),
             }
             for pid, cfg in projects.projects.items()
@@ -180,27 +220,19 @@ def register_project_routes(
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
-        if req.boss and not discovery.get(req.boss):
-            raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht gefunden")
-        if req.workers:
-            missing = [w for w in req.workers if not discovery.get(w)]
-            if missing:
-                raise HTTPException(422, f"Worker-Agenten nicht gefunden: {missing}")
-
         project_dir = Path(projects_dir) / project_id
-        yaml_path = project_dir / "project.yaml"
+        # v2: config.yaml bevorzugen, Fallback auf project.yaml
+        yaml_path = project_dir / "config.yaml"
+        if not yaml_path.exists():
+            yaml_path = project_dir / "project.yaml"
+        if not yaml_path.exists():
+            raise HTTPException(404, "Keine Config-Datei gefunden")
         data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
 
         if req.name is not None:
-            data["identity"]["name"] = req.name
+            data.setdefault("identity", {})["name"] = req.name
         if req.description is not None:
-            data["identity"]["description"] = req.description
-        if req.boss is not None:
-            data["agents"]["boss"] = req.boss
-        if req.workers is not None:
-            data["agents"]["workers"] = req.workers
-        if req.show_swarm is not None:
-            data.setdefault("chat", {})["show_swarm"] = req.show_swarm
+            data.setdefault("identity", {})["description"] = req.description
         if req.members is not None:
             data["members"] = req.members
 
@@ -209,6 +241,390 @@ def register_project_routes(
         audit_log("project.update", target=project_id, project_id=project_id)
         logger.info("Projekt aktualisiert: %s", project_id)
         return {"updated": True, "project_id": project_id}
+
+    # ── v2: Projekt-Erstellung mit Template ──────────────────────────────
+
+    @admin_router.post("/projects/v2", status_code=201)
+    async def create_project_v2(req: CreateProjectV2Request):
+        """v2 (#592): Projekt erstellen mit Template + config.yaml + AGENT.md
+        + Provisioning (Samba, Linux-User, Matrix) + optional Gitea-Repo + Messenger.
+
+        Provisioning-Fehler sind nicht fatal — Config wird trotzdem geschrieben,
+        User kann Setup manuell nachholen via POST /projects/{id}/provision."""
+        import asyncio as _asyncio
+        import subprocess
+        import yaml as _yaml
+
+        if not re.match(r"^[a-z0-9_-]+$", req.id):
+            raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
+        if projects.get(req.id):
+            raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
+
+        # Exec-Mode validieren
+        exec_mode = req.execution_mode if req.execution_mode in ("safe", "elevated", "unrestricted") else "safe"
+
+        project_dir = Path(projects_dir) / req.id
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "memory").mkdir(exist_ok=True)
+
+        # config.yaml aus Request-Daten
+        config_data = {
+            "id": req.id,
+            "version": "2.0.0",
+            "identity": {"name": req.name, "description": req.description},
+            "llm": {
+                "provider": req.provider,
+                "model": req.model,
+                "temperature": req.temperature,
+                "max_tokens": req.max_tokens,
+                "api_key_env": req.api_key_env,
+                "failover": req.failover,
+            },
+            "execution_mode": exec_mode,
+            "filesystem": {
+                "path": f"/projects/{req.id}",
+                "samba": req.samba,
+                "nfs": req.nfs,
+            },
+            "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
+            "plugins": [],
+            "repos": [],
+            "sources": [],
+            "members": req.members or ["admin"],
+            "github_repo": req.github_repo,
+        }
+        config_path = project_dir / "config.yaml"
+        config_path.write_text(
+            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        # #607: members → users.json.allowed_projects synchron halten (Codex-3 MEDIUM:
+        # best-effort, Fehler geht in provision_warnings statt silent failure)
+        _users_sync_error = ""
+        _members_set = set(config_data.get("members") or [])
+        if _members_set:
+            try:
+                from .main import _load_users, _save_users
+                users = _load_users()
+                for uname, udata in users.items():
+                    ap = set(udata.get("allowed_projects") or [])
+                    if uname in _members_set:
+                        ap.add(req.id)
+                        udata["allowed_projects"] = sorted(ap)
+                _save_users(users)
+            except Exception as _e:
+                logger.error("Users-Sync bei Projekt-Creation fehlgeschlagen: %s", _e)
+                _users_sync_error = str(_e)
+
+        # AGENT.md — eigener Text oder aus Template
+        agent_md_text = req.agent_md.strip() if req.agent_md else ""
+        if not agent_md_text:
+            # #609: settings.installer_dir statt hardcoded /opt/... — konsistent
+            # mit der GET /templates API (router_core_misc.py)
+            from .settings import settings as _s
+            template_dir = _s.installer_dir / "templates" / req.template
+            template_md = template_dir / "AGENT.md"
+            if template_md.exists():
+                agent_md_text = template_md.read_text(encoding="utf-8")
+            else:
+                agent_md_text = f"# {req.name}\n\nBeschreibe hier das Fachgebiet."
+
+        agent_md_path = project_dir / "AGENT.md"
+        agent_md_path.write_text(agent_md_text, encoding="utf-8")
+
+        # messenger.yaml falls Daten vorhanden
+        if req.messenger:
+            messenger_path = project_dir / "messenger.yaml"
+            messenger_path.write_text(
+                _yaml.dump(req.messenger, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+
+        # Berechtigungen
+        subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(project_dir)],
+                       capture_output=True, timeout=5)
+
+        # Im ProjectLoader registrieren
+        await _asyncio.sleep(0.2)
+        cfg = projects.get(req.id) or projects.register(project_dir)
+        if cfg is None:
+            raise HTTPException(500, "Projekt konnte nach Anlage nicht geladen werden")
+
+        # Provisioning (Samba + Linux-User + Matrix) — nicht fatal bei Fehler
+        provision_result = None
+        provision_warnings: list[str] = []
+        if _users_sync_error:
+            provision_warnings.append(
+                f"users.json-Sync fehlgeschlagen: {_users_sync_error}. "
+                "Admin muss allowed_projects manuell in users.json ergaenzen "
+                "oder PUT /projects/{id}/settings mit members erneut ausloesen."
+            )
+        try:
+            provisioner = get_provisioner()
+            if provisioner is not None:
+                provision_result = await provisioner.provision(cfg)
+                audit_log("project.provision", target=req.id, project_id=req.id)
+                # Matrix-Room/Space in config.yaml nachtragen
+                if provision_result and getattr(provision_result, "matrix_room", ""):
+                    try:
+                        update_project_matrix_room(req.id, provision_result.matrix_room)
+                    except Exception as e:
+                        logger.warning("Matrix-Room in config.yaml schreiben fehlgeschlagen: %s", e)
+                if provision_result and getattr(provision_result, "matrix_space", ""):
+                    try:
+                        update_project_matrix_space(req.id, provision_result.matrix_space)
+                    except Exception as e:
+                        logger.warning("Matrix-Space in config.yaml schreiben fehlgeschlagen: %s", e)
+            else:
+                provision_warnings.append("Provisioner nicht initialisiert — Samba/Matrix nicht eingerichtet")
+        except Exception as e:
+            logger.warning("Provisioning fehlgeschlagen fuer %s: %s", req.id, e)
+            provision_warnings.append(f"Provisioning: {e}")
+
+        # Gitea-Repo erstellen (nur wenn github_repo gesetzt)
+        gitea_repo_url = ""
+        if req.github_repo:
+            try:
+                from .gitea import get_gitea_client
+                gitea = get_gitea_client()
+                repo = await gitea.create_repo(req.id, description=req.description or "")
+                gitea_repo_url = repo.get("html_url", "")
+                # Webhook anlegen fuer Projekt-Events
+                try:
+                    await gitea.create_webhook(req.id, f"http://127.0.0.1:8765/webhooks/gitea/{req.id}")
+                except Exception as e:
+                    logger.warning("Gitea-Webhook fehlgeschlagen: %s", e)
+            except Exception as e:
+                logger.warning("Gitea-Repo erstellen fehlgeschlagen: %s", e)
+                provision_warnings.append(f"Gitea: {e}")
+
+        # Git-Clone (wenn gewollt)
+        if req.git_clone and req.github_repo:
+            try:
+                clone_url = req.github_repo.strip()
+                if not clone_url.startswith("http"):
+                    clone_url = f"https://github.com/{clone_url}"
+                if not clone_url.endswith(".git"):
+                    clone_url += ".git"
+                if req.git_token.strip():
+                    clone_url = clone_url.replace("https://", f"https://{req.git_token.strip()}@")
+                files_dir = project_dir / "files"
+                files_dir.mkdir(exist_ok=True)
+                clone_result = subprocess.run(
+                    ["git", "clone", "--branch", req.git_branch or "main", clone_url, str(files_dir / req.id)],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if clone_result.returncode != 0:
+                    provision_warnings.append(f"Git-Clone: {clone_result.stderr[:200]}")
+            except Exception as e:
+                logger.warning("Git-Clone fehlgeschlagen: %s", e)
+                provision_warnings.append(f"Git-Clone: {e}")
+
+        audit_log("project.create_v2", target=req.id, project_id=req.id,
+                  details={"template": req.template, "model": req.model,
+                           "samba": req.samba, "has_messenger": bool(req.messenger),
+                           "github_repo": bool(req.github_repo)})
+        logger.info("v2-Projekt erstellt: %s (Template: %s, LLM: %s/%s, Warnings: %d)",
+                    req.id, req.template, req.provider, req.model, len(provision_warnings))
+
+        return {
+            "created": True,
+            "ok": True,
+            "project_id": req.id,
+            "version": "2.0.0",
+            "template": req.template,
+            "model": f"{req.provider}/{req.model}",
+            "linux_user": getattr(provision_result, "linux_user", "") if provision_result else "",
+            "files_dir":  getattr(provision_result, "files_dir",  "") if provision_result else "",
+            "samba_share": getattr(provision_result, "samba_share", "") if provision_result else "",
+            "matrix_room": getattr(provision_result, "matrix_room", "") if provision_result else "",
+            "matrix_space": getattr(provision_result, "matrix_space", "") if provision_result else "",
+            "gitea_repo": gitea_repo_url,
+            "warnings": provision_warnings,
+        }
+
+    # ── v2: Projekt-Settings lesen/schreiben ──────────────────────────
+
+    @auth_router.get("/projects/{project_id}/settings")
+    def get_project_settings(project_id: str, _auth: tuple[str, str] = Depends(require_auth)):
+        """v2: Projekt-Config + AGENT.md laden für Settings-Seite."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        project_dir = Path(projects_dir) / project_id
+        agent_md = ""
+        agent_md_path = project_dir / "AGENT.md"
+        if agent_md_path.exists():
+            agent_md = agent_md_path.read_text(encoding="utf-8")
+
+        return {
+            "project_id": project_id,
+            "is_v2": getattr(cfg, "is_v2", False),
+            "identity": {"name": cfg.identity.name, "description": cfg.identity.description},
+            "llm": {
+                "provider": getattr(cfg.llm, "provider", "anthropic"),
+                "model": getattr(cfg.llm, "model", ""),
+                "temperature": getattr(cfg.llm, "temperature", 0.5),
+                "max_tokens": getattr(cfg.llm, "max_tokens", 4096),
+                "api_key_env": getattr(cfg.llm, "api_key_env", ""),
+                "failover": getattr(cfg.llm, "failover", []),
+            },
+            "agent_md": agent_md,
+            "members": cfg.members,
+            "execution_mode": getattr(cfg, "execution_mode", "safe"),
+            "plugins": getattr(cfg, "plugins", []),
+            "repos": getattr(cfg, "repos", []),
+            "sources": getattr(cfg, "sources", []),
+            "messenger": _load_messenger_config(project_dir),
+        }
+
+    def _load_messenger_config(project_dir: Path) -> dict:
+        """messenger.yaml laden wenn vorhanden."""
+        import yaml as _yaml
+        mp = project_dir / "messenger.yaml"
+        if not mp.exists():
+            return {}
+        try:
+            return _yaml.safe_load(mp.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+
+    @auth_router.put("/projects/{project_id}/settings")
+    def update_project_settings(
+        project_id: str,
+        req: UpdateProjectSettingsRequest,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Projekt-Config + AGENT.md speichern.
+        #586: Nur Admin oder Owner (erster Member) darf aendern."""
+        import yaml as _yaml
+
+        _check_project_access(_auth, project_id)
+        username, role = _auth
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        # #586: Schreibrechte nur fuer Admin oder Personal-Projekt-Owner
+        is_admin = role == "admin"
+        is_personal_owner = project_id == f"personal_{username}"
+        members_list = list(getattr(cfg, "members", []) or [])
+        is_project_owner = bool(members_list) and members_list[0] == username
+        if not (is_admin or is_personal_owner or is_project_owner):
+            raise HTTPException(
+                403,
+                "Nur Admins oder Projekt-Owner (erster Member) duerfen Settings aendern.",
+            )
+
+        project_dir = Path(projects_dir) / project_id
+        config_path = project_dir / "config.yaml"
+
+        # Bestehende config.yaml laden oder neu erstellen
+        if config_path.exists():
+            try:
+                config_data = _yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                config_data = {}
+        else:
+            config_data = {"id": project_id, "version": "2.0.0"}
+
+        # Felder aktualisieren (nur wenn im Request gesetzt)
+        if req.name is not None or req.description is not None:
+            config_data.setdefault("identity", {})
+            if req.name is not None:
+                config_data["identity"]["name"] = req.name
+            if req.description is not None:
+                config_data["identity"]["description"] = req.description
+
+        llm = config_data.setdefault("llm", {})
+        if req.provider is not None:
+            llm["provider"] = req.provider
+        if req.model is not None:
+            llm["model"] = req.model
+        if req.temperature is not None:
+            llm["temperature"] = req.temperature
+        if req.max_tokens is not None:
+            llm["max_tokens"] = req.max_tokens
+        if req.api_key_env is not None:
+            llm["api_key_env"] = req.api_key_env
+        if req.failover is not None:
+            llm["failover"] = req.failover
+
+        if req.members is not None:
+            config_data["members"] = req.members
+
+        if req.execution_mode is not None:
+            if req.execution_mode in ("safe", "elevated", "unrestricted"):
+                config_data["execution_mode"] = req.execution_mode
+
+        config_data["version"] = "2.0.0"
+
+        # #607/Codex-3: Strong Consistency — users.json ZUERST schreiben.
+        # Bei Fehler 500 werfen BEVOR config.yaml geaendert wird. Damit ist
+        # der Zustand atomar: entweder beides durch oder nichts.
+        _warnings: list[str] = []
+        if req.members is not None:
+            try:
+                from .main import _load_users, _save_users
+                users = _load_users()
+                req_members = set(req.members)
+                for uname, udata in users.items():
+                    ap = set(udata.get("allowed_projects") or [])
+                    is_member = uname in req_members
+                    if is_member:
+                        ap.add(project_id)
+                    else:
+                        ap.discard(project_id)
+                    udata["allowed_projects"] = sorted(ap)
+                _save_users(users)
+                logger.info("users.json synchronisiert (Projekt: %s, Members: %s)",
+                            project_id, sorted(req_members))
+            except Exception as _e:
+                logger.error("Users-Sync fehlgeschlagen (config.yaml NICHT geaendert): %s", _e)
+                raise HTTPException(
+                    500,
+                    f"users.json-Sync fehlgeschlagen: {_e}. "
+                    "Keine Aenderung an config.yaml durchgefuehrt — Request bitte wiederholen. "
+                    "Admin sollte /etc/hydrahive/users.json auf Schreibrechte pruefen."
+                )
+
+        # config.yaml schreiben (erst NACH erfolgreichem users.json-Sync)
+        config_path.write_text(
+            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        # AGENT.md schreiben wenn im Request
+        if req.agent_md is not None:
+            agent_md_path = project_dir / "AGENT.md"
+            agent_md_path.write_text(req.agent_md, encoding="utf-8")
+
+        # messenger.yaml schreiben wenn im Request (#569)
+        if req.messenger is not None:
+            messenger_path = project_dir / "messenger.yaml"
+            messenger_path.write_text(
+                _yaml.dump(req.messenger, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+            # Messenger-Router neu laden
+            try:
+                from .messenger_router import messenger_router as _mr
+                _mr.rebuild()
+            except Exception:
+                pass
+
+        # ProjectLoader neu laden
+        projects.register(project_dir)
+
+        audit_log("project.settings_update", target=project_id, project_id=project_id)
+        logger.info("v2-Projekt Settings aktualisiert: %s (warnings: %d)", project_id, len(_warnings))
+
+        return {"updated": True, "project_id": project_id, "warnings": _warnings}
+
+    # ── v1: Projekt-Erstellung (Legacy) ────────────────────────────────
 
     @admin_router.post("/projects", status_code=201)
     async def create_project(req: CreateProjectRequest):
@@ -241,28 +657,31 @@ def register_project_routes(
             except Exception as e:
                 logger.warning("Gitea-Retro-Check fehlgeschlagen für '%s': %s", req.id, e)
             raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
-        if not discovery.get(req.boss):
-            raise HTTPException(422, f"Boss-Agent '{req.boss}' nicht in Discovery")
-
         project_dir = Path(projects_dir) / req.id
         project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "memory").mkdir(exist_ok=True)
 
-        project_data = {
+        # v2: config.yaml statt project.yaml
+        config_data = {
             "id": req.id,
-            "version": "1.0.0",
+            "version": "2.0.0",
             "identity": {"name": req.name, "description": req.description},
-            "agents": {"boss": req.boss, "workers": req.workers},
-            "matrix": {"room": ""},
+            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-6", "temperature": 0.7, "max_tokens": 4096},
             "filesystem": {"path": f"/projects/{req.id}", "samba": req.samba, "nfs": req.nfs},
             "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
-            "chat": {"show_swarm": req.show_swarm},
             "members": req.members,
             "github_repo": req.github_repo,
         }
-        yaml_path = project_dir / "project.yaml"
-        yaml_path.write_text(_yaml.dump(project_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
-        logger.info("project.yaml geschrieben: %s", yaml_path)
-        audit_log("project.create", target=req.id, project_id=req.id, details={"boss": req.boss})
+        config_path = project_dir / "config.yaml"
+        config_path.write_text(_yaml.dump(config_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+
+        # AGENT.md Grundgeruest
+        agent_md_path = project_dir / "AGENT.md"
+        if not agent_md_path.exists():
+            agent_md_path.write_text(f"# {req.name}\n\nBeschreibe hier das Fachgebiet, die Regeln und den Kontext.\n")
+
+        logger.info("v2-Projekt erstellt: %s", config_path)
+        audit_log("project.create", target=req.id, project_id=req.id)
 
         await _asyncio.sleep(0.3)
 
@@ -460,11 +879,15 @@ def register_project_routes(
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, "Projekt nicht gefunden")
-        if not discovery.get(cfg.agents.boss):
-            raise HTTPException(503, "Boss-Agent nicht verfügbar")
+        # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+        if not getattr(cfg, "is_v2", False):
+            if not discovery.get(cfg.agents.boss):
+                raise HTTPException(503, "Boss-Agent nicht verfügbar")
+        # v2: Projekt-Default execution_mode als Fallback (#568)
+        _req_mode = req.execution_mode or getattr(cfg, "execution_mode", None)
         execution_mode = resolve_request_execution_mode(
             auth,
-            req.execution_mode,
+            _req_mode,
             audit_log=audit_log,
             audit_target=project_id,
             audit_source="projects.message.stream",
@@ -483,18 +906,105 @@ def register_project_routes(
             _content_blocks.append({"type": "text", "text": req.content or "Was siehst du auf diesem Bild?"})
             _user_content = _content_blocks
 
+        # v2: Shared Sessions — Turn-Lock + Broadcast
+        from .shared_session import shared_sessions as _ss
+
+        if not _ss.acquire_turn(project_id, sender):
+            _turn_owner = _ss.turn_owner(project_id)
+            raise HTTPException(
+                409, f"Projekt ist gerade belegt von '{_turn_owner}'. Bitte warten."
+            )
+
+        # User-Nachricht an alle Subscriber broadcasten (fuer Multi-Browser-Sync)
+        import json as _json
+        _ss.broadcast(project_id, _json.dumps({"_user_message": req.content, "_sender": sender}))
+
         async def event_stream():
-            async for chunk in orchestrator.handle_message_stream(
-                project_id=project_id,
-                project_cfg=cfg,
-                content=_user_content,
-                sender=sender,
-                execution_mode=execution_mode,
-            ):
-                yield chunk
+            try:
+                async for chunk in orchestrator.handle_message_stream(
+                    project_id=project_id,
+                    project_cfg=cfg,
+                    content=_user_content,
+                    sender=sender,
+                    execution_mode=execution_mode,
+                ):
+                    # Chunk an den sendenden Client
+                    yield chunk
+                    # Chunk an alle anderen Subscriber broadcasten
+                    # SSE-Format: "data: {...}\n\n" → JSON extrahieren
+                    if chunk.startswith("data: "):
+                        _ss.broadcast(project_id, chunk[6:].strip())
+            finally:
+                _ss.release_turn(project_id, sender)
 
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @auth_router.get("/projects/{project_id}/subscribe")
+    async def subscribe_project_stream(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Shared Session — passiv zuschauen was im Projekt passiert.
+        Empfängt alle SSE-Events die andere User auslösen.
+        Für Multi-User: User A sendet, User B sieht in Echtzeit mit."""
+        from fastapi.responses import StreamingResponse as _SR
+        from starlette.requests import Request
+        from .shared_session import shared_sessions as _ss
+
+        _check_project_access(auth, project_id)
+        username = auth[0]
+
+        queue = _ss.subscribe(project_id, username)
+
+        async def event_stream():
+            try:
+                while True:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=30)
+                        # #587: Timestamp refreshen bei jedem Event → User bleibt "online"
+                        _ss.touch_presence(project_id, username)
+                        yield f"data: {event}\n\n"
+                    except asyncio.TimeoutError:
+                        # Keepalive + Presence refreshen
+                        _ss.touch_presence(project_id, username)
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                _ss.unsubscribe(project_id, queue, username)
+
+        return _SR(event_stream(), media_type="text/event-stream",
+                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @auth_router.get("/projects/{project_id}/presence")
+    def project_presence(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Wer ist gerade in diesem Projekt online?"""
+        from .shared_session import shared_sessions as _ss
+        _check_project_access(_auth, project_id)
+        return {
+            "project_id": project_id,
+            "online": _ss.online_users(project_id),
+            "subscribers": _ss.subscriber_count(project_id),
+            "turn_owner": _ss.turn_owner(project_id),
+        }
+
+    @auth_router.post("/projects/{project_id}/typing")
+    async def project_typing(
+        project_id: str,
+        req: TypingRequest,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """v2: Typing-Indicator an alle Subscriber broadcasten (#553)."""
+        _check_project_access(auth, project_id)
+        username = auth[0]
+        from .shared_session import shared_sessions as _ss
+        import json as _json
+        _ss.broadcast(project_id, _json.dumps({"_typing": {"user": username, "active": req.active}}))
+        return {"ok": True}
 
     @auth_router.post("/projects/{project_id}/interrupt")
     async def interrupt_project_stream(
@@ -521,18 +1031,22 @@ def register_project_routes(
         if not cfg:
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
 
-        boss_id = cfg.agents.boss
-        if not discovery.get(boss_id):
-            raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+        # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+        if not getattr(cfg, "is_v2", False):
+            boss_id = cfg.agents.boss
+            if not discovery.get(boss_id):
+                raise HTTPException(503, f"Boss-Agent '{boss_id}' nicht in Discovery")
+        _req_mode2 = req.execution_mode or getattr(cfg, "execution_mode", None)
         execution_mode = resolve_request_execution_mode(
             auth,
-            req.execution_mode,
+            _req_mode2,
             audit_log=audit_log,
             audit_target=project_id,
             audit_source="projects.message",
         )
 
-        await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=sender)
+        # v2: plugin_manager.emit entfernt
+        # await plugin_manager.emit("message.before", project_id=project_id, content=req.content, sender=sender)
         response, workers = await orchestrator.handle_message(
             project_id=project_id,
             project_cfg=cfg,
@@ -540,7 +1054,8 @@ def register_project_routes(
             sender=sender,
             execution_mode=execution_mode,
         )
-        await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)
+        # v2: plugin_manager.emit entfernt
+        # await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)
         session = sessions.get_active(project_id)
         return {
             "response": response,

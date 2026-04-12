@@ -29,7 +29,7 @@ from .orchestrator_context import (
 )
 from .orchestrator_tools import (
     _truncate_tool_result, check_repeated_signature, execute_tool_call,
-    format_tool_detail, format_tool_result, handle_request_tools,
+    format_tool_detail, format_tool_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,12 +71,19 @@ async def handle_message_stream(
     Bei Quota/Overload-Fehler: automatischer Failover auf fallback_models.
     Abschluss: data: {done: true}\\n\\n
     """
-    from .orchestrator import _build_worker_context, _dedup_tools
+    from .orchestrator import _dedup_tools
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
     from . import tool_registry as _tool_reg
 
-    boss_id  = project_cfg.agents.boss
-    boss_cfg = orch._discovery.get(boss_id)
+    # v2: Projekt ist sein eigener Agent — kein Boss-Agent nötig
+    if getattr(project_cfg, "is_v2", False):
+        from .agent_config import agent_config_from_project
+        boss_id = project_cfg.id
+        boss_cfg = agent_config_from_project(project_cfg)
+    else:
+        # v1: Boss-Agent aus Discovery laden
+        boss_id = project_cfg.agents.boss
+        boss_cfg = orch._discovery.get(boss_id)
     if not boss_cfg:
         yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
         return
@@ -121,9 +128,7 @@ async def handle_message_stream(
         # Fallback auf alten Pfad
         _static_prompt = await orch._build_system_prompt(boss_cfg, _content_str, invalidate=_refresh)
         _dynamic_prompt = ""
-    worker_ctx = _build_worker_context(project_cfg, orch._discovery)
-    if worker_ctx:
-        _static_prompt = _static_prompt + "\n\n" + worker_ctx
+    # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
     system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt
     # #485: Frustration Detection — System-Prompt-Injection wenn User genervt ist
     from .frustration_detection import get_frustration_injection
@@ -146,17 +151,18 @@ async def handle_message_stream(
             if history[i].get("role") == "user":
                 history[i] = {"role": "user", "content": _vision_blocks}
                 break
-    # Tool-Schema (Phase 1: nur Meta-Tools wenn request_tools konfiguriert)
-    _use_meta = "request_tools" in (boss_cfg.tools or [])
-    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content, meta_only=_use_meta)
+    # v2: Immer alle 9 Core-Tools laden — keine Meta-Phase mehr
+    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content)
     litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
     _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
     if _mcp_s:
         litellm_tools = (litellm_tools or []) + _mcp_s
     # Plugin-Tools (#110)
-    _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
-    if _plg_s:
-        litellm_tools = (litellm_tools or []) + _plg_s
+    # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
+    # TODO: Plugins später pro Projekt konfigurierbar nachladen
+    # _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
+    # if _plg_s:
+    #     litellm_tools = (litellm_tools or []) + _plg_s
     litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
 
     # Anti-Halluzinations-Guard: System-Prompt ergänzen mit tatsächlich verfügbaren Tools
@@ -168,8 +174,8 @@ async def handle_message_stream(
             "Du hast AUSSCHLIESSLICH folgende Tools zur Verfügung: "
             + ", ".join(f"`{n}`" for n in _active_tool_names) + ".\n"
             "KRITISCHE REGEL: Führe NUR Tools aus die in dieser Liste stehen. "
-            "Wenn du ein Tool brauchst das nicht in der Liste ist, nutze `request_tools` "
-            "um es nachzuladen. Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
+            "Für alles was kein eigenes Tool hat (Git, System, Pakete, SSH, etc.) nutze `shell_exec`. "
+            "Schreibe NIEMALS Tool-Namen als Text in deine Antwort — "
             "nutze IMMER den echten Tool-Aufruf-Mechanismus."
         )
         system_prompt = system_prompt + _tool_guard
@@ -564,14 +570,11 @@ async def _stream_anthropic_oauth(
     import anthropic as _anthropic
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
 
+    from .provider_config import ANTHROPIC_OAUTH_HEADERS
     client = _anthropic.AsyncAnthropic(
         api_key="",
         auth_token=oauth_token,
-        default_headers={
-            "anthropic-beta": "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,prompt-caching-2024-07-31",
-            "user-agent":     "claude-cli/2.1.62",
-            "x-app":          "cli",
-        },
+        default_headers=ANTHROPIC_OAUTH_HEADERS,
     )
     system_msg = ""
     raw: list[dict] = []
@@ -596,8 +599,9 @@ async def _stream_anthropic_oauth(
     if not model.startswith("claude-"):
         model = "claude-haiku-4-5-20251001"
 
+    from .provider_config import ANTHROPIC_OAUTH_IDENTITY
     oauth_system = [
-        {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+        {"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY},
     ]
     # Cache-Optimierung: Static-Block mit cache_control, Dynamic-Block ohne
     if static_prompt:
@@ -606,7 +610,6 @@ async def _stream_anthropic_oauth(
     if dynamic_prompt:
         oauth_system.append({"type": "text", "text": dynamic_prompt})
     elif system_msg and not static_prompt:
-        # Fallback: alter Pfad
         oauth_system.append({"type": "text", "text": system_msg,
                              "cache_control": {"type": "ephemeral"}})
 
@@ -686,7 +689,7 @@ async def _stream_anthropic_oauth(
         # Zwischentext persistent speichern (vor Tool-Ausführung)
         if _round_text.strip():
             await orch._sessions.append(project_id, MessageRole.ASSISTANT, _round_text.strip(), agent_id=boss_id)
-        _LOOP_EXCLUDE_OAUTH = {"file_write", "request_tools"}
+        _LOOP_EXCLUDE_OAUTH = {"file_write"}
         signature = tuple(
             f"{block.name}:{_json.dumps(block.input, ensure_ascii=False, sort_keys=True)}"
             for block in tool_use_blocks
@@ -732,53 +735,20 @@ async def _stream_anthropic_oauth(
         # Phase 1: SSE-Events senden + Tools klassifizieren (#418)
         _oauth_parallel = []
         _oauth_sequential = []
-        _oauth_request_tools = []
+        _oauth_block_results: dict[str, Any] = {}  # block.id → (result, is_error)
         for block in tool_use_blocks:
             _tc_input = block.input or {}
             _tc_detail = format_tool_detail(block.name, _tc_input)
             yield f"data: {_json.dumps({'tool_call': block.name, 'tool_input': _tc_input, 'tool_detail': _tc_detail})}\n\n"
-            # Tool-Call Info nur als SSE-Event (wird am Ende der Runde strukturiert gespeichert)
-            if block.name == "request_tools":
-                _oauth_request_tools.append(block)
+            tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
+            _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
+            if _is_parallel is None and tool_obj:
+                from .context_lifecycle import get_tool_policy
+                _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
+            if _is_parallel:
+                _oauth_parallel.append(block)
             else:
-                tool_obj = orch._resolve_allowed_tool(boss_cfg, block.name, execution_mode)
-                # #528: Tool Policy als Fallback für parallel_safe
-                _is_parallel = getattr(tool_obj, "parallel_safe", None) if tool_obj else None
-                if _is_parallel is None and tool_obj:
-                    from .context_lifecycle import get_tool_policy
-                    _is_parallel = get_tool_policy(tool_obj.id if hasattr(tool_obj, "id") else "").parallel_safe
-                if _is_parallel:
-                    _oauth_parallel.append(block)
-                else:
-                    _oauth_sequential.append(block)
-
-        # request_tools zuerst (damit neue Tool-Schemas für nachfolgende Calls verfügbar sind)
-        _oauth_block_results: dict[str, Any] = {}  # block.id → (result, is_error)
-        for block in _oauth_request_tools:
-            _tc_input = block.input or {}
-            try:
-                categories = _tc_input.get("categories", [])
-                _rt_litellm_tools = []
-                _, result = handle_request_tools(
-                    orch, boss_cfg, execution_mode, categories,
-                    _oauth_loaded_cats, _rt_litellm_tools,
-                )
-                existing_names = {t["name"] for t in (kwargs.get("tools") or [])}
-                new_tool_defs = [
-                    {
-                        "name": s["function"]["name"],
-                        "description": s["function"].get("description", ""),
-                        "input_schema": s["function"].get("parameters", {"type": "object", "properties": {}}),
-                    }
-                    for s in _rt_litellm_tools
-                    if s["function"]["name"] not in existing_names
-                ]
-                if new_tool_defs:
-                    kwargs.setdefault("tools", [])
-                    kwargs["tools"].extend(new_tool_defs)
-            except Exception as te:
-                result = {"error": f"request_tools: {te}"}
-            _oauth_block_results[block.id] = (result, False)
+                _oauth_sequential.append(block)
 
         # Phase 2: Parallel-safe Tools gleichzeitig (#418)
         if _oauth_parallel:
@@ -831,8 +801,8 @@ async def _stream_anthropic_oauth(
         # Phase 4: Ergebnisse in Original-Reihenfolge sammeln
         for block in tool_use_blocks:
             result, _is_err = _oauth_block_results[block.id]
-            if block.name != "request_tools":
-                _img_evt = _extract_tool_image(result, block.name)
+            _img_evt = _extract_tool_image(result, block.name)
+            if _img_evt:
                 if _img_evt:
                     yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)

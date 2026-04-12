@@ -140,14 +140,12 @@ class CreateUserRequest(BaseModel):
     role: str = "user"
     group: str = "standard"
     allowed_projects: list[str] = []
-    allowed_agents: list[str] = []
 
 
 class UpdateUserRequest(BaseModel):
     role: str | None = None
     group: str | None = None
     allowed_projects: list[str] | None = None
-    allowed_agents: list[str] | None = None
     datasources: list[str] | None = None
     wks_ip: str | None = None
     discord_user_id: str | None = None
@@ -168,7 +166,6 @@ class MyAgentUpdateRequest(BaseModel):
     tools: list[str] = Field(default_factory=list)
     tools_extra: list[str] = Field(default_factory=list)
     tools_deny: list[str] = Field(default_factory=list)
-    allowed_agents: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None
 
@@ -192,7 +189,6 @@ def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
         "identity": req.identity,
         "llm": build_personal_agent_llm_data(req),
         "soul": "./soul.md",
-        "allowed_agents": list(req.allowed_agents),
         "mcp_servers": list(req.mcp_servers),
         "heartbeat": {"interval": "60s", "timeout": "180s", "on_failure": "ignore"},
     }
@@ -304,7 +300,6 @@ def register_user_routes(
             "matrix_ok": matrix_ok,
             "created_at": _dt.now().isoformat(),
             "allowed_projects": req.allowed_projects,
-            "allowed_agents": req.allowed_agents,
         }
         save_users(users)
 
@@ -492,8 +487,6 @@ def register_user_routes(
             users[username]["group"] = req.group
         if req.allowed_projects is not None:
             users[username]["allowed_projects"] = req.allowed_projects
-        if req.allowed_agents is not None:
-            users[username]["allowed_agents"] = req.allowed_agents
         if req.datasources is not None:
             users[username]["datasources"] = req.datasources
         if req.wks_ip is not None:

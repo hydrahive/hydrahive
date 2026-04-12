@@ -67,12 +67,13 @@ export const api = {
   saveGithubToken: (token: string) => api.post<Record<string,unknown>>("/github/token", { token }),
   deleteGithubToken: () => api.delete("/github/token"),
   listGithubRepos: () => api.get<{full_name:string;html_url:string;description:string;private:boolean;language:string|null;pushed_at:string|null}[]>("/github/repos"),
-  updateProject:  (id: string, d: {name?:string;description?:string;boss?:string;workers?:string[];show_swarm?:boolean}) => api.put(`/projects/${id}`, d),
+  updateProject:  (id: string, d: {name?:string;description?:string}) => api.put(`/projects/${id}`, d),
   deleteProject:  (id: string) => api.delete(`/projects/${id}`),
+  // v1 deprecated — nur noch fuer AgentsPage (wird in #575 entfernt)
   createAgent:  (d: unknown) => api.post("/agents", d),
   updateAgent:  (id: string, d: unknown) => api.put(`/agents/${id}`, d),
-  updateUser:   (username: string, d: {role?:string;allowed_projects?:string[];allowed_agents?:string[];datasources?:string[];wks_ip?:string}) => api.put(`/users/${username}`, d),
   deleteAgent:  (id: string) => api.delete(`/agents/${id}`),
+  updateUser:   (username: string, d: {role?:string;allowed_projects?:string[];datasources?:string[];wks_ip?:string}) => api.put(`/users/${username}`, d),
   patchAgentHeartbeat: (id: string, d: {enabled: boolean; interval: string; timeout: string; on_failure: string}) =>
     api.patch<{ok: boolean}>(`/agents/${id}/heartbeat`, d),
   getAgentSoul: (id: string) => api.get<{soul:string;exists:boolean}>(`/agents/${id}/soul`),

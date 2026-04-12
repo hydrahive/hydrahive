@@ -1,11 +1,9 @@
 import { useState, lazy, Suspense } from "react";
-import { Workflow, Network, ShieldCheck, Bell, Cpu, Bot, FolderOpen, PenTool } from "lucide-react";
+import { Workflow, Bell, Cpu, Bot, FolderOpen, PenTool } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { ButlerPage } from "@/pages/ButlerPage";
-import { ProjectArchitectTab } from "@/pages/blueprint/ProjectArchitectTab";
-import { PermissionsTab }      from "@/pages/blueprint/PermissionsTab";
 import { NotificationRouterTab } from "@/pages/blueprint/NotificationRouterTab";
 import { WorkflowTab }          from "@/pages/blueprint/WorkflowTab";
 import { AgentBlueprintTab }    from "@/pages/blueprint/AgentBlueprintTab";
@@ -15,12 +13,10 @@ const ScratchpadTab = lazy(() => import("@/pages/blueprint/ScratchpadTab").then(
 const ALL_TABS = [
   { id: "automation",      i18nKey: "automation",      icon: Workflow,    minGroup: "chatter" },
   { id: "pipelines",       i18nKey: "pipelines",       icon: FolderOpen,  minGroup: "admin" },
-  { id: "architect",       i18nKey: "architect",        icon: Network,     minGroup: "standard" },
   { id: "workflow",        i18nKey: "workflow",         icon: Cpu,         minGroup: "standard" },
   { id: "agentblueprint",  i18nKey: "agentblueprint",  icon: Bot,         minGroup: "dev" },
   { id: "scratchpad",      i18nKey: "scratchpad",       icon: PenTool,     minGroup: "chatter" },
   { id: "notifications",   i18nKey: "notifications",   icon: Bell,        minGroup: "admin" },
-  { id: "permissions",     i18nKey: "permissions",      icon: ShieldCheck, minGroup: "admin" },
 ] as const;
 
 const GROUP_RANK: Record<string, number> = {
@@ -75,8 +71,6 @@ export function BlueprintPage() {
       <div className="flex-1 overflow-hidden bg-zinc-950">
         {tab === "automation"    && <ButlerPage />}
         {tab === "pipelines"     && <FilePipelineTab />}
-        {tab === "architect"     && <ProjectArchitectTab />}
-        {tab === "permissions"   && <PermissionsTab />}
         {tab === "notifications"  && <NotificationRouterTab />}
         {tab === "workflow"       && <WorkflowTab />}
         {tab === "agentblueprint" && <AgentBlueprintTab />}
