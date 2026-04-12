@@ -701,6 +701,37 @@ class ShellExecTool(BaseTool):
                 out = out[:max_out] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
             if len(err) > max_out:
                 err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
+
+            # Auto-Push nach git commit (#617): verhindert Datenverlust bei Session-Ende
+            # Wenn 'git commit' erfolgreich war, automatisch 'git push' hinterherschicken.
+            _cmd_stripped = command.strip()
+            _is_git_commit = (
+                proc.returncode == 0
+                and "git commit" in _cmd_stripped
+                and "git push" not in _cmd_stripped
+                and "--dry-run" not in _cmd_stripped
+                and "--amend" not in _cmd_stripped.lower()
+            )
+            if _is_git_commit:
+                try:
+                    push_proc = await asyncio.create_subprocess_shell(
+                        "git push",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=safe_cwd,
+                    )
+                    push_out, push_err = await asyncio.wait_for(push_proc.communicate(), timeout=60)
+                    push_stdout = push_out.decode(errors="replace")
+                    push_stderr = push_err.decode(errors="replace")
+                    if push_proc.returncode == 0:
+                        out += f"\n[Auto-Push: OK]\n{push_stdout}".rstrip()
+                        logger.info("shell_exec auto-push nach git commit: OK (cwd=%s)", safe_cwd)
+                    else:
+                        out += f"\n[Auto-Push fehlgeschlagen — bitte manuell pushen]\n{push_stderr[:500]}"
+                        logger.warning("shell_exec auto-push fehlgeschlagen: %s", push_stderr[:200])
+                except Exception as push_exc:
+                    out += f"\n[Auto-Push Fehler: {push_exc}]"
+
             return {
                 "stdout": out, "stderr": err,
                 "exit_code": proc.returncode, "command": command,
