@@ -99,6 +99,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const abortRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userScrolledUp = useRef(false);
+  const isAutoScrolling = useRef(false);  // verhindert false-positive Scroll-Events
+  const clearedAt = useRef(0);            // Timestamp letztes /clear → loadHistory ignorieren
 
   // ── Chat-Cache: Messages aus sessionStorage nach Mount laden ──────────────
   // Eigener useEffect — feuert NACH dem ersten Render wenn DOM fertig ist.
@@ -117,8 +119,11 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   const loadHistory = useCallback(() => {
     if (!opts.historyEndpoint) return;
+    // Nach /clear 3s nicht neu laden — sonst füllt loadHistory sofort wieder auf
+    if (Date.now() - clearedAt.current < 3000) return;
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
+        if (Date.now() - clearedAt.current < 3000) return;  // nochmal prüfen nach async
         const loaded = d.messages
           .filter((m: any) => (m.role === "user" || m.role === "assistant" || m.role === "tool") && !(m.role === "assistant" && !m.content))
           .map((m: any) => {
@@ -148,8 +153,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
     const el = scrollContainerRef.current;
     if (!el) return;
     function onScroll() {
-      if (!el) return;
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      if (!el || isAutoScrolling.current) return;  // Auto-Scroll ignorieren
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       userScrolledUp.current = !atBottom;
     }
     el.addEventListener("scroll", onScroll, { passive: true });
@@ -159,11 +164,13 @@ export function useChatStream(opts: UseChatStreamOptions) {
   // ── Auto-scroll: nur wenn User am Ende ist ───────────────────────────────
   useEffect(() => {
     if (!userScrolledUp.current) {
-      // rAF warten bis Browser Layout fertig ist — sonst scrollt man auf
-      // alte scrollHeight bevor neue Tool-Messages gerendert wurden (#614)
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      isAutoScrolling.current = true;
       requestAnimationFrame(() => {
-        const el = scrollContainerRef.current;
         if (el) el.scrollTop = el.scrollHeight;
+        // Flag nach kurzer Pause zurücksetzen (Browser-Scroll-Event kommt leicht verzögert)
+        setTimeout(() => { isAutoScrolling.current = false; }, 50);
       });
     }
   }, [messages, sending]);
@@ -202,6 +209,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
     // Built-in slash commands
     if (content === "/clear") {
+      clearedAt.current = Date.now();     // loadHistory für 3s sperren
+      userScrolledUp.current = false;     // Scroll zurück nach unten
       setMessages([]);
       try { sessionStorage.removeItem(`hh_chat_${opts.historyEndpoint}`); } catch {}
       // Server-Session beenden (DELETE /agents/{id}/session oder /projects/{id}/session/end)
