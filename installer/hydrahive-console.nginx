@@ -61,10 +61,9 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # Projekt-Dateien: Agenten-Outputs per HTTP erreichbar (Auth über API)
-    location /projects/ {
-        alias /projects/;
-        autoindex off;
-        add_header Cache-Control "no-store";
-    }
+    # v2 (#594): /projects/ NICHT mehr direkt exposed — war Security-Luecke
+    # (Auth ueber API wurde nie durchgesetzt). Zugriff auf Projekt-Dateien
+    # laeuft jetzt ausschliesslich ueber API-Endpoints /api/projects/{id}/files
+    location = /projects/ { return 404; }
+    location /projects/ { return 404; }
 }
