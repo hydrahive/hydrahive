@@ -450,8 +450,8 @@
   <div class="grid-3">
     <div class="card">
       <div class="card-icon">🧠</div>
-      <h3 data-i18n="f1-h">Boss + Worker Swarms</h3>
-      <p data-i18n="f1-p">One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.</p>
+      <h3 data-i18n="f1-h">Project-Based Agents</h3>
+      <p data-i18n="f1-p">Every project is its own AI agent — no Boss/Worker hierarchy. Each project has its own memory, tools, LLM config and access control. Ask any project anything.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔌</div>
@@ -617,9 +617,9 @@
     <span class="flow-arrow">→</span>
     <div class="flow-step">📡 Matrix Room</div>
     <span class="flow-arrow">→</span>
-    <div class="flow-step">🧠 Boss Agent</div>
+    <div class="flow-step">📁 Project Agent</div>
     <span class="flow-arrow">→</span>
-    <div class="flow-step">🐍 Worker Swarm</div>
+    <div class="flow-step">🔧 9 Core Tools</div>
     <span class="flow-arrow">→</span>
     <div class="flow-step">✅ SSE Stream</div>
   </div>
@@ -730,19 +730,19 @@
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-bottom:3rem;">
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.8rem;">
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-types-title">Agent Types</h3>
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--accent)" data-i18n="hb-types-title">Project = Agent</h3>
       <div style="display:flex;flex-direction:column;gap:0.8rem;">
         <div>
-          <div style="font-weight:600;font-size:0.9rem;">🎯 Boss</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-boss">Receives user messages, coordinates worker agents, streams results back</div>
+          <div style="font-weight:600;font-size:0.9rem;">📁 Project Agent</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-project">Each project is a standalone AI agent with its own memory, LLM config and access control. No Boss/Worker hierarchy.</div>
         </div>
         <div>
-          <div style="font-weight:600;font-size:0.9rem;">🔬 Specialist</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-spec">Domain expert delegated tasks from Boss — tax, legal, code, etc.</div>
+          <div style="font-weight:600;font-size:0.9rem;">👤 Personal Agent</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-personal">Every user gets a personal project (personal_username) — always available, sandboxed from other projects.</div>
         </div>
         <div>
-          <div style="font-weight:600;font-size:0.9rem;">⚡ Worker</div>
-          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-work">Short-lived task agent, spawned on-demand, discarded after completion</div>
+          <div style="font-weight:600;font-size:0.9rem;">🔗 ask_agent</div>
+          <div style="color:var(--muted);font-size:0.85rem;" data-i18n="hb-ask">Projects can consult each other via ask_agent tool — collaborative without shared state.</div>
         </div>
       </div>
     </div>
@@ -766,8 +766,8 @@
         <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_write</span> <span style="color:var(--muted);" data-i18n="tool-fw">— write project files</span></div>
         <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">web_search</span> <span style="color:var(--muted);" data-i18n="tool-ws">— search the web</span></div>
         <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">http_request</span> <span style="color:var(--muted);" data-i18n="tool-hr">— call external APIs</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">dispatch_task</span> <span style="color:var(--muted);" data-i18n="tool-dt">— delegate to workers (boss only)</span></div>
-        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">spawn_agent</span> <span style="color:var(--muted);" data-i18n="tool-sa">— create short-lived agent</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">file_patch</span> <span style="color:var(--muted);" data-i18n="tool-fp">— targeted file editing</span></div>
+        <div style="font-size:0.85rem;"><span style="color:var(--accent);font-family:monospace">ask_agent</span> <span style="color:var(--muted);" data-i18n="tool-aa">— consult another project</span></div>
       </div>
     </div>
   </div>
@@ -788,7 +788,7 @@
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">3</div>
-      <div><strong>Matrix</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df3">Message enqueued → Boss-Agent's Matrix room → matrix-nio client</span></div>
+      <div><strong>Memory</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df3">Memory files injected into system prompt (INDEX.md + all memory/*.md)</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">4</div>
@@ -804,7 +804,7 @@
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">7</div>
-      <div><strong>Workers</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df7">dispatch_task → parallel worker calls → aggregated results back to Boss</span></div>
+      <div><strong>Memory</strong> — <span style="color:var(--muted);font-size:0.9rem;" data-i18n="df7">Bootstrap-Memory + AutoDream maintain project knowledge across sessions</span></div>
     </div>
     <div style="display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;border-bottom:1px solid var(--border);">
       <div style="background:var(--accent);color:#000;font-weight:700;font-size:0.75rem;padding:0.2rem 0.5rem;border-radius:4px;min-width:28px;text-align:center;margin-top:0.15rem;">8</div>
@@ -896,8 +896,8 @@
       'tagline':         '<strong>HydraHive</strong> — The self-hosted agent swarm platform.<br><span style="font-size:0.95rem">No cloud. No lock-in. Full control.</span>',
       'feat-title':      'Everything you need. Nothing you don\'t.',
       'feat-sub':        'Built for real infrastructure. No Docker networking nightmares.',
-      'f1-h': 'Boss + Worker Swarms',
-      'f1-p': 'One Boss-Agent per project coordinates a pool of specialists in parallel. Results aggregated, streamed token-by-token to the user.',
+      'f1-h': 'Project-Based Agents',
+      'f1-p': 'Every project is its own AI agent — no Boss/Worker hierarchy. Each project has its own memory, LLM config and access control. Projects can collaborate via ask_agent.',
       'f2-h': 'One-Command Install',
       'f2-p': 'One bash command. GPU auto-detected. Matrix, nginx, TLS, systemd — all configured. Web console ready in minutes.',
       'f3-h': 'Matrix Communication',
@@ -985,28 +985,28 @@
       'prof-full-spec': '<strong>Rec:</strong> 32 GB RAM · 1 TB Disk',
       'hb-title': 'Agent System',
       'hb-sub':   'From the handbook — how agents, skills and projects work together.',
-      'hb-types-title': 'Agent Types',
-      'hb-boss': 'Receives user messages, coordinates worker agents, streams results back',
-      'hb-spec': 'Domain expert delegated tasks from Boss — tax, legal, code, etc.',
-      'hb-work': 'Short-lived task agent, spawned on-demand, discarded after completion',
+      'hb-types-title': 'Project = Agent (v2)',
+      'hb-project': 'Each project is a standalone AI agent with its own memory, LLM config and access control. No Boss/Worker hierarchy.',
+      'hb-personal': 'Every user gets a personal project (personal_username) — always available, sandboxed from other projects.',
+      'hb-ask': 'Projects can consult each other via ask_agent tool — collaborative without shared state.',
       'hb-skill-note': 'Hot-reload. No restart needed. Injected into system prompt on keyword match.',
-      'hb-tools-title': 'Available Tools',
+      'hb-tools-title': 'v2 Core Tools',
       'tool-fr': '— read project files',
       'tool-fw': '— write project files',
       'tool-ws': '— search the web',
       'tool-hr': '— call external APIs',
-      'tool-dt': '— delegate to workers (boss only)',
-      'tool-sa': '— create short-lived agent',
+      'tool-fp': '— targeted file editing',
+      'tool-aa': '— consult another project',
       'df-title': 'Data Flow A → Z',
       'df-sub':   'From the technical docs — what happens when a message is sent.',
       'df1': 'POST /projects/{id}/message/stream → nginx (TLS termination) → FastAPI',
       'df2-h': 'Auth', 'df2': 'JWT validated, project loaded, asyncio.Queue selected',
-      'df3': "Message enqueued → Boss-Agent's Matrix room → matrix-nio client",
-      'df4': 'Skill files scanned, always-loaded + keyword-matched injected into system prompt',
-      'df5': 'litellm routes to configured provider (Ollama / Claude / OpenAI), streaming enabled',
-      'df6': 'Tool calls intercepted, executed via registry, results returned to LLM (multi-turn)',
-      'df7': 'dispatch_task → parallel worker calls → aggregated results back to Boss',
-      'df8-h': 'Response', 'df8': 'Final answer posted to Matrix room, stored in session history',
+      'df3': 'Memory files injected into system prompt (INDEX.md + all memory/*.md)',
+      'df4': 'AGENT.md loaded, execution mode checked (safe/elevated/unrestricted)',
+      'df5': 'LLM provider routes to configured backend (Ollama / Claude / OpenAI), streaming enabled',
+      'df6': 'Tool calls intercepted, executed via registry (9 core tools), results returned to LLM (multi-turn)',
+      'df7': 'Bootstrap-Memory + AutoDream maintain project knowledge across sessions',
+      'df8-h': 'Response', 'df8': 'Final answer stored in session history, SSE stream continues',
       'df9': 'Core dequeues tokens → data: {"text":"..."} → Browser renders Markdown',
       'df-done-h': 'Done', 'df-done': 'data: {"done":true} → stream closed → Audit Log written',
       'qs-title':   'Quick Start',
@@ -1035,8 +1035,8 @@
       'tagline':         '<strong>HydraHive</strong> — Die selbst-gehostete Agenten-Schwarm-Plattform.<br><span style="font-size:0.95rem">Keine Cloud. Kein Lock-in. Volle Kontrolle.</span>',
       'feat-title':      'Alles was du brauchst. Nichts was du nicht brauchst.',
       'feat-sub':        'Für echte Infrastruktur gebaut. Kein Docker-Netzwerk-Albtraum.',
-      'f1-h': 'Boss + Worker Schwärme',
-      'f1-p': 'Ein Boss-Agent pro Projekt koordiniert einen Pool von Spezialisten parallel. Ergebnisse aggregiert, Token für Token gestreamt.',
+      'f1-h': 'Projektbasierte Agenten',
+      'f1-p': 'Jedes Projekt ist sein eigener KI-Agent — keine Boss/Worker-Hierarchie. Eigene Memory, LLM-Config und Zugangskontrolle. Projekte können sich gegenseitig via ask_agent befragen.',
       'f2-h': 'Ein-Befehl-Installation',
       'f2-p': 'Ein Bash-Befehl. GPU automatisch erkannt. Matrix, nginx, TLS, systemd — alles konfiguriert. Web-Konsole in Minuten bereit.',
       'f3-h': 'Matrix-Kommunikation',
@@ -1122,30 +1122,30 @@
       'prof-full-5': 'Automatisch erkannt beim Installieren',
       'prof-full-6': 'Referenz: GTX 1080 Ti, 11GB VRAM',
       'prof-full-spec': '<strong>Empfohlen:</strong> 32 GB RAM · 1 TB Disk',
-      'hb-title': 'Agenten-System',
-      'hb-sub':   'Aus dem Handbuch — wie Agenten, Skills und Projekte zusammenarbeiten.',
-      'hb-types-title': 'Agenten-Typen',
-      'hb-boss': 'Empfängt Nachrichten, koordiniert Worker-Agenten, streamt Ergebnisse zurück',
-      'hb-spec': 'Domänen-Experte, dem der Boss Aufgaben delegiert — Steuer, Recht, Code, etc.',
-      'hb-work': 'Kurzlebiger Task-Agent, bei Bedarf gestartet, nach Abschluss verworfen',
+      'hb-title': 'Projekt-System (v2)',
+      'hb-sub':   'Aus dem Handbuch — wie Projekte, Memory und Tools zusammenarbeiten.',
+      'hb-types-title': 'Projekt = Agent (v2)',
+      'hb-project': 'Jedes Projekt ist ein eigenständiger KI-Agent mit eigener Memory, LLM-Config und Zugangskontrolle. Keine Boss/Worker-Hierarchie.',
+      'hb-personal': 'Jeder Nutzer bekommt ein persönliches Projekt (personal_username) — immer verfügbar, von anderen Projekten getrennt.',
+      'hb-ask': 'Projekte können sich gegenseitig via ask_agent befragen — kollaborativ ohne geteilten State.',
       'hb-skill-note': 'Hot-Reload. Kein Neustart nötig. Bei Keyword-Treffer in den System-Prompt injiziert.',
-      'hb-tools-title': 'Verfügbare Tools',
+      'hb-tools-title': 'v2 Core-Tools',
       'tool-fr': '— Projektdateien lesen',
       'tool-fw': '— Projektdateien schreiben',
       'tool-ws': '— Im Web suchen',
       'tool-hr': '— Externe APIs aufrufen',
-      'tool-dt': '— An Worker delegieren (nur Boss)',
-      'tool-sa': '— Kurzlebigen Agenten erstellen',
+      'tool-fp': '— Gezielte Datei-Bearbeitung',
+      'tool-aa': '— Anderes Projekt befragen',
       'df-title': 'Datenfluss A → Z',
       'df-sub':   'Aus den technischen Docs — was passiert wenn eine Nachricht gesendet wird.',
       'df1': 'POST /projects/{id}/message/stream → nginx (TLS-Terminierung) → FastAPI',
       'df2-h': 'Auth', 'df2': 'JWT validiert, Projekt geladen, asyncio.Queue ausgewählt',
-      'df3': 'Nachricht eingereiht → Matrix-Room des Boss-Agenten → matrix-nio Client',
-      'df4': 'Skill-Dateien gescannt, immer-aktive + Keyword-gematchte in den System-Prompt injiziert',
-      'df5': 'litellm routet zum konfigurierten Provider (Ollama / Claude / OpenAI), Streaming aktiv',
-      'df6': 'Tool-Calls abgefangen, über Registry ausgeführt, Ergebnisse ans LLM zurückgegeben (multi-turn)',
-      'df7': 'dispatch_task → parallele Worker-Calls → aggregierte Ergebnisse zurück an Boss',
-      'df8-h': 'Antwort', 'df8': 'Finale Antwort in Matrix-Room gepostet, in Session-History gespeichert',
+      'df3': 'Memory-Dateien in System-Prompt injiziert (INDEX.md + alle memory/*.md)',
+      'df4': 'AGENT.md geladen, Ausführungs-Modus geprüft (safe/elevated/unrestricted)',
+      'df5': 'LLM-Provider routet zum konfigurierten Backend (Ollama / Claude / OpenAI), Streaming aktiv',
+      'df6': 'Tool-Calls abgefangen, über Registry ausgeführt (9 Core-Tools), Ergebnisse ans LLM zurückgegeben',
+      'df7': 'Bootstrap-Memory + AutoDream pflegen Projekt-Wissen über Sessions hinaus',
+      'df8-h': 'Antwort', 'df8': 'Finale Antwort in Session-History gespeichert, SSE-Stream geht weiter',
       'df9': 'Core dequeuet Tokens → data: {"text":"..."} → Browser rendert Markdown',
       'df-done-h': 'Fertig', 'df-done': 'data: {"done":true} → Stream geschlossen → Audit-Log geschrieben',
       'qs-title':   'Schnellstart',
