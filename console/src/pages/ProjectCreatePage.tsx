@@ -136,7 +136,13 @@ export function ProjectCreatePage() {
     setSubmitting(true);
     setError("");
     try {
-      await api.post("/projects/v2", {
+      // #592: Messenger-Config bauen nur wenn mindestens einer aktiviert
+      const messenger: Record<string, any> = {};
+      if (discordEnabled) messenger.discord = {};
+      if (telegramEnabled) messenger.telegram = {};
+      if (whatsappEnabled) messenger.whatsapp = {};
+
+      const res = await api.post<any>("/projects/v2", {
         id: projectId,
         name,
         description,
@@ -147,7 +153,18 @@ export function ProjectCreatePage() {
         api_key_env: apiKeyEnv,
         agent_md: agentMd,
         members: ["admin"],
+        // #592 Provisioning + Git + Messenger
+        samba: true,
+        github_repo: repoUrl.trim(),
+        git_clone: !!repoUrl.trim(),
+        git_branch: "main",
+        messenger,
       });
+      // Warnungen anzeigen wenn Provisioning teilweise fehlschlug
+      const warnings: string[] = (res as any)?.warnings || [];
+      if (warnings.length > 0) {
+        console.warn("Projekt erstellt mit Warnungen:", warnings);
+      }
       navigate("/projects");
     } catch (e: any) {
       setError(e?.message || "Fehler beim Erstellen");

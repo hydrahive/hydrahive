@@ -53,7 +53,7 @@ class ProjectWorkflowRequest(BaseModel):
     edges: list = []
 
 
-# v2: Projekt-Erstellung mit Template
+# v2: Projekt-Erstellung mit Template (#592 erweitert: Provisioning + Messenger)
 class CreateProjectV2Request(BaseModel):
     id: str
     name: str
@@ -67,6 +67,15 @@ class CreateProjectV2Request(BaseModel):
     failover: list[dict] = []
     agent_md: str = ""
     members: list[str] = []
+    # #592: Provisioning + Messenger
+    samba: bool = True                    # Samba-Share + Linux-User anlegen
+    nfs: bool = False
+    execution_mode: str = "safe"
+    github_repo: str = ""                 # "user/repo" oder Full-URL (leer = kein Repo)
+    git_clone: bool = False               # Clone direkt nach Erstellung
+    git_branch: str = "main"
+    git_token: str = ""                   # Optional fuer private Repos
+    messenger: dict = {}                  # {discord: {...}, telegram: {...}, whatsapp: {...}}
 
 
 # v2: Projekt-Settings aktualisieren
@@ -237,13 +246,22 @@ def register_project_routes(
 
     @admin_router.post("/projects/v2", status_code=201)
     async def create_project_v2(req: CreateProjectV2Request):
-        """v2: Projekt erstellen mit Template + config.yaml + AGENT.md."""
+        """v2 (#592): Projekt erstellen mit Template + config.yaml + AGENT.md
+        + Provisioning (Samba, Linux-User, Matrix) + optional Gitea-Repo + Messenger.
+
+        Provisioning-Fehler sind nicht fatal — Config wird trotzdem geschrieben,
+        User kann Setup manuell nachholen via POST /projects/{id}/provision."""
+        import asyncio as _asyncio
+        import subprocess
         import yaml as _yaml
 
         if not re.match(r"^[a-z0-9_-]+$", req.id):
             raise HTTPException(400, "Projekt-ID darf nur a-z, 0-9, _ und - enthalten")
         if projects.get(req.id):
             raise HTTPException(409, f"Projekt '{req.id}' existiert bereits")
+
+        # Exec-Mode validieren
+        exec_mode = req.execution_mode if req.execution_mode in ("safe", "elevated", "unrestricted") else "safe"
 
         project_dir = Path(projects_dir) / req.id
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -262,10 +280,18 @@ def register_project_routes(
                 "api_key_env": req.api_key_env,
                 "failover": req.failover,
             },
+            "execution_mode": exec_mode,
+            "filesystem": {
+                "path": f"/projects/{req.id}",
+                "samba": req.samba,
+                "nfs": req.nfs,
+            },
+            "system": {"user": f"proj_{req.id}", "group": f"proj_{req.id}"},
             "plugins": [],
             "repos": [],
             "sources": [],
             "members": req.members or ["admin"],
+            "github_repo": req.github_repo,
         }
         config_path = project_dir / "config.yaml"
         config_path.write_text(
@@ -286,27 +312,109 @@ def register_project_routes(
         agent_md_path = project_dir / "AGENT.md"
         agent_md_path.write_text(agent_md_text, encoding="utf-8")
 
+        # messenger.yaml falls Daten vorhanden
+        if req.messenger:
+            messenger_path = project_dir / "messenger.yaml"
+            messenger_path.write_text(
+                _yaml.dump(req.messenger, allow_unicode=True, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+
         # Berechtigungen
-        import subprocess
         subprocess.run(["chown", "-R", "hydrahive:hydrahive", str(project_dir)],
                        capture_output=True, timeout=5)
 
         # Im ProjectLoader registrieren
-        import asyncio as _asyncio
         await _asyncio.sleep(0.2)
         cfg = projects.get(req.id) or projects.register(project_dir)
+        if cfg is None:
+            raise HTTPException(500, "Projekt konnte nach Anlage nicht geladen werden")
+
+        # Provisioning (Samba + Linux-User + Matrix) — nicht fatal bei Fehler
+        provision_result = None
+        provision_warnings: list[str] = []
+        try:
+            provisioner = get_provisioner()
+            if provisioner is not None:
+                provision_result = await provisioner.provision(cfg)
+                audit_log("project.provision", target=req.id, project_id=req.id)
+                # Matrix-Room/Space in config.yaml nachtragen
+                if provision_result and getattr(provision_result, "matrix_room", ""):
+                    try:
+                        update_project_matrix_room(req.id, provision_result.matrix_room)
+                    except Exception as e:
+                        logger.warning("Matrix-Room in config.yaml schreiben fehlgeschlagen: %s", e)
+                if provision_result and getattr(provision_result, "matrix_space", ""):
+                    try:
+                        update_project_matrix_space(req.id, provision_result.matrix_space)
+                    except Exception as e:
+                        logger.warning("Matrix-Space in config.yaml schreiben fehlgeschlagen: %s", e)
+            else:
+                provision_warnings.append("Provisioner nicht initialisiert — Samba/Matrix nicht eingerichtet")
+        except Exception as e:
+            logger.warning("Provisioning fehlgeschlagen fuer %s: %s", req.id, e)
+            provision_warnings.append(f"Provisioning: {e}")
+
+        # Gitea-Repo erstellen (nur wenn github_repo gesetzt)
+        gitea_repo_url = ""
+        if req.github_repo:
+            try:
+                from .gitea import get_gitea_client
+                gitea = get_gitea_client()
+                repo = await gitea.create_repo(req.id, description=req.description or "")
+                gitea_repo_url = repo.get("html_url", "")
+                # Webhook anlegen fuer Projekt-Events
+                try:
+                    await gitea.create_webhook(req.id, f"http://127.0.0.1:8765/webhooks/gitea/{req.id}")
+                except Exception as e:
+                    logger.warning("Gitea-Webhook fehlgeschlagen: %s", e)
+            except Exception as e:
+                logger.warning("Gitea-Repo erstellen fehlgeschlagen: %s", e)
+                provision_warnings.append(f"Gitea: {e}")
+
+        # Git-Clone (wenn gewollt)
+        if req.git_clone and req.github_repo:
+            try:
+                clone_url = req.github_repo.strip()
+                if not clone_url.startswith("http"):
+                    clone_url = f"https://github.com/{clone_url}"
+                if not clone_url.endswith(".git"):
+                    clone_url += ".git"
+                if req.git_token.strip():
+                    clone_url = clone_url.replace("https://", f"https://{req.git_token.strip()}@")
+                files_dir = project_dir / "files"
+                files_dir.mkdir(exist_ok=True)
+                clone_result = subprocess.run(
+                    ["git", "clone", "--branch", req.git_branch or "main", clone_url, str(files_dir / req.id)],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if clone_result.returncode != 0:
+                    provision_warnings.append(f"Git-Clone: {clone_result.stderr[:200]}")
+            except Exception as e:
+                logger.warning("Git-Clone fehlgeschlagen: %s", e)
+                provision_warnings.append(f"Git-Clone: {e}")
 
         audit_log("project.create_v2", target=req.id, project_id=req.id,
-                  details={"template": req.template, "model": req.model})
-        logger.info("v2-Projekt erstellt: %s (Template: %s, LLM: %s/%s)",
-                    req.id, req.template, req.provider, req.model)
+                  details={"template": req.template, "model": req.model,
+                           "samba": req.samba, "has_messenger": bool(req.messenger),
+                           "github_repo": bool(req.github_repo)})
+        logger.info("v2-Projekt erstellt: %s (Template: %s, LLM: %s/%s, Warnings: %d)",
+                    req.id, req.template, req.provider, req.model, len(provision_warnings))
 
         return {
             "created": True,
+            "ok": True,
             "project_id": req.id,
             "version": "2.0.0",
             "template": req.template,
             "model": f"{req.provider}/{req.model}",
+            "linux_user": getattr(provision_result, "linux_user", "") if provision_result else "",
+            "files_dir":  getattr(provision_result, "files_dir",  "") if provision_result else "",
+            "samba_share": getattr(provision_result, "samba_share", "") if provision_result else "",
+            "matrix_room": getattr(provision_result, "matrix_room", "") if provision_result else "",
+            "matrix_space": getattr(provision_result, "matrix_space", "") if provision_result else "",
+            "gitea_repo": gitea_repo_url,
+            "warnings": provision_warnings,
         }
 
     # ── v2: Projekt-Settings lesen/schreiben ──────────────────────────
