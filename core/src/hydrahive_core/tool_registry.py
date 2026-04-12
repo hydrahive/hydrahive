@@ -950,11 +950,36 @@ class FilePatchTool(BaseTool):
         occurrences = content.count(search)
         if occurrences == 0:
             lines = content.split("\n")
-            snippet = "\n".join(lines[:30]) if len(lines) > 30 else content[:2000]
+            # Diagnose 1: Whitespace-normalisiert suchen
+            _search_stripped = "\n".join(l.rstrip() for l in search.split("\n"))
+            _content_stripped = "\n".join(l.rstrip() for l in lines)
+            _ws_match = _search_stripped in _content_stripped
+            # Diagnose 2: Erste Zeile des Suchtexts finden → Kandidaten-Zeilen zeigen
+            _first_search_line = search.split("\n")[0].strip()
+            _candidate_lines = []
+            for i, line in enumerate(lines):
+                if _first_search_line and _first_search_line in line:
+                    start = max(0, i - 1)
+                    end = min(len(lines), i + len(search.split("\n")) + 2)
+                    _candidate_lines.append(
+                        "\n".join(f"{start+j+1:4d} | {lines[start+j]}" for j in range(end - start))
+                    )
+                    if len(_candidate_lines) >= 3:
+                        break
+            hint = (
+                "WHITESPACE-PROBLEM: Der Text existiert, aber mit anderen Zeilenenden/Einrückungen. "
+                "Kopiere den Suchtext exakt aus file_read (inkl. Tabs/Spaces)."
+                if _ws_match
+                else "Text nicht im Dokument. Prüfe ob du die richtige Datei hast."
+            )
             return {
                 "error": "Suchtext nicht gefunden",
-                "occurrences": 0, "file_lines": len(lines),
-                "file_size": len(content), "first_30_lines": snippet,
+                "hint": hint,
+                "whitespace_match": _ws_match,
+                "occurrences": 0,
+                "file_lines": len(lines),
+                "file_size": len(content),
+                "candidates_for_first_line": _candidate_lines if _candidate_lines else ["(keine ähnlichen Zeilen gefunden)"],
             }
 
         if count == 0:
