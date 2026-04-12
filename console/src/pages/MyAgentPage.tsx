@@ -10,6 +10,7 @@ import { RoleSelector } from "@/components/RoleSelector";
 import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { ProjectSettingsPanel } from "@/components/ProjectSettingsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
@@ -533,11 +534,9 @@ export function MyAgentPage() {
 
       {/* ── Einstellungen Tab ─────────────────────────────────────────────── */}
       {tab === "settings" && agentInfo && (
-        <SettingsPanel
-          agentInfo={agentInfo}
-          agents={agents}
-          onSaved={loadAgent}
-        />
+        <div className="flex-1 overflow-y-auto">
+          <ProjectSettingsPanel projectId={agentInfo.agent_id} />
+        </div>
       )}
       {tab === "settings" && !agentInfo && (
         <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground">
