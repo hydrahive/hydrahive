@@ -620,13 +620,17 @@ class SessionManager:
             )
             session.append(message)
             self._db_insert_message(session.id, message, len(session.messages) - 1)
-            # Preview aktualisieren bei erster User-Message
-            if role == MessageRole.USER and session.messages.index(message) == 0:
-                self._db.execute(
-                    "UPDATE sessions SET preview = ? WHERE id = ?",
-                    (content[:120], session.id),
-                )
-                self._db.commit()
+            # Preview aktualisieren: erste User-Message die ankommt wenn preview noch leer
+            if role == MessageRole.USER:
+                row = self._db.execute(
+                    "SELECT preview FROM sessions WHERE id = ?", (session.id,)
+                ).fetchone()
+                if row and not row["preview"]:
+                    self._db.execute(
+                        "UPDATE sessions SET preview = ? WHERE id = ?",
+                        (content[:120], session.id),
+                    )
+                    self._db.commit()
             return message
 
     async def replace_messages(self, project_id: str, messages: list[Message]) -> None:
