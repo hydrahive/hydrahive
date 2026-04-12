@@ -345,6 +345,18 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         if mem_parts:
             parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
 
+        # Memory-Schreib-Anweisung: Agent soll write_memory aktiv nutzen
+        parts.append(
+            "## Gedächtnis-Regel\n\n"
+            "Nutze `write_memory` aktiv nach abgeschlossenen Aufgaben:\n"
+            "- Nach jedem implementierten Feature: Dateiname, was geändert wurde, warum\n"
+            "- Nach jedem Debug/Fix: Problem, Ursache, Lösung\n"
+            "- Nach jeder Analyse: Projektstruktur, wichtige Pfade, offene Punkte\n"
+            "- Schreibe kurz und präzise (max. 300 Wörter pro Eintrag)\n"
+            "- Kontext-ID = Thema (z.B. 'ship_defense_implementation')\n\n"
+            "So kannst du in der nächsten Session sofort weiterarbeiten ohne alles neu einzulesen."
+        )
+
     # v2: A-MEM Globaler Wissens-Prefetch (#563)
     # Sucht in der zentralen Wissensdatenbank nach relevanten Einträgen.
     # Graceful: wenn A-MEM nicht erreichbar → überspringen, nicht blockieren.

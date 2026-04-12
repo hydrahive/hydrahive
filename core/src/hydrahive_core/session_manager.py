@@ -563,7 +563,7 @@ class SessionManager:
 
             memory_dir = self._projects_dir / project_id / "memory"
             memory_dir.mkdir(parents=True, exist_ok=True)
-            memory_file = memory_dir / "last_session.md"
+            memory_file = memory_dir / "_last_session.md"
             memory_file.write_text("\n".join(lines), encoding="utf-8")
             logger.info("Session-Memory gespeichert: %s (%d Msgs → %s)",
                         session.id[:8], len(msgs), memory_file)
