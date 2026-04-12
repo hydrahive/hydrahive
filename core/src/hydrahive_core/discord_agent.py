@@ -659,12 +659,23 @@ class AgentDiscordClient(DiscordAgentClient):
         except Exception as _pbe:
             logger.debug("Projekt-Butler check Discord: %s", _pbe)
 
+        # v2 (#585): echte Projekt-Config laden statt Virtual-Fallback
+        _real_cfg = None
+        try:
+            from .project_loader import get_project_loader as _gpl
+            _loader = _gpl()
+            if _loader is not None:
+                _real_cfg = _loader.get(_project_id)
+        except Exception as _cfg_err:
+            logger.debug("Discord: Konnte echte Projekt-Config nicht laden (%s) — Fallback Virtual", _cfg_err)
+        _resolved_cfg = _real_cfg or _build_virtual_cfg(_project_id)
+
         # Antwort sammeln und senden
         response_parts: list[str] = []
         try:
             async for chunk in self._orchestrator.handle_message_stream(
                 project_id  = _project_id,
-                project_cfg = _build_virtual_cfg(_project_id),
+                project_cfg = _resolved_cfg,
                 content     = content,
                 sender      = sender,
                 execution_mode = "safe",

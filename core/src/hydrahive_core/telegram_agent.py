@@ -207,13 +207,15 @@ async def start_telegram_bot(
             logger.debug("Projekt-Butler check Telegram: %s", _pbe)
 
         from .project_config import ProjectAgents as _PA, ProjectConfig as _PC, ProjectIdentity as _PI
+        # v2 (#585): echte Projekt-Config via global registriertem Loader laden
         _real_cfg = None
         try:
-            from .project_loader import ProjectLoader
-            # projects ist im Closure der register-Funktion
-            _real_cfg = projects.get(_project_id) if projects else None
-        except Exception:
-            pass
+            from .project_loader import get_project_loader as _gpl
+            _loader = _gpl()
+            if _loader is not None:
+                _real_cfg = _loader.get(_project_id)
+        except Exception as _cfg_err:
+            logger.debug("Telegram: Konnte echte Projekt-Config nicht laden (%s)", _cfg_err)
         virtual_cfg = _real_cfg or _PC(
             id=_project_id,
             identity=_PI(name=_project_id),

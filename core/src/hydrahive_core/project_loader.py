@@ -18,6 +18,20 @@ from .project_config import ProjectConfig, load_project_config
 
 logger = logging.getLogger(__name__)
 
+# Global Singleton — wird von main.py gesetzt, ist ueber get_project_loader()
+# fuer alle Module erreichbar (ohne zyklischen Import via main).
+_GLOBAL_LOADER: "ProjectLoader | None" = None
+
+
+def set_global_loader(loader: "ProjectLoader") -> None:
+    global _GLOBAL_LOADER
+    _GLOBAL_LOADER = loader
+
+
+def get_project_loader() -> "ProjectLoader | None":
+    """Gibt den global registrierten ProjectLoader zurueck (oder None wenn nicht initialisiert)."""
+    return _GLOBAL_LOADER
+
 
 class ProjectLoader:
     """

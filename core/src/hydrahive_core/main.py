@@ -205,6 +205,9 @@ def _ensure_personal_project_manifest(username: str):
 discovery        = AgentDiscovery(AGENTS_DIR)
 runtime          = AgentRuntime()
 projects         = ProjectLoader(PROJECTS_DIR)
+# v2 (#585): Global registrieren damit messenger-adapter ohne zyklischen Import drankommen
+from .project_loader import set_global_loader as _set_global_loader
+_set_global_loader(projects)
 sessions         = SessionManager(PROJECTS_DIR)
 orchestrator     = Orchestrator(discovery, runtime, sessions)
 group_service    = GroupService(users_fn=lambda: _load_users())
