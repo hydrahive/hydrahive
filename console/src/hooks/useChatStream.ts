@@ -159,7 +159,12 @@ export function useChatStream(opts: UseChatStreamOptions) {
   // ── Auto-scroll: nur wenn User am Ende ist ───────────────────────────────
   useEffect(() => {
     if (!userScrolledUp.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const el = scrollContainerRef.current;
+      if (el) {
+        // Direkt scrollTop setzen statt scrollIntoView — verhindert
+        // Browser-Animation-Abbrüche bei rapidem Streaming (#614)
+        el.scrollTop = el.scrollHeight;
+      }
     }
   }, [messages, sending]);
 
