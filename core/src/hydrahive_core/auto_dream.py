@@ -9,6 +9,10 @@ Gate-Reihenfolge (billigster Check zuerst):
   2. Sessions: Transcript-Count mit mtime > letztem Dream >= min_sessions
   3. Lock: Kein anderer Dream-Prozess aktiv
 
+v2-Update: Verwendet /projects/ statt /agents/, config.yaml statt agent.yaml.
+P3 (#614): Memory-Compaction — wenn learned-facts.md > _COMPACTION_THRESHOLD_BYTES,
+  wird eine komprimierte Version erstellt und die alte archiviert.
+
 Pattern analog zu Claude Code autoDream.ts, adaptiert für HydraHive.
 """
 from __future__ import annotations
@@ -36,6 +40,8 @@ DEFAULT_CONFIG = {
     "max_transcript_chars": 60000,
     "summary_model": "claude-haiku-4-5-20251001",
 }
+
+_COMPACTION_THRESHOLD_BYTES = 40_000  # P3: learned-facts.md > 40KB → komprimieren
 
 
 def _load_dream_config() -> dict:
@@ -150,6 +156,57 @@ wichtige Erkenntnisse, Muster und Fakten die der Agent sich merken sollte.
 Fasse die wichtigsten neuen Erkenntnisse zusammen:"""
 
 
+# ── P3: Memory-Compaction ────────────────────────────────────────────────────
+
+async def _compact_memory(
+    project_id: str,
+    memory_dir: Path,
+    learned_path: Path,
+    client: Any,
+    model: str,
+) -> None:
+    """Komprimiert learned-facts.md wenn sie zu groß wird.
+    Schreibt kompakte Version zurück, archiviert Original als .bak."""
+    full_text = learned_path.read_text(encoding="utf-8")
+    logger.info("Memory-Compaction für '%s': %d Bytes → komprimieren", project_id, len(full_text))
+
+    compaction_prompt = f"""Du bist ein Memory-Kompressor für den Agenten '{project_id}'.
+
+Die Memory-Datei ist zu lang geworden. Fasse sie kompakt zusammen:
+- Entferne Duplikate und veraltete Informationen
+- Behalte alle wichtigen Fakten, User-Präferenzen und technischen Details
+- Maximal 600 Zeilen / 15.000 Zeichen
+- Behalte das Bullet-Point-Format
+- Schreibe auf Deutsch
+
+## Aktuelle Memory-Datei ({len(full_text)} Zeichen):
+{full_text[:50000]}
+
+## Kompakte Version:"""
+
+    resp = await client.messages.create(
+        model=model,
+        max_tokens=2000,
+        system=[{"type": "text", "text": "Du bist ein präziser Memory-Kompressor. Kürze ohne Informationsverlust."}],
+        messages=[{"role": "user", "content": compaction_prompt}],
+    )
+    compacted = (resp.content[0].text if resp.content else "").strip()
+    if not compacted or len(compacted) < 100:
+        logger.warning("Memory-Compaction für '%s': LLM-Output zu kurz, abgebrochen", project_id)
+        return
+
+    # Original sichern
+    backup_path = memory_dir / "learned-facts.md.bak"
+    backup_path.write_text(full_text, encoding="utf-8")
+
+    # Kompakte Version schreiben
+    learned_path.write_text(
+        f"<!-- kompaktiert: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} -->\n{compacted}",
+        encoding="utf-8",
+    )
+    logger.info("Memory-Compaction für '%s': %d → %d Bytes", project_id, len(full_text), len(compacted))
+
+
 # ── Dream-Ausführung ─────────────────────────────────────────────────────────
 
 async def _run_dream_for_agent(
@@ -227,6 +284,14 @@ async def _run_dream_for_agent(
             logger=logger,
         )
 
+        # P3 (#614): Memory-Compaction — learned-facts.md zu groß?
+        learned_path = memory_dir / "learned-facts.md"
+        if learned_path.exists() and learned_path.stat().st_size > _COMPACTION_THRESHOLD_BYTES:
+            try:
+                await _compact_memory(agent_id, memory_dir, learned_path, client, model)
+            except Exception as _ce:
+                logger.warning("Memory-Compaction für '%s' fehlgeschlagen: %s", agent_id, _ce)
+
         # State updaten
         state["last_dream_at"] = time.time()
         state["dream_count"] = state.get("dream_count", 0) + 1
@@ -244,7 +309,7 @@ async def _run_dream_for_agent(
                     type="auto_dream",
                     title=f"AutoDream: {agent_id}",
                     body=f"{session_count} Sessions konsolidiert. {len(summary)} Zeichen neue Erkenntnisse.",
-                    link=f"/agents/{agent_id}/chat",
+                    link=f"/projects/{agent_id}/chat",
                 )
             except Exception:
                 pass
@@ -271,14 +336,15 @@ class AutoDreamService:
 
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
-        self._agents_dir: Path = Path("/agents")
+        self._projects_dir: Path = Path("/projects")
         self._notify_fn: Callable[..., Coroutine] | None = None
 
     def start(self, *, agents_dir: str | Path, notify_fn: Callable[..., Coroutine] | None = None) -> None:
-        self._agents_dir = Path(agents_dir)
+        # agents_dir-Parameter bleibt für Rückwärtskompatibilität, zeigt jetzt auf /projects/
+        self._projects_dir = Path(agents_dir)
         self._notify_fn = notify_fn
         self._task = asyncio.create_task(self._loop(), name="auto-dream")
-        logger.info("AutoDreamService gestartet")
+        logger.info("AutoDreamService gestartet (projects_dir: %s)", self._projects_dir)
 
     def stop(self) -> None:
         if self._task:
@@ -289,21 +355,21 @@ class AutoDreamService:
         """Dream sofort ausführen — für API-Trigger."""
         cfg = _load_dream_config()
         if agent_id:
-            agent_dir = self._agents_dir / agent_id
-            if not agent_dir.exists():
-                return {"error": f"Agent '{agent_id}' nicht gefunden"}
+            project_dir = self._projects_dir / agent_id
+            if not project_dir.exists():
+                return {"error": f"Projekt '{agent_id}' nicht gefunden"}
             # Override Gates für manuellen Trigger
             override_cfg = {**cfg, "min_hours": 0, "min_sessions": 0}
-            return await _run_dream_for_agent(agent_id, agent_dir, override_cfg, self._notify_fn)
+            return await _run_dream_for_agent(agent_id, project_dir, override_cfg, self._notify_fn)
 
-        # Alle Agenten
+        # Alle Projekte
         results = []
-        for agent_dir in sorted(self._agents_dir.iterdir()):
-            if not agent_dir.is_dir() or not (agent_dir / "agent.yaml").exists():
+        for project_dir in sorted(self._projects_dir.iterdir()):
+            if not project_dir.is_dir() or not (project_dir / "config.yaml").exists():
                 continue
-            result = await _run_dream_for_agent(agent_dir.name, agent_dir, cfg, self._notify_fn)
+            result = await _run_dream_for_agent(project_dir.name, project_dir, cfg, self._notify_fn)
             results.append(result)
-        return {"agents": results, "total": len(results)}
+        return {"projects": results, "total": len(results)}
 
     async def _loop(self) -> None:
         await asyncio.sleep(120)  # 2 Min nach Start warten
@@ -316,13 +382,13 @@ class AutoDreamService:
 
                 interval = cfg.get("check_interval_seconds", 600)
 
-                for agent_dir in sorted(self._agents_dir.iterdir()):
-                    if not agent_dir.is_dir() or not (agent_dir / "agent.yaml").exists():
+                for project_dir in sorted(self._projects_dir.iterdir()):
+                    if not project_dir.is_dir() or not (project_dir / "config.yaml").exists():
                         continue
                     try:
-                        await _run_dream_for_agent(agent_dir.name, agent_dir, cfg, self._notify_fn)
+                        await _run_dream_for_agent(project_dir.name, project_dir, cfg, self._notify_fn)
                     except Exception as e:
-                        logger.warning("AutoDream für '%s': %s", agent_dir.name, e)
+                        logger.warning("AutoDream für '%s': %s", project_dir.name, e)
 
                 await asyncio.sleep(interval)
 

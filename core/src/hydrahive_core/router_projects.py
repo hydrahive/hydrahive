@@ -1168,4 +1168,48 @@ def register_project_routes(
             "memory_files": memory_files,
             "memory_file_count": len(memory_files),
         }
-        return {"saved": True}
+
+    # ── Memory-Stats (#614 P2) ─────────────────────────────────────────────────
+
+    @auth_router.get("/projects/{project_id}/memory/stats")
+    def get_memory_stats(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """P2: Memory-Statistiken — Dateiliste, Größen, letztes Update."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        import os as _os
+        project_dir = Path(projects_dir) / project_id
+        memory_dir = project_dir / "memory"
+
+        if not memory_dir.exists():
+            return {"project_id": project_id, "total_bytes": 0, "file_count": 0, "files": []}
+
+        files_info = []
+        total_bytes = 0
+        for f in sorted(memory_dir.iterdir()):
+            if not f.is_file() or f.name.startswith("."):
+                continue
+            try:
+                st = f.stat()
+                files_info.append({
+                    "name": f.name,
+                    "size_bytes": st.st_size,
+                    "modified_at": int(st.st_mtime),
+                })
+                total_bytes += st.st_size
+            except Exception:
+                pass
+
+        from .bootstrap_memory import is_bootstrap_done
+        return {
+            "project_id": project_id,
+            "bootstrap_done": is_bootstrap_done(project_dir),
+            "total_bytes": total_bytes,
+            "file_count": len(files_info),
+            "files": files_info,
+        }
