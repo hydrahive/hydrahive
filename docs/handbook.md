@@ -192,139 +192,97 @@ Die Konsole unterstützt Deutsch und Englisch. Der Sprachumschalter befindet sic
 
 ## 4. Agenten anlegen
 
-Agenten sind KI-Persönlichkeiten die Aufgaben ausführen. Jeder Agent hat einen Typ, ein Sprachmodell und optional eine "Soul" (Persönlichkeitsbeschreibung).
+In HydraHive **v2** ist jedes **Projekt** ein eigenständiger KI-Agent. Es gibt keine Boss/Worker/Specialist-Hierarchie mehr — alle Projekte sind gleichwertig. Der persönliche Agent eines Benutzers heißt `personal_<username>`.
 
-### Agent-Typen
+### Projekt erstellen (Konsole)
 
-| Typ | Beschreibung |
-|---|---|
-| **boss** | Nimmt Nutzer-Nachrichten entgegen, koordiniert Worker-Agenten |
-| **specialist** | Spezialist für ein Themengebiet, wird vom Boss delegiert |
-| **worker** | Kurzlebiger Task-Agent, wird on-demand gespawnt |
-
-### Agent anlegen (Konsole)
-
-1. **Agenten** → Tab **Agenten** → **Neuer Agent**
+1. **Projekte** → **+ Neues Projekt**
 2. Felder ausfüllen:
-   - **Agent-ID:** Eindeutiger Bezeichner (z.B. `steuer-agent`)
+   - **Projekt-ID:** Eindeutiger Bezeichner (z.B. `steuer-assistent`)
    - **Anzeigename:** Wird im Chat angezeigt (z.B. `Steuerbert`)
-   - **Typ:** `boss`, `specialist` oder `worker`
-   - **LLM-Modell:** Verfügbares Modell (z.B. `llama3.1:8b`)
-   - **Tools:** Welche Fähigkeiten der Agent hat — Auswahl über gruppierten ToolGroupSelector (Checkboxen)
-   - **MCP-Server:** Checkbox-Liste der verfügbaren MCP-Server
-   - **Plugins:** Checkbox-Liste der installierten Plugins
-   - **Erlaubte Agenten:** Checkbox-Liste für Agenten-Delegation
-   - **Soul:** Freier Markdown-Text der die Persönlichkeit beschreibt
-3. **Agent anlegen** klicken
+   - **Template:** Vorausgefüllte AGENT.md (Allgemein, Code, Finanzen usw.)
+   - **LLM-Modell:** Verfügbares Modell (z.B. `claude-haiku-4-5-20251001`)
+   - **Ausführungs-Modus:** `safe` (Standard), `elevated` oder `unrestricted`
+   - **Members:** Welche Benutzer das Projekt nutzen dürfen
+3. **Erstellen** klicken
 
-> **Hinweis:** Persönliche Agenten (`personal_*`) sind jetzt in der Agenten-Liste sichtbar und bearbeitbar — können jedoch nicht gelöscht werden.
+> **Hinweis:** Persönliche Projekte (`personal_*`) können nicht gelöscht werden.
 
-### Agent-Konfiguration (Datei)
+### Projekt-Konfiguration (Datei)
 
-Agenten liegen als Verzeichnisse unter `/agents/<id>/`:
+Projekte liegen als Verzeichnisse unter `/projects/<id>/`:
 
 ```
-/agents/steuer-agent/
-├── agent.yaml       # Konfiguration
-├── soul.md          # Persönlichkeit (optional)
-├── skills/          # Skill-Dateien (optional)
-│   ├── steuerrecht.md
-│   └── buchhaltung.md
-└── memory/          # Gedächtnis-Dateien (optional)
-    ├── user.md
-    └── projects.md
+/projects/steuer-assistent/
+├── config.yaml      # Konfiguration (v2)
+├── AGENT.md         # Persönlichkeit, Regeln, Wissen
+├── memory/          # Gedächtnis-Dateien
+│   ├── INDEX.md
+│   ├── project_structure.md   (Bootstrap-Memory)
+│   └── learned-facts.md       (AutoDream)
+└── files/           # Projekt-Dateien (optional, z.B. Git-Clone)
 ```
 
-**agent.yaml:**
+**config.yaml:**
 ```yaml
-id: steuer-agent
-type: specialist
-identity: Steuerbert
+id: steuer-assistent
+version: "2.0.0"
+identity:
+  name: Steuerbert
+  description: KI-Assistent für Steuer-Fragen
 
 llm:
-  model: llama3.1:8b
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
   temperature: 0.7
   max_tokens: 4096
-  fallback_models:
-    - claude-haiku-4-5-20251001
-  ollama_base_url: null   # WKS-Ollama-Endpunkt (optional)
+  api_key_env: ""        # leer = OAuth
+  failover: []
 
-tools:
-  - file_read
-  - file_write
-  - read_memory
-  - write_memory
+execution_mode: safe    # safe | elevated | unrestricted
 
-mcp_servers:
-  - amem                 # MCP-Server-IDs aus /etc/hydrahive/mcp_servers.json
+filesystem:
+  path: /projects/steuer-assistent
+  samba: false
+  nfs: false
 
-sources:
-  - name: "Dokumentation"
-    url: "https://docs.example.com"
-    description: "Offizielle Projektdokumentation"
+members:
+  - admin
+  - alice              # darf das Projekt nutzen
 
-heartbeat:
-  interval: 30s
-  timeout: 90s
-  on_failure: restart
-
-heartbeat_tasks:
-  - id: tagesstart
-    message: "Guten Morgen! Bitte prüfe offene Aufgaben und erstelle eine Tages-Zusammenfassung."
-    schedule: "0 8 * * 1-5"    # Mo–Fr um 08:00
-    active_hours: "07:00-22:00"
-
-  - id: erinnerung
-    message: "Bitte prüfe ob neue Dokumente hochgeladen wurden."
-    interval: 3600              # jede Stunde
+github_repo: ""        # optional: Gitea-Repo-URL
 ```
 
-### Heartbeat Tasks — Automatische Aktivierung
+### Schedules (Zeitplan-Aufgaben) — v2
 
-`heartbeat_tasks` definiert periodische Aufgaben die der Agent automatisch ausführt — ohne manuelles Triggern.
+Periodische Aufgaben werden in v2 über die **Schedules**-Seite (`/schedules`) oder die API konfiguriert — nicht mehr über `agent.yaml`. Jedes Projekt kann beliebig viele Schedules haben.
 
-| Feld | Pflicht | Beschreibung |
-|---|---|---|
-| `id` | ja | Eindeutiger Name des Tasks |
-| `message` | ja | Nachricht die an den Agenten gesendet wird |
-| `schedule` | nein | Cron-Ausdruck: `"0 8 * * *"` (täglich 08:00) |
-| `interval` | nein | Sekunden-Intervall: `3600` (jede Stunde) |
-| `project` | nein | Explizites Projekt; sonst: erstes Projekt des Boss-Agenten |
-| `active_hours` | nein | Nur in diesem Zeitfenster aktiv: `"08:00-22:00"` |
+| Feld | Beschreibung |
+|---|---|
+| `project_id` | Welches Projekt die Nachricht empfängt |
+| `message` | Nachricht die an das Projekt gesendet wird |
+| `schedule` | Cron-Ausdruck: `"0 8 * * *"` (täglich 08:00) |
+| `active_hours` | Nur in diesem Zeitfenster aktiv: `"08:00-22:00"` |
 
-Entweder `schedule` (Cron-Syntax) oder `interval` (Sekunden) muss angegeben werden.
+> **v1 entfernt:** `heartbeat_tasks` in `agent.yaml` existiert in v2 nicht mehr.
 
-> **Hinweis:** Heartbeat Tasks laufen nur auf `boss`-Agenten mit zugeordnetem Projekt. Verpasste Ausführungen (Server war aus) werden nicht nachgeholt.
-
-### Verfügbare Tools
+### v2 Core-Tools (fest eingebaut, kein Zuweisen nötig)
 
 | Tool | Beschreibung |
 |---|---|
 | `file_read` | Datei im Projektverzeichnis lesen |
 | `file_write` | Datei im Projektverzeichnis schreiben |
+| `file_patch` | Gezieltes Ersetzen von Text in Dateien |
+| `file_search` | Dateien und Inhalte suchen |
 | `web_search` | Websuche durchführen |
-| `http_request` | HTTP-Anfragen an externe APIs |
-| `shell_exec` | Shell-Befehl auf dem Server ausführen (siehe Blocklist unten) |
-| `read_system_file` | Systemdatei außerhalb des Projekts lesen (z.B. Konfigurationen) |
-| `write_system_file` | Systemdatei schreiben (eingeschränkt) |
-| `dispatch_task` | Andere Agenten beauftragen (nur boss) |
-| `spawn_agent` | Kurzlebigen Worker-Agenten erstellen |
-| `ask_agent` | Synchron einen anderen Agenten befragen |
-| `delegate_agent` | Asynchron einen Agenten beauftragen |
-| `write_handoff` | Aufgabe/Kontext an anderen Agenten übergeben (AgentLink) |
-| `read_handoff` | Übergabe-Auftrag entgegennehmen (AgentLink) |
-| `read_memory` | Gedächtnis-Datei des Agenten lesen |
-| `write_memory` | Gedächtnis-Datei des Agenten schreiben |
-| `git_status` | Git-Status eines Projekts abfragen |
-| `git_diff` | Git-Diff anzeigen |
-| `git_commit` | Dateien committen |
-| `git_push` | Commits zu Gitea pushen |
-| `git_create_pr` | Pull Request erstellen |
-| `wks_shell_exec` | Shell-Befehl auf der eigenen Workstation ausführen (SSH) |
-| `wks_file_read` | Datei von der Workstation lesen (SFTP) |
-| `wks_file_write` | Datei auf die Workstation schreiben (SFTP) |
+| `shell_exec` | Shell-Befehl auf dem Server ausführen (mit Sandbox, siehe Blocklist) |
+| `read_memory` | Gedächtnis-Datei des Projekts lesen |
+| `write_memory` | Gedächtnis-Datei des Projekts schreiben |
+| `ask_agent` | Synchron ein anderes Projekt befragen |
 
 > Alle Filesystem-Operationen sind auf `/projects/<projekt-id>/` beschränkt. Zugriff darüber hinaus wird verweigert.
+
+> **v1 entfernt:** `dispatch_task`, `spawn_agent`, `delegate_agent`, `write_handoff`, `read_handoff`, `wks_*`, `git_*` — diese v1-Tools existieren in v2 nicht mehr. Git-Befehle laufen via `shell_exec`.
 
 ### shell_exec Blocklist
 
@@ -681,17 +639,18 @@ Das Gedächtnis-System ermöglicht Agenten, Informationen persistent über Sessi
 
 ### Funktionsweise
 
-Memory-Dateien liegen als Markdown-Dateien unter `/agents/<id>/memory/`:
+Memory-Dateien liegen als Markdown-Dateien unter `/projects/<id>/memory/`:
 
 ```
-/agents/personal_admin/memory/
-├── user.md          # Informationen über den User
-├── projects.md      # Aktive Projekte und Kontext
-├── daily_2026-03-21.md  # Tages-Notizen
-└── handbook.md      # Wichtige Referenz-Dokumente
+/projects/personal_admin/memory/
+├── INDEX.md                   # Index aller Memory-Dateien (agent-gepflegt)
+├── project_structure.md       # Verzeichnisbaum (Bootstrap-Memory, auto)
+├── learned-facts.md           # AutoDream-Erkenntnisse (auto)
+├── user.md                    # Informationen über den User
+└── projects.md                # Aktive Projekte und Kontext
 ```
 
-Beim Start einer Session werden alle Memory-Dateien automatisch in den System-Prompt des Agenten injiziert.
+Beim Start einer Session werden alle Memory-Dateien automatisch in den System-Prompt injiziert. Die Gesamtgröße ist durch das `memory_budget` in der Session-Konfiguration begrenzt.
 
 ### Tools
 
@@ -727,9 +686,10 @@ Beim Start des Core generiert HydraHive automatisch eine Datei `system_topology.
 Die Datei wird bei jedem Core-Neustart aktualisiert. Agenten kennen damit von Beginn an die Systemstruktur, ohne sie manuell abfragen zu müssen.
 
 ```
-/agents/personal_admin/memory/
-├── user.md
-├── projects.md
+/projects/personal_admin/memory/
+├── INDEX.md
+├── project_structure.md  ← Bootstrap-Memory
+├── learned-facts.md      ← AutoDream
 └── system_topology.md    ← automatisch generiert beim Start
 ```
 
@@ -1028,9 +988,8 @@ Unter **Settings → Backup** (Admin only) können vollständige System-Backups 
 ### Was wird gesichert?
 
 Ein Backup enthält als `tar.gz`:
-- `/etc/hydrahive/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials, WKS-Keys)
-- `/agents/` — alle Agenten-Definitionen, Skills und Memory-Dateien
-- `/projects/` — Projekt-Konfigurationen und Agenten-Dateien
+- `/etc/hydrahive/` — alle Konfigurationsdateien (JWT-Secret, Users, LLM-Config, Admin-Credentials)
+- `/projects/` — alle Projekt-Konfigurationen, AGENT.md und Memory-Dateien
 
 **Nicht enthalten:** Betriebssystem, venv, Console-Build (werden bei Bedarf neu installiert).
 
@@ -1758,7 +1717,7 @@ sudo systemctl restart vaultwarden
 
 | Inhalt | Pfad |
 |---|---|
-| Agenten (Config, Memory, Skills, Soul) | `/agents/` |
+| Projekte (Config, Memory, AGENT.md) | `/projects/` |
 | Benutzerkonten & Secrets | `/etc/hydrahive/users.json`, `jwt_secret`, `internal_secret` |
 | LLM-Konfiguration | `/etc/hydrahive/llm_config.json`, `llm_env` |
 | API-Tokens | `claude_oauth_token`, `openai_codex_token.json`, `github_token` |
@@ -1815,8 +1774,8 @@ Das Archiv wird AES-256-CBC-verschlüsselt und direkt über SSH gestreamt — es
 systemctl status hydrahive-core
 journalctl -u hydrahive-core -n 30
 
-# Agenten vorhanden?
-ls /agents/
+# Projekte vorhanden?
+ls /projects/
 
 # Config übernommen?
 cat /etc/hydrahive/users.json
@@ -2173,7 +2132,7 @@ Bewusst **nicht** enthalten: `python3`, `node`, `pip`, `npm`, `git` — diese k�
 
 - Alle Config-Dateien mit Tokens erhalten `chmod 600`.
 - `sudoers`-Einträge ohne Wildcards — nur explizit benannte Befehle.
-- Backup/Restore extrahiert nur `agents/` und `etc/hydrahive/` — kein Überschreiben von Systempfaden.
+- Backup/Restore extrahiert nur `projects/` und `etc/hydrahive/` — kein Überschreiben von Systempfaden.
 
 ### Download-Sicherheit
 
