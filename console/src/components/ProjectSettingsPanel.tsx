@@ -18,6 +18,7 @@ import {
   Play,
   MessageCircle,
   Hash,
+  Database,
 } from "lucide-react";
 
 interface ProjectSettingsPanelProps {
@@ -108,6 +109,10 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [members, setMembers] = useState<string[]>([]);
   const [allUsers, setAllUsers] = useState<string[]>([]);
   const [newMember, setNewMember] = useState("");
+
+  // Bootstrap-Memory (#614)
+  const [bootstrapRunning, setBootstrapRunning] = useState(false);
+  const [bootstrapResult, setBootstrapResult] = useState<string>("");
 
   useEffect(() => {
     loadSettings();
@@ -307,6 +312,23 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setAvailableKeys((res as any).keys || []);
     } catch {
       // nicht kritisch
+    }
+  }
+
+  async function runBootstrapMemory(force = false) {
+    setBootstrapRunning(true);
+    setBootstrapResult("");
+    try {
+      const res = await api.post<any>(`/projects/${projectId}/bootstrap-memory${force ? "?force=true" : ""}`, {});
+      if ((res as any).skipped) {
+        setBootstrapResult("Memory bereits vorhanden. Erzwingen mit 'Neu aufbauen'.");
+      } else {
+        setBootstrapResult("Memory-Aufbau gestartet — dauert einige Sekunden.");
+      }
+    } catch (e: any) {
+      setBootstrapResult(`Fehler: ${e?.message || "Unbekannt"}`);
+    } finally {
+      setBootstrapRunning(false);
     }
   }
 
@@ -716,6 +738,31 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             Messenger-Config speichern
           </button>
           {messengerSuccess && <span className="text-xs text-green-600">{messengerSuccess}</span>}
+        </div>
+      </div>
+
+      {/* Bootstrap-Memory (#614) */}
+      <div className="rounded-2xl border bg-background/55 p-3 space-y-2">
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <Database className="h-3.5 w-3.5 text-primary" />
+          Memory aufbauen
+        </div>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          Scannt Projekt-Verzeichnis und erstellt eine strukturierte Memory-Basis
+          (Verzeichnisbaum, wichtige Dateien). Nur einmalig nötig — der Agent pflegt
+          die Memory danach selbst.
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => runBootstrapMemory(false)} disabled={bootstrapRunning}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
+            {bootstrapRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Database className="h-3 w-3" />}
+            Memory aufbauen
+          </button>
+          <button onClick={() => runBootstrapMemory(true)} disabled={bootstrapRunning}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition hover:bg-accent disabled:opacity-50">
+            Neu aufbauen
+          </button>
+          {bootstrapResult && <span className="text-[10px] text-muted-foreground">{bootstrapResult}</span>}
         </div>
       </div>
     </div>

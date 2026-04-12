@@ -422,6 +422,13 @@ def register_project_routes(
                 logger.warning("Git-Clone fehlgeschlagen: %s", e)
                 provision_warnings.append(f"Git-Clone: {e}")
 
+        # P4 (#614): Bootstrap-Memory nach Projekt-Anlage automatisch starten
+        try:
+            from .bootstrap_memory import bootstrap_project_memory as _bpm
+            _asyncio.create_task(_bpm(req.id, project_dir))
+        except Exception as _bpm_err:
+            logger.warning("bootstrap_memory Task konnte nicht gestartet werden: %s", _bpm_err)
+
         audit_log("project.create_v2", target=req.id, project_id=req.id,
                   details={"template": req.template, "model": req.model,
                            "samba": req.samba, "has_messenger": bool(req.messenger),
@@ -1105,4 +1112,60 @@ def register_project_routes(
         wf_path = project_dir / "workflow.json"
         wf_path.write_text(_json.dumps(req.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
         logger.info("workflow.json gespeichert: %s", wf_path)
+
+    # ── Bootstrap-Memory (#614) ────────────────────────────────────────────────
+
+    @auth_router.post("/projects/{project_id}/bootstrap-memory", status_code=202)
+    async def trigger_bootstrap_memory(
+        project_id: str,
+        force: bool = False,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """P1: Bootstrap-Memory on-demand (User-Button in Settings).
+        Startet async, gibt 202 zurück. force=true überschreibt bestehendes Bootstrap."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .bootstrap_memory import is_bootstrap_done, bootstrap_project_memory
+        project_dir = Path(projects_dir) / project_id
+
+        if not force and is_bootstrap_done(project_dir):
+            return {"ok": True, "skipped": True, "reason": "Bootstrap bereits erledigt (force=true zum Wiederholen)"}
+
+        # Async starten — Client pollt GET endpoint
+        async def _run():
+            result = await bootstrap_project_memory(project_id, project_dir, force=force)
+            logger.info("bootstrap_memory abgeschlossen: %s → %s", project_id, result)
+
+        asyncio.create_task(_run())
+        return {"ok": True, "skipped": False, "started": True, "project_id": project_id}
+
+    @auth_router.get("/projects/{project_id}/bootstrap-memory")
+    def get_bootstrap_memory_status(
+        project_id: str,
+        _auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """P1: Bootstrap-Memory Status abfragen."""
+        _check_project_access(_auth, project_id)
+        cfg = projects.get(project_id)
+        if not cfg:
+            raise HTTPException(404, "Projekt nicht gefunden")
+
+        from .bootstrap_memory import is_bootstrap_done
+        project_dir = Path(projects_dir) / project_id
+        memory_dir = project_dir / "memory"
+
+        done = is_bootstrap_done(project_dir)
+        memory_files = []
+        if memory_dir.exists():
+            memory_files = sorted(f.name for f in memory_dir.iterdir() if f.is_file() and not f.name.startswith("."))
+
+        return {
+            "project_id": project_id,
+            "bootstrap_done": done,
+            "memory_files": memory_files,
+            "memory_file_count": len(memory_files),
+        }
         return {"saved": True}
