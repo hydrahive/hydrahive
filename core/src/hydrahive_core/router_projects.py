@@ -562,14 +562,9 @@ def register_project_routes(
 
         config_data["version"] = "2.0.0"
 
-        # config.yaml schreiben
-        config_path.write_text(
-            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
-            encoding="utf-8",
-        )
-
-        # #607: members → users.json.allowed_projects synchron halten
-        # Codex-3 MEDIUM: Fehler in Response-warnings, nicht silent (best-effort)
+        # #607/Codex-3: Strong Consistency — users.json ZUERST schreiben.
+        # Bei Fehler 500 werfen BEVOR config.yaml geaendert wird. Damit ist
+        # der Zustand atomar: entweder beides durch oder nichts.
         _warnings: list[str] = []
         if req.members is not None:
             try:
@@ -588,13 +583,19 @@ def register_project_routes(
                 logger.info("users.json synchronisiert (Projekt: %s, Members: %s)",
                             project_id, sorted(req_members))
             except Exception as _e:
-                logger.error("Users-Sync fehlgeschlagen: %s", _e)
-                _warnings.append(
+                logger.error("Users-Sync fehlgeschlagen (config.yaml NICHT geaendert): %s", _e)
+                raise HTTPException(
+                    500,
                     f"users.json-Sync fehlgeschlagen: {_e}. "
-                    f"members in config.yaml sind aktuell, "
-                    f"aber users.json.allowed_projects nicht. "
-                    f"Admin muss manuell synchronisieren."
+                    "Keine Aenderung an config.yaml durchgefuehrt — Request bitte wiederholen. "
+                    "Admin sollte /etc/hydrahive/users.json auf Schreibrechte pruefen."
                 )
+
+        # config.yaml schreiben (erst NACH erfolgreichem users.json-Sync)
+        config_path.write_text(
+            _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
 
         # AGENT.md schreiben wenn im Request
         if req.agent_md is not None:
