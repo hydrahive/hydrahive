@@ -47,6 +47,9 @@ export function VpnPage() {
   const [hsKey,       setHsKey]       = useState("");
   const [hsKeyCopied, setHsKeyCopied] = useState(false);
   const [genKey,      setGenKey]      = useState(false);
+  const [tsInvKey,    setTsInvKey]    = useState("");
+  const [tsInvCopied, setTsInvCopied] = useState(false);
+  const [genTsInv,    setGenTsInv]    = useState(false);
   const [refreshing,  setRefreshing]  = useState(false);
 
   async function load() {
@@ -106,6 +109,22 @@ export function VpnPage() {
     navigator.clipboard.writeText(hsKey);
     setHsKeyCopied(true);
     setTimeout(() => setHsKeyCopied(false), 2000);
+  }
+
+  async function handleTsInvite() {
+    setGenTsInv(true); setError("");
+    try {
+      const d = await api.tailscaleInvite();
+      setTsInvKey(d.auth_key);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("common.error"));
+    } finally { setGenTsInv(false); }
+  }
+
+  function copyTsInvKey() {
+    navigator.clipboard.writeText(tsInvKey);
+    setTsInvCopied(true);
+    setTimeout(() => setTsInvCopied(false), 2000);
   }
 
   if (loading) return (
@@ -252,6 +271,32 @@ export function VpnPage() {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Tailscale: Einmal-Key für neuen Node generieren */}
+      {!isHeadscale && status?.connected && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-medium text-foreground">Neuen Node einladen</h2>
+          <p className="text-xs text-muted-foreground">
+            Generiert einen einmaligen Auth-Key (24h) über die Tailscale API. Voraussetzung: API-Key in den Tailscale-Einstellungen hinterlegt.
+          </p>
+          <button onClick={handleTsInvite} disabled={genTsInv}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-50 text-foreground text-sm transition-colors">
+            <Key size={13} />
+            {genTsInv ? "Generiere..." : "Auth-Key generieren"}
+          </button>
+          {tsInvKey && (
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 rounded-lg bg-muted text-xs text-foreground font-mono truncate border border-border">
+                {tsInvKey}
+              </code>
+              <button onClick={copyTsInvKey}
+                className="p-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground transition-colors">
+                {tsInvCopied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
