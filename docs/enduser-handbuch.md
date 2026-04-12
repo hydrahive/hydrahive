@@ -11,8 +11,8 @@ Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkons
 3. [Dashboard — Übersicht, Aktivität, Usage, Audit](#3-dashboard--übersicht-aktivität-usage-audit)
 4. [Mein Agent — Dein persönlicher KI-Assistent](#4-mein-agent--dein-persönlicher-ki-assistent)
 5. [Messenger-Integrationen einrichten](#5-messenger-integrationen-einrichten)
-6. [Agenten verwalten (Admin)](#6-agenten-verwalten-admin)
-7. [Projekte anlegen und nutzen](#7-projekte-anlegen-und-nutzen)
+6. [Projekte / Agenten erstellen und verwalten (Admin)](#6-projekte--agenten-erstellen-und-verwalten-admin)
+7. [Mit einem Projekt chatten](#7-mit-einem-projekt-chatten)
 8. [Hub — Extensions, Plugins, Skill-Pakete](#8-hub--extensions-plugins-skill-pakete)
 9. [ClawhHub — Skills aus der Community](#9-clawhub--skills-aus-der-community)
 10. [Federation — Mehrere Server verbinden](#10-federation--mehrere-server-verbinden)
@@ -27,7 +27,8 @@ Dieses Handbuch erklärt Schritt für Schritt wie du HydraHive über die Webkons
 19. [Einstellungen — Benutzer & Rollen](#19-einstellungen--benutzer--rollen)
 20. [Einstellungen — Backup & Restore](#20-einstellungen--backup--restore)
 21. [Einstellungen — System-Update](#21-einstellungen--system-update)
-22. [Häufige Fragen](#22-häufige-fragen)
+22. [v2-Features im Überblick](#22-v2-features-im-überblick)
+23. [Häufige Fragen](#23-häufige-fragen)
 
 ---
 
@@ -51,16 +52,19 @@ Nach dem Login siehst du die Webkonsole. Links ist die **Sidebar** mit allen Ber
 |--------|---------|-----------------|
 | 🏠 | **Dashboard** | Tabs: Übersicht, Aktivität, Usage, Audit |
 | 🤖 | **Mein Agent** | Chatten mit deinem persönlichen KI-Assistenten |
-| 👥 | **Agenten** | Alle Agenten anzeigen, erstellen, bearbeiten (Admin) |
-| 📁 | **Projekte** | Tabs: Projekte, Schedules |
-| 🧠 | **HydraBrain** | 3D-Visualisierung aller Agenten |
-| 📐 | **Blueprint** | Visueller Agent-Builder und Scratchpad |
-| 🏪 | **Hub** | Tabs: Extensions, Plugins, Skill-Pakete |
+| 👥 | **Projekte** | Alle KI-Agenten (= Projekte) anzeigen, erstellen, chatten |
+| 🧠 | **HydraBrain** | 3D-Visualisierung aller Projekte |
+| 🔍 | **Web-Suche** | SearXNG Suche verwalten |
+| 🖥️ | **System** | Logs, Services, Hardware-Info |
+| 👥 | **Benutzer** | Benutzer und Rollen verwalten (Admin) |
+| ⚙️ | **Einstellungen** | LLM-Provider, API-Keys, Backup |
+| 🔌 | **MCP-Server** | Model Context Protocol Server |
 | 🌐 | **Federation** | Server miteinander verbinden |
-| ⚙️ | **Einstellungen** | LLM, MCP, VPN, Mail, Backup, Users |
-| 🔍 | **Suche** | Globale Suche über alle Agenten und Projekte |
+| 🏪 | **Hub** | Extensions, Plugins, Skill-Pakete |
 
-> **Tipp für reguläre Benutzer:** Als normaler Benutzer arbeitest du hauptsächlich mit **Dashboard**, **Mein Agent** und **Projekte**. Konfigurationsaufgaben (Tools, Plugins, MCP-Server) erledigt der Admin in der **Agenten**-Seite.
+> **Wichtig (v2):** In HydraHive v2 sind **Agenten** und **Projekte** dasselbe — jedes Projekt ist sein eigener KI-Agent. Erstellen, konfigurieren und chatten läuft alles über **Projekte**.
+
+> **Tipp für reguläre Benutzer:** Als normaler Benutzer arbeitest du hauptsächlich mit **Dashboard** und **Projekte**.
 
 ---
 
@@ -167,105 +171,88 @@ Unter **Mein Agent → Messenger** kannst du deinen persönlichen Agenten mit ve
 
 ---
 
-## 6. Agenten verwalten (Admin)
+## 6. Projekte / Agenten erstellen und verwalten (Admin)
 
-Agenten sind KI-Assistenten die verschiedene Aufgaben übernehmen können.
+In HydraHive v2 ist jedes **Projekt** ein eigenständiger KI-Agent. Es gibt keine Boss/Worker-Hierarchie mehr — jedes Projekt ist gleichwertig und spezialisiert sich auf sein Thema.
 
-### Alle Agenten anzeigen
-1. Klicke in der Sidebar auf **Agenten**
-2. Du siehst eine Liste aller Agenten mit Status (grün = läuft, grau = gestoppt)
+### Alle Projekte anzeigen
+1. Klicke in der Sidebar auf **Projekte**
+2. Du siehst alle verfügbaren Projekte als Karten mit Status
 
-### Neuen Agenten erstellen
-1. Klicke auf **Agenten**
-2. Klicke oben rechts auf **+ Neuer Agent**
-3. Fülle das Formular aus:
-   - **Agent-ID** — Eindeutiger Name, nur Kleinbuchstaben und Bindestriche (z.B. `mein-helfer`)
+### Neues Projekt erstellen
+1. Klicke auf **Projekte**
+2. Klicke oben rechts auf **+ Neues Projekt**
+3. Der **Projekt-Wizard** öffnet sich — fülle aus:
+   - **Projekt-ID** — Eindeutiger Name, nur Kleinbuchstaben, Zahlen und Bindestriche (z.B. `mein-assistent`)
    - **Anzeigename** — Der Name der in der Oberfläche erscheint
-   - **Typ** — Wähle eine Rolle:
-     - **Boss** — Kann Aufgaben an andere Agenten delegieren
-     - **Worker** — Arbeitet Aufgaben ab die er bekommt
-     - **Specialist** — Eigenständiger Experte für ein Thema
-   - **Modell** — Welches KI-Modell der Agent nutzt
-4. Klicke **Erstellen**
+   - **Beschreibung** — Kurze Erklärung was dieses Projekt macht
+   - **Template** — Vorausgefüllte AGENT.md (Allgemein, Code, Finanzen usw.)
+   - **KI-Modell** — Welches Modell der Agent nutzt (Claude, GPT-4, Ollama…)
+   - **Ausführungs-Modus** — Sicherheitsstufe:
+     - **Safe** (Standard) — Befehle in Sandbox, gefährliche Operationen blockiert
+     - **Elevated** — Erweiterte Rechte, bwrap-Sandbox
+     - **Unrestricted** — Volle Kontrolle (nur für vertrauenswürdige Agenten)
+4. Klicke **Erstellen** — das Projekt ist sofort einsatzbereit
 
-### Agenten bearbeiten
-1. Klicke auf **Agenten**
-2. Klicke auf den Agenten den du bearbeiten willst
-3. Klicke auf das **Stift-Symbol** (Pencil-Icon) neben dem Agenten
-4. Ändere die gewünschten Einstellungen
-5. Klicke **Speichern**
+### Projekt-Einstellungen bearbeiten
+1. Klicke auf ein Projekt → **Settings**-Tab oben rechts
+2. Dort kannst du ändern:
+   - **LLM-Modell** und Provider
+   - **AGENT.md** — Persönlichkeit, Regeln und Wissen des Agenten
+   - **Members** — Welche Benutzer das Projekt nutzen dürfen
+   - **Ausführungs-Modus** — Sicherheitsstufe
+   - **Memory aufbauen** — Automatischer Scan des Projektverzeichnisses
+3. Klicke **Speichern**
 
-### Agenten löschen
-1. Klicke auf **Agenten**
-2. Klicke auf den Agenten
-3. Klicke auf das **Papierkorb-Symbol** (Trash-Icon) neben dem Agenten
-4. Bestätige die Sicherheitsabfrage
+### Projekt löschen
+1. Klicke auf **Projekte** → das gewünschte Projekt
+2. Gehe zu **Einstellungen** → **Gefahrenzone**
+3. Klicke auf **Projekt löschen** und bestätige
 
 > **Achtung:** Persönliche Agenten (die mit `personal_` anfangen) können nicht gelöscht werden.
 
----
+### v2 Core-Tools
 
-> **Hinweis für reguläre Benutzer:** Die Tool- und Plugin-Konfiguration wird vom Admin in der **Agenten**-Seite erledigt. Als normaler Benutzer kannst du diese Seite zwar einsehen, änderst aber nichts selbst — wende dich bei Bedarf an deinen Admin.
-
-### Tools einem Agenten zuweisen (Admin)
-1. Klicke auf **Agenten**
-2. Klicke auf den gewünschten Agenten
-3. Klicke auf **Bearbeiten**
-4. Scrolle runter zu **Tools**
-5. Du siehst viele Buttons — jeder ist ein Tool
-6. **Klicke auf einen Button** um das Tool zu aktivieren (farbig = aktiv, grau = inaktiv)
-7. Tools mit ⚠ Symbol sind sensibel (z.B. `shell_exec`, `delete_agent`)
-8. Klicke **Speichern**
-
-### Häufig genutzte Tools
+Alle Projekte haben dieselben 9 Kern-Tools fest eingebaut — kein manuelles Zuweisen nötig:
 
 | Tool | Was es tut |
 |------|-----------|
 | `file_read` | Dateien lesen |
 | `file_write` | Dateien schreiben |
+| `file_patch` | Dateien gezielt bearbeiten |
+| `file_search` | In Dateien suchen |
 | `web_search` | Im Internet suchen |
-| `http_request` | Websites und APIs aufrufen |
-| `shell_exec` | Terminal-Befehle ausführen |
-| `read_memory` | Agenten-Gedächtnis lesen |
-| `write_memory` | Ins Agenten-Gedächtnis schreiben |
-| `ask_agent` | Einen anderen Agenten fragen |
-| `git_status` | Git-Status prüfen |
-| `git_clone` | Git-Repository klonen (braucht `shell_exec`) |
+| `shell_exec` | Terminal-Befehle ausführen (mit Sandbox) |
+| `read_memory` | Projektgedächtnis lesen |
+| `write_memory` | Ins Projektgedächtnis schreiben |
+| `ask_agent` | Ein anderes Projekt fragen |
 
 ### Plugin-Tools zuweisen (Admin)
-Plugin-Tools werden nicht einzeln zugewiesen sondern als ganzes Plugin. Der Admin weist Plugins in der **Agenten**-Seite zu:
-1. Klicke auf **Agenten** → gewünschten Agenten → **Bearbeiten**
-2. Scrolle zu **Plugins**
-3. Wähle die Plugins die der Agent nutzen soll
-4. Klicke **Speichern**
+Plugin-Tools werden über den Hub installiert und sind dann in den Projekt-Einstellungen auswählbar:
+1. **Hub** → **Plugins** → Plugin installieren
+2. In **Projekte** → Projekt → **Einstellungen** → Plugins auswählen
 
 ---
 
-## 7. Projekte anlegen und nutzen
+## 7. Mit einem Projekt chatten
 
-Die **Projekte**-Seite hat zwei Tabs: **Projekte** und **Schedules**.
-
-### Neues Projekt erstellen
+### Projekt öffnen und chatten
 1. Klicke in der Sidebar auf **Projekte**
-2. Du bist im Tab **Projekte** — klicke auf **+ Neues Projekt**
-3. Gib dem Projekt einen **Namen** und eine **Beschreibung**
-4. Wähle den **Boss-Agenten** (der die Arbeit koordiniert)
-5. Wähle **Worker-Agenten** (die die Arbeit erledigen)
-6. Klicke **Erstellen**
-
-### Im Projekt chatten
-1. Klicke auf **Projekte** → Tab **Projekte**
 2. Klicke auf das gewünschte Projekt
-3. Du siehst das Chat-Fenster des Projekts
-4. Schreibe deine Nachricht und drücke **Enter**
-5. Der Boss-Agent koordiniert die Arbeit und delegiert an Worker
+3. Du siehst das Chat-Fenster — schreibe deine Nachricht und drücke **Enter**
+4. Der Agent antwortet — Tool-Aufrufe (Datei lesen, Suche usw.) sind als ausklappbare Blöcke sichtbar
+
+### Typing-Indicator
+Während der Agent arbeitet siehst du in der Sidebar einen animierten Punkt neben dem Projektnamen — so weißt du sofort wenn ein Projekt gerade aktiv ist.
+
+### Persönlicher Agent (Mein Agent)
+Jeder Benutzer hat ein eigenes Projekt: `personal_<benutzername>`. Du erreichst es über **Mein Agent** in der Navigation.
 
 ### Zeitpläne (Schedules)
-1. Klicke auf **Projekte** → Tab **Schedules**
-2. Hier kannst du automatische Aufgaben planen
-3. Klicke auf **+ Neuer Zeitplan**
-4. Wähle den Agenten, die Uhrzeit und den Auftrag
-5. Klicke **Speichern**
+Automatische Aufgaben planst du über **Schedules** (erreichbar über die Sidebar oder unter `/schedules`):
+1. Klicke auf **+ Neuer Zeitplan**
+2. Wähle das Projekt, die Uhrzeit (Cron-Syntax) und den Auftrag
+3. Klicke **Speichern**
 
 ---
 
@@ -442,12 +429,11 @@ HydraBrain zeigt eine interaktive 3D-Karte aller Agenten, Tools und Verbindungen
 ### Was die Farben bedeuten
 | Farbe | Bedeutung |
 |-------|-----------|
-| Blau | Boss-Agent |
-| Grün | Worker/Specialist-Agent |
-| Cyan (hell-blau) | Agent denkt gerade |
-| Grün (leuchtend) | Agent liest gerade Daten |
-| Orange | Agent schreibt gerade Daten |
-| Klein + grau | Tools, Memories, Skills |
+| Blau | Inaktives Projekt |
+| Cyan (leuchtend) | Projekt denkt / antwortet gerade |
+| Grün (leuchtend) | Projekt liest gerade Daten |
+| Orange | Projekt schreibt gerade Daten |
+| Klein + grau | Memory-Dateien, Skills |
 
 ### Federation einblenden
 1. Klicke auf den **Radar-Button** in der Toolbar oben rechts
@@ -477,20 +463,19 @@ Im Blueprint-Bereich baust du Agenten visuell zusammen — als Graph mit Kästch
 3. Wähle oben links im Dropdown einen Agenten aus
 4. Du siehst seinen Aufbau: Agent-Kästchen in der Mitte, Tools links, MCP-Server rechts
 
-### Neuen Agenten visuell erstellen
+### Neues Projekt visuell erstellen
 1. Klicke auf **Blueprint** → Tab **Agent-Blueprint**
-2. Klicke auf **Neuer Agent**
-3. Ein violettes Agent-Kästchen erscheint in der Mitte
+2. Klicke auf **Neues Projekt**
+3. Ein violettes Projekt-Kästchen erscheint in der Mitte
 4. **Klicke auf das Kästchen** — rechts erscheinen die Einstellungen:
-   - **Agent-ID** — Eindeutiger Name (Pflichtfeld!)
-   - **Typ** — Boss, Worker oder Specialist
+   - **Projekt-ID** — Eindeutiger Name (Pflichtfeld!)
    - **LLM Model** — Welches KI-Modell
-   - **Soul** — Persönlichkeit und Anweisungen
+   - **AGENT.md** — Persönlichkeit und Anweisungen
 5. Klicke oben auf **Palette** um die Toolbox zu öffnen
-6. Klicke auf **Tool**, **Skill**, **MCP Server** oder **Plugin** um Kästchen hinzuzufügen
-7. **Ziehe eine Linie** vom neuen Kästchen zum Agent-Kästchen (von einem Punkt zum anderen)
-8. Wähle bei jedem Kästchen rechts im Panel was es sein soll (z.B. welches Tool)
-9. Wenn alles konfiguriert ist: Klicke oben rechts auf **Agent erstellen**
+6. Klicke auf **Skill**, **MCP Server** oder **Plugin** um Kästchen hinzuzufügen
+7. **Ziehe eine Linie** vom neuen Kästchen zum Projekt-Kästchen
+8. Wähle bei jedem Kästchen rechts im Panel was es sein soll
+9. Wenn alles konfiguriert ist: Klicke oben rechts auf **Projekt erstellen**
 
 ### Agent löschen
 1. Im **Agent-Blueprint** Tab den Agenten im Dropdown auswählen
@@ -582,9 +567,9 @@ MCP Server erweitern HydraHive um externe Tools (z.B. Datenbanken, APIs).
    - **Transport** — streamableHttp oder SSE
 4. Klicke **Speichern**
 
-### MCP Server einem Agenten zuweisen
-1. Klicke auf **Agenten** → Wähle einen Agenten → **Bearbeiten**
-2. Unter **MCP Server** wähle die Server die der Agent nutzen soll
+### MCP Server einem Projekt zuweisen
+1. Klicke auf **Projekte** → Projekt → **Einstellungen**
+2. Unter **MCP Server** wähle die Server die das Projekt nutzen soll
 3. Klicke **Speichern**
 
 ---
@@ -675,21 +660,59 @@ Hier konfigurierst du E-Mail-Versand für Agenten.
 
 ---
 
-## 22. Häufige Fragen
+## 22. v2-Features im Überblick
+
+### Typing-Indicator
+Während ein Projekt aktiv arbeitet siehst du einen animierten Punkt in der Projektliste. So siehst du auf einen Blick welche Projekte gerade beschäftigt sind — ohne die Seite zu wechseln.
+
+### WhatsApp-Filter (pro Projekt)
+Jedes Projekt kann seine eigene WhatsApp-Filterregel haben:
+- **Private Chats** — Nur Direktnachrichten annehmen
+- **Gruppen** — Gruppen-Chats bearbeiten
+- **Keyword-Filter** — Nur Nachrichten mit bestimmtem Stichwort bearbeiten
+- **Erlaubte Nummern** — Whitelist für bestimmte Kontakte
+- **Gesperrte Nummern** — Blacklist
+
+Diese Einstellungen findest du unter **Projekte** → Projekt → **Einstellungen** → **WhatsApp**.
+
+### Butler (automatische Aufgaben pro Projekt)
+Jedes Projekt hat seinen eigenen Butler — einen automatisierten Hintergrund-Agenten der regelmäßige Aufgaben erledigt. Einstellungen unter **Mein Agent** → Tab **Butler**.
+
+### Ausführungs-Modus (Execution Mode)
+Beim Erstellen oder in den Einstellungen eines Projekts wählst du die Sicherheitsstufe:
+
+| Modus | Beschreibung | Geeignet für |
+|-------|-------------|-------------|
+| **Safe** | Sandbox-Ausführung, Blocklist aktiv | Alle Projekte (Standard) |
+| **Elevated** | Erweiterte Rechte, bwrap-Sandbox | Entwicklungs-Projekte |
+| **Unrestricted** | Keine Einschränkungen | Nur sehr vertrauenswürdige Agenten |
+
+### Memory aufbauen
+Jedes Projekt kann eine strukturierte Memory-Basis aus seinem Verzeichnis erstellen:
+- **Projekte** → Projekt → **Einstellungen** → **Memory aufbauen**
+- Der Agent scannt das Projektverzeichnis und erstellt `project_structure.md`
+- Das Gedächtnis bleibt über Chats hinaus erhalten und wird automatisch weiterentwickelt
+
+### Shared Sessions (Live-Input-Sharing)
+Mehrere Benutzer können dieselbe Chat-Session gleichzeitig sehen und eingeben — wie `screen -x` für den Browser. Über die Projekt-Chat-Seite verfügbar.
+
+---
+
+## 23. Häufige Fragen
 
 ### "Mein Agent antwortet nicht"
-1. Prüfe ob der Agent läuft: **Agenten** → ist der Status grün?
+1. Prüfe ob das Projekt läuft: **Projekte** → ist der Status grün?
 2. Prüfe ob ein LLM-Provider konfiguriert ist: **Einstellungen** → **LLM**
-3. Leere den Chat: **Mein Agent** → **Papierkorb-Symbol** oben rechts
+3. Leere den Chat: Projekts-Seite → **Papierkorb-Symbol** oben rechts
 
 ### "Ich sehe keine Modelle in der Auswahl"
 1. Gehe auf **Einstellungen** → **LLM**
 2. Prüfe ob mindestens ein Provider eingerichtet ist (Anthropic, OpenAI oder Ollama)
 3. Für Anthropic: Klicke auf **Mit Anthropic verbinden**
 
-### "Plugin-Tools tauchen beim Agenten nicht auf"
-1. Frage deinen Admin — Plugin-Zuweisung erfolgt in der **Agenten**-Seite
-2. Der Admin prüft dort ob das Plugin dem richtigen Agenten zugewiesen ist
+### "Plugin-Tools tauchen beim Projekt nicht auf"
+1. Frage deinen Admin — Plugin-Zuweisung erfolgt in **Projekte** → **Einstellungen**
+2. Der Admin prüft ob das Plugin dem richtigen Projekt zugewiesen ist
 
 ### "Tailscale verbindet nicht"
 1. Prüfe ob du den richtigen Key nutzt:
