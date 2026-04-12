@@ -187,7 +187,8 @@ main() {
     fi
 
     # --- 3b. System-Dependencies nachrüsten (idempotent) ---
-    for pkg in ffmpeg jq tree; do
+    # bubblewrap (bwrap) ist PFLICHT fuer shell_exec safe/elevated-Sandbox (#605)
+    for pkg in ffmpeg jq tree bubblewrap; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
             info "Installiere fehlende Abhängigkeit: $pkg"
             apt-get install -y -qq "$pkg" || warn "$pkg konnte nicht installiert werden"
