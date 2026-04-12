@@ -576,17 +576,27 @@ class ShellExecTool(BaseTool):
         safe_cwd = cwd if Path(cwd).exists() else "/tmp"
 
         import shutil
-        # bwrap-Funktionstest: einmalig cachen ob Sandbox lauffaehig ist
+        # bwrap-Funktionstest: einmalig cachen ob Sandbox lauffaehig ist.
+        # #605: Nutzt dieselbe Mount-Topologie wie die echte Sandbox unten,
+        # damit der Test nicht "ok-wenn-/bin-Symlink-auf-/usr/bin"-faelschlich
+        # positiv oder negativ ausfaellt.
         if not hasattr(ShellExecTool, "_bwrap_works"):
             ShellExecTool._bwrap_works = False
             if shutil.which("bwrap"):
                 try:
                     import subprocess as _sp
-                    _test = _sp.run(
-                        ["bwrap", "--ro-bind", "/usr", "/usr", "--proc", "/proc",
-                         "--dev", "/dev", "--die-with-parent", "--", "/bin/true"],
-                        capture_output=True, timeout=5, check=False,
-                    )
+                    _test_bind: list[str] = ["bwrap",
+                        "--ro-bind", "/usr", "/usr",
+                        "--ro-bind-try", "/bin", "/bin",
+                        "--ro-bind-try", "/lib", "/lib",
+                        "--ro-bind-try", "/lib64", "/lib64",
+                        "--ro-bind-try", "/sbin", "/sbin",
+                        "--proc", "/proc",
+                        "--dev", "/dev",
+                        "--die-with-parent",
+                        "--", "/usr/bin/true",  # garantiert in /usr
+                    ]
+                    _test = _sp.run(_test_bind, capture_output=True, timeout=5, check=False)
                     ShellExecTool._bwrap_works = (_test.returncode == 0)
                     if not ShellExecTool._bwrap_works:
                         logger.warning("bwrap ist installiert aber nicht funktionsfaehig: %s",

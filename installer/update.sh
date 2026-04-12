@@ -215,6 +215,15 @@ main() {
         info "System Handbook deployed"
     fi
 
+    # --- 5a3. sysctl fuer bwrap-Sandbox (#605) ---
+    # Ubuntu 24.04+ AppArmor-Restriction fuer unprivileged user namespaces aushebeln
+    # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann
+    if [ -f "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" ]; then
+        install -m 644 "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" /etc/sysctl.d/60-hydrahive-bwrap.conf
+        sysctl -p /etc/sysctl.d/60-hydrahive-bwrap.conf >/dev/null 2>&1 || true
+        info "sysctl: bwrap-Sandbox aktiviert (#605)"
+    fi
+
     # --- 5b. sudoers: alle sudoers-Dateien synchronisieren (#298) ---
     for _sudoer in hydrahive-installer hydrahive-update hydrahive-provisioner hydrahive-network-profile; do
         if [ -f "${TMPDIR_BASE}/installer/${_sudoer}.sudoers" ]; then
