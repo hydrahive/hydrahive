@@ -43,6 +43,18 @@ class GiteaConfigRequest(BaseModel):
     webhook_secret: str = ""
 
 
+class AlertConfigRequest(BaseModel):
+    enabled: bool | None = None
+    check_interval_seconds: int | None = None
+    disk_warn_pct: int | None = None
+    disk_crit_pct: int | None = None
+    heartbeat_max_age_seconds: int | None = None
+    journal_error_threshold: int | None = None
+    oauth_warn_days: int | None = None
+    cooldown_minutes: int | None = None
+    notify_users: list[str] | None = None
+
+
 _restart_lock = asyncio.Lock()
 _UPDATE_HEAD_CACHE: dict[str, object] = {
     "checked_at": datetime.fromtimestamp(0, tz=timezone.utc),
@@ -869,17 +881,6 @@ def register_system_routes(
     def get_alerts_config():
         from .alert_service import _load_config as _lac
         return _lac()
-
-    class AlertConfigRequest(BaseModel):
-        enabled: bool | None = None
-        check_interval_seconds: int | None = None
-        disk_warn_pct: int | None = None
-        disk_crit_pct: int | None = None
-        heartbeat_max_age_seconds: int | None = None
-        journal_error_threshold: int | None = None
-        oauth_warn_days: int | None = None
-        cooldown_minutes: int | None = None
-        notify_users: list[str] | None = None
 
     @admin_router.put("/admin/alerts/config")
     def update_alerts_config(req: AlertConfigRequest):
