@@ -28,11 +28,15 @@ server {
     location = /502.html { internal; }
 
     location / {
+        # v2 (#603): Security-Header
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-store, no-cache";
     }
 
     location /api/ {
+        # v2 (#603): Security-Header (add_header erbt nicht vom server-Block)
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         proxy_pass         http://127.0.0.1:8765/;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
@@ -73,6 +77,7 @@ server {
     }
 
     location /assets/ {
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
