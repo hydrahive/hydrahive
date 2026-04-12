@@ -98,7 +98,7 @@ export function AgentChatPage() {
       <div className="flex flex-1 flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b flex-shrink-0">
-          <button onClick={() => navigate("/agents")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
+          <button onClick={() => navigate("/projects")} className="p-1.5 rounded-md hover:bg-accent transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
