@@ -23,6 +23,16 @@ def register_brain_routes(auth_router, *, discovery, runtime, projects):
 
         running = runtime.status_all()
 
+        # ── Server-Hauptknoten (Mitte des Graphen) ────────────────────────
+        import socket
+        server_id = "server:core"
+        nodes.append({
+            "id":    server_id,
+            "label": socket.gethostname(),
+            "type":  "server",
+            "group": "server",
+        })
+
         # ── LLM-Provider aus llm_config.json ─────────────────────────────
         llm_cfg_path = settings.llm_config
         llm_providers: dict[str, str] = {}  # model → provider label
@@ -81,6 +91,9 @@ def register_brain_routes(auth_router, *, discovery, runtime, projects):
                 "mem_count":   mem_count,
                 "skill_count": skill_count,
             })
+
+            # Server → Agent
+            links.append({"source": server_id, "target": agent_id, "type": "hosts_agent"})
 
             # Agent → LLM-Provider
             if cfg.llm.model:
@@ -160,6 +173,9 @@ def register_brain_routes(auth_router, *, discovery, runtime, projects):
                 "tools_count": 9,
                 "mem_count":   mem_count,
             })
+
+            # Server → Projekt
+            links.append({"source": server_id, "target": proj_id, "type": "hosts_project"})
 
             # Projekt → LLM-Provider
             if llm_model:
