@@ -299,6 +299,21 @@ def register_project_routes(
             encoding="utf-8",
         )
 
+        # #607: members → users.json.allowed_projects synchron halten
+        _members_set = set(config_data.get("members") or [])
+        if _members_set:
+            try:
+                from .main import _load_users, _save_users
+                users = _load_users()
+                for uname, udata in users.items():
+                    ap = set(udata.get("allowed_projects") or [])
+                    if uname in _members_set:
+                        ap.add(req.id)
+                        udata["allowed_projects"] = sorted(ap)
+                _save_users(users)
+            except Exception as _e:
+                logger.warning("Users-Sync bei Projekt-Creation fehlgeschlagen: %s", _e)
+
         # AGENT.md — eigener Text oder aus Template
         agent_md_text = req.agent_md.strip() if req.agent_md else ""
         if not agent_md_text:
@@ -540,6 +555,26 @@ def register_project_routes(
             _yaml.dump(config_data, allow_unicode=True, default_flow_style=False, sort_keys=False),
             encoding="utf-8",
         )
+
+        # #607: members → users.json.allowed_projects synchron halten
+        if req.members is not None:
+            try:
+                from .main import _load_users, _save_users
+                users = _load_users()
+                req_members = set(req.members)
+                for uname, udata in users.items():
+                    ap = set(udata.get("allowed_projects") or [])
+                    is_member = uname in req_members
+                    if is_member:
+                        ap.add(project_id)
+                    else:
+                        ap.discard(project_id)
+                    udata["allowed_projects"] = sorted(ap)
+                _save_users(users)
+                logger.info("users.json synchronisiert (Projekt: %s, Members: %s)",
+                            project_id, sorted(req_members))
+            except Exception as _e:
+                logger.warning("Users-Sync fehlgeschlagen: %s", _e)
 
         # AGENT.md schreiben wenn im Request
         if req.agent_md is not None:

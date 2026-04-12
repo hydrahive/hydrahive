@@ -646,17 +646,34 @@ def _get_user_allowed_projects(username: str, role: str) -> set[str] | None:
     """
     Gibt die erlaubten Projekt-IDs zurück.
     None = unbegrenzt (nur admin).
-    Non-Admins bekommen IMMER eine explizite Liste — leere Liste = KEIN Zugriff
-    (ausser auf eigenes personal_<username>). (#595 Mandanten-Isolation)
+
+    #607: members (config.yaml) ist jetzt die kanonische Quelle. Wir scannen alle
+    geladenen Projekte nach members. allowed_projects aus users.json wird als
+    Legacy-Fallback dazugemerged.
     """
     if role == "admin":
         return None  # unbegrenzt
-    users = _load_users()
-    user = users.get(username, {})
-    allowed = user.get("allowed_projects") or []
-    # #595: Leere Liste ist KEIN Wildcard mehr — nur personal-Projekt erlaubt
-    result = set(allowed)
-    result.add(f"personal_{username}")  # eigenes Personal-Projekt immer erlaubt
+    result: set[str] = set()
+    # Aus allen geladenen Projekten: User in members?
+    try:
+        from .project_loader import get_project_loader as _gpl
+        loader = _gpl()
+        if loader is not None:
+            for pid, pcfg in loader.projects.items():
+                members = list(getattr(pcfg, "members", []) or [])
+                if username in members:
+                    result.add(pid)
+    except Exception as _e:
+        logger.warning("Project-Member-Scan fehlgeschlagen: %s", _e)
+    # Personal-Projekt immer erlaubt
+    result.add(f"personal_{username}")
+    # Legacy-Fallback: users.json.allowed_projects (falls vor #607 gepflegt)
+    try:
+        users = _load_users()
+        legacy = users.get(username, {}).get("allowed_projects") or []
+        result.update(legacy)
+    except Exception:
+        pass
     return result
 
 
