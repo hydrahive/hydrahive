@@ -41,10 +41,12 @@
 
 set -euo pipefail
 
-AGENTS_DIR="/agents"
-PROJECTS_DIR="/projects"
-BACKUP_DIR="/agents.v1-backup"
-VENV="/opt/hydrahive/venv"
+# Env-Overrides fuer Tests (HYDRAHIVE_* Variablen)
+AGENTS_DIR="${HYDRAHIVE_AGENTS_DIR:-/agents}"
+PROJECTS_DIR="${HYDRAHIVE_PROJECTS_DIR:-/projects}"
+BACKUP_DIR="${HYDRAHIVE_BACKUP_DIR:-/agents.v1-backup}"
+USERS_JSON="${HYDRAHIVE_USERS_JSON:-/etc/hydrahive/users.json}"
+VENV="${HYDRAHIVE_VENV:-/opt/hydrahive/venv}"
 DRY_RUN=false
 
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -64,10 +66,10 @@ errors=0
 
 # users.json → Members-Map (project_id → [usernames]) via allowed_projects (#591)
 USERS_MAP_JSON=$("$VENV/bin/python3" -c "
-import json
+import json, os
 result = {}
 try:
-    with open('/etc/hydrahive/users.json') as f:
+    with open(os.environ.get('HYDRAHIVE_USERS_JSON', '/etc/hydrahive/users.json')) as f:
         users = json.load(f)
     for username, udata in users.items():
         for pid in udata.get('allowed_projects', []) or []:
@@ -256,8 +258,8 @@ AGENTMD
         cp -a "$agent_dir/memory/"* "$project_dir/memory/" 2>/dev/null || true
     fi
 
-    # Berechtigungen setzen
-    chown -R hydrahive:hydrahive "$project_dir"
+    # Berechtigungen setzen (skip wenn kein hydrahive-User, z.B. in Tests)
+    chown -R hydrahive:hydrahive "$project_dir" 2>/dev/null || true
 
     # Migration-Report pro Agent (#591)
     _members_str=$(grep -A 20 "^members:" "$project_dir/config.yaml" 2>/dev/null | head -10 | grep "^- " | sed 's/^- //' | tr '\n' ',' | sed 's/,$//')
