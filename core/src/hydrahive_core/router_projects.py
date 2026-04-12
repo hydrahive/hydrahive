@@ -91,6 +91,7 @@ class UpdateProjectSettingsRequest(BaseModel):
     agent_md: str | None = None
     members: list[str] | None = None
     execution_mode: str | None = None  # safe | elevated | unrestricted (#568)
+    max_tool_rounds: int | None = None  # Max Tool-Aufrufe pro Nachricht (#613)
     messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
 
 
@@ -475,6 +476,7 @@ def register_project_routes(
             "agent_md": agent_md,
             "members": cfg.members,
             "execution_mode": getattr(cfg, "execution_mode", "safe"),
+            "max_tool_rounds": getattr(cfg, "max_tool_rounds", 50),
             "plugins": getattr(cfg, "plugins", []),
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
@@ -559,6 +561,9 @@ def register_project_routes(
         if req.execution_mode is not None:
             if req.execution_mode in ("safe", "elevated", "unrestricted"):
                 config_data["execution_mode"] = req.execution_mode
+
+        if req.max_tool_rounds is not None:
+            config_data["max_tool_rounds"] = max(1, min(200, req.max_tool_rounds))
 
         config_data["version"] = "2.0.0"
 

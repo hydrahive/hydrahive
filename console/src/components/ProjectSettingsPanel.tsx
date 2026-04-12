@@ -40,6 +40,7 @@ interface SettingsData {
   agent_md: string;
   members: string[];
   execution_mode: string;
+  max_tool_rounds?: number;
   messenger: {
     whatsapp?: { session_ids?: string[]; enabled?: boolean };
     discord?: { channels?: string[]; bot_token_env?: string };
@@ -72,6 +73,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [apiKeyEnv, setApiKeyEnv] = useState("");
   const [agentMd, setAgentMd] = useState("");
   const [executionMode, setExecutionMode] = useState("safe");
+  const [maxToolRounds, setMaxToolRounds] = useState(50);
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
 
   // WhatsApp
@@ -275,6 +277,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setApiKeyEnv(d.llm?.api_key_env || "");
       setAgentMd(d.agent_md || "");
       setExecutionMode(d.execution_mode || "safe");
+      setMaxToolRounds(d.max_tool_rounds ?? 50);
       // Messenger-Config laden (#569)
       const m = d.messenger || {};
       setDiscordBotTokenEnv(m.discord?.bot_token_env || "");
@@ -310,6 +313,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         api_key_env: apiKeyEnv,
         agent_md: agentMd,
         execution_mode: executionMode,
+        max_tool_rounds: maxToolRounds,
       });
       setSuccess("Gespeichert!");
       setTimeout(() => setSuccess(""), 3000);
@@ -424,6 +428,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               <option value="elevated">Elevated — erweiterte Rechte</option>
               <option value="unrestricted">Unrestricted — volle Rechte, sudo erlaubt</option>
             </select>
+          </div>
+
+          {/* Max Tool Rounds (#613) */}
+          <div>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Shield className="h-3 w-3" /> Max Tool-Aufrufe pro Nachricht
+            </label>
+            <input
+              type="number"
+              min={1} max={200}
+              value={maxToolRounds}
+              onChange={e => setMaxToolRounds(Number(e.target.value))}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+            />
           </div>
         </div>
 
