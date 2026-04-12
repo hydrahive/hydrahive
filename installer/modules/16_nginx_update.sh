@@ -92,33 +92,37 @@ else
 fi
 
 # --- 3. client_max_body_size ---
-# AdminFun (#AdminFun) kann 200MB MP3s hochladen → Limit entsprechend hochsetzen
-HAS_MAX_BODY=$(grep -c "client_max_body_size" "${TARGET}" 2>/dev/null || true)
-
-if [ "${HAS_MAX_BODY}" -eq 0 ]; then
-    python3 - "${TARGET}" << 'PYEOF'
-import sys, pathlib
+# AdminFun (#AdminFun) kann 200MB MP3s hochladen → in JEDEN server-Block setzen
+# (vorher war nur der HTTP→HTTPS-Redirect-Block getroffen → HTTPS-Uploads
+#  scheiterten mit 413 weil nginx dort seinen compile-default 1M nahm)
+python3 - "${TARGET}" << 'PYEOF'
+import sys, pathlib, re
 target = pathlib.Path(sys.argv[1])
 content = target.read_text()
 lines = content.splitlines()
-for i, line in enumerate(lines):
-    if 'server {' in line:
-        lines.insert(i + 1, '    client_max_body_size   200M;')
-        break
-target.write_text('\n'.join(lines) + '\n')
+out = []
+changed = False
+for line in lines:
+    out.append(line)
+    if re.match(r'\s*server\s*\{', line):
+        # prüfen ob in diesem block schon eins drin ist → ueberspringen
+        pass
+# Statt kompliziertem block-parsing: alle bestehenden client_max_body_size entfernen
+# und direkt nach jedem "server {" eine 200M-Zeile einfügen
+cleaned = re.sub(r'^\s*client_max_body_size[^\n]*\n', '', content, flags=re.MULTILINE)
+# Nach jedem server { eine 200M-Zeile
+patched = re.sub(
+    r'(server\s*\{)',
+    r'\1\n    client_max_body_size   200M;',
+    cleaned,
+)
+if patched != content:
+    target.write_text(patched)
+    print("client_max_body_size 200M in alle server-Bloecke geschrieben")
+else:
+    print("client_max_body_size bereits korrekt")
 PYEOF
-    CHANGED=1
-    echo "client_max_body_size 200M eingefügt"
-else
-    # Bestehenden Wert auf 200M hochziehen (für alte Installationen mit 50M oder niedriger)
-    if ! grep -qE "client_max_body_size\s+200M" "${TARGET}"; then
-        sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[KMG]?;/client_max_body_size   200M;/g' "${TARGET}"
-        CHANGED=1
-        echo "client_max_body_size auf 200M hochgesetzt"
-    else
-        echo "client_max_body_size bereits 200M"
-    fi
-fi
+CHANGED=1
 
 # --- 4. www-data in hydrahive-Gruppe ---
 if getent group hydrahive > /dev/null 2>&1; then
