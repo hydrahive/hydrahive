@@ -122,22 +122,44 @@ class ProjectLoader:
 
 
 class _ProjectEventHandler(FileSystemEventHandler):
+    # v2 (#598): v2-Dateien sind die kanonische Wahrheit, project.yaml als Legacy
+    _CONFIG_FILES = {"config.yaml", "project.yaml", "AGENT.md"}
+    _MESSENGER_FILES = {"messenger.yaml"}
+    _RELOAD_FILES = _CONFIG_FILES | _MESSENGER_FILES
+
     def __init__(self, loader: ProjectLoader) -> None:
         self._l = loader
+
+    def _rebuild_messenger_router(self) -> None:
+        """Messenger-Router neu aufbauen (messenger.yaml geaendert)."""
+        try:
+            from .messenger_router import messenger_router as _mr
+            _mr.rebuild()
+        except Exception as e:
+            logger.debug("messenger_router rebuild fehlgeschlagen: %s", e)
 
     def on_created(self, event: FileSystemEvent) -> None:
         path = Path(event.src_path)
         if event.is_directory:
             self._l._register(path)
-        elif path.name == "project.yaml":
+        elif path.name in self._CONFIG_FILES:
             self._l._register(path.parent)
+        elif path.name in self._MESSENGER_FILES:
+            self._rebuild_messenger_router()
 
     def on_deleted(self, event: FileSystemEvent) -> None:
         path = Path(event.src_path)
         if event.is_directory:
             self._l._unregister_dir(path)
-        elif path.name == "project.yaml":
-            self._l._unregister_dir(path.parent)
+        elif path.name in self._CONFIG_FILES:
+            # v2: Nur deregistrieren wenn weder config.yaml noch project.yaml existiert
+            parent = path.parent
+            if not ((parent / "config.yaml").exists() or (parent / "project.yaml").exists()):
+                self._l._unregister_dir(parent)
+            else:
+                self._l._register(parent)
+        elif path.name in self._MESSENGER_FILES:
+            self._rebuild_messenger_router()
 
     def on_moved(self, event: FileSystemEvent) -> None:
         # rename() feuert on_moved, nicht on_deleted — Projekt aus Registry entfernen
@@ -147,6 +169,11 @@ class _ProjectEventHandler(FileSystemEventHandler):
 
     def on_modified(self, event: FileSystemEvent) -> None:
         path = Path(event.src_path)
-        if not event.is_directory and path.name == "project.yaml":
-            logger.debug("project.yaml geaendert: %s", path)
+        if event.is_directory:
+            return
+        if path.name in self._CONFIG_FILES:
+            logger.debug("%s geaendert: %s", path.name, path)
             self._l._register(path.parent)
+        elif path.name in self._MESSENGER_FILES:
+            logger.debug("messenger.yaml geaendert: %s", path)
+            self._rebuild_messenger_router()
