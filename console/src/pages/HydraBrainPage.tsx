@@ -48,6 +48,8 @@ interface GraphData {
 
 // ── Farben pro Gruppe ──────────────────────────────────────────────────────
 const GROUP_COLOR: Record<string, string> = {
+  // Server-Hub (Mitte)
+  server:        "#ffffff",
   // Lokal
   agent_boss:    "#22d3ee",
   agent_worker:  "#60a5fa",
@@ -63,6 +65,7 @@ const GROUP_COLOR: Record<string, string> = {
 };
 
 const GROUP_SIZE: Record<string, number> = {
+  server:        8,   // Hauptknoten — deutlich größer
   agent_boss:    3,
   agent_worker:  2,
   agent_personal:2,
@@ -76,6 +79,8 @@ const GROUP_SIZE: Record<string, number> = {
 };
 
 const LINK_COLOR: Record<string, string> = {
+  hosts_project:     "#ffffff22",
+  hosts_agent:       "#ffffff22",
   has_boss:          "#facc1588",
   has_worker:        "#facc1544",
   has_tool:          "#fb923c55",
@@ -99,6 +104,7 @@ const LINK_PARTICLES: Record<string, number> = {
 
 // ── Legende ────────────────────────────────────────────────────────────────
 const LEGEND_LOCAL = [
+  { group: "server",        label: "Server" },
   { group: "agent_boss",    label: "Boss-Agent" },
   { group: "agent_worker",  label: "Worker-Agent" },
   { group: "agent_personal",label: "Personal-Agent" },
