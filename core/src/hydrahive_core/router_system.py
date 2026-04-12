@@ -55,6 +55,14 @@ class AlertConfigRequest(BaseModel):
     notify_users: list[str] | None = None
 
 
+class DreamConfigRequest(BaseModel):
+    enabled: bool | None = None
+    min_hours: int | None = None
+    min_sessions: int | None = None
+    check_interval_seconds: int | None = None
+    summary_model: str | None = None
+
+
 _restart_lock = asyncio.Lock()
 _UPDATE_HEAD_CACHE: dict[str, object] = {
     "checked_at": datetime.fromtimestamp(0, tz=timezone.utc),
@@ -903,13 +911,6 @@ def register_system_routes(
     def get_dream_config():
         from .auto_dream import _load_dream_config
         return _load_dream_config()
-
-    class DreamConfigRequest(BaseModel):
-        enabled: bool | None = None
-        min_hours: int | None = None
-        min_sessions: int | None = None
-        check_interval_seconds: int | None = None
-        summary_model: str | None = None
 
     @admin_router.put("/admin/dream/config")
     def update_dream_config(req: DreamConfigRequest):
