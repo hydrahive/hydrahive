@@ -266,8 +266,17 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
     # Datum + Uhrzeit im System-Prompt — LLM hat sonst kein Zeitgefühl
     from datetime import datetime, timezone as _tz
     _now = datetime.now(_tz.utc)
-    parts = [
-        f"Du bist {boss_cfg.identity}.",
+
+    # Generisches Identity-Statement NUR wenn keine AGENT.md existiert.
+    # Mit AGENT.md definiert diese die Identität — zwei konkurrierende "Du bist"-
+    # Anweisungen verwirren das LLM und das erste gewinnt.
+    _has_agent_md = bool(
+        boss_cfg.agent_dir and (boss_cfg.agent_dir / "AGENT.md").exists()
+    )
+    parts = (
+        [] if _has_agent_md
+        else [f"Du bist {boss_cfg.identity}."]
+    ) + [
         f"Aktuelles Datum: {_now.strftime('%A, %d. %B %Y')}. Uhrzeit: {_now.strftime('%H:%M')} UTC.",
     ]
 
