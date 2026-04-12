@@ -642,16 +642,16 @@ def require_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) 
 def _get_user_allowed_projects(username: str, role: str) -> set[str] | None:
     """
     Gibt die erlaubten Projekt-IDs zurück.
-    None = unbegrenzt (admin oder leere Liste als Wildcard).
-    Eigenes personal_<username> Projekt ist immer erlaubt.
+    None = unbegrenzt (nur admin).
+    Non-Admins bekommen IMMER eine explizite Liste — leere Liste = KEIN Zugriff
+    (ausser auf eigenes personal_<username>). (#595 Mandanten-Isolation)
     """
     if role == "admin":
         return None  # unbegrenzt
     users = _load_users()
     user = users.get(username, {})
     allowed = user.get("allowed_projects") or []
-    if not allowed:
-        return None  # leere Liste = kein Projekt-Filtering (Altverhalten)
+    # #595: Leere Liste ist KEIN Wildcard mehr — nur personal-Projekt erlaubt
     result = set(allowed)
     result.add(f"personal_{username}")  # eigenes Personal-Projekt immer erlaubt
     return result

@@ -980,7 +980,29 @@ class FileSearchTool(BaseTool):
     async def execute(self, agent_id: str, project_id: str, pattern: str, path: str = "", file_pattern: str = "", max_results: int = 20, **kwargs) -> dict:
         import subprocess
 
-        search_dir = Path(path) if path and Path(path).is_absolute() else Path(f"/projects/{project_id}") / (path or "")
+        # #597: Path-Validation — niemals ausserhalb des Projekt-Roots suchen
+        project_root = Path(f"/projects/{project_id}").resolve()
+        if path and Path(path).is_absolute():
+            requested = Path(path).resolve()
+            try:
+                requested.relative_to(project_root)
+                search_dir = requested
+            except ValueError:
+                return {
+                    "error": f"Pfad ausserhalb des Projekts nicht erlaubt: {path}",
+                    "blocked": True,
+                }
+        else:
+            # Relativer Pfad — gegen Projekt-Root aufloesen und pruefen
+            candidate = (project_root / (path or "")).resolve()
+            try:
+                candidate.relative_to(project_root)
+                search_dir = candidate
+            except ValueError:
+                return {
+                    "error": f"Pfad traversiert das Projekt-Root: {path}",
+                    "blocked": True,
+                }
         if not search_dir.exists():
             return {"error": f"Verzeichnis nicht gefunden: {search_dir}"}
 

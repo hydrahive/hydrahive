@@ -363,13 +363,26 @@ def register_project_routes(
         req: UpdateProjectSettingsRequest,
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        """v2: Projekt-Config + AGENT.md speichern."""
+        """v2: Projekt-Config + AGENT.md speichern.
+        #586: Nur Admin oder Owner (erster Member) darf aendern."""
         import yaml as _yaml
 
         _check_project_access(_auth, project_id)
+        username, role = _auth
         cfg = projects.get(project_id)
         if not cfg:
             raise HTTPException(404, "Projekt nicht gefunden")
+
+        # #586: Schreibrechte nur fuer Admin oder Personal-Projekt-Owner
+        is_admin = role == "admin"
+        is_personal_owner = project_id == f"personal_{username}"
+        members_list = list(getattr(cfg, "members", []) or [])
+        is_project_owner = bool(members_list) and members_list[0] == username
+        if not (is_admin or is_personal_owner or is_project_owner):
+            raise HTTPException(
+                403,
+                "Nur Admins oder Projekt-Owner (erster Member) duerfen Settings aendern.",
+            )
 
         project_dir = Path(projects_dir) / project_id
         config_path = project_dir / "config.yaml"

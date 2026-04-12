@@ -116,17 +116,22 @@ def register_butler_routes(router: APIRouter, require_auth) -> None:
         role = auth[1] if len(auth) > 1 else ""
         if role == "admin":
             return
-        # Members-Check via config.yaml
+        # Members-Check via config.yaml (#596: HTTPException nicht mehr verschlucken)
         config_path = project_dir / "config.yaml"
+        members = []
         if config_path.exists():
             import yaml
             try:
-                cfg = yaml.safe_load(config_path.read_text())
-                members = cfg.get("members", [])
-                if members and auth[0] not in members:
-                    raise HTTPException(403, "Kein Zugang zu diesem Projekt")
-            except Exception:
-                pass
+                cfg = yaml.safe_load(config_path.read_text()) or {}
+                members = cfg.get("members", []) or []
+            except (yaml.YAMLError, OSError) as e:
+                logger.warning("Butler-Access: config.yaml von %s nicht lesbar: %s",
+                               project_id, e)
+                raise HTTPException(500, "Projekt-Config nicht lesbar")
+        # #595: Fail-closed — User muss explizit Member sein (oder Admin, oben gecheckt)
+        # Ausnahme: Personal-Projekt des Users
+        if auth[0] not in members and project_id != f"personal_{auth[0]}":
+            raise HTTPException(403, "Kein Zugang zu diesem Projekt")
 
     @router.get("/projects/{project_id}/butler/flows")
     async def list_project_flows(project_id: str, auth=Depends(require_auth)):
