@@ -96,7 +96,7 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     # Disabled Agents überspringen
     if [[ "$agent_id" == _*_disabled ]]; then
         warn "$agent_id — disabled, übersprungen"
-        ((skipped++))
+        skipped=$((skipped + 1))
         continue
     fi
 
@@ -108,14 +108,14 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     # agent.yaml muss existieren
     if [[ ! -f "$agent_dir/agent.yaml" ]]; then
         warn "$agent_id — keine agent.yaml, übersprungen"
-        ((skipped++))
+        skipped=$((skipped + 1))
         continue
     fi
 
     # Ephemeral Agents überspringen (z.B. file_specialist_32d9cfc1)
     if [[ "$agent_id" == *_???????? ]] && [[ ${#agent_id} -gt 20 ]]; then
         warn "$agent_id — ephemeral, übersprungen"
-        ((skipped++))
+        skipped=$((skipped + 1))
         continue
     fi
 
@@ -125,7 +125,7 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     # Projekt existiert schon?
     if [[ -f "$project_dir/config.yaml" ]]; then
         warn "$agent_id — config.yaml existiert bereits, übersprungen"
-        ((skipped++))
+        skipped=$((skipped + 1))
         continue
     fi
 
@@ -155,6 +155,9 @@ elif 'gemini' in model.lower():
 elif 'ollama' in model.lower() or 'llama' in model.lower():
     provider = 'ollama'
 
+# llm.api_key_env uebernehmen (Codex #3: Daten-Verlust-Fix)
+api_key_env = llm.get('api_key_env', '') or ''
+
 # Failover aus fallback_models
 failover = []
 for fm in fallback_models:
@@ -176,13 +179,18 @@ if not members:
     # Fallback: nur admin (behaelt bisheriges Verhalten bei unbekannten Projekten)
     members = ['admin']
 
+# identity.description aus agent.yaml, nur Fallback auf Migration-Text
+_existing_desc = raw.get('description', '') or ''
+if not _existing_desc:
+    _existing_desc = f\"Migriert von Agent {raw.get('id', '$agent_id')}\"
+
 # config.yaml zusammenbauen
 config = {
     'id': '$agent_id',
     'version': '2.0.0',
     'identity': {
         'name': raw.get('identity', '$agent_id'),
-        'description': f\"Migriert von Agent {raw.get('id', '$agent_id')}\",
+        'description': _existing_desc,
     },
     'llm': {
         'provider': provider,
@@ -190,6 +198,7 @@ config = {
         'temperature': temperature,
         'max_tokens': max_tokens,
         'thinking_budget': thinking_budget,
+        'api_key_env': api_key_env,
         'failover': failover,
     },
     'execution_mode': default_mode,
@@ -202,7 +211,7 @@ config = {
 yaml.dump(config, sys.stdout, default_flow_style=False, allow_unicode=True, sort_keys=False)
 " 2>/dev/null) || {
         error "$agent_id — config.yaml Konvertierung fehlgeschlagen"
-        ((errors++))
+        errors=$((errors + 1))
         continue
     }
 
@@ -215,9 +224,12 @@ yaml.dump(config, sys.stdout, default_flow_style=False, allow_unicode=True, sort
             echo "  → AGENT.md: $(wc -l < "$agent_dir/soul.md") Zeilen"
         fi
 
-        memory_count=$(ls "$agent_dir/memory/" 2>/dev/null | wc -l)
+        memory_count=0
+        if [[ -d "$agent_dir/memory" ]]; then
+            memory_count=$(find "$agent_dir/memory/" -maxdepth 1 -type f 2>/dev/null | wc -l)
+        fi
         echo "  → Memory: $memory_count Dateien"
-        ((migrated++))
+        migrated=$((migrated + 1))
         continue
     fi
 
@@ -250,14 +262,17 @@ AGENTMD
     # Migration-Report pro Agent (#591)
     _members_str=$(grep -A 20 "^members:" "$project_dir/config.yaml" 2>/dev/null | head -10 | grep "^- " | sed 's/^- //' | tr '\n' ',' | sed 's/,$//')
     _exec_mode=$(grep "^execution_mode:" "$project_dir/config.yaml" 2>/dev/null | awk '{print $2}')
-    _memory_count=$(ls "$project_dir/memory/" 2>/dev/null | wc -l)
+    _memory_count=0
+    if [[ -d "$project_dir/memory" ]]; then
+        _memory_count=$(find "$project_dir/memory/" -maxdepth 1 -type f 2>/dev/null | wc -l)
+    fi
     _agent_md_lines=$(wc -l < "$project_dir/AGENT.md" 2>/dev/null || echo 0)
     success "$agent_id → $project_dir"
     echo "    Members: ${_members_str:-admin}"
     echo "    Execution-Mode: ${_exec_mode:-safe}"
     echo "    AGENT.md: ${_agent_md_lines} Zeilen, Memory: ${_memory_count} Dateien"
     echo "    Nicht uebernommen: tools (v2 = 9 Core-Tools), role, workflow, heartbeat_tasks"
-    ((migrated++))
+    migrated=$((migrated + 1))
 done
 
 echo ""
