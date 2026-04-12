@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -466,6 +467,42 @@ def register_core_misc_routes(
                     "parameters": tool.parameters,
                 }
         return result
+
+    @auth_router.get("/templates")
+    def list_templates(_a: tuple[str, str] = Depends(require_auth)):
+        """v2 (#601): Listet verfuegbare Projekt-Templates aus installer/templates/."""
+        from .settings import settings
+        tpl_dir = settings.installer_dir / "templates"
+        if not tpl_dir.exists():
+            return {"templates": []}
+        templates = []
+        for d in sorted(tpl_dir.iterdir()):
+            if not d.is_dir():
+                continue
+            agent_md = d / "AGENT.md"
+            config = d / "config.yaml"
+            templates.append({
+                "id": d.name,
+                "has_agent_md": agent_md.exists(),
+                "has_config": config.exists(),
+            })
+        return {"templates": templates}
+
+    @auth_router.get("/templates/{template_id}/agent-md", response_class=PlainTextResponse)
+    def get_template_agent_md(template_id: str, _a: tuple[str, str] = Depends(require_auth)):
+        """v2 (#601): AGENT.md eines Templates als Plain-Text.
+        Wird vom Projekt-Wizard zur Preview geladen."""
+        import re as _re
+        from .settings import settings
+        if not _re.match(r"^[a-z0-9_-]+$", template_id):
+            raise HTTPException(400, "Ungueltige template_id")
+        agent_md = settings.installer_dir / "templates" / template_id / "AGENT.md"
+        if not agent_md.exists():
+            raise HTTPException(404, f"Template '{template_id}' hat keine AGENT.md")
+        try:
+            return agent_md.read_text(encoding="utf-8")
+        except Exception as e:
+            raise HTTPException(500, f"AGENT.md nicht lesbar: {e}")
 
     @admin_router.get("/secrets/keys")
     def list_secret_keys():

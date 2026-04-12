@@ -144,14 +144,16 @@ export function ChatPage() {
     chat.loadHistory();
   }, [id]);
 
-  // Live-Sync: History alle 3s refreshen wenn nicht am Streamen
+  // v2 (#602): 3s-Polling entfernt — Real-Time Sync laeuft ueber useProjectSubscribe.
+  // Recovery-Polling NUR wenn SSE-Verbindung tot ist (mit Backoff).
   useEffect(() => {
     if (!id || chat.sending) return;
+    if (subscribe.isConnected) return;  // SSE laeuft → kein Polling
     const poll = setInterval(() => {
       chat.loadHistory();
-    }, 3000);
+    }, 10000);  // Nur Fallback bei Disconnect — 10s statt 3s
     return () => clearInterval(poll);
-  }, [id, chat.sending]);
+  }, [id, chat.sending, subscribe.isConnected]);
 
   // Past Sessions laden wenn History-Panel geöffnet wird
   useEffect(() => {
