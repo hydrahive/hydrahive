@@ -46,6 +46,7 @@ _MOCK_MODULES = [
     "fastapi.middleware.cors", "fastapi.staticfiles",
     "uvicorn",
     "starlette", "starlette.responses", "starlette.requests",
+    "starlette.middleware", "starlette.middleware.base",
     "python_jose", "cryptography",
 ]
 

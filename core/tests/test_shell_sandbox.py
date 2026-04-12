@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from hydrahive_core.tool_registry import _check_shell_blocklist, _validate_shell_cwd
+from hydrahive_core.tool_registry import _check_shell_blocklist, _validate_shell_cwd, ShellExecTool
 
 
 def blocked(cmd: str) -> bool:
@@ -192,3 +192,122 @@ def test_cwd_root_geblockt():
 
 def test_cwd_bin_geblockt():
     assert _validate_shell_cwd("/bin") is not None
+
+
+# ============================================================= ShellExecTool.execute — Mode-Routing (#590)
+
+import asyncio
+
+
+def _run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro) if not asyncio.iscoroutine(coro) else asyncio.run(coro)
+
+
+@pytest.fixture
+def bwrap_ok(monkeypatch):
+    """Simuliert funktionierende bwrap-Sandbox (umgeht echten Self-Test)."""
+    monkeypatch.setattr(ShellExecTool, "_bwrap_works", True, raising=False)
+
+
+@pytest.fixture
+def bwrap_kaputt(monkeypatch):
+    """Simuliert defekte bwrap-Sandbox — safe+elevated müssen fail-closed sein."""
+    monkeypatch.setattr(ShellExecTool, "_bwrap_works", False, raising=False)
+
+
+def test_safe_mode_blocklist_vor_subprocess(bwrap_ok):
+    """safe + rm -rf / → blocked=True, kein Subprocess-Start."""
+    tool = ShellExecTool()
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="rm -rf /tmp/x",
+        _execution_mode="safe",
+    ))
+    assert result.get("blocked") is True
+    assert "blockiert" in result.get("error", "").lower()
+
+
+def test_safe_mode_cwd_blocklist(bwrap_ok):
+    """safe + cwd=/etc → blocked=True."""
+    tool = ShellExecTool()
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="ls",
+        cwd="/etc",
+        _execution_mode="safe",
+    ))
+    assert result.get("blocked") is True
+
+
+def test_safe_mode_bwrap_kaputt_fail_closed(bwrap_kaputt):
+    """safe + bwrap kaputt → Verweigerung mit Sandbox-Error (nicht nur ausführen!)."""
+    tool = ShellExecTool()
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="ls /tmp",  # harmlos, wuerde in safe ohne bwrap sonst durchlaufen
+        _execution_mode="safe",
+    ))
+    assert result.get("blocked") is True
+    assert "sandbox" in result.get("error", "").lower() or "bwrap" in result.get("error", "").lower()
+
+
+def test_elevated_mode_bwrap_kaputt_fail_closed(bwrap_kaputt):
+    """elevated + bwrap kaputt → Verweigerung (MUSS-2: kein unsandboxed Bypass)."""
+    tool = ShellExecTool()
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="npm install",
+        _execution_mode="elevated",
+    ))
+    assert result.get("blocked") is True
+    assert "sandbox" in result.get("error", "").lower() or "bwrap" in result.get("error", "").lower()
+
+
+def test_elevated_mode_keine_blocklist(bwrap_kaputt):
+    """elevated erlaubt Commands die safe blockieren wuerde — Blocklist nicht aktiv.
+
+    Test nutzt bwrap_kaputt damit der Call fail-closed abbricht BEVOR subprocess
+    gestartet wird. Pruefung: Der Error ist sandbox-bezogen, nicht blocklist-bezogen.
+    """
+    tool = ShellExecTool()
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="sudo apt install vim",  # waere in safe blockiert
+        _execution_mode="elevated",
+    ))
+    # Error muss sandbox-/bwrap-bezogen sein, NICHT blocklist ("sudo")
+    err = result.get("error", "").lower()
+    assert "sandbox" in err or "bwrap" in err
+    assert "sudo" not in err  # nicht durch Blocklist blockiert
+
+
+def test_unrestricted_mode_umgeht_sandbox_check(bwrap_kaputt, monkeypatch):
+    """unrestricted laeuft auch ohne bwrap — keine fail-closed Verweigerung.
+
+    Wir patchen subprocess um den tatsaechlichen Aufruf zu verhindern,
+    testen aber dass der Mode nicht fail-closed abbricht.
+    """
+    tool = ShellExecTool()
+    calls = {"count": 0}
+
+    # asyncio.create_subprocess_shell mocken — gibt dummy-Process mit exit 0 zurück
+    class _FakeProc:
+        returncode = 0
+        async def communicate(self):
+            return (b"ok\n", b"")
+
+    async def _fake_exec(*a, **kw):
+        calls["count"] += 1
+        return _FakeProc()
+
+    monkeypatch.setattr("asyncio.create_subprocess_shell", _fake_exec)
+
+    result = asyncio.run(tool.execute(
+        agent_id="x", project_id="p1",
+        command="echo hallo",
+        _execution_mode="unrestricted",
+    ))
+    # unrestricted wird NICHT blockiert (kein blocked=True)
+    assert result.get("blocked") is not True
+    # Und der (gemockte) Subprocess wurde aufgerufen
+    assert calls["count"] >= 1
