@@ -273,6 +273,13 @@ AGENTMD
     echo "    AGENT.md: ${_agent_md_lines} Zeilen, Memory: ${_memory_count} Dateien"
     echo "    Nicht uebernommen: tools (v2 = 9 Core-Tools), role, workflow, heartbeat_tasks"
     migrated=$((migrated + 1))
+
+    # Alten Agent-Ordner aus /agents/ verschieben → nicht mehr aktiv, aber nicht verloren
+    # (Backup unter $BACKUP_DIR existiert bereits als vollständige Kopie)
+    if [[ "$DRY_RUN" == false ]]; then
+        mv "$agent_dir" "$BACKUP_DIR/${agent_id}.v1" 2>/dev/null || true
+        info "$agent_id — /agents/$agent_id verschoben nach $BACKUP_DIR/${agent_id}.v1"
+    fi
 done
 
 echo ""
