@@ -129,15 +129,71 @@ def register_brain_routes(auth_router, *, discovery, runtime, projects):
                             })
                         links.append({"source": agent_id, "target": skill_id, "type": "has_skill"})
 
-        # ── Projekte ────────────────────────────────────────────────────────
+        # ── Projekte (v2: Projekt = Agent) ──────────────────────────────────
+        # v2-Projekte bekommen dieselben reichen Verbindungen wie Agenten:
+        # LLM-Provider, Core-Tools, Memory, AGENT.md
+        V2_CORE_TOOLS = [
+            "shell_exec", "file_read", "file_write", "file_patch",
+            "file_search", "web_search", "read_memory", "write_memory", "ask_agent",
+        ]
         for pid, cfg in projects.projects.items():
             proj_id = f"proj:{pid}"
+            status     = running.get(pid, {}) or {}
+            is_running = status.get("status") == "running"
+
+            mem_count = 0
+            proj_dir = getattr(cfg, "project_dir", None)
+            if proj_dir:
+                mem_dir = Path(proj_dir) / "memory"
+                if mem_dir.exists():
+                    mem_count = len(list(mem_dir.glob("*.md")))
+
+            llm_model = getattr(getattr(cfg, "llm", None), "model", "") or ""
+
             nodes.append({
-                "id":    proj_id,
-                "label": cfg.identity.name if hasattr(cfg.identity, "name") else pid,
-                "type":  "project",
-                "group": "project",
+                "id":          proj_id,
+                "label":       cfg.identity.name if hasattr(cfg.identity, "name") else pid,
+                "type":        "project",
+                "group":       "project",
+                "running":     is_running,
+                "model":       llm_model,
+                "tools_count": 9,
+                "mem_count":   mem_count,
             })
+
+            # Projekt → LLM-Provider
+            if llm_model:
+                prov_id = _ensure_provider(llm_model)
+                links.append({"source": proj_id, "target": prov_id, "type": "uses_llm"})
+
+            # Projekt → Core-Tools
+            for tool_id in V2_CORE_TOOLS:
+                tool_node_id = f"tool:{tool_id}"
+                if tool_node_id not in seen_tools:
+                    seen_tools.add(tool_node_id)
+                    nodes.append({
+                        "id":    tool_node_id,
+                        "label": tool_id,
+                        "type":  "tool",
+                        "group": "tool",
+                    })
+                links.append({"source": proj_id, "target": tool_node_id, "type": "has_tool"})
+
+            # Projekt → Memory-Dateien
+            if proj_dir:
+                memory_dir = Path(proj_dir) / "memory"
+                if memory_dir.exists():
+                    for mem_file in sorted(memory_dir.glob("*.md"))[:8]:
+                        mem_id = f"mem:{pid}:{mem_file.stem}"
+                        nodes.append({
+                            "id":    mem_id,
+                            "label": mem_file.stem,
+                            "type":  "memory",
+                            "group": "memory",
+                        })
+                        links.append({"source": proj_id, "target": mem_id, "type": "has_memory"})
+
+            # Legacy v1: Boss/Worker-Links (falls noch gesetzt)
             boss = cfg.agents.boss if hasattr(cfg, "agents") else None
             if boss:
                 links.append({"source": proj_id, "target": boss, "type": "has_boss"})
