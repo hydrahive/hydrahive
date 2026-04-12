@@ -4,6 +4,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { NotificationQueue } from "@/components/NotificationQueue";
 import { SupportWidget } from "@/components/SupportWidget";
 import { FloatingCompanion, useCompanionActivation, BlobCreature } from "@/components/FloatingCompanion";
+import { AdminFunPlayer } from "@/components/AdminFunPlayer";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -620,6 +621,7 @@ export function AdminLayout() {
       <NotificationQueue />
       <SupportWidget />
       <FloatingCompanion />
+      <AdminFunPlayer />
     </div>
     </TourProvider>
   );

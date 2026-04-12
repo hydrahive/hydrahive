@@ -244,3 +244,60 @@
     filter: drop-shadow(0 0 55px rgba(74, 222, 128, 0.5));
   }
 }
+
+/* ═══ AdminFun — Beat-synchrone Visuals (#AdminFun) ═══
+   CSS-Variablen werden vom AdminFunPlayer pro Frame gesetzt:
+     --adminfun-bass:    0.0 – 1.0  (niedrige Frequenzen)
+     --adminfun-mid:     0.0 – 1.0  (mittlere Frequenzen)
+     --adminfun-treble:  0.0 – 1.0  (hohe Frequenzen)
+     --adminfun-beat:    0 | 1      (Beat-Trigger)
+     --adminfun-active:  0 | 1      (Player aktiv?)
+*/
+:root {
+  --adminfun-bass: 0;
+  --adminfun-mid: 0;
+  --adminfun-treble: 0;
+  --adminfun-beat: 0;
+  --adminfun-active: 0;
+}
+
+/* Sidebar-Icons pulsieren mit Bass wenn AdminFun aktiv */
+.adminfun-react aside [data-nav-item] svg,
+.adminfun-react nav [data-nav-item] svg {
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
+  transform: scale(calc(1 + var(--adminfun-bass, 0) * 0.15 * var(--adminfun-active, 0)));
+  filter: drop-shadow(0 0 calc(var(--adminfun-bass, 0) * 8px * var(--adminfun-active, 0)) rgba(168, 85, 247, calc(var(--adminfun-bass, 0) * 0.8)));
+}
+
+/* Beat-Pulse: alle Buttons mit einer subtilen Chromatic-Aberration bei Beats */
+body:not(.adminfun-disabled) [class*="rounded-full"],
+body:not(.adminfun-disabled) .adminfun-beat-target {
+  transition: box-shadow 0.1s ease-out;
+}
+body:not(.adminfun-disabled) [class*="rounded-full"] {
+  box-shadow: 0 0 calc(var(--adminfun-beat, 0) * 20px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.6 * var(--adminfun-active, 0)));
+}
+
+/* Body-Border glüht mit Mid-Range + Beat-Flash */
+body {
+  transition: box-shadow 0.06s ease-out;
+}
+body {
+  box-shadow:
+    inset 0 0 calc(var(--adminfun-mid, 0) * 80px * var(--adminfun-active, 0)) rgba(168, 85, 247, calc(var(--adminfun-mid, 0) * 0.2 * var(--adminfun-active, 0))),
+    inset 0 0 calc(var(--adminfun-beat, 0) * 40px * var(--adminfun-active, 0)) rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.4 * var(--adminfun-active, 0)));
+}
+
+/* Logo / Hauptelemente bumpen mit Beats */
+.adminfun-bump {
+  transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.08 * var(--adminfun-active, 0)));
+}
+
+/* Chromatic-Shift bei Treble (subtile RGB-Split auf Text) */
+.adminfun-chroma {
+  text-shadow:
+    calc(var(--adminfun-treble, 0) * 2px * var(--adminfun-active, 0)) 0 rgba(236, 72, 153, 0.5),
+    calc(var(--adminfun-treble, 0) * -2px * var(--adminfun-active, 0)) 0 rgba(59, 130, 246, 0.5);
+  transition: text-shadow 0.08s ease-out;
+}

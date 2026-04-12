@@ -34,6 +34,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_backup_restore import register_backup_restore_routes
+from .router_adminfun import register_adminfun_routes
 from .router_migration import register_migration_routes
 from .router_vpn import register_vpn_routes
 from .router_doctor import register_doctor_routes
@@ -1546,6 +1547,7 @@ register_backup_restore_routes(
 
 register_migration_routes(admin_router, require_admin=require_admin, audit_log=audit_log)
 register_vpn_routes(admin_router, require_admin=require_admin)
+register_adminfun_routes(admin_router, audit_log=audit_log, logger=logger)
 register_doctor_routes(admin_router, require_admin=require_admin)
 register_searxng_routes(admin_router, require_admin=require_admin)
 register_knowledge_routes(admin_router, require_admin=require_admin)
