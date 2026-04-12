@@ -299,7 +299,9 @@ def register_project_routes(
             encoding="utf-8",
         )
 
-        # #607: members → users.json.allowed_projects synchron halten
+        # #607: members → users.json.allowed_projects synchron halten (Codex-3 MEDIUM:
+        # best-effort, Fehler geht in provision_warnings statt silent failure)
+        _users_sync_error = ""
         _members_set = set(config_data.get("members") or [])
         if _members_set:
             try:
@@ -312,7 +314,8 @@ def register_project_routes(
                         udata["allowed_projects"] = sorted(ap)
                 _save_users(users)
             except Exception as _e:
-                logger.warning("Users-Sync bei Projekt-Creation fehlgeschlagen: %s", _e)
+                logger.error("Users-Sync bei Projekt-Creation fehlgeschlagen: %s", _e)
+                _users_sync_error = str(_e)
 
         # AGENT.md — eigener Text oder aus Template
         agent_md_text = req.agent_md.strip() if req.agent_md else ""
@@ -351,6 +354,12 @@ def register_project_routes(
         # Provisioning (Samba + Linux-User + Matrix) — nicht fatal bei Fehler
         provision_result = None
         provision_warnings: list[str] = []
+        if _users_sync_error:
+            provision_warnings.append(
+                f"users.json-Sync fehlgeschlagen: {_users_sync_error}. "
+                "Admin muss allowed_projects manuell in users.json ergaenzen "
+                "oder PUT /projects/{id}/settings mit members erneut ausloesen."
+            )
         try:
             provisioner = get_provisioner()
             if provisioner is not None:
@@ -560,6 +569,8 @@ def register_project_routes(
         )
 
         # #607: members → users.json.allowed_projects synchron halten
+        # Codex-3 MEDIUM: Fehler in Response-warnings, nicht silent (best-effort)
+        _warnings: list[str] = []
         if req.members is not None:
             try:
                 from .main import _load_users, _save_users
@@ -577,7 +588,13 @@ def register_project_routes(
                 logger.info("users.json synchronisiert (Projekt: %s, Members: %s)",
                             project_id, sorted(req_members))
             except Exception as _e:
-                logger.warning("Users-Sync fehlgeschlagen: %s", _e)
+                logger.error("Users-Sync fehlgeschlagen: %s", _e)
+                _warnings.append(
+                    f"users.json-Sync fehlgeschlagen: {_e}. "
+                    f"members in config.yaml sind aktuell, "
+                    f"aber users.json.allowed_projects nicht. "
+                    f"Admin muss manuell synchronisieren."
+                )
 
         # AGENT.md schreiben wenn im Request
         if req.agent_md is not None:
@@ -602,9 +619,9 @@ def register_project_routes(
         projects.register(project_dir)
 
         audit_log("project.settings_update", target=project_id, project_id=project_id)
-        logger.info("v2-Projekt Settings aktualisiert: %s", project_id)
+        logger.info("v2-Projekt Settings aktualisiert: %s (warnings: %d)", project_id, len(_warnings))
 
-        return {"updated": True, "project_id": project_id}
+        return {"updated": True, "project_id": project_id, "warnings": _warnings}
 
     # ── v1: Projekt-Erstellung (Legacy) ────────────────────────────────
 

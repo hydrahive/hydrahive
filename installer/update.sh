@@ -217,11 +217,21 @@ main() {
 
     # --- 5a3. sysctl fuer bwrap-Sandbox (#605) ---
     # Ubuntu 24.04+ AppArmor-Restriction fuer unprivileged user namespaces aushebeln
-    # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann
+    # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann.
+    # Codex-3 LOW: Fehler bei sysctl -p NICHT verschlucken — klare Fehlermeldung
     if [ -f "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" ]; then
         install -m 644 "${TMPDIR_BASE}/installer/60-hydrahive-bwrap.conf" /etc/sysctl.d/60-hydrahive-bwrap.conf
-        sysctl -p /etc/sysctl.d/60-hydrahive-bwrap.conf >/dev/null 2>&1 || true
-        info "sysctl: bwrap-Sandbox aktiviert (#605)"
+        if sysctl -p /etc/sysctl.d/60-hydrahive-bwrap.conf >/dev/null 2>&1; then
+            # Verifizieren dass Wert wirklich 0 ist
+            _unp_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || echo "unset")
+            if [ "${_unp_userns}" = "0" ]; then
+                info "sysctl: bwrap-Sandbox aktiviert (#605)"
+            else
+                warn "bwrap-sysctl geschrieben, aber kernel.apparmor_restrict_unprivileged_userns=${_unp_userns} (erwartet: 0). shell_exec safe-Mode wird faktisch nicht laufen bis Host manuell konfiguriert ist."
+            fi
+        else
+            warn "sysctl -p fehlgeschlagen fuer bwrap-Sandbox. shell_exec safe-Mode wird fail-closed greifen. Admin muss manuell: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
+        fi
     fi
 
     # --- 5b. sudoers: alle sudoers-Dateien synchronisieren (#298) ---
