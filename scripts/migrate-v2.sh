@@ -1,17 +1,43 @@
 #!/usr/bin/env bash
-# migrate-v2.sh — Konvertiert v1 Agents zu v2 Projekten
+# migrate-v2.sh — Konvertiert v1 Agents zu v2 Projekten (#591)
 #
 # Ablauf:
 #   1. Backup von /agents/ nach /agents.v1-backup/
-#   2. Für jeden Agent: Projekt erstellen wenn noch keins existiert
-#   3. agent.yaml → config.yaml konvertieren (LLM-Config extrahieren)
-#   4. soul.md → AGENT.md kopieren
-#   5. memory/ übernehmen
-#   6. Disabled/Ephemeral Agents überspringen
+#   2. users.json lesen → allowed_projects → members-Map fuer Projekte
+#   3. Fuer jeden Agent: Projekt erstellen wenn noch keins existiert
+#   4. agent.yaml → config.yaml konvertieren
+#   5. soul.md → AGENT.md kopieren
+#   6. memory/ uebernehmen
+#   7. Disabled/Ephemeral Agents ueberspringen
+#
+# WAS WIRD UEBERNOMMEN:
+#   - LLM: model, temperature, max_tokens, thinking_budget, fallback_models
+#   - Provider wird aus Model abgeleitet (anthropic/openai/google/ollama)
+#   - identity (Name) und description
+#   - execution_modes.default → execution_mode (safe/elevated/unrestricted)
+#   - members: User aus users.json die allowed_projects enthalten
+#   - soul.md-Inhalt als AGENT.md
+#   - memory/-Dateien
+#
+# WAS ENTFAELLT ABSICHTLICH (v1-only):
+#   - tools: v2 hat feste 9 Core-Tools (shell_exec, file_*, web_search, memory_*, ask_agent)
+#   - role: v2 hat kein Role-System mehr
+#   - workflow: v2 Orchestrator hat keinen Worker-Dispatch
+#   - heartbeat_tasks: Feature in v2 noch nicht implementiert
+#   - allowed_agents: v2-Konzept ist Projekt-Members + ask_agent Tool
+#   - execution_modes.{safe,unrestricted}.permissions: v2 hat Tool-Ebene Security
+#
+# NICHT AUTOMATISIERT (manuell pflegen nach Migration):
+#   - Messenger-Config (messenger.yaml pro Projekt)
+#   - Gitea/Matrix-Room-Links
+#
+# IDEMPOTENZ:
+#   - Wenn config.yaml existiert → Projekt komplett ueberspringen
+#   - Fuer Re-Migration: config.yaml manuell loeschen
 #
 # Usage: sudo bash scripts/migrate-v2.sh [--dry-run]
 #
-# WICHTIG: Läuft auf dem Server, nicht auf Lilith!
+# WICHTIG: Laeuft auf dem Server, nicht auf Lilith!
 
 set -euo pipefail
 
@@ -35,6 +61,22 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 migrated=0
 skipped=0
 errors=0
+
+# users.json → Members-Map (project_id → [usernames]) via allowed_projects (#591)
+USERS_MAP_JSON=$("$VENV/bin/python3" -c "
+import json
+result = {}
+try:
+    with open('/etc/hydrahive/users.json') as f:
+        users = json.load(f)
+    for username, udata in users.items():
+        for pid in udata.get('allowed_projects', []) or []:
+            result.setdefault(pid, []).append(username)
+except Exception:
+    pass
+print(json.dumps(result))
+" 2>/dev/null || echo '{}')
+info "Members-Map aus users.json: $(echo "$USERS_MAP_JSON" | "$VENV/bin/python3" -c "import json,sys; d=json.load(sys.stdin); print(len(d), 'Projekte mit expliziten Members')")"
 
 # 1. Backup
 if [[ "$DRY_RUN" == false ]]; then
@@ -90,8 +132,8 @@ for agent_dir in "$AGENTS_DIR"/*/; do
     info "Migriere: $agent_id"
 
     # 3. config.yaml aus agent.yaml generieren (Python-Helper)
-    config_yaml=$("$VENV/bin/python3" -c "
-import yaml, sys
+    config_yaml=$(USERS_MAP_JSON="$USERS_MAP_JSON" "$VENV/bin/python3" -c "
+import yaml, sys, json, os
 
 with open('$agent_dir/agent.yaml') as f:
     raw = yaml.safe_load(f)
@@ -121,6 +163,19 @@ for fm in fallback_models:
     elif 'gemini' in fm.lower(): fp = 'google'
     failover.append({'provider': fp, 'model': fm})
 
+# #591: execution_modes.default → execution_mode (safe/elevated/unrestricted)
+exec_modes = raw.get('execution_modes', {}) or {}
+default_mode = (exec_modes.get('default') or 'safe').strip().lower()
+if default_mode not in ('safe', 'elevated', 'unrestricted'):
+    default_mode = 'safe'
+
+# #591: Members aus users.json allowed_projects Mapping
+users_map = json.loads(os.environ.get('USERS_MAP_JSON', '{}'))
+members = list(users_map.get('$agent_id', []))
+if not members:
+    # Fallback: nur admin (behaelt bisheriges Verhalten bei unbekannten Projekten)
+    members = ['admin']
+
 # config.yaml zusammenbauen
 config = {
     'id': '$agent_id',
@@ -137,10 +192,11 @@ config = {
         'thinking_budget': thinking_budget,
         'failover': failover,
     },
+    'execution_mode': default_mode,
     'plugins': [],
     'repos': [],
     'sources': [],
-    'members': ['admin'],
+    'members': members,
 }
 
 yaml.dump(config, sys.stdout, default_flow_style=False, allow_unicode=True, sort_keys=False)
@@ -191,7 +247,16 @@ AGENTMD
     # Berechtigungen setzen
     chown -R hydrahive:hydrahive "$project_dir"
 
-    success "$agent_id → $project_dir (config.yaml + AGENT.md + $(ls "$project_dir/memory/" 2>/dev/null | wc -l) Memory-Dateien)"
+    # Migration-Report pro Agent (#591)
+    _members_str=$(grep -A 20 "^members:" "$project_dir/config.yaml" 2>/dev/null | head -10 | grep "^- " | sed 's/^- //' | tr '\n' ',' | sed 's/,$//')
+    _exec_mode=$(grep "^execution_mode:" "$project_dir/config.yaml" 2>/dev/null | awk '{print $2}')
+    _memory_count=$(ls "$project_dir/memory/" 2>/dev/null | wc -l)
+    _agent_md_lines=$(wc -l < "$project_dir/AGENT.md" 2>/dev/null || echo 0)
+    success "$agent_id → $project_dir"
+    echo "    Members: ${_members_str:-admin}"
+    echo "    Execution-Mode: ${_exec_mode:-safe}"
+    echo "    AGENT.md: ${_agent_md_lines} Zeilen, Memory: ${_memory_count} Dateien"
+    echo "    Nicht uebernommen: tools (v2 = 9 Core-Tools), role, workflow, heartbeat_tasks"
     ((migrated++))
 done
 
