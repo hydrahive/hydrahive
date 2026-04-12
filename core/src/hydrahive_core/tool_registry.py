@@ -556,9 +556,14 @@ class ShellExecTool(BaseTool):
         command: str, timeout: int = 30, cwd: str = "/tmp",
         **kwargs,
     ) -> dict:
-        unrestricted = kwargs.get("_execution_mode") == "unrestricted"
+        _mode = kwargs.get("_execution_mode")
+        unrestricted = _mode == "unrestricted"
+        # v2 (#606): safe UND elevated werden sandboxed. Nur safe hat Blocklist.
+        # elevated erlaubt freie Commands aber im bwrap-Scope (kein Host-Escape).
+        is_sandboxed = _mode in ("safe", "elevated")
 
-        if not unrestricted:
+        # Blocklist nur fuer safe — elevated darf npm/git/apt-get etc. nutzen
+        if _mode == "safe":
             blocked = _check_shell_blocklist(command)
             if blocked:
                 logger.warning("shell_exec BLOCKED [%s]: %s — %s", agent_id, command[:120], blocked)
@@ -605,15 +610,15 @@ class ShellExecTool(BaseTool):
                     logger.warning("bwrap-Funktionstest fehlgeschlagen: %s", _e)
 
         _use_sandbox = not unrestricted and ShellExecTool._bwrap_works
-        # Fail-closed: Safe-Mode ohne funktionierende Sandbox → verweigern (#593)
-        if kwargs.get("_execution_mode") == "safe" and not _use_sandbox:
+        # Fail-closed: safe + elevated ohne funktionierende Sandbox → verweigern (#593, #606)
+        if is_sandboxed and not _use_sandbox:
             return {
-                "error": "shell_exec im safe-Modus verweigert: Sandbox (bwrap) nicht funktionsfaehig. "
+                "error": f"shell_exec im {_mode}-Modus verweigert: Sandbox (bwrap) nicht funktionsfaehig. "
                          "Administrator muss bwrap mit subuid/subgid einrichten oder "
                          "execution_mode auf 'unrestricted' setzen (Admin-only).",
                 "command": command, "exit_code": -1, "blocked": True,
             }
-        if _use_sandbox and kwargs.get("_execution_mode") == "safe":
+        if _use_sandbox and is_sandboxed:
             import shlex as _shlex
             _quoted = _shlex.quote(command)
             # Projekt-Verzeichnis ermitteln (fuer Scope)
@@ -663,8 +668,8 @@ class ShellExecTool(BaseTool):
                 f"--die-with-parent "
                 f"-- bash -c {_quoted}"
             )
-            logger.info("shell_exec [%s] (SANDBOX/bwrap scope=%s): %s",
-                        agent_id, _project_dir or "/tmp", command[:120])
+            logger.info("shell_exec [%s] (SANDBOX/bwrap mode=%s scope=%s): %s",
+                        agent_id, _mode or "safe", _project_dir or "/tmp", command[:120])
         elif unrestricted:
             exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
             logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
