@@ -1,8 +1,11 @@
 """
-orchestrator_dispatch.py — Tool-Loop, Worker-Dispatch & Synthese (#386)
+orchestrator_dispatch.py — v2 Tool-Loop (#386, v2 cleanup #589)
 
 Agentic Loop: LLM-Antwort → Tool-Calls → Ergebnisse → nächste Runde.
-Worker-Tasks parallel ausführen, Ergebnisse aggregieren.
+
+v2: Kein Worker-Dispatch mehr. `dispatch_task`, DAG-Dispatch, Built-in
+Workers und Coordinator-Mode wurden entfernt (v1-Reste). Alle Tools
+laufen direkt im Projekt-Agent mit den 9 Core-Tools.
 """
 
 import asyncio
@@ -12,7 +15,6 @@ import logging
 from .agent_config import AgentConfig
 from .project_config import ProjectConfig
 from .orchestrator_tools import (
-    DispatchResult, _truncate_tool_result,
     check_repeated_signature, execute_tool_call, format_tool_result,
 )
 
@@ -20,463 +22,6 @@ from .session_manager import MessageRole
 from .session_metrics import metrics as _metrics
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_dispatch_calls(tool_calls: list, parent_messages: list[dict] | None = None) -> list[dict]:
-    """Extrahiert dispatch_task-Aufrufe aus LLM Tool-Calls (#415: +task_id, +depends_on, #505: Fork-Context)."""
-    dispatches = []
-    for tc in tool_calls:
-        if tc.function.name != "dispatch_task":
-            continue
-        try:
-            args = json.loads(tc.function.arguments)
-            d = {
-                "call_id":    tc.id,
-                "worker_id":  args["worker_id"],
-                "task":       args["task"],
-                "context":    args.get("context", ""),
-                "task_id":    args.get("task_id", tc.id),
-                "depends_on": args.get("depends_on", []),
-            }
-            # #505: Fork — letzte 4 Messages als Parent-Context mitgeben
-            if parent_messages:
-                d["_parent_context"] = parent_messages[-4:]
-            dispatches.append(d)
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning("Ungültiger dispatch_task-Aufruf: %s", e)
-    return dispatches
-
-
-def _validate_dag(dispatches: list[dict]) -> str | None:
-    """Prüft DAG auf Zyklen und unbekannte Referenzen. Gibt Fehlermeldung oder None zurück."""
-    known_ids = {d["task_id"] for d in dispatches}
-    for d in dispatches:
-        for dep in d["depends_on"]:
-            if dep not in known_ids:
-                return f"Task '{d['task_id']}' referenziert unbekannte Abhängigkeit '{dep}'"
-    # Zyklenerkennung (DFS)
-    WHITE, GREY, BLACK = 0, 1, 2
-    color: dict[str, int] = {d["task_id"]: WHITE for d in dispatches}
-    adj: dict[str, list[str]] = {d["task_id"]: list(d["depends_on"]) for d in dispatches}
-    def _dfs(node: str) -> bool:
-        color[node] = GREY
-        for dep in adj.get(node, []):
-            if color.get(dep) == GREY:
-                return True  # Zyklus
-            if color.get(dep) == WHITE and _dfs(dep):
-                return True
-        color[node] = BLACK
-        return False
-    for tid in known_ids:
-        if color[tid] == WHITE and _dfs(tid):
-            return f"Zyklische Abhängigkeit erkannt bei Task '{tid}'"
-    return None
-
-
-# #434: Auto-Worker-Selection Strategien
-def _select_worker_auto(orch, project_cfg, task: str) -> str | None:
-    """Wählt automatisch den besten Worker für einen Task (capability-match via Identity-Keywords)."""
-    workers = project_cfg.agents.workers
-    if not workers:
-        return None
-    # Keyword-Matching: Task-Text gegen Worker-Identity
-    best_worker = None
-    best_score = 0
-    task_lower = task.lower()
-    for wid in workers:
-        cfg = orch._discovery.get(wid)
-        if not cfg:
-            continue
-        identity = (cfg.identity or "").lower()
-        # Simpels Scoring: Anzahl überlappender Wörter
-        task_words = set(task_lower.split())
-        identity_words = set(identity.split())
-        score = len(task_words & identity_words)
-        if score > best_score:
-            best_score = score
-            best_worker = wid
-    # Fallback: round-robin (erster Worker)
-    return best_worker or workers[0]
-
-
-async def _dispatch_dag(
-    orch,
-    project_cfg: ProjectConfig,
-    dispatches: list[dict],
-    context: str,
-) -> list[DispatchResult]:
-    """
-    DAG-aware Task-Dispatch (#415): Tasks mit Abhängigkeiten werden in der
-    richtigen Reihenfolge ausgeführt. Tasks ohne Abhängigkeiten laufen parallel.
-    Cascade Failure: fehlgeschlagene Tasks blockieren alle Abhängigen.
-    """
-    # #434: Auto-Worker-Selection wenn worker_id="auto"
-    for d in dispatches:
-        if d["worker_id"] == "auto":
-            auto_worker = _select_worker_auto(orch, project_cfg, d["task"])
-            if auto_worker:
-                d["worker_id"] = auto_worker
-                logger.info("Auto-assigned worker '%s' für Task: %s", auto_worker, d["task"][:60])
-
-    # #526: Built-in Workers sind immer verfügbar
-    from .built_in_workers import is_builtin_worker
-    allowed_workers = set(project_cfg.agents.workers)
-    has_deps = any(d.get("depends_on") for d in dispatches)
-
-    # Kein DAG → alter Pfad (flat parallel)
-    if not has_deps:
-        tasks = []
-        for d in dispatches:
-            if d["worker_id"] not in allowed_workers and not is_builtin_worker(d["worker_id"]):
-                logger.warning("dispatch_task für '%s' abgelehnt — nicht im Projekt", d["worker_id"])
-                async def _rejected(d=d) -> DispatchResult:
-                    return DispatchResult(worker_id=d["worker_id"], task=d["task"],
-                                         result="", success=False, error="Agent nicht dem Projekt zugewiesen",
-                                         task_id=d.get("task_id"))
-                tasks.append(_rejected())
-                continue
-            tasks.append(_run_worker_task(orch, d))
-        return list(await asyncio.gather(*tasks, return_exceptions=False))
-
-    # DAG-Validierung
-    err = _validate_dag(dispatches)
-    if err:
-        logger.error("DAG-Validierung fehlgeschlagen: %s", err)
-        return [DispatchResult(worker_id=d["worker_id"], task=d["task"], result="",
-                               success=False, error=f"DAG-Fehler: {err}", task_id=d.get("task_id"))
-                for d in dispatches]
-
-    # DAG-Execution Loop
-    task_map = {d["task_id"]: d for d in dispatches}
-    completed: dict[str, DispatchResult] = {}
-    failed_ids: set[str] = set()
-    results: list[DispatchResult] = []
-
-    logger.info("DAG-Dispatch: %d Tasks, Dependencies: %s",
-                len(dispatches),
-                {d["task_id"]: d["depends_on"] for d in dispatches if d["depends_on"]})
-
-    max_waves = len(dispatches) + 1  # Safety gegen Endlosloop
-    for _wave in range(max_waves):
-        # Finde Tasks die bereit sind (alle Deps completed + nicht selbst fertig/failed)
-        ready = []
-        for d in dispatches:
-            tid = d["task_id"]
-            if tid in completed or tid in failed_ids:
-                continue
-            deps = d["depends_on"]
-            # Cascade: wenn eine Dep fehlgeschlagen ist → dieser Task auch
-            failed_deps = [dep for dep in deps if dep in failed_ids]
-            if failed_deps:
-                res = DispatchResult(
-                    worker_id=d["worker_id"], task=d["task"], result="",
-                    success=False, error=f"Cascade Failure: Abhängigkeit(en) {failed_deps} fehlgeschlagen",
-                    task_id=tid,
-                )
-                failed_ids.add(tid)
-                results.append(res)
-                continue
-            # Alle Deps müssen completed sein
-            if all(dep in completed for dep in deps):
-                ready.append(d)
-
-        if not ready:
-            break  # Alles erledigt oder Deadlock
-
-        # Ready-Tasks parallel ausführen
-        wave_tasks = []
-        for d in ready:
-            if d["worker_id"] not in allowed_workers:
-                async def _rejected(d=d) -> DispatchResult:
-                    return DispatchResult(worker_id=d["worker_id"], task=d["task"],
-                                         result="", success=False, error="Agent nicht dem Projekt zugewiesen",
-                                         task_id=d.get("task_id"))
-                wave_tasks.append(_rejected())
-            else:
-                # Dependency-Ergebnisse als Kontext mitgeben
-                dep_context = d.get("context", "")
-                for dep_id in d["depends_on"]:
-                    dep_res = completed.get(dep_id)
-                    if dep_res and dep_res.result:
-                        dep_context += f"\n\n[Ergebnis von {dep_id}]: {dep_res.result[:2000]}"
-                d_with_ctx = {**d, "context": dep_context.strip()}
-                wave_tasks.append(_run_worker_task(orch, d_with_ctx))
-
-        wave_results = await asyncio.gather(*wave_tasks, return_exceptions=False)
-        logger.info("DAG Wave %d: %d Tasks (%s)",
-                    _wave + 1, len(wave_results),
-                    ", ".join(d["task_id"] for d in ready))
-
-        for res in wave_results:
-            res.task_id = res.task_id or next((d["task_id"] for d in ready if d["worker_id"] == res.worker_id), None)
-            if res.success:
-                completed[res.task_id] = res
-            else:
-                failed_ids.add(res.task_id)
-            results.append(res)
-
-    return results
-
-# Alias für Abwärtskompatibilität (orchestrator.py importiert diesen Namen)
-_dispatch_parallel = _dispatch_dag
-
-
-async def _run_builtin_worker(orch, dispatch: dict, profile: dict) -> DispatchResult:
-    """#526: Built-in Worker ausführen — nutzt Boss-LLM mit speziellem System-Prompt."""
-    worker_id = dispatch["worker_id"]
-    task = dispatch["task"]
-    context = dispatch.get("context", "")
-    task_id = dispatch.get("task_id")
-
-    logger.info("Built-in Worker '%s': %s", worker_id, task[:60])
-
-    # #484: Coordinator Mode — automatischen Workplan erstellen und ausführen
-    if worker_id == "coordinate":
-        try:
-            from .coordinator_mode import create_workplan, execute_workplan
-            project_id = dispatch.get("project_id", "")
-            project_cfg = None
-            if project_id and hasattr(orch, "_projects"):
-                project_cfg = orch._projects.get(project_id)
-            if project_cfg:
-                plan = await create_workplan(orch, None, task, list(project_cfg.agents.workers))
-                result = await execute_workplan(orch, project_cfg, None, plan)
-                return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
-            else:
-                plan = await create_workplan(orch, None, task, [])
-                # Ohne Projekt: nur plan anzeigen, nicht ausführen
-                return DispatchResult(worker_id=worker_id, task=task,
-                                     result=json.dumps(plan.to_dict(), indent=2), task_id=task_id)
-        except Exception as e:
-            logger.error("Coordinator Mode Fehler: %s", e)
-            return DispatchResult(worker_id=worker_id, task=task, result="",
-                                 success=False, error=str(e), task_id=task_id)
-
-    messages = [
-        {"role": "system", "content": profile["system_prompt"]},
-    ]
-    if context:
-        messages.append({"role": "user", "content": f"Kontext: {context}"})
-    messages.append({"role": "user", "content": task})
-
-    # Built-in Workers nutzen das Boss-LLM (kein eigener Agent nötig)
-    # Tool-Schemas nur für erlaubte Tools
-    allowed = set(profile.get("allowed_tools", []))
-    tools = []
-    for tool_obj in orch._reg.values():
-        if hasattr(tool_obj, "id") and tool_obj.id in allowed:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": tool_obj.id,
-                    "description": tool_obj.description,
-                    "parameters": tool_obj.parameters,
-                },
-            })
-
-    try:
-        import litellm
-        from .orchestrator_llm import _llm_with_retry
-        from .orchestrator_tools import execute_tool_call, format_tool_result
-
-        # #519: Verify-Worker bekommt Mini-Tool-Loop (max 5 Runden)
-        # Andere Built-ins (explore, plan, review) bleiben Single-Shot
-        use_tool_loop = worker_id == "verify" and tools
-        max_rounds = 5 if use_tool_loop else 1
-
-        for _round in range(max_rounds):
-            resp = await _llm_with_retry(lambda: litellm.acompletion(
-                model="claude-haiku-4-5-20251001",
-                messages=messages,
-                tools=tools if tools else None,
-                max_tokens=4000,
-                drop_params=True,
-            ))
-            msg = resp.choices[0].message
-
-            # Keine Tool-Calls → fertig
-            tool_calls = getattr(msg, "tool_calls", None)
-            if not tool_calls or not use_tool_loop:
-                result = msg.content or ""
-                break
-
-            # Tool-Calls ausführen
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {"id": tc.id, "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tool_calls
-                ],
-            })
-            for tc in tool_calls:
-                tc_args = json.loads(tc.function.arguments or "{}")
-                # Safety: Nur erlaubte Tools ausführen
-                if tc.function.name not in allowed:
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": f"[Tool '{tc.function.name}' nicht erlaubt für Built-in Worker]"})
-                    continue
-                try:
-                    tc_result, _ = await execute_tool_call(
-                        orch, boss_cfg=None, project_id=dispatch.get("project_id", ""),
-                        tool_name=tc.function.name, tool_input=tc_args,
-                    )
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": format_tool_result(tc_result)})
-                except Exception as tc_err:
-                    messages.append({"role": "tool", "tool_call_id": tc.id,
-                                     "content": f"[Fehler: {tc_err}]"})
-
-            logger.debug("Built-in Worker '%s' Runde %d/%d", worker_id, _round + 1, max_rounds)
-        else:
-            # max_rounds erreicht — letzte Antwort nehmen
-            result = msg.content or "[Max. Runden erreicht]"
-
-        return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
-    except Exception as e:
-        logger.error("Built-in Worker '%s' Fehler: %s", worker_id, e)
-        return DispatchResult(
-            worker_id=worker_id, task=task, result="",
-            success=False, error=str(e), task_id=task_id,
-        )
-
-
-async def _run_worker_task(orch, dispatch: dict) -> DispatchResult:
-    """Einen Worker-Agenten mit einem Task beauftragen."""
-    worker_id = dispatch["worker_id"]
-    task      = dispatch["task"]
-    context   = dispatch.get("context", "")
-    task_id   = dispatch.get("task_id")
-
-    # #526: Built-in Workers (explore, plan) — virtueller Agent mit eigenem Prompt
-    from .built_in_workers import get_builtin_worker
-    builtin = get_builtin_worker(worker_id)
-    if builtin:
-        return await _run_builtin_worker(orch, dispatch, builtin)
-
-    worker_cfg = orch._discovery.get(worker_id)
-    if not worker_cfg:
-        return DispatchResult(
-            worker_id=worker_id, task=task, result="",
-            success=False, error=f"Agent '{worker_id}' nicht in Discovery",
-            task_id=task_id,
-        )
-
-    logger.info("Dispatche Task an %s: %s", worker_id, task[:60])
-
-    # #505: Fork-Subagenten — System-Prompt und letzte N Messages vom Boss erben
-    # für Prompt-Cache-Hits (gleicher Prefix = Cache-Hit bei Anthropic)
-    _parent_context = dispatch.get("_parent_context", [])
-    if _parent_context:
-        logger.info("Fork: Worker '%s' erbt %d Messages vom Boss", worker_id, len(_parent_context))
-
-    # #522: Worktree-Isolation wenn Feature-Flag aktiv
-    _wt_info = None
-    try:
-        from .settings import settings as _s
-        if _s.worktree_isolation:
-            from .worktree_manager import worktree_manager as _wm
-            # Workspace des Projekts finden (wenn Git-Repo vorhanden)
-            _project_id = dispatch.get("project_id", "")
-            if _project_id:
-                _workspace = Path(f"/tmp/hydrahive-git/{_project_id}")
-                if (_workspace / ".git").exists():
-                    _wt_info = await _wm.create_worktree(_workspace, task_id or worker_id, worker_id)
-                    logger.info("Worker '%s' arbeitet in Worktree: %s", worker_id, _wt_info.path)
-    except Exception as _wt_err:
-        logger.debug("Worktree creation skipped: %s", _wt_err)
-
-    # Worker-LLM-Aufruf (kein Tool-Calling für Worker — nur ausführen)
-    messages = [
-        {"role": "system", "content": f"Du bist {worker_cfg.identity}. Erledige den folgenden Task präzise und knapp."},
-    ]
-    if context:
-        messages.append({"role": "user", "content": f"Kontext: {context}"})
-    messages.append({"role": "user", "content": task})
-
-    # #522: ContextVar setzen wenn Worktree aktiv
-    _wt_token = None
-    if _wt_info:
-        from .tool_registry import _active_worktree
-        _wt_token = _active_worktree.set(_wt_info.path)
-
-    try:
-        response = await orch._llm_call(worker_cfg, messages, tools=None)
-        result = response.choices[0].message.content or ""
-        return DispatchResult(worker_id=worker_id, task=task, result=result, task_id=task_id)
-    except Exception as e:
-        logger.error("Worker '%s' LLM-Fehler: %s", worker_id, e)
-        # #362: Fehlgeschlagene Dispatches notifyen
-        try:
-            from .tool_registry import _notify
-            _notify(dispatch.get("call_id", ""), "agent_error",
-                    f"Worker-Dispatch fehlgeschlagen: {worker_id}",
-                    f"Task: {task[:80]}\nFehler: {e}",
-                    link=f"/agents")
-        except Exception:
-            pass
-        return DispatchResult(
-            worker_id=worker_id, task=task, result="",
-            success=False, error=str(e), task_id=task_id,
-        )
-    finally:
-        # #522: ContextVar zurücksetzen + Worktree Cleanup
-        if _wt_token is not None:
-            from .tool_registry import _active_worktree
-            _active_worktree.reset(_wt_token)
-        if _wt_info:
-            try:
-                from .worktree_manager import worktree_manager as _wm
-                await _wm.cleanup_worktree(task_id or worker_id, merge=True)
-            except Exception as _wt_clean_err:
-                logger.warning("Worktree cleanup failed: %s", _wt_clean_err)
-
-
-async def _synthesize(
-    orch,
-    boss_cfg: AgentConfig,
-    messages: list[dict],
-    tool_calls: list,
-    results: list[DispatchResult],
-) -> str:
-    """Boss fasst Worker-Ergebnisse zur finalen Antwort zusammen."""
-    follow_up = list(messages)
-    follow_up.append({
-        "role": "assistant",
-        "tool_calls": [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            }
-            for tc in tool_calls
-        ],
-    })
-    for result in results:
-        call_id = next(
-            (tc.id for tc in tool_calls
-             if json.loads(tc.function.arguments).get("task_id") == result.task_id
-             or json.loads(tc.function.arguments).get("worker_id") == result.worker_id),
-            "unknown"
-        )
-        content = result.result if result.success else f"[Fehler] {result.error}"
-        follow_up.append({
-            "role":         "tool",
-            "tool_call_id": call_id,
-            "content":      content,
-        })
-
-    try:
-        response = await orch._llm_call(boss_cfg, follow_up, tools=None)
-        return response.choices[0].message.content or ""
-    except Exception as e:
-        logger.error("Synthese-LLM-Fehler: %s", e)
-        lines = [f"**{r.worker_id}**: {r.result}" for r in results if r.success]
-        return "\n".join(lines)
 
 
 async def _tool_loop(
@@ -491,9 +36,11 @@ async def _tool_loop(
 ) -> tuple[str, list[str]]:
     """
     Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
-    Dispatch-Tasks werden parallel ausgeführt, andere Tools sequentiell.
+    Parallel-safe Tools werden via asyncio.gather ausgeführt, Rest sequentiell.
     Max. max_rounds Runden um Endlosschleifen zu vermeiden.
-    Gibt (finale Antwort, beteiligte Worker-IDs) zurück.
+    Gibt (finale Antwort, workers_used-Liste) zurück.
+
+    v2: workers_used bleibt leer — kein Worker-Dispatch mehr.
     """
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
 
@@ -508,15 +55,9 @@ async def _tool_loop(
     _mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
     if _mcp_schemas:
         litellm_tools = litellm_tools + _mcp_schemas
-    # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
-    # TODO: Plugins später pro Projekt konfigurierbar nachladen
-    # _plugin_schemas = orch._plugin_schemas_for_agent(boss_cfg)
-    # if _plugin_schemas:
-    #     litellm_tools = litellm_tools + _plugin_schemas
-    # Dedup über alles (MCP + Plugins können Duplikate erzeugen)
+    # Dedup über alles (MCP kann Duplikate erzeugen)
     from .orchestrator import _dedup_tools
     litellm_tools = _dedup_tools(litellm_tools)
-    _loaded_categories: set[str] = set()
     _file_read_cache: dict[str, str] = {}
     current_messages = list(messages)
     workers_used: list[str] = []
@@ -592,32 +133,12 @@ async def _tool_loop(
             ],
         })
 
-        # dispatch_task separat → paralleles Worker-Dispatch
-        dispatch_tcs     = [tc for tc in tool_calls if tc.function.name == "dispatch_task"]
-        other_tcs        = [tc for tc in tool_calls if tc.function.name != "dispatch_task"]
-
         tool_results: dict[str, str] = {}
-
-        if dispatch_tcs:
-            dispatches = _parse_dispatch_calls(dispatch_tcs)
-            results = await _dispatch_dag(orch, project_cfg, dispatches, context="")
-            # #415: task_id-basiertes Mapping (Fallback: worker_id)
-            call_id_by_task_id = {d["task_id"]: d["call_id"] for d in dispatches}
-            for res in results:
-                call_id = call_id_by_task_id.get(res.task_id) or next(
-                    (tc.id for tc in dispatch_tcs
-                     if json.loads(tc.function.arguments).get("worker_id") == res.worker_id),
-                    "unknown"
-                )
-                content = res.result if res.success else f"[Fehler] {res.error}"
-                tool_results[call_id] = content
-                if res.worker_id not in workers_used:
-                    workers_used.append(res.worker_id)
 
         # #418: parallel-safe Tools via asyncio.gather, Rest sequentiell
         parallel_tcs = []
         sequential_tcs = []
-        for tc in other_tcs:
+        for tc in tool_calls:
             tool_obj = orch._resolve_allowed_tool(boss_cfg, tc.function.name, execution_mode)
             if tool_obj and getattr(tool_obj, "parallel_safe", False):
                 parallel_tcs.append(tc)

@@ -17,7 +17,7 @@ class ToolOpType(str, Enum):
     MUTATION = "mutation"    # file_write, shell_exec, git_commit — Ergebnis lange behalten
     READ = "read"            # file_read, list_directory — aggressiv kürzen
     SEARCH = "search"        # web_search, git_grep, git_diff — mittel kürzen
-    META = "meta"            # request_tools, dispatch_task — sofort kürzen
+    META = "meta"            # request_tools — sofort kürzen
 
 
 # Tool-Name → ToolOpType Mapping
@@ -64,7 +64,6 @@ _TOOL_OP_TYPES: dict[str, ToolOpType] = {
     "git_grep":             ToolOpType.SEARCH,
 
     # Meta — minimaler Informationsgehalt nach Verarbeitung
-    "dispatch_task":        ToolOpType.META,
     "get_final_message":    ToolOpType.META,
 }
 
@@ -117,7 +116,6 @@ _TOOL_POLICIES: dict[str, ToolPolicy] = {
     "git_commit":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
     "git_push":         ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high"),
     # Meta, low cost
-    "dispatch_task":    ToolPolicy(ToolOpType.META, parallel_safe=False, cost="high"),
     "get_final_message": ToolPolicy(ToolOpType.META, parallel_safe=False, cost="low", log_level="minimal"),
 }
 

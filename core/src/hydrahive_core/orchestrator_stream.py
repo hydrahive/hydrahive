@@ -71,7 +71,7 @@ async def handle_message_stream(
     Bei Quota/Overload-Fehler: automatischer Failover auf fallback_models.
     Abschluss: data: {done: true}\\n\\n
     """
-    from .orchestrator import _build_worker_context, _dedup_tools
+    from .orchestrator import _dedup_tools
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
     from . import tool_registry as _tool_reg
 
@@ -128,9 +128,7 @@ async def handle_message_stream(
         # Fallback auf alten Pfad
         _static_prompt = await orch._build_system_prompt(boss_cfg, _content_str, invalidate=_refresh)
         _dynamic_prompt = ""
-    worker_ctx = _build_worker_context(project_cfg, orch._discovery)
-    if worker_ctx:
-        _static_prompt = _static_prompt + "\n\n" + worker_ctx
+    # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
     system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt
     # #485: Frustration Detection — System-Prompt-Injection wenn User genervt ist
     from .frustration_detection import get_frustration_injection

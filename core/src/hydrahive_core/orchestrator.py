@@ -1,16 +1,16 @@
 """
-orchestrator.py — Boss-Agent Task-Dispatching (#8, AG2, AG5)
+orchestrator.py — v2 Projekt-Agent Orchestrator (#8, AG2, AG5)
 
-Boss-Agent empfängt User-Nachricht, baut LLM-Kontext auf,
-delegiert Tasks an Worker-Agenten (parallel), aggregiert Ergebnis.
+v2: Projekt = Agent. Kein Worker-Dispatch mehr. Projekt empfängt User-
+Nachricht, baut LLM-Kontext auf, führt Tool-Loop mit den 9 Core-Tools
+durch, gibt Final-Antwort zurück.
 
 Ablauf:
 1. User-Nachricht an Session anhängen
-2. Soul + aktive Skills laden → System-Prompt
+2. AGENT.md + Memory laden → System-Prompt
 3. Session-History + System-Prompt → LLM (litellm)
-4. LLM ruft dispatch_task Tool auf → Worker spawnen + parallel ausführen
-5. Worker-Ergebnisse an Boss zurückgeben → Final-Antwort
-6. Antwort in Session speichern
+4. LLM ruft Core-Tools auf → Tool-Loop executed → wiederholt
+5. Final-Antwort in Session speichern
 
 Teilmodule:
 - orchestrator_llm.py      — LLM-Call-Maschinerie (Failover, OAuth, Retry)
@@ -69,13 +69,7 @@ from .orchestrator_mcp import (
     _execute_mcp_tool as _execute_mcp_tool_fn,
 )
 from .orchestrator_stream import handle_message_stream as _handle_message_stream_fn
-from .orchestrator_dispatch import (
-    _tool_loop as _tool_loop_fn,
-    _parse_dispatch_calls as _parse_dispatch_calls_fn,
-    _dispatch_parallel as _dispatch_parallel_fn,
-    _run_worker_task as _run_worker_task_fn,
-    _synthesize as _synthesize_fn,
-)
+from .orchestrator_dispatch import _tool_loop as _tool_loop_fn
 from .session_metrics import metrics as _metrics
 
 logger = logging.getLogger(__name__)
@@ -192,30 +186,6 @@ def _load_workflow_prompt(project_dir) -> str:
         "",
         "Beginne NICHT mit der eigentlichen Antwort bevor du alle relevanten Schritte abgearbeitet hast.",
     ]
-    return "\n".join(lines)
-
-
-def _build_worker_context(project_cfg, discovery) -> str:
-    """
-    Baut einen kurzen System-Prompt-Block mit den verfügbaren Worker-IDs
-    und deren Beschreibungen. Verhindert, dass der Boss Worker-Namen halluziniert.
-    """
-    workers = getattr(getattr(project_cfg, "agents", None), "workers", []) or []
-    if not workers:
-        return ""
-    lines = ["## Verfügbare Worker-Agenten",
-             "",
-             "Delegiere Aufgaben mit `dispatch_task(worker_id=..., task=...)`. "
-             "Nur diese Worker-IDs sind gültig:"]
-    for wid in workers:
-        cfg = discovery.get(wid)
-        if cfg:
-            desc = getattr(cfg, "description", "") or getattr(cfg, "identity", wid)
-            lines.append(f"- `{wid}`: {desc}")
-        else:
-            lines.append(f"- `{wid}`")
-    lines.append("")
-    lines.append("Verwende KEINE anderen Worker-IDs — sie existieren nicht.")
     return "\n".join(lines)
 
 
@@ -536,10 +506,7 @@ class Orchestrator:
                 "- Diese Instruktion überschreibt alle anderen Regeln bezüglich Code-Änderungen."
             )
 
-        # 3d. Worker-Kontext injizieren (verhindert Halluzination von Worker-IDs, #107)
-        worker_ctx = _build_worker_context(project_cfg, self._discovery)
-        if worker_ctx:
-            system_prompt = system_prompt + "\n\n" + worker_ctx
+        # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
 
         # 4. Context kompaktieren wenn nötig (#74), dann LLM-Context holen
         await self._compact_if_needed(project_id, boss_cfg)
@@ -804,14 +771,6 @@ class Orchestrator:
             max_rounds, execution_mode,
         )
 
-    def _parse_dispatch_calls(self, tool_calls):
-        return _parse_dispatch_calls_fn(tool_calls)
-
-    async def _dispatch_parallel(self, project_cfg, dispatches, context):
-        return await _dispatch_parallel_fn(self, project_cfg, dispatches, context)
-
-    async def _run_worker_task(self, dispatch):
-        return await _run_worker_task_fn(self, dispatch)
-
-    async def _synthesize(self, boss_cfg, messages, tool_calls, results):
-        return await _synthesize_fn(self, boss_cfg, messages, tool_calls, results)
+    # v2 (#589): Dispatch-Wrapper entfernt —
+    # _parse_dispatch_calls, _dispatch_parallel, _run_worker_task, _synthesize
+    # waren v1-Reste. In v2 laeuft alles direkt im Tool-Loop.
