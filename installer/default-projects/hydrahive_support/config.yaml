@@ -1,0 +1,19 @@
+id: hydrahive_support
+version: 2.0.0
+identity:
+  name: HydraHive Support
+  description: System-Agent fuer Setup-Hilfe und Diagnose
+llm:
+  provider: anthropic
+  model: claude-haiku-4-5-20251001
+  temperature: 0.5
+  max_tokens: 2048
+  api_key_env: ""
+  failover: []
+execution_mode: safe
+max_tool_rounds: 20
+plugins: []
+repos: []
+sources: []
+members:
+  - admin

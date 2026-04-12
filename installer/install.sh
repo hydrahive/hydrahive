@@ -176,22 +176,23 @@ if id www-data &>/dev/null; then
     success "nginx (www-data) zur hydrahive-Gruppe hinzugefügt — /projects/ erreichbar"
 fi
 
-# Standard-Agenten installieren (nur wenn Agent-ID noch nicht existiert)
-_DEFAULT_AGENTS_DIR="$(dirname "${BASH_SOURCE[0]}")/default-agents"
-if [ -d "${_DEFAULT_AGENTS_DIR}" ]; then
+# Standard-Projekte installieren (v2: /projects/ statt /agents/) (#580)
+_DEFAULT_PROJECTS_DIR="$(dirname "${BASH_SOURCE[0]}")/default-projects"
+if [ -d "${_DEFAULT_PROJECTS_DIR}" ]; then
     _installed=0
-    for _agent_dir in "${_DEFAULT_AGENTS_DIR}"/*/; do
-        _agent_id="$(basename "${_agent_dir}")"
-        if [ ! -d "/agents/${_agent_id}" ]; then
-            cp -r "${_agent_dir}" "/agents/${_agent_id}"
-            chown -R hydrahive:hydrahive "/agents/${_agent_id}"
+    for _proj_dir in "${_DEFAULT_PROJECTS_DIR}"/*/; do
+        _proj_id="$(basename "${_proj_dir}")"
+        if [ ! -f "/projects/${_proj_id}/config.yaml" ]; then
+            mkdir -p "/projects/${_proj_id}"
+            cp -r "${_proj_dir}"* "/projects/${_proj_id}/"
+            chown -R hydrahive:hydrahive "/projects/${_proj_id}"
             _installed=$((_installed + 1))
         fi
     done
     if [ $_installed -gt 0 ]; then
-        success "${_installed} Standard-Agenten installiert (chat-assistant, code-reviewer, ...)"
+        success "${_installed} Standard-Projekte installiert (hydrahive_support, ...)"
     else
-        info "Standard-Agenten bereits vorhanden — übersprungen"
+        info "Standard-Projekte bereits vorhanden — übersprungen"
     fi
 fi
 
@@ -218,7 +219,7 @@ fi
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
 info "Login:         admin / ********  (siehe /etc/hydrahive/admin_credentials)"
 info "Credentials:   /etc/hydrahive/admin_credentials"
-info "Agenten-Dir:   /agents"
+info "Projekte-Dir:  /projects"
 info "AgentLink:     http://127.0.0.1:${AGENTLINK_PORT:-8010}/docs"
 if systemctl is-active --quiet gitea 2>/dev/null; then
   SERVER_IP_OUT=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")

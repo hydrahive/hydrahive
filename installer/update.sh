@@ -130,33 +130,26 @@ main() {
         rsync -a "${TMPDIR_BASE}/scripts/" "${HYDRAHIVE_DIR}/scripts/"
     fi
 
-    # --- 2b. System-Agenten aktualisieren (soul.md direkt, agent.yaml per Merge) ---
-    # #310: agent.yaml wird GEMERGT statt überschrieben — Runtime-Einstellungen
-    # (execution_modes, custom tools, temperature etc.) bleiben erhalten.
-    # Nur soul.md wird direkt kopiert (Persönlichkeit gehört zum Repo).
-    if [ -d "${TMPDIR_BASE}/agents" ]; then
-        for _src in "${TMPDIR_BASE}/agents"/*/; do
+    # --- 2b. Default-Projekte aktualisieren (v2: installer/default-projects/) ---
+    # AGENT.md wird immer aus dem Repo übernommen (Persönlichkeit/Identität).
+    # config.yaml: nur bei Neu-Installation kopieren — Runtime-Einstellungen (temperature,
+    # max_tokens, members etc.) die der Admin per Console geändert hat, bleiben erhalten.
+    if [ -d "${TMPDIR_BASE}/installer/default-projects" ]; then
+        for _src in "${TMPDIR_BASE}/installer/default-projects"/*/; do
+            [ -d "${_src}" ] || continue
             _id="$(basename "${_src}")"
-            _dst="/agents/${_id}"
+            _dst="/projects/${_id}"
             mkdir -p "${_dst}/memory"
-            # soul.md: immer aus Repo übernehmen (Persönlichkeit)
-            [ -f "${_src}/soul.md" ] && cp "${_src}/soul.md" "${_dst}/soul.md"
-            # agent.yaml: intelligent mergen (neue Tools addieren, Runtime-Config behalten)
-            if [ -f "${_src}/agent.yaml" ]; then
-                if [ -f "${_dst}/agent.yaml" ]; then
-                    ${VENV}/bin/python3 "${HYDRAHIVE_DIR}/scripts/merge_agent_config.py" \
-                        "${_src}/agent.yaml" "${_dst}/agent.yaml" 2>/dev/null \
-                        || cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
-                else
-                    cp "${_src}/agent.yaml" "${_dst}/agent.yaml"
-                fi
+            # AGENT.md: immer aus Repo übernehmen (Identität/Persönlichkeit)
+            [ -f "${_src}/AGENT.md" ] && cp "${_src}/AGENT.md" "${_dst}/AGENT.md"
+            # config.yaml: nur kopieren wenn noch nicht vorhanden (Erstinstallation)
+            if [ -f "${_src}/config.yaml" ] && [ ! -f "${_dst}/config.yaml" ]; then
+                cp "${_src}/config.yaml" "${_dst}/config.yaml"
             fi
         done
-        chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
-        info "System-Agenten aktualisiert"
+        chown -R hydrahive:hydrahive /projects/ 2>/dev/null || true
+        info "Default-Projekte aktualisiert"
     fi
-
-    # v2: Default-Agents entfernt — Projekte werden ueber den Wizard erstellt
 
     # --- 3. Python-Dependencies ---
     info "Installiere Python-Dependencies..."
