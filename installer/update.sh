@@ -523,6 +523,24 @@ MIGRATE_EOF
         fi
     done
 
+    # #603/#610: nginx Security-Header Snippet nach /etc/nginx/snippets/ deployen.
+    # Haupt-Config (/etc/nginx/sites-available/hydrahive-console) wird NICHT
+    # automatisch gepatcht (User-Customizations). Admin muss einmalig die
+    # includes hinzufuegen — Doctor-Seite zeigt fehlende Snippets an.
+    if [ -f "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" ]; then
+        mkdir -p /etc/nginx/snippets
+        install -m 644 "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" \
+            /etc/nginx/snippets/hydrahive-security-headers.conf
+        info "nginx Security-Header Snippet deployed (#603)"
+        # Warnung wenn nginx-Config das Snippet nicht included
+        if [ -f /etc/nginx/sites-enabled/hydrahive-console ] || [ -f /etc/nginx/sites-available/hydrahive-console ]; then
+            if ! grep -q "hydrahive-security-headers" /etc/nginx/sites-enabled/hydrahive-console 2>/dev/null \
+               && ! grep -q "hydrahive-security-headers" /etc/nginx/sites-available/hydrahive-console 2>/dev/null; then
+                warn "nginx-Config nutzt Security-Header-Snippet nicht. CSP ist inaktiv. Admin muss 'include /etc/nginx/snippets/hydrahive-security-headers.conf;' in location-Bloecken ergaenzen (siehe installer/hydrahive-console.nginx als Referenz)."
+            fi
+        fi
+    fi
+
     # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
     if [ -f "${TMPDIR_BASE}/installer/update.sh" ]; then
         cp "${TMPDIR_BASE}/installer/update.sh" "${HYDRAHIVE_DIR}/update.sh"
