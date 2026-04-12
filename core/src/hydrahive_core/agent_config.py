@@ -224,7 +224,7 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         soul=None,                       # AGENT.md wird separat injiziert
         tools=core_tools,
         tool_selection="always",          # Alle 9 Tools immer laden
-        max_tool_rounds=20,
+        max_tool_rounds=getattr(pcfg, "max_tool_rounds", 50),
         execution_modes=exec_modes,
         agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
     )

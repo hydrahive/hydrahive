@@ -136,6 +136,9 @@ class ProjectConfig(BaseModel):
     # v2: Default Execution-Mode für dieses Projekt (#568)
     execution_mode: str = "safe"  # safe | elevated | unrestricted
 
+    # v2: Max Tool-Runden pro Chat-Nachricht (#613)
+    max_tool_rounds: int = 50
+
     # Wird nach dem Laden gesetzt
     project_dir: Path | None = Field(default=None, exclude=True)
 
