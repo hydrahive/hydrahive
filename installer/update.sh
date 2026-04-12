@@ -524,20 +524,51 @@ MIGRATE_EOF
     done
 
     # #603/#610: nginx Security-Header Snippet nach /etc/nginx/snippets/ deployen.
-    # Haupt-Config (/etc/nginx/sites-available/hydrahive-console) wird NICHT
-    # automatisch gepatcht (User-Customizations). Admin muss einmalig die
-    # includes hinzufuegen — Doctor-Seite zeigt fehlende Snippets an.
+    # Haupt-Config wird MINIMAL-INVASIV gepatcht (include-Zeile in location / und
+    # location /api/) — mit Backup + nginx-t-Validation + Rollback bei Fehler.
     if [ -f "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" ]; then
         mkdir -p /etc/nginx/snippets
         install -m 644 "${TMPDIR_BASE}/installer/hydrahive-security-headers.conf" \
             /etc/nginx/snippets/hydrahive-security-headers.conf
         info "nginx Security-Header Snippet deployed (#603)"
-        # Warnung wenn nginx-Config das Snippet nicht included
-        if [ -f /etc/nginx/sites-enabled/hydrahive-console ] || [ -f /etc/nginx/sites-available/hydrahive-console ]; then
-            if ! grep -q "hydrahive-security-headers" /etc/nginx/sites-enabled/hydrahive-console 2>/dev/null \
-               && ! grep -q "hydrahive-security-headers" /etc/nginx/sites-available/hydrahive-console 2>/dev/null; then
-                warn "nginx-Config nutzt Security-Header-Snippet nicht. CSP ist inaktiv. Admin muss 'include /etc/nginx/snippets/hydrahive-security-headers.conf;' in location-Bloecken ergaenzen (siehe installer/hydrahive-console.nginx als Referenz)."
+        # Nginx-Config auto-patchen wenn vorhanden und Snippet noch nicht included
+        _nginx_cfg=""
+        for _cand in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-enabled/hydrahive-console; do
+            if [ -f "${_cand}" ] && [ ! -L "${_cand}" ]; then
+                _nginx_cfg="${_cand}"
+                break
+            elif [ -f "${_cand}" ]; then
+                # Symlink → sites-available lesen
+                _nginx_cfg=$(readlink -f "${_cand}")
+                break
             fi
+        done
+        if [ -n "${_nginx_cfg}" ] && ! grep -q "hydrahive-security-headers" "${_nginx_cfg}"; then
+            info "nginx-Config patchen: include in location / + /api/ einfuegen"
+            _backup="${_nginx_cfg}.bak-$(date +%s)"
+            cp "${_nginx_cfg}" "${_backup}"
+            python3 <<PYEOF
+import re
+p = "${_nginx_cfg}"
+txt = open(p).read()
+inc = "        include /etc/nginx/snippets/hydrahive-security-headers.conf;\n"
+if "hydrahive-security-headers" not in txt:
+    txt = re.sub(r"(location / \{\n)(\s+try_files)", r"\1" + inc + r"\2", txt, count=1)
+    txt = re.sub(r"(location /api/ \{\n)(\s+proxy_pass)", r"\1" + inc + r"\2", txt, count=1)
+    open(p, "w").write(txt)
+PYEOF
+            # Validate + reload oder rollback
+            if nginx -t >/dev/null 2>&1; then
+                systemctl reload nginx >/dev/null 2>&1 && \
+                    info "nginx-Config gepatcht + reloaded — CSP aktiv" || \
+                    warn "nginx reload fehlgeschlagen — Config ist gepatcht, aber nicht aktiv. systemctl status nginx pruefen."
+            else
+                warn "nginx -t nach CSP-Patch fehlgeschlagen — Rollback aus Backup ${_backup}"
+                cp "${_backup}" "${_nginx_cfg}"
+            fi
+        elif [ -n "${_nginx_cfg}" ]; then
+            # Include schon drin — nur noch reloaden falls Snippet aktualisiert wurde
+            nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
         fi
     fi
 
