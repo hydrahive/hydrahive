@@ -7,8 +7,8 @@
  * - Permanent Error Detection: 401/403/404 → kein Retry-Versuch
  */
 
-const LIVENESS_TIMEOUT_MS = 45_000;  // 45s ohne Event → tot
-const SLEEP_GAP_MS        = 60_000;  // 60s+ Pause → Sleep
+const LIVENESS_TIMEOUT_MS = 90_000;  // 90s ohne Event → tot (Keepalive alle 15s vom Server)
+const SLEEP_GAP_MS        = 120_000; // 120s+ Pause → Sleep (nach Device-Sleep)
 
 export type SSEEvent =
   | { type: "text"; text: string }
@@ -95,6 +95,8 @@ export async function sseStream(opts: SSEStreamOptions): Promise<void> {
       buffer = parts.pop() ?? "";
 
       for (const part of parts) {
+        // SSE-Kommentare (": keepalive") explizit als Liveness-Signal werten
+        if (part.startsWith(":")) { resetLiveness(); continue; }
         for (const line of part.split("\n")) {
           if (!line.startsWith("data: ")) continue;
           try {
