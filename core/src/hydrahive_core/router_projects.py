@@ -798,9 +798,12 @@ def register_project_routes(
                 while True:
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=30)
+                        # #587: Timestamp refreshen bei jedem Event → User bleibt "online"
+                        _ss.touch_presence(project_id, username)
                         yield f"data: {event}\n\n"
                     except asyncio.TimeoutError:
-                        # Keepalive
+                        # Keepalive + Presence refreshen
+                        _ss.touch_presence(project_id, username)
                         yield ": keepalive\n\n"
             except asyncio.CancelledError:
                 pass

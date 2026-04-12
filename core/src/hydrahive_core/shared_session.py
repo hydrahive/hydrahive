@@ -44,6 +44,11 @@ class ProjectPresence:
     def add(self, username: str) -> None:
         self.users[username] = time.time()
 
+    def refresh(self, username: str) -> None:
+        """#587: Timestamp erneuern waehrend Client verbunden ist."""
+        if username in self.users:
+            self.users[username] = time.time()
+
     def remove(self, username: str) -> None:
         self.users.pop(username, None)
 
@@ -101,6 +106,13 @@ class SharedSessionManager:
                 self._broadcast_presence(project_id)
 
         logger.info("SharedSession: %s unsubscribed from %s", username, project_id)
+
+    def touch_presence(self, project_id: str, username: str) -> None:
+        """#587: Heartbeat — Timestamp aktualisieren waehrend Client verbunden ist.
+        Wird vom subscribe-Endpoint bei jedem Keepalive aufgerufen."""
+        presence = self._presence.get(project_id)
+        if presence:
+            presence.refresh(username)
 
     def broadcast(self, project_id: str, event_data: str) -> None:
         """Sendet ein SSE-Event an alle verbundenen Clients eines Projekts.
