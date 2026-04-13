@@ -246,6 +246,8 @@ async def lifespan(app: FastAPI):
     # Internal-Secret laden oder generieren (persistiert → überlebt Restarts)
     _INTERNAL_SECRET = _load_or_create_internal_secret()
     from . import tool_registry as _tr
+    # #620: Deferred Gitea-Tools registrieren
+    from . import tools_gitea as _gitea_tools_mod  # noqa: F401  (side-effect import)
     _tr._internal_secret = _INTERNAL_SECRET
     _tr._rate_limiter = rate_limiter
     _tr._discovery = discovery
