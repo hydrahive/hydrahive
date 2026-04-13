@@ -470,13 +470,16 @@ def register_agent_chat_routes(
             resp = await client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=60,
-                system=[{"type": "text", "text": system_prompt}],
+                system=[
+                    {"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY},
+                    {"type": "text", "text": system_prompt},
+                ],
                 messages=[{"role": "user", "content": context}],
             )
             text = (resp.content[0].text if resp.content else "").strip()[:80]
             return {"comment": text}
         except Exception as e:
-            logger.debug("Tamagotchi LLM call failed: %s", e)
+            logger.warning("Tamagotchi LLM call failed: %s", e)
             return {"comment": ""}
 
     @auth_router.get("/agents/{agent_id}/logs")
