@@ -414,6 +414,8 @@ async def lifespan(app: FastAPI):
     # v2: Plugin-System entfernt — alle Funktionalität über shell_exec
 
     notification_service.start()
+    from .tamagotchi_service import tamagotchi_service
+    tamagotchi_service.start()
     scheduler_service.start(
         orchestrator=orchestrator,
         load_project_cfg_fn=projects.get,

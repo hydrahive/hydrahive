@@ -437,6 +437,37 @@ def register_agent_chat_routes(
         _set_interrupt(agent_id)
         return {"ok": True, "agent_id": agent_id}
 
+    @auth_router.get("/agents/{agent_id}/tamagotchi/state")
+    async def tamagotchi_state(
+        agent_id: str,
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        """Aktueller Companion-Zustand (Happy/Hunger/Energy + Mood + Age)."""
+        from .tamagotchi_service import tamagotchi_service
+        return tamagotchi_service.snapshot_dict(_a[0])
+
+    @auth_router.post("/agents/{agent_id}/tamagotchi/interact")
+    async def tamagotchi_interact(
+        agent_id: str,
+        body: dict = Body(...),
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        """Interaktion: pet | feed | sleep | wake. Gibt neuen Zustand zurück."""
+        from .tamagotchi_service import tamagotchi_service, derive_mood, status_hint
+        kind = (body.get("kind") or "").lower().strip()
+        if kind not in {"pet", "feed", "sleep", "wake"}:
+            raise HTTPException(400, f"Unbekannte Interaktion '{kind}'")
+        try:
+            state = tamagotchi_service.interact(_a[0], kind)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        from dataclasses import asdict
+        d = asdict(state)
+        d["mood"] = derive_mood(state)
+        d["status_hint"] = status_hint(state)
+        d["age_days"] = state.age_days()
+        return d
+
     @auth_router.post("/agents/{agent_id}/tamagotchi")
     async def tamagotchi_comment(
         agent_id: str,
@@ -446,13 +477,19 @@ def register_agent_chat_routes(
         """Easter-Egg: leichter LLM-Call für den Floating Companion. Berührt keine Session."""
         _check_agent_access(agent_id, _a)  # #307
         from .orchestrator import _load_claude_oauth_token
+        from .tamagotchi_service import tamagotchi_service, status_hint
 
         context = body.get("context", "")
         lang = body.get("lang", "de")
         lang_name = {"de": "German", "en": "English", "fr": "French", "es": "Spanish"}.get(lang, "English")
+        # Aktueller Zustand fließt in den Prompt ein, damit die Kommentare zum
+        # Mood passen ("du bist gerade hungrig und traurig" → LLM jammert).
+        state = tamagotchi_service.get_state(_a[0])
+        mood_hint = status_hint(state)
         system_prompt = (
             "You are a tiny, cute companion living in the corner of a screen. "
             "Comment briefly and wittily on what's happening. "
+            f"{mood_hint} Let your mood shape the tone of your comment. "
             "Rules: Max 1 sentence, max 15 words. Be cute and a little cheeky. "
             "Use emoticons occasionally. No markdown, no code. "
             f"IMPORTANT: You MUST respond in {lang_name} only."
@@ -462,6 +499,7 @@ def register_agent_chat_routes(
             if not oauth_token:
                 return {"comment": ""}
             import anthropic as _anthropic
+            from .provider_config import ANTHROPIC_OAUTH_HEADERS, ANTHROPIC_OAUTH_IDENTITY
             client = _anthropic.AsyncAnthropic(
                 api_key="",
                 auth_token=oauth_token,

@@ -90,6 +90,63 @@ export function FloatingCompanion() {
   const lastPathRef = useRef("");
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [wander, setWander] = useState({ x: 0, y: 0 });
+  const [state, setState] = useState<{
+    happy: number; hunger: number; energy: number; is_sleeping: boolean;
+    mood: Mood; age_days: number; interactions_total: number;
+    pet_count: number; feed_count: number;
+  } | null>(null);
+
+  // State vom Server ziehen — authoritative Mood-Quelle
+  const fetchState = () => {
+    const token = localStorage.getItem("hydrahive_token") || "";
+    if (!token) return;
+    fetch("/api/agents/personal_admin/tamagotchi/state", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        setState(d);
+        // Wenn kein Kommentar gerade aktiv → Server-Mood übernehmen
+        if (!showBubble) setMood(d.mood as Mood);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    fetchState();
+    const t = setInterval(fetchState, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // Click = streicheln
+  const interact = (kind: "pet" | "feed" | "sleep" | "wake") => {
+    const token = localStorage.getItem("hydrahive_token") || "";
+    if (!token) return;
+    fetch("/api/agents/personal_admin/tamagotchi/interact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ kind }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        setState(d);
+        setMood(d.mood as Mood);
+        if (kind === "pet") {
+          setBubble("♥");
+          setShowBubble(true);
+          setTimeout(() => setShowBubble(false), 1500);
+        } else if (kind === "feed") {
+          setBubble("*nom nom* 🍪");
+          setShowBubble(true);
+          setTimeout(() => setShowBubble(false), 2500);
+        }
+      })
+      .catch(() => {});
+  };
 
   // Zufälliges Wandern — alle 2-4s neue Position
   useEffect(() => {
@@ -247,14 +304,19 @@ export function FloatingCompanion() {
           transform: `translate(${wander.x}px, ${wander.y}px)`,
           transition: "transform 1.8s cubic-bezier(0.25, 0.1, 0.25, 1)",
         }}
-        title="👋"
+        title={state
+          ? `Happy ${Math.round(state.happy)} · Hunger ${Math.round(state.hunger)} · Energy ${Math.round(state.energy)}\nAge: ${state.age_days}d · Pets: ${state.pet_count} · Feeds: ${state.feed_count}\nClick: streicheln · Rechtsklick: füttern`
+          : "👋"}
         onClick={() => {
-          if (mood === "sleep") {
-            setMood("happy");
-            setBubble("*yawn* ... I'm awake!");
-            setShowBubble(true);
-            setTimeout(() => setShowBubble(false), 4000);
+          if (mood === "sleep" || state?.is_sleeping) {
+            interact("wake");
+            return;
           }
+          interact("pet");
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          interact("feed");
         }}
       >
         <BlobCreature mood={mood} size={dockEl ? 32 : 48} />
