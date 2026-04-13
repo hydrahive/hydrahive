@@ -22,10 +22,19 @@ from typing import Any
 
 import aiohttp
 
-from .gitea import get_gitea_client, resolve_repo_ref
+from .gitea import get_gitea_client, resolve_repo_ref, _load_config
 from .tool_registry import BaseTool, registry
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_with_default_org(repo: str) -> tuple[str, str]:
+    """Wrapper um resolve_repo_ref — holt Default-Org aus gitea_config.json."""
+    try:
+        default_owner = _load_config().get("org", "hydrahive")
+    except Exception:
+        default_owner = "hydrahive"
+    return resolve_repo_ref(repo, default_owner=default_owner)
 
 
 def _parse_err(e: Exception) -> dict:
@@ -81,7 +90,7 @@ class GiteaCreateIssueTool(_GiteaToolBase):
         repo: str, title: str, body: str = "", **kwargs,
     ) -> dict:
         try:
-            owner, name = resolve_repo_ref(repo)
+            owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             result = await client.create_issue_for_repo(owner, name, title, body)
             return {
@@ -124,7 +133,7 @@ class GiteaCommentIssueTool(_GiteaToolBase):
         repo: str, issue_number: int, body: str, **kwargs,
     ) -> dict:
         try:
-            owner, name = resolve_repo_ref(repo)
+            owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             result = await client.comment_issue_for_repo(owner, name, int(issue_number), body)
             return {
@@ -170,7 +179,7 @@ class GiteaListIssuesTool(_GiteaToolBase):
         repo: str, state: str = "open", limit: int = 20, **kwargs,
     ) -> dict:
         try:
-            owner, name = resolve_repo_ref(repo)
+            owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             limit = max(1, min(int(limit), 50))
             items = await client._get(
@@ -228,7 +237,7 @@ class GiteaGetIssueTool(_GiteaToolBase):
         repo: str, issue_number: int, **kwargs,
     ) -> dict:
         try:
-            owner, name = resolve_repo_ref(repo)
+            owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             data = await client._get(f"/repos/{owner}/{name}/issues/{int(issue_number)}")
             if not isinstance(data, dict):
@@ -278,7 +287,7 @@ class GiteaCloseIssueTool(_GiteaToolBase):
         repo: str, issue_number: int, comment: str = "", **kwargs,
     ) -> dict:
         try:
-            owner, name = resolve_repo_ref(repo)
+            owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             num = int(issue_number)
             if comment:
