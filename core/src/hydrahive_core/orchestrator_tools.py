@@ -398,5 +398,52 @@ def check_repeated_signature(
     return signature, repeated_count, repeated_count >= threshold
 
 
+# #618: Fuzzy-Loop-Detection über Sliding-Window
+#
+# Motivation: check_repeated_signature greift nur bei EXAKT identischen Aufrufen
+# in Folge. Wenn der Agent `cat /x/a`, `cat /x/b`, `cat /x/c`, `cat /x/d` …
+# macht (20+ mal nur mit variierendem Dateinamen), erkennt das alte System
+# keinen Loop, weil args unterschiedlich sind.
+#
+# Dieser Detector faltet den Fingerprint auf (tool_name, args-prefix) und
+# zählt Vorkommen im letzten Fenster. Ab N Treffern → Abbruch.
+
+_FUZZY_ARG_PREFIX_CHARS = 50
+_FUZZY_WINDOW = 8
+_FUZZY_THRESHOLD = 5
+
+
+def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
+    """Nur tool_name + erste N Zeichen der args → fängt Pfad/URL-Loops."""
+    prefix = (args_json or "")[:_FUZZY_ARG_PREFIX_CHARS]
+    return f"{tool_name}::{prefix}"
+
+
+def check_fuzzy_loop(
+    history: list[str],
+    window: int = _FUZZY_WINDOW,
+    threshold: int = _FUZZY_THRESHOLD,
+) -> tuple[bool, str | None]:
+    """
+    Prüft ob im Sliding-Window der gleiche fuzzy-Fingerprint ≥ threshold-mal
+    vorkommt. Returns (should_abort, dominant_fingerprint).
+
+    Beispiel: 5× "shell_exec::cat /projects/homepage-sicherheitstest/cms_backup"
+    in den letzten 8 Calls → Abbruch mit Hinweis auf dominantes Pattern.
+    """
+    if not history or window <= 0:
+        return False, None
+    recent = history[-window:]
+    if len(recent) < threshold:
+        return False, None
+    counts: dict[str, int] = {}
+    for fp in recent:
+        counts[fp] = counts.get(fp, 0) + 1
+    dominant = max(counts.items(), key=lambda x: x[1])
+    if dominant[1] >= threshold:
+        return True, dominant[0]
+    return False, None
+
+
 
 # v2: handle_request_tools entfernt — alle 9 Core-Tools sind immer geladen.

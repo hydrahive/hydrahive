@@ -63,6 +63,7 @@ async def _tool_loop(
     workers_used: list[str] = []
     last_signature: tuple[str, ...] | None = None
     repeated_signature_count = 0
+    _fuzzy_history_dispatch: list[str] = []  # #618
     max_rounds = max_rounds or boss_cfg.max_tool_rounds
 
     for _round in range(max_rounds):
@@ -74,9 +75,25 @@ async def _tool_loop(
         _metrics.record_tool_round(project_id, len(tool_calls))
 
         signature = _tool_call_signature_fn(tool_calls)
+        from .orchestrator_tools import _fuzzy_fingerprint, check_fuzzy_loop
+        for tc in tool_calls:
+            _fn = getattr(tc, "function", None)
+            if _fn is None:
+                continue
+            _fuzzy_history_dispatch.append(
+                _fuzzy_fingerprint(getattr(_fn, "name", "") or "", getattr(_fn, "arguments", "") or "")
+            )
         last_signature, repeated_signature_count, should_abort = check_repeated_signature(
             signature, last_signature, repeated_signature_count, threshold=2,
         )
+        if not should_abort:
+            _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history_dispatch)
+            if _fuzzy_abort:
+                logger.warning(
+                    "Fuzzy-Loop erkannt (dispatch): Pattern '%s' — Abbruch",
+                    (_fuzzy_fp or "")[:120],
+                )
+                should_abort = True
 
         if should_abort:
             _metrics.record_signature_abort(project_id)

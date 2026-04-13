@@ -410,14 +410,30 @@ async def _stream_codex(
     cur_messages = list(messages)
     last_signature: tuple[str, ...] | None = None
     repeated_signature_count = 0
+    _fuzzy_history_codex: list[str] = []  # #618
 
     for _round in range(boss_cfg.max_tool_rounds):
         if not getattr(msg, "tool_calls", None):
             break
         signature = _tool_call_signature_fn(msg.tool_calls)
+        from .orchestrator_tools import _fuzzy_fingerprint, check_fuzzy_loop
+        for tc in msg.tool_calls:
+            _fn = getattr(tc, "function", None)
+            if _fn is None:
+                continue
+            _fuzzy_history_codex.append(
+                _fuzzy_fingerprint(getattr(_fn, "name", "") or "", getattr(_fn, "arguments", "") or "")
+            )
         last_signature, repeated_signature_count, should_abort = check_repeated_signature(
             signature, last_signature, repeated_signature_count, threshold=4,
         )
+        if not should_abort:
+            _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history_codex)
+            if _fuzzy_abort:
+                logger.warning(
+                    "Fuzzy-Loop erkannt (Codex): Pattern '%s' — Abbruch", (_fuzzy_fp or "")[:120],
+                )
+                should_abort = True
         if should_abort:
             final = await orch._finalize_tool_loop_response(
                 boss_cfg, cur_messages,
@@ -659,6 +675,7 @@ async def _stream_anthropic_oauth(
     # Agentic Tool-Loop für OAuth-Streaming
     last_tool_signature: tuple[str, ...] | None = None
     repeated_tool_signature_count = 0
+    _fuzzy_history: list[str] = []  # #618
     _oauth_file_read_cache: dict[str, str] = {}
     _oauth_loaded_cats: set[str] = set()
 
@@ -698,9 +715,25 @@ async def _stream_anthropic_oauth(
             for block in tool_use_blocks
             if block.name not in _LOOP_EXCLUDE_OAUTH
         )
+        # #618: Fuzzy-Loop-History füttern (tool_name + args-prefix)
+        from .orchestrator_tools import _fuzzy_fingerprint, check_fuzzy_loop
+        for block in tool_use_blocks:
+            if block.name in _LOOP_EXCLUDE_OAUTH:
+                continue
+            _args_json = _json.dumps(block.input, ensure_ascii=False, sort_keys=True)
+            _fuzzy_history.append(_fuzzy_fingerprint(block.name, _args_json))
         last_tool_signature, repeated_tool_signature_count, should_abort = check_repeated_signature(
             signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
         )
+        # #618: Fuzzy-Detector zusätzlich — fängt variierende Pfade / URLs
+        if not should_abort:
+            _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history)
+            if _fuzzy_abort:
+                logger.warning(
+                    "Fuzzy-Loop erkannt (OAuth): Pattern '%s' dominiert — Abbruch",
+                    (_fuzzy_fp or "")[:120],
+                )
+                should_abort = True
         if should_abort:
             kwargs_final = dict(kwargs)
             kwargs_final.pop("tools", None)
