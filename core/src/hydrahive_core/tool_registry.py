@@ -1809,6 +1809,12 @@ class ToolSearchTool(BaseTool):
         **kwargs,
     ) -> dict:
         skey = session_key(project_id, agent_id)
+        # #620 Phase 5: jeden ToolSearch-Aufruf zählen
+        try:
+            from .session_metrics import metrics as _metrics
+            _metrics.record_toolsearch_call(project_id)
+        except Exception:
+            pass
         deferred = registry.deferred_tools()
         mcp_entries = get_current_mcp_entries(skey)  # [(name, desc), ...]
 
@@ -1842,6 +1848,13 @@ class ToolSearchTool(BaseTool):
                 mark_tool_loaded(skey, t.id)
             for name in loaded_mcp:
                 mark_tool_loaded(skey, name)
+            try:
+                from .session_metrics import metrics as _metrics
+                _metrics.record_deferred_loaded(
+                    project_id, [t.id for t in loaded_local] + loaded_mcp
+                )
+            except Exception:
+                pass
             return {
                 "loaded": [t.id for t in loaded_local] + loaded_mcp,
                 "schemas": [t.as_litellm_tool() for t in loaded_local],
@@ -1903,6 +1916,14 @@ class ToolSearchTool(BaseTool):
             else:
                 loaded_mcp.append(item)  # type: ignore[arg-type]
                 mark_tool_loaded(skey, item)  # type: ignore[arg-type]
+
+        try:
+            from .session_metrics import metrics as _metrics
+            _metrics.record_deferred_loaded(
+                project_id, [t.id for t in loaded_local] + loaded_mcp
+            )
+        except Exception:
+            pass
 
         return {
             "loaded": [t.id for t in loaded_local] + loaded_mcp,

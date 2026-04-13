@@ -297,6 +297,11 @@ async def execute_tool_call(
         # #620 Phase 4: Deferred-Guard — MCP-Tool muss via tool_search geladen sein
         from .tool_registry import is_tool_loaded as _is_loaded, session_key as _skey
         if not _is_loaded(_skey(project_id, boss_cfg.id), tool_name):
+            try:
+                from .session_metrics import metrics as _metrics
+                _metrics.record_deferred_hallucination(project_id)
+            except Exception:
+                pass
             return {
                 "error": (
                     f"MCP-Tool '{tool_name}' wurde in dieser Session noch "
@@ -322,6 +327,11 @@ async def execute_tool_call(
         from .tool_registry import registry as _reg
         _candidate = _reg.get(tool_name)
         if _candidate is not None and not _candidate.always_loaded:
+            try:
+                from .session_metrics import metrics as _metrics
+                _metrics.record_deferred_hallucination(project_id)
+            except Exception:
+                pass
             return {
                 "error": (
                     f"Tool '{tool_name}' ist deferred und wurde in dieser "

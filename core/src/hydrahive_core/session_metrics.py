@@ -73,6 +73,11 @@ class SessionMetricsData:
     # #527: Cache-Break-Diagnostik
     cache_breaks: list = field(default_factory=list)  # Letzte 10 Break-Reasons
 
+    # #620 Phase 5: Deferred-Tools-Metriken
+    deferred_tools_loaded:       set[str] = field(default_factory=set)  # unique IDs
+    toolsearch_calls:            int = 0
+    deferred_hallucinations:     int = 0   # Aufruf von noch nicht geladenem deferred Tool
+
     def cache_hit_rate(self) -> float:
         """Cache-Hit-Rate über alle Calls."""
         total_input = self.total_input_tokens
@@ -110,6 +115,13 @@ class SessionMetricsData:
             "tool_results_budgeted": self.tool_results_budgeted,
             "tool_results_bytes_saved": self.tool_results_bytes_saved,
             "cache_breaks": self.cache_breaks[-5:],
+            "deferred_tools_loaded":        sorted(self.deferred_tools_loaded),
+            "deferred_tools_loaded_count":  len(self.deferred_tools_loaded),
+            "toolsearch_calls":             self.toolsearch_calls,
+            "deferred_hallucinations":      self.deferred_hallucinations,
+            "deferred_hallucination_rate":  round(
+                self.deferred_hallucinations / self.tool_calls_total, 3
+            ) if self.tool_calls_total else 0.0,
             "avg_latency_ms":     round(self.avg_latency_ms(), 1),
             "last_calls":         [
                 {
@@ -231,6 +243,19 @@ class SessionMetrics:
         d.cache_breaks.append(reason)
         if len(d.cache_breaks) > 10:
             d.cache_breaks = d.cache_breaks[-10:]
+
+    # ── #620 Phase 5: Deferred-Tools ────────────────────────────────
+
+    def record_toolsearch_call(self, project_id: str) -> None:
+        self._get(project_id).toolsearch_calls += 1
+
+    def record_deferred_loaded(self, project_id: str, tool_ids: list[str]) -> None:
+        if not tool_ids:
+            return
+        self._get(project_id).deferred_tools_loaded.update(tool_ids)
+
+    def record_deferred_hallucination(self, project_id: str) -> None:
+        self._get(project_id).deferred_hallucinations += 1
 
     def record_tool_budget(self, project_id: str, original_len: int, budgeted_len: int) -> None:
         """#516: Tool-Result wurde durch Budgeting gekürzt."""
