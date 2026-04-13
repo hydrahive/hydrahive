@@ -186,6 +186,28 @@ class BaseTool(ABC):
     def is_destructive(self) -> bool:
         return False
 
+    # ── Deferred-Tools (#620 Phase 1) ─────────────────────────────────────
+    # always_loaded=True: volles Schema immer im Prompt (wie bisher)
+    # always_loaded=False: nur Name+one_line in <available-deferred-tools>,
+    #   Schema lädt Model via ToolSearch bei Bedarf.
+    # Default bleibt True → Verhalten identisch bis Tools aktiv migrieren.
+    @property
+    def always_loaded(self) -> bool:
+        return True
+
+    @property
+    def category(self) -> str:
+        return "core"
+
+    @property
+    def semantic_tags(self) -> list[str]:
+        return []
+
+    @property
+    def one_line(self) -> str:
+        first = self.description.split("\n", 1)[0].strip()
+        return first[:120]
+
     @property
     @abstractmethod
     def parameters(self) -> dict: ...
@@ -244,6 +266,22 @@ class ToolRegistry:
     def all_tools(self) -> list[BaseTool]:
         """Gibt alle 9 Core-Tools zurück — keine Filterung nötig."""
         return list(self._tools.values())
+
+    # ── Deferred-Tools Partitionierung (#620 Phase 1) ─────────────────────
+    def always_loaded_tools(self) -> list[BaseTool]:
+        return [t for t in self._tools.values() if t.always_loaded]
+
+    def deferred_tools(self) -> list[BaseTool]:
+        return [t for t in self._tools.values() if not t.always_loaded]
+
+    def resolve_many(self, ids: list[str]) -> list[BaseTool]:
+        out: list[BaseTool] = []
+        for tid in ids:
+            resolved = self._ALIASES.get(tid, tid)
+            t = self._tools.get(resolved)
+            if t is not None:
+                out.append(t)
+        return out
 
 
 registry = ToolRegistry()
