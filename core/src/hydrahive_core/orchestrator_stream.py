@@ -691,18 +691,32 @@ async def _stream_anthropic_oauth(
         # deferred Tools im vorherigen Turn geladen haben, die ab jetzt
         # zur Verfügung stehen sollen.
         if _round > 0:
-            _new_litellm = _build_stream_tools()
-            if _new_litellm:
-                kwargs["tools"] = [
-                    {
-                        "name":         t["function"]["name"],
-                        "description":  t["function"].get("description", ""),
-                        "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
-                    }
-                    for t in _new_litellm
-                ]
-            else:
-                kwargs.pop("tools", None)
+            try:
+                from .orchestrator_mcp import filter_mcp_schemas_by_loaded
+                from .orchestrator import _dedup_tools
+                from .tool_registry import loaded_deferred_ids as _loaded_ids, session_key as _skey_fn
+                extra = orch._allowed_tool_map(
+                    boss_cfg, execution_mode, user_text="", project_id=project_id,
+                )
+                _new_litellm = orch._reg.as_litellm_tools(list(extra.values())) if extra else []
+                _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
+                if _mcp_s:
+                    _loaded = _loaded_ids(_skey_fn(project_id, boss_cfg.id))
+                    _new_litellm = _new_litellm + filter_mcp_schemas_by_loaded(_mcp_s, _loaded)
+                _new_litellm = _dedup_tools(_new_litellm) if _new_litellm else None
+                if _new_litellm:
+                    kwargs["tools"] = [
+                        {
+                            "name":         t["function"]["name"],
+                            "description":  t["function"].get("description", ""),
+                            "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+                        }
+                        for t in _new_litellm
+                    ]
+                else:
+                    kwargs.pop("tools", None)
+            except Exception as _rebuild_err:
+                logger.warning("Tool-Rebuild fehlgeschlagen, nutze Vorrunden-Set: %s", _rebuild_err)
         async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 full_response += text
