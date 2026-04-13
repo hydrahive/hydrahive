@@ -301,9 +301,25 @@ async def execute_tool_call(
             return {"error": str(te)}, True
 
     # Reguläres Tool
-    tool = orch._resolve_allowed_tool(boss_cfg, tool_name, execution_mode, user_text=user_text)
+    tool = orch._resolve_allowed_tool(
+        boss_cfg, tool_name, execution_mode, user_text=user_text, project_id=project_id,
+    )
     if tool is None:
-        # #465: Denial tracken
+        # #620: Deferred-Tool, das noch nicht via tool_search geladen wurde?
+        from .tool_registry import registry as _reg
+        _candidate = _reg.get(tool_name)
+        if _candidate is not None and not _candidate.always_loaded:
+            return {
+                "error": (
+                    f"Tool '{tool_name}' ist deferred und wurde in dieser "
+                    "Session noch nicht via tool_search geladen."
+                ),
+                "hint": (
+                    f"Rufe zuerst: tool_search(query=\"select:{tool_name}\") "
+                    "— danach ist das Tool im nächsten Turn direkt aufrufbar."
+                ),
+            }, True
+        # Kein bekanntes Tool → Denial tracken (#465)
         count = _record_denial(boss_cfg.id, tool_name)
         return _tool_denied_error(tool_name, denial_count=count), True
 

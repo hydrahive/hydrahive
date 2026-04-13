@@ -224,12 +224,13 @@ class Orchestrator:
     ) -> str | None:
         return agent_cfg.effective_execution_mode(execution_mode)  # type: ignore[arg-type]
 
-    # v2: Die 9 Core-Tool-IDs — Plugins registrieren sich auch in der Registry,
+    # v2: Die 9 Core-Tool-IDs + tool_search (Meta-Tool für Deferred, #620).
+    # Plugins registrieren sich auch in der Registry,
     # deshalb können wir nicht blind all_tools() nehmen.
     _V2_CORE_TOOL_IDS = frozenset({
         "shell_exec", "file_read", "file_write", "file_patch",
         "file_search", "web_search", "read_memory", "write_memory",
-        "ask_agent",
+        "ask_agent", "tool_search",
     })
 
     def _allowed_tools(
@@ -255,9 +256,25 @@ class Orchestrator:
         agent_cfg: AgentConfig,
         execution_mode: str | None = None,
         user_text: str = "",
+        project_id: str = "",
     ) -> dict[str, object]:
-        """v2: Nur Core-Tools."""
-        return {tool.id: tool for tool in self._reg.all_tools() if tool.id in self._V2_CORE_TOOL_IDS}
+        """
+        v2: Core-Tools + bereits in dieser Session geladene deferred Tools (#620).
+        """
+        from .tool_registry import loaded_deferred_ids, session_key
+        result: dict[str, object] = {
+            tool.id: tool
+            for tool in self._reg.all_tools()
+            if tool.id in self._V2_CORE_TOOL_IDS
+        }
+        # Deferred Tools, die via ToolSearch in dieser Session freigegeben wurden
+        if project_id:
+            skey = session_key(project_id, agent_cfg.id)
+            for tid in loaded_deferred_ids(skey):
+                t = self._reg.get(tid)
+                if t is not None:
+                    result[tid] = t
+        return result
 
     def _resolve_allowed_tool(
         self,
@@ -265,8 +282,11 @@ class Orchestrator:
         tool_name: str,
         execution_mode: str | None = None,
         user_text: str = "",
+        project_id: str = "",
     ):
-        allowed = self._allowed_tool_map(agent_cfg, execution_mode, user_text=user_text)
+        allowed = self._allowed_tool_map(
+            agent_cfg, execution_mode, user_text=user_text, project_id=project_id,
+        )
         return allowed.get(tool_name)
 
     async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):

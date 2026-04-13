@@ -676,6 +676,15 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                         last_text = last_text[:3000] + "\n…[gekürzt]"
                     dynamic_parts.append("## Letzte Session\n\n" + last_text)
 
+    # #620: Deferred-Tools-Liste (leer bis Tools aktiv migriert werden)
+    try:
+        from .tool_registry import render_deferred_tools_block
+        _deferred_block = render_deferred_tools_block()
+        if _deferred_block:
+            dynamic_parts.append(_deferred_block)
+    except Exception as _e:
+        logger.debug("deferred-tools block skipped: %s", _e)
+
     dynamic_suffix = "\n\n".join(dynamic_parts) if dynamic_parts else ""
     return static_cached, dynamic_suffix
 

@@ -1591,6 +1591,237 @@ class AskAgentTool(BaseTool):
 
 
 # =========================================================================
+# Deferred-Tools: Session-State + ToolSearch (#620 Phase 2)
+# =========================================================================
+#
+# Mechanik analog Claude Code:
+#   1. Deferred Tools stehen im Prompt nur als Name + one_line (via
+#      render_deferred_tools_block).
+#   2. Model ruft ToolSearch → Scoring-Match → Antwort enthält volles
+#      JSONSchema der Treffer + Side-Effect: Tools für diese Session
+#      freigegeben.
+#   3. Runtime-Guard in orchestrator_tools verhindert direkten Aufruf
+#      nicht-freigegebener deferred Tools.
+#
+# Session-Key-Konvention: f"{project_id}::{agent_id}" — stabil pro Kombi.
+
+_loaded_deferred: dict[str, set[str]] = {}
+
+
+def session_key(project_id: str, agent_id: str) -> str:
+    return f"{project_id}::{agent_id}"
+
+
+def mark_tool_loaded(skey: str, tool_id: str) -> None:
+    _loaded_deferred.setdefault(skey, set()).add(tool_id)
+
+
+def is_tool_loaded(skey: str, tool_id: str) -> bool:
+    t = registry.get(tool_id)
+    if t is None:
+        return False
+    if t.always_loaded:
+        return True
+    return tool_id in _loaded_deferred.get(skey, set())
+
+
+def loaded_deferred_ids(skey: str) -> set[str]:
+    return set(_loaded_deferred.get(skey, set()))
+
+
+def clear_loaded_deferred(skey: str) -> None:
+    _loaded_deferred.pop(skey, None)
+
+
+def render_deferred_tools_block() -> str:
+    """
+    Block der in den System-Prompt eingefügt wird. Listet alle deferred
+    Tools mit Name + one_line. Das volle Schema lädt das Model via
+    ToolSearch nach. Wenn keine deferred Tools registriert: leerer String
+    (kein Block im Prompt).
+    """
+    deferred = registry.deferred_tools()
+    if not deferred:
+        return ""
+
+    lines = []
+    for t in sorted(deferred, key=lambda x: x.id):
+        lines.append(f"- **{t.id}**: {t.one_line}")
+
+    return (
+        "## Available Deferred Tools (via ToolSearch)\n\n"
+        "These tools exist but their JSON schemas are NOT loaded — calling "
+        "them directly will fail. Use `tool_search` with `select:<id>` (or "
+        "keywords) to load their schemas, then call them on the next turn.\n\n"
+        + "\n".join(lines)
+    )
+
+
+def _score_deferred_match(tool: "BaseTool", query: str) -> int:
+    """Einfaches Keyword-Scoring nach Claude-Code-Vorbild (Phase 2 MVP)."""
+    q = query.lower().strip()
+    if not q:
+        return 0
+    score = 0
+    tid = tool.id.lower()
+    tname = tool.name.lower()
+    desc = tool.description.lower()
+    tags = [t.lower() for t in tool.semantic_tags]
+
+    # Exact ID / Name match: starker Boost
+    if q == tid or q == tname:
+        score += 20
+
+    # Query als Ganzes in ID / Tags / Name
+    if q in tid:
+        score += 10
+    if q in tname:
+        score += 5
+    for tag in tags:
+        if q == tag:
+            score += 6
+        elif q in tag:
+            score += 3
+
+    # Term-basiert
+    for term in q.split():
+        if not term:
+            continue
+        if term in tid:
+            score += 3
+        if term in tname:
+            score += 2
+        if term in tags:
+            score += 2
+        if term in desc:
+            score += 1
+
+    return score
+
+
+class ToolSearchTool(BaseTool):
+    """
+    Meta-Tool: Lädt JSON-Schemas deferred Tools on-demand.
+
+    Syntax:
+      - `select:tool_id` oder `select:a,b,c` — direkte Selektion (schnellster Pfad)
+      - Sonst: Keyword-Suche über ID, Name, Tags, Beschreibung
+    """
+
+    @property
+    def id(self) -> str: return "tool_search"
+    @property
+    def name(self) -> str: return "Tool-Suche (deferred)"
+    @property
+    def description(self) -> str:
+        return (
+            "Findet und lädt Schemas für deferred Tools. Nutze "
+            "`select:<tool_id>` für direkte Selektion oder Keywords "
+            "(z.B. 'web fetch' oder 'gitea issue'). Nach dem Call sind "
+            "die Tools ab dem nächsten Turn aufrufbar."
+        )
+
+    @property
+    def always_loaded(self) -> bool:
+        return True  # ToolSearch selbst darf nie deferred werden
+
+    @property
+    def category(self) -> str:
+        return "meta"
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Query — entweder 'select:tool_id' / 'select:a,b,c' "
+                        "für direkte Selektion, oder Keywords zur Suche."
+                    ),
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max Anzahl Matches bei Keyword-Suche (default 5).",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        }
+
+    async def execute(
+        self,
+        agent_id: str,
+        project_id: str,
+        query: str,
+        max_results: int = 5,
+        **kwargs,
+    ) -> dict:
+        skey = session_key(project_id, agent_id)
+        deferred = registry.deferred_tools()
+        if not deferred:
+            return {
+                "matches": [],
+                "message": "Keine deferred Tools registriert.",
+            }
+
+        q = (query or "").strip()
+
+        # select:-Modus
+        if q.lower().startswith("select:"):
+            ids = [s.strip() for s in q[len("select:"):].split(",") if s.strip()]
+            resolved = registry.resolve_many(ids)
+            # Nur deferred akzeptieren (always_loaded braucht kein loading)
+            resolved = [t for t in resolved if not t.always_loaded]
+            if not resolved:
+                return {
+                    "matches": [],
+                    "message": (
+                        f"Kein deferred Tool gefunden für: {ids}. "
+                        "Prüfe Schreibweise im <available-deferred-tools> Block."
+                    ),
+                }
+            for t in resolved:
+                mark_tool_loaded(skey, t.id)
+            return {
+                "loaded": [t.id for t in resolved],
+                "schemas": [t.as_litellm_tool() for t in resolved],
+                "message": (
+                    f"{len(resolved)} Tool(s) geladen. Ab dem nächsten Turn "
+                    "direkt aufrufbar."
+                ),
+            }
+
+        # Keyword-Suche
+        scored = [(t, _score_deferred_match(t, q)) for t in deferred]
+        scored = [(t, s) for t, s in scored if s > 0]
+        scored.sort(key=lambda x: (-x[1], len(x[0].id)))
+        top = [t for t, _ in scored[: max(1, int(max_results))]]
+
+        if not top:
+            return {
+                "matches": [],
+                "message": (
+                    f"Keine Treffer für '{q}'. Versuche andere Begriffe oder "
+                    "'select:<tool_id>' mit einem Namen aus "
+                    "<available-deferred-tools>."
+                ),
+            }
+
+        for t in top:
+            mark_tool_loaded(skey, t.id)
+        return {
+            "loaded": [t.id for t in top],
+            "schemas": [t.as_litellm_tool() for t in top],
+            "message": (
+                f"{len(top)} Tool(s) geladen via Keyword-Suche. Ab dem "
+                "nächsten Turn direkt aufrufbar."
+            ),
+        }
+
+
+# =========================================================================
 # Register all 9 Core Tools
 # =========================================================================
 
@@ -1603,3 +1834,4 @@ registry.register(WebSearchTool())
 registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
 registry.register(AskAgentTool())
+registry.register(ToolSearchTool())
