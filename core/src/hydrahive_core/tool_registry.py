@@ -480,6 +480,15 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bPYTHONSTARTUP=",         "PYTHONSTARTUP verboten"),
     (r"\bPERL5OPT=",              "PERL5OPT verboten"),
     (r"\bRUBYOPT=",               "RUBYOPT verboten"),
+    # Git-Hook-Manipulation blocken (#622)
+    # mv/cp/rm/chmod auf Hook-Dateien verhindern — Hooks sind kritisch
+    # für Branch-Protection, Commit-Validation, Signaturen.
+    (r"\b(mv|cp|rm|chmod|chown)\b[^|;&]*/hooks/",
+     "Manipulation von Git-/Service-Hooks verboten"),
+    (r"\.git/hooks/[a-zA-Z_-]+\b",
+     "Direkter Zugriff auf .git/hooks/* verboten"),
+    (r"/opt/gitea/(git|data)/repositories",
+     "Gitea-Datenverzeichnis verboten — nutze git_* oder gitea_* Tools"),
     # Secret-Pfade: jeder Zugriff auf Konfig-/Token-Dateien wird geblockt.
     # Muster matcht in ganzem Command-String, egal ob cat, less, grep, find,
     # python -c "open(...)", awk -f, ls -la, tail, head, stat, file …
