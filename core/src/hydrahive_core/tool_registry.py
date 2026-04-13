@@ -442,6 +442,19 @@ _SHELL_BLOCKLIST: list[tuple[str, str]] = [
     (r"\bPYTHONSTARTUP=",         "PYTHONSTARTUP verboten"),
     (r"\bPERL5OPT=",              "PERL5OPT verboten"),
     (r"\bRUBYOPT=",               "RUBYOPT verboten"),
+    # Secret-Pfade: jeder Zugriff auf Konfig-/Token-Dateien wird geblockt.
+    # Muster matcht in ganzem Command-String, egal ob cat, less, grep, find,
+    # python -c "open(...)", awk -f, ls -la, tail, head, stat, file …
+    (r"/etc/hydrahive(/|_|\b)",    "/etc/hydrahive/* ist für Agenten tabu (Tokens!)"),
+    (r"/etc/octopos(/|_|\b)",      "/etc/octopos/* ist für Agenten tabu (Tokens!)"),
+    (r"/etc/shadow\b",             "/etc/shadow verboten"),
+    (r"/etc/gshadow\b",            "/etc/gshadow verboten"),
+    (r"/etc/sudoers(\.d)?\b",      "/etc/sudoers verboten"),
+    (r"\.ssh/id_[a-z0-9_]+\b",     "SSH-Private-Keys verboten"),
+    (r"\.ssh/authorized_keys\b",   "authorized_keys verboten"),
+    (r"/root/",                    "Zugriff auf /root/ verboten"),
+    (r"\.aws/credentials\b",       "AWS-Credentials verboten"),
+    (r"/var/run/hydrahive",        "hydrahive-Runtime-State verboten"),
 ]
 
 _SHELL_WRAPPERS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}

