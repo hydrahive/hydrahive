@@ -36,7 +36,7 @@ export function AdminFunPlayer() {
   const [settings, setSettings] = useState<AdminFunSettings | null>(null);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [playing, setPlaying] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [playlistOpen, setPlaylistOpen] = useState(false);
@@ -294,7 +294,7 @@ export function AdminFunPlayer() {
       <button
         onClick={toggleEnabled}
         title="AdminFun aktivieren"
-        className="fixed bottom-4 right-4 z-50 rounded-full border bg-card/80 backdrop-blur p-2 shadow-lg hover:bg-accent transition"
+        className="fixed bottom-4 left-4 z-50 rounded-full border bg-card/80 backdrop-blur p-2 shadow-lg hover:bg-accent transition"
       >
         <Sparkles className="h-4 w-4 text-muted-foreground" />
       </button>
@@ -314,7 +314,7 @@ export function AdminFunPlayer() {
 
       {/* Floating Player */}
       <div
-        className="fixed bottom-4 right-4 z-50 rounded-2xl border bg-card/95 backdrop-blur shadow-2xl transition-all"
+        className="fixed bottom-4 left-4 z-50 rounded-2xl border bg-card/95 backdrop-blur shadow-2xl transition-all"
         style={{
           width: collapsed ? "auto" : "320px",
           boxShadow: `0 4px 24px rgba(168, 85, 247, calc(0.3 + var(--adminfun-bass, 0) * 0.5))`,
