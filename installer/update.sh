@@ -188,6 +188,13 @@ main() {
         fi
     done
 
+    # --- 3c. Default-MCP-Server installieren + registrieren (idempotent, #620) ---
+    if [ -f "${TMPDIR_BASE}/installer/install-default-mcp-servers.sh" ]; then
+        info "Default-MCP-Server installieren..."
+        bash "${TMPDIR_BASE}/installer/install-default-mcp-servers.sh" 2>&1 | \
+            sed 's/^/  /' || warn "MCP-Server-Setup mit Warnungen"
+    fi
+
     # --- 4. Console bauen ---
     info "Baue Console..."
     local CONSOLE_SRC="${TMPDIR_BASE}/console"
