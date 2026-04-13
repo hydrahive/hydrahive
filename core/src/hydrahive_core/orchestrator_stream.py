@@ -151,19 +151,25 @@ async def handle_message_stream(
             if history[i].get("role") == "user":
                 history[i] = {"role": "user", "content": _vision_blocks}
                 break
-    # v2: Immer alle 9 Core-Tools laden — keine Meta-Phase mehr
-    boss_tools    = orch._allowed_tools(boss_cfg, execution_mode, user_text=_text_content)
-    litellm_tools = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
-    _mcp_s = await orch._mcp_schemas_for_agent(boss_cfg)
-    if _mcp_s:
-        litellm_tools = (litellm_tools or []) + _mcp_s
-    # Plugin-Tools (#110)
-    # v2: Plugin-Tools vorerst deaktiviert — nur 9 Core-Tools
-    # TODO: Plugins später pro Projekt konfigurierbar nachladen
-    # _plg_s = orch._plugin_schemas_for_agent(boss_cfg)
-    # if _plg_s:
-    #     litellm_tools = (litellm_tools or []) + _plg_s
-    litellm_tools = _dedup_tools(litellm_tools) if litellm_tools else None
+    # v2: Core-Tools + geladene deferred Tools (#620 Phase 4).
+    # Wird pro Runde via _build_stream_tools() neu aufgebaut, damit
+    # ToolSearch-Käufe im gleichen Loop wirksam werden.
+    from .orchestrator_mcp import filter_mcp_schemas_by_loaded
+    from .tool_registry import loaded_deferred_ids as _loaded_ids, session_key as _skey_fn
+
+    _all_mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
+
+    def _build_stream_tools() -> list[dict] | None:
+        extra = orch._allowed_tool_map(
+            boss_cfg, execution_mode, user_text=_text_content, project_id=project_id,
+        )
+        schemas = orch._reg.as_litellm_tools(list(extra.values())) if extra else []
+        if _all_mcp_schemas:
+            loaded = _loaded_ids(_skey_fn(project_id, boss_cfg.id))
+            schemas = schemas + filter_mcp_schemas_by_loaded(_all_mcp_schemas, loaded)
+        return _dedup_tools(schemas) if schemas else None
+
+    litellm_tools = _build_stream_tools()
 
     # Anti-Halluzinations-Guard: System-Prompt ergänzen mit tatsächlich verfügbaren Tools
     # Verhindert dass der Agent Tools als Text schreibt statt sie echt aufzurufen
@@ -681,6 +687,22 @@ async def _stream_anthropic_oauth(
 
     for _round in range(boss_cfg.max_tool_rounds):
         _round_text = ""
+        # #620 Phase 4: Tools pro Runde aktualisieren — ToolSearch kann
+        # deferred Tools im vorherigen Turn geladen haben, die ab jetzt
+        # zur Verfügung stehen sollen.
+        if _round > 0:
+            _new_litellm = _build_stream_tools()
+            if _new_litellm:
+                kwargs["tools"] = [
+                    {
+                        "name":         t["function"]["name"],
+                        "description":  t["function"].get("description", ""),
+                        "input_schema": t["function"].get("parameters", {"type": "object", "properties": {}}),
+                    }
+                    for t in _new_litellm
+                ]
+            else:
+                kwargs.pop("tools", None)
         async with client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
                 full_response += text

@@ -676,10 +676,19 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                         last_text = last_text[:3000] + "\n…[gekürzt]"
                     dynamic_parts.append("## Letzte Session\n\n" + last_text)
 
-    # #620: Deferred-Tools-Liste (leer bis Tools aktiv migriert werden)
+    # #620: Deferred-Tools-Liste (lokal + MCP, Phase 4)
     try:
-        from .tool_registry import render_deferred_tools_block
-        _deferred_block = render_deferred_tools_block()
+        from .tool_registry import render_deferred_tools_block, set_current_mcp_entries
+        from .orchestrator_mcp import _mcp_deferred_entries
+        _mcp_entries: list[tuple[str, str]] = []
+        try:
+            from .settings import settings as _s
+            _mcp_entries = await _mcp_deferred_entries(boss_cfg, str(_s.mcp_servers_config))
+        except Exception as _mcp_err:
+            logger.debug("mcp deferred entries skipped: %s", _mcp_err)
+        # Cache für ToolSearch-Zugriff in derselben Runde
+        set_current_mcp_entries(boss_cfg.id, _mcp_entries)
+        _deferred_block = render_deferred_tools_block(mcp_entries=_mcp_entries)
         if _deferred_block:
             dynamic_parts.append(_deferred_block)
     except Exception as _e:

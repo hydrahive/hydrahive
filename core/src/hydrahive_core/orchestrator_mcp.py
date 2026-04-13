@@ -60,6 +60,34 @@ def _plugin_schemas_for_agent(agent_cfg: AgentConfig) -> list[dict]:
     return []
 
 
+async def _mcp_deferred_entries(
+    agent_cfg: AgentConfig,
+    mcp_servers_file: str,
+) -> list[tuple[str, str]]:
+    """
+    Liefert [(prefixed_name, one_line_description), ...] für den
+    <available-deferred-tools> Block. Wird vom Prompt-Builder genutzt.
+    #620 Phase 4.
+    """
+    schemas = await _mcp_schemas_for_agent(agent_cfg, mcp_servers_file)
+    out: list[tuple[str, str]] = []
+    for s in schemas:
+        fn = s.get("function") or {}
+        name = fn.get("name") or ""
+        desc = (fn.get("description") or "").split("\n", 1)[0].strip()[:120]
+        if name:
+            out.append((name, desc))
+    return out
+
+
+def filter_mcp_schemas_by_loaded(
+    mcp_schemas: list[dict],
+    loaded_names: set[str],
+) -> list[dict]:
+    """Lässt nur MCP-Schemas durch deren Name in loaded_names steht (#620 Phase 4)."""
+    return [s for s in mcp_schemas if (s.get("function", {}).get("name") or "") in loaded_names]
+
+
 async def _execute_mcp_tool(
     agent_cfg: AgentConfig,
     mcp_servers_file: str,

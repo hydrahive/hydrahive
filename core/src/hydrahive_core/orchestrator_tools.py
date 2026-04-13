@@ -294,6 +294,19 @@ async def execute_tool_call(
     """
     # MCP-Tool?
     if tool_name.startswith("mcp_") and boss_cfg.mcp_servers:
+        # #620 Phase 4: Deferred-Guard — MCP-Tool muss via tool_search geladen sein
+        from .tool_registry import is_tool_loaded as _is_loaded, session_key as _skey
+        if not _is_loaded(_skey(project_id, boss_cfg.id), tool_name):
+            return {
+                "error": (
+                    f"MCP-Tool '{tool_name}' wurde in dieser Session noch "
+                    "nicht via tool_search geladen."
+                ),
+                "hint": (
+                    f"Rufe zuerst: tool_search(query=\"select:{tool_name}\") "
+                    "— danach ist das Tool im nächsten Turn aufrufbar."
+                ),
+            }, True
         try:
             result = await orch._execute_mcp_tool(boss_cfg, tool_name, tool_input)
             return result, False

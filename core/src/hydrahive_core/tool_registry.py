@@ -1626,12 +1626,13 @@ def mark_tool_loaded(skey: str, tool_id: str) -> None:
 
 
 def is_tool_loaded(skey: str, tool_id: str) -> bool:
+    # Session-Load hat Vorrang — gilt auch für MCP-Tools (nicht in registry)
+    if tool_id in _loaded_deferred.get(skey, set()):
+        return True
     t = registry.get(tool_id)
     if t is None:
         return False
-    if t.always_loaded:
-        return True
-    return tool_id in _loaded_deferred.get(skey, set())
+    return t.always_loaded
 
 
 def loaded_deferred_ids(skey: str) -> set[str]:
@@ -1642,28 +1643,68 @@ def clear_loaded_deferred(skey: str) -> None:
     _loaded_deferred.pop(skey, None)
 
 
-def render_deferred_tools_block() -> str:
+def render_deferred_tools_block(
+    mcp_entries: list[tuple[str, str]] | None = None,
+) -> str:
     """
     Block der in den System-Prompt eingefügt wird. Listet alle deferred
     Tools mit Name + one_line. Das volle Schema lädt das Model via
-    ToolSearch nach. Wenn keine deferred Tools registriert: leerer String
-    (kein Block im Prompt).
+    ToolSearch nach. Wenn keine deferred Tools registriert und keine MCP-
+    Einträge: leerer String (kein Block im Prompt).
+
+    #620 Phase 4: mcp_entries enthält [(prefixed_name, one_line), ...]
+    für MCP-Tools des aktuellen Agents (per-Request, nicht global).
     """
     deferred = registry.deferred_tools()
-    if not deferred:
+    mcp_entries = mcp_entries or []
+
+    if not deferred and not mcp_entries:
         return ""
 
-    lines = []
-    for t in sorted(deferred, key=lambda x: x.id):
-        lines.append(f"- **{t.id}**: {t.one_line}")
+    local_lines = [f"- **{t.id}**: {t.one_line}" for t in sorted(deferred, key=lambda x: x.id)]
+    mcp_lines = [f"- **{name}**: [MCP] {desc}" for name, desc in sorted(mcp_entries)]
+
+    sections = []
+    if local_lines:
+        sections.append("\n".join(local_lines))
+    if mcp_lines:
+        sections.append("### MCP-Tools\n" + "\n".join(mcp_lines))
 
     return (
         "## Available Deferred Tools (via ToolSearch)\n\n"
         "These tools exist but their JSON schemas are NOT loaded — calling "
         "them directly will fail. Use `tool_search` with `select:<id>` (or "
         "keywords) to load their schemas, then call them on the next turn.\n\n"
-        + "\n".join(lines)
+        + "\n\n".join(sections)
     )
+
+
+# #620 Phase 4: MCP-Deferred-Entries pro Agent. Prompt-Builder + Tool-
+# Dispatch nutzen denselben Cache (gekeyt auf agent_id — MCP-Tools sind
+# agent-scoped, nicht project-scoped). Ein Set-Call pro Anthropic-Request.
+_current_mcp_entries: dict[str, list[tuple[str, str]]] = {}
+
+
+def set_current_mcp_entries(agent_id: str, entries: list[tuple[str, str]]) -> None:
+    _current_mcp_entries[agent_id] = list(entries)
+
+
+def get_current_mcp_entries_for_agent(agent_id: str) -> list[tuple[str, str]]:
+    return list(_current_mcp_entries.get(agent_id, []))
+
+
+def clear_current_mcp_entries(agent_id: str) -> None:
+    _current_mcp_entries.pop(agent_id, None)
+
+
+# Alias fürs ToolSearch-Nutzungsmuster (skey = project_id::agent_id)
+def get_current_mcp_entries(skey: str) -> list[tuple[str, str]]:
+    """Split skey → agent_id, dann lookup."""
+    if "::" in skey:
+        _, agent_id = skey.split("::", 1)
+    else:
+        agent_id = skey
+    return get_current_mcp_entries_for_agent(agent_id)
 
 
 def _score_deferred_match(tool: "BaseTool", query: str) -> int:
@@ -1769,7 +1810,9 @@ class ToolSearchTool(BaseTool):
     ) -> dict:
         skey = session_key(project_id, agent_id)
         deferred = registry.deferred_tools()
-        if not deferred:
+        mcp_entries = get_current_mcp_entries(skey)  # [(name, desc), ...]
+
+        if not deferred and not mcp_entries:
             return {
                 "matches": [],
                 "message": "Keine deferred Tools registriert.",
@@ -1780,10 +1823,14 @@ class ToolSearchTool(BaseTool):
         # select:-Modus
         if q.lower().startswith("select:"):
             ids = [s.strip() for s in q[len("select:"):].split(",") if s.strip()]
-            resolved = registry.resolve_many(ids)
-            # Nur deferred akzeptieren (always_loaded braucht kein loading)
-            resolved = [t for t in resolved if not t.always_loaded]
-            if not resolved:
+            loaded_local = registry.resolve_many(ids)
+            loaded_local = [t for t in loaded_local if not t.always_loaded]
+
+            # MCP: direkte Namens-Zuordnung
+            mcp_name_set = {name for name, _ in mcp_entries}
+            loaded_mcp = [tid for tid in ids if tid in mcp_name_set]
+
+            if not loaded_local and not loaded_mcp:
                 return {
                     "matches": [],
                     "message": (
@@ -1791,22 +1838,51 @@ class ToolSearchTool(BaseTool):
                         "Prüfe Schreibweise im <available-deferred-tools> Block."
                     ),
                 }
-            for t in resolved:
+            for t in loaded_local:
                 mark_tool_loaded(skey, t.id)
+            for name in loaded_mcp:
+                mark_tool_loaded(skey, name)
             return {
-                "loaded": [t.id for t in resolved],
-                "schemas": [t.as_litellm_tool() for t in resolved],
+                "loaded": [t.id for t in loaded_local] + loaded_mcp,
+                "schemas": [t.as_litellm_tool() for t in loaded_local],
+                "mcp_loaded": loaded_mcp,
                 "message": (
-                    f"{len(resolved)} Tool(s) geladen. Ab dem nächsten Turn "
-                    "direkt aufrufbar."
+                    f"{len(loaded_local) + len(loaded_mcp)} Tool(s) geladen. "
+                    "Ab dem nächsten Turn direkt aufrufbar."
                 ),
             }
 
-        # Keyword-Suche
-        scored = [(t, _score_deferred_match(t, q)) for t in deferred]
-        scored = [(t, s) for t, s in scored if s > 0]
-        scored.sort(key=lambda x: (-x[1], len(x[0].id)))
-        top = [t for t, _ in scored[: max(1, int(max_results))]]
+        # Keyword-Suche: lokal + MCP parallel scoren, zusammenführen
+        local_scored = [(t, _score_deferred_match(t, q)) for t in deferred]
+        local_scored = [(t, s) for t, s in local_scored if s > 0]
+
+        mcp_scored: list[tuple[str, int]] = []
+        q_low = q.lower()
+        terms = [t for t in q_low.split() if t]
+        for name, desc in mcp_entries:
+            score = 0
+            name_l = name.lower()
+            desc_l = desc.lower()
+            if q_low in name_l:
+                score += 10
+            if q_low in desc_l:
+                score += 3
+            for term in terms:
+                if term in name_l:
+                    score += 3
+                if term in desc_l:
+                    score += 1
+            if score > 0:
+                mcp_scored.append((name, score))
+
+        combined: list[tuple[object, int, str]] = (
+            [(t, s, "local") for t, s in local_scored]
+            + [(n, s, "mcp") for n, s in mcp_scored]
+        )
+        combined.sort(
+            key=lambda x: (-x[1], len(x[0].id) if x[2] == "local" else len(x[0])),
+        )
+        top = combined[: max(1, int(max_results))]
 
         if not top:
             return {
@@ -1818,14 +1894,23 @@ class ToolSearchTool(BaseTool):
                 ),
             }
 
-        for t in top:
-            mark_tool_loaded(skey, t.id)
+        loaded_local: list[BaseTool] = []
+        loaded_mcp: list[str] = []
+        for item, _score, kind in top:
+            if kind == "local":
+                loaded_local.append(item)  # type: ignore[arg-type]
+                mark_tool_loaded(skey, item.id)  # type: ignore[attr-defined]
+            else:
+                loaded_mcp.append(item)  # type: ignore[arg-type]
+                mark_tool_loaded(skey, item)  # type: ignore[arg-type]
+
         return {
-            "loaded": [t.id for t in top],
-            "schemas": [t.as_litellm_tool() for t in top],
+            "loaded": [t.id for t in loaded_local] + loaded_mcp,
+            "schemas": [t.as_litellm_tool() for t in loaded_local],
+            "mcp_loaded": loaded_mcp,
             "message": (
-                f"{len(top)} Tool(s) geladen via Keyword-Suche. Ab dem "
-                "nächsten Turn direkt aufrufbar."
+                f"{len(loaded_local) + len(loaded_mcp)} Tool(s) geladen via "
+                "Keyword-Suche. Ab dem nächsten Turn direkt aufrufbar."
             ),
         }
 

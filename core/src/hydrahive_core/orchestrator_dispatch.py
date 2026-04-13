@@ -49,15 +49,28 @@ async def _tool_loop(
         (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
         "",
     )
-    # v2: Immer alle 9 Core-Tools
-    boss_tools = orch._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
-    litellm_tools: list[dict] = orch._reg.as_litellm_tools(boss_tools) if boss_tools else []
-    _mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
-    if _mcp_schemas:
-        litellm_tools = litellm_tools + _mcp_schemas
-    # Dedup über alles (MCP kann Duplikate erzeugen)
+    # v2: Immer alle 9 Core-Tools + ToolSearch + geladene deferred Tools.
+    # #620 Phase 4: wir bauen das Tools-Array pro Runde neu auf, weil
+    # sich _loaded_deferred durch ToolSearch-Calls verändern kann.
     from .orchestrator import _dedup_tools
-    litellm_tools = _dedup_tools(litellm_tools)
+    from .orchestrator_mcp import filter_mcp_schemas_by_loaded
+    from .tool_registry import loaded_deferred_ids, session_key as _skey_fn
+
+    _all_mcp_schemas = await orch._mcp_schemas_for_agent(boss_cfg)
+
+    def _build_tools_for_round() -> list[dict]:
+        boss_tools = orch._allowed_tools(boss_cfg, execution_mode, user_text=_last_user)
+        extra = orch._allowed_tool_map(
+            boss_cfg, execution_mode, user_text=_last_user, project_id=project_id,
+        )
+        # all_tools + any deferred bereits geladen in Session
+        schemas = orch._reg.as_litellm_tools(list(extra.values())) if extra else []
+        if _all_mcp_schemas:
+            loaded = loaded_deferred_ids(_skey_fn(project_id, boss_cfg.id))
+            schemas = schemas + filter_mcp_schemas_by_loaded(_all_mcp_schemas, loaded)
+        return _dedup_tools(schemas)
+
+    litellm_tools = _build_tools_for_round()
     _file_read_cache: dict[str, str] = {}
     current_messages = list(messages)
     workers_used: list[str] = []
@@ -222,7 +235,8 @@ async def _tool_loop(
                 tool_name=tc.function.name,
             )
 
-        # Nächste LLM-Runde
+        # Nächste LLM-Runde — Tools neu bauen (ToolSearch kann neue geladen haben)
+        litellm_tools = _build_tools_for_round()
         try:
             response = await orch._llm_call(boss_cfg, current_messages, litellm_tools)
         except Exception as e:
