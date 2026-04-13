@@ -16,6 +16,7 @@ const ForceGraph3D = lazy(() => import("react-force-graph-3d")) as any as typeof
 import { Loader2, RefreshCw, Eye, EyeOff, Globe, InfoIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
+import { AdminFunPlayer } from "@/components/AdminFunPlayer";
 
 interface GraphNode {
   id: string;
@@ -348,7 +349,7 @@ export function HydraBrainPage() {
   }, []);
 
   return (
-    <div className="relative w-full h-screen bg-[#050810] overflow-hidden" ref={containerRef}>
+    <div className="adminfun-brain-stage relative w-full h-screen bg-[#050810] overflow-hidden" ref={containerRef}>
 
       {/* Toolbar */}
       <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
@@ -620,6 +621,8 @@ export function HydraBrainPage() {
           </div>
         </div>
       )}
+
+      <AdminFunPlayer />
     </div>
   );
 }

@@ -324,6 +324,34 @@ main {
   transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.005 * var(--adminfun-active, 0)));
 }
 
+/* HydraBrain-Seite: 3D-Graph-Canvas pulsiert mit Musik.
+   Canvas bekommt Filter (brightness/saturate/hue-rotate) + Scale pro Beat.
+   Radialer Glow als Overlay mit pointer-events:none. */
+.adminfun-brain-stage canvas {
+  transition: filter 0.08s ease-out, transform 0.08s ease-out;
+  filter:
+    brightness(calc(1 + var(--adminfun-beat, 0) * 0.25 * var(--adminfun-active, 0)))
+    saturate(calc(1 + var(--adminfun-bass, 0) * 0.8 * var(--adminfun-active, 0)))
+    hue-rotate(calc(var(--adminfun-treble, 0) * 40deg * var(--adminfun-active, 0)));
+  transform: scale(calc(1 + var(--adminfun-beat, 0) * 0.015 * var(--adminfun-active, 0)));
+}
+.adminfun-brain-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: var(--adminfun-active, 0);
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgba(236, 72, 153, calc(var(--adminfun-beat, 0) * 0.35)) 0%,
+      rgba(168, 85, 247, calc(var(--adminfun-bass, 0) * 0.25)) 30%,
+      transparent 70%
+    );
+  transition: background 0.08s ease-out;
+}
+
 /* Explizite Opt-in-Klassen bleiben erhalten für spezielle Spots */
 .adminfun-bump {
   transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1);
