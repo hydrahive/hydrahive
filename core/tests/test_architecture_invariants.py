@@ -1031,6 +1031,79 @@ def test_invariant10h_rm_rf_root_still_denied():
     assert _classify_shell("rm -rf /") == RiskLevel.DENY
 
 
+# ===========================================================================
+# Invariante 11 — Tote AgentConfig-Felder entfernt (#642)
+# ===========================================================================
+# role, tools_extra, tools_deny, tool_selection haben keinen Runtime-Konsumenten
+# und sind aus AgentConfig verschwunden. Legacy-YAMLs mit diesen Keys bleiben
+# über `extra: ignore` parsbar. tool_selection wird nicht mehr an die UI
+# serialisiert.
+
+_DEAD_AGENTCONFIG_FIELDS = ("role", "tools_extra", "tools_deny", "tool_selection")
+
+
+def test_invariant11a_dead_agentconfig_fields_removed():
+    """11a (#642): Die 4 toten Felder sind aus AgentConfig entfernt."""
+    from hydrahive_core.agent_config import AgentConfig
+
+    for field in _DEAD_AGENTCONFIG_FIELDS:
+        assert field not in AgentConfig.model_fields, (
+            f"AgentConfig hat noch ein Feld '{field}' — sollte seit #642 weg sein."
+        )
+
+
+def test_invariant11b_legacy_yaml_with_dead_fields_still_parses():
+    """11b (#642): `extra: ignore` hält Legacy-agent.yaml mit den alten Feldern
+    weiter parsbar; Felder landen nicht als Attribut auf der Instanz."""
+    from hydrahive_core.agent_config import AgentConfig
+
+    legacy = {
+        "id": "legacy_agent",
+        "type": "specialist",
+        "identity": "Legacy",
+        "llm": {"model": "claude-opus-4-6"},
+        "role": "coder",
+        "tools_extra": ["gitea_repo_inspect"],
+        "tools_deny": ["shell_exec"],
+        "tool_selection": "always",
+    }
+    cfg = AgentConfig.model_validate(legacy)
+    for field in _DEAD_AGENTCONFIG_FIELDS:
+        assert not hasattr(cfg, field), (
+            f"AgentConfig-Instanz hat nach model_validate noch '{field}' — "
+            f"extra: ignore sollte das verwerfen."
+        )
+
+
+def test_invariant11c_tool_selection_not_in_admin_builders():
+    """11c (#642): Weder Admin- noch User-Agent-Builder schreiben tool_selection
+    oder die anderen toten Felder in die YAML-Shape."""
+    from hydrahive_core.router_agent_admin import (
+        CreateAgentRequest,
+        build_agent_admin_data,
+    )
+    from hydrahive_core.router_users import (
+        MyAgentUpdateRequest,
+        build_personal_agent_data,
+    )
+
+    admin_req = CreateAgentRequest(
+        id="x", type="specialist", identity="X", model="claude-opus-4-6"
+    )
+    admin_data = build_agent_admin_data(admin_req)
+    for field in _DEAD_AGENTCONFIG_FIELDS:
+        assert field not in admin_data, (
+            f"build_agent_admin_data schreibt noch '{field}' — sollte seit #642 weg."
+        )
+
+    my_req = MyAgentUpdateRequest(identity="Y", model="claude-opus-4-6")
+    my_data = build_personal_agent_data("personal_test", my_req)
+    for field in _DEAD_AGENTCONFIG_FIELDS:
+        assert field not in my_data, (
+            f"build_personal_agent_data schreibt noch '{field}' — sollte seit #642 weg."
+        )
+
+
 def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     """9d (#641-Followup): router_agent_chat importiert dasselbe
     ToolConfirmRequest-Modell wie router_projects — kein dupliziertes

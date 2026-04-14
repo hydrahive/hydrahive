@@ -16,10 +16,7 @@ class CreateAgentRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     soul: str = ""
-    role: str | None = None  # #492: reader/assistant/coder/admin
     tools: list[str] = Field(default_factory=list)
-    tools_extra: list[str] = Field(default_factory=list)
-    tools_deny: list[str] = Field(default_factory=list)
     fallback_models: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     allowed_agents: list[str] = Field(default_factory=list)
@@ -59,15 +56,7 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
             "on_failure": req.heartbeat_on_failure,
         },
     }
-    # #492: Role-basiert oder Legacy
-    if req.role:
-        agent_data["role"] = req.role
-        if req.tools_extra:
-            agent_data["tools_extra"] = list(req.tools_extra)
-        if req.tools_deny:
-            agent_data["tools_deny"] = list(req.tools_deny)
-    else:
-        agent_data["tools"] = list(req.tools)
+    agent_data["tools"] = list(req.tools)
     if req.soul:
         agent_data["soul"] = "./soul.md"
     if req.max_tool_rounds is not None:

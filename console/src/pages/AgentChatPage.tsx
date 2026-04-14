@@ -20,7 +20,6 @@ export function AgentChatPage() {
   // Agent info
   const [agentName, setAgentName] = useState(id ?? "");
   const [agentModel, setAgentModel] = useState<{ model?: string; temperature?: number }>({});
-  const [agentRole, setAgentRole] = useState<string | null>(null);
   const [agentTools, setAgentTools] = useState<string[]>([]);
 
   // Debug
@@ -79,7 +78,6 @@ export function AgentChatPage() {
         const cfg = (a as any)?.config;
         if (cfg?.identity) setAgentName(cfg.identity);
         if (cfg?.llm) setAgentModel(cfg.llm);
-        if (cfg?.role) setAgentRole(cfg.role);
         if (cfg?.tools && Array.isArray(cfg.tools)) setAgentTools(cfg.tools.map((t: any) => typeof t === "string" ? t : t.name ?? ""));
       }).catch(() => {});
     chat.loadHistory();
@@ -290,12 +288,6 @@ export function AgentChatPage() {
                   <p className="mt-1 break-all font-medium">{agentModel.model ?? t("chat.notConfigured", { defaultValue: "Nicht konfiguriert" })}</p>
                   <p className="text-xs text-muted-foreground">Temp: {agentModel.temperature ?? "—"}</p>
                 </div>
-                {agentRole && (
-                  <div className="rounded-2xl bg-secondary/40 px-3 py-3">
-                    <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">Rolle</p>
-                    <p className="mt-1 text-xs">{agentRole}</p>
-                  </div>
-                )}
                 <div className="rounded-2xl bg-secondary/40 px-3 py-3">
                   <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.history", { defaultValue: "Verlauf" })}</p>
                   <p className="mt-1 font-medium">{chat.messages.length} {chat.messages.length === 1 ? "Nachricht" : "Nachrichten"}</p>

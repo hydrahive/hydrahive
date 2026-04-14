@@ -101,11 +101,7 @@ class AgentConfig(BaseModel):
     llm:      LlmConfig
     soul:     str | None = None
     skills:   list[str] = Field(default_factory=list)
-    role:            str | None = None  # #492: reader/assistant/coder/admin — setzt tools + execution_modes automatisch
     tools:           list[str] = Field(default_factory=list)
-    tools_extra:     list[str] = Field(default_factory=list)  # #492: zusätzliche Tools on top of role
-    tools_deny:      list[str] = Field(default_factory=list)  # #492: Tools explizit verbieten
-    tool_selection:  Literal["auto", "always"] = "auto"  # always = alle Tools immer laden (für Spezialisten)
     allowed_agents:  list[str] = Field(default_factory=list)  # v1 deprecated — wird ignoriert
     mcp_servers:     list[str] = Field(default_factory=list)
     sources:         list[AgentSource] = Field(default_factory=list)
@@ -167,7 +163,7 @@ def load_agent_config(agent_dir: Path) -> AgentConfig | None:
         return None
 
     # v2: Rollen-System entfernt — Tools sind fix (9 Core-Tools).
-    # role-Feld wird ignoriert, execution_modes nur für shell_exec relevant.
+    # execution_modes nur für shell_exec relevant.
 
     config.agent_dir = agent_dir
     return config
@@ -225,7 +221,6 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         llm=llm,
         soul=None,                       # AGENT.md wird separat injiziert
         tools=core_tools,
-        tool_selection="always",          # Alle 9 Tools immer laden
         max_tool_rounds=getattr(pcfg, "max_tool_rounds", 50),
         execution_modes=exec_modes,
         agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
