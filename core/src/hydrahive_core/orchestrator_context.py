@@ -20,6 +20,7 @@ import litellm
 from .learning_memory import build_learning_prompt_snippet
 from .session_metrics import metrics as _metrics
 from .memory_search import search_memory, update_index as update_memory_index
+from .prefetch import start_memory_prefetch
 from .semantic_index import score_texts
 from .settings import settings
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt, Skill
@@ -263,6 +264,10 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
         else:
             logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
 
+    # #625: Memory-Prefetch — BM25 + A-MEM laufen parallel zum Rest des Builds
+    _k_prefetch = 8 if mode == "full" else 4
+    _prefetch = start_memory_prefetch(boss_cfg.agent_dir, user_text, k=_k_prefetch)
+
     # Datum + Uhrzeit im System-Prompt — LLM hat sonst kein Zeitgefühl
     from datetime import datetime, timezone as _tz
     _now = datetime.now(_tz.utc)
@@ -340,14 +345,8 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             if learning_snippet:
                 mem_parts.append(learning_snippet)
 
-        # #500: Memory-Prefetch — Index-Update, dann BM25-Suche
-        loop = asyncio.get_event_loop()
-        k = 8 if mode == "full" else 4
-        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
-        snippets = await loop.run_in_executor(
-            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
-        )
-
+        # #625: Async Memory-Prefetch — BM25-Treffer abholen (timeout-gesichert)
+        snippets = await _prefetch.get_bm25(timeout=0.8)
         if snippets:
             mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
 
@@ -380,15 +379,11 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
             "damit du beim nächsten `read_memory` sofort weißt was du weißt."
         )
 
-    # v2: A-MEM Globaler Wissens-Prefetch (#563)
-    # Sucht in der zentralen Wissensdatenbank nach relevanten Einträgen.
-    # Graceful: wenn A-MEM nicht erreichbar → überspringen, nicht blockieren.
-    try:
-        amem_snippets = await _amem_global_search(user_text)
-        if amem_snippets:
-            parts.append("## Globales Wissen (A-MEM)\n\n" + amem_snippets)
-    except Exception as _amem_err:
-        logger.debug("A-MEM Prefetch fehlgeschlagen (nicht kritisch): %s", _amem_err)
+    # v2: A-MEM Globaler Wissens-Prefetch (#563/#625)
+    # Läuft jetzt parallel zu BM25 via prefetch — hier nur noch await mit Timeout.
+    amem_snippets = await _prefetch.get_amem(timeout=1.5)
+    if amem_snippets:
+        parts.append("## Globales Wissen (A-MEM)\n\n" + amem_snippets)
 
     # #350: Session-Continuity — letzte Session nach /clear automatisch injizieren
     if boss_cfg.agent_dir:
@@ -539,6 +534,10 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     mode = _context_mode(user_text)
     loop = asyncio.get_event_loop()
 
+    # #625: Memory-Prefetch frühestmöglich starten — läuft parallel zum static-Build
+    _k_prefetch = 8 if mode == "full" else 4
+    _prefetch = start_memory_prefetch(boss_cfg.agent_dir, user_text, k=_k_prefetch)
+
     # --- Statischer Teil (cacheable) ---
     static_parts = [f"Du bist {boss_cfg.identity}."]
 
@@ -636,19 +635,15 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     dynamic_parts = []
 
     if boss_cfg.agent_dir:
-        # #500: Prefetch — Memory-Index erst fertig, dann BM25-Suche
-        k = 8 if mode == "full" else 4
-        # Skills parallel zum Index-Update laden
+        # Skills semantic-scoring parallel laden
         all_skills = load_skills(boss_cfg.agent_dir)
         _skill_task = None
         if all_skills:
             skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
             _skill_task = loop.run_in_executor(None, score_texts, skill_texts, user_text)
 
-        await loop.run_in_executor(None, update_memory_index, boss_cfg.agent_dir)
-        snippets = await loop.run_in_executor(
-            None, lambda: search_memory(boss_cfg.agent_dir, user_text, k=k)
-        )
+        # #625: Async Memory-Prefetch — BM25-Treffer abholen (timeout-gesichert)
+        snippets = await _prefetch.get_bm25(timeout=0.8)
         if snippets:
             dynamic_parts.append("### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets))
 
