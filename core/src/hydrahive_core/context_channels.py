@@ -48,13 +48,14 @@ class ContextChannels:
 
     # ── Dynamic (query-abhängig, nicht cacheable) ───────────────────
     memory_hits: str = ""          # BM25-Treffer für aktuelle Query
-    amem_hits: str = ""            # A-MEM globale Treffer
-    last_session: str = ""         # _last_session.md (Session-Continuity)
-    skills: str = ""               # query-spezifisch ausgewählte Skills
-    repo_guidance: str = ""        # repo-review-guidance bei Repo-Querys
-    deferred_tools: str = ""       # ToolSearch-Hinweis (#620)
-    plan_mode: str = ""            # Plan-Mode-Injection
-    frustration: str = ""          # Frustration-Hint (#485)
+    amem_hits: str = ""             # A-MEM globale Treffer
+    working_state: str = ""         # WorkingState-Snapshot (#632) — Anomalien zuerst
+    last_session: str = ""          # _last_session.md (Session-Continuity)
+    skills: str = ""                # query-spezifisch ausgewählte Skills
+    repo_guidance: str = ""         # repo-review-guidance bei Repo-Querys
+    deferred_tools: str = ""        # ToolSearch-Hinweis (#620)
+    plan_mode: str = ""             # Plan-Mode-Injection
+    frustration: str = ""           # Frustration-Hint (#485)
 
     # ── Helpers ─────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ class ContextChannels:
         "sources", "repos", "handbook", "blueprint", "workflow", "policies",
     )
     _DYNAMIC_SLOTS = (
-        "memory_hits", "amem_hits", "last_session", "skills",
+        "memory_hits", "amem_hits", "working_state", "last_session", "skills",
         "repo_guidance", "deferred_tools", "plan_mode", "frustration",
     )
 
@@ -71,19 +72,23 @@ class ContextChannels:
         return _join([getattr(self, s) for s in self._STATIC_SLOTS])
 
     def to_dynamic_str(self) -> str:
-        # Memory-Treffer mit Markern wrappen, damit Debugging + #629 sie klar
-        # abgrenzen können. Andere dynamische Slots bleiben als Klartext.
+        """Liefert alle dynamischen Channels als String, gewrappt in Markern.
+
+        Der `<memory_dynamic>`-Marker wird IMMER gesetzt sobald ein
+        dynamischer Channel non-empty ist — damit #629 (Cache-Segmentierung)
+        zuverlässig den Cut zwischen cacheable Vorlauf und volatilem Schwanz
+        finden kann. Reihenfolge entspricht `_DYNAMIC_SLOTS` (memory zuerst,
+        working_state zweitens — Anomalien sollen früh sichtbar sein).
+        """
         parts: list[str] = []
-        memory_payload = _join([self.memory_hits, self.amem_hits])
-        if memory_payload:
-            parts.append(f"{MEMORY_OPEN}\n{memory_payload}\n{MEMORY_CLOSE}")
         for s in self._DYNAMIC_SLOTS:
-            if s in ("memory_hits", "amem_hits"):
-                continue  # bereits oben verarbeitet
             val = getattr(self, s)
             if val:
                 parts.append(val)
-        return _join(parts)
+        if not parts:
+            return ""
+        body = _join(parts)
+        return f"{MEMORY_OPEN}\n{body}\n{MEMORY_CLOSE}"
 
     def to_full_str(self) -> str:
         s = self.to_static_str()

@@ -688,22 +688,53 @@ class SessionManager:
                         (content[:120], session.id),
                     )
                     self._db.commit()
-            # #630: Working-Memory-Snapshot am Turn-Ende (assistant-Antwort)
+            # #630/#632: Working-Memory-Snapshot am Turn-Ende (assistant-Antwort)
             if role == MessageRole.ASSISTANT and not tool_calls:
                 try:
-                    from .working_state import WorkingState, now_iso
+                    from .working_state import (
+                        WorkingState, now_iso, summarize_tool_message,
+                        extract_open_files_from_messages, compute_git_state,
+                    )
                     last_user = next(
                         (m.content for m in reversed(session.messages[:-1])
                          if m.role == MessageRole.USER),
                         "",
                     )
+
+                    # last_tools — letzte 10 Tool-Use/Tool-Result-Paare aus der Session
+                    last_tools: list[dict] = []
+                    for m in session.messages[-30:]:  # window auf die letzten 30 Messages
+                        meta = getattr(m, "metadata", None) or {}
+                        if m.role == MessageRole.TOOL:
+                            tn = meta.get("tool_name", "tool")
+                            ok = not meta.get("error")
+                            last_tools.append(summarize_tool_message("tool", m.content, tn, ok=ok))
+                        elif m.role == MessageRole.ASSISTANT and m.tool_calls:
+                            for tc in (m.tool_calls or []):
+                                fn = (tc.get("function") or {})
+                                args = fn.get("arguments", "")
+                                last_tools.append(summarize_tool_message(
+                                    "call", args, fn.get("name", "tool"), ok=None,
+                                ))
+                    last_tools = last_tools[-10:]
+
+                    open_files = extract_open_files_from_messages(session.messages, max_files=8)
+
+                    # git_state für Projekt-Workspace (best effort, nie raise)
+                    git_state: list[dict] = []
+                    proj_dir = Path(f"/projects/{project_id}")
+                    gs = compute_git_state(proj_dir)
+                    if gs:
+                        git_state.append(gs)
+
                     snap = WorkingState(
                         current_goal=(last_user or "")[:200],
                         created_at=now_iso(),
+                        last_tools=last_tools,
+                        open_files=open_files,
+                        git_state=git_state,
                     )
                     self.save_snapshot(session.id, snap, turn_seq=len(session.messages))
-                    # Auch am aktiven Session-Objekt aktualisieren — sonst zeigt
-                    # die API beim nächsten GET noch den vorherigen Stand.
                     session.working_state = snap
                 except Exception as _e:
                     logger.debug("Snapshot bei append fehlgeschlagen: %s", _e)

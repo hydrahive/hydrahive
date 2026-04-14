@@ -525,7 +525,10 @@ async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = F
 _STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 
 
-async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bool = False) -> tuple[str, str]:
+async def _build_system_prompt_split(
+    boss_cfg, user_text: str, *,
+    invalidate: bool = False, session=None,
+) -> tuple[str, str]:
     """
     Baut den System-Prompt strukturiert in ContextChannels (#627) und gibt
     (static_prefix, dynamic_suffix) zurück — kompatibel zur bisherigen Signatur.
@@ -534,6 +537,10 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     pro Slot zugeordnet, nicht in eine flache Parts-Liste gekippt. Der
     dynamische Memory-Block wird im Output mit `<memory_dynamic>` markiert,
     damit #629 (Cache-Segmentierung) und Debugging die Grenze erkennen.
+
+    `session` ist optional und wird nur für den `working_state`-Channel (#632)
+    gebraucht — wenn vorhanden, wird `session.working_state.to_channel_text()`
+    in den Dynamic-Block injiziert (zwischen Memory und Skills, vor dem Marker).
     """
     mode = _context_mode(user_text)
     loop = asyncio.get_event_loop()
@@ -681,6 +688,17 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
             channels.deferred_tools = _deferred_block
     except Exception as _e:
         logger.debug("deferred-tools block skipped: %s", _e)
+
+    # #632: Working-State-Snapshot in den dynamischen Channel injizieren —
+    # zeigt dem Agent was im letzten Turn lief, welche Files offen waren,
+    # ob ein Git-Workspace im halbfertigen Zustand steckt etc.
+    if session is not None and getattr(session, "working_state", None):
+        try:
+            ws_text = session.working_state.to_channel_text()
+            if ws_text:
+                channels.working_state = ws_text
+        except Exception as _ws_err:
+            logger.debug("working_state Channel-Render fehlgeschlagen: %s", _ws_err)
 
     dynamic_suffix = channels.to_dynamic_str()
 
