@@ -318,6 +318,24 @@ export function ChatPage() {
             slashCommands={SLASH_COMMANDS}
             typingUsers={subscribe.typingUsers}
             onTyping={handleTyping}
+            onConfirmTool={async (toolCallId, decision) => {
+              // #641: Backend-Endpoint braucht project_id + session_id.
+              // session_id steht im pendingConfirms-Eintrag selbst — fallback
+              // auf chat.currentSessionId.
+              const pc = chat.pendingConfirms.find(p => p.tool_call_id === toolCallId);
+              const sid = pc?.session_id || chat.currentSessionId;
+              if (!id || !sid) {
+                console.warn("[#641] confirmTool: project_id oder session_id fehlt");
+                return;
+              }
+              try {
+                await api.confirmToolCall(id, sid, toolCallId, decision);
+                chat.removePendingConfirm(toolCallId);
+              } catch (err) {
+                console.error("[#641] confirmTool failed:", err);
+                // Eintrag bleibt im Banner — User kann erneut versuchen.
+              }
+            }}
           />
         )}
       </div>

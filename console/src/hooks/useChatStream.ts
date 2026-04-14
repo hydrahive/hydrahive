@@ -78,6 +78,14 @@ export function useChatStream(opts: UseChatStreamOptions) {
 
   // Stream state
   const [activeTool, setActiveTool] = useState<{ name: string; detail: string } | null>(null);
+  // #641: CONFIRM-Round-Trip — Liste pending Tool-Bestätigungen, dedupliziert per tool_call_id
+  const [pendingConfirms, setPendingConfirms] = useState<{
+    tool_call_id: string;
+    tool_name:    string;
+    tool_input?:  Record<string, unknown>;
+    risk?:        string;
+    session_id?:  string;
+  }[]>([]);
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [doneMsgId, setDoneMsgId] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -320,6 +328,18 @@ export function useChatStream(opts: UseChatStreamOptions) {
           } else if (evt.type === "tool_warning") {
             const warnMsg = mkMsg("tool", `⚠️ ${evt.tool_name}|⚠️ WARNUNG: ${evt.tool_warning}`);
             setMessages(ms => [...ms, warnMsg]);
+          } else if (evt.type === "tool_confirm_required") {
+            // #641: Tool-Call wartet auf User-Bestätigung — Banner anzeigen.
+            setPendingConfirms(prev => {
+              if (prev.some(p => p.tool_call_id === evt.tool_call_id)) return prev;
+              return [...prev, {
+                tool_call_id: evt.tool_call_id,
+                tool_name:    evt.tool_name,
+                tool_input:   evt.tool_input,
+                risk:         evt.risk,
+                session_id:   evt.session_id,
+              }];
+            });
           } else if (evt.type === "tool_call") {
             setActiveTool({ name: evt.tool_call, detail: evt.tool_detail ?? evt.tool_call });
             const toolMsg: ChatMessage = {
@@ -332,6 +352,10 @@ export function useChatStream(opts: UseChatStreamOptions) {
             // Tool-Output nachträglich in die passende Tool-Message eintragen
             const callId = evt.tool_call_id as string | undefined;
             const resultText = (evt.tool_result as string) || "";
+            // #641: zugehöriger Confirm (falls noch pending) ist hiermit aufgelöst
+            if (callId) {
+              setPendingConfirms(prev => prev.filter(p => p.tool_call_id !== callId));
+            }
             setMessages(ms => {
               if (callId) {
                 // Exaktes Match via tool_call_id
@@ -351,10 +375,14 @@ export function useChatStream(opts: UseChatStreamOptions) {
               Object.assign(updates, { model: evt.model, isFallback: true });
             if (Object.keys(updates).length > 0)
               setMessages(ms => ms.map(m => m.id === currentAsst.id ? { ...m, ...updates } : m));
+            // #641: Stream-Ende — alle noch pendingen Confirms sind nicht mehr aktuell
+            setPendingConfirms([]);
           } else if (evt.type === "suggestions") {
             setFollowUpChips(evt.suggestions);
           } else if (evt.type === "error") {
             if (evt.session_reset) setMessages([]);
+            // #641: Bei Error sind pending Confirms obsolet
+            setPendingConfirms([]);
             throw new Error(evt.error);
           }
         },
@@ -405,12 +433,20 @@ export function useChatStream(opts: UseChatStreamOptions) {
     e.target.value = "";
   }, [pendingImages.length]);
 
+  // #641: optimistic-remove vom Banner nach erfolgreichem Approve/Deny POST
+  const removePendingConfirm = useCallback((toolCallId: string) => {
+    setPendingConfirms(prev => prev.filter(p => p.tool_call_id !== toolCallId));
+  }, []);
+
   return {
     // State
     messages, setMessages,
     input, setInput,
     sending,
     error, setError,
+    // #641: Tool-Bestätigungen
+    pendingConfirms,
+    removePendingConfirm,
     // UI
     showEmoji, setShowEmoji,
     showSuggest, setShowSuggest,

@@ -76,6 +76,17 @@ export interface ChatViewProps {
   t: (key: string, opts?: Record<string, string>) => string;
   // Slash commands for suggestion dropdown
   slashCommands?: { cmd: string; desc: string }[];
+  // #641: pendings Tool-Bestätigungen (rendert Banner über dem Composer)
+  pendingConfirms?: {
+    tool_call_id: string;
+    tool_name:    string;
+    tool_input?:  Record<string, unknown>;
+    risk?:        string;
+  }[];
+  /** Wenn gesetzt: Buttons aktiv, Promise = Backend-Call. Wenn undefined:
+      Banner zeigt Hinweis "in dieser Ansicht nicht aktivierbar" (z.B. für
+      Agent-Pages bis Backend-Endpoint dort verfügbar ist). */
+  onConfirmTool?: (toolCallId: string, decision: "approve" | "deny") => Promise<void>;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -95,6 +106,8 @@ export function ChatView(props: ChatViewProps) {
     typingUsers, onTyping,
     t,
     slashCommands = [],
+    pendingConfirms = [],
+    onConfirmTool,
   } = props;
 
   const displayMessages = viewSession ? viewSession.messages : messages;
@@ -375,6 +388,58 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Input Area */}
       <div className="border-t px-4 py-3 flex-shrink-0">
+        {/* #641: Tool-Confirm-Banner — vor Coach + Composer */}
+        {pendingConfirms.length > 0 && (
+          <div className="mb-2 space-y-2">
+            {pendingConfirms.map((pc) => {
+              const inputStr = pc.tool_input ? JSON.stringify(pc.tool_input, null, 2) : "";
+              const inputShort = inputStr.length > 200 ? inputStr.slice(0, 200) + "…" : inputStr;
+              const disabled = !onConfirmTool;
+              return (
+                <div key={pc.tool_call_id}
+                     className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 px-3 py-2 text-xs">
+                  <p className="font-medium text-yellow-500">
+                    🔒 Tool wartet auf Bestätigung — <code className="font-mono">{pc.tool_name}</code>
+                  </p>
+                  <p className="text-muted-foreground mt-1">
+                    Diese Aktion wurde als potenziell riskant eingestuft ({pc.risk || "confirm"}).
+                  </p>
+                  {inputStr && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Tool-Argumente anzeigen
+                      </summary>
+                      <pre className="mt-1 max-h-40 overflow-auto rounded bg-background/50 p-2 text-[10px]">
+{inputShort}
+                      </pre>
+                    </details>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      disabled={disabled}
+                      onClick={() => onConfirmTool?.(pc.tool_call_id, "approve")}
+                      className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Erlauben
+                    </button>
+                    <button
+                      disabled={disabled}
+                      onClick={() => onConfirmTool?.(pc.tool_call_id, "deny")}
+                      className="rounded-md border border-destructive/50 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Ablehnen
+                    </button>
+                    {disabled && (
+                      <span className="text-[10px] text-muted-foreground self-center">
+                        in dieser Ansicht noch nicht aktivierbar
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {/* Coach feedback */}
         {coachFeedback && !coachFeedback.ok && (
           <div className="mb-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-3 py-2 text-xs">

@@ -15,6 +15,7 @@ export type SSEEvent =
   | { type: "tool_call"; tool_call: string; tool_call_id?: string; tool_input?: Record<string, unknown>; tool_detail?: string }
   | { type: "tool_result"; tool_call_id?: string; tool_result: string }
   | { type: "tool_image"; tool_image: string; tool_name?: string }
+  | { type: "tool_confirm_required"; tool_call_id: string; tool_name: string; tool_input?: Record<string, unknown>; risk?: string; session_id?: string }
   | { type: "context_info"; system_tokens: number; history_tokens: number; tool_tokens: number; history_messages: number; history_budget: number }
   | { type: "info"; info: string }
   | { type: "tool_warning"; tool_warning: string; tool_name: string }
@@ -112,6 +113,16 @@ export async function sseStream(opts: SSEStreamOptions): Promise<void> {
               opts.onEvent({ type: "tool_warning", tool_warning: raw.tool_warning, tool_name: raw.tool_name ?? "" });
             } else if (raw.tool_image !== undefined) {
               opts.onEvent({ type: "tool_image", tool_image: raw.tool_image, tool_name: raw.tool_name });
+            } else if (raw.type === "tool_confirm_required") {
+              // #641: CONFIRM-Round-Trip — Backend pausiert Tool-Call, UI rendert Banner
+              opts.onEvent({
+                type: "tool_confirm_required",
+                tool_call_id: String(raw.tool_call_id ?? ""),
+                tool_name:    String(raw.tool_name ?? ""),
+                tool_input:   raw.tool_input,
+                risk:         raw.risk,
+                session_id:   raw.session_id,
+              });
             } else if (raw.tool_result !== undefined) {
               opts.onEvent({ type: "tool_result", tool_call_id: raw.tool_call_id, tool_result: raw.tool_result });
             } else if (raw.tool_call !== undefined) {

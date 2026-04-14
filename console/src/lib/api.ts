@@ -162,6 +162,12 @@ export const api = {
     api.get<SessionFull>(`/agents/${agentId}/sessions/${sessionId}`),
   resumeSession: (agentId: string, sessionId: string) =>
     api.post<{ resumed: boolean; id: string; messages: SessionFull["messages"] }>(`/agents/${agentId}/sessions/${sessionId}/resume`, {}),
+  // #641: CONFIRM-Round-Trip — pendings Tool-Call genehmigen/ablehnen
+  confirmToolCall: (projectId: string, sessionId: string, toolCallId: string, decision: "approve" | "deny") =>
+    api.post<{ resolved: boolean; decision: string; tool_call_id: string }>(
+      `/projects/${projectId}/sessions/${sessionId}/tool-confirm`,
+      { tool_call_id: toolCallId, decision },
+    ),
   // Doctor
   doctor:    () => api.get<DoctorReport>("/admin/doctor"),
   doctorFix: (fixId: string) => api.post<{ok:boolean;output?:string;error?:string}>(`/admin/doctor/fix/${fixId}`, {}),
