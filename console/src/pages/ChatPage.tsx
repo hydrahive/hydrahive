@@ -126,7 +126,7 @@ export function ChatPage() {
 
   const subscribe = useProjectSubscribe(id, handleBroadcast);
 
-  // Load project info + history
+  // Load project info + history (mit Auto-Resume aus localStorage)
   useEffect(() => {
     if (!id) return;
     api.get<Record<string, unknown>>(`/projects/${id}`)
@@ -141,8 +141,28 @@ export function ChatPage() {
             .catch(() => {});
         }
       }).catch(() => {});
-    chat.loadHistory();
+    // Auto-Resume: letzte bekannte Session-ID aus localStorage holen, am Server
+    // wieder aktiv setzen, dann Verlauf laden. Wenn Backend bereits dieselbe
+    // Session aktiv hat ist resumeProjectSession ein No-Op.
+    const lastSid = (() => {
+      try { return localStorage.getItem(`hh_lastsess_/api/projects/${id}/session/history`); }
+      catch { return null; }
+    })();
+    const init = async () => {
+      if (lastSid) {
+        try { await api.resumeProjectSession(id, lastSid); } catch { /* Session evtl. gelöscht */ }
+      }
+      chat.loadHistory();
+    };
+    init();
   }, [id]);
+
+  // Persistiere aktuelle Session-ID damit nach Tab-Schließen Auto-Resume klappt
+  useEffect(() => {
+    if (!id || !chat.currentSessionId) return;
+    try { localStorage.setItem(`hh_lastsess_/api/projects/${id}/session/history`, chat.currentSessionId); }
+    catch { /* quota */ }
+  }, [id, chat.currentSessionId]);
 
   // v2 (#602): 3s-Polling entfernt — Real-Time Sync laeuft ueber useProjectSubscribe.
   // Recovery-Polling NUR wenn SSE-Verbindung tot ist (mit Backoff).

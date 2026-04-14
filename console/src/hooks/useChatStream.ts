@@ -94,6 +94,8 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const [showHistory, setShowHistory] = useState(false);
   const [sessions, setSessions] = useState<any[]>([]);
   const [viewSession, setViewSession] = useState<{ id: string; messages: ChatMessage[]; startedAt: string } | null>(null);
+  // Aktuelle aktive Session-ID (vom /history-Endpoint geliefert) — für Auto-Resume
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   // Refs
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -128,6 +130,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     api.get<{ session_id: string | null; messages: any[]; count: number }>(opts.historyEndpoint)
       .then(d => {
         if (Date.now() - clearedAt.current < 3000) return;  // nochmal prüfen nach async
+        if (d.session_id) setCurrentSessionId(d.session_id);
         const loaded = d.messages
           .filter((m: any) => (m.role === "user" || m.role === "assistant" || m.role === "tool") && !(m.role === "assistant" && !m.content))
           .map((m: any) => {
@@ -216,7 +219,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
       clearedAt.current = Date.now();     // loadHistory für 3s sperren
       userScrolledUp.current = false;     // Scroll zurück nach unten
       setMessages([]);
+      setCurrentSessionId(null);
       try { sessionStorage.removeItem(`hh_chat_${opts.historyEndpoint}`); } catch {}
+      try { localStorage.removeItem(`hh_lastsess_${opts.historyEndpoint}`); } catch {}
       // Server-Session beenden (DELETE /agents/{id}/session oder /projects/{id}/session/end)
       const sessionEndpoint = opts.historyEndpoint.replace(/\/history$/, "");
       api.delete(sessionEndpoint).catch(() => {});
@@ -408,6 +413,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     showHistory, setShowHistory,
     sessions, setSessions,
     viewSession, setViewSession,
+    currentSessionId, setCurrentSessionId,
     // Refs
     bottomRef, scrollContainerRef, textareaRef, fileInputRef,
     // Actions
