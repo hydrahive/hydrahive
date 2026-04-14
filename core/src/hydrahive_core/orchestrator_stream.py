@@ -612,20 +612,11 @@ async def _stream_anthropic_oauth(
         auth_token=oauth_token,
         default_headers=ANTHROPIC_OAUTH_HEADERS,
     )
-    system_msg = ""
-    raw: list[dict] = []
-    for m in messages:
-        if m.get("role") == "system":
-            system_msg = m.get("content", "")
-        else:
-            raw.append({"role": m["role"], "content": m.get("content") or ""})
-    # Consecutive gleiche Rollen mergen
-    filtered: list[dict] = []
-    for m in raw:
-        if filtered and filtered[-1]["role"] == m["role"]:
-            filtered[-1]["content"] += "\n\n" + m["content"]
-        else:
-            filtered.append(dict(m))
+    # #637-Followup: gemeinsamer Helper für OpenAI→Anthropic-Konvertierung —
+    # vorher hatte dieser Pfad eine naive Loop, die `role: tool` und
+    # `tool_calls` nicht konvertierte → Anthropic 400 "Unexpected role tool".
+    from .message_normalization import to_anthropic_format
+    system_msg, filtered = to_anthropic_format(messages)
 
     model = model_name
     for prefix in ("openai/", "anthropic/", "claude/"):
@@ -973,14 +964,24 @@ async def _stream_litellm(
     streamed_any = False
 
     for _round in range(boss_cfg.max_tool_rounds):
+        # #637-Followup: für Anthropic-Modelle vor dem Send in Anthropic-Format
+        # konvertieren — sonst sieht die Anthropic-API rohe `role: "tool"`-Messages.
+        if _is_anthropic:
+            from .message_normalization import to_anthropic_format
+            _sys_split, _send_messages = to_anthropic_format(loop_messages)
+        else:
+            _sys_split, _send_messages = "", loop_messages
+
         kwargs = {
             "model":       model,
-            "messages":    loop_messages,
+            "messages":    _send_messages,
             "temperature": boss_cfg.llm.temperature,
             "max_tokens":  boss_cfg.llm.max_tokens,
             "stream":      True,
             "stream_options": {"include_usage": True},
         }
+        if _is_anthropic and _sys_split:
+            kwargs["system"] = _sys_split
         if api_base:
             kwargs["api_base"] = api_base
         if litellm_tools and not _tools_disabled:

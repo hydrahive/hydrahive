@@ -621,62 +621,9 @@ async def _anthropic_oauth_call(
         default_headers=ANTHROPIC_OAUTH_HEADERS,
     )
 
-    # System-Message extrahieren + OpenAI→Anthropic-Format konvertieren
-    system_msg = ""
-    filtered   = []
-    for m in messages:
-        role = m.get("role", "")
-        if role == "system":
-            system_msg = m.get("content", "")
-            continue
-
-        # OpenAI tool-result → Anthropic tool_result
-        if role == "tool":
-            tool_result_block = {
-                "type":        "tool_result",
-                "tool_use_id": m.get("tool_call_id", "unknown"),
-                "content":     m.get("content", ""),
-            }
-            if filtered and filtered[-1]["role"] == "user" and isinstance(filtered[-1].get("content"), list):
-                filtered[-1]["content"].append(tool_result_block)
-            else:
-                filtered.append({"role": "user", "content": [tool_result_block]})
-            continue
-
-        # OpenAI assistant mit tool_calls → Anthropic tool_use
-        tool_calls = m.get("tool_calls")
-        if role == "assistant" and tool_calls:
-            asst_content = []
-            if m.get("content"):
-                asst_content.append({"type": "text", "text": m["content"]})
-            for tc in tool_calls:
-                fn = tc.get("function", {})
-                try:
-                    inp = _json.loads(fn.get("arguments", "{}"))
-                except Exception:
-                    inp = {}
-                asst_content.append({
-                    "type":  "tool_use",
-                    "id":    tc.get("id", "unknown"),
-                    "name":  fn.get("name", "unknown"),
-                    "input": inp,
-                })
-            filtered.append({"role": "assistant", "content": asst_content})
-            continue
-
-        # Normaler Text-Message
-        filtered.append({"role": role, "content": m.get("content") or ""})
-
-    # Consecutive gleiche Rollen mergen (Anthropic-Constraint) — nur für Text-Messages
-    merged: list[dict] = []
-    for m in filtered:
-        if (merged and merged[-1]["role"] == m["role"]
-                and isinstance(m.get("content"), str)
-                and isinstance(merged[-1].get("content"), str)):
-            merged[-1]["content"] += "\n\n" + m["content"]
-        else:
-            merged.append(dict(m))
-    filtered = merged
+    # #637-Followup: gemeinsamer Helper, dedupliziert mit _stream_anthropic_oauth.
+    from .message_normalization import to_anthropic_format
+    system_msg, filtered = to_anthropic_format(messages)
 
     # Modell-Name normalisieren (openai/claude-... → claude-...)
     model = model_override or agent_cfg.llm.model
@@ -1100,6 +1047,13 @@ async def _llm_call_single(
     from .message_normalization import normalize_messages_for_call
     messages = normalize_messages_for_call(messages)
     cached_messages = _apply_cache_control(messages, is_anthropic)
+    # #637-Followup: für Anthropic-Modelle ohne OAuth-Pfad muss die OpenAI→
+    # Anthropic-Format-Konvertierung trotzdem vor litellm passieren, sonst
+    # sieht Anthropic rohe `role: "tool"`-Messages.
+    _system_for_anthropic = ""
+    if is_anthropic:
+        from .message_normalization import to_anthropic_format
+        _system_for_anthropic, cached_messages = to_anthropic_format(cached_messages)
 
     # #515: Model-spezifische max_tokens auch im litellm-Pfad
     _lm_max = agent_cfg.llm.max_tokens
@@ -1120,6 +1074,8 @@ async def _llm_call_single(
         "temperature": agent_cfg.llm.temperature,
         "max_tokens":  _lm_max,
     }
+    if is_anthropic and _system_for_anthropic:
+        kwargs["system"] = _system_for_anthropic
     if api_base:
         kwargs["api_base"] = api_base
 

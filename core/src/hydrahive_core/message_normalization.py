@@ -117,3 +117,103 @@ def normalize_messages_for_call(messages: list[dict]) -> list[dict]:
         logger.debug("normalize_messages: %d → %d messages", len(messages), len(deduped))
 
     return deduped
+
+
+# =========================================================================
+# OpenAI → Anthropic Format Converter (#637-Followup)
+# =========================================================================
+# Wird vor JEDEM Anthropic-Provider-Send aufgerufen, damit Anthropic nie rohe
+# `role: "tool"`-Messages oder OpenAI-`tool_calls`-Felder sieht.
+# Vorher dupliziert in _anthropic_oauth_call und _stream_anthropic_oauth —
+# ein Helper, eine Wahrheit.
+
+def to_anthropic_format(messages: list[dict]) -> tuple[str, list[dict]]:
+    """Konvertiert OpenAI-Format-Messages in Anthropic-Format.
+
+    Input (OpenAI):
+        [{role: system|user|assistant|tool, content, tool_calls?, tool_call_id?}, ...]
+
+    Output (Anthropic):
+        (system_msg_str, [{role: user|assistant, content: str | [blocks]}, ...])
+
+    Konvertierung:
+        - role: "system" → in system_msg-String extrahiert (kein Anthropic-message)
+        - role: "tool" mit tool_call_id → user-Message mit `tool_result`-Block;
+          mit vorherigem user-Block-List zusammengelegt
+        - role: "assistant" mit tool_calls → assistant-Message mit text + tool_use-Blöcken
+        - sonstige Text-Messages → durchgereicht (role/content)
+
+    Plus consecutive same-role Text-Messages werden gemerged (Anthropic erfordert
+    user/assistant-Wechsel). Messages mit Block-Listen werden NICHT gemerged.
+    """
+    import json as _json
+
+    system_parts: list[str] = []
+    out: list[dict] = []
+    for m in messages:
+        role = m.get("role", "")
+
+        if role == "system":
+            sc = m.get("content", "")
+            if isinstance(sc, str) and sc:
+                system_parts.append(sc)
+            elif isinstance(sc, list):
+                # System-Content kann schon Block-Liste sein (z.B. von _apply_cache_control)
+                for b in sc:
+                    if isinstance(b, dict) and b.get("type") == "text":
+                        system_parts.append(b.get("text", ""))
+            continue
+
+        if role == "tool":
+            tool_result_block = {
+                "type":        "tool_result",
+                "tool_use_id": m.get("tool_call_id", "unknown"),
+                "content":     m.get("content", "") or "",
+            }
+            # An vorherige user-Block-Liste anhängen, sonst neuen user-Eintrag
+            if out and out[-1]["role"] == "user" and isinstance(out[-1].get("content"), list):
+                out[-1]["content"].append(tool_result_block)
+            else:
+                out.append({"role": "user", "content": [tool_result_block]})
+            continue
+
+        tool_calls = m.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            asst_content: list[dict] = []
+            text = m.get("content")
+            if text:
+                asst_content.append({"type": "text", "text": text})
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                try:
+                    inp = _json.loads(fn.get("arguments", "{}"))
+                except Exception:
+                    inp = {}
+                asst_content.append({
+                    "type":  "tool_use",
+                    "id":    tc.get("id", "unknown"),
+                    "name":  fn.get("name", "unknown"),
+                    "input": inp,
+                })
+            out.append({"role": "assistant", "content": asst_content})
+            continue
+
+        # Normale Text-Message — Content kann String oder bereits Block-Liste sein
+        out.append({"role": role, "content": m.get("content") or ""})
+
+    # Consecutive same-role Text-Messages mergen (Anthropic-Constraint).
+    # Block-Listen-Messages bleiben unverändert (würden sonst tool_use/tool_result
+    # zerstören).
+    merged: list[dict] = []
+    for m in out:
+        if (merged
+                and merged[-1]["role"] == m["role"]
+                and isinstance(m.get("content"), str)
+                and isinstance(merged[-1].get("content"), str)):
+            merged[-1] = {**merged[-1],
+                          "content": merged[-1]["content"] + "\n\n" + m["content"]}
+        else:
+            merged.append(dict(m))
+
+    system_msg = "\n\n".join(p for p in system_parts if p)
+    return system_msg, merged

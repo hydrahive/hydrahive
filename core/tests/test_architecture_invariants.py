@@ -612,3 +612,87 @@ Minimaler Refactor-Vorschlag (NICHT UMGESETZT):
     # ShellExecTool.execute ruft statt Inline-Logik nur noch:
     #     safe_cwd, bind_args = _resolve_sandbox_scope(project_id, cwd)
 """
+
+
+# ===========================================================================
+# Invariante 7 — Anthropic-Pfad: keine rohen role:tool-Messages an Anthropic
+# (#637-Followup, Live-Bug 400 "Unexpected role tool")
+# ===========================================================================
+
+def test_invariant7a_to_anthropic_format_strips_tool_role():
+    """7a: to_anthropic_format() konvertiert role:tool zu user-tool_result-Block,
+    assistant+tool_calls zu assistant-tool_use-Block. Im Output existiert kein
+    role:"tool" mehr."""
+    from hydrahive_core.message_normalization import to_anthropic_format
+
+    sys_msg, msgs = to_anthropic_format([
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "do foo"},
+        {"role": "assistant", "content": "", "tool_calls": [{
+            "id": "call_42", "type": "function",
+            "function": {"name": "foo", "arguments": "{}"},
+        }]},
+        {"role": "tool", "tool_call_id": "call_42", "content": "result"},
+        {"role": "assistant", "content": "done"},
+    ])
+
+    assert sys_msg == "sys"
+    # KEIN role:"tool" mehr — Anthropic erlaubt nur user/assistant
+    assert all(m["role"] in ("user", "assistant") for m in msgs), (
+        f"role:tool ist nicht entfernt worden: {msgs}"
+    )
+    # tool_use im assistant-content
+    asst_with_use = [m for m in msgs if m["role"] == "assistant"
+                     and isinstance(m.get("content"), list)
+                     and any(b.get("type") == "tool_use" for b in m["content"])]
+    assert asst_with_use, f"tool_use-Block fehlt: {msgs}"
+    assert asst_with_use[0]["content"][-1]["id"] == "call_42"
+    # tool_result im user-content
+    user_with_result = [m for m in msgs if m["role"] == "user"
+                        and isinstance(m.get("content"), list)
+                        and any(b.get("type") == "tool_result" for b in m["content"])]
+    assert user_with_result, f"tool_result-Block fehlt: {msgs}"
+    assert user_with_result[0]["content"][0]["tool_use_id"] == "call_42"
+
+
+def test_invariant7b_oauth_call_uses_to_anthropic_format():
+    """7b: _anthropic_oauth_call ruft den gemeinsamen Helper auf statt
+    eigenen Inline-Loop. Sichert Code-Dedup nach #637-Followup."""
+    import inspect
+    from hydrahive_core import orchestrator_llm
+
+    src = inspect.getsource(orchestrator_llm._anthropic_oauth_call)
+    assert "to_anthropic_format" in src, (
+        "_anthropic_oauth_call ruft nicht to_anthropic_format auf — "
+        "evtl. eigener Konvertier-Loop wieder eingeschmuggelt."
+    )
+
+
+def test_invariant7c_stream_oauth_uses_to_anthropic_format():
+    """7c: _stream_anthropic_oauth ruft den gemeinsamen Helper auf —
+    der akute Live-Bug (Anthropic 400 'Unexpected role tool') wäre sonst zurück."""
+    import inspect
+    from hydrahive_core import orchestrator_stream
+
+    src = inspect.getsource(orchestrator_stream._stream_anthropic_oauth)
+    assert "to_anthropic_format" in src, (
+        "_stream_anthropic_oauth ruft nicht to_anthropic_format auf — "
+        "Live-Bug 'Unexpected role tool' wäre zurück."
+    )
+
+
+def test_invariant7d_litellm_anthropic_path_converts_before_send():
+    """7d: _stream_litellm und _llm_call_single rufen to_anthropic_format
+    für Anthropic-Modelle auf, damit auch ohne OAuth (litellm-Pfad) keine
+    rohen role:tool-Messages an Anthropic gehen."""
+    import inspect
+    from hydrahive_core import orchestrator_stream, orchestrator_llm
+
+    src_stream = inspect.getsource(orchestrator_stream._stream_litellm)
+    assert "to_anthropic_format" in src_stream, (
+        "_stream_litellm konvertiert nicht für Anthropic-Modelle."
+    )
+    src_call = inspect.getsource(orchestrator_llm._llm_call_single)
+    assert "to_anthropic_format" in src_call, (
+        "_llm_call_single konvertiert nicht für Anthropic-Modelle."
+    )
