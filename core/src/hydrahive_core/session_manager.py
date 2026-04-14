@@ -702,6 +702,9 @@ class SessionManager:
                         created_at=now_iso(),
                     )
                     self.save_snapshot(session.id, snap, turn_seq=len(session.messages))
+                    # Auch am aktiven Session-Objekt aktualisieren — sonst zeigt
+                    # die API beim nächsten GET noch den vorherigen Stand.
+                    session.working_state = snap
                 except Exception as _e:
                     logger.debug("Snapshot bei append fehlgeschlagen: %s", _e)
             return message
