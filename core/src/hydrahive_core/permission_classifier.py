@@ -52,15 +52,21 @@ _SHELL_DENY_PATTERNS = [
 # Shell-Befehle die Bestätigung brauchen
 _SHELL_CONFIRM_PATTERNS = [
     r'\brm\s+-r',              # Rekursives Löschen
-    r'\bchmod\s+777',          # Unsichere Permissions
+    # chmod mit group/world-writable Mode (6xx/7xx, optional 0-Präfix,
+    # egal ob -R/-v davor, egal ob mit /usr/bin/-Pfad) — deckt:
+    #   chmod 777, chmod 0777, chmod -R 777, sudo chmod 666, /usr/bin/chmod 770 …
+    r'\bchmod\b[^;&|\n]{0,40}\b0?[67][0-7][0-7]\b',
+    # chmod symbolic mit write für group/other/all — deckt:
+    #   chmod o+w, chmod go+w, chmod a+w, chmod o=rwx …
+    r'\bchmod\s+(?:-[A-Za-z]+\s+)?[ugoa]*[+=][rwxst]*w',
     r'\bcurl\s+.*\|\s*bash',   # Remote-Execution
     r'\bwget\s+.*\|\s*bash',   # Remote-Execution
     r'pip\s+install',          # Package-Installation
     r'npm\s+install\s+-g',     # Globale NPM-Installation
     r'\bapt\s+(install|remove|purge)',  # System-Packages
     r'\bsudo\b',               # Privilegierte Befehle
-    r'\bgit\s+push\b',        # Code pushen
-    r'\bgit\s+force',         # Force-Push
+    r'\bgit\s+push\b',         # Code pushen
+    r'\bgit\s+force',          # Force-Push
 ]
 
 # File-Pfade die Bestätigung brauchen

@@ -951,3 +951,81 @@ def test_invariant9c_tool_confirm_annotation_resolvable_from_module_globals():
     # BaseModel-Subklasse?
     from pydantic import BaseModel
     assert issubclass(router_projects.ToolConfirmRequest, BaseModel)
+
+
+# ===========================================================================
+# Invariante 10 — shell_exec chmod/Permissions-Patterns sauber auf CONFIRM
+# (#641-Followup — Live-Bug: chmod 777 lief ohne Banner durch)
+# ===========================================================================
+
+def _classify_shell(cmd: str):
+    from hydrahive_core.permission_classifier import classify_static
+    return classify_static("shell_exec", {"command": cmd})
+
+
+def test_invariant10a_chmod_777_is_confirm():
+    """10a (#641): Der Live-Bug-Original-Case."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    assert _classify_shell("chmod 777 /projects/test/confirm_tmp.txt") == RiskLevel.CONFIRM
+
+
+def test_invariant10b_sudo_chmod_777_is_confirm():
+    """10b: Mit sudo-Präfix."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    assert _classify_shell("sudo chmod 777 /tmp/x") == RiskLevel.CONFIRM
+
+
+def test_invariant10c_chmod_octal_prefix_is_confirm():
+    """10c: chmod mit 0-Präfix vor Mode."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    assert _classify_shell("chmod 0777 /tmp/x") == RiskLevel.CONFIRM
+    assert _classify_shell("chmod 0666 /tmp/x") == RiskLevel.CONFIRM
+
+
+def test_invariant10d_chmod_recursive_flag_is_confirm():
+    """10d: chmod mit -R Rekursiv-Flag."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    assert _classify_shell("chmod -R 777 /tmp/x") == RiskLevel.CONFIRM
+    assert _classify_shell("chmod -Rv 666 /tmp/x") == RiskLevel.CONFIRM
+
+
+def test_invariant10e_chmod_group_world_writable_modes():
+    """10e: weitere Gruppe-/World-writable Modes."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    for cmd in [
+        "chmod 666 /tmp/x",     # world rw
+        "chmod 776 /tmp/x",     # world rw + group rwx
+        "chmod 770 /tmp/x",     # group rwx
+        "chmod 707 /tmp/x",     # world rwx + user rwx (keine group)
+    ]:
+        assert _classify_shell(cmd) == RiskLevel.CONFIRM, f"Erwarte CONFIRM für {cmd!r}"
+
+
+def test_invariant10f_chmod_symbolic_world_write_is_confirm():
+    """10f: chmod symbolic — world/other/all +w."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    for cmd in [
+        "chmod o+w /tmp/x",     # other +w
+        "chmod go+w /tmp/x",    # group + other +w
+        "chmod a+w /tmp/x",     # all +w
+        "chmod -R o+w /tmp/x",  # rekursiv
+    ]:
+        assert _classify_shell(cmd) == RiskLevel.CONFIRM, f"Erwarte CONFIRM für {cmd!r}"
+
+
+def test_invariant10g_harmless_shell_commands_stay_non_confirm():
+    """10g: harmlose Befehle bleiben None (Default → ALLOW im Classifier)."""
+    # None = statisch keine Regel → Default-Branch entscheidet
+    for cmd in [
+        "ls -la /tmp",
+        "echo hello",
+        "cat /projects/test/foo.txt",
+        "date",
+    ]:
+        assert _classify_shell(cmd) is None, f"Erwarte None für {cmd!r}, got {_classify_shell(cmd)}"
+
+
+def test_invariant10h_rm_rf_root_still_denied():
+    """10h: Regression-Schutz — kritische DENY-Patterns bleiben DENY."""
+    from hydrahive_core.permission_classifier import RiskLevel
+    assert _classify_shell("rm -rf /") == RiskLevel.DENY
