@@ -937,7 +937,8 @@ class SessionManager:
             self._db.execute("UPDATE sessions SET ended_at = NULL WHERE id = ?", (session_id,))
             self._db.commit()
             if _repaired:
-                self._persist(session)
+                # Bug: hieß früher _persist (existiert nicht) — korrekt ist _db_replace_messages
+                self._db_replace_messages(session)
                 logger.info("Session %s resumed mit %d Reparaturen (%d Nachrichten)",
                             session_id[:8], _repaired, len(session.messages))
             else:
