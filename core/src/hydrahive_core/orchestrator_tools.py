@@ -383,47 +383,58 @@ async def execute_tool_call(
                 "hint": "Diese Aktion wurde aus Sicherheitsgründen verhindert.",
             }, True
         if risk == RiskLevel.CONFIRM:
-            from .tool_confirmation import (
-                request_confirmation, wait_for_confirmation,
-            )
-            # session_id aus aktiver Session ableiten — kein Zwang
-            # für Caller, ihn extra durchzureichen.
-            _active = orch._sessions.get_active(project_id) if hasattr(orch, "_sessions") else None
-            _session_id = _active.id if _active else ""
-            _tcid = tool_call_id or f"auto-{tool_name}-{int(_time.time() * 1000)}"
-            request_confirmation(_session_id, _tcid, tool_name, tool_input)
-            # Stream-Pfade können hier ein SSE-Event yielden, bevor
-            # die Pause beginnt — Frontend rendert den Bestätigungs-Dialog.
-            if confirm_signal is not None:
-                try:
-                    confirm_signal({
-                        "type":         "tool_confirm_required",
-                        "session_id":   _session_id,
-                        "tool_call_id": _tcid,
-                        "tool_name":    tool_name,
-                        "tool_input":   tool_input,
-                        "risk":         "confirm",
-                    })
-                except Exception as _sig_err:
-                    logger.debug("confirm_signal callback failed: %s", _sig_err)
-            decision = await wait_for_confirmation(_session_id, _tcid)
-            if decision == "approve":
-                logger.info("tool-confirm approve: %s tcid=%s", tool_name, _tcid)
-                # Fällt durch zur normalen Ausführung
-            elif decision == "deny":
-                logger.info("tool-confirm deny: %s tcid=%s", tool_name, _tcid)
-                return {
-                    "error": f"Tool '{tool_name}' wurde vom User abgelehnt.",
-                    "risk":  "confirm_denied",
-                    "hint":  "Der User hat die Bestätigungs-Anfrage abgewiesen.",
-                }, True
-            else:  # timeout
-                logger.warning("tool-confirm timeout: %s tcid=%s", tool_name, _tcid)
-                return {
-                    "error": f"Tool '{tool_name}' nicht innerhalb 5 Minuten bestätigt.",
-                    "risk":  "confirm_timeout",
-                    "hint":  "Bestätigung nicht rechtzeitig — Aktion verworfen.",
-                }, True
+            # Trusted-Agent: CONFIRM wird automatisch genehmigt — kein
+            # Banner, keine Pause, kein SSE-Event. DENY (oben) ist davon
+            # nicht betroffen. Bewusste Admin-Entscheidung pro Agent.
+            if getattr(boss_cfg, "risk_policy", "interactive") == "trusted":
+                _tcid_auto = tool_call_id or f"auto-{tool_name}-{int(_time.time() * 1000)}"
+                logger.info(
+                    "tool-confirm auto-approve (trusted): agent=%s tool=%s tcid=%s",
+                    boss_cfg.id, tool_name, _tcid_auto,
+                )
+                # Fall-through zur regulären Tool-Ausführung unten.
+            else:
+                from .tool_confirmation import (
+                    request_confirmation, wait_for_confirmation,
+                )
+                # session_id aus aktiver Session ableiten — kein Zwang
+                # für Caller, ihn extra durchzureichen.
+                _active = orch._sessions.get_active(project_id) if hasattr(orch, "_sessions") else None
+                _session_id = _active.id if _active else ""
+                _tcid = tool_call_id or f"auto-{tool_name}-{int(_time.time() * 1000)}"
+                request_confirmation(_session_id, _tcid, tool_name, tool_input)
+                # Stream-Pfade können hier ein SSE-Event yielden, bevor
+                # die Pause beginnt — Frontend rendert den Bestätigungs-Dialog.
+                if confirm_signal is not None:
+                    try:
+                        confirm_signal({
+                            "type":         "tool_confirm_required",
+                            "session_id":   _session_id,
+                            "tool_call_id": _tcid,
+                            "tool_name":    tool_name,
+                            "tool_input":   tool_input,
+                            "risk":         "confirm",
+                        })
+                    except Exception as _sig_err:
+                        logger.debug("confirm_signal callback failed: %s", _sig_err)
+                decision = await wait_for_confirmation(_session_id, _tcid)
+                if decision == "approve":
+                    logger.info("tool-confirm approve: %s tcid=%s", tool_name, _tcid)
+                    # Fällt durch zur normalen Ausführung
+                elif decision == "deny":
+                    logger.info("tool-confirm deny: %s tcid=%s", tool_name, _tcid)
+                    return {
+                        "error": f"Tool '{tool_name}' wurde vom User abgelehnt.",
+                        "risk":  "confirm_denied",
+                        "hint":  "Der User hat die Bestätigungs-Anfrage abgewiesen.",
+                    }, True
+                else:  # timeout
+                    logger.warning("tool-confirm timeout: %s tcid=%s", tool_name, _tcid)
+                    return {
+                        "error": f"Tool '{tool_name}' nicht innerhalb 5 Minuten bestätigt.",
+                        "risk":  "confirm_timeout",
+                        "hint":  "Bestätigung nicht rechtzeitig — Aktion verworfen.",
+                    }, True
     except Exception as _cls_err:
         logger.debug("Permission classifier / confirm error: %s", _cls_err)
 

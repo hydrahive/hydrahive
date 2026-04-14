@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio as _asyncio
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -101,6 +101,7 @@ class MyAgentUpdateRequest(BaseModel):
     tools: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     ollama_base_url: str | None = None
+    risk_policy: Literal["interactive", "trusted"] = "interactive"
 
 
 def build_personal_agent_llm_data(req: MyAgentUpdateRequest) -> dict:
@@ -127,6 +128,8 @@ def build_personal_agent_data(agent_id: str, req: MyAgentUpdateRequest) -> dict:
     }
     agent_data["tools"] = list(req.tools)
     agent_data["execution_modes"] = default_personal_agent_execution_modes()
+    if req.risk_policy != "interactive":
+        agent_data["risk_policy"] = req.risk_policy
     return agent_data
 
 
@@ -550,6 +553,14 @@ def register_user_routes(
         auth: tuple[str, str] = Depends(require_auth),
     ):
         username, _role = auth
+        # Trusted-Risk-Policy ist eine bewusste Eskalation und nur für Admins
+        # zulässig — verhindert Selbst-Eskalation eines Standard-Users über
+        # das eigene Personal-Agent-Form.
+        if req.risk_policy == "trusted" and _role != "admin":
+            raise HTTPException(
+                403,
+                "risk_policy='trusted' darf nur durch Admins gesetzt werden.",
+            )
         agent_id, _cfg = ensure_personal_agent(username)
         agent_dir = Path(agents_dir) / agent_id
 

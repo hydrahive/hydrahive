@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -27,6 +29,7 @@ class CreateAgentRequest(BaseModel):
     heartbeat_timeout: str = "90s"
     heartbeat_on_failure: str = "restart"
     ollama_base_url: str | None = None
+    risk_policy: Literal["interactive", "trusted"] = "interactive"
 
 
 def build_agent_admin_llm_data(req: CreateAgentRequest) -> dict:
@@ -63,6 +66,8 @@ def build_agent_admin_data(req: CreateAgentRequest, agent_id: str | None = None)
         agent_data["max_tool_rounds"] = req.max_tool_rounds
     if req.execution_mode_default in ("safe", "elevated", "root", "unrestricted"):
         agent_data.setdefault("execution_modes", {})["default"] = req.execution_mode_default
+    if req.risk_policy != "interactive":
+        agent_data["risk_policy"] = req.risk_policy
     return agent_data
 
 

@@ -1226,6 +1226,145 @@ def test_invariant13c_no_tmp_hydrahive_git_in_core_source():
     )
 
 
+# ===========================================================================
+# Invariante 14 — Trusted-Agent: CONFIRM-Auto-Approve, DENY bleibt blockiert
+# ===========================================================================
+# AgentConfig.risk_policy="trusted" überspringt den CONFIRM-Round-Trip in
+# execute_tool_call, ohne DENY zu schwächen. interactive bleibt Default.
+
+
+def _make_minimal_agent_cfg(risk_policy: str = "interactive"):
+    from hydrahive_core.agent_config import AgentConfig
+
+    return AgentConfig.model_validate({
+        "id": "trusted_test_agent",
+        "type": "specialist",
+        "identity": "Trusted Test Agent",
+        "llm": {"model": "claude-opus-4-6"},
+        "risk_policy": risk_policy,
+    })
+
+
+def _run_execute_tool_call(*, risk_level, risk_policy):
+    """Helper: ruft execute_tool_call mit gemockter Klassifikation +
+    Tool-Resolution auf und liefert Spy-Counter zurück.
+
+    Returns (request_count, wait_count, execute_count, result, is_error).
+    """
+    import asyncio
+    from unittest import mock
+    from hydrahive_core import orchestrator_tools as ot
+    from hydrahive_core.permission_classifier import RiskLevel
+
+    cfg = _make_minimal_agent_cfg(risk_policy=risk_policy)
+
+    fake_tool = mock.MagicMock()
+    fake_tool.id = "shell_exec"
+
+    orch = mock.MagicMock()
+    orch._resolve_allowed_tool.return_value = fake_tool
+    orch._sessions.get_active.return_value = mock.MagicMock(id="session-test")
+    orch._execute_tool = mock.AsyncMock(return_value={"ok": True})
+
+    request_spy = mock.MagicMock()
+    wait_spy = mock.AsyncMock(return_value="approve")
+
+    async def _fake_classify(_name, _input, use_llm=False):
+        return risk_level
+
+    with mock.patch.object(ot, "_record_success"), \
+         mock.patch("hydrahive_core.permission_classifier.classify_action", new=_fake_classify), \
+         mock.patch("hydrahive_core.tool_confirmation.request_confirmation", new=request_spy), \
+         mock.patch("hydrahive_core.tool_confirmation.wait_for_confirmation", new=wait_spy):
+        result, is_error = asyncio.run(ot.execute_tool_call(
+            orch,
+            boss_cfg=cfg,
+            project_id="proj_x",
+            tool_name="shell_exec",
+            tool_input={"command": "ls"},
+            tool_call_id="tcid-1",
+        ))
+
+    return (
+        request_spy.call_count,
+        wait_spy.await_count,
+        orch._execute_tool.await_count,
+        result,
+        is_error,
+    )
+
+
+def test_invariant14a_interactive_default_uses_confirm_pipeline():
+    """14a: interactive (Default) ruft request_confirmation + wait_for_
+    confirmation, und führt das Tool nach approve aus."""
+    req, wait, exec_, _result, _is_err = _run_execute_tool_call(
+        risk_level=__import__("hydrahive_core.permission_classifier", fromlist=["RiskLevel"]).RiskLevel.CONFIRM,
+        risk_policy="interactive",
+    )
+    assert req == 1, f"interactive sollte request_confirmation aufrufen, war {req}"
+    assert wait == 1, f"interactive sollte wait_for_confirmation aufrufen, war {wait}"
+    assert exec_ == 1, "Nach approve muss _execute_tool laufen."
+
+
+def test_invariant14b_trusted_auto_approves_confirm():
+    """14b: trusted überspringt den CONFIRM-Round-Trip — kein request/wait,
+    aber das Tool läuft."""
+    from hydrahive_core.permission_classifier import RiskLevel
+
+    req, wait, exec_, _result, _is_err = _run_execute_tool_call(
+        risk_level=RiskLevel.CONFIRM,
+        risk_policy="trusted",
+    )
+    assert req == 0, f"trusted darf request_confirmation NICHT aufrufen, war {req}"
+    assert wait == 0, f"trusted darf wait_for_confirmation NICHT awaiten, war {wait}"
+    assert exec_ == 1, "trusted muss das Tool direkt ausführen."
+
+
+def test_invariant14c_trusted_respects_deny():
+    """14c: trusted respektiert weiterhin DENY — Tool wird NICHT ausgeführt
+    und Block-Result kommt zurück."""
+    from hydrahive_core.permission_classifier import RiskLevel
+
+    req, wait, exec_, result, is_error = _run_execute_tool_call(
+        risk_level=RiskLevel.DENY,
+        risk_policy="trusted",
+    )
+    assert exec_ == 0, "DENY darf trotz trusted niemals zur Tool-Ausführung führen."
+    assert is_error is True, "DENY muss is_error=True liefern."
+    assert isinstance(result, dict) and result.get("risk") == "deny", (
+        f"DENY-Block-Result erwartet, war {result!r}"
+    )
+    assert req == 0 and wait == 0, "DENY-Branch darf CONFIRM-Mechanik nicht antasten."
+
+
+def test_invariant14d_confirm_pipeline_centralized():
+    """14d: Der Wartepfad bleibt zentral in orchestrator_tools — kein anderes
+    Core-Modul importiert wait_for_confirmation/request_confirmation."""
+    from pathlib import Path as _Path
+
+    core_src = _Path(__file__).resolve().parents[1] / "src" / "hydrahive_core"
+    needles = ("wait_for_confirmation", "request_confirmation")
+    allowed_files = {
+        "tool_confirmation.py",       # Definition
+        "orchestrator_tools.py",      # zentraler Konsument
+    }
+    offenders: list[str] = []
+    for py in core_src.rglob("*.py"):
+        if py.name in allowed_files:
+            continue
+        try:
+            text = py.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if any(n in text for n in needles):
+            offenders.append(str(py.relative_to(core_src)))
+    assert not offenders, (
+        "wait_for_confirmation/request_confirmation taucht außerhalb von "
+        f"tool_confirmation.py + orchestrator_tools.py auf: {offenders}. "
+        "Drift-Risiko — Trusted-Bypass würde dort nicht greifen."
+    )
+
+
 def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     """9d (#641-Followup): router_agent_chat importiert dasselbe
     ToolConfirmRequest-Modell wie router_projects — kein dupliziertes
