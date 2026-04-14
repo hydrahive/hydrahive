@@ -1067,7 +1067,6 @@ class SecurityRegressionTests(unittest.TestCase):
                  "workspace_key": "hydrahive__hydrahive",
                  "source": "repo",
              })), \
-             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/hydrahive-git/hydrahive__hydrahive"))), \
              mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("## main\n", "", 0),
                  ("main\n", "", 0),
@@ -1090,7 +1089,6 @@ class SecurityRegressionTests(unittest.TestCase):
             {"sha": "basesha654321"},
         ])
         with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client), \
-             mock.patch("hydrahive_core.gitea.GiteaClient.git_workspace", new=mock.AsyncMock(return_value=Path("/tmp/hydrahive-git/hydrahive__hydrahive"))), \
              mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
                  ("", "", 0),
                  (" file1 | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)", "", 0),

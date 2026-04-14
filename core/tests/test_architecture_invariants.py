@@ -1172,6 +1172,60 @@ def test_invariant12c_upgrade_strips_legacy_permissions():
     )
 
 
+# ===========================================================================
+# Invariante 13 — Keine Legacy-Workspace-Welt mehr (#643)
+# ===========================================================================
+# /tmp/hydrahive-git/, GiteaClient.git_workspace und das worktree_manager-
+# Modul waren die parallele Workspace-Welt vor #635. Sie sind raus —
+# workspace_root(project_id) ist die einzige Quelle (siehe Invarianten 3a/3b).
+
+
+def test_invariant13a_gitea_client_has_no_git_workspace():
+    """13a (#643): GiteaClient.git_workspace ist entfernt."""
+    from hydrahive_core.gitea import GiteaClient
+
+    assert not hasattr(GiteaClient, "git_workspace"), (
+        "GiteaClient.git_workspace existiert noch — gehört seit #643 weg, "
+        "Tools nutzen workspace_root(project_id)."
+    )
+
+
+def test_invariant13b_worktree_manager_module_gone():
+    """13b (#643): hydrahive_core.worktree_manager existiert nicht mehr."""
+    import importlib
+
+    try:
+        importlib.import_module("hydrahive_core.worktree_manager")
+    except ModuleNotFoundError:
+        return
+    raise AssertionError(
+        "hydrahive_core.worktree_manager ist noch importierbar — "
+        "Modul sollte mit #643 gelöscht sein."
+    )
+
+
+def test_invariant13c_no_tmp_hydrahive_git_in_core_source():
+    """13c (#643): kein /tmp/hydrahive-git-Literalpfad mehr im Core-Source-Tree."""
+    from pathlib import Path as _Path
+
+    core_src = _Path(__file__).resolve().parents[1] / "src" / "hydrahive_core"
+    assert core_src.is_dir(), f"Core-Source-Verzeichnis nicht gefunden: {core_src}"
+
+    needle = "/tmp/hydrahive-git"
+    offenders: list[str] = []
+    for py in core_src.rglob("*.py"):
+        try:
+            text = py.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if needle in text:
+            offenders.append(str(py.relative_to(core_src)))
+
+    assert not offenders, (
+        f"Legacy-Workspace-Pfad '{needle}' noch in core/src gefunden: {offenders}"
+    )
+
+
 def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     """9d (#641-Followup): router_agent_chat importiert dasselbe
     ToolConfirmRequest-Modell wie router_projects — kein dupliziertes

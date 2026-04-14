@@ -471,13 +471,6 @@ async def lifespan(app: FastAPI):
     _proactive.load_from_config(settings.etc_dir)
     _proactive.start()
 
-    # #521: Worktree stale cleanup beim Start (Crash-Recovery)
-    try:
-        from .worktree_manager import worktree_manager as _wm
-        asyncio.create_task(_wm.cleanup_stale())
-    except Exception as _wt_err:
-        logger.debug("Worktree stale cleanup: %s", _wt_err)
-
     # #523: Turn Journal — alte Events aufräumen (>30 Tage)
     try:
         from .turn_journal import journal as _tj

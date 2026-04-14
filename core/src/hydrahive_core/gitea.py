@@ -378,31 +378,6 @@ class GiteaClient:
     # ------------------------------------------------------------------ Git (lokal via subprocess)
 
     @staticmethod
-    async def git_workspace(repo_key: str, owner: str | None = None, repo: str | None = None) -> Path:
-        """
-        Gibt das lokale Git-Workspace-Verzeichnis zurueck.
-        /tmp/hydrahive-git/{repo_key}/ — wird bei Bedarf geclont.
-        """
-        import asyncio
-        workspace = Path(f"/tmp/hydrahive-git/{repo_key}")
-        if not workspace.exists():
-            cfg = _load_config()
-            repo_owner = owner or cfg.get("org", "hydrahive")
-            repo_name = repo or repo_key
-            clone_url = f"{cfg['url']}/{repo_owner}/{repo_name}.git"
-            workspace.parent.mkdir(parents=True, exist_ok=True)
-            proc = await asyncio.create_subprocess_exec(
-                "git", "clone", clone_url, str(workspace),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=_git_env_with_auth(cfg["token"], username=cfg.get("org", "hydrahive")),
-            )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                raise RuntimeError(f"git clone fehlgeschlagen: {stderr.decode()[:300]}")
-        return workspace
-
-    @staticmethod
     async def _git(
         args: list[str], cwd: Path, token: str | None = None, username: str = "hydrahive",
     ) -> tuple[str, str, int]:

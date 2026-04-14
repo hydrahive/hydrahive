@@ -270,7 +270,6 @@ def register_project_integration_routes(
     async def gitea_webhook(project_id: str, request: Request):
         import hmac
         import hashlib
-        import shutil as _shutil
 
         body = await request.body()
 
@@ -300,11 +299,6 @@ def register_project_integration_routes(
 
         audit_log("gitea.webhook.push", target=project_id, project_id=project_id,
                   details={"ref": ref, "pusher": pusher, "commits": commits})
-
-        ws = Path(f"/tmp/hydrahive-git/{project_id}")
-        if ws.exists():
-            _shutil.rmtree(ws)
-            logger.info("Gitea Webhook: Workspace-Cache %s geleert", ws)
 
         if project_id == "hydrahive-core":
             asyncio.create_task(run_self_update(pusher, commits))
