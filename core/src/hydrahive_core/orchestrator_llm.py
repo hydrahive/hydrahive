@@ -578,6 +578,10 @@ async def _anthropic_oauth_call(
     import json as _json
     from types import SimpleNamespace
 
+    # #628: Message-Normalisierung VOR Format-Konvertierung
+    from .message_normalization import normalize_messages_for_call
+    messages = normalize_messages_for_call(messages)
+
     # api_key="" verhindert dass der SDK ANTHROPIC_API_KEY aus env liest
     from .provider_config import ANTHROPIC_OAUTH_HEADERS
     client = _anthropic.AsyncAnthropic(
@@ -1062,6 +1066,9 @@ async def _llm_call_single(
 
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
     is_anthropic = model.startswith(("anthropic/", "claude-"))
+    # #628: Message-Normalisierung vor Cache-Control + LLM-Call (kanonische Form)
+    from .message_normalization import normalize_messages_for_call
+    messages = normalize_messages_for_call(messages)
     cached_messages = _apply_cache_control(messages, is_anthropic)
 
     # #515: Model-spezifische max_tokens auch im litellm-Pfad
