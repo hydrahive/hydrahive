@@ -215,5 +215,52 @@ def to_anthropic_format(messages: list[dict]) -> tuple[str, list[dict]]:
         else:
             merged.append(dict(m))
 
+    # Anthropic verlangt: auf eine assistant-Message mit tool_use muss in der
+    # NÄCHSTEN Message ein user-Block mit den korrespondierenden tool_result-
+    # Blöcken folgen. Alt-/Resume-History kann hier trotz OpenAI-seitigem
+    # Repair noch exotische Lücken haben. Als letzte Sicherheitsstufe heilen
+    # wir die Anthropic-Format-History direkt vor dem Send.
+    repaired: list[dict] = []
+    for idx, m in enumerate(merged):
+        repaired.append(dict(m))
+        if m.get("role") != "assistant" or not isinstance(m.get("content"), list):
+            continue
+        tool_use_ids = [
+            str(b.get("id", "")).strip()
+            for b in m["content"]
+            if isinstance(b, dict) and b.get("type") == "tool_use" and str(b.get("id", "")).strip()
+        ]
+        if not tool_use_ids:
+            continue
+
+        next_msg = merged[idx + 1] if idx + 1 < len(merged) else None
+        next_tool_results: set[str] = set()
+        if next_msg and next_msg.get("role") == "user" and isinstance(next_msg.get("content"), list):
+            next_tool_results = {
+                str(b.get("tool_use_id", "")).strip()
+                for b in next_msg["content"]
+                if isinstance(b, dict) and b.get("type") == "tool_result"
+            }
+
+        missing = [tcid for tcid in tool_use_ids if tcid not in next_tool_results]
+        if not missing:
+            continue
+
+        logger.warning(
+            "to_anthropic_format: ergänze %d fehlende tool_result-Blöcke direkt nach tool_use (%s)",
+            len(missing), ", ".join(missing[:3]),
+        )
+        repaired.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tcid,
+                    "content": "[Session unterbrochen — Ergebnis nicht verfügbar]",
+                }
+                for tcid in missing
+            ],
+        })
+
     system_msg = "\n\n".join(p for p in system_parts if p)
-    return system_msg, merged
+    return system_msg, repaired

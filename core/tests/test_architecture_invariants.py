@@ -655,6 +655,45 @@ def test_invariant7a_to_anthropic_format_strips_tool_role():
     assert user_with_result[0]["content"][0]["tool_use_id"] == "call_42"
 
 
+def test_invariant7aa_to_anthropic_format_repairs_missing_tool_results_immediately():
+    """7aa: Fehlen in der nächsten Message die tool_result-Blöcke, muss
+    to_anthropic_format sie direkt hinter dem assistant-tool_use ergänzen.
+
+    Sichert den Live-Fall ab, bei dem Anthropic sonst 400 wirft:
+    "tool_use ids were found without tool_result blocks immediately after".
+    """
+    from hydrahive_core.message_normalization import to_anthropic_format
+
+    _, msgs = to_anthropic_format([
+        {"role": "user", "content": "start"},
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "toolu_a", "type": "function", "function": {"name": "foo", "arguments": "{}"}},
+            {"id": "toolu_b", "type": "function", "function": {"name": "bar", "arguments": "{}"}},
+        ]},
+        {"role": "assistant", "content": "späterer Text ohne tool_result"},
+    ])
+
+    tool_use_idx = next(
+        i for i, m in enumerate(msgs)
+        if m["role"] == "assistant"
+        and isinstance(m.get("content"), list)
+        and any(b.get("type") == "tool_use" for b in m["content"])
+    )
+    assert tool_use_idx + 1 < len(msgs), f"Keine Folge-Message nach tool_use: {msgs}"
+    next_msg = msgs[tool_use_idx + 1]
+    assert next_msg["role"] == "user", f"Nächste Message nach tool_use ist nicht user: {msgs}"
+    assert isinstance(next_msg.get("content"), list), f"tool_result-Message ist keine Block-Liste: {msgs}"
+    result_ids = [
+        b.get("tool_use_id")
+        for b in next_msg["content"]
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    ]
+    assert result_ids == ["toolu_a", "toolu_b"], (
+        "Fehlende tool_result-Blöcke wurden nicht direkt hinter dem tool_use ergänzt. "
+        f"msgs={msgs}"
+    )
+
+
 def test_invariant7b_oauth_call_uses_to_anthropic_format():
     """7b: _anthropic_oauth_call ruft den gemeinsamen Helper auf statt
     eigenen Inline-Loop. Sichert Code-Dedup nach #637-Followup."""
