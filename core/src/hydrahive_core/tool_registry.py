@@ -735,8 +735,34 @@ class ShellExecTool(BaseTool):
             logger.info("shell_exec [%s] (SANDBOX/bwrap mode=%s scope=%s): %s",
                         agent_id, _mode or "safe", _project_dir or "/tmp", command[:120])
         elif unrestricted:
-            exec_command = f"sudo bash -c {__import__('shlex').quote(command)}"
-            logger.info("shell_exec [%s] (UNRESTRICTED/sudo): %s", agent_id, command[:120])
+            # UNRESTRICTED: kein Sandbox, aber als Projekt-User statt root.
+            # Vorteile: Files gehören dem Projekt-User → menschlicher Admin
+            # (auch ohne sudo) kann nachschauen/eingreifen, .git/rebase-merge
+            # blockt nicht mehr Core-Writes auf memory/_last_session.md.
+            import shlex as _shlex
+            _quoted = _shlex.quote(command)
+            _proj_user: str | None = None
+            if project_id:
+                # Konvention aus project_config.effective_system_user(): proj_<id>
+                _candidate = f"proj_{project_id}"
+                try:
+                    import pwd as _pwd
+                    _pwd.getpwnam(_candidate)
+                    _proj_user = _candidate
+                except KeyError:
+                    _proj_user = None
+                except Exception as _u_err:
+                    logger.debug("pwd lookup failed (%s): %s", _candidate, _u_err)
+                    _proj_user = None
+            if _proj_user and _proj_user != "root":
+                exec_command = f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_quoted}"
+                logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
+                            agent_id, _proj_user, command[:120])
+            else:
+                # Fallback: kein proj_<id>-User vorhanden → root via sudo
+                exec_command = f"sudo bash -c {_quoted}"
+                logger.info("shell_exec [%s] (UNRESTRICTED/sudo-root fallback): %s",
+                            agent_id, command[:120])
         else:
             exec_command = command
             logger.info("shell_exec [%s]: %s", agent_id, command[:120])

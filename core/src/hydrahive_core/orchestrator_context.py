@@ -1154,6 +1154,29 @@ async def _compact_if_needed(
     from .orchestrator_llm import _llm_with_retry
     from .session_manager import MessageRole
 
+    # #628-Followup: Compaction-LLM-Helper mit OAuth-Fallback (Bug entdeckt
+    # auf Kundenmaschine .86: litellm fordert ANTHROPIC_API_KEY, aber dort
+    # ist nur OAuth konfiguriert → Compaction crasht → Notfall-Reset)
+    async def _compact_call(messages: list[dict], max_tokens: int) -> str:
+        import os as _os
+        is_claude = compact_model.startswith(("claude-", "anthropic/"))
+        has_api_key = bool(_os.environ.get("ANTHROPIC_API_KEY", "").strip())
+        if is_claude and not has_api_key:
+            from .orchestrator_llm import _anthropic_oauth_call, _load_claude_oauth_token
+            token = (
+                _os.environ.get("ANTHROPIC_API_KEY", "").strip() or
+                _load_claude_oauth_token() or ""
+            )
+            if token:
+                resp = await _anthropic_oauth_call(boss_cfg, messages, None, token, compact_model)
+                return getattr(resp.choices[0].message, "content", "") or ""
+        # Fallback: regulärer litellm-Pfad
+        resp = await _llm_with_retry(lambda: litellm.acompletion(
+            model=compact_model, messages=messages,
+            max_tokens=max_tokens, drop_params=True,
+        ))
+        return resp.choices[0].message.content or ""
+
     # Agent-spezifischer Override oder Model-basierter Default
     if getattr(boss_cfg, "compaction_threshold", None):
         token_threshold = boss_cfg.compaction_threshold
@@ -1273,13 +1296,7 @@ async def _compact_if_needed(
     ]
 
     try:
-        resp = await _llm_with_retry(lambda: litellm.acompletion(
-            model=compact_model,
-            messages=summary_prompt,
-            max_tokens=1200,
-            drop_params=True,
-        ))
-        summary = resp.choices[0].message.content or ""
+        summary = await _compact_call(summary_prompt, max_tokens=1200)
         if not summary:
             return
 
@@ -1306,13 +1323,7 @@ async def _compact_if_needed(
                 )},
                 {"role": "user", "content": summary},
             ]
-            resp2 = await _llm_with_retry(lambda: litellm.acompletion(
-                model=compact_model,
-                messages=meta_prompt,
-                max_tokens=350,
-                drop_params=True,
-            ))
-            meta = resp2.choices[0].message.content or ""
+            meta = await _compact_call(meta_prompt, max_tokens=350)
             if meta:
                 await sessions.compact(project_id, meta, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
                 summary = meta

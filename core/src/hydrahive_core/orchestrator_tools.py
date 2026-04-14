@@ -437,9 +437,41 @@ _FUZZY_THRESHOLD = 5
 
 
 def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
-    """Nur tool_name + erste N Zeichen der args → fängt Pfad/URL-Loops."""
-    prefix = (args_json or "")[:_FUZZY_ARG_PREFIX_CHARS]
-    return f"{tool_name}::{prefix}"
+    """Tool-Name + diskriminierender Argument-Anteil als Loop-Fingerprint.
+
+    Für shell_exec/file_* wird gezielt das `command`/`path`-Feld extrahiert
+    statt den rohen JSON-Prefix zu nehmen, weil sonst Calls mit gleichem
+    cwd-Prefix (`cd /projects/<id> && …`) alle das gleiche Fingerprint
+    bekommen — Recovery-Sequenzen wie `git rebase --abort` → `git cherry-pick`
+    → `git pull` würden fälschlich als Loop erkannt.
+    """
+    raw = args_json or ""
+    payload = raw
+
+    # JSON-Args parsen und das diskriminierende Feld pro Tool extrahieren.
+    if raw.startswith("{"):
+        try:
+            import json as _json
+            data = _json.loads(raw)
+            if isinstance(data, dict):
+                if tool_name == "shell_exec":
+                    cmd = str(data.get("command", "")).strip()
+                    # cwd-Prefix abschneiden — der wechselt selten und ist
+                    # für die Operation selbst nicht aussagekräftig
+                    if cmd.startswith("cd "):
+                        amp = cmd.find("&&")
+                        if amp != -1:
+                            cmd = cmd[amp + 2:].strip()
+                    payload = cmd
+                elif tool_name in ("file_read", "file_write", "file_edit"):
+                    payload = f"{data.get('path','')}|{str(data.get('content',''))[:40]}"
+                else:
+                    payload = raw
+        except Exception:
+            payload = raw
+
+    # Diskriminierender Prefix: lang genug, dass git-Subcommands etc. drin sind
+    return f"{tool_name}::{payload[:200]}"
 
 
 def check_fuzzy_loop(
