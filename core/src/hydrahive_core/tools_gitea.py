@@ -302,6 +302,55 @@ class GiteaCloseIssueTool(_GiteaToolBase):
             return _parse_err(e)
 
 
+class GiteaReopenIssueTool(_GiteaToolBase):
+    """Öffnet ein geschlossenes Issue wieder — z.B. nach Re-Validation
+    wenn die ursprünglichen Fixes nicht vollständig waren."""
+    @property
+    def id(self) -> str: return "gitea_reopen_issue"
+    @property
+    def name(self) -> str: return "Gitea Issue wieder öffnen"
+    @property
+    def description(self) -> str:
+        return "Öffnet ein geschlossenes Issue wieder (optional mit Begründung als Kommentar)."
+
+    @property
+    def is_destructive(self) -> bool: return False
+    @property
+    def semantic_tags(self) -> list[str]:
+        return ["gitea", "issue", "reopen", "open", "revalidate"]
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "repo":         {"type": "string"},
+                "issue_number": {"type": "integer"},
+                "comment":      {"type": "string", "description": "Optional Begründung als Kommentar"},
+            },
+            "required": ["repo", "issue_number"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        repo: str, issue_number: int, comment: str = "", **kwargs,
+    ) -> dict:
+        try:
+            owner, name = _resolve_with_default_org(repo)
+            client = get_gitea_client()
+            num = int(issue_number)
+            if comment:
+                await client.comment_issue_for_repo(owner, name, num, comment)
+            result = await client.update_issue_for_repo(owner, name, num, state="open")
+            return {
+                "ok": True,
+                "number": result.get("number"),
+                "state": result.get("state"),
+            }
+        except Exception as e:
+            return _parse_err(e)
+
+
 # =========================================================================
 # Registration
 # =========================================================================
@@ -311,3 +360,4 @@ registry.register(GiteaCommentIssueTool())
 registry.register(GiteaListIssuesTool())
 registry.register(GiteaGetIssueTool())
 registry.register(GiteaCloseIssueTool())
+registry.register(GiteaReopenIssueTool())
