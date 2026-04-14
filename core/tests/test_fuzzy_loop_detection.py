@@ -35,17 +35,16 @@ def test_no_abort_diverse_calls():
     assert not abort
 
 
-def test_abort_on_repetition_variation_in_suffix():
-    """Der kritische Case: Pfad variiert NUR nach den ersten 80 chars."""
+def test_no_abort_shell_exec_different_files_same_prefix():
+    """#623: Batch-cat auf unterschiedliche Dateien (gleicher Pfad-Prefix,
+    aber je eigene Datei) ist legitime Serienarbeit, kein Loop."""
     prefix = '{"command": "cat /projects/homepage-sicherheitstest/cms_backup/' + "x" * 80
     history = [
         _fuzzy_fingerprint("shell_exec", f'{prefix}/file_{i}"}}')
         for i in range(6)
     ]
-    abort, dominant = check_fuzzy_loop(history)
-    assert abort
-    assert dominant is not None
-    assert "shell_exec" in dominant
+    abort, _ = check_fuzzy_loop(history)
+    assert not abort, "Batch-cat auf 6 verschiedene Dateien darf nicht als Loop gelten."
 
 
 def test_abort_exact_repetition():
@@ -101,16 +100,67 @@ def test_window_limits_scope():
     assert fp == "b"
 
 
-def test_real_world_homepage_loop():
-    """Reproduziert das echte Loop-Pattern von heute Abend."""
-    # 22 cat-Calls auf /projects/homepage-sicherheitstest/cms_backup mit
-    # variierendem Dateinamen — alle gleichen Prefix < 80 chars.
+def test_no_abort_real_world_listing_batch():
+    """#623: 22 cat-Calls auf /projects/homepage-sicherheitstest/cms_backup
+    mit unterschiedlichen Dateinamen sind ein legitimes Listing/Recovery,
+    kein Loop. Echte Wiederholung wird durch test_abort_shell_exec_same_command
+    abgesichert."""
     history = []
     for i in range(22):
         args = f'{{"command": "cat /projects/homepage-sicherheitstest/cms_backup/f{i}"}}'
         history.append(_fuzzy_fingerprint("shell_exec", args))
 
+    abort, _ = check_fuzzy_loop(history)
+    assert not abort, "22 cats auf je eigene Datei dürfen nicht als Loop gelten."
+
+
+# =============================================================================
+# #623 — per-Tool Identifier-Achse, Batch-Arbeit darf weiterlaufen
+# =============================================================================
+
+def test_no_abort_file_patch_different_paths():
+    """#623: file_patch auf 6 unterschiedliche Pfade → kein Loop."""
+    history = [
+        _fuzzy_fingerprint(
+            "file_patch",
+            f'{{"path": "/projects/x/file_{i}.py", "patch": "@@ -1 +1 @@\\n-old\\n+new\\n"}}',
+        )
+        for i in range(6)
+    ]
+    abort, _ = check_fuzzy_loop(history)
+    assert not abort, "Batch-Patch auf 6 verschiedene Dateien darf nicht abbrechen."
+
+
+def test_abort_file_patch_same_path():
+    """#623: file_patch 6× auf denselben Pfad → echter Loop, Abort."""
+    history = [
+        _fuzzy_fingerprint(
+            "file_patch",
+            f'{{"path": "/projects/x/file.py", "patch": "@@ -1 +1 @@\\n-v{i}\\n+v{i+1}\\n"}}',
+        )
+        for i in range(6)
+    ]
+    abort, dominant = check_fuzzy_loop(history)
+    assert abort, "6 Patches auf dieselbe Datei sollten als Loop erkannt werden."
+    assert dominant is not None and "/projects/x/file.py" in dominant
+
+
+def test_abort_shell_exec_same_command():
+    """#623 Gegenprobe: identischer shell_exec-Befehl 6× → Abort bleibt."""
+    history = [
+        _fuzzy_fingerprint("shell_exec", '{"command": "git status"}')
+        for _ in range(6)
+    ]
     abort, dominant = check_fuzzy_loop(history)
     assert abort
-    assert dominant is not None
-    assert "homepage-sicherheits" in dominant  # Prefix abgeschnitten, Teil reicht
+    assert dominant is not None and "git status" in dominant
+
+
+def test_no_abort_file_read_different_paths():
+    """#623: file_read auf 6 verschiedene Dateien → kein Loop (Code-Lesephase)."""
+    history = [
+        _fuzzy_fingerprint("file_read", f'{{"path": "/projects/x/mod_{i}.py"}}')
+        for i in range(6)
+    ]
+    abort, _ = check_fuzzy_loop(history)
+    assert not abort

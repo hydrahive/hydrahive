@@ -510,11 +510,13 @@ _FUZZY_THRESHOLD = 5
 def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
     """Tool-Name + diskriminierender Argument-Anteil als Loop-Fingerprint.
 
-    Für shell_exec/file_* wird gezielt das `command`/`path`-Feld extrahiert
-    statt den rohen JSON-Prefix zu nehmen, weil sonst Calls mit gleichem
-    cwd-Prefix (`cd /projects/<id> && …`) alle das gleiche Fingerprint
-    bekommen — Recovery-Sequenzen wie `git rebase --abort` → `git cherry-pick`
-    → `git pull` würden fälschlich als Loop erkannt.
+    #623: Pro Tool wird die zentrale Identifier-Achse extrahiert (Pfad,
+    Command, Query, URL, Issue), damit legitime Batch-Arbeit auf vielen
+    unterschiedlichen Objekten NICHT als Loop fehlklassifiziert wird:
+        - file_patch auf 5 verschiedene Dateien → 5 unterschiedliche Fingerprints
+        - file_patch auf dieselbe Datei 5× → identische Fingerprints, Abort greift
+    Dieselbe Logik gilt für file_read/file_write/file_search/web_search/http_request
+    sowie gitea_*-Tools (Issue-/Repo-basiert).
     """
     raw = args_json or ""
     payload = raw
@@ -534,8 +536,24 @@ def _fuzzy_fingerprint(tool_name: str, args_json: str) -> str:
                         if amp != -1:
                             cmd = cmd[amp + 2:].strip()
                     payload = cmd
-                elif tool_name in ("file_read", "file_write", "file_edit"):
-                    payload = f"{data.get('path','')}|{str(data.get('content',''))[:40]}"
+                elif tool_name in ("file_read", "file_write", "file_patch", "file_edit"):
+                    # #623: Pfad als alleinige Identifier-Achse — Batch-Edits auf
+                    # unterschiedliche Dateien sollen durchlaufen, gleiche Datei
+                    # 5× hintereinander bleibt Loop.
+                    payload = str(data.get("path", ""))
+                elif tool_name == "file_search":
+                    payload = f"{data.get('path','')}|{data.get('query','')}"
+                elif tool_name == "web_search":
+                    payload = str(data.get("query", ""))
+                elif tool_name == "http_request":
+                    payload = str(data.get("url", "")) or raw
+                elif tool_name.startswith("gitea_"):
+                    issue = data.get("issue_number") or data.get("number") or ""
+                    repo = data.get("repo") or ""
+                    if repo or issue:
+                        payload = f"{repo}#{issue}"
+                    else:
+                        payload = raw
                 else:
                     payload = raw
         except Exception:
