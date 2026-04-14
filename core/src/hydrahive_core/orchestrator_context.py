@@ -161,6 +161,11 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     soul = agent_dir / "soul.md"
     if soul.exists():
         parts.append(f"soul:{soul.stat().st_mtime:.0f}")
+    # v2: AGENT.md ist die identitätskritische Persona-Quelle. Vorher fehlte
+    # sie im Hash → Edits an AGENT.md blieben bis TTL-Ablauf unsichtbar.
+    agent_md = agent_dir / "AGENT.md"
+    if agent_md.exists():
+        parts.append(f"agent_md:{agent_md.stat().st_mtime:.0f}")
     memory_dir = agent_dir / "memory"
     if memory_dir.exists():
         for f in sorted(memory_dir.glob("*.md")):
@@ -185,6 +190,9 @@ def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | No
     soul = agent_dir / "soul.md"
     if soul.exists():
         segments["soul"] = f"{soul.stat().st_mtime:.0f}"
+    agent_md = agent_dir / "AGENT.md"
+    if agent_md.exists():
+        segments["agent_md"] = f"{agent_md.stat().st_mtime:.0f}"
     memory_dir = agent_dir / "memory"
     if memory_dir.exists():
         mem_mtimes = [f"{f.name}:{f.stat().st_mtime:.0f}" for f in sorted(memory_dir.glob("*.md"))]
@@ -550,7 +558,23 @@ async def _build_system_prompt_split(
     _prefetch = start_memory_prefetch(boss_cfg.agent_dir, user_text, k=_k_prefetch)
 
     channels = ContextChannels()
-    channels.agent_identity = f"Du bist {boss_cfg.identity}."
+    # Identity + Datum/Uhrzeit (Datum war im alten Builder als zweiter Slot,
+    # fehlt im Split-Builder → vom Review als Bug markiert)
+    from datetime import datetime, timezone as _tz
+    _now = datetime.now(_tz.utc)
+    # v2 hat AGENT.md → Identitätsstatement weglassen damit es nicht doppelt
+    # mit der AGENT.md konkurriert (siehe alter Builder Z. 270-279)
+    _has_agent_md = bool(
+        boss_cfg.agent_dir and (boss_cfg.agent_dir / "AGENT.md").exists()
+    )
+    _identity_lines = []
+    if not _has_agent_md:
+        _identity_lines.append(f"Du bist {boss_cfg.identity}.")
+    _identity_lines.append(
+        f"Aktuelles Datum: {_now.strftime('%A, %d. %B %Y')}. "
+        f"Uhrzeit: {_now.strftime('%H:%M')} UTC."
+    )
+    channels.agent_identity = "\n".join(_identity_lines)
 
     # ── Static-Cache prüfen (cached den serialisierten static-Block) ──────
     static_cached = None
@@ -576,10 +600,17 @@ async def _build_system_prompt_split(
                         f"{startup_text}"
                     )
 
-        if boss_cfg.soul and boss_cfg.agent_dir:
-            soul_path = boss_cfg.agent_dir / boss_cfg.soul
-            if soul_path.exists():
-                channels.soul = soul_path.read_text(encoding="utf-8").strip()
+        # Identitätskritischer Body: v2 → AGENT.md, v1 → soul.md aus agent.yaml.
+        # Review-Bug: vorher wurde nur boss_cfg.soul gelesen, was bei v2 None
+        # ist → Streaming-Pfad lief ohne AGENT.md-Inhalt.
+        if boss_cfg.agent_dir:
+            agent_md_path = boss_cfg.agent_dir / "AGENT.md"
+            if agent_md_path.exists():
+                channels.soul = agent_md_path.read_text(encoding="utf-8").strip()
+            elif boss_cfg.soul:
+                soul_path = boss_cfg.agent_dir / boss_cfg.soul
+                if soul_path.exists():
+                    channels.soul = soul_path.read_text(encoding="utf-8").strip()
 
         if boss_cfg.agent_dir:
             memory_dir = boss_cfg.agent_dir / "memory"

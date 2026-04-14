@@ -598,6 +598,12 @@ async def _stream_anthropic_oauth(
     import anthropic as _anthropic
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
 
+    # #628-Followup: Normalisierung muss auch im Streaming-Pfad laufen, nicht
+    # nur im non-streaming. Sonst greifen Pair-Repair / Dedupe / Whitespace-
+    # Kanonisierung gerade dort nicht wo der Hauptchat läuft.
+    from .message_normalization import normalize_messages_for_call
+    messages = normalize_messages_for_call(messages)
+
     from .provider_config import ANTHROPIC_OAUTH_HEADERS
     client = _anthropic.AsyncAnthropic(
         api_key="",
@@ -954,7 +960,10 @@ async def _stream_litellm(
 
     model, api_base = _resolve_model(model_name, boss_cfg.llm.ollama_base_url)
     _is_anthropic = model.startswith(("anthropic/", "claude-"))
-    loop_messages = _apply_cache_control(list(messages), _is_anthropic)
+    # #628-Followup: Streaming-litellm-Pfad muss auch normalisieren —
+    # vorher übersprungen, daher kein konsistentes Pair-Repair/Dedupe.
+    from .message_normalization import normalize_messages_for_call
+    loop_messages = _apply_cache_control(normalize_messages_for_call(list(messages)), _is_anthropic)
     last_tool_signature: tuple[str, ...] | None = None
     repeated_tool_signature_count = 0
     _tools_disabled = False
