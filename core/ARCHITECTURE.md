@@ -178,7 +178,6 @@ User-Nachricht → System-Prompt bauen → Tools laden → LLM-Call → Tool-Loo
 | `prompt_speculation.py` | ~80 | Prompt-Prefetch/Speculation |
 | `turn_journal.py` | ~80 | Turn-by-Turn Logging |
 | `verification_contract.py` | ~50 | Verification-Contract |
-| `worktree_manager.py` | ~100 | Git-Worktree-Isolation |
 | `butler_executor.py` | ~100 | Butler-Regel-Ausführung |
 | `butler_rule.py` | ~80 | Butler-Regel-Definition |
 | `config_loader.py` | ~50 | Config-File-Loader |
@@ -206,6 +205,27 @@ User-Nachricht → System-Prompt bauen → Tools laden → LLM-Call → Tool-Loo
 ### Neu
 - `project_config.py` — v2-Format: config.yaml + AGENT.md + messenger.yaml
 - `agent_config.py` — agent_config_from_project() Bridge
+
+## v3 Konsolidierung & Folgeschritte (14.04.2026)
+
+### Architektur-Konsolidierung v3 (#635-#638, #641)
+- #635 — Workspace-SSOT: `workspace_root(project_id)` ist die einzige Quelle für Workspace-Pfade; `file_*`, `shell_exec` und `git_*` resolven byte-identisch
+- #636 — Eine Kontextpipeline für Stream + non-stream
+- #637 — Kanonisches Tool-/Message-Modell + `to_anthropic_format`-Helper an allen Send-Pfaden
+- #638 — Permission-/Execution-Mode-Konsolidierung: `_V2_CORE_TOOL_IDS` + `permission_classifier` + `execution_mode`-Sandbox als drei einzige Quellen; `permissions_required` und Permission-Listen entfernt
+- #641 — CONFIRM-Roundtrip: `tool_confirmation.py` (Pending-Store + Wait), zentral konsumiert in `orchestrator_tools.execute_tool_call`; Banner-SSE + `/tool-confirm`-Endpoints in Project- und Agent-Pfaden
+
+### Tote Felder & Legacy entfernt
+- #642 — `AgentConfig`: `role`, `tools_extra`, `tools_deny`, `tool_selection` raus (Legacy-YAMLs bleiben über `extra: ignore` kompatibel)
+- #643 — Legacy-Workspace-Welt: `GiteaClient.git_workspace`, `worktree_manager.py`, `/tmp/hydrahive-git/`-Webhook-rmtree raus
+- #644 — `default_personal_agent_execution_modes`: tote `permissions`-Listen raus, Strip-on-Load in `upgrade_personal_agent_data`
+
+### Trusted-Agent / `risk_policy`
+- Neues `AgentConfig.risk_policy: Literal["interactive", "trusted"]` (Default `interactive`)
+- Trusted-Bypass im zentralen CONFIRM-Branch von `orchestrator_tools.execute_tool_call`: `RiskLevel.CONFIRM` wird automatisch genehmigt + per `logger.info` audit-geloggt
+- `RiskLevel.DENY` bleibt unverändert blockiert
+- Personal-Agent-`trusted` nur durch Admin-User setzbar (Guard in `router_users.update_my_agent`)
+- Admin-Agents über `AgentsPage` UI-bedienbar; Personal-Agent-Form über `MyAgentPage > Einstellungen`
 
 ## Datenfluss: User-Nachricht → Antwort
 

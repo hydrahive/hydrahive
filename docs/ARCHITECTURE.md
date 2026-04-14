@@ -66,7 +66,6 @@ Auf dem Server:
 | `agent_config.py`        | Agent-YAML-Parsing, LLM-Config pro Agent                   |
 | `agent_discovery.py`     | Agent-Verzeichnis scannen, YAML laden                       |
 | `agent_runtime.py`       | Agent-Lifecycle (Start, Stop, Health)                       |
-| `agent_roles.py`         | Rollen-System (admin/user), Page-Access-Control             |
 | `agent_teams.py`         | Agent-Teams fuer koordinierte Tasks                         |
 
 #### Tool-System
@@ -104,7 +103,6 @@ Auf dem Server:
 | `turn_journal.py`     | Ausfuehrliches Logging jedes Tool-Turns               |
 | `session_metrics.py`  | Token-Verbrauch, Latenz, Metriken pro Session         |
 | `proactive_mode.py`   | Background-Tasks mit Safety-Constraints               |
-| `worktree_manager.py` | Git-Worktree-Isolation fuer Worker (Feature-Flag)     |
 | `heartbeat.py`        | Core-Heartbeat fuer Health-Checks                     |
 | `config_loader.py`    | Zentrales Config-Laden aus /etc/hydrahive/            |
 | `migrations.py`       | Idempotente Schema-Migrationen beim Start             |

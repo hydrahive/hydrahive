@@ -1,5 +1,21 @@
 # HydraHive Changelog
 
+## 2026-04-14
+
+### Added
+
+- **Trusted-Agent / `risk_policy`** — neues Feld auf `AgentConfig` (`Literal["interactive","trusted"]`, Default `interactive`). Trusted-Agenten überspringen den `RiskLevel.CONFIRM`-Round-Trip und führen riskante Tool-Calls automatisch aus; Auto-Approves landen im Server-Log. `RiskLevel.DENY` bleibt unverändert blockiert. UI-Setter in **Agenten** und **Mein Agent → Einstellungen**; Personal-Agent-`trusted` nur durch Admin-User setzbar (Backend-Guard, 403 sonst). Architektur-Invariante 14 sichert ab, dass DENY auch bei `trusted` blockiert bleibt und der CONFIRM-Wartepfad nur an einer Stelle existiert.
+
+### Removed
+
+- **#642 — tote `AgentConfig`-Felder**: `role`, `tools_extra`, `tools_deny`, `tool_selection` aus Schema, Write-Pfaden und `/agents`-Response entfernt; `RoleSelector`-UI gelöscht. Legacy-YAMLs bleiben über `extra: ignore` kompatibel.
+- **#643 — Legacy-Workspace-Welt**: `GiteaClient.git_workspace`, `worktree_manager.py` und der `/tmp/hydrahive-git/`-Webhook-rmtree entfernt. `workspace_root(project_id)` ist ab jetzt die einzige Workspace-Quelle (abgesichert durch Invariants 3a/3b + 13a-c).
+- **#644 — tote Default-Permissions**: `default_personal_agent_execution_modes` auf `{"default": "elevated"}` reduziert; `upgrade_personal_agent_data` strippt Legacy-`permissions`-Listen einmalig beim Personal-Agent-Load. Policy-Verhalten unverändert.
+
+### Frontend-Cleanup
+
+- **AgentsPage / MyAgentPage** an aktuellen Backend-Stand angepasst: `RoleSelector` + `role`-State + `/agent-roles`-Call entfernt; `risk_policy`-Setter ergänzt; MyAgentPage-Settings-Tab wieder an das echte Personal-Agent-Settings-Panel angeschlossen (war zuvor versehentlich durch `ProjectSettingsPanel` ersetzt und tree-shaken).
+
 ## 2026-03-26
 
 ### Added

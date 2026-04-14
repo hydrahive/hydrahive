@@ -343,6 +343,26 @@ sudo nano /etc/hydrahive/system_handbook.md
 
 Änderungen werden beim nächsten Agenten-Start wirksam. Das System-Handbuch ist für alle Agenten identisch — agentenspezifische Anweisungen gehören in die `soul.md` des jeweiligen Agenten.
 
+### Trusted-Agenten und CONFIRM-Bestätigung
+
+Riskante Tool-Aktionen (z. B. `chmod 777`, `git push`, manche `file_write`-Pfade) werden vom `permission_classifier` als `CONFIRM` markiert und müssen normalerweise im Chat per Banner bestätigt werden. Über das Feld `risk_policy` pro Agent lässt sich dieses Verhalten steuern:
+
+| Wert | Verhalten |
+|------|-----------|
+| `interactive` (Default) | Jeder `CONFIRM`-Tool-Call pausiert und wartet auf einen Klick im Chat-Banner. Timeout: 5 Minuten. |
+| `trusted` | `CONFIRM`-Tool-Calls werden automatisch genehmigt — kein Banner, keine Pause. |
+
+Wichtig:
+- `RiskLevel.DENY` bleibt **unabhängig vom `risk_policy`-Wert blockiert** (z. B. `rm -rf /`).
+- Auto-Approves landen im Server-Log (`journalctl -u hydrahive-core | grep "tool-confirm auto-approve"`) und im EKG-Monitor.
+- `risk_policy` lässt sich pro Agent in der Admin-Konsole (**Agenten** → Agent bearbeiten → Risiko-Policy) oder direkt in `agent.yaml` setzen:
+
+  ```yaml
+  risk_policy: trusted
+  ```
+
+- Bei persönlichen Agenten (`Mein Agent` → Einstellungen) kann `trusted` **nur durch Admin-Benutzer** gesetzt werden — Standard-User bekommen beim Speichern eine 403-Fehlermeldung. Der Modus ist als bewusste Eskalation für Admin-/Root-Agenten gedacht, ähnlich wie `--dangerously-skip-permissions` in Claude Code.
+
 ---
 
 ## 5. Projekte anlegen

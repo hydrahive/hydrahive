@@ -167,9 +167,14 @@ curl -sk -X POST https://SERVER/api/agents \
     "identity": "Mein Agent",
     "model": "claude-sonnet-4-6",
     "tools": ["file_read", "file_write", "web_search", "shell_exec"],
-    "soul": "Du bist ein hilfreicher Assistent."
+    "soul": "Du bist ein hilfreicher Assistent.",
+    "risk_policy": "interactive"
   }'
 ```
+
+Optionales Feld `risk_policy`:
+- `"interactive"` (Default) — riskante Tool-Calls (`RiskLevel.CONFIRM`) brauchen User-Bestätigung im Chat-Banner.
+- `"trusted"` — `CONFIRM` wird automatisch genehmigt (Audit im Server-Log). `RiskLevel.DENY` bleibt unverändert blockiert. Bei Personal-Agents über `PUT /me/agent` nur durch Admin-User setzbar.
 
 ### Nachricht an Agent senden
 ```bash
