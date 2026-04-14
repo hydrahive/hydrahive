@@ -42,6 +42,7 @@ interface SettingsData {
   members: string[];
   execution_mode: string;
   max_tool_rounds?: number;
+  risk_policy?: "interactive" | "trusted";
   messenger: {
     whatsapp?: { session_ids?: string[]; enabled?: boolean };
     discord?: { channels?: string[]; bot_token_env?: string };
@@ -75,6 +76,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [agentMd, setAgentMd] = useState("");
   const [executionMode, setExecutionMode] = useState("safe");
   const [maxToolRounds, setMaxToolRounds] = useState(50);
+  const [riskPolicy, setRiskPolicy] = useState<"interactive" | "trusted">("interactive");
   const [availableKeys, setAvailableKeys] = useState<{ name: string; preview: string }[]>([]);
 
   // WhatsApp
@@ -292,6 +294,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setAgentMd(d.agent_md || "");
       setExecutionMode(d.execution_mode || "safe");
       setMaxToolRounds(d.max_tool_rounds ?? 50);
+      setRiskPolicy(d.risk_policy === "trusted" ? "trusted" : "interactive");
       setMembers(d.members || []);
       // Messenger-Config laden (#569)
       const m = d.messenger || {};
@@ -346,12 +349,18 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         agent_md: agentMd,
         execution_mode: executionMode,
         max_tool_rounds: maxToolRounds,
+        risk_policy: riskPolicy,
         members,
       });
       setSuccess("Gespeichert!");
       setTimeout(() => setSuccess(""), 3000);
     } catch (e: any) {
-      setError(e?.message || "Fehler beim Speichern");
+      // Backend-Guard: nicht-Admin darf risk_policy="trusted" nicht setzen → 403
+      const raw = e?.message || "Fehler beim Speichern";
+      const isTrustedDenied = riskPolicy === "trusted" && /trusted/i.test(raw) && /admin/i.test(raw);
+      setError(isTrustedDenied
+        ? "Trusted-Modus für den Projekt-Boss darf nur durch Admins gesetzt werden."
+        : raw);
     } finally {
       setSaving(false);
     }
@@ -475,6 +484,26 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               onChange={e => setMaxToolRounds(Number(e.target.value))}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
             />
+          </div>
+
+          {/* Risiko-Policy — Trusted-Boss ohne CONFIRM-Klicks (Admin-only) */}
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Shield className="h-3 w-3" /> Risiko-Policy (Projekt-Boss)
+            </label>
+            <select
+              value={riskPolicy}
+              onChange={e => setRiskPolicy(e.target.value as "interactive" | "trusted")}
+              className={`mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs ${riskPolicy === "trusted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
+            >
+              <option value="interactive">Interactive — Bestätigung bei riskanten Aktionen</option>
+              <option value="trusted">⚠ Trusted — CONFIRM automatisch genehmigen (nur Admin)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {riskPolicy === "trusted"
+                ? "⚠ Der Projekt-Boss führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approves landen im Server-Log. Nur Admins dürfen diesen Modus setzen — Speichern als Nicht-Admin schlägt mit 403 fehl."
+                : "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)."}
+            </p>
           </div>
         </div>
 

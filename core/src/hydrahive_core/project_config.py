@@ -136,6 +136,11 @@ class ProjectConfig(BaseModel):
     # v2: Default Execution-Mode für dieses Projekt (#568)
     execution_mode: str = "safe"  # safe | elevated | unrestricted
 
+    # Risiko-Policy für den Projekt-Boss: "interactive" verlangt CONFIRM-Klicks,
+    # "trusted" lässt CONFIRM automatisch durch (DENY bleibt blockiert).
+    # Wird über agent_config_from_project an AgentConfig.risk_policy weitergereicht.
+    risk_policy: Literal["interactive", "trusted"] = "interactive"
+
     # v2: Max Tool-Runden pro Chat-Nachricht (#613)
     max_tool_rounds: int = 50
 

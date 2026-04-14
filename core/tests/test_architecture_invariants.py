@@ -1365,6 +1365,53 @@ def test_invariant14d_confirm_pipeline_centralized():
     )
 
 
+def test_invariant14e_project_config_parses_risk_policy():
+    """14e: ProjectConfig parst risk_policy korrekt; Default ist interactive."""
+    from hydrahive_core.project_config import ProjectConfig
+
+    default_cfg = ProjectConfig.model_validate({
+        "id": "proj_default",
+        "identity": {"name": "Default Projekt"},
+    })
+    assert default_cfg.risk_policy == "interactive", (
+        f"Default risk_policy soll 'interactive' sein, war '{default_cfg.risk_policy}'."
+    )
+
+    trusted_cfg = ProjectConfig.model_validate({
+        "id": "proj_trusted",
+        "identity": {"name": "Trusted Projekt"},
+        "risk_policy": "trusted",
+    })
+    assert trusted_cfg.risk_policy == "trusted", (
+        f"risk_policy='trusted' soll erhalten bleiben, war '{trusted_cfg.risk_policy}'."
+    )
+
+
+def test_invariant14f_agent_config_from_project_propagates_risk_policy():
+    """14f: agent_config_from_project reicht risk_policy an AgentConfig durch."""
+    from hydrahive_core.project_config import ProjectConfig
+    from hydrahive_core.agent_config import agent_config_from_project
+
+    pcfg_default = ProjectConfig.model_validate({
+        "id": "proj_default",
+        "identity": {"name": "Default Projekt"},
+    })
+    boss_default = agent_config_from_project(pcfg_default)
+    assert boss_default.risk_policy == "interactive", (
+        f"Default boss soll interactive sein, war '{boss_default.risk_policy}'."
+    )
+
+    pcfg_trusted = ProjectConfig.model_validate({
+        "id": "proj_trusted",
+        "identity": {"name": "Trusted Projekt"},
+        "risk_policy": "trusted",
+    })
+    boss_trusted = agent_config_from_project(pcfg_trusted)
+    assert boss_trusted.risk_policy == "trusted", (
+        f"Trusted-Project soll trusted-Boss liefern, war '{boss_trusted.risk_policy}'."
+    )
+
+
 def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     """9d (#641-Followup): router_agent_chat importiert dasselbe
     ToolConfirmRequest-Modell wie router_projects — kein dupliziertes

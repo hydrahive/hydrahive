@@ -94,6 +94,7 @@ class UpdateProjectSettingsRequest(BaseModel):
     execution_mode: str | None = None  # safe | elevated | unrestricted (#568)
     max_tool_rounds: int | None = None  # Max Tool-Aufrufe pro Nachricht (#613)
     messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
+    risk_policy: str | None = None  # interactive | trusted — trusted nur durch Admin setzbar
 
 
 # #641-Fix: ToolConfirmRequest MUSS Module-Scope sein, damit FastAPI mit
@@ -495,6 +496,7 @@ def register_project_routes(
             "members": cfg.members,
             "execution_mode": getattr(cfg, "execution_mode", "safe"),
             "max_tool_rounds": getattr(cfg, "max_tool_rounds", 50),
+            "risk_policy": getattr(cfg, "risk_policy", "interactive"),
             "plugins": getattr(cfg, "plugins", []),
             "repos": getattr(cfg, "repos", []),
             "sources": getattr(cfg, "sources", []),
@@ -582,6 +584,17 @@ def register_project_routes(
 
         if req.max_tool_rounds is not None:
             config_data["max_tool_rounds"] = max(1, min(200, req.max_tool_rounds))
+
+        if req.risk_policy is not None:
+            if req.risk_policy not in ("interactive", "trusted"):
+                raise HTTPException(400, "risk_policy muss 'interactive' oder 'trusted' sein.")
+            # Trusted ist eine bewusste Eskalation und nur durch Admins setzbar.
+            if req.risk_policy == "trusted" and role != "admin":
+                raise HTTPException(
+                    403,
+                    "risk_policy='trusted' darf nur durch Admins gesetzt werden.",
+                )
+            config_data["risk_policy"] = req.risk_policy
 
         config_data["version"] = "2.0.0"
 

@@ -218,6 +218,11 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         safe=ExecutionModeProfile(),
     )
 
+    # Risk-Policy aus Projekt-Config übernehmen (Default "interactive").
+    _risk_policy = getattr(pcfg, "risk_policy", "interactive")
+    if _risk_policy not in ("interactive", "trusted"):
+        _risk_policy = "interactive"
+
     return AgentConfig(
         id=pcfg.id,
         type="boss",
@@ -227,5 +232,6 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         tools=core_tools,
         max_tool_rounds=getattr(pcfg, "max_tool_rounds", 50),
         execution_modes=exec_modes,
+        risk_policy=_risk_policy,
         agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
     )
