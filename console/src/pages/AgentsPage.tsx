@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ToolGroupSelector } from "@/components/ToolGroupSelector";
-import { RoleSelector } from "@/components/RoleSelector";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
 import { agentCategory, AGENT_COLORS, cn } from "@/lib/utils";
@@ -43,8 +42,8 @@ const EMPTY_FORM = {
   allowed_agents: [] as string[],
   sources: [] as { name: string; url: string; description: string }[],
   max_tool_rounds: null as number | null,
-  role: null as string | null,
   execution_mode_default: "elevated" as string,
+  risk_policy: "interactive" as "interactive" | "trusted",
   heartbeat_interval: "30s",
   heartbeat_timeout: "90s",
   heartbeat_on_failure: "restart",
@@ -283,8 +282,8 @@ function AgentsCrudTab() {
       allowed_agents: cfg?.allowed_agents ?? [],
       sources: cfg?.sources ?? [],
       max_tool_rounds: cfg?.max_tool_rounds ?? null,
-      role: cfg?.role ?? null,
       execution_mode_default: cfg?.execution_modes?.default ?? "elevated",
+      risk_policy: (cfg?.risk_policy === "trusted" ? "trusted" : "interactive") as "interactive" | "trusted",
       heartbeat_interval: cfg?.heartbeat?.interval ?? "30s",
       heartbeat_timeout: cfg?.heartbeat?.timeout ?? "90s",
       heartbeat_on_failure: cfg?.heartbeat?.on_failure ?? "restart",
@@ -592,36 +591,46 @@ function AgentsCrudTab() {
               </div>
             </div>
 
-            {/* Rolle (#492) */}
+            {/* Tools (v2: Whitelist ist serverseitig hardcodiert auf 9 Core-Tools, diese Liste wirkt nur als Hinweis für Repo-Review-Guidance) */}
             <div>
-              <p className="metric-kicker mb-3">Rolle & Tools</p>
-              <RoleSelector
-                value={form.role}
-                onChange={(role) => setForm(f => ({ ...f, role }))}
+              <div className="flex items-center gap-3 mb-3">
+                <p className="metric-kicker">{t("agents.tools")}</p>
+                <button type="button" onClick={() => setForm(f => ({ ...f, tools: knownTools.filter(t => !DANGER_TOOLS.has(t)) }))}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Alle außer ⚠
+                </button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, tools: [] }))}
+                  className="text-xs text-muted-foreground hover:text-foreground transition">
+                  Keine
+                </button>
+              </div>
+              <ToolGroupSelector
+                selectedTools={form.tools}
+                onChange={(tools) => setForm(f => ({ ...f, tools }))}
+                onUnrestrictedChange={(enabled) => setForm(f => ({ ...f, execution_mode_default: enabled ? "unrestricted" : "elevated" }))}
               />
             </div>
 
-            {/* Custom: Legacy ToolGroupSelector */}
-            {form.role === null && (
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <p className="metric-kicker">{t("agents.tools")}</p>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, tools: knownTools.filter(t => !DANGER_TOOLS.has(t)) }))}
-                    className="text-xs text-muted-foreground hover:text-foreground transition">
-                    Alle außer ⚠
-                  </button>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, tools: [] }))}
-                    className="text-xs text-muted-foreground hover:text-foreground transition">
-                    Keine
-                  </button>
-                </div>
-                <ToolGroupSelector
-                  selectedTools={form.tools}
-                  onChange={(tools) => setForm(f => ({ ...f, tools }))}
-                  onUnrestrictedChange={(enabled) => setForm(f => ({ ...f, execution_mode_default: enabled ? "unrestricted" : "elevated" }))}
-                />
-              </div>
-            )}
+            {/* Risk Policy — Trusted-Agent ohne CONFIRM-Klicks */}
+            <div>
+              <p className="metric-kicker mb-3">{t("agents.riskPolicy", { defaultValue: "Risiko-Policy" })}</p>
+              <Field
+                label={t("agents.riskPolicyLabel", { defaultValue: "CONFIRM-Verhalten" })}
+                hint={form.risk_policy === "trusted"
+                  ? t("agents.riskPolicyTrustedHint", { defaultValue: "⚠ Dieser Agent führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Nur für bewusst privilegierte Admin-/Root-Agenten." })
+                  : t("agents.riskPolicyInteractiveHint", { defaultValue: "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)." })}
+                tooltip={t("agents.riskPolicyTip", { defaultValue: "interactive = jeder RiskLevel.CONFIRM braucht User-Klick. trusted = CONFIRM wird automatisch genehmigt (Audit im Log). DENY ist unabhängig — bleibt immer blockiert." })}
+              >
+                <select
+                  value={form.risk_policy}
+                  onChange={(e) => set("risk_policy", e.target.value as "interactive" | "trusted")}
+                  className={`w-full rounded-2xl border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${form.risk_policy === "trusted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
+                >
+                  <option value="interactive">{t("agents.riskPolicyInteractive", { defaultValue: "Interactive — Bestätigung bei riskanten Aktionen" })}</option>
+                  <option value="trusted">{t("agents.riskPolicyTrusted", { defaultValue: "⚠ Trusted — CONFIRM automatisch genehmigen" })}</option>
+                </select>
+              </Field>
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Max Tool Rounds" hint={t("agents.maxToolRoundsHint", { defaultValue: "Leer = Standard (6 Runden)" })} tooltip={t("agents.maxToolRoundsTip", { defaultValue: "Wie oft der Agent pro Nachricht Tools aufrufen darf. Jede Runde: LLM denkt → ruft Tool auf → bekommt Ergebnis. Mehr Runden = komplexere Aufgaben möglich, aber höhere Kosten und Latenz." })}>

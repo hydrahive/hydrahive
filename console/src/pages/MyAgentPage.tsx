@@ -6,7 +6,6 @@ const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.Bu
 import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
 import { ChatView } from "@/components/ChatView";
-import { RoleSelector } from "@/components/RoleSelector";
 import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
@@ -1265,19 +1264,17 @@ function SettingsPanel({
   const [maxTokens,      setMaxTokens]      = useState(cfg.llm?.max_tokens ?? 4096);
   const [fallbacks,      setFallbacks]      = useState<string[]>(cfg.llm?.fallback_models ?? []);
   const [fbInput,        setFbInput]        = useState("");
-  const [role,           setRole]           = useState<string | null>((cfg as any).role ?? null);
   const [tools,          setTools]          = useState<string[]>(cfg.tools ?? []);
+  const [riskPolicy,     setRiskPolicy]     = useState<"interactive" | "trusted">(
+    (cfg as any).risk_policy === "trusted" ? "trusted" : "interactive",
+  );
   const [saving,         setSaving]         = useState(false);
   const [saveMsg,        setSaveMsg]        = useState("");
   const [availableModels, setAvailableModels] = useState<{id:string;label:string;provider:string;wks_base_url?:string}[]>([]);
-  const [roleData, setRoleData] = useState<Record<string, { description: string; tools: string[]; tool_count: number }> | undefined>();
 
   useEffect(() => {
     api.get<{models:{id:string;label:string;provider:string;wks_base_url?:string}[]}>("/llm/available-models")
       .then(r => setAvailableModels(r.models))
-      .catch(() => {});
-    api.get<{roles: typeof roleData}>("/agent-roles")
-      .then(r => setRoleData(r.roles))
       .catch(() => {});
   }, []);
 
@@ -1290,8 +1287,8 @@ function SettingsPanel({
     setTemperature(c.llm?.temperature ?? 0.7);
     setMaxTokens(c.llm?.max_tokens ?? 4096);
     setFallbacks(c.llm?.fallback_models ?? []);
-    setRole((c as any).role ?? null);
     setTools(c.tools ?? []);
+    setRiskPolicy((c as any).risk_policy === "trusted" ? "trusted" : "interactive");
   }, [agentInfo]);
 
   function toggleTool(id: string) {
@@ -1320,14 +1317,21 @@ function SettingsPanel({
       await api.put("/me/agent", {
         identity, soul, model, temperature, max_tokens: maxTokens,
         fallback_models: allFallbacks,
-        role: role || undefined,
-        tools: role ? [] : tools,
+        tools,
+        risk_policy: riskPolicy,
         ollama_base_url,
       });
       setSaveMsg(t("myAgent.settingsSaved"));
       onSaved();
       setTimeout(() => setSaveMsg(""), 3000);
-    } catch(e) { setSaveMsg(e instanceof Error ? e.message : t("common.error")); }
+    } catch(e) {
+      // Backend-Guard: nicht-Admin darf risk_policy="trusted" nicht setzen → 403
+      const raw = e instanceof Error ? e.message : t("common.error");
+      const isTrustedDenied = riskPolicy === "trusted" && /trusted/i.test(raw) && /admin/i.test(raw);
+      setSaveMsg(isTrustedDenied
+        ? t("myAgent.riskPolicyTrustedForbidden", { defaultValue: "Trusted-Modus darf nur durch Admins gesetzt werden." })
+        : raw);
+    }
     finally { setSaving(false); }
   }
 
@@ -1416,39 +1420,53 @@ function SettingsPanel({
           </div>
         </section>
 
-        {/* Rolle & Tools (#492) */}
+        {/* Tools (v2: Whitelist hardcodiert auf 9 Core-Tools — diese Liste ist nur für Repo-Review-Guidance relevant) */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
-          <RoleSelector value={role} onChange={setRole} roleData={roleData} />
-          {/* Custom: Legacy-Checkboxen */}
-          {role === null && (
-            <div className="space-y-2 pt-2">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">Eigene Tool-Auswahl:</span>
-                <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
-                  className="text-xs text-muted-foreground hover:text-foreground transition">
-                  Alle außer ⚠
-                </button>
-                <button type="button" onClick={() => setTools([])}
-                  className="text-xs text-muted-foreground hover:text-foreground transition">
-                  Keine
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {ALL_TOOLS.map(t => {
-                  const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
-                  return (
-                    <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
-                      <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
-                        className="rounded" />
-                      <span className="text-xs">{t.label}</span>
-                      <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
-                    </label>
-                  );
-                })}
-              </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground">{t("myAgent.toolsCustomLabel", { defaultValue: "Eigene Tool-Auswahl:" })}</span>
+              <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
+                className="text-xs text-muted-foreground hover:text-foreground transition">
+                Alle außer ⚠
+              </button>
+              <button type="button" onClick={() => setTools([])}
+                className="text-xs text-muted-foreground hover:text-foreground transition">
+                Keine
+              </button>
             </div>
-          )}
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_TOOLS.map(t => {
+                const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
+                return (
+                  <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
+                    <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
+                      className="rounded" />
+                    <span className="text-xs">{t.label}</span>
+                    <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Risk Policy — Trusted-Agent ohne CONFIRM-Klicks (Admin-only) */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionRiskPolicy", { defaultValue: "Risiko-Policy" })}</h2>
+          <select
+            value={riskPolicy}
+            onChange={(e) => setRiskPolicy(e.target.value as "interactive" | "trusted")}
+            className={`w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${riskPolicy === "trusted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
+          >
+            <option value="interactive">{t("myAgent.riskPolicyInteractive", { defaultValue: "Interactive — Bestätigung bei riskanten Aktionen" })}</option>
+            <option value="trusted">{t("myAgent.riskPolicyTrusted", { defaultValue: "⚠ Trusted — CONFIRM automatisch genehmigen (nur Admin)" })}</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {riskPolicy === "trusted"
+              ? t("myAgent.riskPolicyTrustedHint", { defaultValue: "⚠ Dieser Agent führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approve wird im Server-Log protokolliert. Standard-User können diesen Modus nicht setzen — der Save schlägt sonst mit 403 fehl." })
+              : t("myAgent.riskPolicyInteractiveHint", { defaultValue: "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)." })}
+          </p>
         </section>
 
 
