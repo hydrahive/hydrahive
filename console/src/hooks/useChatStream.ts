@@ -4,7 +4,7 @@
  * Konsolidiert die identische Stream-Logik aus ChatPage, AgentChatPage, MyAgentPage.
  * Enthält: Message-State, SSE-Streaming, Tool-Handling, Suggestions, Debug-Events.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { sseStream, type SSEEvent } from "@/lib/sseStream";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
@@ -112,8 +112,9 @@ export function useChatStream(opts: UseChatStreamOptions) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const userScrolledUp = useRef(false);
-  const isAutoScrolling = useRef(false);  // verhindert false-positive Scroll-Events
+  // #-scroll-fix: state ob der User direkt vor dem letzten Update unten war.
+  // Wird vom scroll-listener geschrieben, vom LayoutEffect gelesen.
+  const wasAtBottomRef = useRef(true);
   const clearedAt = useRef(0);            // Timestamp letztes /clear → loadHistory ignorieren
 
   // ── Chat-Cache: Messages aus sessionStorage nach Mount laden ──────────────
@@ -163,51 +164,43 @@ export function useChatStream(opts: UseChatStreamOptions) {
       .catch(() => {});
   }, [opts.historyEndpoint]);
 
-  // ── Scroll-Tracking: User scrollt hoch → kein auto-scroll ─────────────
-  // Detection-Schwelle generös (140px) damit kleine Render-Hops während
-  // Streaming nicht fälschlich als „User scrollt hoch" interpretiert werden.
-  // Guard-Fenster gegen die programmgesteuerten Scroll-Events deutlich länger
-  // als vorher (50ms → 300ms) — Browser feuert das Scroll-Event manchmal
-  // mehrere Frames später, race-bedingt mit Streaming-Updates.
+  // ── Scroll-Tracking: wasAtBottom wird vor jedem Scroll-Event neu geschrieben.
+  // Detection-Schwelle 140px — tolerant gegen kleine Layout-Wackler.
+  // Kein Flag/Timer-Race mehr: wir prüfen im Layout-Effect direkt isNearBottom().
+  const isNearBottom = (el: HTMLElement) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     function onScroll() {
-      if (!el || isAutoScrolling.current) return;
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
-      userScrolledUp.current = !atBottom;
+      if (!el) return;
+      wasAtBottomRef.current = isNearBottom(el);
     }
     el.addEventListener("scroll", onScroll, { passive: true });
+    // Initial: bei leerem Chat sind wir „unten".
+    wasAtBottomRef.current = isNearBottom(el);
     return () => el.removeEventListener("scroll", onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Auto-scroll: bottomRef in View bringen ───────────────────────────────
-  // Wir scrollen den bottomRef-Sentinel an statt scrollTop manuell zu setzen.
-  // Vorteil: scrollIntoView funktioniert auch zuverlässig wenn neue Inhalte
-  // nach dem Effect erst gerendert werden — der Browser kümmert sich um
-  // Layout-Reflow + Scroll in einem Schritt. Plus: doppelte rAF damit der
-  // Stream-Update wirklich gepainted ist bevor wir scrollen.
+  // ── Auto-scroll vor dem Paint ──────────────────────────────────────────
+  // useLayoutEffect statt useEffect + doppel-rAF: läuft synchron vor dem
+  // Browser-Paint. Dadurch kein Zwischenframe-Flackern bei schnellem
+  // Streaming. `wasAtBottom` wurde durch den letzten echten User-Scroll
+  // gesetzt — nach Layout-Reflow durch neue Messages/Banner-Toggle scrollen
+  // wir nur dann nach, wenn der User direkt vor dem Update unten war.
   //
-  // Trigger: messages-Array (jede neue oder veränderte Nachricht) UND der
-  // Content der letzten Message (Streaming-Token-Updates).
-  const _lastMsgLen = messages.length > 0 ? messages[messages.length - 1].content?.length ?? 0 : 0;
-  useEffect(() => {
-    if (userScrolledUp.current) return;
+  // Deps: `messages` (Reference-change — deckt alle Updates ab, auch
+  // tool_result-Integration in nicht-letzte Tool-Message), `pendingConfirms.length`
+  // (Banner auf/zu ändert Composer-Höhe → Scroll-Compensation), `sending`.
+  useLayoutEffect(() => {
     const el = scrollContainerRef.current;
-    const sentinel = bottomRef.current;
-    if (!el && !sentinel) return;
-    isAutoScrolling.current = true;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (sentinel) {
-          sentinel.scrollIntoView({ block: "end", behavior: "auto" });
-        } else if (el) {
-          el.scrollTop = el.scrollHeight;
-        }
-        setTimeout(() => { isAutoScrolling.current = false; }, 300);
-      });
-    });
-  }, [messages.length, _lastMsgLen, sending]);
+    if (!el) return;
+    if (!wasAtBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, pendingConfirms.length, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
 
@@ -244,7 +237,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     // Built-in slash commands
     if (content === "/clear") {
       clearedAt.current = Date.now();     // loadHistory für 3s sperren
-      userScrolledUp.current = false;     // Scroll zurück nach unten
+      wasAtBottomRef.current = true;      // Scroll zurück nach unten
       setMessages([]);
       setCurrentSessionId(null);
       try { sessionStorage.removeItem(`hh_chat_${opts.historyEndpoint}`); } catch {}
@@ -274,7 +267,7 @@ export function useChatStream(opts: UseChatStreamOptions) {
     }
 
     // User sendet → zurück nach unten scrollen
-    userScrolledUp.current = false;
+    wasAtBottomRef.current = true;
 
     const userMsg: ChatMessage = { ...mkMsg("user", content), _images: pendingImages.map(i => i.preview) };
     let currentAsst = mkMsg("assistant", "");
