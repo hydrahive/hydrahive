@@ -156,31 +156,50 @@ export function useChatStream(opts: UseChatStreamOptions) {
   }, [opts.historyEndpoint]);
 
   // ── Scroll-Tracking: User scrollt hoch → kein auto-scroll ─────────────
+  // Detection-Schwelle generös (140px) damit kleine Render-Hops während
+  // Streaming nicht fälschlich als „User scrollt hoch" interpretiert werden.
+  // Guard-Fenster gegen die programmgesteuerten Scroll-Events deutlich länger
+  // als vorher (50ms → 300ms) — Browser feuert das Scroll-Event manchmal
+  // mehrere Frames später, race-bedingt mit Streaming-Updates.
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     function onScroll() {
-      if (!el || isAutoScrolling.current) return;  // Auto-Scroll ignorieren
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      if (!el || isAutoScrolling.current) return;
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
       userScrolledUp.current = !atBottom;
     }
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ── Auto-scroll: nur wenn User am Ende ist ───────────────────────────────
+  // ── Auto-scroll: bottomRef in View bringen ───────────────────────────────
+  // Wir scrollen den bottomRef-Sentinel an statt scrollTop manuell zu setzen.
+  // Vorteil: scrollIntoView funktioniert auch zuverlässig wenn neue Inhalte
+  // nach dem Effect erst gerendert werden — der Browser kümmert sich um
+  // Layout-Reflow + Scroll in einem Schritt. Plus: doppelte rAF damit der
+  // Stream-Update wirklich gepainted ist bevor wir scrollen.
+  //
+  // Trigger: messages-Array (jede neue oder veränderte Nachricht) UND der
+  // Content der letzten Message (Streaming-Token-Updates).
+  const _lastMsgLen = messages.length > 0 ? messages[messages.length - 1].content?.length ?? 0 : 0;
   useEffect(() => {
-    if (!userScrolledUp.current) {
-      const el = scrollContainerRef.current;
-      if (!el) return;
-      isAutoScrolling.current = true;
+    if (userScrolledUp.current) return;
+    const el = scrollContainerRef.current;
+    const sentinel = bottomRef.current;
+    if (!el && !sentinel) return;
+    isAutoScrolling.current = true;
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (el) el.scrollTop = el.scrollHeight;
-        // Flag nach kurzer Pause zurücksetzen (Browser-Scroll-Event kommt leicht verzögert)
-        setTimeout(() => { isAutoScrolling.current = false; }, 50);
+        if (sentinel) {
+          sentinel.scrollIntoView({ block: "end", behavior: "auto" });
+        } else if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+        setTimeout(() => { isAutoScrolling.current = false; }, 300);
       });
-    }
-  }, [messages, sending]);
+    });
+  }, [messages.length, _lastMsgLen, sending]);
 
   // ── Coach toggle ──────────────────────────────────────────────────────────
 
