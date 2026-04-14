@@ -168,6 +168,12 @@ export const api = {
       `/projects/${projectId}/sessions/${sessionId}/tool-confirm`,
       { tool_call_id: toolCallId, decision },
     ),
+  // #641-Followup: derselbe Roundtrip für Agent-Sessions
+  confirmToolCallAgent: (agentId: string, sessionId: string, toolCallId: string, decision: "approve" | "deny") =>
+    api.post<{ resolved: boolean; decision: string; tool_call_id: string }>(
+      `/agents/${agentId}/sessions/${sessionId}/tool-confirm`,
+      { tool_call_id: toolCallId, decision },
+    ),
   // Doctor
   doctor:    () => api.get<DoctorReport>("/admin/doctor"),
   doctorFix: (fixId: string) => api.post<{ok:boolean;output?:string;error?:string}>(`/admin/doctor/fix/${fixId}`, {}),

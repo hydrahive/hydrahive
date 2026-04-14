@@ -459,6 +459,28 @@ export function MyAgentPage() {
                   t={t}
                   showOAuthBar={false}
                   slashCommands={SLASH_COMMANDS}
+                  onConfirmTool={async (toolCallId, decision) => {
+                    // #641-Followup: Agent-Endpoint mit echter agent_id
+                    // (nicht "me"); MyAgentPage nutzt schon andere session-
+                    // basierte Calls über /agents/{agent_id}/.
+                    const aid = agentInfo?.agent_id;
+                    const pc = chat.pendingConfirms.find(p => p.tool_call_id === toolCallId);
+                    const sid = pc?.session_id || chat.currentSessionId;
+                    if (!aid || !sid) {
+                      console.warn("[#641] confirmTool: agent_id oder session_id fehlt");
+                      return;
+                    }
+                    try {
+                      await api.confirmToolCallAgent(aid, sid, toolCallId, decision);
+                      chat.removePendingConfirm(toolCallId);
+                    } catch (err) {
+                      const msg = err instanceof Error
+                        ? err.message
+                        : (typeof err === "string" ? err : JSON.stringify(err));
+                      console.error(`[#641] confirmToolAgent(${decision}, ${toolCallId}) failed: ${msg}`);
+                      chat.setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
+                    }
+                  }}
                   headerSlot={
                     <div className="mb-2 flex flex-wrap gap-2">
                       {SLASH_COMMANDS.map((cmd) => (

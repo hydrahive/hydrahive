@@ -222,6 +222,27 @@ export function AgentChatPage() {
             {...chat}
             t={t}
             slashCommands={SLASH_COMMANDS}
+            onConfirmTool={async (toolCallId, decision) => {
+              // #641-Followup: Agent-Endpoint, gleicher Pending-Store wie bei
+              // ChatPage. session_id aus pendingConfirms-Eintrag, Fallback
+              // auf currentSessionId.
+              const pc = chat.pendingConfirms.find(p => p.tool_call_id === toolCallId);
+              const sid = pc?.session_id || chat.currentSessionId;
+              if (!id || !sid) {
+                console.warn("[#641] confirmTool: agent_id oder session_id fehlt");
+                return;
+              }
+              try {
+                await api.confirmToolCallAgent(id, sid, toolCallId, decision);
+                chat.removePendingConfirm(toolCallId);
+              } catch (err) {
+                const msg = err instanceof Error
+                  ? err.message
+                  : (typeof err === "string" ? err : JSON.stringify(err));
+                console.error(`[#641] confirmToolAgent(${decision}, ${toolCallId}) failed: ${msg}`);
+                chat.setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
+              }
+            }}
           />
         )}
       </div>

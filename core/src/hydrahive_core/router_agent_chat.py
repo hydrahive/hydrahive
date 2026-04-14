@@ -8,6 +8,9 @@ from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .learning_memory import append_learning_snapshot
+# #641-Followup: ToolConfirmRequest ist Module-Scope in router_projects —
+# wir importieren dasselbe Modell statt zu duplizieren.
+from .router_projects import ToolConfirmRequest
 
 
 class AgentMemoryRequest(BaseModel):
@@ -151,6 +154,35 @@ def register_agent_chat_routes(
         p.open("a" if mode == "append" else "w", encoding="utf-8").write(content)
         p.chmod(0o600)
         return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
+
+    # #641-Followup: CONFIRM-Roundtrip analog zu router_projects.
+    # Pending-Store (tool_confirmation._pending) ist session-universell —
+    # dieselben Helper resolve_confirmation / get_pending, nur Auth über
+    # _check_agent_access. ToolConfirmRequest wird direkt aus router_projects
+    # importiert (Module-Scope seit 1ddbc20), keine Model-Duplikation.
+    @auth_router.post("/agents/{agent_id}/sessions/{session_id}/tool-confirm")
+    def agent_resolve_tool_confirm(
+        agent_id: str, session_id: str,
+        req: ToolConfirmRequest,
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        _check_agent_access(agent_id, _a)
+        from .tool_confirmation import resolve_confirmation
+        outcome = resolve_confirmation(session_id, req.tool_call_id, req.decision)
+        if outcome == "not_found":
+            raise HTTPException(404, "Keine pending Tool-Bestätigung für diese (session_id, tool_call_id)")
+        if outcome == "already_resolved":
+            raise HTTPException(409, "Tool-Bestätigung wurde bereits aufgelöst")
+        return {"resolved": True, "decision": req.decision, "tool_call_id": req.tool_call_id}
+
+    @auth_router.get("/agents/{agent_id}/sessions/{session_id}/tool-confirms")
+    def agent_list_tool_confirms(
+        agent_id: str, session_id: str,
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        _check_agent_access(agent_id, _a)
+        from .tool_confirmation import get_pending
+        return {"pending": get_pending(session_id)}
 
     @auth_router.post("/agents/{agent_id}/sessions/{session_id}/resume")
     async def agent_resume_session(agent_id: str, session_id: str, _a: tuple[str, str] = Depends(require_auth)):

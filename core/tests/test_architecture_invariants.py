@@ -1029,3 +1029,16 @@ def test_invariant10h_rm_rf_root_still_denied():
     """10h: Regression-Schutz — kritische DENY-Patterns bleiben DENY."""
     from hydrahive_core.permission_classifier import RiskLevel
     assert _classify_shell("rm -rf /") == RiskLevel.DENY
+
+
+def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
+    """9d (#641-Followup): router_agent_chat importiert dasselbe
+    ToolConfirmRequest-Modell wie router_projects — kein dupliziertes
+    Pydantic-Model, kein Drift-Risiko."""
+    from hydrahive_core.router_projects import ToolConfirmRequest as Proj
+    from hydrahive_core.router_agent_chat import ToolConfirmRequest as Agent
+    assert Proj is Agent, (
+        "router_agent_chat hat eine eigene ToolConfirmRequest-Class statt "
+        "die aus router_projects zu importieren — Drift-Risiko bei Schema-"
+        "Änderungen."
+    )
