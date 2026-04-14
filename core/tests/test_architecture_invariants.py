@@ -696,3 +696,182 @@ def test_invariant7d_litellm_anthropic_path_converts_before_send():
     assert "to_anthropic_format" in src_call, (
         "_llm_call_single konvertiert nicht für Anthropic-Modelle."
     )
+
+
+# ===========================================================================
+# Invariante 8 — CONFIRM-Round-Trip (#641)
+# ===========================================================================
+# RiskLevel.CONFIRM pausiert den Tool-Call und wartet auf User-Antwort.
+# Vorher (vor #641) wurde CONFIRM nur geloggt und der Call lief durch.
+
+import asyncio as _asyncio_inv8
+
+
+def _make_orch_for_confirm(tool_name: str, tool_input: dict, exec_count: list,
+                            session_id: str = "sess-1") -> object:
+    """Stub-Orch für execute_tool_call — Tool zählt Aufrufe in exec_count."""
+    fake_tool = MagicMock()
+    fake_tool.id = tool_name
+
+    async def _exec_recording(*a, **k):
+        exec_count.append(1)
+        return {"ok": True, "called": tool_name}
+
+    orch = MagicMock()
+    orch._resolve_allowed_tool = MagicMock(return_value=fake_tool)
+    orch._execute_tool = _exec_recording
+    fake_session = MagicMock()
+    fake_session.id = session_id
+    orch._sessions = MagicMock()
+    orch._sessions.get_active = MagicMock(return_value=fake_session)
+    orch._mcp_schemas_for_agent = MagicMock(return_value=[])
+    return orch
+
+
+def _confirm_tool_input_for_classifier_confirm():
+    """Tool-Name + Input, das `permission_classifier.classify_static`
+    garantiert auf CONFIRM klassifiziert."""
+    # `git_push` ist in _ALWAYS_CONFIRM (permission_classifier.py:37-39)
+    return "git_push", {}
+
+
+async def test_invariant8a_confirm_pauses_until_approved():
+    """8a (#641): CONFIRM pausiert den Tool-Call. Nach approve wird normal
+    ausgeführt."""
+    from hydrahive_core import tool_confirmation
+    from hydrahive_core.orchestrator_tools import execute_tool_call
+    tool_confirmation._reset_for_tests()
+
+    tool_name, tool_input = _confirm_tool_input_for_classifier_confirm()
+    exec_count: list = []
+    orch = _make_orch_for_confirm(tool_name, tool_input, exec_count)
+    boss_cfg = MagicMock()
+    boss_cfg.id = "agent-x"
+    boss_cfg.mcp_servers = []
+    tcid = "call-approve-1"
+
+    async def _approve_after_delay():
+        await _asyncio_inv8.sleep(0.05)
+        outcome = tool_confirmation.resolve_confirmation("sess-1", tcid, "approve")
+        assert outcome == "resolved"
+
+    approve_task = _asyncio_inv8.create_task(_approve_after_delay())
+    result, is_error = await execute_tool_call(
+        orch, boss_cfg=boss_cfg, project_id="p", tool_name=tool_name,
+        tool_input=tool_input, tool_call_id=tcid,
+    )
+    await approve_task
+
+    assert is_error is False, f"approve sollte zu Erfolg führen, got: {result}"
+    assert result.get("ok") is True
+    assert len(exec_count) == 1, "Tool wurde nach approve nicht ausgeführt"
+
+
+async def test_invariant8b_confirm_denied_returns_error_without_executing():
+    """8b (#641): deny verhindert die Ausführung. Tool wird nicht aufgerufen."""
+    from hydrahive_core import tool_confirmation
+    from hydrahive_core.orchestrator_tools import execute_tool_call
+    tool_confirmation._reset_for_tests()
+
+    tool_name, tool_input = _confirm_tool_input_for_classifier_confirm()
+    exec_count: list = []
+    orch = _make_orch_for_confirm(tool_name, tool_input, exec_count)
+    boss_cfg = MagicMock()
+    boss_cfg.id = "agent-x"
+    boss_cfg.mcp_servers = []
+    tcid = "call-deny-1"
+
+    async def _deny_after_delay():
+        await _asyncio_inv8.sleep(0.05)
+        tool_confirmation.resolve_confirmation("sess-1", tcid, "deny")
+
+    deny_task = _asyncio_inv8.create_task(_deny_after_delay())
+    result, is_error = await execute_tool_call(
+        orch, boss_cfg=boss_cfg, project_id="p", tool_name=tool_name,
+        tool_input=tool_input, tool_call_id=tcid,
+    )
+    await deny_task
+
+    assert is_error is True
+    assert result.get("risk") == "confirm_denied", f"got: {result}"
+    assert len(exec_count) == 0, "Tool wurde trotz deny ausgeführt"
+
+
+async def test_invariant8c_confirm_timeout_returns_error_without_executing(monkeypatch):
+    """8c (#641): Ohne Antwort → Timeout-Fehler, Tool wird nicht ausgeführt."""
+    from hydrahive_core import tool_confirmation
+    from hydrahive_core.orchestrator_tools import execute_tool_call
+    tool_confirmation._reset_for_tests()
+    # Default-Timeout per monkeypatch auf 0.2s drücken — schneller Test
+    monkeypatch.setattr(tool_confirmation, "DEFAULT_CONFIRM_TIMEOUT", 0.2)
+
+    tool_name, tool_input = _confirm_tool_input_for_classifier_confirm()
+    exec_count: list = []
+    orch = _make_orch_for_confirm(tool_name, tool_input, exec_count)
+    boss_cfg = MagicMock()
+    boss_cfg.id = "agent-x"
+    boss_cfg.mcp_servers = []
+
+    result, is_error = await execute_tool_call(
+        orch, boss_cfg=boss_cfg, project_id="p", tool_name=tool_name,
+        tool_input=tool_input, tool_call_id="call-timeout-1",
+    )
+
+    assert is_error is True
+    assert result.get("risk") == "confirm_timeout", f"got: {result}"
+    assert len(exec_count) == 0, "Tool wurde trotz Timeout ausgeführt"
+
+
+def test_invariant8d_wrong_tool_call_id_does_not_resolve_other_pending():
+    """8d (#641): Antwort auf falsche tool_call_id löst keinen anderen
+    pending Call auf."""
+    from hydrahive_core import tool_confirmation
+    tool_confirmation._reset_for_tests()
+
+    e1 = tool_confirmation.request_confirmation("sess-A", "call-1", "git_push", {})
+    e2 = tool_confirmation.request_confirmation("sess-A", "call-2", "git_push", {})
+
+    out = tool_confirmation.resolve_confirmation("sess-A", "wrong-id", "approve")
+    assert out == "not_found"
+    assert e1.decision is None
+    assert e2.decision is None
+    assert not e1.event.is_set()
+    assert not e2.event.is_set()
+    # Korrekte ID löst nur den richtigen auf
+    out2 = tool_confirmation.resolve_confirmation("sess-A", "call-1", "deny")
+    assert out2 == "resolved"
+    assert e1.decision == "deny"
+    assert e2.decision is None
+
+
+def test_invariant8e_central_confirm_branch_in_execute_tool_call():
+    """8e (#641): execute_tool_call hat den CONFIRM-Branch — alle Tool-Loops
+    rufen diese eine Stelle auf, kein Loop kann CONFIRM umgehen."""
+    import inspect
+    from hydrahive_core import orchestrator_tools
+
+    src = inspect.getsource(orchestrator_tools.execute_tool_call)
+    assert "RiskLevel.CONFIRM" in src, (
+        "execute_tool_call hat keinen CONFIRM-Branch — Loops können Confirm umgehen."
+    )
+    assert "wait_for_confirmation" in src, (
+        "execute_tool_call wartet nicht auf User-Antwort."
+    )
+
+
+def test_invariant8f_session_isolation():
+    """8f (#641): Pending-Einträge sind session-gebunden — andere Session
+    sieht sie nicht in get_pending."""
+    from hydrahive_core import tool_confirmation
+    tool_confirmation._reset_for_tests()
+
+    tool_confirmation.request_confirmation("sess-A", "call-1", "git_push", {})
+    tool_confirmation.request_confirmation("sess-B", "call-2", "git_push", {})
+
+    pending_a = tool_confirmation.get_pending("sess-A")
+    pending_b = tool_confirmation.get_pending("sess-B")
+    pending_other = tool_confirmation.get_pending("sess-other")
+
+    assert len(pending_a) == 1 and pending_a[0]["tool_call_id"] == "call-1"
+    assert len(pending_b) == 1 and pending_b[0]["tool_call_id"] == "call-2"
+    assert pending_other == []

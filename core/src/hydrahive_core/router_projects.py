@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Literal
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -886,6 +887,52 @@ def register_project_routes(
                 for m in session.messages
             ],
         }
+
+    # ──────────────────────────────────────────────────────────────────────
+    # #641: CONFIRM-Round-Trip — Auflösen pendinger Tool-Bestätigungen
+    # ──────────────────────────────────────────────────────────────────────
+    class ToolConfirmRequest(BaseModel):
+        tool_call_id: str
+        decision:     Literal["approve", "deny"]
+
+    @auth_router.post("/projects/{project_id}/sessions/{session_id}/tool-confirm")
+    def resolve_tool_confirm(
+        project_id: str,
+        session_id: str,
+        req: ToolConfirmRequest,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Löst eine pendingnde RiskLevel.CONFIRM-Anfrage auf.
+
+        - approve: laufender Tool-Call wird nach dem Wait normal ausgeführt
+        - deny:    Tool-Call wird abgebrochen, LLM bekommt risk: confirm_denied
+        - 404:     keine pending Anfrage für (session_id, tool_call_id)
+        - 409:     Anfrage wurde bereits aufgelöst (Doppel-Klick / Race)
+        """
+        _check_project_access(auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        from .tool_confirmation import resolve_confirmation
+        outcome = resolve_confirmation(session_id, req.tool_call_id, req.decision)
+        if outcome == "not_found":
+            raise HTTPException(404, "Keine pending Tool-Bestätigung für diese (session_id, tool_call_id)")
+        if outcome == "already_resolved":
+            raise HTTPException(409, "Tool-Bestätigung wurde bereits aufgelöst")
+        return {"resolved": True, "decision": req.decision, "tool_call_id": req.tool_call_id}
+
+    @auth_router.get("/projects/{project_id}/sessions/{session_id}/tool-confirms")
+    def list_tool_confirms(
+        project_id: str,
+        session_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Listet alle aktuell pending Tool-Bestätigungen einer Session.
+        Für Frontend-Polling-Fallback (non-stream-Pfad ohne SSE-Bridge)."""
+        _check_project_access(auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        from .tool_confirmation import get_pending
+        return {"pending": get_pending(session_id)}
 
     @auth_router.post("/projects/{project_id}/message/stream")
     async def send_message_stream(

@@ -184,6 +184,7 @@ async def _tool_loop(
                     tool_name=tc.function.name, tool_input=args,
                     execution_mode=execution_mode,
                     file_read_cache=_file_read_cache,
+                    tool_call_id=tc.id,
                 )
                 if is_error:
                     logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))
@@ -204,6 +205,7 @@ async def _tool_loop(
                 tool_name=tc.function.name, tool_input=args,
                 execution_mode=execution_mode,
                 file_read_cache=_file_read_cache,
+                tool_call_id=tc.id,
             )
             if is_error:
                 logger.error("Tool '%s' fehlgeschlagen: %s", tc.function.name, result.get("error", ""))

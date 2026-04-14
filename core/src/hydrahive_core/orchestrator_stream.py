@@ -491,12 +491,17 @@ async def _stream_codex(
 
         # Phase 2: Parallel-safe Tools gleichzeitig ausführen (#418)
         _tool_results: dict[str, Any] = {}  # tc.id → (result, tc)
+        # #641: SSE-Bridge für tool_confirm_required-Events
+        _codex_pending_sse: list[dict] = []
+        _codex_confirm_signal = lambda ev: _codex_pending_sse.append(ev)
         if parallel_tcs:
             _par_tasks = [
                 _asyncio.create_task(execute_tool_call(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                     execution_mode=execution_mode, user_text=content,
+                    tool_call_id=tc.id,
+                    confirm_signal=_codex_confirm_signal,
                 ))
                 for tc in parallel_tcs
             ]
@@ -505,6 +510,8 @@ async def _stream_codex(
             while not all(t.done() for t in _par_tasks):
                 await _asyncio.sleep(0.2)
                 _par_wait += 0.2
+                while _codex_pending_sse:
+                    yield f"data: {_json.dumps(_codex_pending_sse.pop(0))}\n\n"
                 if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _par_wait = 0.0
@@ -521,11 +528,15 @@ async def _stream_codex(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                 execution_mode=execution_mode, user_text=content,
+                tool_call_id=tc.id,
+                confirm_signal=_codex_confirm_signal,
             ))
             _elapsed_wait = 0.0
             while not _tool_task.done():
                 await _asyncio.sleep(0.2)  # Schnelles Polling — Tool kann in <1s fertig sein
                 _elapsed_wait += 0.2
+                while _codex_pending_sse:
+                    yield f"data: {_json.dumps(_codex_pending_sse.pop(0))}\n\n"
                 if not _tool_task.done() and _elapsed_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _elapsed_wait = 0.0
@@ -824,6 +835,11 @@ async def _stream_anthropic_oauth(
             else:
                 _oauth_sequential.append(block)
 
+        # #641: shared SSE-Bridge — execute_tool_call hängt confirm-Events hier an,
+        # die Polling-Loops yielden sie ans Frontend.
+        _oauth_pending_sse: list[dict] = []
+        _oauth_confirm_signal = lambda ev: _oauth_pending_sse.append(ev)
+
         # Phase 2: Parallel-safe Tools gleichzeitig (#418)
         if _oauth_parallel:
             _par_tasks = [
@@ -832,6 +848,8 @@ async def _stream_anthropic_oauth(
                     tool_name=b.name, tool_input=b.input or {},
                     execution_mode=execution_mode, user_text=content,
                     file_read_cache=_oauth_file_read_cache,
+                    tool_call_id=b.id,
+                    confirm_signal=_oauth_confirm_signal,
                 ))
                 for b in _oauth_parallel
             ]
@@ -839,6 +857,8 @@ async def _stream_anthropic_oauth(
             while not all(t.done() for t in _par_tasks):
                 await _asyncio.sleep(0.2)
                 _par_wait += 0.2
+                while _oauth_pending_sse:
+                    yield f"data: {_json.dumps(_oauth_pending_sse.pop(0))}\n\n"
                 if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _par_wait = 0.0
@@ -859,11 +879,15 @@ async def _stream_anthropic_oauth(
                 tool_name=block.name, tool_input=_tc_input,
                 execution_mode=execution_mode, user_text=content,
                 file_read_cache=_oauth_file_read_cache,
+                tool_call_id=block.id,
+                confirm_signal=_oauth_confirm_signal,
             ))
             _oauth_wait = 0.0
             while not _tool_task_oauth.done():
                 await _asyncio.sleep(0.2)
                 _oauth_wait += 0.2
+                while _oauth_pending_sse:
+                    yield f"data: {_json.dumps(_oauth_pending_sse.pop(0))}\n\n"
                 if not _tool_task_oauth.done() and _oauth_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _oauth_wait = 0.0
@@ -1101,12 +1125,17 @@ async def _stream_litellm(
 
         # Phase 2: Parallel-safe Tools gleichzeitig (#418)
         _lm_results: dict[str, Any] = {}  # tc["id"] → result
+        # #641: SSE-Bridge für tool_confirm_required-Events
+        _lm_pending_sse: list[dict] = []
+        _lm_confirm_signal = lambda ev: _lm_pending_sse.append(ev)
         if _lm_parallel:
             _par_tasks = [
                 _asyncio.create_task(execute_tool_call(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                     execution_mode=execution_mode,
+                    tool_call_id=tc["id"],
+                    confirm_signal=_lm_confirm_signal,
                 ))
                 for tc in _lm_parallel
             ]
@@ -1114,6 +1143,8 @@ async def _stream_litellm(
             while not all(t.done() for t in _par_tasks):
                 await _asyncio.sleep(0.2)
                 _par_wait += 0.2
+                while _lm_pending_sse:
+                    yield f"data: {_json.dumps(_lm_pending_sse.pop(0))}\n\n"
                 if not all(t.done() for t in _par_tasks) and _par_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _par_wait = 0.0
@@ -1130,11 +1161,15 @@ async def _stream_litellm(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                 execution_mode=execution_mode,
+                tool_call_id=tc["id"],
+                confirm_signal=_lm_confirm_signal,
             ))
             _lm_wait = 0.0
             while not _tool_task_lm.done():
                 await _asyncio.sleep(0.2)
                 _lm_wait += 0.2
+                while _lm_pending_sse:
+                    yield f"data: {_json.dumps(_lm_pending_sse.pop(0))}\n\n"
                 if not _tool_task_lm.done() and _lm_wait >= _KEEPALIVE_INTERVAL:
                     yield ": keepalive\n\n"
                     _lm_wait = 0.0

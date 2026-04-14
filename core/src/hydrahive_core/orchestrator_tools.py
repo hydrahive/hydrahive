@@ -294,11 +294,20 @@ async def execute_tool_call(
     execution_mode: str | None = None,
     user_text: str = "",
     file_read_cache: dict[str, str] | None = None,
+    tool_call_id: str = "",
+    confirm_signal=None,
 ) -> tuple[object, bool]:
     """
     Einheitlicher Tool-Execution-Pfad für alle 4 Loops.
     Handles: MCP-Tools, reguläre Tools, file_read-Dedup.
     Returns: (result, is_error)
+
+    #641: bei `RiskLevel.CONFIRM` wird der Call pausiert und auf eine
+    User-Antwort über den /tool-confirm-Endpoint gewartet. `tool_call_id`
+    muss eindeutig pro Call sein (vom jeweiligen Tool-Loop generiert),
+    `confirm_signal` ist ein optionaler Sync-Callback (yield-fähig in
+    async-Generator-Loops), der das `tool_confirm_required`-Event ans
+    Frontend signalisiert, BEVOR der Wait beginnt.
     """
     # MCP-Tool?
     if tool_name.startswith("mcp_") and boss_cfg.mcp_servers:
@@ -362,6 +371,7 @@ async def execute_tool_call(
             return file_read_cache[_rpath], False
 
     # #466: Permission Classifier — Risikobewertung vor Ausführung
+    # #641: CONFIRM-Round-Trip — pausiert auf User-Antwort statt zu loggen
     try:
         from .permission_classifier import classify_action, RiskLevel
         risk = await classify_action(tool_name, tool_input, use_llm=False)
@@ -372,8 +382,50 @@ async def execute_tool_call(
                 "risk": "deny",
                 "hint": "Diese Aktion wurde aus Sicherheitsgründen verhindert.",
             }, True
+        if risk == RiskLevel.CONFIRM:
+            from .tool_confirmation import (
+                request_confirmation, wait_for_confirmation,
+            )
+            # session_id aus aktiver Session ableiten — kein Zwang
+            # für Caller, ihn extra durchzureichen.
+            _active = orch._sessions.get_active(project_id) if hasattr(orch, "_sessions") else None
+            _session_id = _active.id if _active else ""
+            _tcid = tool_call_id or f"auto-{tool_name}-{int(_time.time() * 1000)}"
+            request_confirmation(_session_id, _tcid, tool_name, tool_input)
+            # Stream-Pfade können hier ein SSE-Event yielden, bevor
+            # die Pause beginnt — Frontend rendert den Bestätigungs-Dialog.
+            if confirm_signal is not None:
+                try:
+                    confirm_signal({
+                        "type":         "tool_confirm_required",
+                        "session_id":   _session_id,
+                        "tool_call_id": _tcid,
+                        "tool_name":    tool_name,
+                        "tool_input":   tool_input,
+                        "risk":         "confirm",
+                    })
+                except Exception as _sig_err:
+                    logger.debug("confirm_signal callback failed: %s", _sig_err)
+            decision = await wait_for_confirmation(_session_id, _tcid)
+            if decision == "approve":
+                logger.info("tool-confirm approve: %s tcid=%s", tool_name, _tcid)
+                # Fällt durch zur normalen Ausführung
+            elif decision == "deny":
+                logger.info("tool-confirm deny: %s tcid=%s", tool_name, _tcid)
+                return {
+                    "error": f"Tool '{tool_name}' wurde vom User abgelehnt.",
+                    "risk":  "confirm_denied",
+                    "hint":  "Der User hat die Bestätigungs-Anfrage abgewiesen.",
+                }, True
+            else:  # timeout
+                logger.warning("tool-confirm timeout: %s tcid=%s", tool_name, _tcid)
+                return {
+                    "error": f"Tool '{tool_name}' nicht innerhalb 5 Minuten bestätigt.",
+                    "risk":  "confirm_timeout",
+                    "hint":  "Bestätigung nicht rechtzeitig — Aktion verworfen.",
+                }, True
     except Exception as _cls_err:
-        logger.debug("Permission classifier error: %s", _cls_err)
+        logger.debug("Permission classifier / confirm error: %s", _cls_err)
 
     # #523: Turn Journal — TOOL_USE Event
     try:
