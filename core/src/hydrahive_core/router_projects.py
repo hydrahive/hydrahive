@@ -96,6 +96,16 @@ class UpdateProjectSettingsRequest(BaseModel):
     messenger: dict | None = None  # Discord/Telegram/Matrix Config (#569)
 
 
+# #641-Fix: ToolConfirmRequest MUSS Module-Scope sein, damit FastAPI mit
+# `from __future__ import annotations` den String-Annotation-Hint auflösen
+# kann. Lokal in register_project_routes definiert führte das zu
+# `422 missing field 'req' in query` (FastAPI erkennt das BaseModel nicht
+# und fällt auf Query-Parameter-Default zurück).
+class ToolConfirmRequest(BaseModel):
+    tool_call_id: str
+    decision:     Literal["approve", "deny"]
+
+
 class GitCloneRequest(BaseModel):
     url: str
     branch: str = "main"
@@ -890,10 +900,8 @@ def register_project_routes(
 
     # ──────────────────────────────────────────────────────────────────────
     # #641: CONFIRM-Round-Trip — Auflösen pendinger Tool-Bestätigungen
+    # (ToolConfirmRequest ist auf Module-Scope definiert, siehe oben)
     # ──────────────────────────────────────────────────────────────────────
-    class ToolConfirmRequest(BaseModel):
-        tool_call_id: str
-        decision:     Literal["approve", "deny"]
 
     @auth_router.post("/projects/{project_id}/sessions/{session_id}/tool-confirm")
     def resolve_tool_confirm(

@@ -332,7 +332,12 @@ export function ChatPage() {
                 await api.confirmToolCall(id, sid, toolCallId, decision);
                 chat.removePendingConfirm(toolCallId);
               } catch (err) {
-                console.error("[#641] confirmTool failed:", err);
+                // Lesbare Fehlermeldung statt [object Object] im Log.
+                const msg = err instanceof Error
+                  ? err.message
+                  : (typeof err === "string" ? err : JSON.stringify(err));
+                console.error(`[#641] confirmTool(${decision}, ${toolCallId}) failed: ${msg}`);
+                chat.setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
                 // Eintrag bleibt im Banner — User kann erneut versuchen.
               }
             }}

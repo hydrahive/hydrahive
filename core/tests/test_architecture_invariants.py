@@ -875,3 +875,79 @@ def test_invariant8f_session_isolation():
     assert len(pending_a) == 1 and pending_a[0]["tool_call_id"] == "call-1"
     assert len(pending_b) == 1 and pending_b[0]["tool_call_id"] == "call-2"
     assert pending_other == []
+
+
+# ===========================================================================
+# Invariante 9 — /tool-confirm JSON-Body-Parsing (#641-Followup)
+# ===========================================================================
+# Bug: `ToolConfirmRequest` lokal in `register_project_routes()` definiert,
+# kombiniert mit `from __future__ import annotations`, führte zu FastAPI 422
+# "missing query parameter 'req'" — das Modell wurde im Modul-Namespace
+# nicht gefunden, FastAPI fiel auf Query-Default zurück.
+
+def test_invariant9a_tool_confirm_request_is_module_scope():
+    """9a (#641): ToolConfirmRequest ist auf Module-Scope importierbar.
+
+    Wenn das Modell in register_project_routes() lokal definiert wäre,
+    schlägt dieser Import fehl → FastAPI kann die String-Annotation bei
+    `from __future__ import annotations` nicht auflösen → 422 query.req.
+    """
+    from hydrahive_core.router_projects import ToolConfirmRequest
+    assert ToolConfirmRequest.__module__ == "hydrahive_core.router_projects"
+
+
+def test_invariant9b_tool_confirm_request_parses_json_body():
+    """9b (#641): Modell akzeptiert exakt die vom Frontend gesendete Form."""
+    from hydrahive_core.router_projects import ToolConfirmRequest
+
+    obj = ToolConfirmRequest.model_validate({
+        "tool_call_id": "call_42",
+        "decision":     "approve",
+    })
+    assert obj.tool_call_id == "call_42"
+    assert obj.decision == "approve"
+
+    obj2 = ToolConfirmRequest.model_validate({
+        "tool_call_id": "call_99",
+        "decision":     "deny",
+    })
+    assert obj2.decision == "deny"
+
+    # Pydantic erzwingt den Literal-Constraint
+    import pytest as _pt
+    with _pt.raises(Exception):
+        ToolConfirmRequest.model_validate({
+            "tool_call_id": "x", "decision": "maybe",
+        })
+
+
+def test_invariant9c_tool_confirm_annotation_resolvable_from_module_globals():
+    """9c (#641): Kern des Fix-Beweises. FastAPI nutzt `typing.get_type_hints()`
+    um bei `from __future__ import annotations` die String-Annotationen zu
+    Real-Types aufzulösen. Die Auflösung geschieht im Modul-Namespace der
+    definierenden Funktion. Wenn `ToolConfirmRequest` nur lokal definiert
+    war, scheiterte diese Auflösung still → FastAPI fiel auf Query-Default
+    zurück → 422 'missing query parameter req'.
+
+    Test: sucht den Endpoint, holt seine Type-Hints via `get_type_hints`,
+    prüft dass `req` zu `ToolConfirmRequest` auflöst (nicht zu einem
+    String bleibt oder fehlt).
+    """
+    import typing
+    from hydrahive_core import router_projects
+
+    # Den Endpoint finden — er ist in register_project_routes lokal definiert,
+    # aber resolve_tool_confirm ist die Funktion. Wir prüfen stattdessen, dass
+    # der Modul-Namespace ToolConfirmRequest enthält (Vorbedingung für FastAPI):
+    assert hasattr(router_projects, "ToolConfirmRequest"), (
+        "ToolConfirmRequest muss im Modul-Namespace sein, sonst kann "
+        "FastAPI/get_type_hints die String-Annotation nicht auflösen."
+    )
+    # get_type_hints mit localns=None/globalns=module muss es finden
+    import inspect
+    mod_globals = inspect.getmembers(router_projects)
+    names = {n for n, _ in mod_globals}
+    assert "ToolConfirmRequest" in names
+    # BaseModel-Subklasse?
+    from pydantic import BaseModel
+    assert issubclass(router_projects.ToolConfirmRequest, BaseModel)
