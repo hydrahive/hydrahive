@@ -544,16 +544,13 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(agent_data["tools"], [])
         self.assertEqual(agent_data["allowed_agents"], [])
         self.assertEqual(agent_data["mcp_servers"], [])
-        self.assertIn("git.read", agent_data["execution_modes"]["safe"]["permissions"])
+        # #644: execution_modes ist Minimal-Shape, keine toten permissions-Listen
+        self.assertEqual(agent_data["execution_modes"], {"default": "elevated"})
 
-    def test_personal_agent_default_execution_modes_include_git_read(self):
+    def test_personal_agent_default_execution_modes_minimal_shape(self):
+        # #644: Helper liefert nur noch den Default-Mode, keine Permission-Listen
         execution_modes = default_personal_agent_execution_modes()
-        self.assertEqual(execution_modes["default"], "safe")
-        self.assertIn("git.read", execution_modes["safe"]["permissions"])
-        self.assertIn("git.issue", execution_modes["safe"]["permissions"])
-        self.assertIn("git.write", execution_modes["elevated"]["permissions"])
-        self.assertIn("git.push", execution_modes["root"]["permissions"])
-        self.assertIn("shell.exec", execution_modes["root"]["permissions"])
+        self.assertEqual(execution_modes, {"default": "elevated"})
 
     def test_rate_limiter_local_fallback_enforces_and_prunes(self):
         limiter = RateLimiter(
@@ -832,7 +829,9 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn("## Lernfakten (zuletzt)", prompt)
         self.assertLess(prompt.index("## Lernfakten (zuletzt)"), prompt.index("### project-context"))
 
-    def test_upgrade_personal_agent_data_backfills_issue_tool_and_permission(self):
+    def test_upgrade_personal_agent_data_backfills_issue_tool(self):
+        # #644: permissions-Listen sind tot — upgrade strippt sie aus Legacy-YAMLs
+        # und backfillt nur noch Tool-IDs (hier: gitea_create_issue).
         agent_data = {
             "tools": ["gitea_repo_inspect", "gitea_repo_tree"],
             "execution_modes": {
@@ -847,7 +846,12 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertTrue(changed)
         self.assertIn("gitea_create_issue", upgraded["tools"])
-        self.assertIn("git.issue", upgraded["execution_modes"]["safe"]["permissions"])
+        for mode in ("safe", "elevated", "root"):
+            self.assertNotIn(
+                "permissions",
+                upgraded["execution_modes"][mode],
+                f"Legacy permissions-Liste in '{mode}' wurde nicht entfernt",
+            )
 
     def test_gitea_create_issue_tool_uses_repo_reference(self):
         tool = GiteaCreateIssueTool()

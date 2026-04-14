@@ -1104,6 +1104,74 @@ def test_invariant11c_tool_selection_not_in_admin_builders():
         )
 
 
+# ===========================================================================
+# Invariante 12 — Keine toten Default-Permissions für Personal-Agents (#644)
+# ===========================================================================
+# ExecutionModeProfile.permissions ist seit #638 weg. Seit #644 schreibt der
+# Personal-Agent-Helper keine Permission-Listen mehr, und upgrade_personal_
+# agent_data entfernt bestehende Listen aus Legacy-YAMLs beim Load.
+
+
+def _assert_no_permissions_in_execution_modes(em: dict, ctx: str) -> None:
+    for mode, profile in em.items():
+        if mode == "default":
+            continue
+        if isinstance(profile, dict):
+            assert "permissions" not in profile, (
+                f"{ctx}: Modus '{mode}' hat noch ein 'permissions'-Feld — "
+                f"sollte seit #644 weg sein."
+            )
+
+
+def test_invariant12a_default_helper_has_no_permissions():
+    """12a (#644): default_personal_agent_execution_modes liefert keine
+    permissions-Listen mehr."""
+    from hydrahive_core.router_users import default_personal_agent_execution_modes
+
+    em = default_personal_agent_execution_modes()
+    _assert_no_permissions_in_execution_modes(em, "default_personal_agent_execution_modes()")
+    assert em.get("default") == "elevated", (
+        f"Default-Mode für Personal-Agents soll 'elevated' bleiben, ist '{em.get('default')}'."
+    )
+
+
+def test_invariant12b_build_personal_agent_data_has_no_permissions():
+    """12b (#644): build_personal_agent_data schreibt keine permissions-Listen
+    in die YAML-Shape."""
+    from hydrahive_core.router_users import (
+        MyAgentUpdateRequest,
+        build_personal_agent_data,
+    )
+
+    req = MyAgentUpdateRequest(identity="Test", model="claude-opus-4-6")
+    data = build_personal_agent_data("personal_test", req)
+    em = data.get("execution_modes", {})
+    _assert_no_permissions_in_execution_modes(em, "build_personal_agent_data()['execution_modes']")
+
+
+def test_invariant12c_upgrade_strips_legacy_permissions():
+    """12c (#644): upgrade_personal_agent_data entfernt Legacy-permissions-
+    Listen aus vorhandenen Profilen und meldet changed=True."""
+    from hydrahive_core.router_users import upgrade_personal_agent_data
+
+    legacy = {
+        "tools": [],
+        "execution_modes": {
+            "default": "elevated",
+            "safe": {"permissions": ["filesystem.read", "git.read"]},
+            "elevated": {"permissions": ["filesystem.write", "shell.exec"]},
+            "root": {"permissions": ["git.push"]},
+            "unrestricted": {"permissions": []},
+        },
+    }
+    upgraded, changed = upgrade_personal_agent_data(legacy)
+    assert changed, "upgrade_personal_agent_data meldet kein changed, obwohl permissions stripped werden müssten."
+    _assert_no_permissions_in_execution_modes(
+        upgraded["execution_modes"],
+        "upgrade_personal_agent_data(legacy)['execution_modes']",
+    )
+
+
 def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     """9d (#641-Followup): router_agent_chat importiert dasselbe
     ToolConfirmRequest-Modell wie router_projects — kein dupliziertes

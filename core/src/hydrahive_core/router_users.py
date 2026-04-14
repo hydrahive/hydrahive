@@ -13,78 +13,14 @@ from .execution_mode_policy import resolve_request_execution_mode
 ADMIN_TOOLS = ["create_agent", "delete_agent", "create_project", "delete_project"]
 
 
-def default_personal_agent_execution_modes(is_admin: bool = False) -> dict:
-    elevated_perms = [
-        "filesystem.read",
-        "filesystem.write",
-        "filesystem.read_all",
-        "system.read",
-        "system.write",
-        "memory.read",
-        "memory.write",
-        "handoff.read",
-        "handoff.write",
-        "agents.ask",
-        "agents.delegate",
-        "git.read",
-        "git.issue",
-        "git.write",
-        "workstation.read",
-        "workstation.write",
-        "workstation.shell",
-        "discord",
-        "mail",
-    ]
-    root_perms = [
-        "filesystem.read",
-        "filesystem.write",
-        "filesystem.read_all",
-        "system.read",
-        "system.write",
-        "memory.read",
-        "memory.write",
-        "handoff.read",
-        "handoff.write",
-        "agents.ask",
-        "agents.delegate",
-        "git.read",
-        "git.issue",
-        "git.write",
-        "git.push",
-        "git.pr",
-        "shell.exec",
-        "workstation.read",
-        "workstation.write",
-        "workstation.shell",
-        "discord",
-        "mail",
-    ]
-    if is_admin:
-        elevated_perms.append("admin.manage")
-        root_perms.append("admin.manage")
-    return {
-        "default": "elevated",
-        "safe": {
-            "permissions": [
-                "filesystem.read",
-                "system.read",
-                "memory.read",
-                "memory.write",
-                "handoff.read",
-                "handoff.write",
-                "agents.ask",
-                "agents.delegate",
-                "git.read",
-                "git.issue",
-                "workstation.read",
-                "discord",
-                "mail",
-            ],
-        },
-        "elevated": {"permissions": elevated_perms},
-        "root": {"permissions": root_perms},
-        "unrestricted": {"permissions": []},
-    }
+def default_personal_agent_execution_modes() -> dict:
+    """Minimal execution_modes-Shape für Personal-Agents (#644).
+
+    Seit #638 ist `ExecutionModeProfile.permissions` entfernt; Listen
+    wurden beim Loader stumm verworfen. Hier bleibt nur noch der
+    autoritativ genutzte `default`-Key übrig.
+    """
+    return {"default": "elevated"}
 
 
 def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None, *, is_admin: bool = False) -> tuple[dict, bool]:
@@ -92,7 +28,7 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None,
     if agent_data.get("role"):
         return agent_data, False
     changed = False
-    defaults = default_personal_agent_execution_modes(is_admin=is_admin)
+    defaults = default_personal_agent_execution_modes()
     execution_modes = agent_data.setdefault("execution_modes", {})
     # Default NICHT überschreiben wenn Admin ihn auf root/unrestricted gesetzt hat
     current_default = execution_modes.get("default", "")
@@ -100,14 +36,14 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None,
         execution_modes["default"] = defaults["default"]
         changed = True
 
+    # #644: Tote permissions-Listen aus Legacy-YAMLs einmalig strippen.
+    # ExecutionModeProfile.permissions ist seit #638 weg — Listen wurden beim
+    # Loader stumm verworfen, bleiben aber in alten YAMLs stehen.
     for mode_name in ("safe", "elevated", "root", "unrestricted"):
-        profile = execution_modes.setdefault(mode_name, {})
-        permissions = list(profile.get("permissions") or [])
-        for permission in defaults[mode_name]["permissions"]:
-            if permission not in permissions:
-                permissions.append(permission)
-                changed = True
-        profile["permissions"] = permissions
+        profile = execution_modes.get(mode_name)
+        if isinstance(profile, dict) and "permissions" in profile:
+            profile.pop("permissions", None)
+            changed = True
 
     tools = list(agent_data.get("tools") or [])
     has_gitea_tools = any(tool.startswith("gitea_repo_") for tool in tools)
