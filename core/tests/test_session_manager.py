@@ -241,3 +241,46 @@ async def test_compact_persists_to_db(sm, tmp_path):
     ).fetchone()[0]
     assert msg_count == 6  # 1 summary + 5 kept
     db.close()
+
+
+# =========================================================================
+# #637 Review-Finding: _merge_consecutive_roles darf tool_calls nicht
+# stillschweigend verlieren (Edge nach Compaction-Summary etc.)
+# =========================================================================
+
+def test_merge_consecutive_roles_preserves_tool_calls():
+    """Wenn zwei aufeinanderfolgende assistant-Messages auftreten und eine
+    davon `tool_calls` hat, darf der Merge sie NICHT zusammenwerfen —
+    sonst gehen die strukturierten Tool-Call-Daten verloren."""
+    from hydrahive_core.session_manager import _merge_consecutive_roles
+
+    msgs = [
+        {"role": "assistant", "content": "Compaction-Summary."},
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "call_42", "type": "function",
+             "function": {"name": "foo", "arguments": "{}"}},
+        ]},
+    ]
+    out = _merge_consecutive_roles(msgs)
+
+    # Beide Messages bleiben getrennt, tool_calls erhalten
+    assert len(out) == 2, f"Merge hat tool_calls-Message verschluckt: {out}"
+    assert out[1].get("tool_calls"), "tool_calls-Feld ging verloren"
+    assert out[1]["tool_calls"][0]["id"] == "call_42"
+    # Compaction-Summary bleibt unverändert
+    assert out[0]["content"] == "Compaction-Summary."
+
+
+def test_merge_consecutive_roles_still_merges_plain_text():
+    """Regression-Schutz: zwei aufeinanderfolgende user/assistant ohne
+    tool_calls werden weiterhin gemerged (Anthropic-Wechsel-Constraint)."""
+    from hydrahive_core.session_manager import _merge_consecutive_roles
+
+    msgs = [
+        {"role": "assistant", "content": "Erste Antwort"},
+        {"role": "assistant", "content": "Zweite Antwort"},
+    ]
+    out = _merge_consecutive_roles(msgs)
+    assert len(out) == 1
+    assert "Erste Antwort" in out[0]["content"]
+    assert "Zweite Antwort" in out[0]["content"]

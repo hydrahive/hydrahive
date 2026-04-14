@@ -41,6 +41,7 @@ class ContextChannels:
     learning: str = ""             # learned-memory snippet
     sources: str = ""              # zugewiesene externe Quellen
     repos: str = ""                # zugewiesene Git-Repos
+    servers: str = ""              # zugewiesene Remote-Server (#636 Migration)
     handbook: str = ""             # globales System-Handbook
     blueprint: str = ""            # workflow_blueprint.json Kontext
     workflow: str = ""             # Agent-spezifischer Workflow
@@ -61,7 +62,7 @@ class ContextChannels:
 
     _STATIC_SLOTS = (
         "agent_identity", "onboarding", "soul", "memory_index", "learning",
-        "sources", "repos", "handbook", "blueprint", "workflow", "policies",
+        "sources", "repos", "servers", "handbook", "blueprint", "workflow", "policies",
     )
     _DYNAMIC_SLOTS = (
         "memory_hits", "amem_hits", "working_state", "last_session", "skills",

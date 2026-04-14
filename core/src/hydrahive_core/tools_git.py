@@ -1,18 +1,15 @@
 """
-tools_git.py — Native Git-Tools (#621)
+tools_git.py — Native Git-Tools (#621, #635 SSOT)
 
 Ersetzt shell_exec(git ...) Improvisation durch deferred, server-side
 authenticated Git-Operationen. Agent sieht keine Tokens, kann keine
 Gitea-Hooks manipulieren.
 
-Workspace-Layout:
-    /var/lib/hydrahive/agent_workspaces/
-        {project_id}/
-            {agent_id}/
-                {workspace_name}/   ← hier liegt das Repo
-
-workspace_name wird vom Agent gewählt (muss sicher sein — Pfad-Safety
-im Tool erzwungen). Default = letzter Slash-Teil der Clone-URL.
+#635 Workspace-Modell:
+    workspace_root(project_id) IST der git-Working-Tree.
+    Ein Projekt = ein Repo. Kein workspace-Parameter mehr in den Tool-
+    Schemas — die git_*-Tools operieren immer auf workspace_root(project_id).
+    Damit sehen file_*, shell_exec und git_* exakt denselben Tree.
 """
 from __future__ import annotations
 
@@ -23,14 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from .gitea import GiteaClient, _load_config
-from .tool_registry import BaseTool, registry
+from .tool_registry import BaseTool, registry, workspace_root
 
 logger = logging.getLogger(__name__)
 
-# Workspace-Root (override via env/settings möglich, für jetzt hardcoded)
-_WORKSPACE_ROOT = Path("/var/lib/hydrahive/agent_workspaces")
-
-# Erlaubte Workspace-Namen: Alphanumerisch + . _ - ; keine Pfad-Traversal.
+# Erlaubte Branch-/Repo-Namen: Alphanumerisch + . _ - ; keine Pfad-Traversal.
 # Muss mit Buchstabe/Ziffer beginnen (kein . → keine .., kein .hidden).
 _SAFE_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 
@@ -44,24 +38,15 @@ def _is_safe(name: str) -> bool:
     return True
 
 
-def _workspace_path(project_id: str, agent_id: str, name: str) -> Path:
-    if not _is_safe(name):
-        raise ValueError(f"Unsicherer Workspace-Name: '{name}'")
-    if not _is_safe(project_id):
+def _project_workspace(project_id: str) -> Path:
+    """#635: Working-Tree eines Projekts. Identisch mit workspace_root.
+
+    Dünner Wrapper, damit lokal in tools_git.py klar ist: hier wird der
+    GEMEINSAME Workspace genutzt, kein Sub-Tree, kein Sonderpfad.
+    """
+    if not project_id or not _is_safe(project_id):
         raise ValueError(f"Unsicherer project_id: '{project_id}'")
-    if not _is_safe(agent_id):
-        raise ValueError(f"Unsicherer agent_id: '{agent_id}'")
-    root = _WORKSPACE_ROOT / project_id / agent_id
-    root.mkdir(parents=True, exist_ok=True)
-    return root / name
-
-
-def _default_workspace_name(repo: str) -> str:
-    """Aus 'hydrahive/myrepo' → 'myrepo', aus 'myrepo.git' → 'myrepo'."""
-    last = repo.rstrip("/").split("/")[-1]
-    if last.endswith(".git"):
-        last = last[:-4]
-    return last or "workspace"
+    return workspace_root(project_id)
 
 
 def _parse_remote(repo: str) -> tuple[str, str, str]:
@@ -94,8 +79,6 @@ class _GitToolBase(BaseTool):
     def always_loaded(self) -> bool: return False
     @property
     def category(self) -> str: return "git"
-    @property
-    def permissions_required(self) -> list[str]: return ["git:write"]
 
 
 # =========================================================================
@@ -110,15 +93,13 @@ class GitCloneTool(_GitToolBase):
     @property
     def description(self) -> str:
         return (
-            "Klont ein Repo in ein isoliertes Agent-Workspace. repo als "
-            "'owner/name' oder nur 'name'. Auth wird server-side gesetzt "
-            "— kein Token in der Shell."
+            "Klont ein Repo direkt in den Project-Workspace (#635: ein Projekt = "
+            "ein Repo). repo als 'owner/name' oder nur 'name'. Auth wird "
+            "server-side gesetzt — kein Token in der Shell."
         )
 
     @property
     def is_read_only(self) -> bool: return False
-    @property
-    def permissions_required(self) -> list[str]: return ["git:read"]
     @property
     def semantic_tags(self) -> list[str]:
         return ["git", "clone", "checkout", "download", "repo"]
@@ -128,28 +109,42 @@ class GitCloneTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "repo":      {"type": "string", "description": "'owner/name' oder 'name'"},
-                "workspace": {"type": "string", "description": "Optional — Workspace-Name (default: repo-Name)"},
-                "branch":    {"type": "string", "description": "Optional — spezifischer Branch"},
-                "depth":     {"type": "integer", "description": "Optional — shallow clone (z.B. 1 für nur letzten Commit)"},
+                "repo":   {"type": "string", "description": "'owner/name' oder 'name'"},
+                "branch": {"type": "string", "description": "Optional — spezifischer Branch"},
+                "depth":  {"type": "integer", "description": "Optional — shallow clone (z.B. 1 für nur letzten Commit)"},
             },
             "required": ["repo"],
         }
 
     async def execute(
         self, agent_id: str, project_id: str,
-        repo: str, workspace: str = "", branch: str = "", depth: int = 0,
+        repo: str, branch: str = "", depth: int = 0,
         **kwargs,
     ) -> dict:
         try:
             _, owner, name = _parse_remote(repo)
-            ws_name = workspace or _default_workspace_name(repo)
-            ws_path = _workspace_path(project_id, agent_id, ws_name)
+            ws_path = _project_workspace(project_id)
             cfg = _load_config()
             clone_url = f"{cfg['url']}/{owner}/{name}.git"
 
-            if ws_path.exists() and (ws_path / ".git").exists():
+            # #635 Vorbedingungs-Check:
+            # - bereits .git → idempotent "bereits geklont"
+            # - leerer/nicht-existierender Workspace → klonen
+            # - non-empty ohne .git → Konflikt, NICHT überschreiben
+            if (ws_path / ".git").exists():
                 return {"ok": True, "workspace": str(ws_path), "note": "bereits geklont"}
+            if ws_path.exists():
+                non_empty = any(ws_path.iterdir())
+                if non_empty:
+                    return {
+                        "error": (
+                            f"Workspace '{ws_path}' ist nicht leer und enthält kein .git. "
+                            "git_clone würde existierende Dateien überschreiben — abgelehnt."
+                        ),
+                    }
+
+            # Workspace-Parent muss existieren damit git clone schreiben kann
+            ws_path.parent.mkdir(parents=True, exist_ok=True)
 
             args = ["clone"]
             if branch:
@@ -187,31 +182,25 @@ class GitStatusTool(_GitToolBase):
     def name(self) -> str: return "Git-Status"
     @property
     def description(self) -> str:
-        return "Zeigt git status --porcelain für ein Workspace."
+        return "Zeigt git status --porcelain für den Project-Workspace."
 
     @property
     def is_read_only(self) -> bool: return True
-    @property
-    def permissions_required(self) -> list[str]: return ["git:read"]
     @property
     def semantic_tags(self) -> list[str]:
         return ["git", "status", "changes", "dirty", "uncommitted"]
 
     @property
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {"workspace": {"type": "string"}},
-            "required": ["workspace"],
-        }
+        return {"type": "object", "properties": {}, "required": []}
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str, **kwargs,
+        self, agent_id: str, project_id: str, **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             if not (ws / ".git").exists():
-                return {"error": f"Workspace '{workspace}' ist kein Git-Repo"}
+                return {"error": f"Workspace '{ws}' ist kein Git-Repo"}
             stdout, stderr, rc = await _run_git(["status", "--porcelain=v1", "-b"], ws)
             if rc != 0:
                 return {"error": f"git status rc={rc}", "stderr": stderr[:400]}
@@ -234,12 +223,10 @@ class GitLogTool(_GitToolBase):
     def name(self) -> str: return "Git-Log"
     @property
     def description(self) -> str:
-        return "Letzte N Commits eines Workspaces (oneline)."
+        return "Letzte N Commits des Project-Workspaces (oneline)."
 
     @property
     def is_read_only(self) -> bool: return True
-    @property
-    def permissions_required(self) -> list[str]: return ["git:read"]
     @property
     def semantic_tags(self) -> list[str]:
         return ["git", "log", "history", "commits", "blame"]
@@ -249,19 +236,18 @@ class GitLogTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "workspace": {"type": "string"},
-                "limit":     {"type": "integer", "default": 20},
-                "path":      {"type": "string", "description": "Optional — nur Commits die diese Datei/Ordner betreffen"},
+                "limit": {"type": "integer", "default": 20},
+                "path":  {"type": "string", "description": "Optional — nur Commits die diese Datei/Ordner betreffen"},
             },
-            "required": ["workspace"],
+            "required": [],
         }
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str,
+        self, agent_id: str, project_id: str,
         limit: int = 20, path: str = "", **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             limit = max(1, min(int(limit), 100))
             args = ["log", f"-{limit}", "--pretty=format:%h %an %ad %s", "--date=short"]
             if path:
@@ -288,12 +274,10 @@ class GitDiffTool(_GitToolBase):
     def name(self) -> str: return "Git-Diff"
     @property
     def description(self) -> str:
-        return "Diff im Workspace — unstaged, staged, oder beliebige Refs."
+        return "Diff im Project-Workspace — unstaged, staged, oder beliebige Refs."
 
     @property
     def is_read_only(self) -> bool: return True
-    @property
-    def permissions_required(self) -> list[str]: return ["git:read"]
     @property
     def semantic_tags(self) -> list[str]:
         return ["git", "diff", "changes", "compare"]
@@ -303,21 +287,20 @@ class GitDiffTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "workspace": {"type": "string"},
-                "staged":    {"type": "boolean", "default": False},
-                "ref_a":     {"type": "string", "description": "Optional Ref A"},
-                "ref_b":     {"type": "string", "description": "Optional Ref B"},
+                "staged": {"type": "boolean", "default": False},
+                "ref_a":  {"type": "string", "description": "Optional Ref A"},
+                "ref_b":  {"type": "string", "description": "Optional Ref B"},
             },
-            "required": ["workspace"],
+            "required": [],
         }
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str,
+        self, agent_id: str, project_id: str,
         staged: bool = False, ref_a: str = "", ref_b: str = "",
         **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             args = ["diff"]
             if staged:
                 args.append("--staged")
@@ -348,8 +331,8 @@ class GitCommitAllTool(_GitToolBase):
     @property
     def description(self) -> str:
         return (
-            "git add -A + git commit -m MESSAGE im Workspace. Author/Email "
-            "server-seitig ('HydraHive Agent <agent@hydrahive.local>')."
+            "git add -A + git commit -m MESSAGE im Project-Workspace. "
+            "Author/Email server-seitig ('HydraHive Agent <agent@hydrahive.local>')."
         )
 
     @property
@@ -361,19 +344,18 @@ class GitCommitAllTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "workspace":  {"type": "string"},
-                "message":    {"type": "string", "description": "Commit-Message (Pflicht)"},
+                "message":     {"type": "string", "description": "Commit-Message (Pflicht)"},
                 "allow_empty": {"type": "boolean", "default": False},
             },
-            "required": ["workspace", "message"],
+            "required": ["message"],
         }
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str,
+        self, agent_id: str, project_id: str,
         message: str, allow_empty: bool = False, **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             if not message or not message.strip():
                 return {"error": "message darf nicht leer sein"}
             # 1) Add alles
@@ -408,8 +390,8 @@ class GitPushTool(_GitToolBase):
     @property
     def description(self) -> str:
         return (
-            "Pusht Commits des Workspaces zum Remote. Token wird server-side "
-            "injiziert — Pre-Receive-Hooks greifen normal (kein Bypass)."
+            "Pusht Commits des Project-Workspaces zum Remote. Token wird "
+            "server-side injiziert — Pre-Receive-Hooks greifen normal."
         )
 
     @property
@@ -423,19 +405,18 @@ class GitPushTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "workspace": {"type": "string"},
-                "branch":    {"type": "string", "description": "Optional — default: aktueller Branch"},
-                "force":     {"type": "boolean", "default": False, "description": "Force-Push (mit-lease)"},
+                "branch": {"type": "string", "description": "Optional — default: aktueller Branch"},
+                "force":  {"type": "boolean", "default": False, "description": "Force-Push (mit-lease)"},
             },
-            "required": ["workspace"],
+            "required": [],
         }
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str,
+        self, agent_id: str, project_id: str,
         branch: str = "", force: bool = False, **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             args = ["push"]
             if force:
                 args.append("--force-with-lease")
@@ -463,7 +444,7 @@ class GitPullTool(_GitToolBase):
     def name(self) -> str: return "Git-Pull"
     @property
     def description(self) -> str:
-        return "Pull --rebase im Workspace. Authenticated gegen Gitea."
+        return "Pull --rebase im Project-Workspace. Authenticated gegen Gitea."
 
     @property
     def semantic_tags(self) -> list[str]:
@@ -471,17 +452,13 @@ class GitPullTool(_GitToolBase):
 
     @property
     def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {"workspace": {"type": "string"}},
-            "required": ["workspace"],
-        }
+        return {"type": "object", "properties": {}, "required": []}
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str, **kwargs,
+        self, agent_id: str, project_id: str, **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             stdout, stderr, rc = await _run_git(["pull", "--rebase", "origin"], ws, with_auth=True)
             if rc != 0:
                 return {"error": f"git pull rc={rc}", "stderr": stderr[:500]}
@@ -501,7 +478,7 @@ class GitBranchTool(_GitToolBase):
     def name(self) -> str: return "Git-Branch verwalten"
     @property
     def description(self) -> str:
-        return "list | create | delete | checkout für Branches im Workspace."
+        return "list | create | delete | checkout für Branches im Project-Workspace."
 
     @property
     def semantic_tags(self) -> list[str]:
@@ -512,20 +489,19 @@ class GitBranchTool(_GitToolBase):
         return {
             "type": "object",
             "properties": {
-                "workspace": {"type": "string"},
-                "action":    {"type": "string", "enum": ["list", "create", "delete", "checkout"]},
-                "name":      {"type": "string", "description": "Branch-Name bei create/delete/checkout"},
-                "from_ref":  {"type": "string", "description": "Bei create optional — Start-Ref (default: HEAD)"},
+                "action":   {"type": "string", "enum": ["list", "create", "delete", "checkout"]},
+                "name":     {"type": "string", "description": "Branch-Name bei create/delete/checkout"},
+                "from_ref": {"type": "string", "description": "Bei create optional — Start-Ref (default: HEAD)"},
             },
-            "required": ["workspace", "action"],
+            "required": ["action"],
         }
 
     async def execute(
-        self, agent_id: str, project_id: str, workspace: str, action: str,
+        self, agent_id: str, project_id: str, action: str,
         name: str = "", from_ref: str = "", **kwargs,
     ) -> dict:
         try:
-            ws = _workspace_path(project_id, agent_id, workspace)
+            ws = _project_workspace(project_id)
             if action == "list":
                 stdout, stderr, rc = await _run_git(["branch", "-a"], ws)
                 if rc != 0:

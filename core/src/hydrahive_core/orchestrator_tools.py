@@ -120,20 +120,27 @@ def _tool_call_signature(tool_calls: list) -> tuple[str, ...]:
     return tuple(signature)
 
 
-# #440: Permission Suggestions bei Tool-Denial
+# #638: Hinweise auf existierende Mechanismen — kein Verweis auf
+# nicht-existente "Permission XYZ hinzufügen"-Konzepte mehr.
 _TOOL_SUGGESTIONS = {
-    "shell_exec":        "Execution-Mode auf 'elevated' oder 'root' setzen",
-    "file_write":        "Permission 'filesystem.write' hinzufügen",
-    "file_read":         "Permission 'filesystem.read' hinzufügen",
-    "git_push":          "Permission 'git.write' hinzufügen",
-    "git_commit":        "Permission 'git.write' hinzufügen",
-    "write_system_file": "Execution-Mode auf 'root' oder 'unrestricted' setzen",
-    "read_system_file":  "Permission 'system.read' hinzufügen",
+    "shell_exec":        "Falls bwrap-Sandbox blockiert: execution_mode='unrestricted' setzen (Admin-only).",
+    "file_read":         "Tool ist nicht in der aktiven Tool-Whitelist verfügbar.",
+    "file_write":        "Tool ist nicht in der aktiven Tool-Whitelist verfügbar.",
+    "git_push":          "Lade Git-Tools via tool_search(query='git ...') in dieser Session.",
+    "git_commit":        "Lade Git-Tools via tool_search(query='git ...') in dieser Session.",
+    "git_clone":         "Lade Git-Tools via tool_search(query='git ...') in dieser Session.",
+    "git_status":        "Lade Git-Tools via tool_search(query='git ...') in dieser Session.",
+    "write_system_file": "execution_mode='unrestricted' setzen (Admin-only).",
+    "read_system_file":  "execution_mode='unrestricted' setzen (Admin-only).",
 }
 
 def _tool_denied_error(tool_name: str, *, denial_count: int = 0) -> dict:
-    suggestion = _TOOL_SUGGESTIONS.get(tool_name, f"Tool '{tool_name}' in Agent-Config erlauben")
-    msg = f"Tool '{tool_name}' ist in diesem Modus nicht erlaubt"
+    suggestion = _TOOL_SUGGESTIONS.get(
+        tool_name,
+        f"Tool '{tool_name}' ist nicht in der aktiven Tool-Whitelist. "
+        "Falls deferred: via tool_search laden.",
+    )
+    msg = f"Tool '{tool_name}' ist in der aktiven Tool-Whitelist nicht verfügbar"
     if denial_count >= _DENIAL_THRESHOLD:
         msg += (
             f" (bereits {denial_count}x verweigert). "
@@ -164,14 +171,15 @@ async def _execute_tool(
         logger.debug("Tool cache hit: %s", tool_name)
         return cache_result
 
-    agent_permissions = list(boss_cfg.effective_permissions(execution_mode) or [])
-    # Only pass _agent_permissions and _execution_mode if the tool's execute method accepts **kwargs
+    # #638: Permissions-Layer entfernt — autoritativ ist `_allowed_tool_map`
+    # (Whitelist) + permission_classifier (Risiko) + execution_mode (nur Shell).
+    # Nur _execution_mode wird an Tools weitergereicht, das aktuell ausschliesslich
+    # ShellExecTool semantisch konsumiert.
     import inspect
     sig = inspect.signature(tool.execute)
     has_kwargs = any(p.kind == p.VAR_KEYWORD for p in sig.parameters.values())
     extra = {}
     if has_kwargs:
-        extra["_agent_permissions"] = agent_permissions
         extra["_execution_mode"] = execution_mode or boss_cfg.effective_execution_mode(execution_mode)
     # #431: Tool-Timeout (Default 120s, konfigurierbar)
     import asyncio as _aio

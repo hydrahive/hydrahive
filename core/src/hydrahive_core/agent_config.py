@@ -56,17 +56,23 @@ class HeartbeatTask(BaseModel):
 
 
 class ExecutionModeProfile(BaseModel):
-    """Permissions-Profil fuer einen technischen Ausfuehrungsmodus."""
-    model_config = {"extra": "ignore"}
+    """Profil fuer einen technischen Ausfuehrungsmodus.
 
-    permissions: list[str] = Field(default_factory=list)
+    #638: Permissions-Liste entfernt — sie wurde nirgends ausgewertet.
+    Profil ist heute leer, bleibt als Pydantic-Anker damit
+    `ExecutionModesConfig.{safe,elevated,root,unrestricted}` schemamäßig
+    weiter parsbar bleibt; Felder aus Legacy-YAML werden via
+    `extra: ignore` stillschweigend verworfen.
+    """
+    model_config = {"extra": "ignore"}
 
 
 class ExecutionModesConfig(BaseModel):
-    """Technische Tool-Permissions pro Modus.
+    """Aktiver Execution-Mode pro Agent (#638).
 
-    Phase 1 haelt die Struktur bewusst klein: globale Tool-Liste aus agent.yaml
-    bleibt bestehen, Modi filtern nur ueber Permissions.
+    `default` bestimmt den initial gewählten Modus. Modi sind heute keine
+    Permission-Filter mehr — siehe `execution_mode_policy.py` (autoritativ
+    fuer Shell-Sandbox-Level).
     """
     model_config = {"extra": "ignore"}
 
@@ -124,19 +130,14 @@ class AgentConfig(BaseModel):
         self,
         execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
     ) -> Literal["safe", "elevated", "root", "unrestricted"] | None:
-        """Aktiven Modus bestimmen, ohne Legacy-Agenten zu beeinflussen."""
+        """Aktiven Modus bestimmen, ohne Legacy-Agenten zu beeinflussen.
+
+        #638: einzige autoritative Methode für Execution-Mode. Nur Shell-Sandbox
+        wertet das aus — siehe `execution_mode_policy.py` und ShellExecTool.
+        """
         if self.execution_modes is None:
             return None
         return execution_mode or self.execution_modes.default
-
-    def effective_permissions(
-        self,
-        execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None,
-    ) -> list[str] | None:
-        """v2: Keine Permission-Filterung mehr — gibt immer None zurück.
-        execution_mode wird nur noch von shell_exec genutzt (sudo vs. Blocklist).
-        """
-        return None
 
 
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
@@ -211,9 +212,10 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
     _default_mode = getattr(pcfg, "execution_mode", "safe") or "safe"
     if _default_mode not in ("safe", "elevated", "unrestricted"):
         _default_mode = "safe"
+    # #638: ExecutionModeProfile hat kein permissions-Feld mehr — leeres Profil reicht.
     exec_modes = ExecutionModesConfig(
         default=_default_mode,
-        safe=ExecutionModeProfile(permissions=[]),
+        safe=ExecutionModeProfile(),
     )
 
     return AgentConfig(

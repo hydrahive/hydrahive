@@ -822,8 +822,12 @@ class SecurityRegressionTests(unittest.TestCase):
                 }
             )
             cfg.agent_dir = agent_dir
-            orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
-            prompt = orchestrator._build_system_prompt(cfg, "Sag mir, was wichtig ist")
+            # #636: einheitlicher Builder, Tuple-Return — Tests rufen Modul-API
+            from hydrahive_core.orchestrator_context import build_system_prompt
+            static_p, dynamic_p = asyncio.run(
+                build_system_prompt(cfg, "Sag mir, was wichtig ist")
+            )
+            prompt = (static_p + "\n\n" + dynamic_p).strip() if dynamic_p else static_p
 
         self.assertIn("## Lernfakten (zuletzt)", prompt)
         self.assertLess(prompt.index("## Lernfakten (zuletzt)"), prompt.index("### project-context"))
@@ -996,8 +1000,14 @@ class SecurityRegressionTests(unittest.TestCase):
                 }
             )
             cfg.agent_dir = agent_dir
-            orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
-            prompt = orchestrator._build_system_prompt(cfg, "Schau dir das hydrahive repo an und reviewe die Aenderungen")
+            # #636: einheitlicher Builder, Tuple-Return — Tests rufen Modul-API
+            from hydrahive_core.orchestrator_context import build_system_prompt
+            static_p, dynamic_p = asyncio.run(
+                build_system_prompt(
+                    cfg, "Schau dir das hydrahive repo an und reviewe die Aenderungen",
+                )
+            )
+            prompt = (static_p + "\n\n" + dynamic_p).strip() if dynamic_p else static_p
 
         self.assertIn("Repo-Review-Arbeitsrahmen", prompt)
         self.assertIn("gitea_repo_tree", prompt)

@@ -17,7 +17,6 @@ Alles andere (Git, Discord, Server, Mail, etc.) geht über shell_exec.
 """
 
 import asyncio
-import contextvars
 import json
 import logging
 import re as _re_shell
@@ -36,6 +35,96 @@ logger = logging.getLogger(__name__)
 
 PROJECTS_ROOT = settings.projects_dir
 AGENTS_ROOT   = settings.agents_dir
+
+
+# =========================================================================
+# Workspace-SSOT (#635)
+# =========================================================================
+# `workspace_root(project_id)` ist die EINZIGE Quelle für Workspace-Pfade.
+# `file_*`, `file_patch`, `shell_exec` und `git_*` operieren alle auf
+# diesem identischen Pfad — kein Sub-Tree, keine "Familie von Roots",
+# kein Parent-Trick. Ein Projekt hat genau einen effektiven Working Tree.
+def workspace_root(project_id: str) -> Path:
+    """Autoritativer Workspace-Pfad eines Projekts.
+
+    Identisch genutzt von file-, shell- und git-Tools. Reine Resolver-
+    Funktion ohne Side-Effects — kein mkdir, kein I/O. Verbraucher legen
+    Verzeichnisse selbst an.
+    """
+    return (PROJECTS_ROOT / project_id).resolve()
+
+
+def _resolve_sandbox_scope(
+    project_id: str, cwd: str | Path,
+) -> tuple[Path, list[str]]:
+    """Pure helper: berechnet (effective_cwd, bwrap_bind_args) für die Shell-Sandbox.
+
+    Extrahiert aus ShellExecTool.execute (#635, B2 aus #639), damit der Shell-
+    Sandbox-Scope ohne Prozessstart testbar wird.
+
+    Verwendet `workspace_root(project_id)` als Working-Tree-Mount — derselbe
+    Pfad den `file_*` und `git_*` nutzen.
+
+    Pure: nur Path-Operationen + .exists()-Checks, kein subprocess, kein I/O.
+    """
+    project_dir = workspace_root(project_id) if project_id else None
+    cwd_path = Path(cwd).resolve() if cwd else Path("/tmp")
+
+    # cwd in Scope? — entweder unter /tmp oder unter project_dir
+    cwd_in_scope = (
+        str(cwd_path).startswith("/tmp")
+        or (project_dir is not None
+            and (cwd_path == project_dir or _path_within(cwd_path, project_dir)))
+    )
+    if not cwd_in_scope:
+        cwd_path = project_dir if (project_dir is not None and project_dir.exists()) else Path("/tmp")
+
+    # Minimale Sandbox — nur System-Binaries/Libs + Projekt + /tmp
+    # NICHT `/` komplett mounten (#593: verhindert Host-Leak)
+    bind_args: list[str] = [
+        "--ro-bind", "/usr", "/usr",
+        "--ro-bind", "/bin", "/bin",
+        "--ro-bind", "/lib", "/lib",
+        "--ro-bind", "/lib64", "/lib64",
+        "--ro-bind", "/sbin", "/sbin",
+        "--ro-bind-try", "/etc/alternatives", "/etc/alternatives",
+        "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
+        "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
+        "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
+        "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
+        "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
+        "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
+        "--bind", "/tmp", "/tmp",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--setenv", "HOME", "/tmp",
+        "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    ]
+    # Workspace-Root rw binden — DAS ist der gemeinsame Tree für file_*/git_*/shell
+    if project_dir is not None and project_dir.exists():
+        bind_args += ["--bind", str(project_dir), str(project_dir)]
+    # cwd extra rw binden, falls außerhalb /tmp UND außerhalb project_dir
+    cwd_str = str(cwd_path)
+    extra_cwd = (
+        cwd_str != "/tmp"
+        and cwd_path.exists()
+        and (project_dir is None or cwd_path != project_dir)
+        and not (project_dir is not None and _path_within(cwd_path, project_dir))
+    )
+    if extra_cwd:
+        bind_args += ["--bind", cwd_str, cwd_str]
+
+    return cwd_path, bind_args
+
+
+def _path_within(child: Path, parent: Path) -> bool:
+    """Hilfsfunktion: True wenn child ein Pfad unter parent ist (str-prefix sicher)."""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
 
 # Wird von main.py im Lifespan gesetzt
 _internal_secret: str = ""
@@ -101,27 +190,19 @@ class PathSafetyError(PermissionError):
     pass
 
 
-_active_worktree: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
-    "_active_worktree", default=None,
-)
-
-
 def assert_path_within_project(
     path: str | Path,
     project_id: str,
-    *,
-    agent_permissions: list[str] | None = None,
 ) -> Path:
+    """#638: Pfadsicherheit auf Projekt-Workspace begrenzt.
+
+    Permission-Parameter (`agent_permissions=`) und der ehemalige
+    `filesystem.read_all`-Branch wurden entfernt — sie waren toter Code,
+    weil `effective_permissions()` immer leer lieferte.
+    """
     import os
 
-    wt = _active_worktree.get()
-    if wt is not None:
-        wt_resolved = wt.resolve()
-        assert str(wt_resolved).startswith("/tmp/hydrahive-git"), \
-            f"Worktree-Safety-Violation: {wt_resolved} liegt nicht unter /tmp/hydrahive-git/"
-        project_root = wt_resolved
-    else:
-        project_root = (PROJECTS_ROOT / project_id).resolve()
+    project_root = workspace_root(project_id)
 
     target = Path(path)
     if not target.is_absolute():
@@ -132,15 +213,6 @@ def assert_path_within_project(
         normalized = normalized.resolve()
     except OSError:
         pass
-
-    if agent_permissions is not None and "filesystem.read_all" in agent_permissions:
-        try:
-            normalized.relative_to(PROJECTS_ROOT.resolve())
-        except ValueError:
-            raise PathSafetyError(
-                f"Zugriff verweigert: '{normalized}' liegt ausserhalb von '{PROJECTS_ROOT}'."
-            )
-        return normalized
 
     try:
         normalized.relative_to(project_root)
@@ -169,10 +241,6 @@ class BaseTool(ABC):
     @property
     @abstractmethod
     def description(self) -> str: ...
-
-    @property
-    def permissions_required(self) -> list[str]:
-        return []
 
     @property
     def parallel_safe(self) -> bool:
@@ -684,48 +752,11 @@ class ShellExecTool(BaseTool):
             }
         if _use_sandbox and is_sandboxed:
             import shlex as _shlex
+            # #635: Pure helper für Scope-Auflösung (ersetzt inline-Bau).
+            # Mountet workspace_root(project_id) — derselbe Tree wie file_*/git_*.
+            _resolved_cwd, _bind_args = _resolve_sandbox_scope(project_id, safe_cwd)
+            safe_cwd = str(_resolved_cwd)
             _quoted = _shlex.quote(command)
-            # Projekt-Verzeichnis ermitteln (fuer Scope)
-            _project_dir = f"/projects/{project_id}" if project_id else ""
-            # Sicherstellen dass cwd im Projekt-Dir oder /tmp liegt
-            _cwd_resolved = str(Path(safe_cwd).resolve())
-            _cwd_in_scope = (
-                _cwd_resolved.startswith("/tmp") or
-                (_project_dir and _cwd_resolved.startswith(_project_dir))
-            )
-            if not _cwd_in_scope:
-                # Fallback auf Projekt-Dir oder /tmp
-                safe_cwd = _project_dir if _project_dir and Path(_project_dir).exists() else "/tmp"
-                _cwd_resolved = safe_cwd
-
-            # Minimale Sandbox — nur System-Binaries/Libs + Projekt + /tmp
-            # NICHT `/` komplett mounten (#593: verhindert Host-Leak)
-            _bind_args = [
-                "--ro-bind", "/usr", "/usr",
-                "--ro-bind", "/bin", "/bin",
-                "--ro-bind", "/lib", "/lib",
-                "--ro-bind", "/lib64", "/lib64",
-                "--ro-bind", "/sbin", "/sbin",
-                "--ro-bind-try", "/etc/alternatives", "/etc/alternatives",
-                "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
-                "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
-                "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
-                "--ro-bind-try", "/etc/ssl/certs", "/etc/ssl/certs",
-                "--ro-bind-try", "/etc/ca-certificates", "/etc/ca-certificates",
-                "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf",
-                "--bind", "/tmp", "/tmp",
-                "--dev", "/dev",
-                "--proc", "/proc",
-                "--setenv", "HOME", "/tmp",
-                "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            ]
-            # Projekt-Dir read-write binden (wenn vorhanden)
-            if _project_dir and Path(_project_dir).exists():
-                _bind_args += ["--bind", _project_dir, _project_dir]
-            # cwd read-write binden falls ausserhalb /tmp/Projekt
-            if safe_cwd not in {"/tmp", _project_dir} and Path(safe_cwd).exists():
-                _bind_args += ["--bind", safe_cwd, safe_cwd]
-
             _bind_cmd = " ".join(_shlex.quote(a) for a in _bind_args)
             exec_command = (
                 f"bwrap {_bind_cmd} "
@@ -733,7 +764,9 @@ class ShellExecTool(BaseTool):
                 f"-- bash -c {_quoted}"
             )
             logger.info("shell_exec [%s] (SANDBOX/bwrap mode=%s scope=%s): %s",
-                        agent_id, _mode or "safe", _project_dir or "/tmp", command[:120])
+                        agent_id, _mode or "safe",
+                        str(workspace_root(project_id)) if project_id else "/tmp",
+                        command[:120])
         elif unrestricted:
             # UNRESTRICTED: kein Sandbox, aber als Projekt-User statt root.
             # Vorteile: Files gehören dem Projekt-User → menschlicher Admin
@@ -788,36 +821,9 @@ class ShellExecTool(BaseTool):
             if len(err) > max_out:
                 err = err[:max_out] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
 
-            # Auto-Push nach git commit (#617): verhindert Datenverlust bei Session-Ende
-            # Wenn 'git commit' erfolgreich war, automatisch 'git push' hinterherschicken.
-            _cmd_stripped = command.strip()
-            _is_git_commit = (
-                proc.returncode == 0
-                and "git commit" in _cmd_stripped
-                and "git push" not in _cmd_stripped
-                and "--dry-run" not in _cmd_stripped
-                and "--amend" not in _cmd_stripped.lower()
-            )
-            if _is_git_commit:
-                try:
-                    push_proc = await asyncio.create_subprocess_shell(
-                        "git push",
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        cwd=safe_cwd,
-                    )
-                    push_out, push_err = await asyncio.wait_for(push_proc.communicate(), timeout=60)
-                    push_stdout = push_out.decode(errors="replace")
-                    push_stderr = push_err.decode(errors="replace")
-                    if push_proc.returncode == 0:
-                        out += f"\n[Auto-Push: OK]\n{push_stdout}".rstrip()
-                        logger.info("shell_exec auto-push nach git commit: OK (cwd=%s)", safe_cwd)
-                    else:
-                        out += f"\n[Auto-Push fehlgeschlagen — bitte manuell pushen]\n{push_stderr[:500]}"
-                        logger.warning("shell_exec auto-push fehlgeschlagen: %s", push_stderr[:200])
-                except Exception as push_exc:
-                    out += f"\n[Auto-Push Fehler: {push_exc}]"
-
+            # #635: Auto-Push nach git commit entfernt.
+            # Hing am Shell-Tool, kannte das Workspace-Modell nicht, war ein
+            # versteckter Fremdeffekt. Wer pushen will, ruft `git_push`.
             return {
                 "stdout": out, "stderr": err,
                 "exit_code": proc.returncode, "command": command,
@@ -864,9 +870,8 @@ class FileReadTool(BaseTool):
         self, agent_id: str, project_id: str,
         path: str, offset: int = 0, limit: int = 8000, **kwargs,
     ) -> dict:
-        agent_permissions = kwargs.pop("_agent_permissions", None)
         try:
-            safe_path = assert_path_within_project(path, project_id, agent_permissions=agent_permissions)
+            safe_path = assert_path_within_project(path, project_id)
         except PathSafetyError as e:
             return {"error": str(e), "allowed": False}
 
@@ -1011,11 +1016,12 @@ class FilePatchTool(BaseTool):
         }
 
     async def execute(self, agent_id: str, project_id: str, path: str, search: str, replace: str, count: int = 1, **kwargs) -> dict:
-        file_path = Path(path)
-        if not file_path.is_absolute():
-            file_path = Path(f"/projects/{project_id}/files") / path
-            if not file_path.exists():
-                file_path = Path(f"/projects/{project_id}") / path
+        # #635: gemeinsamer Workspace via assert_path_within_project —
+        # kein /projects/<id>/files-Sonderpfad mehr.
+        try:
+            file_path = assert_path_within_project(path, project_id)
+        except PathSafetyError as e:
+            return {"error": str(e), "allowed": False}
 
         if not file_path.exists():
             return {"error": f"Datei nicht gefunden: {path}"}

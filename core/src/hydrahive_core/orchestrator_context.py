@@ -3,7 +3,8 @@ orchestrator_context.py — Context-Compaction & Memory-Budget
 
 Standalone-Funktionen für System-Prompt-Aufbau und Context-Kompaktierung:
 - _context_mode: normal vs. full anhand der User-Nachricht
-- _build_system_prompt: Soul + Memory + Skills zusammenbauen (mit Budget-Limit)
+- build_system_prompt: einziger autoritativer Builder (#636) — Soul + Memory +
+  Skills + Channels strukturiert, (static, dynamic)-Tuple-Return
 - _repo_review_guidance: Repo-Review-Arbeitsrahmen einblenden
 - _compact_if_needed: veralteten Kontext per LLM zusammenfassen
 """
@@ -97,15 +98,16 @@ def amem_invalidate() -> None:
     _AMEM_ENABLED = None
 
 
-# Python-seitiger System-Prompt-Cache (ergänzt Anthropic Server-Side-Caching)
-# Format: agent_id → (prompt_str, timestamp, cache_hash)
-_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
+# Python-seitiger System-Prompt-Cache (#636: nur noch Static-Cache, der alte
+# Voll-Prompt-Cache des entfernten Builders ist ersatzlos weggefallen).
+# Format: agent_id → (static_str, timestamp, cache_hash)
 _PROMPT_CACHE_TTL = 300  # 5 Min — gleich wie Anthropic ephemeral cache
+_STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 
 
 def invalidate_prompt_cache(agent_id: str) -> None:
-    """Löscht den gecachten System-Prompt für einen Agenten (z.B. nach Blueprint-Änderung)."""
-    _PROMPT_CACHE.pop(agent_id, None)
+    """Löscht den gecachten Static-Prompt-Anteil eines Agenten."""
+    _STATIC_PROMPT_CACHE.pop(agent_id, None)
 
 # Kontextfenster je Modell-Familie (Tokens)
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
@@ -248,298 +250,18 @@ def _context_mode(user_text: str) -> str:
     return "full" if any(t in text for t in full_triggers) else "normal"
 
 
-async def _build_system_prompt(boss_cfg, user_text: str, *, invalidate: bool = False) -> str | tuple[str, str]:
-    """Baut den System-Prompt — mit Python-Cache (5 Min TTL, hash-basiert).
-
-    Gibt einen String zurück (für Kompatibilität) ODER ein Tupel (static, dynamic)
-    wenn split_for_cache=True intern genutzt wird. Der Aufrufer in orchestrator_stream.py
-    kann das Tupel nutzen um cache_control nur auf den statischen Teil zu setzen.
-    """
-    mode = _context_mode(user_text)
-
-    if not invalidate and boss_cfg.agent_dir:
-        cached = _PROMPT_CACHE.get(boss_cfg.id)
-        if cached:
-            prompt, ts, h = cached
-            if (time.time() - ts) < _PROMPT_CACHE_TTL:
-                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
-                if current_h == h:
-                    logger.debug("system-prompt cache-hit (agent=%s age=%.0fs)", boss_cfg.id, time.time() - ts)
-                    return prompt
-        # #527: Cache-Break-Diagnose — welches Segment hat sich geändert?
-        _break_reason = _diagnose_cache_break(boss_cfg.id, boss_cfg.agent_dir, mode)
-        if _break_reason:
-            logger.info("system-prompt %s (agent=%s)", _break_reason, boss_cfg.id)
-        else:
-            logger.debug("system-prompt cache-miss (agent=%s) — rebuilding", boss_cfg.id)
-
-    # #625: Memory-Prefetch — BM25 + A-MEM laufen parallel zum Rest des Builds
-    _k_prefetch = 8 if mode == "full" else 4
-    _prefetch = start_memory_prefetch(boss_cfg.agent_dir, user_text, k=_k_prefetch)
-
-    # Datum + Uhrzeit im System-Prompt — LLM hat sonst kein Zeitgefühl
-    from datetime import datetime, timezone as _tz
-    _now = datetime.now(_tz.utc)
-
-    # Generisches Identity-Statement NUR wenn keine AGENT.md existiert.
-    # Mit AGENT.md definiert diese die Identität — zwei konkurrierende "Du bist"-
-    # Anweisungen verwirren das LLM und das erste gewinnt.
-    _has_agent_md = bool(
-        boss_cfg.agent_dir and (boss_cfg.agent_dir / "AGENT.md").exists()
-    )
-    parts = (
-        [] if _has_agent_md
-        else [f"Du bist {boss_cfg.identity}."]
-    ) + [
-        f"Aktuelles Datum: {_now.strftime('%A, %d. %B %Y')}. Uhrzeit: {_now.strftime('%H:%M')} UTC.",
-    ]
-
-    # startup.md — Erster Start / Onboarding
-    # VOR soul.md injiziert damit Onboarding-Instruktionen die normale Persönlichkeit überschreiben.
-    # Existiert die Datei → wird injiziert. Agent löscht sie selbst nach Abschluss.
-    _startup_active = False
-    if boss_cfg.agent_dir:
-        startup_path = boss_cfg.agent_dir / "startup.md"
-        if startup_path.exists():
-            startup_text = startup_path.read_text(encoding="utf-8").strip()
-            if startup_text:
-                parts.append(
-                    f"## ERSTER START — ONBOARDING\n\n"
-                    f"**WICHTIG: Diese Anweisung hat höchste Priorität und überschreibt alle anderen "
-                    f"Persönlichkeits- oder Verhaltensregeln aus der soul.md für diesen ersten Start.**\n\n"
-                    f"{startup_text}"
-                )
-                _startup_active = True
-
-    # Soul / AGENT.md laden (identitätskritisch)
-    # v2: AGENT.md im Projekt-Verzeichnis. v1: soul.md aus agent.yaml.
-    if boss_cfg.agent_dir:
-        agent_md_path = boss_cfg.agent_dir / "AGENT.md"
-        if agent_md_path.exists():
-            # v2: AGENT.md als Persönlichkeit/Fachgebiet
-            parts.append(agent_md_path.read_text(encoding="utf-8").strip())
-        elif boss_cfg.soul:
-            # v1: soul.md aus agent.yaml
-            soul_path = boss_cfg.agent_dir / boss_cfg.soul
-            if soul_path.exists():
-                parts.append(soul_path.read_text(encoding="utf-8").strip())
-
-    # Persistentes Gedächtnis — BM25 Memory Search (OpenClaw-Stil, kein GPU)
-    # #529: Memory Budget aus context_lifecycle
-    from .context_lifecycle import get_memory_budget
-    _mem_budget = get_memory_budget(mode)
-    if boss_cfg.agent_dir:
-        mem_parts = []
-        memory_dir = boss_cfg.agent_dir / "memory"
-
-        # INDEX.md — Vault-Pattern (OpenClaw boot-md Äquivalent):
-        # Immer direkt geladen (nicht via BM25), max 1500 chars.
-        # Agent hält diese Datei slim (Inhaltsverzeichnis / Kernfakten).
-        if memory_dir.exists():
-            index_path = memory_dir / "INDEX.md"
-            if index_path.exists():
-                index_text = index_path.read_text(encoding="utf-8").strip()
-                if index_text:
-                    if len(index_text) > 1500:
-                        index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
-                    mem_parts.append(f"### Index\n{index_text}")
-
-        # Learning-Snippet (bleibt wie bisher — schon kompakt)
-        if memory_dir.exists():
-            learning_snippet = build_learning_prompt_snippet(
-                boss_cfg.agent_dir,
-                **({"max_entries": 8, "max_chars": _mem_budget} if mode == "full"
-                   else {"max_entries": 3, "max_chars": min(_mem_budget, 1500)}),
-            )
-            if learning_snippet:
-                mem_parts.append(learning_snippet)
-
-        # #625: Async Memory-Prefetch — BM25-Treffer abholen (timeout-gesichert)
-        snippets = await _prefetch.get_bm25(timeout=0.8)
-        if snippets:
-            mem_parts.append("### Erinnerungen\n" + "\n---\n".join(snippets))
-
-        if mem_parts:
-            parts.append("## Persistentes Gedächtnis\n\n" + "\n\n".join(mem_parts))
-
-        # Memory-Schreib-Anweisung: Agent soll write_memory aktiv nutzen (wie Claude Code)
-        parts.append(
-            "## Gedächtnis-Regel (Memory-System)\n\n"
-            "Nutze `write_memory` aktiv — genau wie ein erfahrener Entwickler Notizen macht.\n\n"
-            "**Wann schreiben:**\n"
-            "- Nach jedem implementierten Feature oder Fix\n"
-            "- Nach jeder wichtigen Analyse (Projektstruktur, Pfade, Abhängigkeiten)\n"
-            "- Nach Entscheidungen die du später begründen können möchtest\n"
-            "- Immer wenn du denkst 'das werde ich in der nächsten Session wieder brauchen'\n\n"
-            "**Format (Frontmatter + Inhalt):**\n"
-            "```\n"
-            "---\n"
-            "name: Kurzer Titel\n"
-            "description: Ein Satz was drin steht\n"
-            "type: project | feedback | reference\n"
-            "---\n\n"
-            "## Was wurde gemacht\n"
-            "...\n\n"
-            "**Why:** Warum war das nötig\n"
-            "**Status:** done | in_progress | blocked\n"
-            "```\n\n"
-            "**Kontext-IDs:** thematisch benennen, z.B. `ship_defense_packet`, `project_structure`, `open_issues`\n\n"
-            "**Wichtig:** Schreibe auch einen Index-Eintrag in `MEMORY.md` (context_id: `memory_index`) "
-            "damit du beim nächsten `read_memory` sofort weißt was du weißt."
-        )
-
-    # v2: A-MEM Globaler Wissens-Prefetch (#563/#625)
-    # Läuft jetzt parallel zu BM25 via prefetch — hier nur noch await mit Timeout.
-    amem_snippets = await _prefetch.get_amem(timeout=1.5)
-    if amem_snippets:
-        parts.append("## Globales Wissen (A-MEM)\n\n" + amem_snippets)
-
-    # #350: Session-Continuity — letzte Session nach /clear automatisch injizieren
-    if boss_cfg.agent_dir:
-        last_session_path = boss_cfg.agent_dir / "memory" / "_last_session.md"
-        if last_session_path.exists():
-            import os
-            # Nur injizieren wenn < 24h alt (stale prevention)
-            age_hours = (time.time() - os.path.getmtime(last_session_path)) / 3600
-            if age_hours < 24:
-                last_text = last_session_path.read_text(encoding="utf-8").strip()
-                if last_text:
-                    if len(last_text) > 3000:
-                        last_text = last_text[:3000] + "\n…[gekürzt]"
-                    parts.append(
-                        "## Letzte Session (vor Clear)\n\n"
-                        "Dieser Kontext stammt aus der vorherigen Session. "
-                        "Nutze ihn als Hintergrund falls der User darauf Bezug nimmt.\n\n"
-                        + last_text
-                    )
-
-    # Agenten-Quellen — URLs/Suchmaschinen die diesem Agenten zugewiesen sind
-    if getattr(boss_cfg, "sources", None):
-        src_lines = []
-        for src in boss_cfg.sources:
-            line = f"- **{src.name}**: {src.url}"
-            if src.description:
-                line += f" — {src.description}"
-            src_lines.append(line)
-        parts.append(
-            "## Zugewiesene Quellen & Suchmaschinen\n\n"
-            "Nutze diese Quellen wenn du Informationen zu deinem Fachgebiet benötigst. "
-            "Rufe relevante Quellen mit `http_request` ab bevor du antwortest — "
-            "zitiere niemals aus dem Gedächtnis wenn eine Quelle verfügbar ist.\n\n"
-            + "\n".join(src_lines)
-        )
-
-    # Zugewiesene Git-Repos — Credentials + Workflow-Info für Git-Tools
-    try:
-        from .repo_config import repos_for_agent
-        agent_repos = repos_for_agent(boss_cfg.id)
-        if agent_repos:
-            repo_lines = []
-            for repo in agent_repos:
-                clone_url = repo.url
-                if repo.token and "github.com" in repo.url:
-                    clone_url = repo.url.replace("https://", f"https://{repo.token}@")
-                repo_lines.append(
-                    f"- **{repo.name}** ({repo.provider}): {repo.url}\n"
-                    f"  Clone-URL (mit Token): `{clone_url}.git`\n"
-                    f"  Branch: `{repo.branch}` | Token: vorhanden"
-                )
-            parts.append(
-                "## Zugewiesene Git-Repos\n\n"
-                "Diese Repos sind dir zugewiesen. Nutze die Clone-URL mit Token für git push/pull.\n"
-                "Bei Anweisungen wie 'push' oder 'commit' nutze IMMER diese Repos — nicht nachfragen!\n\n"
-                + "\n".join(repo_lines)
-            )
-    except Exception as e:
-        logger.debug("Repo-Injection übersprungen: %s", e)
-
-    # Zugewiesene Remote-Server — SSH-Zugang über server_shell/server_file_* Tools
-    try:
-        from .router_servers import _load_agent_servers, _load_servers
-        agent_servers_map = _load_agent_servers()
-        assigned_ids = agent_servers_map.get(boss_cfg.id, [])
-        if assigned_ids:
-            all_servers = {s["id"]: s for s in _load_servers()}
-            srv_lines = []
-            for sid in assigned_ids:
-                srv = all_servers.get(sid)
-                if srv:
-                    srv_lines.append(
-                        f"- **{srv.get('name', sid)}** (ID: `{sid}`): "
-                        f"`{srv.get('ssh_user', '?')}@{srv.get('ip', '?')}:{srv.get('ssh_port', 22)}`"
-                        + (f" — {srv.get('description', '')}" if srv.get("description") else "")
-                    )
-            if srv_lines:
-                parts.append(
-                    "## Zugewiesene Remote-Server\n\n"
-                    "Diese Server sind dir zugewiesen. Nutze `server_shell` (mit `server_id`) "
-                    "um Befehle auszuführen, und `server_file_read`/`server_file_write` für Dateien. "
-                    "SSH-Keys werden automatisch geladen — NICHT manuell per ssh/shell_exec verbinden!\n\n"
-                    + "\n".join(srv_lines)
-                )
-    except Exception as e:
-        logger.debug("Server-Injection übersprungen: %s", e)
-
-    # System-Handbuch — globale Arbeitsweise, wird in jeden Agenten injiziert
-    _handbook_path = settings.system_handbook
-    if _handbook_path.exists():
-        _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
-        if _handbook_text:
-            parts.append(_handbook_text)
-
-    # A-MEM Skills laden (scope=always immer, on-demand: Keyword-Match + Semantik #44)
-    if boss_cfg.agent_dir:
-        all_skills = load_skills(boss_cfg.agent_dir)
-        # Semantische Scores berechnen (fällt auf {} zurück wenn FAISS nicht verfügbar)
-        semantic_scores: dict[str, float] = {}
-        if all_skills:
-            skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
-            raw_scores  = await loop.run_in_executor(None, score_texts, skill_texts, user_text)
-            if raw_scores:
-                semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)}
-        # Token-Budget: max 8000 Zeichen für Skills (~2k Tokens)
-        active_skills = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
-        if active_skills:
-            parts.append(skills_to_system_prompt(active_skills, token_budget=8000))
-
-    # Agent-Blueprint Kontext (workflow_blueprint.json)
-    if boss_cfg.agent_dir:
-        blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
-        if blueprint_ctx:
-            parts.append(blueprint_ctx)
-
-    # Agent-Workflow (workflow_flow.json) — Arbeitsanweisung wie der Agent Aufgaben bearbeitet
-    if boss_cfg.agent_dir:
-        agent_wf = _load_agent_workflow_prompt(boss_cfg.agent_dir)
-        if agent_wf:
-            parts.append(agent_wf)
-
-    repo_guidance = _repo_review_guidance(boss_cfg, user_text)
-    if repo_guidance:
-        parts.append(repo_guidance)
-
-    logger.debug("context-mode=%s agent=%s", mode, boss_cfg.id)
-    prompt = "\n\n".join(parts)
-
-    # In Python-Cache speichern (nur den vollen Prompt — für Non-Anthropic-Pfade)
-    if boss_cfg.agent_dir:
-        h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
-        _PROMPT_CACHE[boss_cfg.id] = (prompt, time.time(), h)
-
-    return prompt
-
-
-# Cache für den statischen Prompt-Anteil (ändert sich nur bei File-Changes)
-_STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
-
-
-async def _build_system_prompt_split(
+async def build_system_prompt(
     boss_cfg, user_text: str, *,
     invalidate: bool = False, session=None,
 ) -> tuple[str, str]:
     """
+    #636: Einziger autoritativer Builder. Wird von non-stream, OAuth-stream
+    und litellm-stream gleichermaßen aufgerufen — kein Parallel-Builder,
+    kein Fallback. Aufrufer joinen Tuple mit:
+    `(static + "\\n\\n" + dynamic).strip() if dynamic else static`.
+
     Baut den System-Prompt strukturiert in ContextChannels (#627) und gibt
-    (static_prefix, dynamic_suffix) zurück — kompatibel zur bisherigen Signatur.
+    (static_prefix, dynamic_suffix) zurück.
 
     Static-Channels (cacheable) und Dynamic-Channels (query-abhängig) werden
     pro Slot zugeordnet, nicht in eine flache Parts-Liste gekippt. Der
@@ -622,10 +344,13 @@ async def _build_system_prompt_split(
                         if len(index_text) > 1500:
                             index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
                         channels.memory_index = f"## Persistentes Gedächtnis\n\n### Index\n{index_text}"
+                # #636: konsistentes Memory-Budget statt hardcoded
+                from .context_lifecycle import get_memory_budget as _gmb
+                _mem_budget = _gmb(mode)
                 learning_snippet = build_learning_prompt_snippet(
                     boss_cfg.agent_dir,
-                    **({"max_entries": 8, "max_chars": 3000} if mode == "full"
-                       else {"max_entries": 3, "max_chars": 1500}),
+                    **({"max_entries": 8, "max_chars": _mem_budget} if mode == "full"
+                       else {"max_entries": 3, "max_chars": min(_mem_budget, 1500)}),
                 )
                 if learning_snippet:
                     channels.learning = learning_snippet
@@ -647,6 +372,60 @@ async def _build_system_prompt_split(
                 channels.repos = "## Zugewiesene Git-Repos\n\n" + "\n".join(repo_lines)
         except Exception:
             pass
+
+        # #636: Remote-Server-Injektion (aus altem Builder migriert).
+        try:
+            from .router_servers import _load_agent_servers, _load_servers
+            agent_servers_map = _load_agent_servers()
+            assigned_ids = agent_servers_map.get(boss_cfg.id, [])
+            if assigned_ids:
+                all_servers = {s["id"]: s for s in _load_servers()}
+                srv_lines = []
+                for sid in assigned_ids:
+                    srv = all_servers.get(sid)
+                    if srv:
+                        srv_lines.append(
+                            f"- **{srv.get('name', sid)}** (ID: `{sid}`): "
+                            f"`{srv.get('ssh_user', '?')}@{srv.get('ip', '?')}:{srv.get('ssh_port', 22)}`"
+                            + (f" — {srv.get('description', '')}" if srv.get("description") else "")
+                        )
+                if srv_lines:
+                    channels.servers = (
+                        "## Zugewiesene Remote-Server\n\n"
+                        "Diese Server sind dir zugewiesen. Nutze `server_shell` (mit `server_id`) "
+                        "um Befehle auszuführen, und `server_file_read`/`server_file_write` für Dateien. "
+                        "SSH-Keys werden automatisch geladen — NICHT manuell per ssh/shell_exec verbinden!\n\n"
+                        + "\n".join(srv_lines)
+                    )
+        except Exception as _srv_err:
+            logger.debug("Server-Injection übersprungen: %s", _srv_err)
+
+        # #636: Memory-Schreib-Anweisung (aus altem Builder migriert) als statische Policy.
+        if boss_cfg.agent_dir:
+            channels.policies = (
+                "## Gedächtnis-Regel (Memory-System)\n\n"
+                "Nutze `write_memory` aktiv — genau wie ein erfahrener Entwickler Notizen macht.\n\n"
+                "**Wann schreiben:**\n"
+                "- Nach jedem implementierten Feature oder Fix\n"
+                "- Nach jeder wichtigen Analyse (Projektstruktur, Pfade, Abhängigkeiten)\n"
+                "- Nach Entscheidungen die du später begründen können möchtest\n"
+                "- Immer wenn du denkst 'das werde ich in der nächsten Session wieder brauchen'\n\n"
+                "**Format (Frontmatter + Inhalt):**\n"
+                "```\n"
+                "---\n"
+                "name: Kurzer Titel\n"
+                "description: Ein Satz was drin steht\n"
+                "type: project | feedback | reference\n"
+                "---\n\n"
+                "## Was wurde gemacht\n"
+                "...\n\n"
+                "**Why:** Warum war das nötig\n"
+                "**Status:** done | in_progress | blocked\n"
+                "```\n\n"
+                "**Kontext-IDs:** thematisch benennen, z.B. `ship_defense_packet`, `project_structure`, `open_issues`\n\n"
+                "**Wichtig:** Schreibe auch einen Index-Eintrag in `MEMORY.md` (context_id: `memory_index`) "
+                "damit du beim nächsten `read_memory` sofort weißt was du weißt."
+            )
 
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
@@ -679,6 +458,11 @@ async def _build_system_prompt_split(
         snippets = await _prefetch.get_bm25(timeout=0.8)
         if snippets:
             channels.memory_hits = "### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets)
+
+        # #636: A-MEM globaler Wissens-Prefetch (aus altem Builder migriert).
+        amem_snippets = await _prefetch.get_amem(timeout=1.5)
+        if amem_snippets:
+            channels.amem_hits = "## Globales Wissen (A-MEM)\n\n" + amem_snippets
 
         if all_skills and _skill_task:
             raw_scores = await _skill_task

@@ -51,7 +51,7 @@ from .orchestrator_llm import (
 )
 from .orchestrator_context import (
     _context_mode,
-    _build_system_prompt as _build_system_prompt_fn,
+    build_system_prompt,
     _repo_review_guidance,
     _compact_if_needed as _compact_if_needed_fn,
     _history_token_budget,
@@ -496,11 +496,16 @@ class Orchestrator:
         if not boss_cfg:
             return f"[Fehler] Boss-Agent '{getattr(project_cfg.agents, 'boss', project_cfg.id)}' nicht gefunden.", []
 
-        # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache
+        # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache.
+        # #636: einheitlicher Builder, Tuple-Return, mit aktiver Session für working_state.
         _refresh = content.strip().startswith("!refresh")
         if _refresh:
             content = content.strip()[8:].strip()
-        system_prompt = await self._build_system_prompt(boss_cfg, content, invalidate=_refresh)
+        _active_session = self._sessions.get_active(project_id)
+        _static_p, _dynamic_p = await build_system_prompt(
+            boss_cfg, content, invalidate=_refresh, session=_active_session,
+        )
+        system_prompt = (_static_p + "\n\n" + _dynamic_p).strip() if _dynamic_p else _static_p
 
         # 3b. Projekt-Workflow injizieren falls vorhanden
         if project_cfg.project_dir:
@@ -543,8 +548,8 @@ class Orchestrator:
             project_id,
             max_history_tokens=_hist_budget,
         )
-        # Tool-Messages werden von as_llm_message() zu assistant konvertiert
-        history = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
+        # #637: role:"tool" bleibt strukturiert erhalten — nicht mehr filtern.
+        history = [m for m in _raw_history if m.get("role") in ("user", "assistant", "tool")]
         messages.extend(history)
 
         # ── Confirmation-Injection (#616) ────────────────────────────────────
@@ -760,9 +765,6 @@ class Orchestrator:
     @staticmethod
     def _context_mode(user_text: str) -> str:
         return _context_mode(user_text)
-
-    async def _build_system_prompt(self, boss_cfg, user_text: str, *, invalidate: bool = False) -> str:
-        return await _build_system_prompt_fn(boss_cfg, user_text, invalidate=invalidate)
 
     @staticmethod
     def _repo_review_guidance(agent_cfg, user_text: str) -> str:

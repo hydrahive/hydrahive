@@ -120,17 +120,13 @@ async def handle_message_stream(
     _refresh = _content_str.strip().startswith("!refresh")
     if _refresh:
         content = _content_str.strip()[8:].strip()
-    # Cache-Optimierung: Split in static (cacheable) + dynamic (query-abhängig)
-    from .orchestrator_context import _build_system_prompt_split
+    # #636: einheitlicher Builder, kein Fallback-Pfad mehr.
+    # Builder-Exception propagiert — laute Fail statt stiller Kontextdrift.
+    from .orchestrator_context import build_system_prompt
     _active_session = orch._sessions.get_active(project_id)
-    try:
-        _static_prompt, _dynamic_prompt = await _build_system_prompt_split(
-            boss_cfg, _content_str, invalidate=_refresh, session=_active_session,
-        )
-    except Exception:
-        # Fallback auf alten Pfad
-        _static_prompt = await orch._build_system_prompt(boss_cfg, _content_str, invalidate=_refresh)
-        _dynamic_prompt = ""
+    _static_prompt, _dynamic_prompt = await build_system_prompt(
+        boss_cfg, _content_str, invalidate=_refresh, session=_active_session,
+    )
     # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
     system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt
     # #485: Frustration Detection — System-Prompt-Injection wenn User genervt ist
@@ -146,8 +142,8 @@ async def handle_message_stream(
         project_id,
         max_history_tokens=_hist_budget_s,
     )
-    # Tool-Messages werden von as_llm_message() zu assistant konvertiert
-    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant")]
+    # #637: role:"tool" bleibt strukturiert erhalten — nicht mehr filtern.
+    history       = [m for m in _raw_history if m.get("role") in ("user", "assistant", "tool")]
     # #414: Letzte User-Message mit Vision-Blocks ersetzen
     if _vision_blocks and history:
         for i in range(len(history) - 1, -1, -1):
@@ -368,9 +364,15 @@ async def handle_message_stream(
                 from .orchestrator_context import _compact_if_needed as _compact_fn
                 await _compact_fn(orch._sessions, project_id, boss_cfg, keep_last=4)
                 yield f"data: {_json.dumps({'text': '[Kontext wurde automatisch kompaktiert — fahre fort…]\\n\\n'})}\n\n"
-                # Kompaktierten Context neu aufbauen und zweiten Streaming-Versuch starten
+                # Kompaktierten Context neu aufbauen und zweiten Streaming-Versuch starten.
+                # #636: derselbe einheitliche Builder wie im Hauptpfad.
+                from .orchestrator_context import build_system_prompt as _bsp_retry
                 _retry_history = orch._sessions.get_context(project_id)
-                _retry_sys = await orch._build_system_prompt(boss_cfg, content)
+                _retry_session = orch._sessions.get_active(project_id)
+                _retry_static, _retry_dynamic = await _bsp_retry(
+                    boss_cfg, content, session=_retry_session,
+                )
+                _retry_sys = (_retry_static + "\n\n" + _retry_dynamic).strip() if _retry_dynamic else _retry_static
                 _retry_msgs = [{"role": "system", "content": _retry_sys}] + _retry_history
                 # Vereinfachter Retry: non-streaming LLM-Call für die Recovery
                 _retry_resp = await orch._llm_call(boss_cfg, _retry_msgs, litellm_tools)
@@ -1138,8 +1140,7 @@ async def _stream_litellm(
             result, _ = _tool_task_lm.result()
             _lm_results[tc["id"]] = result
 
-        # Phase 4: Ergebnisse in Original-Reihenfolge
-        tool_results_text = []
+        # Phase 4: Ergebnisse in Original-Reihenfolge sammeln
         _tc_results_for_session: list[tuple[str, str, str]] = []  # (tc_id, tc_name, result_str)
         for tc in tc_list:
             result = _lm_results[tc["id"]]
@@ -1147,20 +1148,29 @@ async def _stream_litellm(
             if _img_evt:
                 yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
-            tool_results_text.append(f"[Tool: {tc['name']}]\n{result_str}")
             _tc_results_for_session.append((tc["id"], tc["name"], result_str))
 
-        loop_messages.append({
-            "role":    "user",
-            "content": "Tool-Ergebnisse:\n" + "\n\n".join(tool_results_text),
-        })
-
-        # Tool-Calls + Results in Session persistieren (OpenAI-Format)
+        # #637: Tool-Calls + Results strukturiert an loop_messages anhängen
+        # statt als User-Freitext. assistant+tool_calls vor den role:tool-
+        # Ergebnissen, damit das Pair konsistent bleibt.
         _tc_calls_for_session = [
             {"id": tc["id"], "type": "function",
              "function": {"name": tc["name"], "arguments": tc.get("arguments", "{}")}}
             for tc in tc_list
         ]
+        loop_messages.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": _tc_calls_for_session,
+        })
+        for _tcid, _tcname, _tcresult in _tc_results_for_session:
+            loop_messages.append({
+                "role": "tool",
+                "tool_call_id": _tcid,
+                "content": _tcresult,
+            })
+
+        # Persistieren in Session (OpenAI-Format, identisch zu OAuth-Pfad)
         await orch._sessions.append(
             project_id, MessageRole.ASSISTANT, "",
             agent_id=boss_id, tool_calls=_tc_calls_for_session,

@@ -52,8 +52,6 @@ class _GiteaToolBase(BaseTool):
     def always_loaded(self) -> bool: return False
     @property
     def category(self) -> str: return "gitea"
-    @property
-    def permissions_required(self) -> list[str]: return ["gitea:write"]
 
 
 class GiteaCreateIssueTool(_GiteaToolBase):
@@ -157,8 +155,6 @@ class GiteaListIssuesTool(_GiteaToolBase):
     @property
     def is_read_only(self) -> bool: return True
     @property
-    def permissions_required(self) -> list[str]: return ["gitea:read"]
-    @property
     def semantic_tags(self) -> list[str]:
         return ["gitea", "issue", "list", "search", "query", "open", "closed"]
 
@@ -215,8 +211,6 @@ class GiteaGetIssueTool(_GiteaToolBase):
 
     @property
     def is_read_only(self) -> bool: return True
-    @property
-    def permissions_required(self) -> list[str]: return ["gitea:read"]
     @property
     def semantic_tags(self) -> list[str]:
         return ["gitea", "issue", "read", "get", "detail"]

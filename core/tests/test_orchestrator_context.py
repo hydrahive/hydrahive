@@ -3,7 +3,7 @@ test_orchestrator_context.py — Tests für orchestrator_context.py
 
 Testet standalone-Funktionen:
 - _context_mode: normal vs. full
-- _build_system_prompt: Soul, Memory-Budget, Skills
+- build_system_prompt (#636): einziger autoritativer Builder, Tuple-Return
 - _compact_if_needed: Threshold-Check, LLM-Summary, Notfall-Reset
 """
 import sys
@@ -15,9 +15,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from hydrahive_core.orchestrator_context import (
     _context_mode,
-    _build_system_prompt,
+    build_system_prompt,
     _compact_if_needed,
 )
+
+
+async def _build_prompt_str(cfg, user_text: str) -> str:
+    """Test-Helfer: Tuple-Builder zu String joinen wie call-sites es tun."""
+    static_p, dynamic_p = await build_system_prompt(cfg, user_text)
+    return (static_p + "\n\n" + dynamic_p).strip() if dynamic_p else static_p
 
 
 # ================================================================= _context_mode
@@ -66,12 +72,12 @@ class TestBuildSystemPrompt:
 
     async def test_identity_immer_enthalten(self, tmp_path):
         cfg = _make_agent_cfg(agent_dir=str(tmp_path))
-        prompt = await _build_system_prompt(cfg, "Hallo")
+        prompt = await _build_prompt_str(cfg, "Hallo")
         assert "Test-Agent" in prompt
 
     async def test_kein_memory_ohne_verzeichnis(self, tmp_path):
         cfg = _make_agent_cfg(agent_dir=str(tmp_path))
-        prompt = await _build_system_prompt(cfg, "Hallo")
+        prompt = await _build_prompt_str(cfg, "Hallo")
         assert "Persistentes Gedächtnis" not in prompt
 
     async def test_memory_budget_normal_begrenzt(self, tmp_path):
@@ -79,7 +85,7 @@ class TestBuildSystemPrompt:
         mem_dir.mkdir()
         (mem_dir / "gross.md").write_text("X" * 50_000)
         cfg = _make_agent_cfg(agent_dir=str(tmp_path))
-        prompt = await _build_system_prompt(cfg, "Normale Frage")
+        prompt = await _build_prompt_str(cfg, "Normale Frage")
         assert len(prompt) < 35_000
 
     async def test_memory_bm25_snippet_erscheint_in_prompt(self, tmp_path):
@@ -87,7 +93,7 @@ class TestBuildSystemPrompt:
         mem_dir.mkdir()
         (mem_dir / "fakt.md").write_text("Lilith ist der wichtigste Agent und kennt das Projekt.")
         cfg = _make_agent_cfg(agent_dir=str(tmp_path))
-        prompt = await _build_system_prompt(cfg, "Wer ist Lilith?")
+        prompt = await _build_prompt_str(cfg, "Wer ist Lilith?")
         assert "Lilith" in prompt or "Persistentes" in prompt
 
     async def test_full_mode_mehr_bm25_treffer(self, tmp_path):
@@ -97,8 +103,8 @@ class TestBuildSystemPrompt:
         for i in range(10):
             (mem_dir / f"mem_{i:02d}.md").write_text(f"Faktum {i}: Dies ist ein wichtiger Eintrag über das Projekt.")
         cfg = _make_agent_cfg(agent_dir=str(tmp_path))
-        normal = await _build_system_prompt(cfg, "Was ist das Projekt?")
-        full   = await _build_system_prompt(cfg, "!full Was ist das Projekt?")
+        normal = await _build_prompt_str(cfg, "Was ist das Projekt?")
+        full   = await _build_prompt_str(cfg, "!full Was ist das Projekt?")
         # full kann gleich oder länger sein — mindestens kein Fehler
         assert isinstance(full, str) and isinstance(normal, str)
 
@@ -106,12 +112,12 @@ class TestBuildSystemPrompt:
         soul_file = tmp_path / "soul.md"
         soul_file.write_text("Ich bin ein freundlicher Agent.")
         cfg = _make_agent_cfg(agent_dir=str(tmp_path), soul="soul.md")
-        prompt = await _build_system_prompt(cfg, "Test")
+        prompt = await _build_prompt_str(cfg, "Test")
         assert "freundlicher Agent" in prompt
 
     async def test_soul_datei_fehlt_kein_fehler(self, tmp_path):
         cfg = _make_agent_cfg(agent_dir=str(tmp_path), soul="nicht_vorhanden.md")
-        prompt = await _build_system_prompt(cfg, "Test")
+        prompt = await _build_prompt_str(cfg, "Test")
         assert "Test-Agent" in prompt
 
 

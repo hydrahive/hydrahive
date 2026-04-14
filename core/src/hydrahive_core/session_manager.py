@@ -146,19 +146,29 @@ def _merge_consecutive_roles(messages: list[dict]) -> list[dict]:
     Anthropic erfordert strikten user/assistant Wechsel.
     Tool-Call + Tool-Result erzeugen sonst zwei assistant-Messages
     hintereinander → 400 Error.
+
+    #637-Sicherheitsregel: Messages mit `tool_calls` werden NIE gemerged —
+    sonst gehen die strukturierten Tool-Call-Daten still verloren oder
+    zwei Tool-Roundtrips werden zu einem verschmolzen. Lieber Anthropic-
+    Validierung sprechen lassen als stillen Datenverlust.
     """
     if not messages:
         return messages
     merged: list[dict] = [messages[0]]
     for msg in messages[1:]:
-        if msg.get("role") == merged[-1].get("role") and msg.get("role") in ("assistant", "user"):
-            # Content zusammenfügen
-            prev_content = merged[-1].get("content", "") or ""
+        prev = merged[-1]
+        same_role = msg.get("role") == prev.get("role")
+        mergeable_role = msg.get("role") in ("assistant", "user")
+        # tool_calls auf einer der beiden Seiten → Merge unterbinden,
+        # sonst wäre der Tool-Roundtrip strukturell beschädigt.
+        has_tool_calls = bool(prev.get("tool_calls")) or bool(msg.get("tool_calls"))
+        if same_role and mergeable_role and not has_tool_calls:
+            prev_content = prev.get("content", "") or ""
             new_content = msg.get("content", "") or ""
             if prev_content and new_content:
-                merged[-1]["content"] = prev_content + "\n" + new_content
+                prev["content"] = prev_content + "\n" + new_content
             elif new_content:
-                merged[-1]["content"] = new_content
+                prev["content"] = new_content
         else:
             merged.append(msg)
     return merged
@@ -197,30 +207,31 @@ class Message:
         )
 
     def as_llm_message(self) -> dict:
-        """Format für LLM-API — provider-agnostisch (kein role:tool nötig).
+        """#637: Format für LLM-API — kanonisches OpenAI-Schema.
 
-        Tool-Calls und Results werden als assistant-Messages formatiert,
-        damit sie mit jedem Provider funktionieren (Anthropic, OpenAI, etc.).
+        Tool-Events bleiben strukturiert, Provider-Adapter (Anthropic-OAuth)
+        konvertieren erst beim Senden zu Anthropic-content-Block-Liste.
+        litellm akzeptiert OpenAI-Format nativ.
         """
-        # Assistant mit Tool-Calls → als Text ausgeben welche Tools aufgerufen wurden
+        # Assistant mit Tool-Calls → strukturiert mit tool_calls-Feld
         if self.tool_calls and self.role == MessageRole.ASSISTANT:
-            parts = []
-            if self.content:
-                parts.append(self.content)
-            for tc in self.tool_calls:
-                fn = tc.get("function", {})
-                parts.append(f"[Tool-Call: {fn.get('name', '?')}({fn.get('arguments', '{}')})]")
-            return {"role": "assistant", "content": "\n".join(parts)}
-
-        # Tool-Result → als assistant-Message mit Kennzeichnung
-        if self.tool_call_id and self.role == MessageRole.TOOL:
-            tool_name = self.metadata.get("tool_name", "")
             return {
                 "role": "assistant",
-                "content": f"[Tool-Result: {tool_name}]\n{self.content or ''}",
+                "content": self.content or "",
+                "tool_calls": self.tool_calls,
             }
 
-        # Legacy TOOL-Messages (ohne tool_call_id) → als assistant
+        # Tool-Result mit tool_call_id → role:"tool"
+        if self.tool_call_id and self.role == MessageRole.TOOL:
+            return {
+                "role": "tool",
+                "tool_call_id": self.tool_call_id,
+                "content": self.content or "",
+            }
+
+        # Legacy-Fallback: TOOL-Messages OHNE tool_call_id (alte DB-Einträge
+        # vor #637). Ohne tool_call_id kein gültiges OpenAI tool-Pair → als
+        # assistant-Text. Eng begrenzt, sichtbar markiert. Kein neuer Drift.
         if self.role == MessageRole.TOOL:
             return {"role": "assistant", "content": self.content}
 
@@ -343,20 +354,25 @@ class Session:
         result = [m.as_llm_message() for m in summary_msgs]
         for i, m in enumerate(window):
             if m.role == MessageRole.TOOL:
+                # #637: Tool-Result-Budgeting bleibt — wirkt jetzt auf den
+                # content der strukturierten role:tool-Message statt durch
+                # Rollenwechsel.
                 tool_name = _extract_tool_name(m)
                 try:
                     msg_time = datetime.fromisoformat(m.timestamp)
                     age_minutes = (now - msg_time).total_seconds() / 60
                 except (ValueError, TypeError):
                     age_minutes = 0
-
                 pos_from_end = _tool_positions[i] if i < len(_tool_positions) else 0
                 budgeted = budget_tool_result(
                     m.content, tool_name, pos_from_end, age_minutes,
                 )
-                # Tool-Results als assistant ausgeben (provider-agnostisch)
-                _tool_label = f"[Tool-Result: {tool_name}]\n" if tool_name else ""
-                result.append({"role": "assistant", "content": f"{_tool_label}{budgeted}"})
+                msg_dict = m.as_llm_message()
+                # Nur überschreiben falls budgeting den content gekürzt hat
+                # (Legacy-Fallback ohne tool_call_id liefert role:assistant —
+                # auch dort budgeting auf content anwenden).
+                msg_dict["content"] = budgeted
+                result.append(msg_dict)
             else:
                 result.append(m.as_llm_message())
 

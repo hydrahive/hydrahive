@@ -21,6 +21,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from hydrahive_core.orchestrator import Orchestrator, _should_failover
 from hydrahive_core.session_manager import SessionManager, MessageRole
 from hydrahive_core import tool_registry as _tool_reg_module
+from hydrahive_core.orchestrator_context import build_system_prompt
+
+
+async def _build_prompt_str(_orc, cfg, user_text: str) -> str:
+    """#636: einheitlicher Builder, Tuple → joined String wie call-sites es tun."""
+    static_p, dynamic_p = await build_system_prompt(cfg, user_text)
+    return (static_p + "\n\n" + dynamic_p).strip() if dynamic_p else static_p
 
 
 # ================================================================= Fixtures
@@ -106,7 +113,7 @@ class TestContextOverflow:
         with patch.object(orc, "_llm_call", side_effect=Exception(
             "Error code: 400 - prompt is too long: 201000 tokens > 200000 maximum"
         )):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 response, _ = await orc._handle_message_impl(
                     "proj-x", _make_project_cfg(), "Hallo", "user"
                 )
@@ -120,7 +127,7 @@ class TestContextOverflow:
         orc, sessions, _ = _make_orchestrator(tmp_path / "s")
 
         with patch.object(orc, "_llm_call", side_effect=Exception("context_length_exceeded")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 response, _ = await orc._handle_message_impl(
                     "proj-y", _make_project_cfg(), "Test", "user"
                 )
@@ -132,7 +139,7 @@ class TestContextOverflow:
         orc, sessions, _ = _make_orchestrator(tmp_path / "s")
 
         with patch.object(orc, "_llm_call", side_effect=Exception("Verbindung unterbrochen")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 response, _ = await orc._handle_message_impl(
                     "proj-z", _make_project_cfg(), "Test", "user"
                 )
@@ -230,7 +237,7 @@ class TestMemoryBudget:
         agent_cfg.soul = None
 
         orc, _, _ = _make_orchestrator(tmp_path / "s")
-        prompt = await orc._build_system_prompt(agent_cfg, "Normale Frage")
+        prompt = await _build_prompt_str(orc, agent_cfg, "Normale Frage")
 
         assert len(prompt) < 35_000
 
@@ -244,7 +251,7 @@ class TestMemoryBudget:
         agent_cfg.soul = None
 
         orc, _, _ = _make_orchestrator(tmp_path / "s")
-        prompt = await orc._build_system_prompt(agent_cfg, "Wer ist Lilith?")
+        prompt = await _build_prompt_str(orc, agent_cfg, "Wer ist Lilith?")
 
         # Bei BM25-Match erscheint entweder "Erinnerungen" oder Inhalt direkt
         assert "Lilith" in prompt or "Persistentes" in prompt
@@ -260,8 +267,8 @@ class TestMemoryBudget:
         agent_cfg.soul = None
 
         orc, _, _ = _make_orchestrator(tmp_path / "s")
-        normal_prompt = await orc._build_system_prompt(agent_cfg, "Was ist das System?")
-        full_prompt   = await orc._build_system_prompt(agent_cfg, "!full Was ist das System?")
+        normal_prompt = await _build_prompt_str(orc, agent_cfg, "Was ist das System?")
+        full_prompt   = await _build_prompt_str(orc, agent_cfg, "!full Was ist das System?")
 
         assert isinstance(normal_prompt, str) and isinstance(full_prompt, str)
 
@@ -271,7 +278,7 @@ class TestMemoryBudget:
         agent_cfg.soul = None
 
         orc, _, _ = _make_orchestrator(tmp_path / "s")
-        prompt = await orc._build_system_prompt(agent_cfg, "Test")
+        prompt = await _build_prompt_str(orc, agent_cfg, "Test")
 
         assert "Persistentes Gedächtnis" not in prompt
 
@@ -287,7 +294,7 @@ class TestTokenTracking:
 
         with patch.object(_tool_reg_module, "_rate_limiter", mock_rl):
             with patch.object(orc, "_llm_call", return_value=_make_llm_response("Ok", input_tokens=200, output_tokens=80)):
-                with patch.object(orc, "_build_system_prompt", return_value="S"):
+                with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                     await orc._handle_message_impl("proj-t", _make_project_cfg(), "Hi", "user")
 
         mock_rl.track_token_usage.assert_called_once()
@@ -301,7 +308,7 @@ class TestTokenTracking:
 
         with patch.object(_tool_reg_module, "_rate_limiter", mock_rl):
             with patch.object(orc, "_llm_call", side_effect=Exception("Timeout")):
-                with patch.object(orc, "_build_system_prompt", return_value="S"):
+                with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                     await orc._handle_message_impl("proj-u", _make_project_cfg(), "Hi", "user")
 
         mock_rl.track_token_usage.assert_not_called()
@@ -312,7 +319,7 @@ class TestTokenTracking:
 
         with patch.object(_tool_reg_module, "_rate_limiter", None):
             with patch.object(orc, "_llm_call", return_value=_make_llm_response("Ok")):
-                with patch.object(orc, "_build_system_prompt", return_value="S"):
+                with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                     response, _ = await orc._handle_message_impl(
                         "proj-v", _make_project_cfg(), "Hi", "user"
                     )
@@ -328,7 +335,7 @@ class TestSessionState:
         orc, sessions, _ = _make_orchestrator(tmp_path / "s")
 
         with patch.object(orc, "_llm_call", return_value=_make_llm_response("Antwort")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 await orc._handle_message_impl("proj-s", _make_project_cfg(), "Frage", "user")
 
         ctx = sessions.get_context("proj-s")
@@ -341,7 +348,7 @@ class TestSessionState:
         orc, sessions, _ = _make_orchestrator(tmp_path / "s")
 
         with patch.object(orc, "_llm_call", side_effect=Exception("Timeout")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 await orc._handle_message_impl("proj-e", _make_project_cfg(), "Test", "user")
 
         ctx = sessions.get_context("proj-e")
@@ -352,7 +359,7 @@ class TestSessionState:
         orc, sessions, _ = _make_orchestrator(tmp_path / "s")
 
         with patch.object(orc, "_llm_call", return_value=_make_llm_response("Meine Antwort")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 response, _ = await orc._handle_message_impl(
                     "proj-a", _make_project_cfg(), "Frage", "user"
                 )
@@ -374,7 +381,7 @@ class TestSessionState:
         await sessions.append("proj-full", MessageRole.ASSISTANT, "Alte Antwort 1")
 
         with patch.object(orc, "_llm_call", side_effect=Exception("prompt is too long: 201k > 200k")):
-            with patch.object(orc, "_build_system_prompt", return_value="S"):
+            with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
                 await orc._handle_message_impl("proj-full", _make_project_cfg(), "Neue Frage", "user")
 
         # Session wurde zurückgesetzt — keine alten Nachrichten mehr
