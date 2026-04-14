@@ -36,11 +36,35 @@ _CACHE_FINGERPRINTS: dict[str, dict] = {}  # agent_id → {had_write, last_write
 
 # ---------------------------------------------------------------- Prompt Caching
 
+def _split_system_at_memory_marker(content: str) -> list[dict] | None:
+    """#629: Wenn der System-Prompt den <memory_dynamic>-Marker enthält (gesetzt
+    durch ContextChannels in #627), splitten wir ihn in zwei content-blocks:
+    - statischer Vorlauf (cacheable)
+    - dynamischer Rest (memory + last_session + skills + ...; NICHT cachen)
+
+    So bleibt der statische Block byte-identisch zwischen Turns und der Cache
+    überlebt Memory-Wechsel. Returns None wenn kein Marker gefunden.
+    """
+    from .context_channels import MEMORY_OPEN
+    if not isinstance(content, str) or MEMORY_OPEN not in content:
+        return None
+    static_part, _, dynamic_part = content.partition(MEMORY_OPEN)
+    static_part = static_part.rstrip()
+    dynamic_part = (MEMORY_OPEN + dynamic_part).strip()
+    if not static_part or not dynamic_part:
+        return None
+    return [
+        {"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": dynamic_part},
+    ]
+
+
 def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]:
     """
     Fügt Anthropic Prompt Caching Cache-Breakpoints ein (max 4 erlaubt).
     Strategie (4 Breakpoints):
-    1. System-Message (letzter Block) — größter Gewinn
+    1. System-Message: bei <memory_dynamic>-Marker → 2 Blöcke (static cached,
+       dynamic ungecached). Sonst: gesamter System-Block cached.
     2. Erste User-Message (Kontext-Anfang)
     3. Mittlere History-Message (bei langen Conversations)
     4. Vorletzte Message (nahe am aktuellen Turn)
@@ -66,10 +90,16 @@ def _apply_cache_control(messages: list[dict], is_anthropic: bool) -> list[dict]
             return {**msg, "content": new_c}
         return msg
 
-    # Breakpoint 1: System-Message
+    # Breakpoint 1: System-Message — #629 Segmentierung am Memory-Marker
     for i, m in enumerate(result):
         if m.get("role") == "system" and used < _MAX_CACHE:
-            result[i] = _tag_cache(m)
+            segmented = _split_system_at_memory_marker(m.get("content", ""))
+            if segmented is not None:
+                result[i] = {**m, "content": segmented}
+                logger.debug("system-prompt segmentiert: static=%d chars (cached), dynamic=%d chars",
+                             len(segmented[0]["text"]), len(segmented[1]["text"]))
+            else:
+                result[i] = _tag_cache(m)
             used += 1
             break
 

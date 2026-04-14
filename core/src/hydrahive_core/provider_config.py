@@ -41,16 +41,39 @@ def get_oauth_system_blocks(system_prompt: str) -> list[dict]:
 
     Anthropic OAuth erfordert den Identity-Block als erstes Element.
     Der eigene System-Prompt wird als zweites Element angehängt.
+
+    #629: Wenn der System-Prompt den <memory_dynamic>-Marker enthält, wird er
+    in zwei Blöcke gesplittet — der statische Vorlauf bleibt cacheable, der
+    dynamische Memory-Block bekommt KEIN cache_control. Das stabilisiert den
+    Cache über Memory-Wechsel hinweg.
     """
     blocks = [
         {"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY},
     ]
-    if system_prompt:
-        blocks.append({
-            "type": "text",
-            "text": system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        })
+    if not system_prompt:
+        return blocks
+
+    # Lokaler Import, weil context_channels in __init__-Reihenfolge später kommt
+    from .context_channels import MEMORY_OPEN
+    if MEMORY_OPEN in system_prompt:
+        static_part, _, dynamic_part = system_prompt.partition(MEMORY_OPEN)
+        static_part = static_part.rstrip()
+        dynamic_part = (MEMORY_OPEN + dynamic_part).strip()
+        if static_part:
+            blocks.append({
+                "type": "text",
+                "text": static_part,
+                "cache_control": {"type": "ephemeral"},
+            })
+        if dynamic_part:
+            blocks.append({"type": "text", "text": dynamic_part})
+        return blocks
+
+    blocks.append({
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral"},
+    })
     return blocks
 
 
