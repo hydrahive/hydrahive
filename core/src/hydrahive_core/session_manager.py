@@ -253,6 +253,8 @@ class Session:
     started_at:  str                    # ISO-8601
     ended_at:    str | None = None
     messages:    list[Message] = field(default_factory=list)
+    # #630: Working-Memory-Snapshot bei Resume (None für frische Sessions)
+    working_state: object | None = None
 
     @classmethod
     def new(cls, project_id: str) -> "Session":
@@ -499,9 +501,64 @@ class SessionManager:
                 ON messages(session_id, seq);
             CREATE INDEX IF NOT EXISTS idx_messages_usage
                 ON messages(input_tokens) WHERE input_tokens > 0;
+
+            -- #630: Working-Memory Snapshots pro Turn (siehe working_state.py)
+            CREATE TABLE IF NOT EXISTS session_snapshots (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                created_at  TEXT NOT NULL,
+                turn_seq    INTEGER NOT NULL DEFAULT 0,
+                state_json  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_snapshots_session
+                ON session_snapshots(session_id, id DESC);
         """)
         db.commit()
         return db
+
+    # ------------------------------------------------------------------ #630 Snapshots
+
+    def save_snapshot(self, session_id: str, state, turn_seq: int = 0) -> None:
+        """#630: Speichert einen Working-Memory-Snapshot am Turn-Ende.
+
+        Nimmt ein WorkingState-Objekt (siehe working_state.py) oder ein dict
+        und persistiert es als JSON. Fehler werden geschluckt — Snapshots
+        sind eine Komfort-Schicht, kein kritischer Pfad.
+        """
+        if not self._db:
+            return
+        try:
+            from .working_state import WorkingState, now_iso
+            if isinstance(state, dict):
+                state = WorkingState(**state)
+            if not state.created_at:
+                state.created_at = now_iso()
+            self._db.execute(
+                "INSERT INTO session_snapshots (session_id, created_at, turn_seq, state_json) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, state.created_at, int(turn_seq), state.to_json()),
+            )
+            self._db.commit()
+        except Exception as e:
+            logger.debug("save_snapshot Fehler (%s): %s", session_id[:8], e)
+
+    def load_latest_snapshot(self, session_id: str):
+        """#630: Lädt den jüngsten Snapshot zu einer Session oder None."""
+        if not self._db:
+            return None
+        try:
+            row = self._db.execute(
+                "SELECT state_json FROM session_snapshots "
+                "WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return None
+            from .working_state import WorkingState
+            return WorkingState.from_json(row["state_json"])
+        except Exception as e:
+            logger.debug("load_latest_snapshot Fehler (%s): %s", session_id[:8], e)
+            return None
 
     # ------------------------------------------------------------------ public
 
@@ -631,6 +688,22 @@ class SessionManager:
                         (content[:120], session.id),
                     )
                     self._db.commit()
+            # #630: Working-Memory-Snapshot am Turn-Ende (assistant-Antwort)
+            if role == MessageRole.ASSISTANT and not tool_calls:
+                try:
+                    from .working_state import WorkingState, now_iso
+                    last_user = next(
+                        (m.content for m in reversed(session.messages[:-1])
+                         if m.role == MessageRole.USER),
+                        "",
+                    )
+                    snap = WorkingState(
+                        current_goal=(last_user or "")[:200],
+                        created_at=now_iso(),
+                    )
+                    self.save_snapshot(session.id, snap, turn_seq=len(session.messages))
+                except Exception as _e:
+                    logger.debug("Snapshot bei append fehlgeschlagen: %s", _e)
             return message
 
     async def replace_messages(self, project_id: str, messages: list[Message]) -> None:
@@ -812,6 +885,18 @@ class SessionManager:
                 })
             except Exception:
                 pass
+
+            # #630: Working-Memory-Snapshot laden falls vorhanden
+            _snapshot = self.load_latest_snapshot(session_id)
+            if _snapshot:
+                logger.info(
+                    "Session %s: Working-Memory-Snapshot geladen (created=%s, goal=%r, files=%d)",
+                    session_id[:8], _snapshot.created_at,
+                    (_snapshot.current_goal or "")[:60], len(_snapshot.open_files),
+                )
+                # Snapshot am Session-Objekt halten — Builder nutzt ihn via
+                # session.working_state für den `working_state`-Channel (#627).
+                session.working_state = _snapshot
 
             # Als aktiv setzen — ended_at zurücksetzen
             self._active[project_id] = session
