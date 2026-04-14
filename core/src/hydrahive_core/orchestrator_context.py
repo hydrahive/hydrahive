@@ -19,6 +19,7 @@ import litellm
 
 from .learning_memory import build_learning_prompt_snippet
 from .session_metrics import metrics as _metrics
+from .context_channels import ContextChannels
 from .memory_search import search_memory, update_index as update_memory_index
 from .prefetch import start_memory_prefetch
 from .semantic_index import score_texts
@@ -526,10 +527,13 @@ _STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 
 async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bool = False) -> tuple[str, str]:
     """
-    Wie _build_system_prompt, aber gibt (static_prefix, dynamic_suffix) zurück.
-    Der static_prefix ist cacheable (soul, handbook, repos, blueprint, workflow).
-    Der dynamic_suffix ist query-abhängig (BM25 Memory, semantic Skills, repo-guidance).
-    Anthropic cache_control wird nur auf static_prefix gesetzt → Cache-Hits!
+    Baut den System-Prompt strukturiert in ContextChannels (#627) und gibt
+    (static_prefix, dynamic_suffix) zurück — kompatibel zur bisherigen Signatur.
+
+    Static-Channels (cacheable) und Dynamic-Channels (query-abhängig) werden
+    pro Slot zugeordnet, nicht in eine flache Parts-Liste gekippt. Der
+    dynamische Memory-Block wird im Output mit `<memory_dynamic>` markiert,
+    damit #629 (Cache-Segmentierung) und Debugging die Grenze erkennen.
     """
     mode = _context_mode(user_text)
     loop = asyncio.get_event_loop()
@@ -538,10 +542,10 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
     _k_prefetch = 8 if mode == "full" else 4
     _prefetch = start_memory_prefetch(boss_cfg.agent_dir, user_text, k=_k_prefetch)
 
-    # --- Statischer Teil (cacheable) ---
-    static_parts = [f"Du bist {boss_cfg.identity}."]
+    channels = ContextChannels()
+    channels.agent_identity = f"Du bist {boss_cfg.identity}."
 
-    # Static-Cache prüfen
+    # ── Static-Cache prüfen (cached den serialisierten static-Block) ──────
     static_cached = None
     if not invalidate and boss_cfg.agent_dir:
         cached = _STATIC_PROMPT_CACHE.get(boss_cfg.id)
@@ -553,25 +557,23 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                     static_cached = prompt_s
 
     if static_cached is None:
-        # startup.md
+        # ── Static-Channels füllen ────────────────────────────────────
         if boss_cfg.agent_dir:
             startup_path = boss_cfg.agent_dir / "startup.md"
             if startup_path.exists():
                 startup_text = startup_path.read_text(encoding="utf-8").strip()
                 if startup_text:
-                    static_parts.append(
-                        f"## ERSTER START — ONBOARDING\n\n"
-                        f"**WICHTIG: Diese Anweisung hat höchste Priorität.**\n\n"
+                    channels.onboarding = (
+                        "## ERSTER START — ONBOARDING\n\n"
+                        "**WICHTIG: Diese Anweisung hat höchste Priorität.**\n\n"
                         f"{startup_text}"
                     )
 
-        # Soul
         if boss_cfg.soul and boss_cfg.agent_dir:
             soul_path = boss_cfg.agent_dir / boss_cfg.soul
             if soul_path.exists():
-                static_parts.append(soul_path.read_text(encoding="utf-8").strip())
+                channels.soul = soul_path.read_text(encoding="utf-8").strip()
 
-        # INDEX.md + Learning-Snippets (stabil zwischen Queries)
         if boss_cfg.agent_dir:
             memory_dir = boss_cfg.agent_dir / "memory"
             if memory_dir.exists():
@@ -581,21 +583,19 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                     if index_text:
                         if len(index_text) > 1500:
                             index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
-                        static_parts.append(f"## Persistentes Gedächtnis\n\n### Index\n{index_text}")
+                        channels.memory_index = f"## Persistentes Gedächtnis\n\n### Index\n{index_text}"
                 learning_snippet = build_learning_prompt_snippet(
                     boss_cfg.agent_dir,
                     **({"max_entries": 8, "max_chars": 3000} if mode == "full"
                        else {"max_entries": 3, "max_chars": 1500}),
                 )
                 if learning_snippet:
-                    static_parts.append(learning_snippet)
+                    channels.learning = learning_snippet
 
-        # Sources
         if getattr(boss_cfg, "sources", None):
             src_lines = [f"- **{s.name}**: {s.url}" + (f" — {s.description}" if s.description else "") for s in boss_cfg.sources]
-            static_parts.append("## Zugewiesene Quellen\n\n" + "\n".join(src_lines))
+            channels.sources = "## Zugewiesene Quellen\n\n" + "\n".join(src_lines)
 
-        # Git-Repos
         try:
             from .repo_config import repos_for_agent
             agent_repos = repos_for_agent(boss_cfg.id)
@@ -606,59 +606,53 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                     if repo.token and "github.com" in repo.url:
                         clone_url = repo.url.replace("https://", f"https://{repo.token}@")
                     repo_lines.append(f"- **{repo.name}** ({repo.provider}): Clone `{clone_url}.git` Branch `{repo.branch}`")
-                static_parts.append("## Zugewiesene Git-Repos\n\n" + "\n".join(repo_lines))
+                channels.repos = "## Zugewiesene Git-Repos\n\n" + "\n".join(repo_lines)
         except Exception:
             pass
 
-        # Handbook
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
             _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
             if _handbook_text:
-                static_parts.append(_handbook_text)
+                channels.handbook = _handbook_text
 
-        # Blueprint + Workflow
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
             if blueprint_ctx:
-                static_parts.append(blueprint_ctx)
+                channels.blueprint = blueprint_ctx
             agent_wf = _load_agent_workflow_prompt(boss_cfg.agent_dir)
             if agent_wf:
-                static_parts.append(agent_wf)
+                channels.workflow = agent_wf
 
-        static_cached = "\n\n".join(static_parts)
+        static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
             h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
             _STATIC_PROMPT_CACHE[boss_cfg.id] = (static_cached, time.time(), h)
 
-    # --- Dynamischer Teil (query-abhängig, NICHT cached) ---
-    dynamic_parts = []
-
+    # ── Dynamic-Channels füllen ───────────────────────────────────────
     if boss_cfg.agent_dir:
-        # Skills semantic-scoring parallel laden
         all_skills = load_skills(boss_cfg.agent_dir)
         _skill_task = None
         if all_skills:
             skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
             _skill_task = loop.run_in_executor(None, score_texts, skill_texts, user_text)
 
-        # #625: Async Memory-Prefetch — BM25-Treffer abholen (timeout-gesichert)
+        # #625: Async Memory-Prefetch — BM25-Treffer abholen
         snippets = await _prefetch.get_bm25(timeout=0.8)
         if snippets:
-            dynamic_parts.append("### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets))
+            channels.memory_hits = "### Erinnerungen (query-relevant)\n" + "\n---\n".join(snippets)
 
         if all_skills and _skill_task:
             raw_scores = await _skill_task
             semantic_scores = {s.skill: raw_scores[i] for i, s in enumerate(all_skills)} if raw_scores else {}
             active_skills = select_skills(all_skills, user_text, semantic_scores=semantic_scores)
             if active_skills:
-                dynamic_parts.append(skills_to_system_prompt(active_skills, token_budget=8000))
+                channels.skills = skills_to_system_prompt(active_skills, token_budget=8000)
 
     repo_guidance = _repo_review_guidance(boss_cfg, user_text)
     if repo_guidance:
-        dynamic_parts.append(repo_guidance)
+        channels.repo_guidance = repo_guidance
 
-    # Session-Continuity
     if boss_cfg.agent_dir:
         last_session_path = boss_cfg.agent_dir / "memory" / "_last_session.md"
         if last_session_path.exists():
@@ -669,7 +663,7 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
                 if last_text:
                     if len(last_text) > 3000:
                         last_text = last_text[:3000] + "\n…[gekürzt]"
-                    dynamic_parts.append("## Letzte Session\n\n" + last_text)
+                    channels.last_session = "## Letzte Session\n\n" + last_text
 
     # #620: Deferred-Tools-Liste (lokal + MCP, Phase 4)
     try:
@@ -681,15 +675,19 @@ async def _build_system_prompt_split(boss_cfg, user_text: str, *, invalidate: bo
             _mcp_entries = await _mcp_deferred_entries(boss_cfg, str(_s.mcp_servers_config))
         except Exception as _mcp_err:
             logger.debug("mcp deferred entries skipped: %s", _mcp_err)
-        # Cache für ToolSearch-Zugriff in derselben Runde
         set_current_mcp_entries(boss_cfg.id, _mcp_entries)
         _deferred_block = render_deferred_tools_block(mcp_entries=_mcp_entries)
         if _deferred_block:
-            dynamic_parts.append(_deferred_block)
+            channels.deferred_tools = _deferred_block
     except Exception as _e:
         logger.debug("deferred-tools block skipped: %s", _e)
 
-    dynamic_suffix = "\n\n".join(dynamic_parts) if dynamic_parts else ""
+    dynamic_suffix = channels.to_dynamic_str()
+
+    # #627: Channel-Sizes loggen (Diagnose)
+    _filled = {k: v for k, v in channels.sizes().items() if v > 0}
+    logger.debug("system-prompt channels (agent=%s): %s", boss_cfg.id, _filled)
+
     return static_cached, dynamic_suffix
 
 
