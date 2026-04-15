@@ -11,14 +11,6 @@ llm:
 
 execution_modes:
   default: safe
-  safe:
-    permissions:
-    - filesystem.read
-    - system.read
-    - memory.read
-    - memory.write
-    - handoff.read
-    - agents.ask
 
 heartbeat:
   interval: 60s

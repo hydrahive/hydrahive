@@ -1211,6 +1211,35 @@ def test_invariant12c_upgrade_strips_legacy_permissions():
     )
 
 
+def test_invariant12d_bundled_agent_yamls_have_no_legacy_permissions():
+    """12d (#644): Gebündelte agent.yaml-Dateien unter /agents/<id>/ tragen
+    keine toten permissions-Listen mehr in execution_modes — sonst driftet
+    der Repo-Stand von der Runtime-Konfiguration weg."""
+    import yaml as _yaml
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    agents_dir = repo_root / "agents"
+    if not agents_dir.exists():
+        return
+
+    offenders: list[str] = []
+    for yaml_path in agents_dir.glob("*/agent.yaml"):
+        data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        em = data.get("execution_modes", {})
+        if not isinstance(em, dict):
+            continue
+        for mode, profile in em.items():
+            if mode == "default":
+                continue
+            if isinstance(profile, dict) and "permissions" in profile:
+                offenders.append(f"{yaml_path.relative_to(repo_root)}::{mode}")
+    assert not offenders, (
+        "Tote permissions-Listen in gebündelten agent.yaml-Dateien gefunden "
+        f"(seit #638/#644 wirkungslos): {offenders}"
+    )
+
+
 # ===========================================================================
 # Invariante 13 — Keine Legacy-Workspace-Welt mehr (#643)
 # ===========================================================================

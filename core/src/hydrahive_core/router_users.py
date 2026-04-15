@@ -24,9 +24,6 @@ def default_personal_agent_execution_modes() -> dict:
 
 
 def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None, *, is_admin: bool = False) -> tuple[dict, bool]:
-    # #492: Agents mit role brauchen kein Legacy-Upgrade
-    if agent_data.get("role"):
-        return agent_data, False
     changed = False
     defaults = default_personal_agent_execution_modes()
     execution_modes = agent_data.setdefault("execution_modes", {})
