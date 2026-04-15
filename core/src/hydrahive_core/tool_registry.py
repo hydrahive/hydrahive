@@ -1624,6 +1624,28 @@ class AskAgentTool(BaseTool):
                 "question": {"type": "string", "description": "Frage/Task"},
                 "context": {"type": "string", "description": "Zusätzlicher Kontext (optional)"},
                 "project_id": {"type": "string", "description": "Projekt-ID für den Ziel-Agent (optional)"},
+                "isolation_mode": {
+                    "type": "string",
+                    "enum": ["read_only", "patch_only", "full_worktree"],
+                    "description": (
+                        "Sub-Agent-Isolation (#652). Default: full_worktree. "
+                        "Nur wirksam bei settings.worktree_isolation=True + Git-Repo. "
+                        "read_only/patch_only blockieren Writes via Tool-Dispatch-Enforcement (#664)."
+                    ),
+                },
+                "write_scope": {
+                    "type": "object",
+                    "description": (
+                        "Write-Scope (#653) für Sub-Agent-Worktree. "
+                        "Nur wirksam bei Worktree-Isolation. V1 informativ (Scope-Report), "
+                        "keine direkte Tool-Blockade."
+                    ),
+                    "properties": {
+                        "allow":       {"type": "array", "items": {"type": "string"}},
+                        "deny":        {"type": "array", "items": {"type": "string"}},
+                        "description": {"type": "string"},
+                    },
+                },
             },
             "required": ["target", "question"],
         }
@@ -1657,14 +1679,59 @@ class AskAgentTool(BaseTool):
         else:
             session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
 
-        # #662: Optionale Worktree-Isolation. Nur aktiv wenn Feature-Flag
+        # #662/#667: Optionale Worktree-Isolation. Nur aktiv wenn Feature-Flag
         # gesetzt UND Parent-Workspace ein Git-Repo ist. Payload bekommt ein
         # workspace_override-Feld, das der Router ausschließlich für
         # internal-auth Aufrufe akzeptiert.
+        # #667: isolation_mode + write_scope sind optionale Caller-Args. Werden
+        # nur durchgereicht, wenn explizit gesetzt — sonst nutzt create_worktree
+        # seinen eigenen Default (full_worktree / None).
         _wt_meta = None
         _wt_skipped_reason: str | None = None
         _wt_setup_error: str | None = None
         _extra_body: dict = {}
+        _raw_iso = kwargs.get("isolation_mode")
+        _raw_scope = kwargs.get("write_scope")
+        _explicit_iso_args = _raw_iso is not None or _raw_scope is not None
+
+        # #667: Validierung der Caller-Args (vor Git-Check, vor create_worktree,
+        # vor HTTP). Bei settings.worktree_isolation=False werden Args stumm
+        # ignoriert (Feature global aus — Legacy-Pfad bleibt stabil).
+        _validated_iso = None
+        _validated_scope_raw = None
+        if getattr(settings, "worktree_isolation", False):
+            from .subagent_isolation import (
+                IsolationError as _IsoErr,
+                validate_isolation_mode as _validate_iso,
+            )
+            from .subagent_write_scope import (
+                WriteScopeError as _WSErr,
+                validate_write_scope as _validate_scope,
+            )
+            if _raw_iso is not None:
+                try:
+                    _validated_iso = _validate_iso(_raw_iso).value
+                except _IsoErr as _iso_err:
+                    return {
+                        "error": f"ask_agent: ungültiges isolation_mode: {_iso_err}",
+                        "agent_id": target,
+                        "worktree_skipped": "invalid_args",
+                        "field": "isolation_mode",
+                        "reason": str(_iso_err),
+                    }
+            if _raw_scope is not None:
+                try:
+                    _validate_scope(_raw_scope)  # validiert, wir geben das dict weiter
+                    _validated_scope_raw = _raw_scope
+                except _WSErr as _ws_err:
+                    return {
+                        "error": f"ask_agent: ungültiger write_scope: {_ws_err}",
+                        "agent_id": target,
+                        "worktree_skipped": "invalid_args",
+                        "field": "write_scope",
+                        "reason": str(_ws_err),
+                    }
+
         if getattr(settings, "worktree_isolation", False):
             from .subagent_worktrees import (
                 WorktreeError,
@@ -1675,6 +1742,16 @@ class AskAgentTool(BaseTool):
 
             parent_workspace = workspace_root(project_id) if project_id else None
             if parent_workspace is None or not is_git_repo(parent_workspace):
+                if _explicit_iso_args:
+                    # #667: Caller hat Isolation explizit angefordert, aber
+                    # Projekt ist kein Git-Repo → fail-closed, kein HTTP.
+                    return {
+                        "error": (
+                            "worktree isolation requested but project is not a git repo"
+                        ),
+                        "agent_id": target,
+                        "worktree_skipped": "non_git_repo_but_isolation_requested",
+                    }
                 _wt_skipped_reason = "non_git_repo"
             else:
                 # task_id: session_id sanitized auf Identifier-Whitelist.
@@ -1684,14 +1761,20 @@ class AskAgentTool(BaseTool):
                 _parent_pid = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", project_id or "p")[:64] or "p"
                 _parent_aid = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", agent_id or "a")[:64] or "a"
                 try:
+                    # Nur explizit gesetzte Args durchreichen; sonst nutzt
+                    # create_worktree seinen eigenen Default.
+                    _cw_kwargs: dict = {}
+                    if _validated_iso is not None:
+                        _cw_kwargs["isolation_mode"] = _validated_iso
+                    if _validated_scope_raw is not None:
+                        _cw_kwargs["write_scope"] = _validated_scope_raw
                     _wt_meta = create_worktree(
                         base_repo=str(parent_workspace),
                         parent_project_id=_parent_pid,
                         parent_agent_id=_parent_aid,
                         sub_agent_id=_sub_id,
                         task_id=_task_id,
-                        isolation_mode="full_worktree",
-                        write_scope=None,
+                        **_cw_kwargs,
                     )
                     _extra_body["workspace_override"] = {
                         "path": _wt_meta.worktree_path,
@@ -1801,9 +1884,11 @@ class AskAgentTool(BaseTool):
 
                 if isinstance(result, dict):
                     result["worktree_meta"] = {
-                        "worktree_id":   _wt_meta.worktree_id,
-                        "worktree_path": _wt_meta.worktree_path,
-                        "scope_report":  _scope_dict,
+                        "worktree_id":    _wt_meta.worktree_id,
+                        "worktree_path":  _wt_meta.worktree_path,
+                        "isolation_mode": _wt_meta.isolation_mode,
+                        "write_scope":    _wt_meta.write_scope,
+                        "scope_report":   _scope_dict,
                     }
 
         if _wt_skipped_reason is not None and isinstance(result, dict):

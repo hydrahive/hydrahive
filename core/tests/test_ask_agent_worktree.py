@@ -292,3 +292,177 @@ async def test_scope_report_in_result(parent_repo, fake_aiohttp, monkeypatch):
     assert "allowed_files" in report
     assert "denied_files" in report
     assert "out_of_scope_files" in report
+
+
+# ── #667: isolation_mode / write_scope konfigurierbar ───────────────────────
+
+async def test_isolation_default_from_create_worktree(parent_repo, fake_aiohttp, monkeypatch):
+    """Ohne explizite Args: create_worktree-Default (full_worktree) greift."""
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+    )
+    assert result.get("success") is True
+    wm = result["worktree_meta"]
+    assert wm["isolation_mode"] == "full_worktree"
+    assert wm["write_scope"] is None
+
+
+@pytest.mark.parametrize("mode", ["read_only", "patch_only", "full_worktree"])
+async def test_explicit_isolation_mode_persisted(parent_repo, fake_aiohttp, monkeypatch, mode):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        isolation_mode=mode,
+    )
+    assert result.get("success") is True
+    assert result["worktree_meta"]["isolation_mode"] == mode
+
+    # Meta-Disk spiegelt den Wert
+    from hydrahive_core.subagent_worktrees import get_worktree
+    wid = fake_aiohttp.last_body["workspace_override"]["worktree_id"]
+    meta = get_worktree(wid)
+    assert meta.isolation_mode == mode
+
+
+async def test_invalid_isolation_mode_rejected(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        isolation_mode="yolo",
+    )
+    assert "error" in result
+    assert result.get("worktree_skipped") == "invalid_args"
+    assert result.get("field") == "isolation_mode"
+    # Kein HTTP-Call
+    assert fake_aiohttp.last_body is None
+
+
+async def test_valid_write_scope_persisted(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    scope = {"allow": ["core/**"], "deny": ["**/*.env"], "description": "core-only"}
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        write_scope=scope,
+    )
+    assert result.get("success") is True
+    assert result["worktree_meta"]["write_scope"] == scope
+
+    # Disk-Persistenz
+    from hydrahive_core.subagent_worktrees import get_worktree
+    wid = fake_aiohttp.last_body["workspace_override"]["worktree_id"]
+    meta = get_worktree(wid)
+    assert meta.write_scope == scope
+
+
+async def test_invalid_write_scope_rejected(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        write_scope={"allow": ["/abs/path"]},  # absoluter Pfad → invalid
+    )
+    assert "error" in result
+    assert result.get("worktree_skipped") == "invalid_args"
+    assert result.get("field") == "write_scope"
+    assert fake_aiohttp.last_body is None
+
+
+async def test_non_git_default_args_legacy_fallback(tmp_path, fake_aiohttp, monkeypatch):
+    """Non-Git + keine Args → Legacy-Fallback mit Marker."""
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_id = "p_non_git_default"
+    (projects_root / project_id).mkdir()
+    monkeypatch.setattr(tr, "PROJECTS_ROOT", projects_root)
+    monkeypatch.setenv("HYDRAHIVE_WORKTREES_DIR", str(tmp_path / "wt"))
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+    )
+    assert result.get("worktree_skipped") == "non_git_repo"
+    # HTTP-Call ging durch
+    assert fake_aiohttp.last_body is not None
+
+
+@pytest.mark.parametrize("explicit_kwarg", [
+    {"isolation_mode": "read_only"},
+    {"write_scope": {"allow": ["core/**"]}},
+    {"isolation_mode": "patch_only", "write_scope": {"deny": ["**/*.env"]}},
+])
+async def test_non_git_with_explicit_args_fail_closed(tmp_path, fake_aiohttp, monkeypatch, explicit_kwarg):
+    """Non-Git + explizite Isolation-Args → fail-closed, kein HTTP."""
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    project_id = "p_non_git_strict"
+    (projects_root / project_id).mkdir()
+    monkeypatch.setattr(tr, "PROJECTS_ROOT", projects_root)
+    monkeypatch.setenv("HYDRAHIVE_WORKTREES_DIR", str(tmp_path / "wt"))
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        **explicit_kwarg,
+    )
+    assert "error" in result
+    assert result.get("worktree_skipped") == "non_git_repo_but_isolation_requested"
+    # KEIN HTTP-Call
+    assert fake_aiohttp.last_body is None
+
+
+async def test_isolation_off_ignores_explicit_args(parent_repo, fake_aiohttp, monkeypatch):
+    """settings.worktree_isolation=False → Legacy-Pfad, explizite Args stumm ignoriert."""
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", False, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        isolation_mode="read_only",
+        write_scope={"allow": ["core/**"]},
+    )
+    assert result.get("success") is True
+    # Legacy: kein Worktree, kein override im body
+    assert "workspace_override" not in fake_aiohttp.last_body
+    assert "worktree_meta" not in result
+
+
+async def test_result_contains_isolation_and_scope_keys(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+    )
+    wm = result["worktree_meta"]
+    for k in ("worktree_id", "worktree_path", "isolation_mode", "write_scope", "scope_report"):
+        assert k in wm, f"missing {k!r} in worktree_meta: {wm}"
