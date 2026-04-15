@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
@@ -11,6 +12,61 @@ from .learning_memory import append_learning_snapshot
 # #641-Followup: ToolConfirmRequest ist Module-Scope in router_projects —
 # wir importieren dasselbe Modell statt zu duplizieren.
 from .router_projects import ToolConfirmRequest
+from .settings import settings as _hh_settings
+
+logger = logging.getLogger(__name__)
+
+
+def _validate_workspace_override(ov, auth_user: str) -> Path:
+    """#662: validiert den internal-only workspace_override.
+
+    Raises HTTPException(400) bei Verletzung. Rückgabe: validierter absoluter
+    Path, den der Caller als ContextVar-Override setzen darf.
+    """
+    import re as _re
+    from .subagent_worktrees import WorktreeError, get_worktree
+
+    if auth_user != "internal":
+        raise HTTPException(400, "workspace_override requires internal auth")
+
+    # 1. Format-Checks (Path + worktree_id) zuerst, bevor wir Meta laden.
+    p = Path(ov.path)
+    if not p.is_absolute():
+        raise HTTPException(400, "workspace_override: path must be absolute")
+    if not _re.match(r"^wt-[A-Za-z0-9_-]{1,96}$", ov.worktree_id or ""):
+        raise HTTPException(400, "workspace_override: invalid worktree_id format")
+
+    # 2. get_worktree(worktree_id) → meta
+    try:
+        meta = get_worktree(ov.worktree_id)
+    except WorktreeError as exc:
+        raise HTTPException(400, f"workspace_override: unknown worktree_id: {exc}") from exc
+
+    # 3. Meta-Konsistenz
+    if meta.worktree_path != ov.path:
+        raise HTTPException(400, "workspace_override: path does not match worktree metadata")
+    if meta.parent_project_id != ov.parent_project_id:
+        raise HTTPException(400, "workspace_override: parent_project_id mismatch")
+    if meta.status != "active":
+        raise HTTPException(
+            400, f"workspace_override: worktree is not active (status={meta.status})"
+        )
+
+    # 4. Pfad-Existenz + Dir
+    resolved = p.resolve()
+    if not resolved.is_dir():
+        raise HTTPException(400, "workspace_override: path is not an existing directory")
+
+    # 5. Prefix-Check: muss unter worktrees_dir/trees liegen.
+    trees_root = (_hh_settings.worktrees_dir / "trees").resolve()
+    try:
+        resolved.relative_to(trees_root)
+    except ValueError as exc:
+        raise HTTPException(
+            400, f"workspace_override: path must be under {trees_root}"
+        ) from exc
+
+    return resolved
 
 
 class AgentMemoryRequest(BaseModel):
@@ -387,13 +443,29 @@ def register_agent_chat_routes(
         )
         # project_id immer auf agent_id setzen (kein client-controlled override)
         project_id = agent_id
-        response, _ = await agent_orchestrator.handle_message(
-            project_id=project_id,
-            project_cfg=virtual_cfg,
-            content=req.content,
-            sender=sender,
-            execution_mode=execution_mode,
-        )
+
+        # #662: optionaler Workspace-Override für Sub-Agent-Worktrees.
+        # Feld darf NUR von internal-auth Aufrufen (ask_agent via HMAC)
+        # gesetzt werden. Externe Clients → HTTP 400.
+        _ws_override_token = None
+        if req.workspace_override is not None:
+            from .tool_registry import set_workspace_override as _set_ws
+            _validated_path = _validate_workspace_override(req.workspace_override, _username)
+            _ws_override_token = _set_ws(_validated_path)
+
+        try:
+            response, _ = await agent_orchestrator.handle_message(
+                project_id=project_id,
+                project_cfg=virtual_cfg,
+                content=req.content,
+                sender=sender,
+                execution_mode=execution_mode,
+            )
+        finally:
+            if _ws_override_token is not None:
+                from .tool_registry import reset_workspace_override as _reset_ws
+                _reset_ws(_ws_override_token)
+
         return {"response": response, "agent_id": agent_id}
 
     @app.post("/agents/{agent_id}/message/stream")
@@ -408,6 +480,12 @@ def register_agent_chat_routes(
         from .project_config import ProjectIdentity as _PI
 
         req = incoming_message_model.model_validate(body)
+        # #662: Streaming unterstützt workspace_override in V1 NICHT — siehe
+        # Follow-up-Issue. Feld abweisen, auch für internal-auth Aufrufe.
+        if req.workspace_override is not None:
+            raise HTTPException(
+                400, "workspace_override is not supported for streaming yet"
+            )
         execution_mode = resolve_request_execution_mode(
             _a,
             req.execution_mode,

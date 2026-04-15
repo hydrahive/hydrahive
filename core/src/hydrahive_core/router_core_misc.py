@@ -40,11 +40,24 @@ class AgentLlmPatchRequest(BaseModel):
     fallback_models: list[str]
 
 
+class WorkspaceOverride(BaseModel):
+    """#662: internal-only Workspace-Override für Sub-Agent-Worktrees.
+
+    Darf NUR von internal-auth Aufrufen (ask_agent via HMAC) gesetzt werden.
+    Der Router validiert Feld gegen worktrees_dir und subagent_worktrees-
+    Metadaten und lehnt externe Clients mit 400 ab.
+    """
+    path:              str
+    worktree_id:       str
+    parent_project_id: str
+
+
 class IncomingMessage(BaseModel):
     content: str
     sender: str = "user"
     execution_mode: Literal["safe", "elevated", "root", "unrestricted"] | None = None
     images: list[dict] | None = None  # [{"data": "base64...", "media_type": "image/png"}]
+    workspace_override: WorkspaceOverride | None = None  # #662, internal-only
 
 
 class AgentSoulRequest(BaseModel):

@@ -17,6 +17,7 @@ Alles andere (Git, Discord, Server, Mail, etc.) geht über shell_exec.
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import re as _re_shell
@@ -44,13 +45,48 @@ AGENTS_ROOT   = settings.agents_dir
 # `file_*`, `file_patch`, `shell_exec` und `git_*` operieren alle auf
 # diesem identischen Pfad — kein Sub-Tree, keine "Familie von Roots",
 # kein Parent-Trick. Ein Projekt hat genau einen effektiven Working Tree.
+# #662: Per-Request Workspace-Override via ContextVar.
+# Wird vom Router für internal-auth Sub-Agent-Aufrufe gesetzt, wenn ein
+# validiertes workspace_override im Payload steht. Async-Task-lokal, damit
+# parallele Requests sich nicht beeinflussen. Set vor handle_message(),
+# reset in finally. Ohne Override fällt workspace_root() auf den Default
+# zurück — bestehende Tests und Aufrufer bleiben unverändert.
+_workspace_override_var: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
+    "hydrahive_workspace_override", default=None,
+)
+
+
+def set_workspace_override(path: Path) -> contextvars.Token:
+    """Setzt den Workspace-Override für den aktuellen async-Task-Kontext.
+
+    Rückgabe: Token für späteren reset_workspace_override().
+    """
+    return _workspace_override_var.set(path)
+
+
+def reset_workspace_override(token: contextvars.Token) -> None:
+    _workspace_override_var.reset(token)
+
+
+def _current_workspace_override() -> Path | None:
+    return _workspace_override_var.get()
+
+
 def workspace_root(project_id: str) -> Path:
     """Autoritativer Workspace-Pfad eines Projekts.
 
     Identisch genutzt von file-, shell- und git-Tools. Reine Resolver-
     Funktion ohne Side-Effects — kein mkdir, kein I/O. Verbraucher legen
     Verzeichnisse selbst an.
+
+    #662: Wenn im aktuellen async-Context ein Workspace-Override gesetzt
+    ist (via set_workspace_override, vom Router für Sub-Agent-Worktrees),
+    wird dieser Pfad zurückgegeben. Die Invariante "workspace_root ist die
+    einzige Quelle" bleibt — nur ihr Ergebnis ist per-Task override-bar.
     """
+    ov = _workspace_override_var.get()
+    if ov is not None:
+        return ov
     return (PROJECTS_ROOT / project_id).resolve()
 
 
@@ -1574,61 +1610,159 @@ class AskAgentTool(BaseTool):
         else:
             session_id = f"{target}_{_uuid.uuid4().hex[:8]}"
 
-        try:
-            async def _do_post():
-                async with _aio.ClientSession() as _s:
-                    async with _s.post(
-                        f"http://127.0.0.1:8765/agents/{target}/message",
-                        json={"content": content, "sender": agent_id, "project_id": session_id},
-                        headers=headers,
-                        timeout=_aio.ClientTimeout(total=300),
-                    ) as _resp:
-                        return _resp.status, await _resp.json()
+        # #662: Optionale Worktree-Isolation. Nur aktiv wenn Feature-Flag
+        # gesetzt UND Parent-Workspace ein Git-Repo ist. Payload bekommt ein
+        # workspace_override-Feld, das der Router ausschließlich für
+        # internal-auth Aufrufe akzeptiert.
+        _wt_meta = None
+        _wt_skipped_reason: str | None = None
+        _wt_setup_error: str | None = None
+        _extra_body: dict = {}
+        if getattr(settings, "worktree_isolation", False):
+            from .subagent_worktrees import (
+                WorktreeError,
+                create_worktree,
+                is_git_repo,
+                release_worktree,
+            )
 
-            task = asyncio.create_task(_do_post())
-            while not task.done():
+            parent_workspace = workspace_root(project_id) if project_id else None
+            if parent_workspace is None or not is_git_repo(parent_workspace):
+                _wt_skipped_reason = "non_git_repo"
+            else:
+                # task_id: session_id sanitized auf Identifier-Whitelist.
+                _raw_task = session_id or f"{target}_{_uuid.uuid4().hex[:8]}"
+                _task_id = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", _raw_task)[:64] or "task"
+                _sub_id = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", target)[:64] or "sub"
+                _parent_pid = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", project_id or "p")[:64] or "p"
+                _parent_aid = _re_shell.sub(r"[^A-Za-z0-9_-]", "_", agent_id or "a")[:64] or "a"
                 try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-                except asyncio.TimeoutError:
-                    pass
-                if _interrupt_flags.get(project_id) or _interrupt_flags.get(agent_id):
-                    task.cancel()
-                    clear_interrupt(project_id)
-                    clear_interrupt(agent_id)
-                    _notify(project_id, "task_failed", f"Abgebrochen: {target}",
-                            f"Agent '{target}' wurde unterbrochen.", link=f"/chat/{project_id}")
+                    _wt_meta = create_worktree(
+                        base_repo=str(parent_workspace),
+                        parent_project_id=_parent_pid,
+                        parent_agent_id=_parent_aid,
+                        sub_agent_id=_sub_id,
+                        task_id=_task_id,
+                        isolation_mode="full_worktree",
+                        write_scope=None,
+                    )
+                    _extra_body["workspace_override"] = {
+                        "path": _wt_meta.worktree_path,
+                        "worktree_id": _wt_meta.worktree_id,
+                        "parent_project_id": _wt_meta.parent_project_id,
+                    }
+                except WorktreeError as _wt_err:
+                    _wt_setup_error = str(_wt_err)
+                    logger.warning("ask_agent worktree setup failed: %s", _wt_err)
+
+        if _wt_setup_error is not None:
+            # fail-closed: KEIN HTTP-Call wenn Isolation gewünscht aber nicht möglich.
+            return {
+                "error": f"worktree setup failed: {_wt_setup_error}",
+                "worktree_skipped": "error",
+                "agent_id": target,
+            }
+
+        _post_body = {"content": content, "sender": agent_id, "project_id": session_id}
+        _post_body.update(_extra_body)
+
+        async def _call_and_parse() -> dict:
+            try:
+                async def _do_post():
+                    async with _aio.ClientSession() as _s:
+                        async with _s.post(
+                            f"http://127.0.0.1:8765/agents/{target}/message",
+                            json=_post_body,
+                            headers=headers,
+                            timeout=_aio.ClientTimeout(total=300),
+                        ) as _resp:
+                            return _resp.status, await _resp.json()
+
+                task = asyncio.create_task(_do_post())
+                while not task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        pass
+                    if _interrupt_flags.get(project_id) or _interrupt_flags.get(agent_id):
+                        task.cancel()
+                        clear_interrupt(project_id)
+                        clear_interrupt(agent_id)
+                        _notify(project_id, "task_failed", f"Abgebrochen: {target}",
+                                f"Agent '{target}' wurde unterbrochen.", link=f"/chat/{project_id}")
+                        return {
+                            "interrupted": True, "agent_id": target,
+                            "directive": "Der Nutzer hat den Request abgebrochen.",
+                        }
+
+                status, data = task.result()
+                if status == 404:
+                    return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
+                response = data.get("response", "")
+                if not response or not response.strip():
                     return {
-                        "interrupted": True, "agent_id": target,
-                        "directive": "Der Nutzer hat den Request abgebrochen.",
+                        "agent_id": target, "worker_failed": True,
+                        "directive": f"Agent '{target}' hat keine Antwort geliefert.",
                     }
 
-            status, data = task.result()
-            if status == 404:
-                return {"error": f"Agent '{target}' nicht gefunden", "agent_id": target}
-            response = data.get("response", "")
-            if not response or not response.strip():
-                return {
-                    "agent_id": target, "worker_failed": True,
-                    "directive": f"Agent '{target}' hat keine Antwort geliefert.",
-                }
+                _error_keywords = (
+                    "konnte nicht", "fehlgeschlagen", "fehler:", "error:", "permission denied",
+                    "nicht abgeschlossen", "nicht möglich", "nicht erlaubt", "nicht gefunden",
+                )
+                response_lower = response.lower()
+                worker_errors = [kw for kw in _error_keywords if kw in response_lower]
+                _r: dict = {"agent_id": target, "response": response, "success": True}
+                if worker_errors:
+                    _r["worker_reported_errors"] = True
+                    _r["hint"] = "Der Worker hat Fehler gemeldet (siehe response)."
+                    _notify(project_id, "task_failed", f"Fehler: {target}", response[:120], link=f"/chat/{project_id}")
+                else:
+                    _notify(project_id, "task_done", f"Fertig: {target}", response[:120], link=f"/chat/{project_id}")
+                return _r
+            except Exception as e:
+                _notify(project_id, "task_failed", f"Kommunikationsfehler: {target}", str(e)[:120], link=f"/chat/{project_id}")
+                return {"error": f"Fehler bei Kommunikation mit '{target}': {e}", "agent_id": target}
 
-            _error_keywords = (
-                "konnte nicht", "fehlgeschlagen", "fehler:", "error:", "permission denied",
-                "nicht abgeschlossen", "nicht möglich", "nicht erlaubt", "nicht gefunden",
-            )
-            response_lower = response.lower()
-            worker_errors = [kw for kw in _error_keywords if kw in response_lower]
-            result: dict = {"agent_id": target, "response": response, "success": True}
-            if worker_errors:
-                result["worker_reported_errors"] = True
-                result["hint"] = "Der Worker hat Fehler gemeldet (siehe response)."
-                _notify(project_id, "task_failed", f"Fehler: {target}", response[:120], link=f"/chat/{project_id}")
-            else:
-                _notify(project_id, "task_done", f"Fertig: {target}", response[:120], link=f"/chat/{project_id}")
-            return result
-        except Exception as e:
-            _notify(project_id, "task_failed", f"Kommunikationsfehler: {target}", str(e)[:120], link=f"/chat/{project_id}")
-            return {"error": f"Fehler bei Kommunikation mit '{target}': {e}", "agent_id": target}
+        # Echtes try/finally: release_worktree muss auch laufen, wenn
+        # _call_and_parse() eine unerwartete Exception wirft.
+        result: Any = None
+        try:
+            result = await _call_and_parse()
+        finally:
+            if _wt_meta is not None:
+                from .subagent_worktrees import release_worktree
+                from .subagent_write_scope import WriteScope, evaluate_worktree_scope
+
+                _scope_dict: dict
+                try:
+                    _report = evaluate_worktree_scope(_wt_meta.worktree_path, WriteScope())
+                    _scope_dict = {
+                        "ok":                 _report.ok,
+                        "violations_count":   _report.violations_count,
+                        "allowed_files":      list(_report.allowed_files),
+                        "denied_files":       list(_report.denied_files),
+                        "out_of_scope_files": list(_report.out_of_scope_files),
+                    }
+                except Exception as _serr:
+                    logger.warning("scope eval failed: %s", _serr)
+                    _scope_dict = {"error": f"scope eval failed: {_serr}"}
+
+                try:
+                    release_worktree(_wt_meta.worktree_id)
+                except Exception as _rerr:
+                    logger.warning("release failed: %s", _rerr)
+
+                if isinstance(result, dict):
+                    result["worktree_meta"] = {
+                        "worktree_id":   _wt_meta.worktree_id,
+                        "worktree_path": _wt_meta.worktree_path,
+                        "scope_report":  _scope_dict,
+                    }
+
+        if _wt_skipped_reason is not None and isinstance(result, dict):
+            result["worktree_skipped"] = _wt_skipped_reason
+
+        return result
 
 
 # =========================================================================
