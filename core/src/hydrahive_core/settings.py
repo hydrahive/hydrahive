@@ -157,6 +157,19 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "wks_keys"
 
     @property
+    def settings_file(self) -> Path:
+        """Pfad zu settings.json (Hook-Konfiguration, #654).
+
+        Override via Env HYDRAHIVE_SETTINGS_FILE (wird von
+        hook_settings.load_hook_settings() direkt geprüft).
+        """
+        import os
+        override = os.environ.get("HYDRAHIVE_SETTINGS_FILE")
+        if override:
+            return Path(override)
+        return self.etc_dir / "settings.json"
+
+    @property
     def use_local_gitea_file(self) -> Path:
         return self.etc_dir / "use_local_gitea"
 

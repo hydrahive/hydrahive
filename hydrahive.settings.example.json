@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/hydrahive/scripts/pre-tool-validate.sh",
+            "timeout": 30,
+            "disabled": false,
+            "description": "Validiert Bash- und Write-Tool-Aufrufe"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/hydrahive/scripts/post-tool-log.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "OnTaskStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/hydrahive/scripts/task-start-notify.sh"
+          }
+        ]
+      }
+    ],
+    "OnTaskDone": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/hydrahive/scripts/task-done-notify.sh",
+            "disabled": true,
+            "description": "Noch deaktiviert — Task-Done-Notifier in Arbeit"
+          }
+        ]
+      }
+    ]
+  }
+}
