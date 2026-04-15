@@ -325,6 +325,23 @@ class TestTokenTracking:
                     )
         assert response == "Ok"
 
+    async def test_llm_response_ohne_usage_bricht_nicht_ab(self, tmp_path):
+        """Provider ohne usage-Feld darf nicht an undefiniertem total_t scheitern."""
+        orc, _, _ = _make_orchestrator(tmp_path / "s")
+        mock_rl = MagicMock()
+        response_obj = _make_llm_response("Ok")
+        response_obj.usage = None
+
+        with patch.object(_tool_reg_module, "_rate_limiter", mock_rl):
+            with patch.object(orc, "_llm_call", return_value=response_obj):
+                with patch("hydrahive_core.orchestrator_context.build_system_prompt", new_callable=AsyncMock, return_value=("S", "")):
+                    response, _ = await orc._handle_message_impl(
+                        "proj-no-usage", _make_project_cfg(), "Hi", "user"
+                    )
+
+        assert response == "Ok"
+        mock_rl.track_token_usage.assert_not_called()
+
 
 # ================================================================= Session-State
 

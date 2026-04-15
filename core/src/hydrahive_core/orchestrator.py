@@ -877,8 +877,8 @@ class Orchestrator:
                     "cache_read_tokens":  cache_read,
                 }
             total_t = input_t + output_t
-        if total_t > 0 and _tool_reg._rate_limiter is not None:
-            _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
+            if total_t > 0 and _tool_reg._rate_limiter is not None:
+                _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
 
         await self._sessions.append(
             project_id, MessageRole.ASSISTANT,
