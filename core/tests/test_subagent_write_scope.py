@@ -9,12 +9,17 @@ import pytest
 from hydrahive_core.subagent_write_scope import (
     IMPLICIT_DENY_PATTERNS,
     MAX_PATTERN_LEN,
+    ScopeOverlap,
     WriteScope,
     WriteScopeError,
     WriteScopeReport,
     WriteScopeViolation,
+    _classify_pair,
+    _classify_pattern,
     _glob_to_regex,
     changed_files,
+    compare_many_scopes,
+    compare_scopes,
     evaluate_worktree_scope,
     path_allowed,
     validate_write_scope,
@@ -326,3 +331,225 @@ def test_implicit_deny_applied_via_path_allowed():
 def test_implicit_deny_patterns_constant():
     assert ".git" in IMPLICIT_DENY_PATTERNS
     assert ".git/**" in IMPLICIT_DENY_PATTERNS
+
+
+# ── Pattern-Classifier (#666) ────────────────────────────────────────────────
+
+@pytest.mark.parametrize("pat,kind,payload", [
+    ("core/a.py",   "literal",    ("core/a.py",)),
+    ("README.md",   "literal",    ("README.md",)),
+    ("**",          "catch_all",  ()),
+    ("**/*",        "catch_all",  ()),
+    ("core/**",     "prefix",     ("core",)),
+    ("core/src/**", "prefix",     ("core/src",)),
+    ("**/*.py",     "ext_any",    ("py",)),
+    ("**/*.yaml",   "ext_any",    ("yaml",)),
+    ("core/*.py",   "ext_scoped", ("core", "py")),
+    ("*.py",        "ext_scoped", ("", "py")),
+    # Unklare Muster → complex
+    ("**/config.*",    "complex", ()),
+    ("core/**/*.py",   "complex", ()),
+    ("*/foo.py",       "complex", ()),
+    ("**/*secret*",    "complex", ()),
+])
+def test_classify_pattern(pat, kind, payload):
+    k, v = _classify_pattern(pat)
+    assert k == kind
+    assert v == payload
+
+
+# ── _classify_pair Matrix ────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("pa,pb,expected", [
+    # identisch
+    ("core/**",       "core/**",       "overlap"),
+    # prefix-superset
+    ("core/**",       "core/src/**",   "overlap"),
+    ("core/src/**",   "core/**",       "overlap"),
+    # disjoint prefix
+    ("core/**",       "console/**",    "safe"),
+    ("core/**",       "core2/**",      "safe"),
+    # literal × literal
+    ("core/a.py",     "core/b.py",     "safe"),
+    ("core/a.py",     "core/a.py",     "overlap"),
+    # literal × prefix
+    ("core/a.py",     "core/**",       "overlap"),
+    ("core/a.py",     "console/**",    "safe"),
+    # literal × ext_any
+    ("**/*.py",       "core/foo.py",   "overlap"),
+    ("**/*.py",       "core/foo.txt",  "safe"),
+    # literal × ext_scoped
+    ("core/*.py",     "core/foo.py",   "overlap"),
+    ("core/*.py",     "core/sub/foo.py", "safe"),
+    ("core/*.py",     "core/foo.txt",  "safe"),
+    # prefix × ext_any
+    ("core/**",       "**/*.py",       "overlap"),
+    # prefix × ext_scoped
+    ("core/*.py",     "core/**",       "overlap"),
+    ("core/sub/*.py", "core/**",       "overlap"),
+    ("core/*.py",     "console/**",    "safe"),
+    # ext_any × ext_any
+    ("**/*.py",       "**/*.py",       "overlap"),
+    ("**/*.py",       "**/*.txt",      "safe"),
+    # ext_any × ext_scoped
+    ("**/*.py",       "core/*.py",     "overlap"),
+    ("**/*.txt",      "core/*.py",     "safe"),
+    # ext_scoped × ext_scoped
+    ("core/*.py",     "console/*.py",  "safe"),
+    ("core/*.py",     "core/*.txt",    "safe"),
+    ("core/*.py",     "core/*.py",     "overlap"),
+    # catch-all "**" schluckt alles
+    ("**",            "core/a.py",     "overlap"),
+    ("**",            "console/**",    "overlap"),
+    # complex → uncertain
+    ("*/foo.py",      "core/*.py",     "uncertain"),
+    ("**/config.*",   "core/**",       "uncertain"),
+    ("**/*secret*",   "core/**",       "uncertain"),
+])
+def test_classify_pair_matrix(pa, pb, expected):
+    assert _classify_pair(pa, pb) == expected
+    # Symmetrie
+    assert _classify_pair(pb, pa) == expected
+
+
+# ── compare_scopes: Allow-Geometrie ──────────────────────────────────────────
+
+def _ws(allow=(), deny=()):
+    return WriteScope(allow=tuple(allow), deny=tuple(deny), description=None)
+
+
+def test_compare_identical_allow_overlap():
+    r = compare_scopes(_ws(["core/**"]), _ws(["core/**"]))
+    assert r.status == "overlap"
+    assert ("core/**", "core/**") in r.overlapping_patterns
+
+
+def test_compare_prefix_superset_overlap():
+    r = compare_scopes(_ws(["core/**"]), _ws(["core/src/**"]))
+    assert r.status == "overlap"
+
+
+def test_compare_disjoint_prefix_safe():
+    r = compare_scopes(_ws(["core/**"]), _ws(["console/**"]))
+    assert r.status == "safe"
+    assert r.overlapping_patterns == ()
+    assert r.uncertain_patterns == ()
+
+
+def test_compare_different_literal_files_safe():
+    r = compare_scopes(_ws(["core/a.py"]), _ws(["core/b.py"]))
+    assert r.status == "safe"
+
+
+def test_compare_both_empty_allow_overlap():
+    r = compare_scopes(_ws(), _ws())
+    assert r.status == "overlap"
+
+
+def test_compare_empty_vs_nonempty_overlap_or_uncertain():
+    r = compare_scopes(_ws(), _ws(["core/**"]))
+    assert r.status in ("overlap", "uncertain")
+    assert r.status != "safe"
+
+
+def test_compare_ext_any_vs_literal_overlap():
+    r = compare_scopes(_ws(["**/*.py"]), _ws(["core/foo.py"]))
+    assert r.status == "overlap"
+
+
+def test_compare_ext_any_vs_literal_safe():
+    r = compare_scopes(_ws(["**/*.py"]), _ws(["core/foo.txt"]))
+    assert r.status == "safe"
+
+
+def test_compare_complex_wildcard_uncertain():
+    r = compare_scopes(_ws(["*/foo.py"]), _ws(["core/*.py"]))
+    assert r.status == "uncertain"
+
+
+def test_compare_complex_wildcard_never_safe():
+    r = compare_scopes(_ws(["**/config.*"]), _ws(["core/**"]))
+    assert r.status != "safe"
+
+
+# ── compare_scopes: Deny-Regeln (V1) ────────────────────────────────────────
+
+def test_deny_downgrades_overlap_to_uncertain():
+    """
+    [core/**] deny [core/secrets/**] vs [core/secrets/**] → uncertain,
+    weil deny möglicherweise den overlap ausschließt, aber nicht mit
+    Sicherheit.
+    """
+    a = _ws(["core/**"], ["core/secrets/**"])
+    b = _ws(["core/secrets/**"])
+    r = compare_scopes(a, b)
+    assert r.status == "uncertain"
+
+
+def test_deny_does_not_affect_disjoint_allow_geometry():
+    """
+    [core/**] deny [core/secrets/**] vs [console/**] → safe bleibt safe,
+    weil Allow-Geometrie disjunkt ist.
+    """
+    a = _ws(["core/**"], ["core/secrets/**"])
+    b = _ws(["console/**"])
+    r = compare_scopes(a, b)
+    assert r.status == "safe"
+
+
+def test_deny_never_makes_overlap_safe():
+    """
+    [core/**] deny [core/**] vs [core/**] → uncertain, nicht safe,
+    obwohl deny theoretisch alles ausschließt.
+    """
+    a = _ws(["core/**"], ["core/**"])
+    b = _ws(["core/**"])
+    r = compare_scopes(a, b)
+    assert r.status == "uncertain"
+
+
+def test_both_empty_allow_with_deny_is_uncertain():
+    a = _ws([], ["**/*.env"])
+    b = _ws([], [])
+    r = compare_scopes(a, b)
+    assert r.status == "uncertain"
+
+
+# ── compare_many_scopes ──────────────────────────────────────────────────────
+
+def test_compare_many_scopes_pairs():
+    scopes = {
+        "alice":   _ws(["core/**"]),
+        "bob":     _ws(["console/**"]),
+        "charlie": _ws(["core/src/**"]),
+    }
+    report = compare_many_scopes(scopes)
+    assert set(report.keys()) == {
+        ("alice", "bob"),
+        ("alice", "charlie"),
+        ("bob", "charlie"),
+    }
+    assert report[("alice", "bob")].status == "safe"
+    assert report[("alice", "charlie")].status == "overlap"
+    assert report[("bob", "charlie")].status == "safe"
+
+
+def test_compare_many_scopes_rejects_non_writescope():
+    with pytest.raises(WriteScopeError, match="WriteScope"):
+        compare_many_scopes({"a": _ws(["core/**"]), "b": {"allow": []}})  # type: ignore[dict-item]
+
+
+def test_compare_many_scopes_rejects_non_dict():
+    with pytest.raises(WriteScopeError, match="dict"):
+        compare_many_scopes([("a", _ws())])  # type: ignore[arg-type]
+
+
+def test_compare_scopes_rejects_non_writescope():
+    with pytest.raises(WriteScopeError, match="WriteScope"):
+        compare_scopes({"allow": []}, _ws())  # type: ignore[arg-type]
+
+
+def test_scope_overlap_is_frozen():
+    r = compare_scopes(_ws(["core/**"]), _ws(["console/**"]))
+    with pytest.raises(Exception):
+        r.status = "overlap"  # type: ignore[misc]
