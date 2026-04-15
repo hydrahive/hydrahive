@@ -8,6 +8,7 @@ Projekt-Boss-Composer bleibt bewusst out of scope (Phase 1e).
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 from datetime import datetime, timezone
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import yaml as _yaml
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 from .composer_engine import (
@@ -174,6 +175,54 @@ def _validate_admin_agent_id(agent_id: str, agents_root: Path) -> Path:
     return agent_dir
 
 
+def _compute_etag(agent_dir: Path) -> str:
+    """Stat-Fingerprint von AGENT.md + agent_profile.yaml → sha256[:16].
+
+    Keine Dateien → Hash von `empty`. Fehlt eine Seite, wird `missing` als
+    Platzhalter eingesetzt, damit Übergänge (kein profile → mit profile)
+    sichere Key-Wechsel auslösen.
+    """
+    agent_md = agent_dir / AGENT_MD_FILENAME
+    profile = agent_dir / PROFILE_FILENAME
+
+    def _part(p: Path, label: str) -> str:
+        if not p.exists():
+            return f"{label}:missing"
+        try:
+            st = p.stat()
+        except OSError:
+            return f"{label}:missing"
+        return f"{label}:{st.st_mtime_ns}:{st.st_size}"
+
+    if not agent_md.exists() and not profile.exists():
+        raw = "empty"
+    else:
+        raw = _part(agent_md, "agent") + "|" + _part(profile, "profile")
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _require_etag_match(agent_dir: Path, if_match: Optional[str]) -> None:
+    """Optionaler Concurrent-Edit-Schutz.
+
+    Kein `If-Match` → no-op (Backward-Compat V1).
+    Mismatch → 409 mit minimalem Detail `{message, current_etag}`.
+    Kein Write, Backup, Cache-Invalidate oder Audit darf nach einem 409
+    noch laufen — Aufrufer muss `_require_etag_match` vor `_perform_save`
+    platzieren.
+    """
+    if if_match is None:
+        return
+    current = _compute_etag(agent_dir)
+    if if_match != current:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "AGENT.md wurde seit dem Laden geändert. Bitte Profil neu laden.",
+                "current_etag": current,
+            },
+        )
+
+
 def _build_profile_response(agent_dir: Path) -> dict:
     profile, load_warnings = _load_profile(agent_dir)
     agent_md_exists, mtime_matches = _agent_md_mtime_matches(agent_dir)
@@ -185,6 +234,7 @@ def _build_profile_response(agent_dir: Path) -> dict:
         "updated_at": profile.updated_at,
         "agent_md_exists": agent_md_exists,
         "agent_md_mtime_matches": mtime_matches,
+        "etag": _compute_etag(agent_dir),
         "warnings": warnings,
     }
 
@@ -277,6 +327,7 @@ def _perform_save(
         "bytes_written": len(markdown.encode("utf-8")),
         "preset": body.preset,
         "warnings": warnings,
+        "etag": _compute_etag(agent_dir),
     }
 
 
@@ -321,6 +372,7 @@ def register_composer_routes(
     @auth_router.put("/me/agent/composer")
     def save_composer(
         body: ComposerInput = Body(...),
+        if_match: Optional[str] = Header(None, alias="If-Match"),
         auth: tuple[str, str] = Depends(require_auth),
     ):
         username, _role = auth
@@ -334,6 +386,7 @@ def register_composer_routes(
                 detail=f"Personal-Agent-Verzeichnis nicht gefunden: {agent_id}",
             )
 
+        _require_etag_match(agent_dir, if_match)
         return _perform_save(
             agent_dir,
             agent_id,
@@ -411,11 +464,13 @@ def register_admin_composer_routes(
     def admin_save(
         agent_id: str,
         body: ComposerInput = Body(...),
+        if_match: Optional[str] = Header(None, alias="If-Match"),
         auth: tuple[str, str] = Depends(require_admin),
     ):
         username, _role = auth
         agent_dir = _validate_admin_agent_id(agent_id, agents_root)
         _validate_save_input(body)
+        _require_etag_match(agent_dir, if_match)
         return _perform_save(
             agent_dir,
             agent_id,
@@ -538,12 +593,14 @@ def register_project_composer_routes(
     def project_save(
         project_id: str,
         body: ComposerInput = Body(...),
+        if_match: Optional[str] = Header(None, alias="If-Match"),
         auth: tuple[str, str] = Depends(require_auth),
     ):
         project_dir = _validate_project_id(project_id, projects_root)
         _require_project_composer_access(auth, project_id)
         username, _role = auth
         _validate_save_input(body)
+        _require_etag_match(project_dir, if_match)
         return _perform_save(
             project_dir,
             project_id,

@@ -25,9 +25,9 @@ export interface ProfileComposerProps {
 interface ComposerApi {
   loadBlocks: () => Promise<{categories: CategoryDef[]}>;
   loadPresets: () => Promise<{presets: PresetDef[]}>;
-  loadProfile: () => Promise<{selected: string[]; preset: string | null; warnings: ComposerWarning[]; agent_md_exists: boolean; agent_md_mtime_matches: boolean}>;
+  loadProfile: () => Promise<{selected: string[]; preset: string | null; warnings: ComposerWarning[]; agent_md_exists: boolean; agent_md_mtime_matches: boolean; etag: string}>;
   preview: (selected: string[], preset: string | null) => Promise<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>;
-  save: (selected: string[], preset: string | null) => Promise<{backup_created: boolean; warnings: ComposerWarning[]}>;
+  save: (selected: string[], preset: string | null, etag: string | null) => Promise<{backup_created: boolean; warnings: ComposerWarning[]; etag: string}>;
 }
 
 function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId?: string): ComposerApi {
@@ -38,7 +38,7 @@ function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId
       loadPresets: () => api.adminComposerPresets(agentId),
       loadProfile: () => api.adminComposerProfile(agentId),
       preview: (sel, p) => api.adminComposerPreview(agentId, sel, p),
-      save: (sel, p) => api.adminComposerSave(agentId, sel, p),
+      save: (sel, p, etag) => api.adminComposerSave(agentId, sel, p, etag),
     };
   }
   if (scope === "project") {
@@ -48,7 +48,7 @@ function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId
       loadPresets: () => api.projectComposerPresets(projectId),
       loadProfile: () => api.projectComposerProfile(projectId),
       preview: (sel, p) => api.projectComposerPreview(projectId, sel, p),
-      save: (sel, p) => api.projectComposerSave(projectId, sel, p),
+      save: (sel, p, etag) => api.projectComposerSave(projectId, sel, p, etag),
     };
   }
   return {
@@ -56,7 +56,7 @@ function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId
     loadPresets: () => api.composerPresets(),
     loadProfile: () => api.composerProfile(),
     preview: (sel, p) => api.composerPreview(sel, p),
-    save: (sel, p) => api.composerSave(sel, p),
+    save: (sel, p, etag) => api.composerSave(sel, p, etag),
   };
 }
 
@@ -72,6 +72,8 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
   const [saveBlocked, setSaveBlocked] = useState(false);
   const [mtimeMatches, setMtimeMatches] = useState<boolean>(true);
   const [agentMdExists, setAgentMdExists] = useState<boolean>(false);
+  const [etag, setEtag] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{ currentEtag: string; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -79,28 +81,36 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [presetSwitchTarget, setPresetSwitchTarget] = useState<string | null>(null);
 
+  async function reloadAll() {
+    setLoading(true);
+    setMsg(null);
+    setPreview("");
+    try {
+      const [blocksR, presetsR, profileR] = await Promise.all([
+        composerApi.loadBlocks(),
+        composerApi.loadPresets(),
+        composerApi.loadProfile(),
+      ]);
+      setCategories(blocksR.categories);
+      setPresets(presetsR.presets);
+      setSelected(new Set(profileR.selected));
+      setPreset(profileR.preset ?? PRESET_CUSTOM);
+      setWarnings(profileR.warnings);
+      setSaveBlocked(profileR.warnings.some(w => w.severity === "error"));
+      setAgentMdExists(profileR.agent_md_exists);
+      setMtimeMatches(profileR.agent_md_mtime_matches);
+      setEtag(profileR.etag);
+      setConflict(null);
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const [blocksR, presetsR, profileR] = await Promise.all([
-          composerApi.loadBlocks(),
-          composerApi.loadPresets(),
-          composerApi.loadProfile(),
-        ]);
-        setCategories(blocksR.categories);
-        setPresets(presetsR.presets);
-        setSelected(new Set(profileR.selected));
-        setPreset(profileR.preset ?? PRESET_CUSTOM);
-        setWarnings(profileR.warnings);
-        setSaveBlocked(profileR.warnings.some(w => w.severity === "error"));
-        setAgentMdExists(profileR.agent_md_exists);
-        setMtimeMatches(profileR.agent_md_mtime_matches);
-      } catch (e) {
-        setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
-      } finally {
-        setLoading(false);
-      }
-    })();
+    void reloadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composerApi]);
 
   const selectedCount = selected.size;
@@ -163,6 +173,7 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
       const r = await composerApi.save(
         Array.from(selected),
         preset === PRESET_CUSTOM ? null : preset,
+        etag,
       );
       setMsg({
         kind: "ok",
@@ -178,8 +189,21 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
       setSaveBlocked(false);
       setMtimeMatches(true);
       setAgentMdExists(true);
+      setEtag(r.etag);
+      setConflict(null);
     } catch (e) {
-      setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
+      const err = e as Error & { status?: number; detail?: { message?: string; current_etag?: string } };
+      if (err && err.status === 409 && err.detail && typeof err.detail === "object") {
+        setConflict({
+          currentEtag: err.detail.current_etag || "",
+          message: err.detail.message || t("composer.conflictMessage", {
+            defaultValue: "AGENT.md wurde seit dem Laden geändert. Bitte Profil neu laden.",
+          }),
+        });
+        setMsg(null);
+      } else {
+        setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+      }
     } finally {
       setSaving(false);
     }
@@ -248,6 +272,24 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
                 "AGENT.md hat Vorrang vor soul.md. Diese Ansicht bearbeitet nur AGENT.md und agent_profile.yaml — agent.yaml, soul.md, tools[] und execution_modes bleiben unverändert.",
             })}
           </span>
+        </div>
+      )}
+
+      {/* 409 Conflict — AGENT.md extern geändert, Reload nötig */}
+      {conflict && (
+        <div className="flex items-start gap-2 text-xs rounded-md border border-destructive/50 bg-destructive/10 text-destructive p-2">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <p>{conflict.message}</p>
+            <button
+              type="button"
+              onClick={() => void reloadAll()}
+              className="inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded-md border border-destructive/50 bg-background hover:bg-accent transition"
+            >
+              <RefreshCw className="h-3 w-3" />
+              {t("composer.conflictReload", { defaultValue: "Profil neu laden" })}
+            </button>
+          </div>
         </div>
       )}
 
@@ -327,7 +369,7 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          disabled={!hasSelection || saving || saveBlocked}
+          disabled={!hasSelection || saving || saveBlocked || !!conflict}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs rounded-md bg-primary text-primary-foreground hover:opacity-90 transition disabled:opacity-50"
         >
           <Save className="h-3.5 w-3.5" />

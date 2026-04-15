@@ -52,7 +52,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const e = await res.json().catch(()=>({detail:res.statusText}));
     // Only trigger logout if the token hasn't changed since this request was sent
     if (res.status === 401 && tokenAtRequest && tokenAtRequest === getToken()) notifyAuthExpired(path);
-    throw new Error(e.detail||`HTTP ${res.status}`);
+    // Stringify structured detail (z.B. 409 Composer-Conflict) damit kein [object Object] entsteht,
+    // aber originalen Status + Detail am Error-Objekt verfügbar machen.
+    const detailText = typeof e.detail === "string" ? e.detail : (e.detail?.message || `HTTP ${res.status}`);
+    const err = new Error(detailText) as Error & { status?: number; detail?: unknown };
+    err.status = res.status;
+    err.detail = e.detail;
+    throw err;
   }
   return res.json();
 }
@@ -60,6 +66,8 @@ export const api = {
   get:    <T>(path: string)                => request<T>(path),
   post:   <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put:    <T>(path: string, body: unknown) => request<T>(path, { method: "PUT",   body: JSON.stringify(body) }),
+  putWithHeaders: <T>(path: string, body: unknown, headers: Record<string, string>) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body), headers }),
   patch:  <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string)               => request<T>(path, { method: "DELETE" }),
   health:        ()           => api.get<{status:string}>("/health"),
@@ -125,21 +133,21 @@ export const api = {
   // #645 Profile-Composer (Personal-Agent)
   composerBlocks: () => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>("/me/agent/composer/blocks"),
   composerPresets: () => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>("/me/agent/composer/presets"),
-  composerProfile: () => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>("/me/agent/composer/profile"),
+  composerProfile: () => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>("/me/agent/composer/profile"),
   composerPreview: (selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>("/me/agent/composer/preview", {selected, preset: preset ?? null}),
-  composerSave: (selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset: preset ?? null}),
+  composerSave: (selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
   // #645 Phase 1d — Admin-Agent-Composer
   adminComposerBlocks: (agentId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/blocks`),
   adminComposerPresets: (agentId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/presets`),
-  adminComposerProfile: (agentId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/profile`),
+  adminComposerProfile: (agentId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/profile`),
   adminComposerPreview: (agentId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/preview`, {selected, preset: preset ?? null}),
-  adminComposerSave: (agentId: string, selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset: preset ?? null}),
+  adminComposerSave: (agentId: string, selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
   // #645 Phase 1e — Projekt-Boss-Composer
   projectComposerBlocks: (projectId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/blocks`),
   projectComposerPresets: (projectId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/presets`),
-  projectComposerProfile: (projectId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer/profile`),
+  projectComposerProfile: (projectId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer/profile`),
   projectComposerPreview: (projectId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/projects/${encodeURIComponent(projectId)}/composer/preview`, {selected, preset: preset ?? null}),
-  projectComposerSave: (projectId: string, selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset: preset ?? null}),
+  projectComposerSave: (projectId: string, selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
