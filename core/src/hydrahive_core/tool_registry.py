@@ -23,8 +23,9 @@ import logging
 import re as _re_shell
 import shlex as _shlex_shell
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from .settings import settings
 
@@ -45,31 +46,77 @@ AGENTS_ROOT   = settings.agents_dir
 # `file_*`, `file_patch`, `shell_exec` und `git_*` operieren alle auf
 # diesem identischen Pfad — kein Sub-Tree, keine "Familie von Roots",
 # kein Parent-Trick. Ein Projekt hat genau einen effektiven Working Tree.
-# #662: Per-Request Workspace-Override via ContextVar.
-# Wird vom Router für internal-auth Sub-Agent-Aufrufe gesetzt, wenn ein
-# validiertes workspace_override im Payload steht. Async-Task-lokal, damit
-# parallele Requests sich nicht beeinflussen. Set vor handle_message(),
-# reset in finally. Ohne Override fällt workspace_root() auf den Default
-# zurück — bestehende Tests und Aufrufer bleiben unverändert.
-_workspace_override_var: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
-    "hydrahive_workspace_override", default=None,
+# #662/#664: Per-Request Workspace-Runtime-Context via ContextVar.
+# Wird vom Router für internal-auth Sub-Agent-Aufrufe gesetzt. Async-Task-
+# lokal, damit parallele Requests sich nicht beeinflussen. Set vor
+# handle_message(), reset in finally.
+#
+# Trägt:
+#   - path:              Worktree-Pfad → workspace_root() liefert diesen.
+#   - worktree_id:       Meta-Handle (Observability/Debugging).
+#   - isolation_mode:    read_only | patch_only | full_worktree | None.
+#                        None = kein Enforcement (Backward-Compat für
+#                        alte Path-only-Aufrufer). Sonst konsultiert der
+#                        Tool-Dispatcher allow_tool() am Funktionseingang.
+#   - parent_project_id: Boss-Projekt (Observability).
+#
+# Ohne Context fällt workspace_root() auf den Default zurück — bestehende
+# Tests und normale Agents bleiben unverändert.
+
+
+@dataclass(frozen=True)
+class WorkspaceRuntimeContext:
+    path:              Path
+    worktree_id:       str | None = None
+    isolation_mode:    str | None = None
+    parent_project_id: str | None = None
+
+
+_workspace_override_var: contextvars.ContextVar[WorkspaceRuntimeContext | None] = (
+    contextvars.ContextVar("hydrahive_workspace_override", default=None)
 )
 
 
-def set_workspace_override(path: Path) -> contextvars.Token:
-    """Setzt den Workspace-Override für den aktuellen async-Task-Kontext.
+def set_workspace_override(
+    ctx_or_path: Union[Path, "WorkspaceRuntimeContext"],
+) -> contextvars.Token:
+    """Setzt den Workspace-Runtime-Context für den aktuellen async-Task.
+
+    Akzeptiert `Path` (Backward-Compat für #662/#663-Aufrufer — wird intern
+    zu WorkspaceRuntimeContext(path=..., isolation_mode=None) gewrappt, d.h.
+    kein Enforcement) oder `WorkspaceRuntimeContext` mit vollem Kontext
+    inkl. `isolation_mode` für #664-Enforcement.
 
     Rückgabe: Token für späteren reset_workspace_override().
     """
-    return _workspace_override_var.set(path)
+    if isinstance(ctx_or_path, WorkspaceRuntimeContext):
+        ctx = ctx_or_path
+    elif isinstance(ctx_or_path, Path):
+        ctx = WorkspaceRuntimeContext(path=ctx_or_path)
+    else:
+        raise TypeError(
+            f"set_workspace_override expects Path or WorkspaceRuntimeContext, "
+            f"got {type(ctx_or_path).__name__}"
+        )
+    return _workspace_override_var.set(ctx)
 
 
 def reset_workspace_override(token: contextvars.Token) -> None:
     _workspace_override_var.reset(token)
 
 
-def _current_workspace_override() -> Path | None:
+def current_workspace_context() -> "WorkspaceRuntimeContext | None":
+    """Liefert den aktuellen Workspace-Runtime-Context des async-Tasks.
+
+    None, wenn kein Sub-Agent-Worktree-Kontext aktiv ist (normale Agents).
+    """
     return _workspace_override_var.get()
+
+
+def _current_workspace_override() -> Path | None:
+    """Backward-compat getter — liefert path des aktuellen Context oder None."""
+    ctx = _workspace_override_var.get()
+    return ctx.path if ctx is not None else None
 
 
 def workspace_root(project_id: str) -> Path:
@@ -84,9 +131,9 @@ def workspace_root(project_id: str) -> Path:
     wird dieser Pfad zurückgegeben. Die Invariante "workspace_root ist die
     einzige Quelle" bleibt — nur ihr Ergebnis ist per-Task override-bar.
     """
-    ov = _workspace_override_var.get()
-    if ov is not None:
-        return ov
+    ctx = _workspace_override_var.get()
+    if ctx is not None:
+        return ctx.path
     return (PROJECTS_ROOT / project_id).resolve()
 
 

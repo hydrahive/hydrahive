@@ -17,14 +17,17 @@ from .settings import settings as _hh_settings
 logger = logging.getLogger(__name__)
 
 
-def _validate_workspace_override(ov, auth_user: str) -> Path:
-    """#662: validiert den internal-only workspace_override.
+def _validate_workspace_override(ov, auth_user: str):
+    """#662/#664: validiert den internal-only workspace_override.
 
-    Raises HTTPException(400) bei Verletzung. Rückgabe: validierter absoluter
-    Path, den der Caller als ContextVar-Override setzen darf.
+    Raises HTTPException(400) bei Verletzung. Rückgabe: `WorkspaceRuntimeContext`
+    mit validiertem Path + worktree_id + isolation_mode + parent_project_id.
+    Den Context setzt der Caller via `set_workspace_override(ctx)` —
+    isolation_mode treibt das Tool-Dispatch-Enforcement (#664).
     """
     import re as _re
     from .subagent_worktrees import WorktreeError, get_worktree
+    from .tool_registry import WorkspaceRuntimeContext
 
     if auth_user != "internal":
         raise HTTPException(400, "workspace_override requires internal auth")
@@ -66,7 +69,12 @@ def _validate_workspace_override(ov, auth_user: str) -> Path:
             400, f"workspace_override: path must be under {trees_root}"
         ) from exc
 
-    return resolved
+    return WorkspaceRuntimeContext(
+        path=resolved,
+        worktree_id=meta.worktree_id,
+        isolation_mode=meta.isolation_mode,
+        parent_project_id=meta.parent_project_id,
+    )
 
 
 class AgentMemoryRequest(BaseModel):

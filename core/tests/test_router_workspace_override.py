@@ -59,8 +59,14 @@ def test_valid_internal_passes(valid_meta):
         worktree_id=meta.worktree_id,
         parent_project_id=meta.parent_project_id,
     )
-    p = _validate_workspace_override(ov, auth_user="internal")
-    assert p == Path(meta.worktree_path).resolve()
+    ctx = _validate_workspace_override(ov, auth_user="internal")
+    # #664: validator returniert WorkspaceRuntimeContext statt Path.
+    from hydrahive_core.tool_registry import WorkspaceRuntimeContext
+    assert isinstance(ctx, WorkspaceRuntimeContext)
+    assert ctx.path == Path(meta.worktree_path).resolve()
+    assert ctx.worktree_id == meta.worktree_id
+    assert ctx.parent_project_id == meta.parent_project_id
+    assert ctx.isolation_mode == meta.isolation_mode
 
 
 # ── External auth → 400 ──────────────────────────────────────────────────────

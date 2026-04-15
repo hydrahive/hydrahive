@@ -309,6 +309,48 @@ async def execute_tool_call(
     async-Generator-Loops), der das `tool_confirm_required`-Event ans
     Frontend signalisiert, BEVOR der Wait beginnt.
     """
+    # #664: IsolationMode-Enforcement (built-in hard policy).
+    # Läuft VOR MCP-Branch, Permission-Classifier und PreToolUse-Hook:
+    # verbotene Calls sollen keine Admin-Hooks erreichen. Nur aktiv wenn
+    # ein Sub-Agent-Worktree-Kontext mit isolation_mode gesetzt ist;
+    # normale Agents ohne Kontext sind nicht betroffen.
+    try:
+        from .tool_registry import current_workspace_context as _cur_ctx
+        _iso_ctx = _cur_ctx()
+    except Exception:
+        _iso_ctx = None
+    if _iso_ctx is not None and _iso_ctx.isolation_mode:
+        from .subagent_isolation import IsolationError as _IsoErr, allow_tool as _allow_tool
+        try:
+            _iso_decision = _allow_tool(_iso_ctx.isolation_mode, tool_name)
+        except _IsoErr as _iso_err:
+            logger.warning(
+                "IsolationMode validation failed: mode=%s tool=%s err=%s",
+                _iso_ctx.isolation_mode, tool_name, _iso_err,
+            )
+            return {
+                "error": f"Tool '{tool_name}' blockiert — IsolationMode ungültig.",
+                "risk": "isolation_error",
+                "tool_name": tool_name,
+                "isolation_mode": _iso_ctx.isolation_mode,
+            }, True
+        if not _iso_decision.allowed:
+            logger.info(
+                "IsolationMode blocked tool=%s mode=%s: %s",
+                tool_name, _iso_ctx.isolation_mode, _iso_decision.reason,
+            )
+            return {
+                "error": (
+                    f"Tool '{tool_name}' ist in IsolationMode "
+                    f"'{_iso_ctx.isolation_mode}' nicht erlaubt."
+                ),
+                "risk":           "isolation_block",
+                "isolation_mode": _iso_ctx.isolation_mode,
+                "tool_name":      tool_name,
+                "reason":         _iso_decision.reason,
+                "hint":           "Sub-Agent läuft in isolierter Worktree-Runtime.",
+            }, True
+
     # MCP-Tool?
     if tool_name.startswith("mcp_") and boss_cfg.mcp_servers:
         # #620 Phase 4: Deferred-Guard — MCP-Tool muss via tool_search geladen sein
