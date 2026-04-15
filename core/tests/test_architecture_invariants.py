@@ -31,6 +31,11 @@ from unittest.mock import MagicMock
 import pytest
 
 
+def test_ci_gate_intentional_failure_for_required_check_probe():
+    """Temporärer Testbranch: muss rot werden, um #639 Required Check zu prüfen."""
+    assert False
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
