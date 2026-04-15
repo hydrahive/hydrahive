@@ -34,6 +34,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_backup_restore import register_backup_restore_routes
+from .router_composer import register_composer_routes
 from .router_adminfun import register_adminfun_routes
 from .router_migration import register_migration_routes
 from .router_vpn import register_vpn_routes
@@ -1325,6 +1326,18 @@ _user_route_exports = register_user_routes(
     incoming_message_model=IncomingMessage,
     load_agent_config_direct=load_agent_config_direct,
     discovery=discovery,
+)
+
+# #645 Phase 1b — Personal-Agent Profile-Composer
+from .orchestrator_context import invalidate_prompt_cache as _invalidate_prompt_cache
+register_composer_routes(
+    auth_router,
+    require_auth=require_auth,
+    agents_dir=AGENTS_DIR,
+    ensure_personal_agent=_ensure_personal_agent,
+    invalidate_prompt_cache=_invalidate_prompt_cache,
+    logger=logger,
+    audit_log=audit_log,
 )
 
 _CONSOLE_BASE_URL = os.environ.get("HYDRAHIVE_CONSOLE_URL", "http://192.168.178.181")

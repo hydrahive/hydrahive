@@ -113,6 +113,10 @@ export const api = {
   patchMyAgentHeartbeat: (d: {heartbeat?: Record<string,unknown>; heartbeat_tasks?: unknown[]}) =>
     api.patch<{updated:boolean}>("/me/agent/heartbeat", d),
   clearMyAgentSession: () => api.delete("/me/agent/session"),
+  // #645 Profile-Composer (Personal-Agent)
+  composerBlocks: () => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>("/me/agent/composer/blocks"),
+  composerPreview: (selected: string[]) => api.post<{markdown: string}>("/me/agent/composer/preview", {selected}),
+  composerSave: (selected: string[]) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number}>("/me/agent/composer", {selected}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),

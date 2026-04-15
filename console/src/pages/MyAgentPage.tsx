@@ -10,6 +10,7 @@ import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ProfileComposer } from "@/components/ProfileComposer";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 
@@ -1358,6 +1359,9 @@ function SettingsPanel({
             })}
           </div>
         </section>
+
+        {/* #645 Profile-Composer */}
+        <ProfileComposer />
 
         {/* Risk Policy — Trusted-Agent ohne CONFIRM-Klicks (Admin-only) */}
         <section className="space-y-3">

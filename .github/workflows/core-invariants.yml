@@ -2,19 +2,9 @@ name: Core Invariants
 
 on:
   pull_request:
-    paths:
-      - "core/src/hydrahive_core/**"
-      - "core/tests/test_architecture_invariants.py"
-      - "core/pyproject.toml"
-      - ".github/workflows/core-invariants.yml"
   push:
     branches:
       - main
-    paths:
-      - "core/src/hydrahive_core/**"
-      - "core/tests/test_architecture_invariants.py"
-      - "core/pyproject.toml"
-      - ".github/workflows/core-invariants.yml"
   workflow_dispatch:
 
 permissions:
@@ -47,6 +37,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
-      - name: Run architecture invariants
+      - name: Run architecture invariants + composer tests
         working-directory: core
-        run: python -m pytest tests/test_architecture_invariants.py -q
+        run: python -m pytest tests/test_architecture_invariants.py tests/test_composer.py -q
