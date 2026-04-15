@@ -79,7 +79,7 @@ def test_create_on_clean_repo(repo, worktrees):
     assert data["worktree_id"] == meta.worktree_id
     assert data["parent_project_id"] == "proj1"
     assert data["status"] == "active"
-    assert data["isolation_mode"] == "worktree"
+    assert data["isolation_mode"] == "full_worktree"
     assert data["write_scope"] is None
 
 
@@ -274,3 +274,40 @@ def test_settings_default_path(monkeypatch):
     from hydrahive_core.settings import HydraHiveSettings
     s = HydraHiveSettings()
     assert s.worktrees_dir == Path("/var/lib/hydrahive/worktrees")
+
+
+# ── #652: isolation_mode Parameter ──────────────────────────────────────────
+
+def test_default_isolation_mode_full_worktree(repo, worktrees):
+    meta = create_worktree(base_repo=repo, **BASE_KW)
+    assert meta.isolation_mode == "full_worktree"
+
+
+@pytest.mark.parametrize("mode", ["read_only", "patch_only", "full_worktree"])
+def test_isolation_mode_persisted(repo, worktrees, mode):
+    kw = {**BASE_KW, "sub_agent_id": f"sub_{mode}"}
+    meta = create_worktree(base_repo=repo, isolation_mode=mode, **kw)
+    assert meta.isolation_mode == mode
+    # Disk-Persistenz
+    disk = get_worktree(meta.worktree_id)
+    assert disk.isolation_mode == mode
+
+
+def test_invalid_isolation_mode(repo, worktrees):
+    with pytest.raises(WorktreeError, match="invalid isolation_mode"):
+        create_worktree(base_repo=repo, isolation_mode="bogus", **BASE_KW)
+
+
+def test_legacy_isolation_mode_mapped_on_read(repo, worktrees):
+    """Pre-#652 Meta-Dateien hatten isolation_mode='worktree'.
+    Loader muss das transparent auf 'full_worktree' mappen.
+    """
+    meta = create_worktree(base_repo=repo, **BASE_KW)
+    # Meta-JSON auf Legacy-Wert manipulieren
+    meta_file = worktrees / "meta" / f"{meta.worktree_id}.json"
+    data = json.loads(meta_file.read_text())
+    data["isolation_mode"] = "worktree"
+    meta_file.write_text(json.dumps(data))
+
+    reread = get_worktree(meta.worktree_id)
+    assert reread.isolation_mode == "full_worktree"

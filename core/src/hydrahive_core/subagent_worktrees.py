@@ -48,7 +48,19 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .subagent_isolation import (
+    DEFAULT_ISOLATION_MODE,
+    IsolationError,
+    IsolationMode,
+    validate_isolation_mode,
+)
+
 logger = logging.getLogger(__name__)
+
+# Legacy-Wert aus dem #651-Initial-Commit — wird beim Einlesen der Metadaten
+# tolerant auf "full_worktree" gemappt, damit existierende Worktrees nicht
+# brechen. Neue Meta-Dateien schreiben nur noch kanonische IsolationMode-Werte.
+_LEGACY_ISOLATION_MODE_ALIAS = "worktree"
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MAX_COLLISION_RETRIES = 3
@@ -75,8 +87,10 @@ class WorktreeMeta:
     released_at: str | None = None
     removed_at: str | None = None
     tree_removed: bool = False
-    # Reserved für #652/#653 — Schema-Stabilität
-    isolation_mode: str = "worktree"
+    # #652: Isolation-Mode (read_only | patch_only | full_worktree).
+    # Default "full_worktree" entspricht semantisch dem vorherigen "worktree".
+    # write_scope reserviert für #653.
+    isolation_mode: str = "full_worktree"
     write_scope: Any = None
 
 
@@ -190,6 +204,9 @@ def _read_meta(root: Path, worktree_id: str) -> WorktreeMeta:
     if not path.exists():
         raise WorktreeError(f"worktree not found: {worktree_id}")
     data = json.loads(path.read_text(encoding="utf-8"))
+    # Legacy-Mapping: Pre-#652 Metadaten hatten isolation_mode="worktree".
+    if data.get("isolation_mode") == _LEGACY_ISOLATION_MODE_ALIAS:
+        data["isolation_mode"] = IsolationMode.FULL_WORKTREE.value
     return WorktreeMeta(**data)
 
 
@@ -210,19 +227,28 @@ def create_worktree(
     task_id: str,
     allow_dirty: bool = False,
     worktrees_dir: Path | None = None,
+    isolation_mode: str | IsolationMode = DEFAULT_ISOLATION_MODE,
 ) -> WorktreeMeta:
     """
     Legt einen Git-Worktree mit detached HEAD auf dem aktuellen Commit an.
     Persistiert Metadaten. Haupt-Workspace bleibt unverändert.
 
+    isolation_mode wird gegen die in subagent_isolation definierten Modes
+    validiert und kanonisiert in den Metadaten persistiert. Default:
+    full_worktree (entspricht semantisch dem Pre-#652 "worktree"-Wert).
+
     Raises WorktreeError bei fehlendem Git-Repo, dirty worktree (wenn
-    allow_dirty=False), ungültigen Identifiern, Pfad-Traversal oder
-    gescheitertem `git worktree add`.
+    allow_dirty=False), ungültigen Identifiern/isolation_mode,
+    Pfad-Traversal oder gescheitertem `git worktree add`.
     """
     _validate_identifier(parent_project_id, "parent_project_id")
     _validate_identifier(parent_agent_id, "parent_agent_id")
     _validate_identifier(sub_agent_id, "sub_agent_id")
     _validate_identifier(task_id, "task_id")
+    try:
+        iso = validate_isolation_mode(isolation_mode)
+    except IsolationError as exc:
+        raise WorktreeError(str(exc)) from exc
 
     base_repo_path = Path(base_repo).resolve()
     if not is_git_repo(base_repo_path):
@@ -282,6 +308,7 @@ def create_worktree(
         dirty=dirty,
         worktree_path=str(tree_path),
         created_at=created_at,
+        isolation_mode=iso.value,
     )
 
     try:
