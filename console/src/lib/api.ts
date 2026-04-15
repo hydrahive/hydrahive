@@ -128,6 +128,12 @@ export const api = {
   composerProfile: () => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>("/me/agent/composer/profile"),
   composerPreview: (selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>("/me/agent/composer/preview", {selected, preset: preset ?? null}),
   composerSave: (selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset: preset ?? null}),
+  // #645 Phase 1d — Admin-Agent-Composer
+  adminComposerBlocks: (agentId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/blocks`),
+  adminComposerPresets: (agentId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/presets`),
+  adminComposerProfile: (agentId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/profile`),
+  adminComposerPreview: (agentId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/preview`, {selected, preset: preset ?? null}),
+  adminComposerSave: (agentId: string, selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset: preset ?? null}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),

@@ -1,12 +1,14 @@
-"""Personal-Agent Profile-Composer Routen (#645 Phase 1b + 1c).
+"""Profile-Composer Routen (#645 Phase 1b + 1c + 1d).
 
-Deckt ausschließlich `/me/agent/composer/*` ab — Admin-Composer folgt in
-einem späteren PR.
+Phase 1b/1c: `/me/agent/composer/*` — Personal-Agent.
+Phase 1d: `/admin/agents/{agent_id}/composer/*` — Admin-Agent.
 
-Phase 1c: agent_profile.yaml als Truth-File, Presets, Konfliktregeln.
+agent_profile.yaml ist Truth-File, Presets + Konfliktregeln identisch.
+Projekt-Boss-Composer bleibt bewusst out of scope (Phase 1e).
 """
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -144,6 +146,140 @@ def _write_profile(agent_dir: Path, profile: AgentProfile) -> None:
     )
 
 
+_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
+def _validate_admin_agent_id(agent_id: str, agents_root: Path) -> Path:
+    """Validiert agent_id für Admin-Composer und liefert absoluten agent_dir.
+
+    - Syntax-Check blockt Path-Traversal (`..`, `/`, Backslash, Null).
+    - `personal_*` wird explizit mit 403 abgewiesen (Admin soll diese nicht
+      über den Admin-Composer editieren, wir erhalten die Rollentrennung).
+    - Fehlendes Verzeichnis → 404.
+    """
+    if not agent_id or not _AGENT_ID_RE.match(agent_id):
+        raise HTTPException(status_code=400, detail="Ungültige agent_id.")
+    if agent_id.startswith("personal_"):
+        raise HTTPException(
+            status_code=403,
+            detail="Personal-Agenten werden über /me/agent/composer gepflegt, nicht über den Admin-Composer.",
+        )
+    agent_dir = (agents_root / agent_id).resolve()
+    try:
+        agent_dir.relative_to(agents_root.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Pfad außerhalb agents_dir.")
+    if not agent_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Agent nicht gefunden: {agent_id}")
+    return agent_dir
+
+
+def _build_profile_response(agent_dir: Path) -> dict:
+    profile, load_warnings = _load_profile(agent_dir)
+    agent_md_exists, mtime_matches = _agent_md_mtime_matches(agent_dir)
+    warnings = load_warnings + evaluate_warnings(profile.selected, profile.preset)
+    return {
+        "schema_version": profile.schema_version,
+        "preset": profile.preset,
+        "selected": profile.selected,
+        "updated_at": profile.updated_at,
+        "agent_md_exists": agent_md_exists,
+        "agent_md_mtime_matches": mtime_matches,
+        "warnings": warnings,
+    }
+
+
+def _validate_save_input(body: "ComposerInput") -> list[dict]:
+    """Prüft body, wirft HTTPException bei harten Fehlern, liefert Warnings."""
+    unknown_blocks = [sid for sid in body.selected if sid not in known_block_ids()]
+    if unknown_blocks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekannte Composer-Blöcke: {unknown_blocks}",
+        )
+    if body.preset is not None and body.preset not in known_preset_ids():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unbekanntes Preset: {body.preset}",
+        )
+    warnings = evaluate_warnings(body.selected, body.preset)
+    if save_blocked(warnings):
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Save blockiert durch Konflikte.", "warnings": warnings},
+        )
+    return warnings
+
+
+def _perform_save(
+    agent_dir: Path,
+    agent_id: str,
+    body: "ComposerInput",
+    *,
+    invalidate_prompt_cache: Callable[[str], None],
+    logger,
+    audit_log,
+    audit_action: str,
+    audit_user: str,
+) -> dict:
+    """Schreibt AGENT.md + agent_profile.yaml, legt Backup an, invalidiert Cache.
+
+    Voraussetzung: _validate_save_input wurde bereits aufgerufen. Leere
+    Selection wird hier mit 400 abgelehnt.
+    """
+    warnings = evaluate_warnings(body.selected, body.preset)  # konsistent zur Preview
+    markdown = render_agent_md(body.selected)
+    if not markdown.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Mindestens einen Baustein auswählen, bevor AGENT.md geschrieben wird.",
+        )
+
+    agent_md = agent_dir / AGENT_MD_FILENAME
+    backup_created = False
+    if agent_md.exists():
+        shutil.copy2(agent_md, agent_dir / AGENT_MD_BACKUP)
+        backup_created = True
+
+    agent_md.write_text(markdown, encoding="utf-8")
+
+    profile = AgentProfile(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        preset=body.preset,
+        selected=list(body.selected),
+        updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    )
+    _write_profile(agent_dir, profile)
+
+    try:
+        invalidate_prompt_cache(agent_id)
+    except Exception as e:
+        logger.warning("Composer: Prompt-Cache-Invalidierung fehlgeschlagen: %s", e)
+
+    audit_log(
+        audit_action,
+        user=audit_user,
+        target=agent_id,
+        details={
+            "block_count": len(body.selected),
+            "backup": backup_created,
+            "preset": body.preset,
+        },
+    )
+    logger.info(
+        "Composer AGENT.md geschrieben: agent=%s blocks=%d preset=%s backup=%s (%s)",
+        agent_id, len(body.selected), body.preset, backup_created, audit_action,
+    )
+    return {
+        "updated": True,
+        "agent_id": agent_id,
+        "backup_created": backup_created,
+        "bytes_written": len(markdown.encode("utf-8")),
+        "preset": body.preset,
+        "warnings": warnings,
+    }
+
+
 def register_composer_routes(
     auth_router: APIRouter,
     *,
@@ -167,18 +303,7 @@ def register_composer_routes(
         username, _role = auth
         agent_id, _cfg = ensure_personal_agent(username)
         agent_dir = Path(agents_dir) / agent_id
-        profile, load_warnings = _load_profile(agent_dir)
-        agent_md_exists, mtime_matches = _agent_md_mtime_matches(agent_dir)
-        warnings = load_warnings + evaluate_warnings(profile.selected, profile.preset)
-        return {
-            "schema_version": profile.schema_version,
-            "preset": profile.preset,
-            "selected": profile.selected,
-            "updated_at": profile.updated_at,
-            "agent_md_exists": agent_md_exists,
-            "agent_md_mtime_matches": mtime_matches,
-            "warnings": warnings,
-        }
+        return _build_profile_response(agent_dir)
 
     @auth_router.post("/me/agent/composer/preview")
     def preview_composer(
@@ -199,32 +324,7 @@ def register_composer_routes(
         auth: tuple[str, str] = Depends(require_auth),
     ):
         username, _role = auth
-
-        unknown_blocks = [sid for sid in body.selected if sid not in known_block_ids()]
-        if unknown_blocks:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unbekannte Composer-Blöcke: {unknown_blocks}",
-            )
-        if body.preset is not None and body.preset not in known_preset_ids():
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unbekanntes Preset: {body.preset}",
-            )
-
-        warnings = evaluate_warnings(body.selected, body.preset)
-        if save_blocked(warnings):
-            raise HTTPException(
-                status_code=422,
-                detail={"message": "Save blockiert durch Konflikte.", "warnings": warnings},
-            )
-
-        markdown = render_agent_md(body.selected)
-        if not markdown.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Mindestens einen Baustein auswählen, bevor AGENT.md geschrieben wird.",
-            )
+        _validate_save_input(body)
 
         agent_id, _cfg = ensure_personal_agent(username)
         agent_dir = Path(agents_dir) / agent_id
@@ -234,46 +334,95 @@ def register_composer_routes(
                 detail=f"Personal-Agent-Verzeichnis nicht gefunden: {agent_id}",
             )
 
-        agent_md = agent_dir / AGENT_MD_FILENAME
-        backup_created = False
-        if agent_md.exists():
-            shutil.copy2(agent_md, agent_dir / AGENT_MD_BACKUP)
-            backup_created = True
-
-        agent_md.write_text(markdown, encoding="utf-8")
-
-        profile = AgentProfile(
-            schema_version=CURRENT_SCHEMA_VERSION,
-            preset=body.preset,
-            selected=list(body.selected),
-            updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        return _perform_save(
+            agent_dir,
+            agent_id,
+            body,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="personal_agent.composer_save",
+            audit_user=username,
         )
-        _write_profile(agent_dir, profile)
 
-        try:
-            invalidate_prompt_cache(agent_id)
-        except Exception as e:
-            logger.warning("Composer: Prompt-Cache-Invalidierung fehlgeschlagen: %s", e)
 
-        audit_log(
-            "personal_agent.composer_save",
-            user=username,
-            target=agent_id,
-            details={
-                "block_count": len(body.selected),
-                "backup": backup_created,
-                "preset": body.preset,
-            },
-        )
-        logger.info(
-            "Composer AGENT.md geschrieben: agent=%s blocks=%d preset=%s backup=%s",
-            agent_id, len(body.selected), body.preset, backup_created,
-        )
+# ===========================================================================
+# Phase 1d — Admin-Agent-Composer
+# ===========================================================================
+
+
+def register_admin_composer_routes(
+    admin_router: APIRouter,
+    *,
+    agents_dir: str,
+    invalidate_prompt_cache: Callable[[str], None],
+    logger,
+    audit_log,
+    require_admin,
+) -> None:
+    """Registriert `/admin/agents/{agent_id}/composer/*` Routen.
+
+    admin_router hat bereits `require_admin` als Dependency. Wir hängen es
+    zusätzlich hier an, damit ein auth-Tupel für das Audit-Log verfügbar ist.
+    `personal_*` wird mit 403 abgelehnt, Path-Traversal mit 400.
+    """
+    agents_root = Path(agents_dir)
+
+    @admin_router.get("/admin/agents/{agent_id}/composer/blocks")
+    def admin_get_blocks(
+        agent_id: str,
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        _validate_admin_agent_id(agent_id, agents_root)
+        return {"categories": list_blocks()}
+
+    @admin_router.get("/admin/agents/{agent_id}/composer/presets")
+    def admin_get_presets(
+        agent_id: str,
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        _validate_admin_agent_id(agent_id, agents_root)
+        return {"presets": list_presets()}
+
+    @admin_router.get("/admin/agents/{agent_id}/composer/profile")
+    def admin_get_profile(
+        agent_id: str,
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        agent_dir = _validate_admin_agent_id(agent_id, agents_root)
+        return _build_profile_response(agent_dir)
+
+    @admin_router.post("/admin/agents/{agent_id}/composer/preview")
+    def admin_preview(
+        agent_id: str,
+        body: ComposerInput = Body(...),
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        _validate_admin_agent_id(agent_id, agents_root)
+        markdown = render_agent_md(body.selected)
+        warnings = evaluate_warnings(body.selected, body.preset)
         return {
-            "updated": True,
-            "agent_id": agent_id,
-            "backup_created": backup_created,
-            "bytes_written": len(markdown.encode("utf-8")),
-            "preset": body.preset,
+            "markdown": markdown,
             "warnings": warnings,
+            "save_blocked": save_blocked(warnings),
         }
+
+    @admin_router.put("/admin/agents/{agent_id}/composer")
+    def admin_save(
+        agent_id: str,
+        body: ComposerInput = Body(...),
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        username, _role = auth
+        agent_dir = _validate_admin_agent_id(agent_id, agents_root)
+        _validate_save_input(body)
+        return _perform_save(
+            agent_dir,
+            agent_id,
+            body,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="admin.agent.composer_save",
+            audit_user=username,
+        )

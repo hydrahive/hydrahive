@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench, HelpCircle } from "lucide-react";
+import { Bot, RefreshCw, Circle, Plus, X, Save, Trash2, Pencil, ScrollText, BookOpen, Timer, MessageSquare, ShieldAlert, Radar, Workflow, Cpu, ArrowRight, Activity, Search, Puzzle, Server as ServerIcon, Globe, Wrench, HelpCircle, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api, HeartbeatTaskStatus, McpServer, PluginInfo } from "@/lib/api";
 import { SkillsPanel } from "@/components/SkillsPanel";
+import { ProfileComposer } from "@/components/ProfileComposer";
 import { ToolGroupSelector } from "@/components/ToolGroupSelector";
 import { useAuth } from "@/hooks/useAuth";
 import { useTranslation } from "react-i18next";
@@ -131,6 +132,7 @@ function AgentsCrudTab() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [fallbackInput, setFallbackInput] = useState("");
   const [skillsAgent, setSkillsAgent] = useState<string | null>(null);
+  const [composerAgent, setComposerAgent] = useState<string | null>(null);
   const [hbEditAgent, setHbEditAgent] = useState<string | null>(null);
   const [hbForm, setHbForm] = useState({ enabled: true, interval: "30s", timeout: "90s", on_failure: "restart" });
   const [hbSaving, setHbSaving] = useState(false);
@@ -863,7 +865,7 @@ function AgentsCrudTab() {
               const hbAge = rt?.last_heartbeat_age;
               const hbWarn = hbAge != null && hbAge > (rt?.heartbeat_timeout ?? 90) * 0.8;
               const taskCount = hbTasks.filter((t) => t.agent_id === id).length;
-              const expanded = skillsAgent === id || hbEditAgent === id || logAgent === id;
+              const expanded = skillsAgent === id || hbEditAgent === id || logAgent === id || composerAgent === id;
               return (
                 <div key={id}>
                   {/* Kompakte Zeile */}
@@ -912,6 +914,12 @@ function AgentsCrudTab() {
                           <Activity className="h-3.5 w-3.5" />
                         </button>
                       )}
+                      {isAdmin && !id.startsWith("personal_") && (
+                        <button onClick={() => setComposerAgent((s) => s === id ? null : id)} title={t("agents.composer", { defaultValue: "Profil-Composer (AGENT.md)" })}
+                          className={`p-1.5 rounded-lg transition-colors ${composerAgent === id ? "bg-primary/10 text-primary" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {isAdmin && (
                         <button onClick={() => openEdit(id, agent)} title={t("agents.editBtn")}
                           className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
@@ -931,6 +939,20 @@ function AgentsCrudTab() {
 
                   {/* Aufklappbare Panels */}
                   {skillsAgent === id && <div className="border-t"><SkillsPanel agentId={id} /></div>}
+                  {composerAgent === id && !id.startsWith("personal_") && (
+                    <div className="border-t px-4 py-4 bg-muted/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium flex items-center gap-2">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {t("agents.composerTitle", { defaultValue: "Profil-Composer" })} — {id}
+                        </p>
+                        <button onClick={() => setComposerAgent(null)} className="p-1 rounded hover:bg-accent">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <ProfileComposer scope="admin" agentId={id} showSoulHint />
+                    </div>
+                  )}
                   {logAgent === id && (
                     <div className="border-t">
                       <div className="flex items-center justify-between bg-muted/30 px-4 py-2">

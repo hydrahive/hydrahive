@@ -11,8 +11,46 @@ interface PresetDef { id: string; label: string; description: string; selected: 
 
 const PRESET_CUSTOM = "__custom__";
 
-export function ProfileComposer() {
+export interface ProfileComposerProps {
+  /** "me" (default) → /me/agent/composer/*; "admin" → /admin/agents/{agentId}/composer/* */
+  scope?: "me" | "admin";
+  /** Erforderlich wenn scope = "admin". Wird ignoriert bei scope = "me". */
+  agentId?: string;
+  /** Zeigt einen dezenten Hinweis, dass AGENT.md Vorrang vor soul.md hat. */
+  showSoulHint?: boolean;
+}
+
+interface ComposerApi {
+  loadBlocks: () => Promise<{categories: CategoryDef[]}>;
+  loadPresets: () => Promise<{presets: PresetDef[]}>;
+  loadProfile: () => Promise<{selected: string[]; preset: string | null; warnings: ComposerWarning[]; agent_md_exists: boolean; agent_md_mtime_matches: boolean}>;
+  preview: (selected: string[], preset: string | null) => Promise<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>;
+  save: (selected: string[], preset: string | null) => Promise<{backup_created: boolean; warnings: ComposerWarning[]}>;
+}
+
+function buildApi(scope: "me" | "admin", agentId?: string): ComposerApi {
+  if (scope === "admin") {
+    if (!agentId) throw new Error("ProfileComposer: agentId ist bei scope='admin' erforderlich.");
+    return {
+      loadBlocks: () => api.adminComposerBlocks(agentId),
+      loadPresets: () => api.adminComposerPresets(agentId),
+      loadProfile: () => api.adminComposerProfile(agentId),
+      preview: (sel, p) => api.adminComposerPreview(agentId, sel, p),
+      save: (sel, p) => api.adminComposerSave(agentId, sel, p),
+    };
+  }
+  return {
+    loadBlocks: () => api.composerBlocks(),
+    loadPresets: () => api.composerPresets(),
+    loadProfile: () => api.composerProfile(),
+    preview: (sel, p) => api.composerPreview(sel, p),
+    save: (sel, p) => api.composerSave(sel, p),
+  };
+}
+
+export function ProfileComposer({ scope = "me", agentId, showSoulHint = false }: ProfileComposerProps = {}) {
   const { t } = useTranslation();
+  const composerApi = useMemo(() => buildApi(scope, agentId), [scope, agentId]);
   const [categories, setCategories] = useState<CategoryDef[]>([]);
   const [presets, setPresets] = useState<PresetDef[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -33,9 +71,9 @@ export function ProfileComposer() {
     (async () => {
       try {
         const [blocksR, presetsR, profileR] = await Promise.all([
-          api.composerBlocks(),
-          api.composerPresets(),
-          api.composerProfile(),
+          composerApi.loadBlocks(),
+          composerApi.loadPresets(),
+          composerApi.loadProfile(),
         ]);
         setCategories(blocksR.categories);
         setPresets(presetsR.presets);
@@ -51,7 +89,7 @@ export function ProfileComposer() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [composerApi]);
 
   const selectedCount = selected.size;
   const hasSelection = selectedCount > 0;
@@ -92,7 +130,7 @@ export function ProfileComposer() {
   async function refreshPreview() {
     setPreviewing(true); setMsg(null);
     try {
-      const r = await api.composerPreview(
+      const r = await composerApi.preview(
         Array.from(selected),
         preset === PRESET_CUSTOM ? null : preset,
       );
@@ -110,7 +148,7 @@ export function ProfileComposer() {
     setConfirmOpen(false);
     setSaving(true); setMsg(null);
     try {
-      const r = await api.composerSave(
+      const r = await composerApi.save(
         Array.from(selected),
         preset === PRESET_CUSTOM ? null : preset,
       );
@@ -187,6 +225,19 @@ export function ProfileComposer() {
           </p>
         )}
       </div>
+
+      {/* soul.md Hinweis — AGENT.md hat Vorrang */}
+      {showSoulHint && (
+        <div className="flex items-start gap-2 text-xs rounded-md border border-border/70 bg-muted/30 text-muted-foreground p-2">
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            {t("composer.soulHint", {
+              defaultValue:
+                "AGENT.md hat Vorrang vor soul.md. Diese Ansicht bearbeitet nur AGENT.md und agent_profile.yaml — agent.yaml, soul.md, tools[] und execution_modes bleiben unverändert.",
+            })}
+          </span>
+        </div>
+      )}
 
       {/* Externer AGENT.md-Hinweis */}
       {agentMdExists && !mtimeMatches && (

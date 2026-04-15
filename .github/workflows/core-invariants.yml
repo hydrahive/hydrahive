@@ -39,4 +39,4 @@ jobs:
 
       - name: Run architecture invariants + composer tests
         working-directory: core
-        run: python -m pytest tests/test_architecture_invariants.py tests/test_composer.py -q
+        run: python -m pytest tests/test_architecture_invariants.py tests/test_composer.py tests/test_composer_admin.py -q
