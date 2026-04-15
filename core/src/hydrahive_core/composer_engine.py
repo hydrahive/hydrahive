@@ -1,14 +1,20 @@
-"""AGENT.md Profile-Composer (#645 Phase 1b).
+"""AGENT.md Profile-Composer (#645 Phase 1b + 1c).
 
 Stellt einen Katalog von Persona-Bausteinen bereit, aus dem User im
 Personal-Agent-Composer ihre AGENT.md zusammenklicken können.
 
+Phase 1c: Presets + Konfliktregeln + Profile-Persistenz (agent_profile.yaml).
 Keine KI-Generierung — jeder Block liefert festen Markdown-Text.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, Optional
+
+from pydantic import BaseModel, Field
+
+
+CURRENT_SCHEMA_VERSION: int = 1
 
 
 @dataclass(frozen=True)
@@ -279,3 +285,178 @@ def render_agent_md(selected_ids: Iterable[str]) -> str:
             out.append("")
 
     return "\n".join(out).rstrip() + "\n"
+
+
+# ===========================================================================
+# Phase 1c — Presets, Conflict-Rules, Profile-Modell
+# ===========================================================================
+
+
+class AgentProfile(BaseModel):
+    schema_version: int = CURRENT_SCHEMA_VERSION
+    preset: Optional[str] = None
+    selected: list[str] = Field(default_factory=list)
+    updated_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PresetDef:
+    id: str
+    label: str
+    description: str
+    selected: tuple[str, ...]
+
+
+PRESETS: tuple[PresetDef, ...] = (
+    PresetDef(
+        id="read_only_auditor",
+        label="Read-only Auditor",
+        description="Prüft, dokumentiert, verändert nichts ungefragt.",
+        selected=(
+            "work_style.ask_when_unsure",
+            "work_style.plan_first",
+            "safety.read_only_default",
+            "safety.prod_hands_off",
+            "safety.no_ssh_hotfix",
+            "safety.confirm_destructive",
+            "docs.summary_after_change",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    PresetDef(
+        id="trusted_admin",
+        label="Trusted Admin",
+        description="Darf selbstständig arbeiten, hält aber Disziplin und Abschlussberichte ein.",
+        selected=(
+            "work_style.precise",
+            "work_style.no_pragmatic_shortcuts",
+            "safety.confirm_destructive",
+            "safety.prod_hands_off",
+            "git.small_focused_commits",
+            "git.no_force_push_main",
+            "git.scope_check_before_commit",
+            "git.verify_before_done",
+            "docs.summary_after_change",
+            "docs.why_not_what",
+            "docs.keep_docs_current",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+)
+
+
+_PRESET_INDEX: dict[str, PresetDef] = {p.id: p for p in PRESETS}
+
+
+def list_presets() -> list[dict]:
+    return [
+        {
+            "id": p.id,
+            "label": p.label,
+            "description": p.description,
+            "selected": list(p.selected),
+        }
+        for p in PRESETS
+    ]
+
+
+def known_preset_ids() -> set[str]:
+    return set(_PRESET_INDEX.keys())
+
+
+def preset_selection(preset_id: str) -> list[str]:
+    """Liefert die Block-IDs eines Presets in Katalog-Reihenfolge."""
+    p = _PRESET_INDEX.get(preset_id)
+    if p is None:
+        return []
+    return list(p.selected)
+
+
+# ---------------------------------------------------------------------------
+# Konfliktregeln
+# ---------------------------------------------------------------------------
+
+
+def _rule_preset_drift(selected: list[str], preset: Optional[str]) -> list[dict]:
+    if not preset:
+        return []
+    p = _PRESET_INDEX.get(preset)
+    if p is None:
+        return []
+    if set(selected) == set(p.selected):
+        return []
+    return [{
+        "rule": "preset_drift",
+        "severity": "info",
+        "message": (
+            f"Auswahl weicht vom Preset '{p.label}' ab. "
+            "Beim Speichern wird die aktuelle Auswahl übernommen."
+        ),
+        "block_ids": sorted(set(selected) ^ set(p.selected)),
+    }]
+
+
+def _rule_empty_selection_with_preset(selected: list[str], preset: Optional[str]) -> list[dict]:
+    if preset and not selected:
+        return [{
+            "rule": "empty_selection_with_preset",
+            "severity": "error",
+            "message": "Preset gesetzt, aber keine Bausteine ausgewählt. Preset entfernen oder Bausteine wählen.",
+            "block_ids": [],
+        }]
+    return []
+
+
+def _rule_read_only_incomplete(selected: list[str], _preset: Optional[str]) -> list[dict]:
+    ro = "safety.read_only_default" in selected
+    prod = "safety.prod_hands_off" in selected
+    if ro ^ prod:
+        missing = "safety.prod_hands_off" if ro else "safety.read_only_default"
+        return [{
+            "rule": "read_only_incomplete",
+            "severity": "warning",
+            "message": (
+                "Read-only-Haltung ist nur wirksam, wenn auch Produktivsysteme geschützt sind "
+                f"('{missing}' fehlt)."
+            ),
+            "block_ids": [missing],
+        }]
+    return []
+
+
+def _rule_deploy_discipline_partial(selected: list[str], _preset: Optional[str]) -> list[dict]:
+    if "git.verify_before_done" in selected and "docs.summary_after_change" not in selected:
+        return [{
+            "rule": "deploy_discipline_partial",
+            "severity": "warning",
+            "message": "Live-Verify ohne Abschlussbericht ist schwer nachvollziehbar — 'docs.summary_after_change' ergänzen.",
+            "block_ids": ["docs.summary_after_change"],
+        }]
+    return []
+
+
+CONFLICT_RULES = (
+    _rule_preset_drift,
+    _rule_empty_selection_with_preset,
+    _rule_read_only_incomplete,
+    _rule_deploy_discipline_partial,
+)
+
+
+def evaluate_warnings(selected: list[str], preset: Optional[str]) -> list[dict]:
+    """Wendet alle Konfliktregeln an und liefert Liste von Warnings."""
+    warnings: list[dict] = []
+    for rule in CONFLICT_RULES:
+        warnings.extend(rule(selected, preset))
+    return warnings
+
+
+def save_blocked(warnings: list[dict]) -> bool:
+    return any(w.get("severity") == "error" for w in warnings)
+
+
+def render_from_profile(profile: AgentProfile) -> str:
+    """Thin wrapper: rendert AGENT.md aus einem AgentProfile."""
+    return render_agent_md(profile.selected)

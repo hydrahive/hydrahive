@@ -1,33 +1,54 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
-import { api } from "@/lib/api";
+import { api, type ComposerWarning } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface BlockDef { id: string; label: string; description: string }
 interface CategoryDef { id: string; label: string; blocks: BlockDef[] }
+interface PresetDef { id: string; label: string; description: string; selected: string[] }
+
+const PRESET_CUSTOM = "__custom__";
 
 export function ProfileComposer() {
   const { t } = useTranslation();
   const [categories, setCategories] = useState<CategoryDef[]>([]);
+  const [presets, setPresets] = useState<PresetDef[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [preset, setPreset] = useState<string>(PRESET_CUSTOM);
   const [preview, setPreview] = useState<string>("");
-  const [loadingBlocks, setLoadingBlocks] = useState(true);
+  const [warnings, setWarnings] = useState<ComposerWarning[]>([]);
+  const [saveBlocked, setSaveBlocked] = useState(false);
+  const [mtimeMatches, setMtimeMatches] = useState<boolean>(true);
+  const [agentMdExists, setAgentMdExists] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [presetSwitchTarget, setPresetSwitchTarget] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await api.composerBlocks();
-        setCategories(r.categories);
+        const [blocksR, presetsR, profileR] = await Promise.all([
+          api.composerBlocks(),
+          api.composerPresets(),
+          api.composerProfile(),
+        ]);
+        setCategories(blocksR.categories);
+        setPresets(presetsR.presets);
+        setSelected(new Set(profileR.selected));
+        setPreset(profileR.preset ?? PRESET_CUSTOM);
+        setWarnings(profileR.warnings);
+        setSaveBlocked(profileR.warnings.some(w => w.severity === "error"));
+        setAgentMdExists(profileR.agent_md_exists);
+        setMtimeMatches(profileR.agent_md_mtime_matches);
       } catch (e) {
         setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
       } finally {
-        setLoadingBlocks(false);
+        setLoading(false);
       }
     })();
   }, []);
@@ -41,14 +62,43 @@ export function ProfileComposer() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    // Manuelle Änderung → Preset auf Custom zurücksetzen
+    if (preset !== PRESET_CUSTOM) setPreset(PRESET_CUSTOM);
     setPreview("");
+  }
+
+  function requestPresetSwitch(targetId: string) {
+    if (targetId === preset) return;
+    if (targetId === PRESET_CUSTOM) {
+      setPreset(PRESET_CUSTOM);
+      return;
+    }
+    if (selected.size > 0) {
+      setPresetSwitchTarget(targetId);
+    } else {
+      applyPreset(targetId);
+    }
+  }
+
+  function applyPreset(targetId: string) {
+    const p = presets.find(p => p.id === targetId);
+    if (!p) return;
+    setSelected(new Set(p.selected));
+    setPreset(targetId);
+    setPreview("");
+    setPresetSwitchTarget(null);
   }
 
   async function refreshPreview() {
     setPreviewing(true); setMsg(null);
     try {
-      const r = await api.composerPreview(Array.from(selected));
+      const r = await api.composerPreview(
+        Array.from(selected),
+        preset === PRESET_CUSTOM ? null : preset,
+      );
       setPreview(r.markdown);
+      setWarnings(r.warnings);
+      setSaveBlocked(r.save_blocked);
     } catch (e) {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -60,7 +110,10 @@ export function ProfileComposer() {
     setConfirmOpen(false);
     setSaving(true); setMsg(null);
     try {
-      const r = await api.composerSave(Array.from(selected));
+      const r = await api.composerSave(
+        Array.from(selected),
+        preset === PRESET_CUSTOM ? null : preset,
+      );
       setMsg({
         kind: "ok",
         text: t("composer.saveOk", {
@@ -71,6 +124,10 @@ export function ProfileComposer() {
             : "",
         }),
       });
+      setWarnings(r.warnings);
+      setSaveBlocked(false);
+      setMtimeMatches(true);
+      setAgentMdExists(true);
     } catch (e) {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -86,7 +143,7 @@ export function ProfileComposer() {
     });
   }, [selectedCount, hasSelection, t]);
 
-  if (loadingBlocks) {
+  if (loading) {
     return <div className="text-xs text-muted-foreground">{t("composer.loading", { defaultValue: "Lade Bausteine..." })}</div>;
   }
 
@@ -103,10 +160,48 @@ export function ProfileComposer() {
       <p className="text-xs text-muted-foreground leading-relaxed">
         {t("composer.intro", {
           defaultValue:
-            "Wähle Bausteine, um eine AGENT.md-Datei für deinen persönlichen Agent zu erzeugen. AGENT.md beschreibt, wie der Agent arbeiten soll, und ersetzt keine bestehende Soul-Einstellung.",
+            "Wähle Bausteine oder ein Preset, um eine AGENT.md-Datei für deinen persönlichen Agent zu erzeugen. Die Auswahl wird in agent_profile.yaml gespeichert. soul.md und agent.yaml bleiben unverändert.",
         })}
       </p>
 
+      {/* Preset-Auswahl */}
+      <div className="rounded-md border border-border/70 bg-background p-3 space-y-2">
+        <label className="text-xs font-semibold text-foreground">
+          {t("composer.presetLabel", { defaultValue: "Preset" })}
+        </label>
+        <select
+          value={preset}
+          onChange={e => requestPresetSwitch(e.target.value)}
+          className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value={PRESET_CUSTOM}>
+            {t("composer.presetCustom", { defaultValue: "Custom (eigene Auswahl)" })}
+          </option>
+          {presets.map(p => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
+        </select>
+        {preset !== PRESET_CUSTOM && (
+          <p className="text-xs text-muted-foreground">
+            {presets.find(p => p.id === preset)?.description}
+          </p>
+        )}
+      </div>
+
+      {/* Externer AGENT.md-Hinweis */}
+      {agentMdExists && !mtimeMatches && (
+        <div className="flex items-start gap-2 text-xs rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 p-2">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            {t("composer.mtimeDrift", {
+              defaultValue:
+                "AGENT.md wurde seit dem letzten Composer-Save extern geändert. Speichern überschreibt den aktuellen Stand; ein Backup wird als AGENT.md.backup angelegt.",
+            })}
+          </span>
+        </div>
+      )}
+
+      {/* Bausteine */}
       <div className="space-y-4">
         {categories.map(cat => (
           <div key={cat.id} className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
@@ -134,6 +229,28 @@ export function ProfileComposer() {
         ))}
       </div>
 
+      {/* Warnings */}
+      {warnings.length > 0 && (
+        <div className="space-y-1.5">
+          {warnings.map((w, i) => {
+            const tone =
+              w.severity === "error"
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : w.severity === "warning"
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-border/70 bg-muted/30 text-muted-foreground";
+            const Icon = w.severity === "error" ? AlertCircle : w.severity === "warning" ? AlertTriangle : Info;
+            return (
+              <div key={`${w.rule}-${i}`} className={`flex items-start gap-2 text-xs rounded-md border p-2 ${tone}`}>
+                <Icon className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                <span>{w.message}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Aktionen */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -147,7 +264,7 @@ export function ProfileComposer() {
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          disabled={!hasSelection || saving}
+          disabled={!hasSelection || saving || saveBlocked}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs rounded-md bg-primary text-primary-foreground hover:opacity-90 transition disabled:opacity-50"
         >
           <Save className="h-3.5 w-3.5" />
@@ -191,6 +308,20 @@ export function ProfileComposer() {
         cancelLabel={t("composer.confirmCancel", { defaultValue: "Abbrechen" })}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={doSave}
+      />
+
+      <ConfirmDialog
+        open={presetSwitchTarget !== null}
+        variant="default"
+        title={t("composer.presetSwitchTitle", { defaultValue: "Preset übernehmen?" })}
+        message={t("composer.presetSwitchMsg", {
+          defaultValue:
+            "Preset-Auswahl ersetzt deine aktuelle Bausteinauswahl. Fortfahren?",
+        })}
+        confirmLabel={t("composer.presetSwitchOk", { defaultValue: "Übernehmen" })}
+        cancelLabel={t("composer.presetSwitchCancel", { defaultValue: "Abbrechen" })}
+        onCancel={() => setPresetSwitchTarget(null)}
+        onConfirm={() => presetSwitchTarget && applyPreset(presetSwitchTarget)}
       />
     </section>
   );

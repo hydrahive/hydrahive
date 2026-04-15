@@ -25,6 +25,15 @@ export interface GpuInfo {
   gpus?:     GpuEntry[];
 }
 
+// #645 Composer
+export type ComposerWarningSeverity = "info" | "warning" | "error";
+export interface ComposerWarning {
+  rule:      string;
+  severity:  ComposerWarningSeverity;
+  message:   string;
+  block_ids: string[];
+}
+
 const BASE = "/api";
 function getToken() { return localStorage.getItem("hydrahive_token") || ""; }
 
@@ -115,8 +124,10 @@ export const api = {
   clearMyAgentSession: () => api.delete("/me/agent/session"),
   // #645 Profile-Composer (Personal-Agent)
   composerBlocks: () => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>("/me/agent/composer/blocks"),
-  composerPreview: (selected: string[]) => api.post<{markdown: string}>("/me/agent/composer/preview", {selected}),
-  composerSave: (selected: string[]) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number}>("/me/agent/composer", {selected}),
+  composerPresets: () => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>("/me/agent/composer/presets"),
+  composerProfile: () => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>("/me/agent/composer/profile"),
+  composerPreview: (selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>("/me/agent/composer/preview", {selected, preset: preset ?? null}),
+  composerSave: (selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset: preset ?? null}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
