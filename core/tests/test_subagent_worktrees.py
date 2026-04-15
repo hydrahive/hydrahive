@@ -298,6 +298,27 @@ def test_invalid_isolation_mode(repo, worktrees):
         create_worktree(base_repo=repo, isolation_mode="bogus", **BASE_KW)
 
 
+# ── #653: write_scope Parameter ─────────────────────────────────────────────
+
+def test_write_scope_default_none(repo, worktrees):
+    meta = create_worktree(base_repo=repo, **BASE_KW)
+    assert meta.write_scope is None
+
+
+def test_write_scope_persisted(repo, worktrees):
+    scope = {"allow": ["core/**"], "deny": ["**/*.env"], "description": "core-only"}
+    kw = {**BASE_KW, "sub_agent_id": "sub_ws"}
+    meta = create_worktree(base_repo=repo, write_scope=scope, **kw)
+    assert meta.write_scope == scope
+    disk = get_worktree(meta.worktree_id)
+    assert disk.write_scope == scope
+
+
+def test_write_scope_invalid_rejected(repo, worktrees):
+    with pytest.raises(WorktreeError, match="write_scope"):
+        create_worktree(base_repo=repo, write_scope={"allow": ["/abs/path"]}, **BASE_KW)
+
+
 def test_legacy_isolation_mode_mapped_on_read(repo, worktrees):
     """Pre-#652 Meta-Dateien hatten isolation_mode='worktree'.
     Loader muss das transparent auf 'full_worktree' mappen.

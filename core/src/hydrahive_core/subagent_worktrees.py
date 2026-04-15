@@ -54,6 +54,11 @@ from .subagent_isolation import (
     IsolationMode,
     validate_isolation_mode,
 )
+from .subagent_write_scope import (
+    WriteScopeError,
+    validate_write_scope,
+    write_scope_to_dict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +233,7 @@ def create_worktree(
     allow_dirty: bool = False,
     worktrees_dir: Path | None = None,
     isolation_mode: str | IsolationMode = DEFAULT_ISOLATION_MODE,
+    write_scope: dict | None = None,
 ) -> WorktreeMeta:
     """
     Legt einen Git-Worktree mit detached HEAD auf dem aktuellen Commit an.
@@ -249,6 +255,11 @@ def create_worktree(
         iso = validate_isolation_mode(isolation_mode)
     except IsolationError as exc:
         raise WorktreeError(str(exc)) from exc
+    try:
+        ws = validate_write_scope(write_scope)
+    except WriteScopeError as exc:
+        raise WorktreeError(f"invalid write_scope: {exc}") from exc
+    scope_persist = write_scope_to_dict(ws) if write_scope is not None else None
 
     base_repo_path = Path(base_repo).resolve()
     if not is_git_repo(base_repo_path):
@@ -309,6 +320,7 @@ def create_worktree(
         worktree_path=str(tree_path),
         created_at=created_at,
         isolation_mode=iso.value,
+        write_scope=scope_persist,
     )
 
     try:
