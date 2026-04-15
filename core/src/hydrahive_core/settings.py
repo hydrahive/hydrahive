@@ -157,6 +157,23 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "wks_keys"
 
     @property
+    def worktrees_dir(self) -> Path:
+        """Basisverzeichnis für Sub-Agent-Worktrees (#651).
+
+        Layout:
+          <worktrees_dir>/trees/<id>/    Git-Worktree
+          <worktrees_dir>/meta/<id>.json Metadaten
+
+        Override via Env HYDRAHIVE_WORKTREES_DIR (wird von
+        subagent_worktrees direkt geprüft).
+        """
+        import os
+        override = os.environ.get("HYDRAHIVE_WORKTREES_DIR")
+        if override:
+            return Path(override)
+        return Path("/var/lib/hydrahive/worktrees")
+
+    @property
     def settings_file(self) -> Path:
         """Pfad zu settings.json (Hook-Konfiguration, #654).
 
