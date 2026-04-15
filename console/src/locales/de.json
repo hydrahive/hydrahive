@@ -483,7 +483,9 @@
     "identityPlaceholder": "z.B. Steuerbert",
     "editBtn": "Bearbeiten",
     "soulHint": "Markdown beschreibt Charakter und Kommunikationsstil des Agenten",
-    "tabPlugins": "Plugins"
+    "tabPlugins": "Plugins",
+    "composer": "Profil-Composer (AGENT.md)",
+    "composerTitle": "Profil-Composer"
   },
   "projects": {
     "infoTitle": "Projekte verwalten",
@@ -1493,6 +1495,32 @@
     "step3": "Schritt 3: Peers hinzufügen",
     "step4": "Schritt 4: Verbindung testen",
     "step5": "Schritt 5: Aktivieren"
+  },
+  "composer": {
+    "loading": "Lade Bausteine…",
+    "title": "Profil-Composer",
+    "intro": "Wähle Bausteine oder ein Preset, um eine AGENT.md-Datei für deinen persönlichen Agent zu erzeugen. Die Auswahl wird in agent_profile.yaml gespeichert. soul.md und agent.yaml bleiben unverändert.",
+    "presetLabel": "Preset",
+    "presetCustom": "Custom (eigene Auswahl)",
+    "soulHint": "AGENT.md hat Vorrang vor soul.md. Diese Ansicht bearbeitet nur AGENT.md und agent_profile.yaml — agent.yaml, soul.md, tools[] und execution_modes bleiben unverändert.",
+    "mtimeDrift": "AGENT.md wurde seit dem letzten Composer-Save extern geändert. Speichern überschreibt den aktuellen Stand; ein Backup wird als AGENT.md.backup angelegt.",
+    "conflictMessage": "AGENT.md wurde seit dem Laden geändert. Bitte Profil neu laden.",
+    "conflictReload": "Profil neu laden",
+    "refreshPreview": "Vorschau aktualisieren",
+    "save": "In AGENT.md übernehmen",
+    "previewTitle": "Vorschau (Markdown)",
+    "confirmTitle": "AGENT.md überschreiben?",
+    "confirmMsg": "Eine bestehende AGENT.md wird überschrieben. Der vorherige Stand wird automatisch als AGENT.md.backup gesichert. soul.md und agent.yaml bleiben unverändert.",
+    "confirmOk": "Überschreiben",
+    "confirmCancel": "Abbrechen",
+    "presetSwitchTitle": "Preset übernehmen?",
+    "presetSwitchMsg": "Preset-Auswahl ersetzt deine aktuelle Bausteinauswahl. Fortfahren?",
+    "presetSwitchOk": "Übernehmen",
+    "presetSwitchCancel": "Abbrechen",
+    "selectionCount": "{{count}} Baustein(e) ausgewählt",
+    "noSelection": "Keine Bausteine ausgewählt.",
+    "saveOk": "AGENT.md gespeichert ({{count}} Bausteine).{{backup}}",
+    "saveBackup": "Vorheriger Stand liegt in AGENT.md.backup."
   },
   "action": "Aktion",
   "agent_id": "Agent-ID",

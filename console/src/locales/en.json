@@ -483,7 +483,9 @@
     "identityPlaceholder": "e.g. TaxBot",
     "editBtn": "Edit",
     "soulHint": "Markdown describes character and communication style of the agent",
-    "tabPlugins": "Plugins"
+    "tabPlugins": "Plugins",
+    "composer": "Profile Composer (AGENT.md)",
+    "composerTitle": "Profile Composer"
   },
   "projects": {
     "infoTitle": "Manage Projects",
@@ -1493,6 +1495,32 @@
     "step3": "Step 3: Add peers",
     "step4": "Step 4: Test connection",
     "step5": "Step 5: Activate"
+  },
+  "composer": {
+    "loading": "Loading blocks…",
+    "title": "Profile Composer",
+    "intro": "Pick blocks or a preset to generate an AGENT.md file for your personal agent. The selection is saved in agent_profile.yaml. soul.md and agent.yaml are left untouched.",
+    "presetLabel": "Preset",
+    "presetCustom": "Custom (your own selection)",
+    "soulHint": "AGENT.md takes precedence over soul.md. This view only edits AGENT.md and agent_profile.yaml — agent.yaml, soul.md, tools[] and execution_modes stay untouched.",
+    "mtimeDrift": "AGENT.md was changed externally since the last Composer save. Saving will overwrite the current state; the previous version is kept as AGENT.md.backup.",
+    "conflictMessage": "AGENT.md changed since you loaded the profile. Please reload.",
+    "conflictReload": "Reload profile",
+    "refreshPreview": "Refresh preview",
+    "save": "Apply to AGENT.md",
+    "previewTitle": "Preview (Markdown)",
+    "confirmTitle": "Overwrite AGENT.md?",
+    "confirmMsg": "An existing AGENT.md will be overwritten. The previous version is saved as AGENT.md.backup. soul.md and agent.yaml remain untouched.",
+    "confirmOk": "Overwrite",
+    "confirmCancel": "Cancel",
+    "presetSwitchTitle": "Apply preset?",
+    "presetSwitchMsg": "Preset selection replaces your current block selection. Continue?",
+    "presetSwitchOk": "Apply",
+    "presetSwitchCancel": "Cancel",
+    "selectionCount": "{{count}} block(s) selected",
+    "noSelection": "No blocks selected.",
+    "saveOk": "AGENT.md saved ({{count}} blocks).{{backup}}",
+    "saveBackup": "Previous version available as AGENT.md.backup."
   },
   "action": "Action",
   "agent_id": "Agent ID",
