@@ -104,10 +104,39 @@ $SSH "$VM" "if [ ! -d ${INSTALL_DIR}/whatsapp-bridge/node_modules ]; then echo '
 $SSH "$VM" "sudo systemctl restart hydrahive-whatsapp-bridge 2>/dev/null && echo '   Bridge neu gestartet' || echo '   Bridge nicht aktiv (übersprungen)'"
 
 echo ""
-echo "==> [5e/5] Bundled Agents → VM (--ignore-existing, überschreibt KEINE user-eigenen Agents)"
-# Bundled agents werden nur angelegt wenn sie noch nicht existieren (--ignore-existing).
-# User-eigene Anpassungen bleiben erhalten.
+echo "==> [5e/5] Bundled Agents → VM"
+# Zwei-Stufen-Sync:
+#   1) Bundled-Template-Whitelist: agent.yaml + soul.md hart synchronisieren
+#      (vom Repo gepflegte Templates müssen Repo-Updates erhalten).
+#      memory/ und skills/ bleiben unangetastet — Runtime-State.
+#   2) Rest mit --ignore-existing: legt neue Agents an, überschreibt keine
+#      user-eigenen Anpassungen (personal_*, user-erstellte Agents).
 $SSH "$VM" "sudo mkdir -p /agents && sudo chown -R ${SSH_USER}:${SSH_USER} /agents/"
+
+BUNDLED_TEMPLATES=("hydrahive_support")
+for bundled in "${BUNDLED_TEMPLATES[@]}"; do
+  src_yaml="$REPO/agents/$bundled/agent.yaml"
+  if [ ! -f "$src_yaml" ]; then
+    echo "   FEHLER: bundled template '$bundled' fehlt im Repo ($src_yaml) — Abbruch."
+    exit 1
+  fi
+  echo "   bundled template: $bundled"
+  $SSH "$VM" "sudo mkdir -p /agents/$bundled && sudo chown -R ${SSH_USER}:${SSH_USER} /agents/$bundled"
+  rsync -av --no-owner --no-group \
+    -e "ssh -i $SSH_KEY" \
+    "$src_yaml" \
+    "$VM:/agents/$bundled/agent.yaml"
+  src_soul="$REPO/agents/$bundled/soul.md"
+  if [ -f "$src_soul" ]; then
+    rsync -av --no-owner --no-group \
+      -e "ssh -i $SSH_KEY" \
+      "$src_soul" \
+      "$VM:/agents/$bundled/soul.md"
+  fi
+done
+
+# Alles Übrige nur neu anlegen — memory/, skills/, personal_*, user-angelegte Agents
+# bleiben geschützt.
 rsync -av --no-owner --no-group --ignore-existing \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
   -e "ssh -i $SSH_KEY" \
