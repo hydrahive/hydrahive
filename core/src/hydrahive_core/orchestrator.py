@@ -624,6 +624,47 @@ class Orchestrator:
         _request_start = _perf_time.monotonic()
         workers_used: list[str] = []
 
+        # #656: OnTaskStart Hook-Runtime — fail-closed.
+        # V1 GILT NUR FÜR DEN NON-STREAMING-PFAD (_handle_message_impl).
+        # Streaming-Integration (orchestrator_stream._handle_message_stream_fn)
+        # folgt in separatem Issue.
+        # No-op wenn settings.json fehlt oder kein Matcher trifft.
+        import datetime as _dt
+        _started_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        _task_start_decision = None
+        _task_start_error: Exception | None = None
+        _task_dict = {
+            "kind":            "agent_turn",
+            "project_id":      project_id,
+            "agent_id":        getattr(getattr(project_cfg, "agents", None), "boss", "") or project_id,
+            "user":            sender,
+            "session_id":      "",
+            "message_preview": content,
+            "started_at":      _started_at,
+        }
+        try:
+            from .hook_runtime import run_task_start_hooks as _run_ts
+            _task_start_decision = await _run_ts(_task_dict, context={})
+        except Exception as _hook_err:
+            _task_start_error = _hook_err
+            logger.error(
+                "OnTaskStart hook runtime crashed (fail-closed): project=%s err=%s",
+                project_id, _hook_err, exc_info=True,
+            )
+        if _task_start_error is not None:
+            try:
+                from .hook_runtime import _redact_str as _red
+                _hint = _red(str(_task_start_error))[:200]
+            except Exception:
+                _hint = "hook runtime error"
+            return f"[Blockiert] OnTaskStart-Hook-Runtime-Fehler: {_hint}", []
+        if _task_start_decision is not None and _task_start_decision.action == "block":
+            logger.warning(
+                "OnTaskStart hook blocked task project=%s: %s",
+                project_id, _task_start_decision.message,
+            )
+            return f"[Blockiert] {_task_start_decision.message or 'Task von OnTaskStart-Hook blockiert.'}", []
+
         # 1. Nachricht in Session speichern
         await self._sessions.append(project_id, MessageRole.USER, content)
 
@@ -897,6 +938,25 @@ class Orchestrator:
             handle.total_requests += 1
             handle.total_response_ms += _elapsed_ms
             handle.last_response_ms = _elapsed_ms
+
+        # #656: OnTaskDone Hook-Runtime — non-blocking.
+        # V1 GILT NUR FÜR DEN NON-STREAMING-PFAD (s. oben).
+        # Runtime-Fehler werden hier geloggt, aber NICHT zurückpropagiert —
+        # final_response bleibt unverändert.
+        try:
+            from .hook_runtime import run_task_done_hooks as _run_td
+            _task_dict["session_id"] = ""  # V1 ohne Session-Tracking
+            _result_dict = {
+                "ok":          True,
+                "duration_ms": int(_elapsed_ms),
+                "summary":     final_response or "",
+                "error":       None,
+            }
+            _done_report = await _run_td(_task_dict, _result_dict, context={})
+            for _w in _done_report.warnings:
+                logger.warning("OnTaskDone warning project=%s: %s", project_id, _w)
+        except Exception as _hook_err:
+            logger.debug("OnTaskDone hook runtime error: %s", _hook_err)
 
         return final_response, workers_used
 

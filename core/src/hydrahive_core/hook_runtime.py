@@ -1,13 +1,19 @@
 """
-hook_runtime.py — Runtime für PreToolUse/PostToolUse command-Hooks (#655)
+hook_runtime.py — Runtime für Hook-Events (#655, #656)
+
+Unterstützt Events:
+  PreToolUse / PostToolUse      — #655 (Tool-Dispatch in orchestrator_tools.py)
+  OnTaskStart / OnTaskDone      — #656 (Agent-Turn in orchestrator.py,
+                                  Non-Streaming-Pfad. Streaming folgt separat.)
 
 Baut auf hook_settings.py (#654) auf. Führt deklarierte command-Hooks
 aus und liefert eine Policy-Entscheidung (allow/warn/block).
 
 Semantik
 --------
-PreToolUse kann blockieren. PostToolUse blockiert NICHT rückwirkend —
-Fehler, Timeouts oder block-Requests werden nur geloggt/als Warnung
+PreToolUse / OnTaskStart sind fail-closed (können blockieren).
+PostToolUse / OnTaskDone blockieren NICHT rückwirkend — Fehler,
+Timeouts oder block-Requests werden nur geloggt/als Warnung
 durchgereicht.
 
 Isolation
@@ -410,6 +416,164 @@ async def run_posttool_hooks(
         if action in ("block", "warn"):
             w = message or f"PostToolUse {action} from {cmd_short}"
             logger.info("PostToolUse %s: tool=%s %s", action, tool_name, w)
+            warnings.append(w)
+
+    return PostHookReport(warnings=warnings)
+
+
+# ── Task-Lifecycle-Hooks (#656) ──────────────────────────────────────────────
+# OnTaskStart / OnTaskDone folgen derselben Subprocess-/Redaction-/Timeout-
+# Mechanik wie PreToolUse/PostToolUse. Matcher greift auf `task["kind"]`
+# (V1: nur "agent_turn"). Decision-/Report-Typen werden wiederverwendet —
+# strukturell identisch, nur Semantik-Kontext unterschiedlich.
+
+# Inhalts-Preview-Cap für Task-Payloads (User-Text / Agent-Output könnten
+# länger sein als 2 KB; für Hooks reicht ein kurzer Ausschnitt).
+TASK_PREVIEW_MAX = 512
+
+
+def _task_payload(event: str, task: dict, context: dict | None, extra: dict | None = None) -> dict:
+    task_red = _redact_value(task)
+    if isinstance(task_red, dict):
+        for k in ("message_preview",):
+            v = task_red.get(k)
+            if isinstance(v, str) and len(v) > TASK_PREVIEW_MAX:
+                task_red[k] = v[:TASK_PREVIEW_MAX] + "…[truncated]"
+    payload = {
+        "event": event,
+        "task": task_red,
+        "context": {k: _redact_value(v) for k, v in (context or {}).items()},
+    }
+    if extra:
+        for k, v in extra.items():
+            payload[k] = _redact_value(v)
+        # summary cap
+        result = payload.get("result")
+        if isinstance(result, dict):
+            s = result.get("summary")
+            if isinstance(s, str) and len(s) > TASK_PREVIEW_MAX:
+                result["summary"] = s[:TASK_PREVIEW_MAX] + "…[truncated]"
+    return payload
+
+
+def _task_kind(task: dict) -> str:
+    k = task.get("kind") if isinstance(task, dict) else None
+    return k if isinstance(k, str) and k else "unknown"
+
+
+async def run_task_start_hooks(
+    task: dict,
+    context: dict | None = None,
+) -> PreHookDecision:
+    """
+    Führt OnTaskStart-Hooks aus. Fail-closed analog PreToolUse —
+    Block/Timeout/Exit≠0/invalid JSON → Block mit message.
+    Fehlende settings.json → allow (no-op).
+    """
+    settings = get_hook_settings()
+    if settings.is_empty:
+        return PreHookDecision(action="allow")
+
+    kind = _task_kind(task)
+    hooks = _collect_hooks(settings, "OnTaskStart", kind)
+    if not hooks:
+        return PreHookDecision(action="allow")
+
+    payload = _task_payload("OnTaskStart", task, context)
+    warnings: list[str] = []
+
+    for hook in hooks:
+        outcome, rc, stdout, stderr = await _run_one_hook(hook, payload, "OnTaskStart", kind)
+        cmd_short = shlex.split(hook.command)[0] if hook.command else "<empty>"
+
+        if outcome == "timeout":
+            msg = f"OnTaskStart hook timeout ({hook.timeout}s): {cmd_short}"
+            logger.warning(msg)
+            return PreHookDecision(action="block", message=msg, warnings=warnings)
+
+        if outcome == "exec_fail":
+            msg = f"OnTaskStart hook failed to execute: {cmd_short}: {stderr.strip()}"
+            logger.warning(msg)
+            return PreHookDecision(action="block", message=msg, warnings=warnings)
+
+        if rc != 0:
+            msg = f"OnTaskStart hook exit {rc}: {cmd_short}"
+            if stderr.strip():
+                msg += f" | stderr: {stderr.strip()[:200]}"
+            logger.warning(msg)
+            return PreHookDecision(action="block", message=msg, warnings=warnings)
+
+        try:
+            action, message = _parse_hook_output(stdout)
+        except ValueError as exc:
+            msg = f"OnTaskStart hook invalid output: {cmd_short}: {exc}"
+            logger.warning(msg)
+            return PreHookDecision(action="block", message=msg, warnings=warnings)
+
+        if action == "block":
+            logger.info("OnTaskStart block: kind=%s hook=%s msg=%s", kind, cmd_short, message)
+            return PreHookDecision(
+                action="block",
+                message=message or f"blocked by {cmd_short}",
+                warnings=warnings,
+            )
+        if action == "warn":
+            w = message or f"warning from {cmd_short}"
+            logger.info("OnTaskStart warn: kind=%s %s", kind, w)
+            warnings.append(w)
+
+    return PreHookDecision(action="allow", warnings=warnings)
+
+
+async def run_task_done_hooks(
+    task: dict,
+    result: dict,
+    context: dict | None = None,
+) -> PostHookReport:
+    """
+    Führt OnTaskDone-Hooks aus. Non-blocking analog PostToolUse —
+    Fehler/Timeouts/Block-Requests werden nur gesammelt, Task-Ergebnis
+    bleibt unangetastet.
+    """
+    settings = get_hook_settings()
+    if settings.is_empty:
+        return PostHookReport()
+
+    kind = _task_kind(task)
+    hooks = _collect_hooks(settings, "OnTaskDone", kind)
+    if not hooks:
+        return PostHookReport()
+
+    payload = _task_payload("OnTaskDone", task, context, extra={"result": result})
+    warnings: list[str] = []
+
+    for hook in hooks:
+        outcome, rc, stdout, stderr = await _run_one_hook(hook, payload, "OnTaskDone", kind)
+        cmd_short = shlex.split(hook.command)[0] if hook.command else "<empty>"
+
+        if outcome == "timeout":
+            w = f"OnTaskDone hook timeout ({hook.timeout}s): {cmd_short}"
+            logger.warning(w); warnings.append(w); continue
+
+        if outcome == "exec_fail":
+            w = f"OnTaskDone hook exec failed: {cmd_short}: {stderr.strip()}"
+            logger.warning(w); warnings.append(w); continue
+
+        if rc != 0:
+            w = f"OnTaskDone hook exit {rc}: {cmd_short}"
+            if stderr.strip():
+                w += f" | stderr: {stderr.strip()[:200]}"
+            logger.warning(w); warnings.append(w); continue
+
+        try:
+            action, message = _parse_hook_output(stdout)
+        except ValueError as exc:
+            w = f"OnTaskDone hook invalid output: {cmd_short}: {exc}"
+            logger.warning(w); warnings.append(w); continue
+
+        if action in ("block", "warn"):
+            w = message or f"OnTaskDone {action} from {cmd_short}"
+            logger.info("OnTaskDone %s: kind=%s %s", action, kind, w)
             warnings.append(w)
 
     return PostHookReport(warnings=warnings)
