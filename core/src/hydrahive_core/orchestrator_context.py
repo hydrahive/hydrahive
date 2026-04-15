@@ -476,6 +476,22 @@ async def build_system_prompt(
         channels.repo_guidance = repo_guidance
 
     if boss_cfg.agent_dir:
+        handoff_path = boss_cfg.agent_dir / "memory" / "_last_handoff.md"
+        if handoff_path.exists():
+            import os
+            age_hours = (time.time() - os.path.getmtime(handoff_path)) / 3600
+            if age_hours < 48:
+                handoff_text = handoff_path.read_text(encoding="utf-8").strip()
+                if handoff_text:
+                    if len(handoff_text) > 3000:
+                        handoff_text = handoff_text[:3000] + "\n…[gekürzt]"
+                    channels.forced_handoff = (
+                        "## Forced-Abort-Handoff\n\n"
+                        "Dieser automatisch gespeicherte Stand stammt aus einem abgebrochenen Tool-Loop. "
+                        "Verifiziere Pfade, Repo und TODOs vor weiteren Änderungen.\n\n"
+                        + handoff_text
+                    )
+
         last_session_path = boss_cfg.agent_dir / "memory" / "_last_session.md"
         if last_session_path.exists():
             import os

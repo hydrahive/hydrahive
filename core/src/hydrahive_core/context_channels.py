@@ -51,6 +51,7 @@ class ContextChannels:
     memory_hits: str = ""          # BM25-Treffer für aktuelle Query
     amem_hits: str = ""             # A-MEM globale Treffer
     working_state: str = ""         # WorkingState-Snapshot (#632) — Anomalien zuerst
+    forced_handoff: str = ""         # _last_handoff.md nach Forced-Abort (#624)
     last_session: str = ""          # _last_session.md (Session-Continuity)
     skills: str = ""                # query-spezifisch ausgewählte Skills
     repo_guidance: str = ""         # repo-review-guidance bei Repo-Querys
@@ -65,8 +66,9 @@ class ContextChannels:
         "sources", "repos", "servers", "handbook", "blueprint", "workflow", "policies",
     )
     _DYNAMIC_SLOTS = (
-        "memory_hits", "amem_hits", "working_state", "last_session", "skills",
-        "repo_guidance", "deferred_tools", "plan_mode", "frustration",
+        "memory_hits", "amem_hits", "working_state", "forced_handoff",
+        "last_session", "skills", "repo_guidance", "deferred_tools",
+        "plan_mode", "frustration",
     )
 
     def to_static_str(self) -> str:

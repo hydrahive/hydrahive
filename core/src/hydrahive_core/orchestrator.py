@@ -347,6 +347,146 @@ class Orchestrator:
             runtime=self._runtime,
         )
 
+    async def _write_forced_abort_handoff(
+        self,
+        boss_cfg: AgentConfig,
+        current_messages: list[dict],
+        *,
+        reason: str,
+        execution_mode: str | None = None,
+    ) -> bool:
+        """#624: Persistiert vor Forced-Aborts einen kompakten Resume-Handoff.
+
+        Der Handoff ist Komfort-Schicht, kein kritischer Pfad: Fehler werden
+        geloggt und der Tool-Loop finalisiert trotzdem normal weiter.
+        """
+        agent_dir = getattr(boss_cfg, "agent_dir", None)
+        if not agent_dir:
+            return False
+
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        memory_dir = Path(agent_dir) / "memory"
+        handoff_path = memory_dir / "_last_handoff.md"
+        summary = ""
+
+        prompt = (
+            "[System: Tool-Loop wurde erzwungen beendet. Erstelle ein Resume-Handoff "
+            "in maximal 300 Woertern. Ziel: Bei der naechsten User-Nachricht wie "
+            "'mach weiter' soll der Agent ohne Chat-Kontext sicher fortsetzen koennen. "
+            "Nenne konkret: Workspace-Pfad, Repo/Issue/Task falls bekannt, erledigte "
+            "Schritte, offene TODOs, zuletzt beruehrte Dateien, naechste sichere "
+            "Schritte. Wichtig: keine Tools aufrufen, nur Text. "
+            f"Abort-Grund: {reason}.]"
+        )
+        handoff_messages = list(current_messages[-14:])
+        handoff_messages.append({"role": "user", "content": prompt})
+
+        try:
+            resp = await self._llm_call(boss_cfg, handoff_messages, tools=None)
+            summary = (resp.choices[0].message.content or "").strip()
+        except Exception as e:
+            logger.warning("Forced-Abort-Handoff LLM-Zusammenfassung fehlgeschlagen: %s", e)
+
+        if not summary:
+            summary = self._fallback_forced_abort_handoff(current_messages, reason=reason)
+
+        try:
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            handoff_path.write_text(
+                (
+                    f"# Auto-Handoff nach Forced-Abort\n\n"
+                    f"- created_at: {created}\n"
+                    f"- reason: {reason}\n"
+                    f"- execution_mode: {execution_mode or 'default'}\n\n"
+                    "Hinweis: Dieser Stand kann veraltet sein. Vor mutierenden Aktionen "
+                    "Workspace, Repo, Issue und offene Dateien verifizieren.\n\n"
+                    f"{summary.strip()}\n"
+                ),
+                encoding="utf-8",
+            )
+            logger.info(
+                "Forced-Abort-Handoff geschrieben: agent=%s reason=%s path=%s",
+                getattr(boss_cfg, "id", "?"), reason, handoff_path,
+            )
+            return True
+        except Exception as e:
+            logger.warning("Forced-Abort-Handoff konnte nicht geschrieben werden: %s", e)
+            return False
+
+    @staticmethod
+    def _fallback_forced_abort_handoff(current_messages: list[dict], *, reason: str) -> str:
+        """Best-effort-Handoff falls der zusaetzliche LLM-Call scheitert."""
+        lines = [f"Abort-Grund: {reason}", "", "Letzter bekannter Verlauf:"]
+        for msg in current_messages[-8:]:
+            role = msg.get("role", "?")
+            if msg.get("tool_calls"):
+                tools = []
+                for tc in msg.get("tool_calls", [])[:5]:
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                    tools.append(fn.get("name", "?"))
+                lines.append(f"- {role}: Tool-Calls: {', '.join(tools)}")
+                continue
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                content = " ".join(
+                    str(part.get("text", part)) if isinstance(part, dict) else str(part)
+                    for part in content
+                )
+            content = str(content).strip().replace("\n", " ")
+            if content:
+                lines.append(f"- {role}: {content[:300]}")
+        lines.append("")
+        lines.append("Naechster Schritt: Stand verifizieren, dann die letzte Aufgabe fortsetzen.")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _forced_abort_handoff_mtime(boss_cfg: AgentConfig) -> float | None:
+        agent_dir = getattr(boss_cfg, "agent_dir", None)
+        if not agent_dir:
+            return None
+        try:
+            from pathlib import Path
+            handoff_path = Path(agent_dir) / "memory" / "_last_handoff.md"
+            return handoff_path.stat().st_mtime if handoff_path.exists() else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _clear_forced_abort_handoff_if_unchanged(
+        boss_cfg: AgentConfig,
+        expected_mtime: float | None,
+    ) -> bool:
+        """Loescht ein injiziertes Handoff nach erfolgreichem Folge-Turn.
+
+        Nur loeschen, wenn die Datei seit Prompt-Aufbau nicht neu geschrieben
+        wurde. So bleibt ein frischer Handoff erhalten, falls die Fortsetzung
+        erneut in einen Abort laeuft.
+        """
+        if expected_mtime is None:
+            return False
+        agent_dir = getattr(boss_cfg, "agent_dir", None)
+        if not agent_dir:
+            return False
+        try:
+            from pathlib import Path
+            handoff_path = Path(agent_dir) / "memory" / "_last_handoff.md"
+            if not handoff_path.exists():
+                return False
+            if handoff_path.stat().st_mtime != expected_mtime:
+                return False
+            handoff_path.unlink()
+            logger.info(
+                "Forced-Abort-Handoff nach Resume geloescht: agent=%s path=%s",
+                getattr(boss_cfg, "id", "?"), handoff_path,
+            )
+            return True
+        except Exception as e:
+            logger.debug("Forced-Abort-Handoff Cleanup uebersprungen: %s", e)
+            return False
+
     async def _finalize_tool_loop_response(
         self,
         boss_cfg: AgentConfig,
@@ -495,6 +635,7 @@ class Orchestrator:
             boss_cfg = self._discovery.get(project_cfg.agents.boss)
         if not boss_cfg:
             return f"[Fehler] Boss-Agent '{getattr(project_cfg.agents, 'boss', project_cfg.id)}' nicht gefunden.", []
+        _handoff_mtime_at_prompt = self._forced_abort_handoff_mtime(boss_cfg)
 
         # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache.
         # #636: einheitlicher Builder, Tuple-Return, mit aktiver Session für working_state.
@@ -736,14 +877,16 @@ class Orchestrator:
                     "cache_read_tokens":  cache_read,
                 }
             total_t = input_t + output_t
-            if total_t > 0 and _tool_reg._rate_limiter is not None:
-                _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
+        if total_t > 0 and _tool_reg._rate_limiter is not None:
+            _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_t)
 
         await self._sessions.append(
             project_id, MessageRole.ASSISTANT,
             final_response, agent_id=boss_cfg.id,
             **_usage_meta,
         )
+        if final_response:
+            self._clear_forced_abort_handoff_if_unchanged(boss_cfg, _handoff_mtime_at_prompt)
 
         self._runtime.set_activity(boss_cfg.id, None)
 

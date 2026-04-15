@@ -87,6 +87,7 @@ async def handle_message_stream(
     if not boss_cfg:
         yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
         return
+    _handoff_mtime_at_prompt = orch._forced_abort_handoff_mtime(boss_cfg)
 
     # Stale Interrupt-Flags löschen (von eventuell vorangegangenem abgebrochenem Request)
     from .tool_registry import clear_interrupt as _clear_interrupt
@@ -314,6 +315,7 @@ async def handle_message_stream(
                 full_response, agent_id=boss_cfg.id,
                 **_stream_meta,
             )
+            orch._clear_forced_abort_handoff_if_unchanged(boss_cfg, _handoff_mtime_at_prompt)
         total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
         if total_tokens > 0 and _tool_reg._rate_limiter is not None:
             _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
@@ -438,6 +440,7 @@ async def _stream_codex(
         last_signature, repeated_signature_count, should_abort = check_repeated_signature(
             signature, last_signature, repeated_signature_count, threshold=4,
         )
+        abort_reason = "signature_abort"
         if not should_abort:
             _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history_codex)
             if _fuzzy_abort:
@@ -445,7 +448,14 @@ async def _stream_codex(
                     "Fuzzy-Loop erkannt (Codex): Pattern '%s' — Abbruch", (_fuzzy_fp or "")[:120],
                 )
                 should_abort = True
+                abort_reason = "fuzzy_loop_abort"
         if should_abort:
+            await orch._write_forced_abort_handoff(
+                boss_cfg,
+                cur_messages,
+                reason=abort_reason,
+                execution_mode=execution_mode,
+            )
             final = await orch._finalize_tool_loop_response(
                 boss_cfg, cur_messages,
                 reason="wiederholte Tool-Signatur",
@@ -593,6 +603,14 @@ async def _stream_codex(
         if hasattr(next_resp, "usage") and next_resp.usage:
             _usage["input"] += getattr(next_resp.usage, "prompt_tokens", 0)
             _usage["output"] += getattr(next_resp.usage, "completion_tokens", 0)
+
+    else:
+        await orch._write_forced_abort_handoff(
+            boss_cfg,
+            cur_messages,
+            reason=f"max_rounds_hit:{boss_cfg.max_tool_rounds}",
+            execution_mode=execution_mode,
+        )
 
     text = msg.content or ""
     if text:
@@ -774,6 +792,7 @@ async def _stream_anthropic_oauth(
         last_tool_signature, repeated_tool_signature_count, should_abort = check_repeated_signature(
             signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
         )
+        abort_reason = "signature_abort"
         # #618: Fuzzy-Detector zusätzlich — fängt variierende Pfade / URLs
         if not should_abort:
             _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history)
@@ -783,7 +802,14 @@ async def _stream_anthropic_oauth(
                     (_fuzzy_fp or "")[:120],
                 )
                 should_abort = True
+                abort_reason = "fuzzy_loop_abort"
         if should_abort:
+            await orch._write_forced_abort_handoff(
+                boss_cfg,
+                filtered,
+                reason=abort_reason,
+                execution_mode=execution_mode,
+            )
             kwargs_final = dict(kwargs)
             kwargs_final.pop("tools", None)
             kwargs_final["messages"] = filtered + [
@@ -947,6 +973,12 @@ async def _stream_anthropic_oauth(
         kwargs["messages"] = redact_thinking_blocks(filtered)
     else:
         # Loop normal beendet (kein break nach letzter Runde)
+        await orch._write_forced_abort_handoff(
+            boss_cfg,
+            filtered,
+            reason=f"max_rounds_hit:{boss_cfg.max_tool_rounds}",
+            execution_mode=execution_mode,
+        )
         kwargs_final = dict(kwargs)
         kwargs_final.pop("tools", None)
         kwargs_final["messages"] = filtered + [{"role": "user", "content": [{"type": "text", "text": "[System: Tool-Limit erreicht. Fasse ab was abgeschlossen wurde, was nicht geklappt hat und warum. WICHTIG: Du hast KEINE Tools mehr — schreibe KEINE Tool-Aufrufe als Text.]"}]}]
@@ -1065,6 +1097,12 @@ async def _stream_litellm(
             signature, last_tool_signature, repeated_tool_signature_count, threshold=4,
         )
         if should_abort:
+            await orch._write_forced_abort_handoff(
+                boss_cfg,
+                loop_messages,
+                reason="signature_abort",
+                execution_mode=execution_mode,
+            )
             loop_messages.append({
                 "role": "user",
                 "content": "[System: Wiederholte Tool-Signatur erkannt — kein weiterer Fortschritt möglich. Berichte: 1) Was wurde abgeschlossen? 2) Was ist gescheitert und warum? WICHTIG: Du hast KEINE Tools mehr — schreibe KEINE Tool-Aufrufe als Text, antworte NUR mit normalem Text.]",
@@ -1217,5 +1255,13 @@ async def _stream_litellm(
                 agent_id=boss_id, tool_call_id=_tcid,
                 tool_name=_tcname,
             )
+
+    else:
+        await orch._write_forced_abort_handoff(
+            boss_cfg,
+            loop_messages,
+            reason=f"max_rounds_hit:{boss_cfg.max_tool_rounds}",
+            execution_mode=execution_mode,
+        )
 
     yield {"_full_response": full_response, "_streamed_any": streamed_any}

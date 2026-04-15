@@ -99,6 +99,7 @@ async def _tool_loop(
         last_signature, repeated_signature_count, should_abort = check_repeated_signature(
             signature, last_signature, repeated_signature_count, threshold=2,
         )
+        abort_reason = "signature_abort"
         if not should_abort:
             _fuzzy_abort, _fuzzy_fp = check_fuzzy_loop(_fuzzy_history_dispatch)
             if _fuzzy_abort:
@@ -107,6 +108,7 @@ async def _tool_loop(
                     (_fuzzy_fp or "")[:120],
                 )
                 should_abort = True
+                abort_reason = "fuzzy_loop_abort"
 
         if should_abort:
             _metrics.record_signature_abort(project_id)
@@ -115,6 +117,12 @@ async def _tool_loop(
                 ", ".join(signature[:3])[:180],
             )
             try:
+                await orch._write_forced_abort_handoff(
+                    boss_cfg,
+                    current_messages,
+                    reason=abort_reason,
+                    execution_mode=execution_mode,
+                )
                 final = await orch._finalize_tool_loop_response(
                     boss_cfg,
                     current_messages,
@@ -139,6 +147,12 @@ async def _tool_loop(
             except Exception as e:
                 logger.debug("Failed to send tool-loop warning notification: %s", e)
             try:
+                await orch._write_forced_abort_handoff(
+                    boss_cfg,
+                    current_messages,
+                    reason=f"max_rounds_hit:{max_rounds}",
+                    execution_mode=execution_mode,
+                )
                 final = await orch._finalize_tool_loop_response(
                     boss_cfg,
                     current_messages,
