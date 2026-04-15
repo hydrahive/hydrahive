@@ -6,6 +6,8 @@
  */
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { ProfileComposer } from "@/components/ProfileComposer";
 import {
   Save,
   X,
@@ -19,6 +21,7 @@ import {
   MessageCircle,
   Hash,
   Database,
+  Sparkles,
 } from "lucide-react";
 
 interface ProjectSettingsPanelProps {
@@ -61,6 +64,11 @@ const MODELS: Record<string, string[]> = {
 };
 
 export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPanelProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const isPersonalOwner = projectId === `personal_${user?.username}`;
+  const canUseComposer = isAdmin || isPersonalOwner;
+  const [showComposer, setShowComposer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -340,18 +348,23 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     setError("");
     setSuccess("");
     try {
-      await api.put(`/projects/${projectId}/settings`, {
+      // #645 Phase 1e: AGENT.md nur mitsenden, wenn Caller es auch editieren
+      // darf. Sonst versucht das Backend den Persona-Write-Guard — und bei
+      // inhaltlicher Abweichung würde das 403 werfen, auch wenn der User
+      // gar nichts an der Textarea geändert hat.
+      const body: Record<string, unknown> = {
         provider,
         model,
         temperature,
         max_tokens: maxTokens,
         api_key_env: apiKeyEnv,
-        agent_md: agentMd,
         execution_mode: executionMode,
         max_tool_rounds: maxToolRounds,
         risk_policy: riskPolicy,
         members,
-      });
+      };
+      if (canUseComposer) body.agent_md = agentMd;
+      await api.put(`/projects/${projectId}/settings`, body);
       setSuccess("Gespeichert!");
       setTimeout(() => setSuccess(""), 3000);
     } catch (e: any) {
@@ -551,14 +564,46 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             <FileText className="h-3.5 w-3.5 text-primary" />
             AGENT.md — Persönlichkeit &amp; Regeln
           </div>
+          {!canUseComposer && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Nur Admin oder Personal-Projekt-Owner dürfen die AGENT.md (Projekt-Boss-Persona) ändern. Andere Settings kannst du weiter speichern.
+            </p>
+          )}
           <textarea
             value={agentMd}
             onChange={e => setAgentMd(e.target.value)}
             rows={14}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono leading-relaxed resize-y"
+            readOnly={!canUseComposer}
+            disabled={!canUseComposer}
+            className={`w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono leading-relaxed resize-y ${!canUseComposer ? "opacity-60 cursor-not-allowed" : ""}`}
             placeholder="# Agent&#10;&#10;Beschreibe hier das Fachgebiet, die Regeln und den Kontext."
           />
         </div>
+
+        {/* #645 Phase 1e — Projekt-Boss Profile-Composer */}
+        {canUseComposer && (
+          <div className="rounded-2xl border bg-background/55 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Profil-Composer (AGENT.md)
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowComposer(s => !s)}
+                className="text-xs px-2 py-1 rounded-md border hover:bg-accent transition"
+              >
+                {showComposer ? "Schließen" : "Öffnen"}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Der Composer überschreibt die AGENT.md dieses Projekts aus Bausteinen. Vor dem Überschreiben wird ein Backup als AGENT.md.backup angelegt. config.yaml und Mitglieder bleiben unberührt.
+            </p>
+            {showComposer && (
+              <ProfileComposer scope="project" projectId={projectId} showSoulHint />
+            )}
+          </div>
+        )}
       </div>
 
       {/* WhatsApp */}

@@ -130,6 +130,7 @@ def register_project_routes(
     audit_log,
     check_message_rate,
     logger,
+    invalidate_prompt_cache=None,
 ) -> None:
     def _check_project_access(auth: tuple[str, str], project_id: str) -> None:
         """Wirft 403 wenn der User keinen Zugriff auf das Projekt hat."""
@@ -634,9 +635,31 @@ def register_project_routes(
         )
 
         # AGENT.md schreiben wenn im Request
+        # #645 Phase 1e: Persona-Write-Guard — nur Admin + Personal-Projekt-Owner
+        # dürfen AGENT.md über Settings ändern. Reguläre Project-Owner können
+        # andere Settings weiter speichern, wenn sie dasselbe AGENT.md
+        # mitsenden (No-Op); jede inhaltliche Änderung → 403.
         if req.agent_md is not None:
             agent_md_path = project_dir / "AGENT.md"
-            agent_md_path.write_text(req.agent_md, encoding="utf-8")
+            caller_may_write_persona = is_admin or is_personal_owner
+            current_md = (
+                agent_md_path.read_text(encoding="utf-8") if agent_md_path.exists() else ""
+            )
+            if caller_may_write_persona:
+                if req.agent_md != current_md:
+                    agent_md_path.write_text(req.agent_md, encoding="utf-8")
+                    if invalidate_prompt_cache is not None:
+                        try:
+                            invalidate_prompt_cache(project_id)
+                        except Exception as e:  # pragma: no cover — defensiv
+                            logger.warning("invalidate_prompt_cache fehlgeschlagen: %s", e)
+            else:
+                if req.agent_md != current_md:
+                    raise HTTPException(
+                        403,
+                        "AGENT.md darf nur von Admin oder Personal-Projekt-Owner geändert werden.",
+                    )
+                # sonst: identischer Inhalt → kein Write, kein Fehler, kein Cache-Invalidate
 
         # messenger.yaml schreiben wenn im Request (#569)
         if req.messenger is not None:

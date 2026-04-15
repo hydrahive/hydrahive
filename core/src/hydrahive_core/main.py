@@ -34,7 +34,7 @@ from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
 from .router_backup_restore import register_backup_restore_routes
-from .router_composer import register_admin_composer_routes, register_composer_routes
+from .router_composer import register_admin_composer_routes, register_composer_routes, register_project_composer_routes
 from .router_adminfun import register_adminfun_routes
 from .router_migration import register_migration_routes
 from .router_vpn import register_vpn_routes
@@ -1350,6 +1350,16 @@ register_admin_composer_routes(
     require_admin=require_admin,
 )
 
+# #645 Phase 1e — Projekt-Boss Profile-Composer
+register_project_composer_routes(
+    auth_router,
+    require_auth=require_auth,
+    projects_dir=PROJECTS_DIR,
+    invalidate_prompt_cache=_invalidate_prompt_cache,
+    logger=logger,
+    audit_log=audit_log,
+)
+
 _CONSOLE_BASE_URL = os.environ.get("HYDRAHIVE_CONSOLE_URL", "http://192.168.178.181")
 
 register_invite_routes(
@@ -1520,6 +1530,7 @@ register_project_routes(
     audit_log=audit_log,
     check_message_rate=_check_message_rate,
     logger=logger,
+    invalidate_prompt_cache=_invalidate_prompt_cache,
 )
 
 register_llm_routes(

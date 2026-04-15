@@ -12,10 +12,12 @@ interface PresetDef { id: string; label: string; description: string; selected: 
 const PRESET_CUSTOM = "__custom__";
 
 export interface ProfileComposerProps {
-  /** "me" (default) → /me/agent/composer/*; "admin" → /admin/agents/{agentId}/composer/* */
-  scope?: "me" | "admin";
-  /** Erforderlich wenn scope = "admin". Wird ignoriert bei scope = "me". */
+  /** "me" (default) → /me/agent/composer/*; "admin" → /admin/agents/{agentId}/composer/*; "project" → /projects/{projectId}/composer/* */
+  scope?: "me" | "admin" | "project";
+  /** Erforderlich wenn scope = "admin". */
   agentId?: string;
+  /** Erforderlich wenn scope = "project". */
+  projectId?: string;
   /** Zeigt einen dezenten Hinweis, dass AGENT.md Vorrang vor soul.md hat. */
   showSoulHint?: boolean;
 }
@@ -28,7 +30,7 @@ interface ComposerApi {
   save: (selected: string[], preset: string | null) => Promise<{backup_created: boolean; warnings: ComposerWarning[]}>;
 }
 
-function buildApi(scope: "me" | "admin", agentId?: string): ComposerApi {
+function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId?: string): ComposerApi {
   if (scope === "admin") {
     if (!agentId) throw new Error("ProfileComposer: agentId ist bei scope='admin' erforderlich.");
     return {
@@ -37,6 +39,16 @@ function buildApi(scope: "me" | "admin", agentId?: string): ComposerApi {
       loadProfile: () => api.adminComposerProfile(agentId),
       preview: (sel, p) => api.adminComposerPreview(agentId, sel, p),
       save: (sel, p) => api.adminComposerSave(agentId, sel, p),
+    };
+  }
+  if (scope === "project") {
+    if (!projectId) throw new Error("ProfileComposer: projectId ist bei scope='project' erforderlich.");
+    return {
+      loadBlocks: () => api.projectComposerBlocks(projectId),
+      loadPresets: () => api.projectComposerPresets(projectId),
+      loadProfile: () => api.projectComposerProfile(projectId),
+      preview: (sel, p) => api.projectComposerPreview(projectId, sel, p),
+      save: (sel, p) => api.projectComposerSave(projectId, sel, p),
     };
   }
   return {
@@ -48,9 +60,9 @@ function buildApi(scope: "me" | "admin", agentId?: string): ComposerApi {
   };
 }
 
-export function ProfileComposer({ scope = "me", agentId, showSoulHint = false }: ProfileComposerProps = {}) {
+export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint = false }: ProfileComposerProps = {}) {
   const { t } = useTranslation();
-  const composerApi = useMemo(() => buildApi(scope, agentId), [scope, agentId]);
+  const composerApi = useMemo(() => buildApi(scope, agentId, projectId), [scope, agentId, projectId]);
   const [categories, setCategories] = useState<CategoryDef[]>([]);
   const [presets, setPresets] = useState<PresetDef[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());

@@ -134,6 +134,12 @@ export const api = {
   adminComposerProfile: (agentId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/profile`),
   adminComposerPreview: (agentId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/preview`, {selected, preset: preset ?? null}),
   adminComposerSave: (agentId: string, selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset: preset ?? null}),
+  // #645 Phase 1e — Projekt-Boss-Composer
+  projectComposerBlocks: (projectId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/blocks`),
+  projectComposerPresets: (projectId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/presets`),
+  projectComposerProfile: (projectId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer/profile`),
+  projectComposerPreview: (projectId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/projects/${encodeURIComponent(projectId)}/composer/preview`, {selected, preset: preset ?? null}),
+  projectComposerSave: (projectId: string, selected: string[], preset?: string|null) => api.put<{updated:boolean; agent_id:string; backup_created:boolean; bytes_written:number; preset:string|null; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset: preset ?? null}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),

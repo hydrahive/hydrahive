@@ -426,3 +426,131 @@ def register_admin_composer_routes(
             audit_action="admin.agent.composer_save",
             audit_user=username,
         )
+
+
+# ===========================================================================
+# Phase 1e — Projekt-Boss-Composer
+# ===========================================================================
+
+
+_PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
+def _validate_project_id(project_id: str, projects_root: Path) -> Path:
+    """Validiert project_id und liefert absoluten project_dir.
+
+    - Regex-Syntax-Check blockt `/`, `..`, Backslash, leer, Null.
+    - `.resolve()` + `.relative_to(projects_root.resolve())` als zweite Schicht.
+    - Fehlendes Verzeichnis → 404.
+
+    Personal-Projekte (`personal_<user>`) werden hier NICHT blockiert; der
+    Rechte-Check entscheidet ob der Aufrufer schreiben darf.
+    """
+    if not project_id or not _PROJECT_ID_RE.match(project_id):
+        raise HTTPException(status_code=400, detail="Ungültige project_id.")
+    project_dir = (projects_root / project_id).resolve()
+    try:
+        project_dir.relative_to(projects_root.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Pfad außerhalb projects_dir.")
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"Projekt nicht gefunden: {project_id}")
+    return project_dir
+
+
+def _require_project_composer_access(auth: tuple[str, str], project_id: str) -> None:
+    """Admin ODER Personal-Projekt-Owner. Alles andere → 403.
+
+    Reguläre Project-Owner und Members sind bewusst ausgeschlossen — der
+    Composer steuert Safety-/Confirm-Defaults und wird konservativ gegated.
+    """
+    username, role = auth
+    if role == "admin":
+        return
+    if project_id == f"personal_{username}":
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Nur Admin oder Personal-Projekt-Owner dürfen den Projekt-Composer nutzen.",
+    )
+
+
+def register_project_composer_routes(
+    auth_router: APIRouter,
+    *,
+    require_auth,
+    projects_dir: str,
+    invalidate_prompt_cache: Callable[[str], None],
+    logger,
+    audit_log,
+) -> None:
+    """Registriert `/projects/{project_id}/composer/*` Routen.
+
+    Rechte: Admin oder Personal-Projekt-Owner (reguläre Project-Owner/Members
+    werden mit 403 abgewiesen).
+    """
+    projects_root = Path(projects_dir)
+
+    @auth_router.get("/projects/{project_id}/composer/blocks")
+    def project_get_blocks(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        return {"categories": list_blocks()}
+
+    @auth_router.get("/projects/{project_id}/composer/presets")
+    def project_get_presets(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        return {"presets": list_presets()}
+
+    @auth_router.get("/projects/{project_id}/composer/profile")
+    def project_get_profile(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        project_dir = _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        return _build_profile_response(project_dir)
+
+    @auth_router.post("/projects/{project_id}/composer/preview")
+    def project_preview(
+        project_id: str,
+        body: ComposerInput = Body(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        markdown = render_agent_md(body.selected)
+        warnings = evaluate_warnings(body.selected, body.preset)
+        return {
+            "markdown": markdown,
+            "warnings": warnings,
+            "save_blocked": save_blocked(warnings),
+        }
+
+    @auth_router.put("/projects/{project_id}/composer")
+    def project_save(
+        project_id: str,
+        body: ComposerInput = Body(...),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        project_dir = _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        username, _role = auth
+        _validate_save_input(body)
+        return _perform_save(
+            project_dir,
+            project_id,
+            body,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="project.composer_save",
+            audit_user=username,
+        )
