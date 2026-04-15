@@ -438,6 +438,46 @@ async def execute_tool_call(
     except Exception as _cls_err:
         logger.debug("Permission classifier / confirm error: %s", _cls_err)
 
+    # #655: PreToolUse Hook-Runtime — kann Tool-Call blockieren.
+    # No-op wenn settings.json fehlt oder kein Matcher trifft.
+    # SICHERHEITSMODELL: Runtime-Fehler in der Hook-Kette sind fail-closed —
+    # ein defekter Guard darf nicht still allowen.
+    _pre_decision = None
+    _pre_error: Exception | None = None
+    try:
+        from .hook_runtime import run_pretool_hooks as _run_pre
+        _hook_ctx = {
+            "project_id": project_id,
+            "agent_id": getattr(boss_cfg, "id", ""),
+        }
+        _pre_decision = await _run_pre(tool_name, tool_input, context=_hook_ctx)
+    except Exception as _hook_err:
+        _pre_error = _hook_err
+        logger.error(
+            "PreToolUse hook runtime crashed (fail-closed): tool=%s err=%s",
+            tool_name, _hook_err, exc_info=True,
+        )
+
+    if _pre_error is not None:
+        try:
+            from .hook_runtime import _redact_str as _red
+            _hint = _red(str(_pre_error))[:200]
+        except Exception:
+            _hint = "hook runtime error"
+        return {
+            "error": f"Tool '{tool_name}' blockiert — PreToolUse-Hook-Runtime-Fehler.",
+            "risk": "hook_error",
+            "hint": _hint,
+        }, True
+
+    if _pre_decision is not None and _pre_decision.action == "block":
+        logger.warning("PreToolUse hook blocked tool=%s: %s", tool_name, _pre_decision.message)
+        return {
+            "error": f"Tool '{tool_name}' wurde von einem PreToolUse-Hook blockiert.",
+            "risk": "hook_block",
+            "hint": _pre_decision.message or "Siehe Hook-Logs.",
+        }, True
+
     # #523: Turn Journal — TOOL_USE Event
     try:
         from .turn_journal import journal as _tj, EventType as _JE
@@ -469,6 +509,21 @@ async def execute_tool_call(
             _rpath = tool_input.get("path", "")
             if _rpath:
                 file_read_cache[_rpath] = result
+
+        # #655: PostToolUse Hook-Runtime — non-blocking, nur Warnings.
+        try:
+            from .hook_runtime import run_posttool_hooks as _run_post
+            _post_ctx = {
+                "project_id": project_id,
+                "agent_id": getattr(boss_cfg, "id", ""),
+            }
+            _post_report = await _run_post(
+                tool_name, tool_input, result, is_error=False, context=_post_ctx,
+            )
+            for _w in _post_report.warnings:
+                logger.warning("PostToolUse warning tool=%s: %s", tool_name, _w)
+        except Exception as _hook_err:
+            logger.debug("PostToolUse hook runtime error: %s", _hook_err)
 
         return result, False
     except Exception as te:
