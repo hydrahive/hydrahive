@@ -23,63 +23,12 @@ interface AgentCfg {
   mcp_servers?:    string[];
   execution_modes?: {
     default?: "safe" | "elevated" | "root" | "unrestricted";
-    safe?: { permissions?: string[] };
-    elevated?: { permissions?: string[] };
-    root?: { permissions?: string[] };
-    unrestricted?: { permissions?: string[] };
   };
   soul?:           string;
 }
 interface AgentInfo { agent_id: string; config: AgentCfg; }
 
 // ── Konstanten ───────────────────────────────────────────────────────────────
-
-const ALL_TOOLS: { id: string; label: string }[] = [
-  { id: "file_read",        label: "Datei lesen" },
-  { id: "file_write",       label: "Datei schreiben" },
-  { id: "project_shell",    label: "⚠ Projekt-Shell (Whitelist)" },
-  { id: "web_search",       label: "Web-Suche" },
-  { id: "http_request",     label: "HTTP-Request" },
-  { id: "shell_exec",       label: "Shell-Befehl (Server)" },
-  { id: "read_system_file", label: "Systemdatei lesen" },
-  { id: "write_system_file",label: "Systemdatei schreiben" },
-  { id: "read_memory",      label: "Gedächtnis lesen" },
-  { id: "write_memory",     label: "Gedächtnis schreiben" },
-  { id: "ask_agent",        label: "Agent fragen (sync)" },
-  { id: "delegate_agent",   label: "Agent beauftragen (async)" },
-  { id: "write_handoff",    label: "AgentLink Handoff schreiben" },
-  { id: "read_handoff",     label: "AgentLink Handoff lesen" },
-  { id: "gitea_repo_inspect", label: "Gitea-Repo pruefen" },
-  { id: "gitea_repo_tree",  label: "Gitea-Repo Struktur" },
-  { id: "gitea_repo_file",  label: "Gitea-Repo Datei" },
-  { id: "gitea_repo_commits", label: "Gitea-Repo Commits" },
-  { id: "gitea_repo_diff", label: "Gitea-Repo Diff" },
-  { id: "gitea_create_issue", label: "Gitea-Issue erstellen" },
-  { id: "gitea_comment_issue", label: "Gitea-Issue kommentieren" },
-  { id: "gitea_update_issue", label: "Gitea-Issue aktualisieren" },
-  { id: "wks_shell_exec",   label: "WKS Shell-Befehl" },
-  { id: "wks_file_read",    label: "WKS Datei lesen" },
-  { id: "wks_file_write",   label: "WKS Datei schreiben" },
-  { id: "send_mail",        label: "Mail senden" },
-  { id: "receive_mail",     label: "Mail empfangen" },
-  { id: "discord_send",              label: "Discord: Nachricht senden" },
-  { id: "discord_read",              label: "Discord: Nachrichten lesen" },
-  { id: "discord_list_channels",     label: "Discord: Text-Channels auflisten" },
-  { id: "discord_list_all_channels", label: "Discord: Alle Channels auflisten" },
-  { id: "discord_create_category",   label: "Discord: Kategorie erstellen" },
-  { id: "discord_create_channel",    label: "Discord: Channel erstellen" },
-  { id: "discord_delete_channel",    label: "Discord: Channel löschen" },
-  { id: "discord_set_topic",         label: "Discord: Channel-Topic setzen" },
-  { id: "discord_rename_channel",    label: "Discord: Channel umbenennen" },
-  { id: "discord_list_members",      label: "Discord: Mitglieder auflisten" },
-  { id: "discord_list_roles",        label: "Discord: Rollen auflisten" },
-  { id: "discord_delete_message",    label: "Discord: Nachricht löschen" },
-  { id: "discord_pin_message",       label: "Discord: Nachricht anpinnen" },
-  { id: "create_agent",   label: "⚠ Agent anlegen (Admin)" },
-  { id: "delete_agent",   label: "⚠ Agent löschen (Admin)" },
-  { id: "create_project", label: "⚠ Projekt anlegen (Admin)" },
-  { id: "delete_project", label: "⚠ Projekt löschen (Admin)" },
-];
 
 const BROWSER_HOST = typeof window !== "undefined" ? window.location.hostname : "127.0.0.1";
 
@@ -97,14 +46,7 @@ function resolveSearchUiUrl(url: string) {
 }
 
 function modeSummary(cfg?: AgentCfg["execution_modes"]) {
-  const defaultMode = cfg?.default ?? "safe";
-  const counts = {
-    safe: cfg?.safe?.permissions?.length ?? 0,
-    elevated: cfg?.elevated?.permissions?.length ?? 0,
-    root: cfg?.root?.permissions?.length ?? 0,
-    unrestricted: "∞",
-  };
-  return { defaultMode, counts };
+  return { defaultMode: cfg?.default ?? "safe" };
 }
 
 const KNOWN_MODELS = [
@@ -518,14 +460,6 @@ export function MyAgentPage() {
                     <div className="text-muted-foreground">{t("myAgent.historyCount")}</div>
                     <div className="font-medium mt-0.5">{chat.messages.filter(m => m.role !== "system").length}</div>
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
-                    <div className="text-muted-foreground">safe</div>
-                    <div className="font-medium mt-0.5">{exec.counts.safe} Tools</div>
-                  </div>
-                  <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
-                    <div className="text-muted-foreground">elevated</div>
-                    <div className="font-medium mt-0.5">{exec.counts.elevated} Tools</div>
-                  </div>
                 </div>
 
                 {/* Slash-Commands */}
@@ -911,7 +845,7 @@ function AccountTab() {
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><User className="h-4 w-4 text-primary" /> Benutzerkonto</h2>
         <div className="grid gap-2 text-sm">
           <InfoRow label="Benutzername" value={data.username} onCopy={copy} copied={copied} />
-          <InfoRow label="Rolle" value={data.role} />
+          <InfoRow label="Benutzer-Rolle" value={data.role} />
           <InfoRow label="Gruppe" value={data.group} />
           <InfoRow label="Console" value={data.console_url} onCopy={copy} copied={copied} />
         </div>
@@ -1288,9 +1222,6 @@ function SettingsPanel({
     setRiskPolicy((c as any).risk_policy === "trusted" ? "trusted" : "interactive");
   }, [agentInfo]);
 
-  function toggleTool(id: string) {
-    setTools(t => t.includes(id) ? t.filter(x => x!==id) : [...t, id]);
-  }
   function addFallback() {
     const v = fbInput.trim();
     if (v && !fallbacks.includes(v)) setFallbacks(f => [...f, v]);
@@ -1417,34 +1348,14 @@ function SettingsPanel({
           </div>
         </section>
 
-        {/* Tools (v2: Whitelist hardcodiert auf 9 Core-Tools — diese Liste ist nur für Repo-Review-Guidance relevant) */}
+        {/* Tools — v2: keine freie Per-Agent-Auswahl mehr, Core-Tools + ToolSearch/MCP */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">{t("myAgent.settingsSectionTools")}</h2>
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">{t("myAgent.toolsCustomLabel", { defaultValue: "Eigene Tool-Auswahl:" })}</span>
-              <button type="button" onClick={() => setTools(ALL_TOOLS.filter(t => !["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id)).map(t => t.id))}
-                className="text-xs text-muted-foreground hover:text-foreground transition">
-                Alle außer ⚠
-              </button>
-              <button type="button" onClick={() => setTools([])}
-                className="text-xs text-muted-foreground hover:text-foreground transition">
-                Keine
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {ALL_TOOLS.map(t => {
-                const isDanger = ["project_shell","create_agent","delete_agent","create_project","delete_project"].includes(t.id);
-                return (
-                  <label key={t.id} className={`flex items-center gap-2 text-sm cursor-pointer select-none${isDanger ? " text-red-500" : ""}`}>
-                    <input type="checkbox" checked={tools.includes(t.id)} onChange={() => toggleTool(t.id)}
-                      className="rounded" />
-                    <span className="text-xs">{t.label}</span>
-                    <span className={`text-xs font-mono ${isDanger ? "text-red-400" : "text-muted-foreground"}`}>({t.id})</span>
-                  </label>
-                );
-              })}
-            </div>
+          <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed">
+            {t("myAgent.toolsInfoV2", {
+              defaultValue:
+                "HydraHive v2 nutzt feste Core-Tools plus ToolSearch/MCP. Diese Ansicht steuert keine Tool-Berechtigungen mehr. Bestehende Tool-Einträge in der Agent-Konfiguration bleiben unverändert.",
+            })}
           </div>
         </section>
 
