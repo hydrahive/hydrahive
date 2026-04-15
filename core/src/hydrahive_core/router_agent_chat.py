@@ -535,19 +535,117 @@ def register_agent_chat_routes(
             # Generator-Start). Reset muss hier im Generator-finally, damit
             # er auch bei GeneratorExit (Client-Abbruch) oder Exception
             # greift.
+            #
+            # #661: OnTaskStart/OnTaskDone Hook-Lifecycle als inneres
+            # try/finally. OnTaskStart fail-closed VOR handle_message_stream
+            # → kein Session-Append bei Block. OnTaskDone best-effort im
+            # inner-finally (läuft auch bei GeneratorExit/CancelledError/
+            # Exception). workspace_override ist outer-lifecycle; Task-Hooks
+            # laufen innerhalb davon, können workspace_root() nutzen.
+            import asyncio as _asyncio
+            import datetime as _dt
+            import json as _json
+            import time as _perf
+
             _ws_token = None
             if _ws_validated_path is not None:
                 from .tool_registry import set_workspace_override as _set_ws
                 _ws_token = _set_ws(_ws_validated_path)
             try:
-                async for chunk in agent_orchestrator.handle_message_stream(
-                    project_id=agent_id,
-                    project_cfg=virtual_cfg,
-                    content=_user_content,
-                    sender=sender,
-                    execution_mode=execution_mode,
-                ):
-                    yield chunk
+                # Content-Preview für TaskPayload (string-extrahieren bei
+                # Vision-Content-Blocks).
+                if isinstance(_user_content, str):
+                    _msg_preview = _user_content
+                elif isinstance(_user_content, list):
+                    _msg_preview = next(
+                        (b.get("text", "") for b in _user_content if isinstance(b, dict) and b.get("type") == "text"),
+                        "",
+                    )
+                else:
+                    _msg_preview = ""
+
+                _task_dict = {
+                    "kind":            "agent_turn",
+                    "project_id":      agent_id,
+                    "agent_id":        agent_id,
+                    "user":            sender,
+                    "session_id":      "",
+                    "message_preview": _msg_preview,
+                    "started_at":      _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                }
+                _hook_ctx = {"streaming": True}
+
+                # --- OnTaskStart (fail-closed) ---
+                from .hook_runtime import run_task_start_hooks as _run_ts
+                try:
+                    _decision = await _run_ts(_task_dict, context=_hook_ctx)
+                except Exception as _start_err:
+                    logger.error(
+                        "OnTaskStart stream runtime crashed (fail-closed): %s",
+                        _start_err, exc_info=True,
+                    )
+                    try:
+                        from .hook_runtime import _redact_str as _red
+                        _hint = _red(str(_start_err))[:200]
+                    except Exception:
+                        _hint = "hook runtime error"
+                    yield f'data: {_json.dumps({"type": "text_delta", "text": f"[Blockiert] OnTaskStart-Hook-Runtime-Fehler: {_hint}"})}\n\n'
+                    yield f'data: {_json.dumps({"done": True})}\n\n'
+                    return
+
+                if _decision.action == "block":
+                    logger.warning(
+                        "OnTaskStart stream blocked agent=%s: %s",
+                        agent_id, _decision.message,
+                    )
+                    _msg = _decision.message or "Task von OnTaskStart-Hook blockiert."
+                    yield f'data: {_json.dumps({"type": "text_delta", "text": f"[Blockiert] {_msg}"})}\n\n'
+                    yield f'data: {_json.dumps({"done": True})}\n\n'
+                    return
+
+                # --- Stream + OnTaskDone ---
+                _started = _perf.monotonic()
+                _done_state = {"ok": True, "error": None, "disconnected": False, "chunks": 0}
+                try:
+                    try:
+                        async for chunk in agent_orchestrator.handle_message_stream(
+                            project_id=agent_id,
+                            project_cfg=virtual_cfg,
+                            content=_user_content,
+                            sender=sender,
+                            execution_mode=execution_mode,
+                        ):
+                            _done_state["chunks"] += 1
+                            yield chunk
+                    except GeneratorExit:
+                        _done_state["disconnected"] = True
+                        raise
+                    except _asyncio.CancelledError:
+                        _done_state["disconnected"] = True
+                        raise
+                    except Exception as _stream_err:
+                        _done_state["ok"] = False
+                        _done_state["error"] = str(_stream_err)
+                        raise
+                finally:
+                    # OnTaskDone: non-blocking, best-effort. Fehler nur loggen.
+                    try:
+                        from .hook_runtime import run_task_done_hooks as _run_td
+                        _result = {
+                            "ok":           bool(_done_state["ok"]),
+                            "duration_ms":  int((_perf.monotonic() - _started) * 1000),
+                            "summary":      f"{_done_state['chunks']} chunks",
+                            "error":        _done_state["error"],
+                            "disconnected": bool(_done_state["disconnected"]),
+                        }
+                        _report = await _run_td(_task_dict, _result, context=_hook_ctx)
+                        for _w in _report.warnings:
+                            logger.warning(
+                                "OnTaskDone stream warning agent=%s: %s",
+                                agent_id, _w,
+                            )
+                    except Exception as _done_err:
+                        logger.debug("OnTaskDone stream runtime error: %s", _done_err)
             finally:
                 if _ws_token is not None:
                     from .tool_registry import reset_workspace_override as _reset_ws
