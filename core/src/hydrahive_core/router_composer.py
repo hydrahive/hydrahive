@@ -35,7 +35,26 @@ from .composer_engine import (
 PROFILE_FILENAME = "agent_profile.yaml"
 AGENT_MD_FILENAME = "AGENT.md"
 AGENT_MD_BACKUP = "AGENT.md.backup"
+_VERSIONED_BACKUP_RE = re.compile(r"^AGENT\.md\.\d{8}T\d{6}Z(-\d+)?\.backup$")
 _MTIME_TOLERANCE_SECONDS = 2.0
+
+
+def _versioned_backup_name(agent_dir: Path, now: datetime | None = None) -> str:
+    """Liefert einen eindeutigen Basename `AGENT.md.<UTC>.backup`.
+
+    Format: `AGENT.md.YYYYMMDDTHHMMSSZ.backup`. Bei Kollision im selben
+    Sekundenfenster hängt Suffix `-2`, `-3`, ... an — Windows-safe, keine `:`.
+    """
+    ts = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    base = f"AGENT.md.{ts}.backup"
+    if not (agent_dir / base).exists():
+        return base
+    i = 2
+    while True:
+        candidate = f"AGENT.md.{ts}-{i}.backup"
+        if not (agent_dir / candidate).exists():
+            return candidate
+        i += 1
 
 
 class ComposerInput(BaseModel):
@@ -287,8 +306,11 @@ def _perform_save(
 
     agent_md = agent_dir / AGENT_MD_FILENAME
     backup_created = False
+    versioned_backup: str | None = None
     if agent_md.exists():
         shutil.copy2(agent_md, agent_dir / AGENT_MD_BACKUP)
+        versioned_backup = _versioned_backup_name(agent_dir)
+        shutil.copy2(agent_md, agent_dir / versioned_backup)
         backup_created = True
 
     agent_md.write_text(markdown, encoding="utf-8")
@@ -324,6 +346,7 @@ def _perform_save(
         "updated": True,
         "agent_id": agent_id,
         "backup_created": backup_created,
+        "versioned_backup": versioned_backup,
         "bytes_written": len(markdown.encode("utf-8")),
         "preset": body.preset,
         "warnings": warnings,

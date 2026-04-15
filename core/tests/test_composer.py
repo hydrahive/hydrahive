@@ -388,3 +388,82 @@ def test_agent_md_mtime_matches_false_on_external_edit(client_factory):
     r = client.get("/me/agent/composer/profile")
     assert r.status_code == 200
     assert r.json()["agent_md_mtime_matches"] is False
+
+
+# ===========================================================================
+# Versionierte Backups
+# ===========================================================================
+
+
+import re as _re
+
+
+def test_versioned_backup_created_alongside_latest(client_factory):
+    client, personal_dir, _, _ = client_factory()
+    (personal_dir / "AGENT.md").write_text("old content\n", encoding="utf-8")
+
+    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backup_created"] is True
+    assert body["versioned_backup"] is not None
+
+    versioned = personal_dir / body["versioned_backup"]
+    assert versioned.exists()
+    assert versioned.read_text(encoding="utf-8") == "old content\n"
+    assert (personal_dir / "AGENT.md.backup").read_text(encoding="utf-8") == "old content\n"
+
+
+def test_versioned_backup_filename_format(client_factory):
+    client, personal_dir, _, _ = client_factory()
+    (personal_dir / "AGENT.md").write_text("seed\n", encoding="utf-8")
+    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    assert r.status_code == 200
+    name = r.json()["versioned_backup"]
+    assert _re.match(r"^AGENT\.md\.\d{8}T\d{6}Z(-\d+)?\.backup$", name), name
+
+
+def test_two_saves_same_second_yield_distinct_names(client_factory):
+    from datetime import datetime, timezone
+    from hydrahive_core import router_composer
+
+    client, personal_dir, _, _ = client_factory()
+    fixed = datetime(2026, 4, 15, 14, 30, 0, tzinfo=timezone.utc)
+
+    name1 = router_composer._versioned_backup_name(personal_dir, fixed)
+    (personal_dir / name1).write_text("first", encoding="utf-8")
+    name2 = router_composer._versioned_backup_name(personal_dir, fixed)
+    (personal_dir / name2).write_text("second", encoding="utf-8")
+    name3 = router_composer._versioned_backup_name(personal_dir, fixed)
+
+    assert name1 == "AGENT.md.20260415T143000Z.backup"
+    assert name2 == "AGENT.md.20260415T143000Z-2.backup"
+    assert name3 == "AGENT.md.20260415T143000Z-3.backup"
+
+
+def test_fresh_save_without_existing_agent_md_has_no_backup(client_factory):
+    client, personal_dir, _, _ = client_factory()
+    assert not (personal_dir / "AGENT.md").exists()
+    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backup_created"] is False
+    assert body["versioned_backup"] is None
+    assert not (personal_dir / "AGENT.md.backup").exists()
+    # keine versionierte Backup-Datei
+    versioned = [p.name for p in personal_dir.glob("AGENT.md.*.backup")]
+    assert versioned == []
+
+
+def test_versioned_backup_response_is_basename_only(client_factory):
+    client, personal_dir, _, _ = client_factory()
+    (personal_dir / "AGENT.md").write_text("x\n", encoding="utf-8")
+    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    assert r.status_code == 200
+    name = r.json()["versioned_backup"]
+    assert name is not None
+    assert "/" not in name
+    assert "\\" not in name
+    assert ".." not in name
+    assert name.startswith("AGENT.md.")
+    assert name.endswith(".backup")
