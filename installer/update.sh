@@ -130,6 +130,33 @@ main() {
         rsync -a "${TMPDIR_BASE}/scripts/" "${HYDRAHIVE_DIR}/scripts/"
     fi
 
+    # --- 2b0. Bundled Agent Templates aktualisieren ---
+    # Repo-gepflegte Template-Agents brauchen Updates an agent.yaml/soul.md.
+    # Runtime-State wie memory/, skills/ und user-eigene personal_*-Agents darf
+    # dabei nicht überschrieben werden.
+    if [ -d "${TMPDIR_BASE}/agents" ]; then
+        mkdir -p /agents
+        BUNDLED_TEMPLATES=("hydrahive_support")
+        for bundled in "${BUNDLED_TEMPLATES[@]}"; do
+            src_yaml="${TMPDIR_BASE}/agents/${bundled}/agent.yaml"
+            if [ ! -f "${src_yaml}" ]; then
+                error "bundled template '${bundled}' fehlt im Repo (${src_yaml})"
+            fi
+            dst_dir="/agents/${bundled}"
+            mkdir -p "${dst_dir}"
+            install -m 644 -o hydrahive -g hydrahive "${src_yaml}" "${dst_dir}/agent.yaml"
+            src_soul="${TMPDIR_BASE}/agents/${bundled}/soul.md"
+            if [ -f "${src_soul}" ]; then
+                install -m 644 -o hydrahive -g hydrahive "${src_soul}" "${dst_dir}/soul.md"
+            fi
+            info "Bundled Agent Template aktualisiert: ${bundled}"
+        done
+        rsync -a --ignore-existing \
+            --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' \
+            "${TMPDIR_BASE}/agents/" /agents/
+        chown -R hydrahive:hydrahive /agents/ 2>/dev/null || true
+    fi
+
     # --- 2b. Default-Projekte aktualisieren (v2: installer/default-projects/) ---
     # AGENT.md wird immer aus dem Repo übernommen (Persönlichkeit/Identität).
     # config.yaml: nur bei Neu-Installation kopieren — Runtime-Einstellungen (temperature,
