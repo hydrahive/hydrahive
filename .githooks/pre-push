@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# pre-push — blockiert Push bei verifiziertem Secret-Fund oder harten rg-Treffern.
+# Bypass: HYDRAHIVE_SKIP_SECRET_SCAN=1 git push  (warnt laut auf stderr)
+set -e
+REPO="$(git rev-parse --show-toplevel)"
+SCAN="$REPO/scripts/scan-secrets.sh"
+if [ ! -x "$SCAN" ]; then
+  echo "[pre-push] $SCAN fehlt oder nicht ausführbar — Push abgebrochen." >&2
+  exit 1
+fi
+exec "$SCAN" --fast

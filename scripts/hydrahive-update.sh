@@ -27,6 +27,14 @@ if ! git pull hydrahive main 2>/dev/null && ! git pull gitea-local main 2>/dev/n
 fi
 
 echo ""
+echo "==> [1b/5] Secret-Scan (fast) — blockiert bei verifiziertem Fund"
+if ! "$REPO/scripts/scan-secrets.sh" --fast; then
+    echo "   FEHLER: Secret-Scan blockiert Deploy — siehe Findings oben." >&2
+    echo "   Bypass nur mit Grund: HYDRAHIVE_SKIP_SECRET_SCAN=1 $0" >&2
+    exit 1
+fi
+
+echo ""
 echo "==> [2/5] Core rsync → VM"
 # Vor rsync: SSH-User als Owner setzen damit rsync schreiben kann
 $SSH "$VM" "sudo chown -R ${SSH_USER}:${SSH_USER} ${INSTALL_DIR}/core/"
