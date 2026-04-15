@@ -105,9 +105,29 @@ _PROMPT_CACHE_TTL = 300  # 5 Min — gleich wie Anthropic ephemeral cache
 _STATIC_PROMPT_CACHE: dict[str, tuple[str, float, str]] = {}
 
 
+def _prompt_cache_key(agent_id: str, agent_dir=None) -> str:
+    """Namespaced Cache-Key: trennt Personal-Agent und Personal-Projekt-Boss,
+    die beide `agent_id="personal_<user>"` tragen, aber unterschiedliche
+    agent_dir haben. Ohne agent_dir bleibt der flache Key erhalten."""
+    if agent_dir is None:
+        return agent_id
+    try:
+        return f"{agent_id}:{Path(agent_dir).resolve()}"
+    except (OSError, ValueError):
+        return f"{agent_id}:{agent_dir}"
+
+
 def invalidate_prompt_cache(agent_id: str) -> None:
-    """Löscht den gecachten Static-Prompt-Anteil eines Agenten."""
+    """Löscht den gecachten Static-Prompt-Anteil eines Agenten.
+
+    Aufrufer kennen typischerweise nur die `agent_id`, nicht den `agent_dir`.
+    Um die gleiche Semantik wie vor dem Key-Namespacing zu erhalten, löschen
+    wir sowohl den flachen Legacy-Key als auch alle namespaced Varianten.
+    """
     _STATIC_PROMPT_CACHE.pop(agent_id, None)
+    prefix = f"{agent_id}:"
+    for key in [k for k in _STATIC_PROMPT_CACHE if k.startswith(prefix)]:
+        _STATIC_PROMPT_CACHE.pop(key, None)
 
 # Kontextfenster je Modell-Familie (Tokens)
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
@@ -300,8 +320,9 @@ async def build_system_prompt(
 
     # ── Static-Cache prüfen (cached den serialisierten static-Block) ──────
     static_cached = None
+    _cache_key = _prompt_cache_key(boss_cfg.id, boss_cfg.agent_dir) if boss_cfg.agent_dir else boss_cfg.id
     if not invalidate and boss_cfg.agent_dir:
-        cached = _STATIC_PROMPT_CACHE.get(boss_cfg.id)
+        cached = _STATIC_PROMPT_CACHE.get(_cache_key)
         if cached:
             prompt_s, ts, h = cached
             if (time.time() - ts) < _PROMPT_CACHE_TTL:
@@ -444,7 +465,7 @@ async def build_system_prompt(
         static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
             h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
-            _STATIC_PROMPT_CACHE[boss_cfg.id] = (static_cached, time.time(), h)
+            _STATIC_PROMPT_CACHE[_cache_key] = (static_cached, time.time(), h)
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
     if boss_cfg.agent_dir:
