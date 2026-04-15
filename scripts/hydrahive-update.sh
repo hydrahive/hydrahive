@@ -73,6 +73,7 @@ rsync -av --delete --no-owner --no-group \
   -e "ssh -i $SSH_KEY" \
   "$REPO/installer/" \
   "$VM:${INSTALL_DIR}/installer/"
+$SSH "$VM" "sudo install -m 755 -o ${INSTALL_USER} -g ${INSTALL_USER} ${INSTALL_DIR}/installer/update.sh ${INSTALL_DIR}/update.sh"
 $SSH "$VM" "sudo chown -R ${INSTALL_USER}:${INSTALL_USER} ${INSTALL_DIR}/installer/"
 
 echo ""
