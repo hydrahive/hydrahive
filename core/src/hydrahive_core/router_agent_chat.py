@@ -480,11 +480,17 @@ def register_agent_chat_routes(
         from .project_config import ProjectIdentity as _PI
 
         req = incoming_message_model.model_validate(body)
-        # #662: Streaming unterstützt workspace_override in V1 NICHT — siehe
-        # Follow-up-Issue. Feld abweisen, auch für internal-auth Aufrufe.
+        # #663: Streaming workspace_override-Support. Validation ist synchron
+        # im Route-Handler (HTTP 400 muss vor StreamingResponse möglich sein).
+        # set/reset_workspace_override passiert innerhalb des Generators —
+        # der Generator läuft nach Route-Handler-Return in eigenem Task-
+        # Kontext, ContextVar muss während der gesamten Generator-Laufzeit
+        # aktiv sein und im Generator-finally wieder freigegeben werden.
+        _ws_validated_path = None
         if req.workspace_override is not None:
-            raise HTTPException(
-                400, "workspace_override is not supported for streaming yet"
+            _username_tmp, _ = _a
+            _ws_validated_path = _validate_workspace_override(
+                req.workspace_override, _username_tmp,
             )
         execution_mode = resolve_request_execution_mode(
             _a,
@@ -524,14 +530,28 @@ def register_agent_chat_routes(
             _user_content = _content_blocks
 
         async def event_stream():
-            async for chunk in agent_orchestrator.handle_message_stream(
-                project_id=agent_id,
-                project_cfg=virtual_cfg,
-                content=_user_content,
-                sender=sender,
-                execution_mode=execution_mode,
-            ):
-                yield chunk
+            # #663: ContextVar muss während der gesamten Generator-Laufzeit
+            # aktiv sein. Route-Handler-finally wäre zu früh (läuft vor
+            # Generator-Start). Reset muss hier im Generator-finally, damit
+            # er auch bei GeneratorExit (Client-Abbruch) oder Exception
+            # greift.
+            _ws_token = None
+            if _ws_validated_path is not None:
+                from .tool_registry import set_workspace_override as _set_ws
+                _ws_token = _set_ws(_ws_validated_path)
+            try:
+                async for chunk in agent_orchestrator.handle_message_stream(
+                    project_id=agent_id,
+                    project_cfg=virtual_cfg,
+                    content=_user_content,
+                    sender=sender,
+                    execution_mode=execution_mode,
+                ):
+                    yield chunk
+            finally:
+                if _ws_token is not None:
+                    from .tool_registry import reset_workspace_override as _reset_ws
+                    _reset_ws(_ws_token)
 
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
