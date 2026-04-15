@@ -1496,6 +1496,47 @@
     "step4": "Step 4: Test connection",
     "step5": "Step 5: Activate"
   },
+  "projectSettings": {
+    "title": "Agent settings",
+    "save": "Save",
+    "saved": "Saved!",
+    "noData": "No data",
+    "saveFailed": "Save failed",
+    "trustedDeniedNonAdmin": "Trusted mode for the project boss can only be set by admins.",
+    "execMode": {
+      "label": "Permissions",
+      "safe": "Safe — blocklist active, no sudo",
+      "elevated": "Elevated — extended privileges",
+      "unrestricted": "Unrestricted — full privileges, sudo allowed"
+    },
+    "maxToolRounds": {
+      "label": "Max tool calls per message"
+    },
+    "risk": {
+      "label": "Risk policy (project boss)",
+      "interactive": "Interactive — confirm risky actions",
+      "trusted": "⚠ Trusted — auto-approve CONFIRM (admin only)",
+      "descInteractive": "Risky actions require a chat confirmation (default).",
+      "descTrusted": "⚠ The project boss executes CONFIRM actions without clicking. DENY remains blocked. Auto-approvals are logged server-side. Only admins may set this mode — saving as non-admin fails with 403."
+    },
+    "members": {
+      "label": "Members (access to this project)",
+      "empty": "No members — only admins have access",
+      "pick": "Pick user...",
+      "add": "Add"
+    },
+    "agentMd": {
+      "title": "AGENT.md — personality & rules",
+      "readOnlyHint": "Only admin or personal project owner may edit AGENT.md (project boss persona). Other settings remain editable.",
+      "placeholder": "# Agent\n\nDescribe the domain, rules and context here."
+    },
+    "composer": {
+      "title": "Profile composer (AGENT.md)",
+      "open": "Open",
+      "close": "Close",
+      "intro": "The composer overwrites this project's AGENT.md from blocks. The previous version is saved as AGENT.md.backup before overwriting. config.yaml and members remain untouched."
+    }
+  },
   "composer": {
     "loading": "Loading blocks…",
     "title": "Profile Composer",

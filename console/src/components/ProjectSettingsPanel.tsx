@@ -5,6 +5,7 @@
  * Nutzt GET/PUT /projects/{id}/settings Endpoints.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { ProfileComposer } from "@/components/ProfileComposer";
@@ -64,6 +65,7 @@ const MODELS: Record<string, string[]> = {
 };
 
 export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPanelProps) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isPersonalOwner = projectId === `personal_${user?.username}`;
@@ -365,14 +367,14 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       };
       if (canUseComposer) body.agent_md = agentMd;
       await api.put(`/projects/${projectId}/settings`, body);
-      setSuccess("Gespeichert!");
+      setSuccess(t("projectSettings.saved", { defaultValue: "Gespeichert!" }));
       setTimeout(() => setSuccess(""), 3000);
     } catch (e: any) {
       // Backend-Guard: nicht-Admin darf risk_policy="trusted" nicht setzen → 403
-      const raw = e?.message || "Fehler beim Speichern";
+      const raw = e?.message || t("projectSettings.saveFailed", { defaultValue: "Fehler beim Speichern" });
       const isTrustedDenied = riskPolicy === "trusted" && /trusted/i.test(raw) && /admin/i.test(raw);
       setError(isTrustedDenied
-        ? "Trusted-Modus für den Projekt-Boss darf nur durch Admins gesetzt werden."
+        ? t("projectSettings.trustedDeniedNonAdmin", { defaultValue: "Trusted-Modus für den Projekt-Boss darf nur durch Admins gesetzt werden." })
         : raw);
     } finally {
       setSaving(false);
@@ -388,7 +390,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   }
 
   if (!data) {
-    return <div className="p-4 text-sm text-destructive">{error || "Keine Daten"}</div>;
+    return <div className="p-4 text-sm text-destructive">{error || t("projectSettings.noData", { defaultValue: "Keine Daten" })}</div>;
   }
 
   return (
@@ -397,7 +399,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Bot className="h-4 w-4 text-primary" />
-          Agent-Settings
+          {t("projectSettings.title", { defaultValue: "Agent-Settings" })}
           {data.is_v2 && (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">v2</span>
           )}
@@ -408,7 +410,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           <button onClick={handleSave} disabled={saving}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            Speichern
+            {t("projectSettings.save", { defaultValue: "Speichern" })}
           </button>
           {onClose && (
             <button onClick={onClose} className="rounded-lg border px-2 py-1 text-xs transition hover:bg-accent">
@@ -475,20 +477,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           {/* Execution Mode (#568) */}
           <div>
             <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Shield className="h-3 w-3" /> Berechtigungen
+              <Shield className="h-3 w-3" /> {t("projectSettings.execMode.label", { defaultValue: "Berechtigungen" })}
             </label>
             <select value={executionMode} onChange={e => setExecutionMode(e.target.value)}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-              <option value="safe">Safe — Blocklist aktiv, kein sudo</option>
-              <option value="elevated">Elevated — erweiterte Rechte</option>
-              <option value="unrestricted">Unrestricted — volle Rechte, sudo erlaubt</option>
+              <option value="safe">{t("projectSettings.execMode.safe", { defaultValue: "Safe — Blocklist aktiv, kein sudo" })}</option>
+              <option value="elevated">{t("projectSettings.execMode.elevated", { defaultValue: "Elevated — erweiterte Rechte" })}</option>
+              <option value="unrestricted">{t("projectSettings.execMode.unrestricted", { defaultValue: "Unrestricted — volle Rechte, sudo erlaubt" })}</option>
             </select>
           </div>
 
           {/* Max Tool Rounds (#613) */}
           <div>
             <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Shield className="h-3 w-3" /> Max Tool-Aufrufe pro Nachricht
+              <Shield className="h-3 w-3" /> {t("projectSettings.maxToolRounds.label", { defaultValue: "Max Tool-Aufrufe pro Nachricht" })}
             </label>
             <input
               type="number"
@@ -502,20 +504,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           {/* Risiko-Policy — Trusted-Boss ohne CONFIRM-Klicks (Admin-only) */}
           <div className="md:col-span-2">
             <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Shield className="h-3 w-3" /> Risiko-Policy (Projekt-Boss)
+              <Shield className="h-3 w-3" /> {t("projectSettings.risk.label", { defaultValue: "Risiko-Policy (Projekt-Boss)" })}
             </label>
             <select
               value={riskPolicy}
               onChange={e => setRiskPolicy(e.target.value as "interactive" | "trusted")}
               className={`mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs ${riskPolicy === "trusted" ? "border-red-500 text-red-600 font-semibold" : ""}`}
             >
-              <option value="interactive">Interactive — Bestätigung bei riskanten Aktionen</option>
-              <option value="trusted">⚠ Trusted — CONFIRM automatisch genehmigen (nur Admin)</option>
+              <option value="interactive">{t("projectSettings.risk.interactive", { defaultValue: "Interactive — Bestätigung bei riskanten Aktionen" })}</option>
+              <option value="trusted">{t("projectSettings.risk.trusted", { defaultValue: "⚠ Trusted — CONFIRM automatisch genehmigen (nur Admin)" })}</option>
             </select>
             <p className="mt-1 text-[11px] text-muted-foreground">
               {riskPolicy === "trusted"
-                ? "⚠ Der Projekt-Boss führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approves landen im Server-Log. Nur Admins dürfen diesen Modus setzen — Speichern als Nicht-Admin schlägt mit 403 fehl."
-                : "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)."}
+                ? t("projectSettings.risk.descTrusted", { defaultValue: "⚠ Der Projekt-Boss führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approves landen im Server-Log. Nur Admins dürfen diesen Modus setzen — Speichern als Nicht-Admin schlägt mit 403 fehl." })
+                : t("projectSettings.risk.descInteractive", { defaultValue: "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard)." })}
             </p>
           </div>
         </div>
@@ -523,7 +525,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         {/* Members (#570) */}
         <div>
           <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-            <Hash className="h-3 w-3" /> Members (Zugriff auf dieses Projekt)
+            <Hash className="h-3 w-3" /> {t("projectSettings.members.label", { defaultValue: "Members (Zugriff auf dieses Projekt)" })}
           </label>
           <div className="flex flex-wrap gap-1.5 mb-1.5">
             {members.map(m => (
@@ -535,7 +537,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
                 </button>
               </span>
             ))}
-            {members.length === 0 && <span className="text-[10px] text-muted-foreground">Keine Members — nur Admins haben Zugriff</span>}
+            {members.length === 0 && <span className="text-[10px] text-muted-foreground">{t("projectSettings.members.empty", { defaultValue: "Keine Members — nur Admins haben Zugriff" })}</span>}
           </div>
           <div className="flex gap-1.5">
             <select
@@ -543,7 +545,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               onChange={e => setNewMember(e.target.value)}
               className="flex-1 rounded-lg border bg-background px-2 py-1 text-xs"
             >
-              <option value="">User auswählen...</option>
+              <option value="">{t("projectSettings.members.pick", { defaultValue: "User auswählen..." })}</option>
               {allUsers.filter(u => !members.includes(u)).map(u => (
                 <option key={u} value={u}>{u}</option>
               ))}
@@ -553,7 +555,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               disabled={!newMember}
               className="rounded-lg border bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
             >
-              Hinzufügen
+              {t("projectSettings.members.add", { defaultValue: "Hinzufügen" })}
             </button>
           </div>
         </div>
@@ -562,11 +564,11 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         <div className="rounded-2xl border bg-background/55 p-3 space-y-2">
           <div className="flex items-center gap-2 text-xs font-medium">
             <FileText className="h-3.5 w-3.5 text-primary" />
-            AGENT.md — Persönlichkeit &amp; Regeln
+            {t("projectSettings.agentMd.title", { defaultValue: "AGENT.md — Persönlichkeit & Regeln" })}
           </div>
           {!canUseComposer && (
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Nur Admin oder Personal-Projekt-Owner dürfen die AGENT.md (Projekt-Boss-Persona) ändern. Andere Settings kannst du weiter speichern.
+              {t("projectSettings.agentMd.readOnlyHint", { defaultValue: "Nur Admin oder Personal-Projekt-Owner dürfen die AGENT.md (Projekt-Boss-Persona) ändern. Andere Settings kannst du weiter speichern." })}
             </p>
           )}
           <textarea
@@ -576,7 +578,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             readOnly={!canUseComposer}
             disabled={!canUseComposer}
             className={`w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono leading-relaxed resize-y ${!canUseComposer ? "opacity-60 cursor-not-allowed" : ""}`}
-            placeholder="# Agent&#10;&#10;Beschreibe hier das Fachgebiet, die Regeln und den Kontext."
+            placeholder={t("projectSettings.agentMd.placeholder", { defaultValue: "# Agent\n\nBeschreibe hier das Fachgebiet, die Regeln und den Kontext." })}
           />
         </div>
 
@@ -586,18 +588,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-medium">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Profil-Composer (AGENT.md)
+                {t("projectSettings.composer.title", { defaultValue: "Profil-Composer (AGENT.md)" })}
               </div>
               <button
                 type="button"
                 onClick={() => setShowComposer(s => !s)}
                 className="text-xs px-2 py-1 rounded-md border hover:bg-accent transition"
               >
-                {showComposer ? "Schließen" : "Öffnen"}
+                {showComposer
+                  ? t("projectSettings.composer.close", { defaultValue: "Schließen" })
+                  : t("projectSettings.composer.open", { defaultValue: "Öffnen" })}
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Der Composer überschreibt die AGENT.md dieses Projekts aus Bausteinen. Vor dem Überschreiben wird ein Backup als AGENT.md.backup angelegt. config.yaml und Mitglieder bleiben unberührt.
+              {t("projectSettings.composer.intro", { defaultValue: "Der Composer überschreibt die AGENT.md dieses Projekts aus Bausteinen. Vor dem Überschreiben wird ein Backup als AGENT.md.backup angelegt. config.yaml und Mitglieder bleiben unberührt." })}
             </p>
             {showComposer && (
               <ProfileComposer scope="project" projectId={projectId} showSoulHint />

@@ -1496,6 +1496,47 @@
     "step4": "Schritt 4: Verbindung testen",
     "step5": "Schritt 5: Aktivieren"
   },
+  "projectSettings": {
+    "title": "Agent-Settings",
+    "save": "Speichern",
+    "saved": "Gespeichert!",
+    "noData": "Keine Daten",
+    "saveFailed": "Fehler beim Speichern",
+    "trustedDeniedNonAdmin": "Trusted-Modus für den Projekt-Boss darf nur durch Admins gesetzt werden.",
+    "execMode": {
+      "label": "Berechtigungen",
+      "safe": "Safe — Blocklist aktiv, kein sudo",
+      "elevated": "Elevated — erweiterte Rechte",
+      "unrestricted": "Unrestricted — volle Rechte, sudo erlaubt"
+    },
+    "maxToolRounds": {
+      "label": "Max Tool-Aufrufe pro Nachricht"
+    },
+    "risk": {
+      "label": "Risiko-Policy (Projekt-Boss)",
+      "interactive": "Interactive — Bestätigung bei riskanten Aktionen",
+      "trusted": "⚠ Trusted — CONFIRM automatisch genehmigen (nur Admin)",
+      "descInteractive": "Riskante Aktionen brauchen eine Bestätigung im Chat (Standard).",
+      "descTrusted": "⚠ Der Projekt-Boss führt CONFIRM-Aktionen ohne Klick aus. DENY bleibt blockiert. Auto-Approves landen im Server-Log. Nur Admins dürfen diesen Modus setzen — Speichern als Nicht-Admin schlägt mit 403 fehl."
+    },
+    "members": {
+      "label": "Members (Zugriff auf dieses Projekt)",
+      "empty": "Keine Members — nur Admins haben Zugriff",
+      "pick": "User auswählen...",
+      "add": "Hinzufügen"
+    },
+    "agentMd": {
+      "title": "AGENT.md — Persönlichkeit & Regeln",
+      "readOnlyHint": "Nur Admin oder Personal-Projekt-Owner dürfen die AGENT.md (Projekt-Boss-Persona) ändern. Andere Settings kannst du weiter speichern.",
+      "placeholder": "# Agent\n\nBeschreibe hier das Fachgebiet, die Regeln und den Kontext."
+    },
+    "composer": {
+      "title": "Profil-Composer (AGENT.md)",
+      "open": "Öffnen",
+      "close": "Schließen",
+      "intro": "Der Composer überschreibt die AGENT.md dieses Projekts aus Bausteinen. Vor dem Überschreiben wird ein Backup als AGENT.md.backup angelegt. config.yaml und Mitglieder bleiben unberührt."
+    }
+  },
   "composer": {
     "loading": "Lade Bausteine…",
     "title": "Profil-Composer",
