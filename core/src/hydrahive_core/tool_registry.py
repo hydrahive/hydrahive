@@ -1891,6 +1891,38 @@ class AskAgentTool(BaseTool):
                         "scope_report":   _scope_dict,
                     }
 
+                # #665: Patch-Artefakt-Extraktion nur für isolation_mode="patch_only".
+                # Sub-Agent-Response wird auf fenced ```diff/```patch Block geprüft,
+                # validiert, (auch bei invalid) für Audit persistiert. KEIN Auto-Apply.
+                if (
+                    isinstance(result, dict)
+                    and _wt_meta.isolation_mode == "patch_only"
+                ):
+                    try:
+                        from dataclasses import asdict as _asdict
+                        from .subagent_patch_artifacts import (
+                            build_patch_artifact_report as _build_patch_report,
+                        )
+                        from .subagent_write_scope import (
+                            WriteScope as _WS, validate_write_scope as _validate_ws,
+                        )
+                        _ws_obj: _WS | None
+                        if _wt_meta.write_scope:
+                            try:
+                                _ws_obj = _validate_ws(_wt_meta.write_scope)
+                            except Exception as _ws_err:
+                                logger.warning("patch_artifact: ws validate failed: %s", _ws_err)
+                                _ws_obj = None
+                        else:
+                            _ws_obj = None
+                        _response_text = result.get("response") or ""
+                        _patch_report = _build_patch_report(
+                            _response_text, _ws_obj, _wt_meta.worktree_id,
+                        )
+                        result["patch_artifact"] = _asdict(_patch_report)
+                    except Exception as _patch_err:
+                        logger.warning("patch_artifact extraction failed: %s", _patch_err)
+
         if _wt_skipped_reason is not None and isinstance(result, dict):
             result["worktree_skipped"] = _wt_skipped_reason
 

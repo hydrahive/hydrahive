@@ -466,3 +466,128 @@ async def test_result_contains_isolation_and_scope_keys(parent_repo, fake_aiohtt
     wm = result["worktree_meta"]
     for k in ("worktree_id", "worktree_path", "isolation_mode", "write_scope", "scope_report"):
         assert k in wm, f"missing {k!r} in worktree_meta: {wm}"
+
+
+# ── #665: Patch-Artefakt-Flow (nur patch_only) ──────────────────────────────
+
+async def test_patch_only_extracts_valid_diff(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    # Fake-Sub-Agent-Response enthält fenced diff
+    diff_text = (
+        "Vorschlag:\n\n"
+        "```diff\n"
+        "diff --git a/README.md b/README.md\n"
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ @@\n"
+        "-old\n"
+        "+new\n"
+        "```\n"
+    )
+    fake_aiohttp.response_payload = {"response": diff_text}
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="bitte patchen",
+        isolation_mode="patch_only",
+    )
+    assert result.get("success") is True
+    assert "patch_artifact" in result
+    pa = result["patch_artifact"]
+    assert pa["present"] is True
+    assert pa["valid"] is True
+    assert "README.md" in pa["paths"]
+    assert pa["artifact_path"] is not None
+    assert pa["bytes"] > 0
+
+
+async def test_patch_only_no_diff_in_response(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    fake_aiohttp.response_payload = {"response": "Ich hätte Ideen, aber kein Patch."}
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="?",
+        isolation_mode="patch_only",
+    )
+    assert "patch_artifact" in result
+    pa = result["patch_artifact"]
+    assert pa["present"] is False
+    assert pa["valid"] is False
+    assert pa["error"] == "no_diff_block_found"
+    assert pa["artifact_path"] is None
+
+
+async def test_read_only_no_patch_artifact_even_with_diff(parent_repo, fake_aiohttp, monkeypatch):
+    """read_only + Response enthält diff block → kein patch_artifact-Key.
+    Patch-Extraktion läuft ausschließlich bei patch_only.
+    """
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    diff_text = (
+        "```diff\n--- a/x\n+++ b/x\n@@ @@\n-old\n+new\n```\n"
+    )
+    fake_aiohttp.response_payload = {"response": diff_text}
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="lies",
+        isolation_mode="read_only",
+    )
+    assert result.get("success") is True
+    assert "patch_artifact" not in result
+
+
+async def test_full_worktree_no_patch_artifact(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    diff_text = (
+        "```diff\n--- a/x\n+++ b/x\n@@ @@\n```\n"
+    )
+    fake_aiohttp.response_payload = {"response": diff_text}
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="q",
+        # kein isolation_mode → default full_worktree
+    )
+    assert result.get("success") is True
+    assert "patch_artifact" not in result
+
+
+async def test_patch_only_scope_violation(parent_repo, fake_aiohttp, monkeypatch):
+    from hydrahive_core import tool_registry as tr
+    monkeypatch.setattr(tr.settings, "worktree_isolation", True, raising=False)
+    project_id, _, _ = parent_repo
+
+    diff_text = (
+        "```diff\n"
+        "--- a/secrets.env\n"
+        "+++ b/secrets.env\n"
+        "@@ @@\n"
+        "-A=1\n"
+        "+A=2\n"
+        "```\n"
+    )
+    fake_aiohttp.response_payload = {"response": diff_text}
+
+    tool = tr.AskAgentTool()
+    result = await tool.execute(
+        agent_id="boss", project_id=project_id, target="sub", question="patch",
+        isolation_mode="patch_only",
+        write_scope={"allow": ["core/**"], "deny": ["**/*.env"]},
+    )
+    pa = result["patch_artifact"]
+    assert pa["present"] is True
+    assert pa["valid"] is False
+    assert any(".env" in v and "deny" in v for v in pa["violations"])
