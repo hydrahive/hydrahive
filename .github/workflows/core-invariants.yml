@@ -1,0 +1,52 @@
+name: Core Invariants
+
+on:
+  pull_request:
+    paths:
+      - "core/src/hydrahive_core/**"
+      - "core/tests/test_architecture_invariants.py"
+      - "core/pyproject.toml"
+      - ".github/workflows/core-invariants.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "core/src/hydrahive_core/**"
+      - "core/tests/test_architecture_invariants.py"
+      - "core/pyproject.toml"
+      - ".github/workflows/core-invariants.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-invariants-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-invariants:
+    name: core-invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: core/pyproject.toml
+
+      - name: Install core test dependencies
+        working-directory: core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run architecture invariants
+        working-directory: core
+        run: python -m pytest tests/test_architecture_invariants.py -q
