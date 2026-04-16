@@ -154,7 +154,7 @@ function OAuthFlowPanel({
 
 export function LlmConfigPage() {
   const { t } = useTranslation();
-  const [providerStatus, setProviderStatus] = useState<Record<string,{has_key:boolean}>>({});
+  const [providerStatus, setProviderStatus] = useState<Record<string,{has_key:boolean; base_url?: string}>>({});
   const [ollamaModels,   setOllamaModels]   = useState<OllamaModel[]>([]);
   const [ollamaOk,       setOllamaOk]       = useState<boolean|null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -180,6 +180,10 @@ export function LlmConfigPage() {
   const [savingEmbed,    setSavingEmbed]    = useState(false);
   const [savedEmbed,     setSavedEmbed]     = useState(false);
 
+  // MiniMax base_url (#616) — optionaler Endpoint-Override
+  const [minimaxBaseUrl, setMinimaxBaseUrl] = useState("");
+  const [savingBaseUrl,  setSavingBaseUrl]  = useState(false);
+
   // Ref so exchange handler always sees current flow state
   const oauthFlowRef = useRef<OAuthFlow | null>(null);
   oauthFlowRef.current = oauthFlow;
@@ -187,7 +191,7 @@ export function LlmConfigPage() {
   async function load() {
     try {
       const [cfg, ollama, claudeSt, codexSt, sysModel, avail, embedCfg] = await Promise.allSettled([
-        api.get<{providers:Record<string,{has_key:boolean}>}>("/llm/config"),
+        api.get<{providers:Record<string,{has_key:boolean; base_url?: string}>}>("/llm/config"),
         api.get<{available:boolean;models:OllamaModel[]}>("/llm/ollama/models"),
         api.claudeTokenStatus(),
         api.openaiCodexStatus(),
@@ -261,13 +265,42 @@ export function LlmConfigPage() {
     if (!keys[providerId]?.trim()) return;
     setSaving(providerId);
     try {
-      await api.put(`/llm/config/${providerId}`, { provider: providerId, api_key: keys[providerId], enabled: true });
+      const body: Record<string, unknown> = { provider: providerId, api_key: keys[providerId], enabled: true };
+      // #616: MiniMax erlaubt optional einen Endpoint-Override
+      if (providerId === "minimax" && minimaxBaseUrl.trim()) {
+        body.base_url = minimaxBaseUrl.trim();
+      }
+      await api.put(`/llm/config/${providerId}`, body);
       setSaved(providerId);
       setKeys(k => ({ ...k, [providerId]: "" }));
       setTimeout(() => setSaved(null), 3000);
       await load();
     } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(null); }
+  }
+
+  async function saveMinimaxBaseUrl() {
+    // #616: base_url ohne Key-Rotation speichern — bestehenden Key beibehalten.
+    // Payload mit leerem api_key schreibt dort "" — Backend entfernt dann
+    // den Env-Eintrag. Deshalb nur speichern wenn Key schon gesetzt ist.
+    if (!minimaxBaseUrl.trim()) return;
+    if (!providerStatus["minimax"]?.has_key) {
+      alert(t("llm.minimax.keyRequired", { defaultValue: "Bitte zuerst den MiniMax API-Key speichern." }));
+      return;
+    }
+    setSavingBaseUrl(true);
+    try {
+      // api_key weglassen → Backend lässt bestehenden Key unverändert.
+      await api.put(`/llm/config/minimax`, {
+        provider: "minimax",
+        enabled: true,
+        base_url: minimaxBaseUrl.trim(),
+      });
+      setSaved("minimax");
+      setTimeout(() => setSaved(null), 3000);
+      await load();
+    } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
+    finally { setSavingBaseUrl(false); }
   }
 
   async function pullOllamaModel() {
@@ -391,6 +424,57 @@ export function LlmConfigPage() {
           </button>
         </div>
         <p className="text-xs text-muted-foreground">Von https://platform.openai.com/api-keys</p>
+      </div>
+
+      {/* MiniMax (#616) — OpenAI-compatible API */}
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <h2 className="font-medium text-sm">MiniMax API</h2>
+              {providerStatus["minimax"]?.has_key
+                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>Aktiv</span>
+                : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>Nicht konfiguriert</span>
+              }
+              {saved === "minimax" && <span className="text-xs text-green-600">{t("common.saved")}</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">OpenAI-compatible API — MiniMax-M2.7</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={keys["minimax"] ?? ""}
+            onChange={e => setKeys(k => ({...k, minimax: e.target.value}))}
+            placeholder={providerStatus["minimax"]?.has_key ? "••••••••••••••• (gesetzt)" : "MINIMAX_API_KEY"}
+            className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button onClick={() => saveKey("minimax")}
+            disabled={saving === "minimax" || !keys["minimax"]?.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5"/>
+            {saving === "minimax" ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Endpoint (optional)</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={minimaxBaseUrl}
+              onChange={e => setMinimaxBaseUrl(e.target.value)}
+              placeholder={providerStatus["minimax"]?.base_url || "https://api.minimax.io/v1 (Default)"}
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button onClick={saveMinimaxBaseUrl}
+              disabled={savingBaseUrl || !minimaxBaseUrl.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 transition-colors">
+              <Save className="h-3.5 w-3.5"/>
+              {savingBaseUrl ? t("common.saving") : t("common.save")}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">Leer lassen für Default. Für CN-Region ggf. api.minimax.chat/v1.</p>
+        </div>
       </div>
 
       {/* Ollama */}

@@ -476,9 +476,31 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
             continue
         is_claude  = model.startswith(("claude-", "anthropic/"))
         is_openai  = model.startswith(("gpt-", "o1-", "o3-", "openai/", "openai-codex/"))
-        is_ollama  = model.startswith(("ollama/", "ollama_chat/")) or (
-            not is_claude and not is_openai and "/" not in model
+        is_minimax = model.startswith("MiniMax-") or model.startswith("minimax/")
+        is_ollama  = (not is_minimax) and (
+            model.startswith(("ollama/", "ollama_chat/")) or (
+                not is_claude and not is_openai and "/" not in model
+            )
         )
+
+        if is_minimax:
+            if os.environ.get("MINIMAX_API_KEY", "").strip():
+                return None
+            try:
+                cfg = _load_llm_config()
+                if cfg.get("providers", {}).get("minimax", {}).get("api_key", "").strip():
+                    return None
+            except Exception:
+                pass
+            try:
+                _env_file = settings.llm_env
+                if _env_file.exists():
+                    for line in _env_file.read_text().splitlines():
+                        if line.startswith("MINIMAX_API_KEY=") and line.split("=", 1)[1].strip():
+                            return None
+            except OSError:
+                pass
+            continue
 
         if is_claude:
             if _load_claude_oauth_token():
@@ -545,14 +567,63 @@ def _load_llm_config() -> dict:
 
 # ---------------------------------------------------------------- Model-Resolution
 
+# #616: MiniMax-M2 als eigenständiger Provider. Nutzt OpenAI-kompatiblen Transport
+# (LiteLLM openai/ Prefix), aber eigener Endpoint + eigener API-Key.
+MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/v1"
+
+
+def _minimax_base_url() -> str:
+    """Liefert den aktuellen MiniMax-Endpoint aus llm_config, sonst Default."""
+    try:
+        cfg = _load_llm_config()
+        url = (cfg.get("providers", {}).get("minimax", {}).get("base_url") or "").strip()
+        if url:
+            return url
+    except Exception:
+        pass
+    return MINIMAX_DEFAULT_BASE_URL
+
+
+def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
+    """#616: Provider-spezifische litellm-kwargs (api_base, api_key) für
+    OpenAI-kompatible Endpoints mit separatem Key (z.B. MiniMax).
+
+    Vorrang für api_key: agent_cfg.llm.api_key_env > MINIMAX_API_KEY (env) > providers.minimax.api_key.
+    Für andere Provider: leeres dict — bestehende Pfade bleiben unverändert.
+    """
+    kwargs: dict = {}
+    if model_name.startswith("MiniMax-") or model_name.startswith("minimax/"):
+        kwargs["api_base"] = _minimax_base_url()
+        _akv = getattr(getattr(agent_cfg, "llm", None), "api_key_env", "") or ""
+        key = os.environ.get(_akv, "") if _akv else ""
+        if not key:
+            key = os.environ.get("MINIMAX_API_KEY", "")
+        if not key:
+            try:
+                cfg = _load_llm_config()
+                key = (cfg.get("providers", {}).get("minimax", {}).get("api_key") or "").strip()
+            except Exception:
+                key = ""
+        if key:
+            kwargs["api_key"] = key
+    return kwargs
+
+
 def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str, str | None]:
     """
     Gibt (litellm_model, api_base) zurück.
     Provider-Prefix (z.B. anthropic/, openai/) → direkt weiterreichen.
     Claude/GPT-Modellnamen → passenden Provider-Prefix ergänzen.
+    MiniMax-Modelle → OpenAI-kompatibler Transport mit MiniMax-Endpoint (#616).
     Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
     ollama_base_url: wenn gesetzt, wird statt localhost dieser Endpunkt genutzt (WKS-Ollama).
     """
+    # #616: MiniMax vor Ollama-Fallback checken, damit "MiniMax-M2.7" nicht als Ollama-Modell gemappt wird
+    if model.startswith("MiniMax-"):
+        return f"openai/{model}", _minimax_base_url()
+    if model.startswith("minimax/"):
+        return f"openai/{model[len('minimax/'):]}", _minimax_base_url()
+
     # Wenn kein ollama_base_url aber Modell Ollama: WKS-URL aus User-Config suchen
     if not ollama_base_url and (model.startswith("ollama/") or "/" not in model):
         try:
@@ -1086,6 +1157,15 @@ async def _llm_call_single(
         _resolved_key = os.environ.get(_api_key_env, "")
         if _resolved_key:
             kwargs["api_key"] = _resolved_key
+
+    # #616: Provider-spezifische kwargs (aktuell MiniMax: OpenAI-kompatibler
+    # Endpoint + eigener Key). api_key_env hat Vorrang — der Helper respektiert
+    # das intern, aber wir schreiben nur Felder, die noch nicht gesetzt sind.
+    _prov_kw = _provider_call_kwargs(model_name, agent_cfg)
+    if "api_base" in _prov_kw:
+        kwargs["api_base"] = _prov_kw["api_base"]
+    if "api_key" in _prov_kw and "api_key" not in kwargs:
+        kwargs["api_key"] = _prov_kw["api_key"]
 
     # Extended Thinking via litellm (für API-Key-basierte Calls)
     _thinking_budget = getattr(agent_cfg.llm, "thinking_budget", 0) or 0

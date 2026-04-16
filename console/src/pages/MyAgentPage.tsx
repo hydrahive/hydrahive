@@ -53,6 +53,7 @@ function modeSummary(cfg?: AgentCfg["execution_modes"]) {
 const KNOWN_MODELS = [
   "claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6",
   "gpt-4o-mini","gpt-4o",
+  "MiniMax-M2.7",
   "ollama/mistral:latest","ollama/llama3.1:8b","ollama/llama3.2:3b",
 ];
 

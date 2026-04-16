@@ -68,6 +68,8 @@ const KNOWN_MODELS = [
   "openai-codex/gpt-5.3-codex",
   "openai-codex/gpt-5.3-codex-spark",
   "openai-codex/gpt-5.4",
+  // MiniMax (#616) — OpenAI-kompatibel via api.minimax.io
+  "MiniMax-M2.7",
   // Ollama (lokal)
   "llama3.2:3b",
   "llama3.1:8b",

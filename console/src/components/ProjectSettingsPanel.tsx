@@ -54,11 +54,12 @@ interface SettingsData {
   };
 }
 
-const PROVIDERS = ["anthropic", "openai", "google", "ollama", "deepseek"];
+const PROVIDERS = ["anthropic", "openai", "minimax", "google", "ollama", "deepseek"];
 
 const MODELS: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
+  minimax: ["MiniMax-M2.7"],
   google: ["gemini-2.0-flash", "gemini-2.5-pro"],
   ollama: ["llama3.1", "qwen2.5:7b", "mistral"],
   deepseek: ["deepseek-r1"],

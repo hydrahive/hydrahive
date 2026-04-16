@@ -14,8 +14,14 @@ LLM_CONFIG_FILE = str(settings.llm_config)
 
 class LlmProviderConfig(BaseModel):
     provider: str
-    api_key: str = ""
+    # #616: api_key Optional — None (weggelassen) bedeutet "nicht ändern",
+    # "" bedeutet "explizit löschen", alles andere setzt den Key.
+    # So kann base_url geändert werden, ohne den bestehenden Key zu verlieren.
+    api_key: str | None = None
     enabled: bool = True
+    # #616: optionaler Endpoint-Override (aktuell nur für MiniMax relevant).
+    # Default wird providerseitig in _minimax_base_url() gesetzt.
+    base_url: str = ""
 
 
 class CoachConfigRequest(BaseModel):
@@ -62,6 +68,32 @@ _oauth_pending: dict[str, dict] = {}
 
 # #391: mtime-basierter Config-Cache
 _config_cache: dict[str, tuple[float, dict]] = {}  # path → (mtime, data)
+
+
+def _has_minimax_provider_key(providers: dict | None = None) -> bool:
+    """#616: True wenn ein echter MiniMax-API-Key konfiguriert ist.
+
+    Quellen (reine Key-Prüfung, enabled/base_url zählen NICHT):
+    - providers.minimax.api_key
+    - MINIMAX_API_KEY in os.environ
+    - MINIMAX_API_KEY=... in settings.llm_env
+    """
+    if providers is None:
+        providers = _load_llm_config().get("providers", {})
+    mm = providers.get("minimax", {}) or {}
+    if (mm.get("api_key") or "").strip():
+        return True
+    if os.environ.get("MINIMAX_API_KEY", "").strip():
+        return True
+    try:
+        for line in settings.llm_env.read_text().splitlines():
+            if not line.startswith("MINIMAX_API_KEY="):
+                continue
+            if line.split("=", 1)[1].strip():
+                return True
+    except OSError:
+        pass
+    return False
 
 
 def _cached_json_load(path: str, default: dict | None = None) -> dict:
@@ -121,11 +153,15 @@ def register_llm_routes(
         providers = config.get("providers", {})
         masked = {}
         for name, cfg in providers.items():
-            masked[name] = {
+            entry = {
                 "enabled": cfg.get("enabled", True),
                 "api_key": "***" + cfg.get("api_key", "")[-4:] if cfg.get("api_key") else "",
                 "has_key": bool(cfg.get("api_key")),
             }
+            # #616: base_url nur ausgeben wenn Provider ihn nutzt (aktuell minimax)
+            if cfg.get("base_url"):
+                entry["base_url"] = cfg["base_url"]
+            masked[name] = entry
         return {"providers": masked}
 
     @admin_router.get("/llm/config/coach")
@@ -197,24 +233,35 @@ def register_llm_routes(
         config = _load_llm_config()
         if "providers" not in config:
             config["providers"] = {}
-        config["providers"][provider] = {
-            "enabled": req.enabled,
-            "api_key": req.api_key,
-        }
-        env_key_map = {
-            "claude_max": "ANTHROPIC_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-        }
-        env_var = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
-        env_file = settings.llm_env
-        lines = []
-        if env_file.exists():
-            lines = [line for line in env_file.read_text().splitlines() if not line.startswith(f"{env_var}=")]
-        if req.api_key:
-            lines.append(f"{env_var}={req.api_key}")
-        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        env_file.chmod(0o600)
+        # #616: bestehenden Eintrag erhalten — api_key=None (weggelassen) = nicht ändern.
+        existing = dict(config["providers"].get(provider) or {})
+        existing["enabled"] = req.enabled
+        if req.api_key is not None:
+            existing["api_key"] = req.api_key
+        elif "api_key" not in existing:
+            existing["api_key"] = ""
+        if req.base_url and req.base_url.strip():
+            existing["base_url"] = req.base_url.strip()
+        config["providers"][provider] = existing
+
+        # Env-File nur aktualisieren wenn api_key explizit mitgeschickt wurde.
+        # Andernfalls (None) bleibt der existierende Env-Eintrag unverändert.
+        if req.api_key is not None:
+            env_key_map = {
+                "claude_max": "ANTHROPIC_API_KEY",
+                "anthropic": "ANTHROPIC_API_KEY",
+                "openai": "OPENAI_API_KEY",
+            }
+            env_var = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
+            env_file = settings.llm_env
+            lines = []
+            if env_file.exists():
+                lines = [line for line in env_file.read_text().splitlines() if not line.startswith(f"{env_var}=")]
+            if req.api_key:
+                lines.append(f"{env_var}={req.api_key}")
+            env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            env_file.chmod(0o600)
+
         _save_llm_config(config)
         logger.info("LLM-Provider konfiguriert: %s", provider)
         return {"updated": True, "provider": provider}
@@ -250,6 +297,11 @@ def register_llm_routes(
         if openai_cfg.get("enabled") or openai_cfg.get("api_key"):
             for model in ["gpt-4o-mini", "gpt-4o"]:
                 models.append({"id": model, "label": model, "provider": "openai"})
+
+        # #616: MiniMax-M2 — OpenAI-kompatibler Transport, eigener Endpoint + Key
+        if _has_minimax_provider_key(providers):
+            for model in ["MiniMax-M2.7"]:
+                models.append({"id": model, "label": model, "provider": "minimax"})
 
         codex_file = settings.openai_codex_token
         if codex_file.exists():

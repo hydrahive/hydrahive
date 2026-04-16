@@ -21,6 +21,7 @@ interface LlmProvider {
   enabled: boolean;
   api_key?: string;
   has_key?: boolean;
+  base_url?: string;
 }
 
 /* ── Collapsible Section ────────────────────────────────────────── */
@@ -84,6 +85,7 @@ function LlmSection() {
   const [systemModel, setSystemModel] = useState("");
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [minimaxKey, setMinimaxKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -101,7 +103,9 @@ function LlmSection() {
     }).catch(() => setLoaded(true));
   }, []);
 
-  const configured = loaded ? !!(providers.anthropic?.has_key || providers.openai?.has_key) : null;
+  const configured = loaded
+    ? !!(providers.anthropic?.has_key || providers.openai?.has_key || providers.minimax?.has_key)
+    : null;
 
   async function save() {
     setSaving(true); setMsg("");
@@ -110,12 +114,14 @@ function LlmSection() {
         await api.put("/llm/config/anthropic", { provider: "anthropic", api_key: anthropicKey.trim(), enabled: true });
       if (openaiKey.trim())
         await api.put("/llm/config/openai", { provider: "openai", api_key: openaiKey.trim(), enabled: true });
+      if (minimaxKey.trim())
+        await api.put("/llm/config/minimax", { provider: "minimax", api_key: minimaxKey.trim(), enabled: true });
       if (systemModel)
         await api.setSystemDefaultModel(systemModel);
       // Reload
       const cfg = await api.get<{ providers: Record<string, LlmProvider> }>("/llm/config");
       setProviders(cfg.providers ?? {});
-      setAnthropicKey(""); setOpenaiKey("");
+      setAnthropicKey(""); setOpenaiKey(""); setMinimaxKey("");
       setMsg("Gespeichert");
       setTimeout(() => setMsg(""), 3000);
     } catch (e) {
@@ -143,6 +149,14 @@ function LlmSection() {
               {providers.openai?.has_key && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
             </div>
           </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>MiniMax API-Key</label>
+            <div className="flex items-center gap-2">
+              <input type="password" value={minimaxKey} onChange={e => setMinimaxKey(e.target.value)}
+                placeholder={providers.minimax?.has_key ? "mm-***  (gesetzt)" : "MINIMAX_API_KEY"} className={inputCls} />
+              {providers.minimax?.has_key && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
+            </div>
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className={labelCls}>Standard-Modell</label>
@@ -154,7 +168,7 @@ function LlmSection() {
           <p className={hintCls}>Wird verwendet wenn ein Agent kein eigenes Modell konfiguriert hat.</p>
         </div>
         <div className="flex items-center gap-3">
-          <SaveBtn saving={saving} onClick={save} disabled={!anthropicKey.trim() && !openaiKey.trim() && !systemModel} />
+          <SaveBtn saving={saving} onClick={save} disabled={!anthropicKey.trim() && !openaiKey.trim() && !minimaxKey.trim() && !systemModel} />
           {msg && <span className="text-sm text-green-500">{msg}</span>}
         </div>
       </div>

@@ -1006,11 +1006,26 @@ async def _stream_litellm(
     messages, litellm_tools, model_name,
     execution_mode, _usage,
 ):
-    """litellm Streaming (Ollama / OpenAI / Anthropic API-Key) mit Tool-Loop."""
+    """litellm Streaming (Ollama / OpenAI / Anthropic API-Key / MiniMax) mit Tool-Loop."""
     import litellm
-    from .orchestrator_llm import _resolve_model
+    import os as _os
+    from .orchestrator_llm import _resolve_model, _provider_call_kwargs
 
     model, api_base = _resolve_model(model_name, boss_cfg.llm.ollama_base_url)
+    # #616: Streaming-Pfad muss für MiniMax denselben api_base+api_key
+    # liefern wie Non-Streaming. Ohne das würde litellm OPENAI_API_KEY ziehen
+    # und zum falschen Endpoint schicken.
+    _prov_kw_stream = _provider_call_kwargs(model_name, boss_cfg)
+    # api_key_env hat Vorrang (analog Non-Streaming): erst Projekt-Key prüfen,
+    # Helper-Key nur nutzen, wenn noch nichts gesetzt ist.
+    _stream_api_key: str | None = None
+    _akv_stream = getattr(getattr(boss_cfg, "llm", None), "api_key_env", "") or ""
+    if _akv_stream:
+        _resolved_stream = _os.environ.get(_akv_stream, "")
+        if _resolved_stream:
+            _stream_api_key = _resolved_stream
+    if _stream_api_key is None and "api_key" in _prov_kw_stream:
+        _stream_api_key = _prov_kw_stream["api_key"]
     _is_anthropic = model.startswith(("anthropic/", "claude-"))
     # #628-Followup: Streaming-litellm-Pfad muss auch normalisieren —
     # vorher übersprungen, daher kein konsistentes Pair-Repair/Dedupe.
@@ -1043,6 +1058,11 @@ async def _stream_litellm(
             kwargs["system"] = _sys_split
         if api_base:
             kwargs["api_base"] = api_base
+        # #616: Provider-spezifischer api_base-Override (idempotent zu _resolve_model)
+        if "api_base" in _prov_kw_stream:
+            kwargs["api_base"] = _prov_kw_stream["api_base"]
+        if _stream_api_key:
+            kwargs["api_key"] = _stream_api_key
         if litellm_tools and not _tools_disabled:
             kwargs["tools"] = litellm_tools
 
