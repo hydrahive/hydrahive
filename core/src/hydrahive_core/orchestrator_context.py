@@ -1069,7 +1069,7 @@ async def _compact_call(
     ohne Closure-Tricks (#660).
     """
     import os as _os
-    from .orchestrator_llm import _llm_with_retry
+    from .orchestrator_llm import _llm_with_retry, _provider_call_kwargs, _resolve_model
 
     is_claude = compact_model.startswith(("claude-", "anthropic/"))
     has_api_key = bool(_os.environ.get("ANTHROPIC_API_KEY", "").strip())
@@ -1085,10 +1085,20 @@ async def _compact_call(
                 boss_cfg, messages, None, token, compact_model,
             )
             return getattr(resp.choices[0].message, "content", "") or ""
-    resp = await _llm_with_retry(lambda: litellm.acompletion(
-        model=compact_model, messages=messages,
-        max_tokens=max_tokens, drop_params=True,
-    ))
+    model, api_base = _resolve_model(compact_model, getattr(boss_cfg.llm, "ollama_base_url", None))
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "drop_params": True,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+    # #616: Compaction must use the same provider-specific transport kwargs as
+    # normal LLM calls, otherwise bare MiniMax model IDs are sent to LiteLLM
+    # without provider/base_url information.
+    kwargs.update(_provider_call_kwargs(compact_model, boss_cfg))
+    resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs))
     return resp.choices[0].message.content or ""
 
 

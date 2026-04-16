@@ -9,6 +9,7 @@ Prüft:
 - check_llm_provider_available: OK mit MINIMAX_API_KEY, Fehlermeldung ohne Key.
 - _has_minimax_provider_key: erkennt llm_config, ENV und llm.env-Datei.
 - _llm_call_single: reicht api_base + api_key an litellm.acompletion.
+- _compact_call: Compaction nutzt denselben MiniMax-Transport.
 """
 import os
 import sys
@@ -266,3 +267,47 @@ class TestLlmCallSingleKwargs:
         assert captured.get("model") == "openai/MiniMax-M2.7"
         assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
         assert captured.get("api_key") == "mm-secret"
+
+
+# ================================================================= _compact_call kwargs
+
+class TestCompactCallMinimaxKwargs:
+    """Regressionsschutz für Live-Befund: Compaction umging _resolve_model()
+    und schickte bare MiniMax-M2.7 direkt an LiteLLM."""
+
+    async def test_compact_call_nutzt_minimax_transport_kwargs(self, monkeypatch):
+        from hydrahive_core import orchestrator_context as oc
+
+        monkeypatch.setenv("MINIMAX_API_KEY", "mm-compact-secret")
+        captured: dict = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            message = MagicMock()
+            message.content = "summary"
+            choice = MagicMock()
+            choice.message = message
+            resp = MagicMock()
+            resp.choices = [choice]
+            return resp
+
+        cfg = MagicMock()
+        cfg.llm.api_key_env = ""
+        cfg.llm.ollama_base_url = None
+
+        fake_cfg = {"providers": {"minimax": {}}, "blocked_models": []}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg), \
+             patch("hydrahive_core.orchestrator_llm._llm_with_retry", new=lambda fn: fn()), \
+             patch("hydrahive_core.orchestrator_context.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(side_effect=fake_acompletion)
+            result = await oc._compact_call(
+                cfg,
+                "MiniMax-M2.7",
+                [{"role": "user", "content": "summarize"}],
+                128,
+            )
+
+        assert result == "summary"
+        assert captured.get("model") == "openai/MiniMax-M2.7"
+        assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
+        assert captured.get("api_key") == "mm-compact-secret"
