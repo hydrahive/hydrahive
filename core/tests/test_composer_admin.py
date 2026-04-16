@@ -222,7 +222,9 @@ def test_admin_presets_and_blocks_endpoints(admin_client):
     r = client.get("/admin/agents/ops_bot/composer/presets")
     assert r.status_code == 200
     ids = {p["id"] for p in r.json()["presets"]}
-    assert ids == {"read_only_auditor", "trusted_admin"}
+    # #649: Katalog erweitert — Phase-1c-Presets bleiben Teil der Liste,
+    # exakte Gleichheit ist nicht mehr gefordert.
+    assert {"read_only_auditor", "trusted_admin"}.issubset(ids)
 
     r2 = client.get("/admin/agents/ops_bot/composer/blocks")
     assert r2.status_code == 200

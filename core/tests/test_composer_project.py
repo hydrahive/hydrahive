@@ -248,7 +248,8 @@ def test_blocks_and_presets_endpoints(admin_client):
     r2 = client.get("/projects/team_alpha/composer/presets")
     assert r2.status_code == 200
     ids = {p["id"] for p in r2.json()["presets"]}
-    assert ids == {"read_only_auditor", "trusted_admin"}
+    # #649: Katalog erweitert — Phase-1c-Presets bleiben Teil der Liste.
+    assert {"read_only_auditor", "trusted_admin"}.issubset(ids)
 
 
 # ===========================================================================

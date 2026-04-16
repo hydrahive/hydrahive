@@ -74,6 +74,25 @@ BLOCK_CATALOG: tuple[CategoryDef, ...] = (
                     "- Root-Cause fixen statt Symptome umgehen (kein `--no-verify`, keine Feature-Flags als Workaround)."
                 ),
             ),
+            # #649
+            BlockDef(
+                id="work_style.cite_sources",
+                label="Quellen belegen",
+                description="Aussagen mit konkreten Quellen (Datei:Zeile, URL, Commit).",
+                markdown=(
+                    "- Aussagen mit konkreten Quellen belegen: Datei:Zeile, URL, Commit-Hash, Log-Ausschnitt.\n"
+                    "- Keine Behauptungen ohne Beleg, keine erfundenen Referenzen."
+                ),
+            ),
+            BlockDef(
+                id="work_style.propose_patch",
+                label="Änderungen als Patch vorschlagen",
+                description="Patch/Vorschlag statt direkt anwenden.",
+                markdown=(
+                    "- Änderungen als konkreten Patch oder strukturierten Vorschlag liefern, nicht direkt anwenden.\n"
+                    "- Umsetzung nur nach expliziter Freigabe — auch wenn technisch Schreibrechte da sind."
+                ),
+            ),
         ),
     ),
     CategoryDef(
@@ -308,6 +327,9 @@ class PresetDef:
 
 
 PRESETS: tuple[PresetDef, ...] = (
+    # Reihenfolge von „passiv/read-only" → „aktiv/write" (#649).
+    # Legacy-Presets read_only_auditor und trusted_admin bleiben Block-für-Block
+    # unverändert; neue Presets werden dazwischen eingeordnet.
     PresetDef(
         id="read_only_auditor",
         label="Read-only Auditor",
@@ -320,6 +342,98 @@ PRESETS: tuple[PresetDef, ...] = (
             "safety.no_ssh_hotfix",
             "safety.confirm_destructive",
             "docs.summary_after_change",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    # #649: neue Presets ab hier.
+    PresetDef(
+        id="research_analyst",
+        label="Research-Analyst",
+        description="Recherche, Quellen belegt, keine lokalen Writes.",
+        selected=(
+            "work_style.ask_when_unsure",
+            "work_style.plan_first",
+            "work_style.cite_sources",
+            "safety.read_only_default",
+            "safety.prod_hands_off",
+            "docs.why_not_what",
+            "docs.summary_after_change",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    PresetDef(
+        id="operations_guardian",
+        label="Operations-Guardian",
+        description="Vorsichtige Ops/Admin-Aufgaben, keine riskanten Prod-Aktionen ohne Confirm.",
+        selected=(
+            "work_style.ask_when_unsure",
+            "work_style.no_pragmatic_shortcuts",
+            "safety.confirm_destructive",
+            "safety.prod_hands_off",
+            "safety.no_ssh_hotfix",
+            "safety.read_only_default",
+            "git.no_force_push_main",
+            "git.verify_before_done",
+            "docs.summary_after_change",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    PresetDef(
+        id="patch_only_contributor",
+        label="Patch-Only Contributor",
+        description="Änderungen als Patch/Vorschlag, keine direkten Writes.",
+        selected=(
+            "work_style.precise",
+            "work_style.plan_first",
+            "work_style.ask_when_unsure",
+            "work_style.propose_patch",
+            "safety.read_only_default",
+            "safety.prod_hands_off",
+            "safety.confirm_destructive",
+            "docs.why_not_what",
+            "docs.summary_after_change",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    PresetDef(
+        id="project_boss_conservative",
+        label="Project-Boss (konservativ)",
+        description="Projekt-Boss mit sicherem Verhalten, keine Auto-Approves.",
+        selected=(
+            "work_style.ask_when_unsure",
+            "work_style.plan_first",
+            "work_style.no_pragmatic_shortcuts",
+            "safety.confirm_destructive",
+            "safety.prod_hands_off",
+            "safety.no_ssh_hotfix",
+            "git.no_force_push_main",
+            "git.scope_check_before_commit",
+            "docs.summary_after_change",
+            "docs.keep_docs_current",
+            "comm.concise",
+            "comm.german_default",
+        ),
+    ),
+    PresetDef(
+        id="implementation_worker",
+        label="Implementation-Worker",
+        description="Klare Umsetzer-Rolle: Plan, Umsetzung, Verify, Bericht.",
+        selected=(
+            "work_style.precise",
+            "work_style.plan_first",
+            "work_style.no_pragmatic_shortcuts",
+            "safety.confirm_destructive",
+            "safety.prod_hands_off",
+            "git.small_focused_commits",
+            "git.no_force_push_main",
+            "git.scope_check_before_commit",
+            "git.verify_before_done",
+            "docs.summary_after_change",
+            "docs.why_not_what",
             "comm.concise",
             "comm.german_default",
         ),

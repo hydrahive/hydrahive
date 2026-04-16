@@ -10,8 +10,13 @@ from fastapi.testclient import TestClient
 
 from hydrahive_core.composer_engine import (
     BLOCK_CATALOG,
+    PRESETS,
+    AgentProfile,
+    evaluate_warnings,
     known_block_ids,
+    known_preset_ids,
     list_blocks,
+    list_presets,
     render_agent_md,
 )
 from hydrahive_core.router_composer import register_composer_routes
@@ -204,10 +209,12 @@ from hydrahive_core.composer_engine import (
 )
 
 
-def test_list_presets_contains_both_phase1c_presets():
+def test_list_presets_contains_phase1c_presets():
+    # #649: der Katalog wurde erweitert, aber die Phase-1c-Presets bleiben
+    # Teil der Liste. Exakte Gleichheit ist nicht mehr gefordert.
     presets = list_presets()
     ids = {p["id"] for p in presets}
-    assert ids == {"read_only_auditor", "trusted_admin"}
+    assert {"read_only_auditor", "trusted_admin"}.issubset(ids)
     for p in presets:
         assert p["selected"], f"Preset {p['id']} hat leere Selection"
 
@@ -467,3 +474,143 @@ def test_versioned_backup_response_is_basename_only(client_factory):
     assert ".." not in name
     assert name.startswith("AGENT.md.")
     assert name.endswith(".backup")
+
+
+# ===========================================================================
+# #649 Preset-Katalog-Erweiterung
+# ===========================================================================
+
+# Legacy-Presets von vor #649 — Back-Compat-Wächter (Block-für-Block).
+_LEGACY_READ_ONLY_AUDITOR = (
+    "work_style.ask_when_unsure",
+    "work_style.plan_first",
+    "safety.read_only_default",
+    "safety.prod_hands_off",
+    "safety.no_ssh_hotfix",
+    "safety.confirm_destructive",
+    "docs.summary_after_change",
+    "comm.concise",
+    "comm.german_default",
+)
+_LEGACY_TRUSTED_ADMIN = (
+    "work_style.precise",
+    "work_style.no_pragmatic_shortcuts",
+    "safety.confirm_destructive",
+    "safety.prod_hands_off",
+    "git.small_focused_commits",
+    "git.no_force_push_main",
+    "git.scope_check_before_commit",
+    "git.verify_before_done",
+    "docs.summary_after_change",
+    "docs.why_not_what",
+    "docs.keep_docs_current",
+    "comm.concise",
+    "comm.german_default",
+)
+
+# #649 neue Presets — sollen alle im Katalog liegen und die definierte
+# Reihenfolge einhalten.
+_NEW_PRESET_IDS = {
+    "research_analyst",
+    "operations_guardian",
+    "patch_only_contributor",
+    "project_boss_conservative",
+    "implementation_worker",
+}
+_EXPECTED_ORDER = [
+    "read_only_auditor",
+    "research_analyst",
+    "operations_guardian",
+    "patch_only_contributor",
+    "project_boss_conservative",
+    "implementation_worker",
+    "trusted_admin",
+]
+
+
+@pytest.mark.parametrize("preset", PRESETS, ids=lambda p: p.id)
+def test_all_presets_reference_known_blocks(preset):
+    unknown = set(preset.selected) - known_block_ids()
+    assert not unknown, (
+        f"Preset {preset.id!r} referenziert unbekannte Block-IDs: {sorted(unknown)}"
+    )
+
+
+@pytest.mark.parametrize("preset", PRESETS, ids=lambda p: p.id)
+def test_all_presets_render_nonempty_markdown(preset):
+    md = render_agent_md(preset.selected)
+    assert md.startswith("# Persönliches Agent-Profil")
+    # Mindestens eine Kategorie-Section (## Label).
+    assert "\n## " in md, f"Preset {preset.id!r} rendert ohne Kategorie-Sections"
+
+
+@pytest.mark.parametrize("preset", PRESETS, ids=lambda p: p.id)
+def test_all_presets_baseline_not_save_blocked(preset):
+    """Contract: wenn User exakt das Preset übernimmt, darf kein `error`
+    feuern (Save muss durchgehen), und kein `preset_drift`, weil die
+    Selection identisch zum Preset ist.
+
+    `read_only_incomplete` (Severity `warning`) ist bewusst erlaubt — der
+    XOR-Check trifft historisch auch schon `trusted_admin`, ist also
+    preexisting Baseline und kein Regressions-Signal für #649."""
+    from hydrahive_core.composer_engine import save_blocked
+
+    warnings = evaluate_warnings(list(preset.selected), preset.id)
+    # Kein Save-Blocker:
+    assert not save_blocked(warnings), (
+        f"Preset {preset.id!r} erzeugt save-blockierende Warnings: {warnings}"
+    )
+    # Kein Drift-Warning bei exakter Übernahme:
+    drift = [w for w in warnings if w.get("rule") == "preset_drift"]
+    assert drift == [], (
+        f"Preset {preset.id!r} triggert preset_drift obwohl Selection identisch: {drift}"
+    )
+
+
+def test_new_preset_ids_exposed_via_list_presets():
+    ids = {p["id"] for p in list_presets()}
+    assert _NEW_PRESET_IDS.issubset(ids), (
+        f"Fehlende Presets in list_presets(): {_NEW_PRESET_IDS - ids}"
+    )
+    # known_preset_ids() muss konsistent sein.
+    assert _NEW_PRESET_IDS.issubset(known_preset_ids())
+    # Preset-Reihenfolge in der API entspricht der Freigabe.
+    api_order = [p["id"] for p in list_presets()]
+    assert api_order == _EXPECTED_ORDER
+
+
+def test_new_blocks_exposed_via_list_blocks():
+    all_blocks: set[str] = set()
+    for cat in list_blocks():
+        for b in cat["blocks"]:
+            all_blocks.add(b["id"])
+    assert "work_style.cite_sources" in all_blocks
+    assert "work_style.propose_patch" in all_blocks
+    # Beide neuen Blocks sitzen in der work_style-Kategorie.
+    ws_cat = next(c for c in list_blocks() if c["id"] == "work_style")
+    ws_ids = {b["id"] for b in ws_cat["blocks"]}
+    assert "work_style.cite_sources" in ws_ids
+    assert "work_style.propose_patch" in ws_ids
+
+
+def test_backcompat_legacy_presets_unchanged():
+    by_id = {p.id: p for p in PRESETS}
+    assert by_id["read_only_auditor"].selected == _LEGACY_READ_ONLY_AUDITOR
+    assert by_id["trusted_admin"].selected == _LEGACY_TRUSTED_ADMIN
+
+
+def test_legacy_profile_yaml_still_loads():
+    """Ein vor #649 gespeichertes agent_profile.yaml lädt sich
+    weiterhin als AgentProfile — kein Schema-Bruch."""
+    profile = AgentProfile(
+        schema_version=1,
+        preset="read_only_auditor",
+        selected=list(_LEGACY_READ_ONLY_AUDITOR),
+        updated_at="2026-04-15T12:00:00+00:00",
+    )
+    assert profile.preset in known_preset_ids()
+    # Render auf Legacy-Selection ist weiterhin nicht-leer.
+    md = render_agent_md(profile.selected)
+    assert md.startswith("# Persönliches Agent-Profil")
+    # evaluate_warnings ist leer (kein Drift, keine neuen Falschalarme).
+    assert evaluate_warnings(profile.selected, profile.preset) == []
