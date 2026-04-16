@@ -1712,6 +1712,30 @@
       "note": "note",
       "rolePlaceholder": "role (e.g. web)",
       "notePlaceholder": "note (optional)"
+    },
+    "hostkeys": {
+      "title": "SSH Host Keys",
+      "button": "Host Keys",
+      "enforcement": "Mode",
+      "enforcementMode": {
+        "warn": "warn (non-blocking)",
+        "strict": "strict (blocking)"
+      },
+      "statusBadge": {
+        "verified": "verified",
+        "unverified": "unverified",
+        "changed": "changed!",
+        "unknown": "unknown"
+      },
+      "lastChecked": "last checked",
+      "empty": "No host keys recorded yet. Click \"Rescan\" to capture them.",
+      "rescan": "Rescan",
+      "scanning": "Scanning…",
+      "approve": "Approve",
+      "remove": "Remove",
+      "approvedBy": "approved by",
+      "confirmRemove": "Really remove this host key?",
+      "changedWarning": "Host key differs from the stored one — possible MITM. Inspect the new fingerprint before approving."
     }
   },
   "composer": {

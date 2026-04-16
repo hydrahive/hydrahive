@@ -20,6 +20,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { ServerEditModal, type RemoteServer, type ServerEditPayload } from "@/components/ServerEditModal";
+import { ServerHostKeysModal, HostStatusBadge, type HostKeyStatus } from "@/components/ServerHostKeysModal";
 
 // ─────────────────────────────────────────── Types
 
@@ -379,6 +380,29 @@ function ServersView(props: {
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const [pubKey, setPubKey] = useState("");
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
+  // #674-B Sprint 3: Host-Key-Management
+  const [hostKeysModal, setHostKeysModal] = useState<string | null>(null);
+  const [hostKeyStatus, setHostKeyStatus] = useState<Record<string, HostKeyStatus>>({});
+
+  // Parallel-Prefetch der Host-Key-Stati für alle gelisteten Server. Fehler
+  // pro Server sind nicht fatal (Server bleibt im Badge "unknown").
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(
+        servers.map(s =>
+          api.get<{ status: HostKeyStatus }>(`/admin/servers/${s.id}/hostkeys`)
+            .then(r => [s.id, r.status] as const)
+            .catch(() => [s.id, "unknown" as HostKeyStatus] as const)
+        )
+      );
+      if (cancelled) return;
+      const map: Record<string, HostKeyStatus> = {};
+      for (const [sid, status] of results) map[sid] = status;
+      setHostKeyStatus(map);
+    })();
+    return () => { cancelled = true; };
+  }, [servers]);
 
   async function addServer(srv: ServerEditPayload) {
     try {
@@ -490,7 +514,7 @@ function ServersView(props: {
                       <p className="text-xs text-muted-foreground mt-0.5">{srv.description}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       srv.has_ssh_key ? "bg-green-500/10 text-green-500" : "bg-amber-500/10 text-amber-500"
                     }`}>
@@ -498,11 +522,15 @@ function ServersView(props: {
                         ? t("targetSystems.servers.hasKey", { defaultValue: "Key vorhanden" })
                         : t("targetSystems.servers.noKey",  { defaultValue: "Kein Key" })}
                     </span>
+                    <HostStatusBadge status={hostKeyStatus[srv.id] ?? "unknown"} />
                     <button onClick={() => showPubKey(srv.id)} className="text-xs text-primary hover:underline">
                       {t("targetSystems.servers.keyBtn", { defaultValue: "Key" })}
                     </button>
                     <button onClick={() => testServer(srv.id)} className="text-xs text-primary hover:underline">
                       {t("targetSystems.servers.testBtn", { defaultValue: "Test" })}
+                    </button>
+                    <button onClick={() => setHostKeysModal(srv.id)} className="text-xs text-primary hover:underline">
+                      {t("targetSystems.hostkeys.button", { defaultValue: "Host-Keys" })}
                     </button>
                     <button onClick={() => setEditing(srv)} className="text-muted-foreground hover:text-foreground">
                       <Pencil size={14} />
@@ -547,6 +575,14 @@ function ServersView(props: {
           server={editing}
           onSave={(srv) => editing ? updateServer(editing.id, srv) : addServer(srv)}
           onClose={() => { setShowAdd(false); setEditing(null); }}
+        />
+      )}
+
+      {hostKeysModal && (
+        <ServerHostKeysModal
+          serverId={hostKeysModal}
+          onClose={() => setHostKeysModal(null)}
+          onStatusChanged={(status) => setHostKeyStatus(prev => ({ ...prev, [hostKeysModal]: status }))}
         />
       )}
     </div>
