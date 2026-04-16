@@ -309,6 +309,9 @@ class TestRunSshCommand:
         assert "BatchMode=yes" in captured_args
         assert "StrictHostKeyChecking=no" in captured_args
         assert "ConnectTimeout=10" in captured_args
+        # #674-B: Auch ohne target_type niemals System-known_hosts beschreiben
+        assert "UserKnownHostsFile=/dev/null" in captured_args
+        assert "GlobalKnownHostsFile=/dev/null" in captured_args
 
     async def test_redacts_key_path_in_stderr(self, env):
         key = env.server_keys_dir / "prod-web"
@@ -422,3 +425,225 @@ class TestRunSshCommand:
             result = await run_ssh_command("h", "u", 22, key, "x", timeout=5)
         assert str(key) not in result.get("error", "")
         assert "<ssh_key>" in result.get("error", "")
+
+
+# ═════════════════════════════════════════════════ Host-Key-Enforcement (#674-B)
+
+
+class TestRunSshCommandHostKeyEnforcement:
+    """#674-B: Neue Semantik in run_ssh_command() — warn/strict Mode,
+    temp-known_hosts mit verified Keys, stderr-basiertes changed-key-Signal."""
+
+    @pytest.fixture
+    def skh_mocks(self, monkeypatch):
+        """Lässt Tests mode + get_verified_keys pro Case einstellen.
+        Default: warn, keine verified keys."""
+        state = {"mode": "warn", "verified_keys": []}
+
+        def fake_get_enforcement_mode():
+            return state["mode"]
+
+        def fake_get_verified_keys(target_type, target_id):
+            return list(state["verified_keys"])
+
+        monkeypatch.setattr(
+            "hydrahive_core.target_resolution.ssh_known_hosts.get_enforcement_mode",
+            fake_get_enforcement_mode,
+        )
+        monkeypatch.setattr(
+            "hydrahive_core.target_resolution.ssh_known_hosts.get_verified_keys",
+            fake_get_verified_keys,
+        )
+        return state
+
+    async def test_warn_mode_unknown_host_does_not_block(self, env, skh_mocks):
+        """warn + kein verified Key → SSH läuft trotzdem, Result-Flags gesetzt."""
+        skh_mocks["mode"] = "warn"
+        captured_args = []
+
+        async def fake_exec(*args, **kwargs):
+            captured_args.extend(args)
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"ok\n", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "echo ok",
+                target_type="server", target_id="prod-web",
+                timeout=5,
+            )
+        assert result["exit_code"] == 0
+        assert result["host_key_unverified"] is True
+        assert result["host_key_mode"] == "warn"
+        # Fallback-Path: kein temp-known_hosts, sondern /dev/null
+        assert "StrictHostKeyChecking=no" in captured_args
+        assert "UserKnownHostsFile=/dev/null" in captured_args
+
+    async def test_strict_mode_unknown_host_fails_closed(self, env, skh_mocks):
+        """strict + kein verified Key → fail-closed, kein SSH-Call überhaupt."""
+        skh_mocks["mode"] = "strict"
+        called = {"n": 0}
+
+        async def fake_exec(*args, **kwargs):
+            called["n"] += 1
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "echo ok",
+                target_type="server", target_id="prod-web",
+                timeout=5,
+            )
+        assert called["n"] == 0  # SSH darf gar nicht gestartet werden
+        assert result["exit_code"] == -1
+        assert result["host_key_unverified"] is True
+        assert result["host_key_mode"] == "strict"
+        assert "genehmigen" in result["error"].lower() or "vertraut" in result["error"].lower()
+
+    async def test_strict_mode_verified_key_uses_temp_known_hosts(self, env, skh_mocks):
+        """strict + verified Key → temp known_hosts, StrictHostKeyChecking=yes,
+        Datei existiert während des Calls und wird danach aufgeräumt."""
+        skh_mocks["mode"] = "strict"
+        skh_mocks["verified_keys"] = [{
+            "algorithm": "ssh-ed25519",
+            "public_key": "AAAAC3fake",
+            "fingerprint_sha256": "SHA256:abc",
+        }]
+        captured_args = []
+        known_hosts_during_call: list[str] = []
+
+        async def fake_exec(*args, **kwargs):
+            captured_args.extend(args)
+            # Extrahiere UserKnownHostsFile-Pfad aus args
+            for i, a in enumerate(args):
+                if a == "-o" and i + 1 < len(args) and args[i + 1].startswith("UserKnownHostsFile="):
+                    path = args[i + 1].split("=", 1)[1]
+                    known_hosts_during_call.append(path)
+                    assert Path(path).exists(), "temp known_hosts muss während Call existieren"
+                    content = Path(path).read_text()
+                    assert "1.2.3.4 ssh-ed25519 AAAAC3fake" in content
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"ok\n", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "echo ok",
+                target_type="server", target_id="prod-web",
+                timeout=5,
+            )
+        assert result["exit_code"] == 0
+        assert result.get("host_key_unverified") is not True
+        assert result.get("host_key_changed") is not True
+        assert "StrictHostKeyChecking=yes" in captured_args
+        assert "GlobalKnownHostsFile=/dev/null" in captured_args
+        # Cleanup: temp-File darf nach Call nicht mehr existieren
+        assert known_hosts_during_call, "fake_exec hat UserKnownHostsFile nicht gesehen"
+        for p in known_hosts_during_call:
+            assert not Path(p).exists(), f"temp known_hosts {p} nicht aufgeräumt"
+
+    async def test_strict_mode_changed_key_detected_via_stderr(self, env, skh_mocks):
+        """Verified Key im Store, aber Server liefert anderen Key: SSH bricht
+        ab, stderr enthält 'Host key verification failed' → wir klassifizieren
+        als host_key_changed."""
+        skh_mocks["mode"] = "strict"
+        skh_mocks["verified_keys"] = [{
+            "algorithm": "ssh-ed25519",
+            "public_key": "AAAAC3fake",
+            "fingerprint_sha256": "SHA256:abc",
+        }]
+
+        async def fake_exec(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 255
+            proc.communicate = AsyncMock(return_value=(
+                b"",
+                b"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+                b"@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n"
+                b"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+                b"Host key verification failed.\n",
+            ))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "echo ok",
+                target_type="server", target_id="prod-web",
+                timeout=5,
+            )
+        assert result["host_key_changed"] is True
+        assert result["exit_code"] == 255
+        assert result["host_key_mode"] == "strict"
+        assert "MITM" in result["error"] or "geändert" in result["error"]
+
+    async def test_no_target_context_no_enforcement_no_pollution(self, env, skh_mocks):
+        """target_type=None → kein Enforcement, aber /dev/null-Pollution-Fix
+        greift trotzdem (User-Entscheidung)."""
+        # skh_mocks ist gesetzt, aber wird nicht aufgerufen weil target_type=None
+        captured_args = []
+
+        async def fake_exec(*args, **kwargs):
+            captured_args.extend(args)
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "x", timeout=5,
+            )
+        assert "host_key_unverified" not in result
+        assert "host_key_mode" not in result
+        assert "UserKnownHostsFile=/dev/null" in captured_args
+        assert "GlobalKnownHostsFile=/dev/null" in captured_args
+        assert "StrictHostKeyChecking=no" in captured_args
+
+    async def test_known_hosts_path_never_leaks_in_error(self, env, skh_mocks):
+        """Wenn SSH-Start fehlschlägt während temp-known_hosts existiert,
+        darf der Pfad nicht in der Fehlermeldung stehen."""
+        skh_mocks["mode"] = "strict"
+        skh_mocks["verified_keys"] = [{
+            "algorithm": "ssh-ed25519",
+            "public_key": "AAAAC3fake",
+            "fingerprint_sha256": "SHA256:abc",
+        }]
+        key = env.server_keys_dir / "prod-web"
+        captured_paths: list[str] = []
+
+        async def fake_exec(*args, **kwargs):
+            # Pfad aus args extrahieren, dann synthetischen Fehler werfen der
+            # genau diesen Pfad mitbringt — Redaction muss ihn ausblenden.
+            for i, a in enumerate(args):
+                if a == "-o" and i + 1 < len(args) and args[i + 1].startswith("UserKnownHostsFile="):
+                    captured_paths.append(args[i + 1].split("=", 1)[1])
+            raise OSError(f"explode with {captured_paths[-1] if captured_paths else 'noop'}")
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22, key, "x",
+                target_type="server", target_id="prod-web",
+                timeout=5,
+            )
+        assert captured_paths, "fake_exec sollte den known_hosts-Pfad gesehen haben"
+        err_text = result.get("error", "")
+        assert captured_paths[-1] not in err_text
+        assert "<known_hosts>" in err_text
+        # Und Cleanup der temp-Datei trotz Exception:
+        assert not Path(captured_paths[-1]).exists()

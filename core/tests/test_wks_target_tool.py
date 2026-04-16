@@ -59,8 +59,12 @@ class TestWksShellExecTool:
         })
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
-            captured.update({"host": host, "port": ssh_port, "key": key_path, "cmd": command})
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
+            captured.update({
+                "host": host, "port": ssh_port, "key": key_path, "cmd": command,
+                "target_type": kwargs.get("target_type"),
+                "target_id": kwargs.get("target_id"),
+            })
             return {"stdout": "", "stderr": "", "exit_code": 0}
 
         with patch("hydrahive_core.target_resolution.run_ssh_command", side_effect=fake_run):
@@ -72,6 +76,9 @@ class TestWksShellExecTool:
         assert captured["port"] == 22
         assert captured["key"] == env.wks_keys_dir / "till"
         assert captured["cmd"] == "whoami"
+        # #674-B: WKS-Tool reicht target_type/target_id für Host-Key-Lookup durch
+        assert captured["target_type"] == "wks"
+        assert captured["target_id"] == "till"
         assert result["username"] == "till"
 
     async def test_requires_explicit_username_when_multiple(self, env):

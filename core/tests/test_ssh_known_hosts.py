@@ -443,6 +443,90 @@ class TestVerifyHostKey:
 # ═════════════════════════════════════════════════════ enforcement mode
 
 
+class TestRemoveHost:
+
+    def test_removes_existing_entry(self, store):
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        skh.record_scan_result(
+            "server", "prod-web",
+            ip="1.2.3.4", ssh_port=22, ssh_user="root",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+        assert skh.get_host_entry("server", "prod-web") is not None
+        assert skh.remove_host("server", "prod-web") is True
+        assert skh.get_host_entry("server", "prod-web") is None
+
+    def test_noop_when_missing(self, store):
+        assert skh.remove_host("server", "nope") is False
+
+    def test_invalid_target_returns_false(self, store):
+        assert skh.remove_host("server", "../etc") is False
+
+    def test_only_removes_matching_target_type(self, store):
+        """wks:till und server:till koexistieren — remove darf nicht das
+        falsche Target treffen."""
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        for ttype in ("server", "wks"):
+            skh.record_scan_result(
+                ttype, "till",
+                ip="1.2.3.4", ssh_port=22, ssh_user="root",
+                scanned_keys=[{
+                    "algorithm": "ssh-ed25519",
+                    "public_key": _FAKE_ED25519_B64,
+                    "fingerprint_sha256": fp,
+                }],
+            )
+        skh.remove_host("server", "till")
+        assert skh.get_host_entry("server", "till") is None
+        assert skh.get_host_entry("wks", "till") is not None
+
+
+class TestGetVerifiedKeys:
+
+    def test_empty_when_no_entry(self, store):
+        assert skh.get_verified_keys("server", "nope") == []
+
+    def test_empty_when_only_unverified(self, store):
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        skh.record_scan_result(
+            "server", "prod-web",
+            ip="1.2.3.4", ssh_port=22, ssh_user="root",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+        assert skh.get_verified_keys("server", "prod-web") == []
+
+    def test_returns_only_verified(self, store):
+        fp1 = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        fp2 = skh.compute_fingerprint(_FAKE_RSA_B64)
+        skh.record_scan_result(
+            "server", "prod-web",
+            ip="1.2.3.4", ssh_port=22, ssh_user="root",
+            scanned_keys=[
+                {"algorithm": "ssh-ed25519", "public_key": _FAKE_ED25519_B64,
+                 "fingerprint_sha256": fp1},
+                {"algorithm": "ssh-rsa", "public_key": _FAKE_RSA_B64,
+                 "fingerprint_sha256": fp2},
+            ],
+        )
+        skh.approve_key("server", "prod-web", fp1)
+        verified = skh.get_verified_keys("server", "prod-web")
+        assert len(verified) == 1
+        assert verified[0]["fingerprint_sha256"] == fp1
+        assert verified[0]["algorithm"] == "ssh-ed25519"
+        assert verified[0]["public_key"] == _FAKE_ED25519_B64
+
+    def test_invalid_target_returns_empty(self, store):
+        assert skh.get_verified_keys("server", "../x") == []
+
+
 class TestEnforcementMode:
 
     def test_default_warn(self, monkeypatch):

@@ -69,9 +69,11 @@ class TestServerShellTool:
     async def test_builds_ssh_command_correctly(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured.update({"host": host, "user": ssh_user, "port": ssh_port,
-                             "key": key_path, "cmd": command, "timeout": timeout})
+                             "key": key_path, "cmd": command, "timeout": timeout,
+                             "target_type": kwargs.get("target_type"),
+                             "target_id": kwargs.get("target_id")})
             return {"stdout": "ok\n", "stderr": "", "exit_code": 0}
 
         with patch("hydrahive_core.target_resolution.run_ssh_command", side_effect=fake_run):
@@ -85,6 +87,9 @@ class TestServerShellTool:
         assert captured["port"] == 2222
         assert captured["cmd"] == "uname -a"
         assert captured["timeout"] == 60
+        # #674-B: Tool-Handler müssen Target-Kontext für Host-Key-Lookup durchreichen
+        assert captured["target_type"] == "server"
+        assert captured["target_id"] == "prod-web"
         assert result["stdout"] == "ok\n"
         assert result["server_id"] == "prod-web"
 
@@ -246,7 +251,7 @@ class TestServerFileWriteTool:
     async def test_uses_base64_not_raw_shell(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured["cmd"] = command
             return {"stdout": "", "stderr": "", "exit_code": 0}
 
@@ -287,7 +292,7 @@ class TestServerFileWriteTool:
     async def test_mode_added_to_command(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured["cmd"] = command
             return {"stdout": "", "stderr": "", "exit_code": 0}
 

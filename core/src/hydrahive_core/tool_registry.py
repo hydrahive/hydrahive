@@ -2319,7 +2319,9 @@ class ServerShellTool(BaseTool):
         timeout = min(max(int(timeout or 60), 1), 120)
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
-            target.ssh_key_path, command, timeout=timeout,
+            target.ssh_key_path, command,
+            target_type="server", target_id=target.server_id,
+            timeout=timeout,
         )
         result["server_id"] = server_id
         result["command"] = command
@@ -2384,15 +2386,21 @@ class ServerFileReadTool(BaseTool):
         # also bleibt der Speicher-Footprint beschränkt.
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
-            target.ssh_key_path, remote_cmd, timeout=60,
+            target.ssh_key_path, remote_cmd,
+            target_type="server", target_id=target.server_id,
+            timeout=60,
             max_output=None,
         )
         if result.get("exit_code") != 0:
-            return {
+            out = {
                 "error": result.get("stderr") or result.get("error") or "read failed",
                 "exit_code": result.get("exit_code", -1),
                 "server_id": server_id, "path": path,
             }
+            for k in ("host_key_unverified", "host_key_changed", "host_key_mode"):
+                if k in result:
+                    out[k] = result[k]
+            return out
         content = result.get("stdout", "")
         content_bytes = len(content.encode("utf-8", errors="replace"))
         truncated = content_bytes > max_bytes
@@ -2483,14 +2491,20 @@ class ServerFileWriteTool(BaseTool):
         )
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
-            target.ssh_key_path, remote_cmd, timeout=60,
+            target.ssh_key_path, remote_cmd,
+            target_type="server", target_id=target.server_id,
+            timeout=60,
         )
         if result.get("exit_code") != 0:
-            return {
+            out = {
                 "error": result.get("stderr") or result.get("error") or "write failed",
                 "exit_code": result.get("exit_code", -1),
                 "server_id": server_id, "path": path,
             }
+            for k in ("host_key_unverified", "host_key_changed", "host_key_mode"):
+                if k in result:
+                    out[k] = result[k]
+            return out
         return {
             "server_id": server_id,
             "path": path,
@@ -2544,7 +2558,9 @@ class WksShellExecTool(BaseTool):
         timeout = min(max(int(timeout or 60), 1), 120)
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
-            target.ssh_key_path, command, timeout=timeout,
+            target.ssh_key_path, command,
+            target_type="wks", target_id=target.username,
+            timeout=timeout,
         )
         result["username"] = target.username
         result["command"] = command

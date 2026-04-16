@@ -17,10 +17,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import ssh_known_hosts
 from .settings import settings
 from .project_targets import get_project_targets
 
@@ -30,6 +33,14 @@ logger = logging.getLogger(__name__)
 _SAFE_ID = re.compile(r"^[a-z0-9_-]+$")
 _DEFAULT_WKS_SSH_PORT = 22
 MAX_SSH_OUTPUT = 32000
+
+# #674-B: Stabile OpenSSH-Fragmente bei Host-Key-Mismatch. ssh läuft mit
+# LC_ALL=C, damit die Meldungen englisch und verlässlich sind.
+_HOST_KEY_CHANGED_RE = re.compile(
+    r"Host key verification failed"
+    r"|REMOTE HOST IDENTIFICATION HAS CHANGED"
+    r"|Offending .* key",
+)
 
 
 class TargetAccessError(Exception):
@@ -195,11 +206,44 @@ def resolve_wks_target(
 
 # ────────────────────────────────────────────── SSH-Runner
 
-def _redact_key(text: str, key_path: Path) -> str:
-    """Ersetzt alle Vorkommen des Key-Pfads im Text durch <ssh_key>."""
+def _redact_key(text: str, key_path: Path, known_hosts_path: str | None = None) -> str:
+    """Ersetzt Key-Pfad und optionalen temp-known_hosts-Pfad durch Platzhalter."""
     if not text:
         return text
-    return text.replace(str(key_path), "<ssh_key>")
+    text = text.replace(str(key_path), "<ssh_key>")
+    if known_hosts_path:
+        text = text.replace(known_hosts_path, "<known_hosts>")
+    return text
+
+
+def _write_temp_known_hosts(host: str, verified_keys: list[dict]) -> str:
+    """Schreibt eine temporäre OpenSSH-known_hosts-Datei mit ausschließlich
+    verified Keys für `host`. Caller ist verantwortlich für Cleanup.
+
+    Format pro Zeile: `<host> <algorithm> <public_key_base64>`
+    """
+    fd, path = tempfile.mkstemp(prefix="hydrahive_known_hosts_", suffix=".tmp")
+    try:
+        lines = []
+        for k in verified_keys:
+            algo = k.get("algorithm")
+            pub = k.get("public_key")
+            if algo and pub:
+                lines.append(f"{host} {algo} {pub}\n")
+        with os.fdopen(fd, "w", encoding="ascii") as f:
+            f.writelines(lines)
+        os.chmod(path, 0o600)
+        return path
+    except Exception:
+        try:
+            os.close(fd)
+        except Exception:
+            pass
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+        raise
 
 
 async def run_ssh_command(
@@ -209,37 +253,101 @@ async def run_ssh_command(
     key_path: Path,
     command: str,
     *,
+    target_type: str | None = None,
+    target_id: str | None = None,
     timeout: int = 60,
     max_output: int | None = MAX_SSH_OUTPUT,
 ) -> dict:
-    """Führt einen Command via SSH aus und liefert {stdout, stderr, exit_code}.
+    """Führt einen Command via SSH aus und liefert {stdout, stderr, exit_code,
+    [host_key_unverified, host_key_changed, host_key_mode]}.
 
-    stdout wird auf max_output Zeichen gekürzt (Default MAX_SSH_OUTPUT=32000).
-    `max_output=None` schaltet stdout-Truncation aus — Aufrufer muss dann selbst
-    per Remote-Command (z.B. `head -c N`) begrenzen, damit der Runner nicht
-    unbeschränkt viel Speicher allokiert. Genutzt von server_file_read (#670),
-    damit max_bytes >32k tatsächlich funktioniert.
+    Host-Key-Enforcement (#674-B):
+    - Wenn target_type/target_id gesetzt und der Store verified Keys hat:
+      temp known_hosts + StrictHostKeyChecking=yes. SSH wird mit
+      UserKnownHostsFile=<temp> ausgeführt; bei Mismatch erkennen wir
+      "Host key verification failed" / "REMOTE HOST IDENTIFICATION HAS
+      CHANGED" im stderr und setzen host_key_changed=true.
+    - Wenn target_type/target_id gesetzt, aber keine verified Keys:
+      enforcement=strict → sofort fail-closed (kein SSH-Call),
+      enforcement=warn → SSH läuft (StrictHostKeyChecking=no), Result
+      bekommt host_key_unverified=true + host_key_mode="warn".
+    - Wenn target_type ODER target_id None: kein Enforcement, aber weiterhin
+      UserKnownHostsFile=/dev/null — System-known_hosts wird nie mehr
+      beschrieben.
 
-    stderr wird stets auf MAX_SSH_OUTPUT gekürzt — das ist ein Diagnose-Kanal,
-    der nie groß werden sollte. Key-Pfad wird in stderr/Exceptions redacted.
+    stdout-Truncation wie bisher (max_output=None schaltet ab, #670).
+    stderr wird stets auf MAX_SSH_OUTPUT gekürzt. Key-Pfad und temp-
+    known_hosts-Pfad werden in stderr/Fehler redacted.
     """
-    args = [
-        "ssh",
-        "-i", str(key_path),
-        "-o", "BatchMode=yes",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "ConnectTimeout=10",
-        "-p", str(ssh_port),
-        "-l", ssh_user,
-        host,
-        command,
-    ]
+    verified_keys: list[dict] = []
+    enforcement = "warn"
+    host_key_unverified = False
+
+    if target_type and target_id:
+        verified_keys = ssh_known_hosts.get_verified_keys(target_type, target_id)
+        enforcement = ssh_known_hosts.get_enforcement_mode()
+        if not verified_keys:
+            host_key_unverified = True
+            if enforcement == "strict":
+                logger.info(
+                    "run_ssh_command blocked: %s:%s ohne verified Host-Keys (strict)",
+                    target_type, target_id,
+                )
+                return {
+                    "error": (
+                        "Host-Key nicht vertraut — Admin muss im Admin-Panel "
+                        "unter Server → Host-Keys einen Fingerprint genehmigen."
+                    ),
+                    "exit_code": -1,
+                    "host_key_unverified": True,
+                    "host_key_mode": "strict",
+                }
+            logger.debug(
+                "run_ssh_command warn-mode: %s:%s ohne verified Host-Keys",
+                target_type, target_id,
+            )
+
+    known_hosts_path: str | None = None
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        args = ["ssh", "-i", str(key_path), "-o", "BatchMode=yes"]
+        if verified_keys:
+            known_hosts_path = _write_temp_known_hosts(host, verified_keys)
+            args.extend([
+                "-o", f"UserKnownHostsFile={known_hosts_path}",
+                "-o", "GlobalKnownHostsFile=/dev/null",
+                "-o", "StrictHostKeyChecking=yes",
+            ])
+        else:
+            # Kein Enforcement — aber niemals mehr System-known_hosts
+            # beschreiben (auch bei target_type=None, User-Entscheidung #674-B).
+            args.extend([
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "GlobalKnownHostsFile=/dev/null",
+                "-o", "StrictHostKeyChecking=no",
+            ])
+        args.extend([
+            "-o", "ConnectTimeout=10",
+            "-p", str(ssh_port),
+            "-l", ssh_user,
+            host,
+            command,
+        ])
+
+        # LC_ALL=C: OpenSSH-Meldungen englisch und stabil für stderr-Parsing.
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+        except FileNotFoundError:
+            return {"error": "ssh nicht verfügbar", "exit_code": -1}
+
         try:
             stdout_b, stderr_b = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout,
@@ -259,14 +367,42 @@ async def run_ssh_command(
         if len(err) > MAX_SSH_OUTPUT:
             err = err[:MAX_SSH_OUTPUT] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
 
-        err = _redact_key(err, key_path)
-        return {
+        err = _redact_key(err, key_path, known_hosts_path)
+        exit_code = proc.returncode if proc.returncode is not None else -1
+
+        # Host-Key-Mismatch erkennen (nur relevant wenn wir verified Keys haben)
+        host_key_changed = False
+        if verified_keys and exit_code != 0 and _HOST_KEY_CHANGED_RE.search(err):
+            host_key_changed = True
+            logger.warning(
+                "run_ssh_command host_key_changed: %s:%s (%s:%d)",
+                target_type, target_id, host, ssh_port,
+            )
+
+        result: dict = {
             "stdout": out,
             "stderr": err,
-            "exit_code": proc.returncode if proc.returncode is not None else -1,
+            "exit_code": exit_code,
         }
-    except FileNotFoundError:
-        return {"error": "ssh nicht verfügbar", "exit_code": -1}
+        if host_key_changed:
+            # Im strict-Modus wird die Nachricht user-facing verständlich.
+            result["host_key_changed"] = True
+            if enforcement == "strict":
+                result["error"] = (
+                    "Host-Key hat sich geändert — möglicher MITM. "
+                    "Admin muss den neuen Fingerprint genehmigen."
+                )
+                result["host_key_mode"] = "strict"
+        elif host_key_unverified:
+            result["host_key_unverified"] = True
+            result["host_key_mode"] = "warn"
+        return result
     except Exception as e:
-        msg = _redact_key(str(e), key_path)
+        msg = _redact_key(str(e), key_path, known_hosts_path)
         return {"error": msg, "exit_code": -1}
+    finally:
+        if known_hosts_path:
+            try:
+                os.unlink(known_hosts_path)
+            except Exception:
+                pass

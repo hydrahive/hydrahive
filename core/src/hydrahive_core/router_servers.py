@@ -224,6 +224,14 @@ def register_server_routes(
         for aid in list(agent_servers.keys()):
             agent_servers[aid] = [s for s in agent_servers[aid] if s != server_id]
         _save_agent_servers(agent_servers)
+        # #674-B: Host-Key-Pins gleich mit aufräumen, sonst Orphans im Store
+        try:
+            ssh_known_hosts.remove_host("server", server_id)
+        except Exception as exc:
+            logger.warning(
+                "ssh_known_hosts.remove_host('server','%s') fehlgeschlagen: %s",
+                server_id, type(exc).__name__,
+            )
         return {"deleted": True, "server_id": server_id}
 
     @admin_router.get("/admin/servers/{server_id}/test")
@@ -250,6 +258,8 @@ def register_server_routes(
             proc = await asyncio.create_subprocess_exec(
                 "ssh", "-i", use_key,
                 "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "GlobalKnownHostsFile=/dev/null",
                 "-o", "ConnectTimeout=5",
                 "-o", "BatchMode=yes",
                 "-p", str(ssh_port),

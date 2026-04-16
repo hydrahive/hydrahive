@@ -361,6 +361,53 @@ def delete_key(
     return host
 
 
+def remove_host(target_type: str, target_id: str) -> bool:
+    """Entfernt den gesamten Host-Entry aus dem Store. Idempotent.
+
+    Liefert True wenn etwas entfernt wurde, False wenn der Host gar nicht
+    existierte. Genutzt von delete_server() (#674-B).
+    """
+    try:
+        key = make_host_key(target_type, target_id)
+    except ValueError:
+        return False
+    store = load_known_hosts()
+    if key not in store["hosts"]:
+        return False
+    del store["hosts"][key]
+    save_known_hosts(store)
+    return True
+
+
+def get_verified_keys(target_type: str, target_id: str) -> list[dict]:
+    """Liefert alle Keys eines Hosts mit status='verified' als
+    [{algorithm, public_key, fingerprint_sha256}, ...].
+
+    Wird von run_ssh_command() in #674-B genutzt, um eine temp-Datei im
+    OpenSSH-known_hosts-Format zu erzeugen: `<host> <algorithm> <public_key>`.
+    """
+    try:
+        entry = get_host_entry(target_type, target_id)
+    except ValueError:
+        return []
+    if not entry:
+        return []
+    out: list[dict] = []
+    for hk in (entry.get("host_keys") or {}).values():
+        if hk.get("status") != "verified":
+            continue
+        algo = hk.get("algorithm")
+        pub = hk.get("public_key")
+        fp = hk.get("fingerprint_sha256")
+        if algo and pub and fp:
+            out.append({
+                "algorithm": algo,
+                "public_key": pub,
+                "fingerprint_sha256": fp,
+            })
+    return out
+
+
 def verify_host_key(
     target_type: str,
     target_id: str,
