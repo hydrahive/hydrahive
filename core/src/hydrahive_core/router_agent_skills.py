@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 
@@ -140,23 +140,96 @@ def register_agent_skill_routes(
     catalog_dir_provider: Callable[[], Path] | None = None,
 ) -> None:
     @auth_router.get("/agents/{agent_id}/skills")
-    def list_agent_skills(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
+    def list_agent_skills(
+        agent_id: str,
+        layers: str = Query("installed", pattern="^(installed|effective|all)$"),
+        _a: tuple[str, str] = Depends(require_auth),
+    ):
+        """
+        #659: Multi-Layer-View.
+
+        - `layers=installed` (Default, backwärtskompatibel zu #658):
+          nur agent-lokale Skills, altes Response-Shape.
+        - `layers=effective`: pro Stem der effektive Skill. `skills[]`
+          enthält nur agent/project/user (prompt-wirksam); System/Catalog
+          wird separat in `available[]` ausgewiesen und ist NICHT
+          prompt-wirksam.
+        - `layers=all`: wie `effective` plus `shadows[]` in `skills[]`
+          und `errors[]` auf Response-Ebene; `content` eingebettet pro
+          Skill für `/skill run`.
+        """
         agent_dir = Path(agents_dir) / agent_id
         if not agent_dir.exists():
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
 
-        skills_dir = _skills_dir(agents_dir, agent_id)
-        if not skills_dir.exists():
-            return {"agent_id": agent_id, "skills": []}
+        if layers == "installed":
+            skills_dir = _skills_dir(agents_dir, agent_id)
+            if not skills_dir.exists():
+                return {"agent_id": agent_id, "skills": []}
 
-        skills = []
-        for path in sorted(skills_dir.glob("*.md")):
-            skill = _parse_skill_file(path)
-            if skill:
-                skills.append(skill)
+            skills = []
+            for path in sorted(skills_dir.glob("*.md")):
+                skill = _parse_skill_file(path)
+                if skill:
+                    skills.append(skill)
 
-        skills.sort(key=lambda s: s.get("priority", 50))
-        return {"agent_id": agent_id, "skills": skills}
+            skills.sort(key=lambda s: s.get("priority", 50))
+            return {"agent_id": agent_id, "skills": skills}
+
+        # effective | all — Resolver-basierte Ansicht.
+        #
+        # Wichtig: `effective` bedeutet „in einem installierten Layer
+        # (agent/project/user) vorhanden". System-/Catalog-Skills tauchen
+        # ausdrücklich NICHT in `skills[]` auf — sie werden in `available[]`
+        # separat ausgewiesen. So kann `/skill run` strikt gegen `skills[]`
+        # matchen, ohne dass ein uninstalled Catalog-Skill aktivierbar wird.
+        from .skill_resolver import (
+            origin_to_dict,
+            resolve_full_view,
+            resolved_to_dict,
+        )
+        from .settings import settings as _settings
+
+        project_dir: Path | None = None
+        if agent_dir.parent.resolve() == _settings.projects_dir.resolve():
+            project_dir = agent_dir
+
+        catalog_dir = (Path(catalog_dir_provider()) if catalog_dir_provider
+                       else None)
+        resolved, errors = resolve_full_view(
+            agent_dir=_skills_dir(agents_dir, agent_id),
+            project_dir=(project_dir / "skills") if project_dir else None,
+            user_skills_dir=None,        # V1: nicht per Route adressiert
+            system_catalog_dir=catalog_dir,
+        )
+
+        effective: list[dict] = []
+        available: list[dict] = []
+        include_content = (layers == "all")
+        for r in resolved:
+            if r.effective.source == "system":
+                # System-only (nicht in agent/project/user vorhanden) →
+                # als installierbare Quelle ausweisen, nie als effective.
+                entry = origin_to_dict(r.effective)
+                entry["name"] = r.name
+                if include_content and r.effective.skill is not None:
+                    entry["content"] = r.effective.skill.content
+                available.append(entry)
+                continue
+            item = resolved_to_dict(r, include_content=include_content)
+            if layers == "effective":
+                item.pop("shadows", None)
+                item.pop("shadowed_by", None)
+            effective.append(item)
+
+        response: dict = {
+            "agent_id":  agent_id,
+            "skills":    effective,
+            "available": available,
+        }
+        if layers == "all":
+            response["errors"] = errors
+        return response
 
     @auth_router.post("/agents/{agent_id}/skills", status_code=201)
     def create_agent_skill(agent_id: str, req: SkillRequest, auth: tuple = Depends(require_auth)):

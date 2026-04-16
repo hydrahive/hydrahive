@@ -236,6 +236,21 @@ class HydraHiveSettings(BaseSettings):
         return self.opt_dir / "skills" / "catalog"
 
     @property
+    def users_data_dir(self) -> Path:
+        """Basis für per-User mutable Daten (#659). Layout:
+
+          <users_data_dir>/<username>/skills/<name>.md
+        """
+        return Path("/var/lib/hydrahive/users")
+
+    def user_skills_dir(self, username: str) -> Path:
+        """User-globaler Skill-Ordner (#659). Wirft ValueError bei ungültigem
+        Username. Verzeichnis wird NICHT automatisch angelegt."""
+        from .skill_resolver import validate_username
+        validate_username(username)
+        return self.users_data_dir / username / "skills"
+
+    @property
     def system_handbook(self) -> Path:
         return self.etc_dir / "system_handbook.md"
 

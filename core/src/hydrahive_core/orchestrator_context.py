@@ -26,6 +26,7 @@ from .prefetch import start_memory_prefetch
 from .semantic_index import score_texts
 from .settings import settings
 from .skill_loader import load_skills, select_skills, skills_to_system_prompt, Skill
+from .skill_resolver import resolve_prompt_skills
 
 logger = logging.getLogger(__name__)
 
@@ -469,7 +470,24 @@ async def build_system_prompt(
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
     if boss_cfg.agent_dir:
-        all_skills = load_skills(boss_cfg.agent_dir)
+        # #659: Multi-Layer-Resolver (agent > project > user). System/Catalog
+        # ist bewusst KEIN automatischer Prompt-Layer — Admin kontrolliert via
+        # `/skill install`, was prompt-wirksam wird.
+        # User-Layer-Runtime-Wiring: aktuell deaktiviert (kein sauberer
+        # owner_username am Orchestrator-Einstieg), siehe Follow-up in
+        # project_session_hydrahive_0416.md.
+        _resolved_prompt, _resolver_errors = resolve_prompt_skills(
+            agent_dir=boss_cfg.agent_dir,
+            project_dir=getattr(boss_cfg, "project_dir", None),
+            user_skills_dir=None,
+        )
+        if _resolver_errors:
+            logger.debug("skill-resolver: %d Fehler ignoriert: %s",
+                         len(_resolver_errors), _resolver_errors[:3])
+        all_skills: list[Skill] = [
+            r.effective.skill for r in _resolved_prompt
+            if r.effective.parsed_ok and r.effective.skill is not None
+        ]
         _skill_task = None
         if all_skills:
             skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]
@@ -872,7 +890,16 @@ def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], lis
     """
     if not boss_cfg.agent_dir:
         return [], []
-    all_skills = load_skills(boss_cfg.agent_dir)
+    # #659: gleicher Resolver wie build_system_prompt — konsistente Layer-Sicht.
+    _resolved_prompt, _ = resolve_prompt_skills(
+        agent_dir=boss_cfg.agent_dir,
+        project_dir=getattr(boss_cfg, "project_dir", None),
+        user_skills_dir=None,
+    )
+    all_skills: list[Skill] = [
+        r.effective.skill for r in _resolved_prompt
+        if r.effective.parsed_ok and r.effective.skill is not None
+    ]
     semantic_scores: dict[str, float] = {}
     if all_skills:
         skill_texts = [f"{s.skill} {' '.join(s.triggers)} {s.content[:300]}" for s in all_skills]

@@ -80,18 +80,63 @@ export function AgentChatPage() {
         const [sub, ...rest] = (args || "").trim().split(/\s+/);
         const name = rest.join(" ").trim();
         if (sub === "list") {
+          // #659: Multi-Layer-View.
+          // - `skills[]`  = effective (agent/project/user), prompt-wirksam.
+          // - `available[]` = System/Catalog, NICHT prompt-aktiv, erst per
+          //                   `/skill install <name>` aktivierbar.
+          // - `errors[]`  = Parse-Fehler aus beliebigem Layer.
+          type ShadowOrigin = { source: string; skill?: string; scope?: string };
+          type EffectiveSkill = {
+            name: string;
+            effective: ShadowOrigin;
+            shadows?: ShadowOrigin[];
+          };
+          type AvailableSkill = {
+            name: string;
+            source: string;
+            skill?: string;
+            scope?: string;
+          };
           (async () => {
             try {
-              const [installed, catalog] = await Promise.all([
-                api.get<{ skills: Array<{ filename?: string; skill?: string; scope?: string }> }>(`/agents/${id}/skills`),
-                api.get<{ skills: Array<{ name: string; skill?: string; scope?: string; description?: string }>; errors: Array<{ name: string; error: string }> }>(`/skills/catalog`),
-              ]);
-              const inst = installed.skills?.map(s => `• ${s.skill || s.filename} (${s.scope || "on-demand"})`).join("\n") || "— keine —";
-              const cat  = catalog.skills?.map(s => `• ${s.name} — ${s.description || s.skill || ""}`).join("\n") || "— Catalog leer —";
-              const errs = catalog.errors?.length
-                ? `\n\n⚠ Catalog-Fehler:\n${catalog.errors.map(e => `• ${e.name}: ${e.error}`).join("\n")}` : "";
+              const layered = await api.get<{
+                skills: EffectiveSkill[];
+                available: AvailableSkill[];
+                errors?: Array<{ name: string; source: string; error: string }>;
+              }>(`/agents/${id}/skills?layers=all`);
+
+              const groups: Record<string, string[]> = { agent: [], project: [], user: [] };
+              (layered.skills || []).forEach(s => {
+                const src = s.effective.source;
+                const scope = s.effective.scope || "on-demand";
+                const shadowSrcs = (s.shadows || []).map(x => x.source);
+                const suffix = shadowSrcs.length
+                  ? ` [shadows: ${shadowSrcs.join(", ")}]`
+                  : "";
+                if (groups[src]) {
+                  groups[src].push(`• ${s.name} (${scope})${suffix}`);
+                }
+              });
+              const effLines = (label: string, key: string) =>
+                groups[key].length ? `${label}:\n${groups[key].join("\n")}` : "";
+              const effective = [
+                effLines("Effective — agent", "agent"),
+                effLines("Effective — project", "project"),
+                effLines("Effective — user", "user"),
+              ].filter(Boolean).join("\n\n") || "— keine installierten Skills —";
+
+              const availLines = (layered.available || [])
+                .map(a => `• ${a.name} (${a.scope || "on-demand"})`)
+                .join("\n");
+              const catSection = availLines
+                ? `\n\nCatalog / available (nicht automatisch aktiv — '/skill install <name>'):\n${availLines}`
+                : "";
+
+              const resolverErrs = (layered.errors || []).length
+                ? `\n\n⚠ Resolver-Fehler:\n${layered.errors!.map(e => `• ${e.name} (${e.source}): ${e.error}`).join("\n")}` : "";
+
               chat.setMessages(ms => [...ms, mkMsg("system",
-                `Installierte Skills:\n${inst}\n\nVerfügbar im Catalog:\n${cat}${errs}`,
+                `${effective}${catSection}${resolverErrs}`,
               )]);
             } catch (e: any) {
               chat.setMessages(ms => [...ms, mkMsg("system", `Skill-Liste nicht abrufbar: ${e?.message || e}`)]);
@@ -126,22 +171,45 @@ export function AgentChatPage() {
           }
           (async () => {
             try {
-              const list = await api.get<{ skills: Array<{ filename?: string; skill?: string; content?: string }> }>(`/agents/${id}/skills`);
-              const skill = list.skills?.find(s => s.filename === runName || s.skill === runName);
-              if (!skill) {
-                chat.setMessages(ms => [...ms, mkMsg("system", `Skill '${runName}' nicht installiert. Erst '/skill install ${runName}' ausführen.`)]);
+              // #659: `skills[]` ist per API-Garantie nur installiert
+              // (agent/project/user). `available[]` ist System/Catalog.
+              // `/skill run` matcht strikt gegen `skills[]`; ein Treffer
+              // in `available[]` löst den Install-Hinweis aus.
+              type EffectiveItem = {
+                name: string;
+                effective: { source: string };
+                content?: string;
+              };
+              type AvailableItem = { name: string };
+              const list = await api.get<{
+                skills: EffectiveItem[];
+                available: AvailableItem[];
+              }>(`/agents/${id}/skills?layers=all`);
+
+              const hit = list.skills?.find(s => s.name === runName);
+              if (hit) {
+                const body = hit.content || "";
+                const prefix = `[Active skill: ${runName}]\n${body}\n---\n`;
+                if (question) {
+                  chat.send(prefix + question);
+                } else {
+                  chat.setInput(prefix);
+                  chat.setMessages(ms => [...ms, mkMsg("system",
+                    `Skill "${runName}" wurde in das Eingabefeld geladen. Ergänze deine Frage und sende die Nachricht.`,
+                  )]);
+                }
                 return;
               }
-              const body = skill.content || "";
-              const prefix = `[Active skill: ${runName}]\n${body}\n---\n`;
-              if (question) {
-                chat.send(prefix + question);
-              } else {
-                chat.setInput(prefix);
+              const avail = list.available?.find(a => a.name === runName);
+              if (avail) {
                 chat.setMessages(ms => [...ms, mkMsg("system",
-                  `Skill "${runName}" wurde in das Eingabefeld geladen. Ergänze deine Frage und sende die Nachricht.`,
+                  `Skill '${runName}' ist nur im Catalog. Erst '/skill install ${runName}' ausführen.`,
                 )]);
+                return;
               }
+              chat.setMessages(ms => [...ms, mkMsg("system",
+                `Skill '${runName}' nicht gefunden. Mit '/skill install <name>' aus dem Catalog installieren.`,
+              )]);
             } catch (e: any) {
               chat.setMessages(ms => [...ms, mkMsg("system", `Skill-Laden fehlgeschlagen: ${e?.message || e}`)]);
             }

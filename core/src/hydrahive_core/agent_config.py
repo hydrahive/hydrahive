@@ -120,6 +120,10 @@ class AgentConfig(BaseModel):
 
     # Wird nach dem Laden gesetzt, nicht aus YAML
     agent_dir: Path | None = Field(default=None, exclude=True)
+    # #659: Bei v2-Projekt-Agenten (Bridge agent_config_from_project) wird
+    # project_dir zusätzlich gesetzt, damit der Skill-Resolver den
+    # project-Layer kennt. Normale AgentConfigs lassen das Feld leer.
+    project_dir: Path | None = Field(default=None, exclude=True)
 
     @property
     def _heartbeat_raw(self) -> dict[str, Any]:
@@ -234,4 +238,6 @@ def agent_config_from_project(project_cfg) -> AgentConfig:
         execution_modes=exec_modes,
         risk_policy=_risk_policy,
         agent_dir=pcfg.project_dir,       # Projekt-Verzeichnis = Agent-Verzeichnis
+        project_dir=pcfg.project_dir,     # #659: expliziter Project-Layer; Resolver
+                                          # dedupliziert, weil agent_dir==project_dir.
     )
