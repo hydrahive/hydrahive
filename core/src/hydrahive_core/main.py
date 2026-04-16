@@ -33,6 +33,7 @@ from .rate_limiter import RateLimiter
 from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
+from .router_skills_catalog import register_skills_catalog_routes
 from .router_backup_restore import register_backup_restore_routes
 from .router_composer import register_admin_composer_routes, register_composer_routes, register_project_composer_routes
 from .router_adminfun import register_adminfun_routes
@@ -1470,6 +1471,15 @@ register_agent_skill_routes(
     require_auth=require_auth,
     check_agent_write=_check_agent_write,
     agents_dir=AGENTS_DIR,
+    logger=logger,
+    catalog_dir_provider=lambda: settings.skills_catalog_dir,
+)
+
+
+register_skills_catalog_routes(
+    auth_router,
+    require_auth=require_auth,
+    catalog_dir_provider=lambda: settings.skills_catalog_dir,
     logger=logger,
 )
 

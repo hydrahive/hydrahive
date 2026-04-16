@@ -28,13 +28,16 @@ export function AgentChatPage() {
 
   // Slash commands
   const SLASH_COMMANDS = [
-    { cmd: "/help",     desc: t("slashCommands.help") },
-    { cmd: "/clear",    desc: t("slashCommands.clear") },
-    { cmd: "/compact",  desc: t("slashCommands.compact") },
-    { cmd: "/model",    desc: t("slashCommands.model") },
-    { cmd: "/retry",    desc: t("slashCommands.retry") },
-    { cmd: "/remember", desc: t("slashCommands.remember") },
-    { cmd: "/history",  desc: t("slashCommands.history") },
+    { cmd: "/help",          desc: t("slashCommands.help") },
+    { cmd: "/clear",         desc: t("slashCommands.clear") },
+    { cmd: "/compact",       desc: t("slashCommands.compact") },
+    { cmd: "/model",         desc: t("slashCommands.model") },
+    { cmd: "/retry",         desc: t("slashCommands.retry") },
+    { cmd: "/remember",      desc: t("slashCommands.remember") },
+    { cmd: "/history",       desc: t("slashCommands.history") },
+    { cmd: "/skill list",    desc: "Installierte + verfügbare Skills anzeigen" },
+    { cmd: "/skill install", desc: "Skill aus Catalog installieren: /skill install <name>" },
+    { cmd: "/skill run",     desc: "Skill einmalig in nächste Nachricht injizieren: /skill run <name>" },
   ];
 
   // Chat hook
@@ -64,6 +67,88 @@ export function AgentChatPage() {
       if (cmd === "/retry") {
         const lastUser = [...chat.messages].reverse().find(m => m.role === "user");
         if (lastUser) chat.send(lastUser.content);
+        return true;
+      }
+      // #658: Skill-Bedienoberfläche
+      //   /skill list                     — installierte + Catalog-Skills anzeigen
+      //   /skill install <name>           — aus curated Catalog installieren
+      //   /skill run <name>               — CLIENT-SIDE one-shot context injection:
+      //                                     Skill-Body wird in den Composer geprependet;
+      //                                     NICHT persistent, NICHT im Backend-State.
+      //                                     Input wird beim nächsten Submit automatisch gelöscht.
+      if (cmd === "/skill") {
+        const [sub, ...rest] = (args || "").trim().split(/\s+/);
+        const name = rest.join(" ").trim();
+        if (sub === "list") {
+          (async () => {
+            try {
+              const [installed, catalog] = await Promise.all([
+                api.get<{ skills: Array<{ filename?: string; skill?: string; scope?: string }> }>(`/agents/${id}/skills`),
+                api.get<{ skills: Array<{ name: string; skill?: string; scope?: string; description?: string }>; errors: Array<{ name: string; error: string }> }>(`/skills/catalog`),
+              ]);
+              const inst = installed.skills?.map(s => `• ${s.skill || s.filename} (${s.scope || "on-demand"})`).join("\n") || "— keine —";
+              const cat  = catalog.skills?.map(s => `• ${s.name} — ${s.description || s.skill || ""}`).join("\n") || "— Catalog leer —";
+              const errs = catalog.errors?.length
+                ? `\n\n⚠ Catalog-Fehler:\n${catalog.errors.map(e => `• ${e.name}: ${e.error}`).join("\n")}` : "";
+              chat.setMessages(ms => [...ms, mkMsg("system",
+                `Installierte Skills:\n${inst}\n\nVerfügbar im Catalog:\n${cat}${errs}`,
+              )]);
+            } catch (e: any) {
+              chat.setMessages(ms => [...ms, mkMsg("system", `Skill-Liste nicht abrufbar: ${e?.message || e}`)]);
+            }
+          })();
+          return true;
+        }
+        if (sub === "install") {
+          if (!name) {
+            chat.setMessages(ms => [...ms, mkMsg("system", "Nutzung: /skill install <name>")]);
+            return true;
+          }
+          (async () => {
+            try {
+              await api.post(`/agents/${id}/skills/install`, { source: "catalog", name });
+              chat.setMessages(ms => [...ms, mkMsg("system", `Skill '${name}' installiert.`)]);
+            } catch (e: any) {
+              chat.setMessages(ms => [...ms, mkMsg("system", `Install fehlgeschlagen: ${e?.message || e}`)]);
+            }
+          })();
+          return true;
+        }
+        if (sub === "run") {
+          // Option B: "<name>" allein → Skill in Composer laden.
+          //           "<name> <frage>" → Skill-Prefix + Frage direkt senden.
+          // Client-side one-shot: kein Backend-State, keine persistente Aktivierung.
+          const runName = rest[0]?.trim() || "";
+          const question = rest.slice(1).join(" ").trim();
+          if (!runName) {
+            chat.setMessages(ms => [...ms, mkMsg("system", "Nutzung: /skill run <name> [frage]")]);
+            return true;
+          }
+          (async () => {
+            try {
+              const list = await api.get<{ skills: Array<{ filename?: string; skill?: string; content?: string }> }>(`/agents/${id}/skills`);
+              const skill = list.skills?.find(s => s.filename === runName || s.skill === runName);
+              if (!skill) {
+                chat.setMessages(ms => [...ms, mkMsg("system", `Skill '${runName}' nicht installiert. Erst '/skill install ${runName}' ausführen.`)]);
+                return;
+              }
+              const body = skill.content || "";
+              const prefix = `[Active skill: ${runName}]\n${body}\n---\n`;
+              if (question) {
+                chat.send(prefix + question);
+              } else {
+                chat.setInput(prefix);
+                chat.setMessages(ms => [...ms, mkMsg("system",
+                  `Skill "${runName}" wurde in das Eingabefeld geladen. Ergänze deine Frage und sende die Nachricht.`,
+                )]);
+              }
+            } catch (e: any) {
+              chat.setMessages(ms => [...ms, mkMsg("system", `Skill-Laden fehlgeschlagen: ${e?.message || e}`)]);
+            }
+          })();
+          return true;
+        }
+        chat.setMessages(ms => [...ms, mkMsg("system", "Unbekannter /skill-Subcommand. Verfügbar: list, install <name>, run <name>.")]);
         return true;
       }
       return false;

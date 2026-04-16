@@ -231,6 +231,11 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "skill_packages"
 
     @property
+    def skills_catalog_dir(self) -> Path:
+        """Curated Quelle für `/skill install` (#658). Read-only, Admin-befüllt."""
+        return self.opt_dir / "skills" / "catalog"
+
+    @property
     def system_handbook(self) -> Path:
         return self.etc_dir / "system_handbook.md"
 
