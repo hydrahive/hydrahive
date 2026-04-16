@@ -747,11 +747,18 @@ def register_project_routes(
         for t in raw["wks"]:
             user = users.get(t["username"]) or {}
             wks_entry = user.get("wks") or {}
+            # #677: ssh_port backward-compatible aus users.json
+            try:
+                wks_ssh_port = int(wks_entry.get("ssh_port") or 22)
+                if not (1 <= wks_ssh_port <= 65535):
+                    wks_ssh_port = 22
+            except (TypeError, ValueError):
+                wks_ssh_port = 22
             wks_out.append({
                 "username":   t["username"],
                 "ip":         wks_entry.get("ip", ""),
                 "ssh_user":   wks_entry.get("ssh_user", t["username"]),
-                "ssh_port":   22,
+                "ssh_port":   wks_ssh_port,
                 "role":       t.get("role", ""),
                 "note":       t.get("note", ""),
                 "has_ssh_key": (_settings.wks_keys_dir / t["username"]).exists(),

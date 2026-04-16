@@ -257,6 +257,34 @@ class TestResolveWks:
         with pytest.raises(TargetAccessError, match="Keine WKS"):
             resolve_wks_target(None, project_id="proj-a")
 
+    def test_custom_ssh_port_honored(self, env):
+        """#677: ssh_port aus users.json überschreibt Default 22."""
+        set_project_targets("proj-a", {
+            "servers": [],
+            "wks": [{"username": "till", "role": "dev", "note": ""}],
+        })
+        # users.json um ssh_port ergänzen
+        users = json.loads(env.users_config.read_text(encoding="utf-8"))
+        users["till"]["wks"]["ssh_port"] = 2222
+        env.users_config.write_text(json.dumps(users), encoding="utf-8")
+        r = resolve_wks_target("till", project_id="proj-a")
+        assert r.ssh_port == 2222
+
+    def test_invalid_ssh_port_falls_back_to_22(self, env):
+        """#677: defensive — stringiger/out-of-range Port fällt auf 22."""
+        set_project_targets("proj-a", {
+            "servers": [],
+            "wks": [{"username": "till", "role": "dev", "note": ""}],
+        })
+        users = json.loads(env.users_config.read_text(encoding="utf-8"))
+        users["till"]["wks"]["ssh_port"] = "kaputt"
+        env.users_config.write_text(json.dumps(users), encoding="utf-8")
+        assert resolve_wks_target("till", project_id="proj-a").ssh_port == 22
+
+        users["till"]["wks"]["ssh_port"] = 99999
+        env.users_config.write_text(json.dumps(users), encoding="utf-8")
+        assert resolve_wks_target("till", project_id="proj-a").ssh_port == 22
+
 
 # ═════════════════════════════════════════════════════ Error-Message-Safety
 

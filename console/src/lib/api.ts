@@ -288,7 +288,7 @@ export const api = {
   getWksOllamaModels: () => api.get<{models: {id:string;label:string;provider:string}[];wks_url:string|null;error?:string}>("/me/wks/ollama-models"),
   getWksPubkey:       () => api.get<{public_key:string}>("/me/wks/pubkey"),
   generateWksKey:     () => api.post<{generated:boolean;public_key:string}>("/me/wks/generate-key", {}),
-  testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string}>("/me/wks/test-ssh", {}),
+  testWksSsh:         () => api.post<{ok:boolean;hostname?:string;user?:string;error?:string;ssh_port?:number}>("/me/wks/test-ssh", {}),
   getWhatsApp:           () => api.get<WhatsAppStatus>("/me/whatsapp"),
   connectWhatsApp:       () => api.post<WhatsAppStatus>("/me/whatsapp/connect", {}),
   disconnectWhatsApp:    () => api.delete<{disconnected:boolean}>("/me/whatsapp"),
@@ -449,6 +449,7 @@ export interface WksConfig {
   configured:  boolean;
   ip:          string;
   ssh_user:    string;
+  ssh_port:    number;   // #677
   ollama_port: number;
   has_ssh_key: boolean;
 }
@@ -456,6 +457,7 @@ export interface WksConfig {
 export interface WksConfigPayload {
   ip:          string;
   ssh_user:    string;
+  ssh_port:    number;   // #677
   ollama_port: number;
   ssh_key?:    string;
 }

@@ -938,6 +938,7 @@
     "wksSectionConnection": "Connection",
     "wksIpLabel": "IP address",
     "wksSshUserLabel": "SSH user",
+    "wksSshPortLabel": "SSH port",
     "wksSshKeyLabel": "SSH key",
     "wksSshKeyPresent": "✓ SSH key present",
     "wksCopyPublicKey": "Copy public key",

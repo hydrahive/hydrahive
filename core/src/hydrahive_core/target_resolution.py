@@ -195,11 +195,22 @@ def resolve_wks_target(
     if not key_path.exists():
         raise TargetAccessError(f"WKS '{username}' hat keinen SSH-Key hinterlegt.")
 
+    # #677: ssh_port aus users.json, backward-compatible fallback auf 22.
+    # Defensive: falls jemand "ssh_port": "2222" als string gespeichert hat,
+    # trotzdem numerisch interpretieren; bei Parse-Fehler fällt auf 22 zurück.
+    raw_port = wks_entry.get("ssh_port")
+    try:
+        ssh_port = int(raw_port) if raw_port not in (None, "") else _DEFAULT_WKS_SSH_PORT
+    except (TypeError, ValueError):
+        ssh_port = _DEFAULT_WKS_SSH_PORT
+    if not (1 <= ssh_port <= 65535):
+        ssh_port = _DEFAULT_WKS_SSH_PORT
+
     return ResolvedWks(
         username=username,
         ip=ip,
         ssh_user=wks_entry.get("ssh_user") or username,
-        ssh_port=_DEFAULT_WKS_SSH_PORT,
+        ssh_port=ssh_port,
         ssh_key_path=key_path,
     )
 

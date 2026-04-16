@@ -19,7 +19,8 @@ Datenformat (settings.project_targets_config, 0o600):
 V1 (Phase #584-A):
 - reine Zuweisungs-/Prompt-Sicht.
 - KEINE Tool-Handler-Auth hier (kommt in #584-B).
-- WKS ssh_port hardcoded 22 (bestehendes WKS-Schema hat kein Feld).
+
+V1.1 (#677): WKS ssh_port wird aus users.json gelesen, Default 22.
 """
 from __future__ import annotations
 
@@ -261,13 +262,18 @@ def render_project_targets_for_prompt(
         if not ip:
             continue
         ssh_user = user_entry.get("ssh_user", t["username"])
+        # #677: ssh_port aus users.json (Default 22)
+        try:
+            port = int(user_entry.get("ssh_port") or _DEFAULT_WKS_SSH_PORT)
+        except (TypeError, ValueError):
+            port = _DEFAULT_WKS_SSH_PORT
         role = t.get("role", "")
         note = t.get("note", "")
         meta = [f"role: `{role}`"] if role else []
         head = f"**{t['username']}**"
         if meta:
             head += f" ({', '.join(meta)})"
-        line = f"- {head}: `{ssh_user}@{ip}:{_DEFAULT_WKS_SSH_PORT}`"
+        line = f"- {head}: `{ssh_user}@{ip}:{port}`"
         if note:
             line += f" — {note}"
         wks_lines.append(line)

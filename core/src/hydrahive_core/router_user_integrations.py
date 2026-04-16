@@ -50,8 +50,19 @@ def _username_from_auth(auth: tuple) -> str:
 class WksConfigRequest(BaseModel):
     ip: str
     ssh_user: str = ""
+    ssh_port: int = 22        # #677: Default 22, konfigurierbar 1..65535
     ollama_port: int = 11434
     ssh_key: str = ""
+
+    @validator("ssh_port")
+    def _validate_ssh_port(cls, v):
+        try:
+            port = int(v)
+        except (TypeError, ValueError):
+            raise ValueError("ssh_port muss eine Ganzzahl sein")
+        if not (1 <= port <= 65535):
+            raise ValueError("ssh_port muss zwischen 1 und 65535 liegen")
+        return port
 
 
 class MailConfigRequest(BaseModel):
@@ -262,6 +273,13 @@ def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
         return False
 
     ssh_user = str(wks.get("ssh_user", username)).strip() or username
+    # #677: ssh_port backward-compatible lesen
+    try:
+        ssh_port = int(wks.get("ssh_port") or 22)
+        if not (1 <= ssh_port <= 65535):
+            ssh_port = 22
+    except (TypeError, ValueError):
+        ssh_port = 22
     try:
         result = _sp.run(
             [
@@ -280,6 +298,8 @@ def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
                 "LogLevel=ERROR",
                 "-o",
                 "ConnectTimeout=3",
+                "-p",
+                str(ssh_port),
                 f"{ssh_user}@{ip}",
                 "true",
             ],
@@ -550,10 +570,18 @@ def register_user_integration_routes(
         username = _username_from_auth(auth)
         users = load_users()
         wks = users.get(username, {}).get("wks", {})
+        # #677: ssh_port backward-compatible (Default 22 bei fehlendem Feld)
+        try:
+            ssh_port = int(wks.get("ssh_port") or 22)
+            if not (1 <= ssh_port <= 65535):
+                ssh_port = 22
+        except (TypeError, ValueError):
+            ssh_port = 22
         return {
             "configured": bool(wks.get("ip")),
             "ip": wks.get("ip", ""),
             "ssh_user": wks.get("ssh_user", username),
+            "ssh_port": ssh_port,
             "ollama_port": wks.get("ollama_port", 11434),
             "has_ssh_key": (wks_keys_dir / username).exists(),
         }
@@ -585,11 +613,15 @@ def register_user_integration_routes(
         users[username]["wks"] = {
             "ip": req.ip.strip(),
             "ssh_user": req.ssh_user.strip() or username,
+            "ssh_port": req.ssh_port,         # #677: explizit speichern
             "ollama_port": req.ollama_port,
             "ssh_key_path": str(wks_keys_dir / username),
         }
         save_users(users)
-        logger.info("WKS konfiguriert: %s -> %s@%s", username, req.ssh_user or username, req.ip)
+        logger.info(
+            "WKS konfiguriert: %s -> %s@%s:%d",
+            username, req.ssh_user or username, req.ip, req.ssh_port,
+        )
         return {"updated": True}
 
     @auth_router.get("/me/wks/pubkey")
@@ -659,6 +691,13 @@ def register_user_integration_routes(
         wks = users.get(username, {}).get("wks", {})
         ip = wks.get("ip", "")
         ssh_user = wks.get("ssh_user", username)
+        # #677: ssh_port backward-compatible lesen
+        try:
+            ssh_port = int(wks.get("ssh_port") or 22)
+            if not (1 <= ssh_port <= 65535):
+                ssh_port = 22
+        except (TypeError, ValueError):
+            ssh_port = 22
         key_file = wks_keys_dir / username
 
         if not ip:
@@ -683,6 +722,8 @@ def register_user_integration_routes(
                 "ConnectTimeout=5",
                 "-o",
                 "BatchMode=yes",
+                "-p",
+                str(ssh_port),
                 f"{ssh_user}@{ip}",
                 "hostname && whoami",
                 stdout=_asyncio.subprocess.PIPE,
@@ -692,8 +733,13 @@ def register_user_integration_routes(
             if proc.returncode == 0:
                 output = stdout.decode().strip()
                 lines = output.splitlines()
-                return {"ok": True, "hostname": lines[0] if lines else "", "user": lines[1] if len(lines) > 1 else ""}
-            return {"ok": False, "error": stderr.decode().strip()[:300]}
+                return {
+                    "ok": True,
+                    "hostname": lines[0] if lines else "",
+                    "user": lines[1] if len(lines) > 1 else "",
+                    "ssh_port": ssh_port,   # #677: effektiver Port für UI
+                }
+            return {"ok": False, "error": stderr.decode().strip()[:300], "ssh_port": ssh_port}
         except _asyncio.TimeoutError:
             return {"ok": False, "error": "Timeout - Host nicht erreichbar"}
         except Exception as e:

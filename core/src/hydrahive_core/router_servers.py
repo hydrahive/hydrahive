@@ -119,11 +119,18 @@ def register_server_routes(
         for username, udata in sorted(users.items()):
             wks = (udata or {}).get("wks") or {}
             ip = (wks.get("ip") or "").strip()
+            # #677: ssh_port backward-compatible (Default 22)
+            try:
+                wks_ssh_port = int(wks.get("ssh_port") or 22)
+                if not (1 <= wks_ssh_port <= 65535):
+                    wks_ssh_port = 22
+            except (TypeError, ValueError):
+                wks_ssh_port = 22
             out.append({
                 "username":    username,
                 "ip":          ip,
                 "ssh_user":    wks.get("ssh_user", username) or username,
-                "ssh_port":    22,
+                "ssh_port":    wks_ssh_port,
                 "configured":  bool(ip),
                 "has_ssh_key": (wks_keys_dir / username).exists(),
             })

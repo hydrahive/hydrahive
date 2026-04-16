@@ -1585,6 +1585,7 @@ function WksTab() {
   const [wks,         setWks]         = useState<WksConfig | null>(null);
   const [ip,          setIp]          = useState("");
   const [sshUser,     setSshUser]     = useState("");
+  const [sshPort,     setSshPort]     = useState(22);         // #677
   const [ollamaPort,  setOllamaPort]  = useState(11434);
   const [sshKey,      setSshKey]      = useState("");
   const [saving,      setSaving]      = useState(false);
@@ -1602,6 +1603,7 @@ function WksTab() {
       setWks(d);
       setIp(d.ip);
       setSshUser(d.ssh_user);
+      setSshPort(d.ssh_port || 22);
       setOllamaPort(d.ollama_port);
       if (d.has_ssh_key) {
         api.getWksPubkey().then(r => setPubKey(r.public_key)).catch(e => console.error("Failed to load WKS public key", e));
@@ -1613,11 +1615,12 @@ function WksTab() {
     e.preventDefault();
     setSaving(true); setMsg("");
     try {
-      await api.updateWks({ ip, ssh_user: sshUser, ollama_port: ollamaPort, ssh_key: sshKey });
+      await api.updateWks({ ip, ssh_user: sshUser, ssh_port: sshPort, ollama_port: ollamaPort, ssh_key: sshKey });
       setMsg(t("myAgent.wksSave") + " ✓");
       setSshKey("");
       const updated = await api.getWks();
       setWks(updated);
+      setSshPort(updated.ssh_port || 22);
       setTimeout(() => setMsg(""), 3000);
     } catch(e) { setMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(false); }
@@ -1640,8 +1643,12 @@ function WksTab() {
     setSshTesting(true); setSshTestMsg("");
     try {
       const r = await api.testWksSsh();
-      if (r.ok) setSshTestMsg(`✓ Verbunden — ${r.hostname} (${r.user})`);
-      else setSshTestMsg(`✗ ${r.error}`);
+      if (r.ok) {
+        const portSuffix = r.ssh_port && r.ssh_port !== 22 ? `:${r.ssh_port}` : "";
+        setSshTestMsg(`✓ Verbunden — ${r.hostname}${portSuffix} (${r.user})`);
+      } else {
+        setSshTestMsg(`✗ ${r.error}`);
+      }
     } catch(e) { setSshTestMsg(e instanceof Error ? e.message : t("common.error")); }
     finally { setSshTesting(false); }
   }
@@ -1687,7 +1694,7 @@ function WksTab() {
 
         <section className="space-y-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("myAgent.wksSectionConnection")}</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-[2fr_2fr_1fr] gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">{t("myAgent.wksIpLabel")}</label>
               <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.100"
@@ -1697,6 +1704,23 @@ function WksTab() {
               <label className="text-xs text-muted-foreground">{t("myAgent.wksSshUserLabel")}</label>
               <input value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="till"
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">
+                {t("myAgent.wksSshPortLabel", { defaultValue: "SSH-Port" })}
+              </label>
+              <input
+                type="number" min={1} max={65535}
+                value={sshPort}
+                onChange={e => {
+                  const v = e.target.value === "" ? NaN : parseInt(e.target.value, 10);
+                  if (Number.isFinite(v) && v >= 1 && v <= 65535) setSshPort(v);
+                  else if (e.target.value === "") setSshPort(22);
+                }}
+                onBlur={() => { if (!(sshPort >= 1 && sshPort <= 65535)) setSshPort(22); }}
+                placeholder="22"
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
             </div>
           </div>
           {/* SSH Key */}
