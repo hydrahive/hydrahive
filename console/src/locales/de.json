@@ -1498,9 +1498,11 @@
   },
   "projectSettings": {
     "title": "Agent-Settings",
+    "versionBadge": "v2",
     "save": "Speichern",
     "saved": "Gespeichert!",
     "noData": "Keine Daten",
+    "loadFailed": "Fehler beim Laden",
     "saveFailed": "Fehler beim Speichern",
     "trustedDeniedNonAdmin": "Trusted-Modus für den Projekt-Boss darf nur durch Admins gesetzt werden.",
     "execMode": {
@@ -1535,6 +1537,78 @@
       "open": "Öffnen",
       "close": "Schließen",
       "intro": "Der Composer überschreibt die AGENT.md dieses Projekts aus Bausteinen. Vor dem Überschreiben wird ein Backup als AGENT.md.backup angelegt. config.yaml und Mitglieder bleiben unberührt."
+    },
+    "llm": {
+      "title": "LLM-Konfiguration",
+      "provider": "Provider",
+      "model": "Modell",
+      "temperature": "Temperature: {{value}}",
+      "maxTokens": "Max Tokens",
+      "apiKey": "API-Key (Env-Variable)",
+      "apiKeyDefault": "Standard (aus Environment)"
+    },
+    "whatsapp": {
+      "saved": "Gespeichert!",
+      "saveFailed": "WhatsApp-Config speichern fehlgeschlagen",
+      "previewText": "Hallo, ich bin dein HydraHive Assistent.",
+      "previewFailed": "Preview fehlgeschlagen",
+      "connectFailed": "WhatsApp-Verbindung fehlgeschlagen",
+      "disconnectFailed": "Trennen fehlgeschlagen",
+      "status": {
+        "connected": "Verbunden",
+        "connectedWithPhone": "Verbunden ({{phone}})",
+        "connecting": "Verbinde...",
+        "unavailable": "Bridge nicht erreichbar",
+        "disconnected": "Nicht verbunden"
+      },
+      "qrHint": "QR-Code mit WhatsApp scannen:",
+      "waitingQr": "Warte auf QR-Scan...",
+      "btnConnect": "WhatsApp verbinden",
+      "btnDisconnect": "WhatsApp trennen",
+      "filterIntro": "Diese Einstellungen gelten fuer deine persoenliche WhatsApp-Verbindung.",
+      "privateChats": "Private Nachrichten",
+      "groupChats": "Gruppen-Nachrichten",
+      "keywordLabel": "Aktivierungs-Keyword (leer = immer antworten)",
+      "keywordPlaceholder": "z.B. !bot",
+      "ownerNumbers": "Eigene Nummern (elevated)",
+      "allowedNumbers": "Whitelist (leer = alle)",
+      "blockedNumbers": "Blacklist",
+      "voiceMessages": "Sprachnachrichten",
+      "voiceMode": {
+        "never": "Nie (nur Text)",
+        "echo": "Nur Antwort auf Sprachnachrichten",
+        "always": "Immer als Audio"
+      },
+      "ttsVoice": "TTS-Stimme",
+      "previewTitle": "Vorhoeren",
+      "saveBtn": "WhatsApp-Config speichern"
+    },
+    "messenger": {
+      "saved": "Gespeichert!",
+      "saveFailed": "Messenger-Config speichern fehlgeschlagen",
+      "title": "Messenger-Routing",
+      "subtitle": "Welche Messenger-Kanaele leiten Nachrichten an dieses Projekt?",
+      "discord": {
+        "botToken": "Bot-Token (Env-Variable)",
+        "notConfigured": "Nicht konfiguriert",
+        "channelIds": "Channel-IDs (eine pro Zeile)"
+      },
+      "telegram": {
+        "botToken": "Bot-Token (Env-Variable)",
+        "notConfigured": "Nicht konfiguriert",
+        "chatIds": "Chat-IDs (eine pro Zeile)"
+      },
+      "saveBtn": "Messenger-Config speichern"
+    },
+    "bootstrapMemory": {
+      "title": "Memory aufbauen",
+      "description": "Scannt Projekt-Verzeichnis und erstellt eine strukturierte Memory-Basis (Verzeichnisbaum, wichtige Dateien). Nur einmalig nötig — der Agent pflegt die Memory danach selbst.",
+      "btnBuild": "Memory aufbauen",
+      "btnRebuild": "Neu aufbauen",
+      "skipped": "Memory bereits vorhanden. Erzwingen mit 'Neu aufbauen'.",
+      "started": "Memory-Aufbau gestartet — dauert einige Sekunden.",
+      "error": "Fehler: {{message}}",
+      "unknown": "Unbekannt"
     }
   },
   "composer": {

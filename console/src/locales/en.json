@@ -1498,9 +1498,11 @@
   },
   "projectSettings": {
     "title": "Agent settings",
+    "versionBadge": "v2",
     "save": "Save",
     "saved": "Saved!",
     "noData": "No data",
+    "loadFailed": "Failed to load",
     "saveFailed": "Save failed",
     "trustedDeniedNonAdmin": "Trusted mode for the project boss can only be set by admins.",
     "execMode": {
@@ -1535,6 +1537,78 @@
       "open": "Open",
       "close": "Close",
       "intro": "The composer overwrites this project's AGENT.md from blocks. The previous version is saved as AGENT.md.backup before overwriting. config.yaml and members remain untouched."
+    },
+    "llm": {
+      "title": "LLM configuration",
+      "provider": "Provider",
+      "model": "Model",
+      "temperature": "Temperature: {{value}}",
+      "maxTokens": "Max tokens",
+      "apiKey": "API key (env variable)",
+      "apiKeyDefault": "Default (from environment)"
+    },
+    "whatsapp": {
+      "saved": "Saved!",
+      "saveFailed": "Saving WhatsApp config failed",
+      "previewText": "Hello, I am your HydraHive assistant.",
+      "previewFailed": "Preview failed",
+      "connectFailed": "WhatsApp connection failed",
+      "disconnectFailed": "Disconnect failed",
+      "status": {
+        "connected": "Connected",
+        "connectedWithPhone": "Connected ({{phone}})",
+        "connecting": "Connecting...",
+        "unavailable": "Bridge unreachable",
+        "disconnected": "Not connected"
+      },
+      "qrHint": "Scan QR code with WhatsApp:",
+      "waitingQr": "Waiting for QR scan...",
+      "btnConnect": "Connect WhatsApp",
+      "btnDisconnect": "Disconnect WhatsApp",
+      "filterIntro": "These settings apply to your personal WhatsApp connection.",
+      "privateChats": "Private messages",
+      "groupChats": "Group messages",
+      "keywordLabel": "Activation keyword (empty = always reply)",
+      "keywordPlaceholder": "e.g. !bot",
+      "ownerNumbers": "Own numbers (elevated)",
+      "allowedNumbers": "Whitelist (empty = all)",
+      "blockedNumbers": "Blacklist",
+      "voiceMessages": "Voice messages",
+      "voiceMode": {
+        "never": "Never (text only)",
+        "echo": "Only reply to voice messages",
+        "always": "Always as audio"
+      },
+      "ttsVoice": "TTS voice",
+      "previewTitle": "Preview",
+      "saveBtn": "Save WhatsApp config"
+    },
+    "messenger": {
+      "saved": "Saved!",
+      "saveFailed": "Saving messenger config failed",
+      "title": "Messenger routing",
+      "subtitle": "Which messenger channels route messages to this project?",
+      "discord": {
+        "botToken": "Bot token (env variable)",
+        "notConfigured": "Not configured",
+        "channelIds": "Channel IDs (one per line)"
+      },
+      "telegram": {
+        "botToken": "Bot token (env variable)",
+        "notConfigured": "Not configured",
+        "chatIds": "Chat IDs (one per line)"
+      },
+      "saveBtn": "Save messenger config"
+    },
+    "bootstrapMemory": {
+      "title": "Build memory",
+      "description": "Scans the project directory and creates a structured memory base (directory tree, important files). Only needed once — the agent maintains memory afterwards.",
+      "btnBuild": "Build memory",
+      "btnRebuild": "Rebuild",
+      "skipped": "Memory already present. Force with 'Rebuild'.",
+      "started": "Memory build started — takes a few seconds.",
+      "error": "Error: {{message}}",
+      "unknown": "Unknown"
     }
   },
   "composer": {

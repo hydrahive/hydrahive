@@ -182,10 +182,10 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         voice_mode: waVoiceMode,
         voice_name: waVoiceName,
       });
-      setWaSuccess("Gespeichert!");
+      setWaSuccess(t("projectSettings.whatsapp.saved", { defaultValue: "Gespeichert!" }));
       setTimeout(() => setWaSuccess(""), 3000);
     } catch (e: any) {
-      setError(e?.message || "WhatsApp-Config speichern fehlgeschlagen");
+      setError(e?.message || t("projectSettings.whatsapp.saveFailed", { defaultValue: "WhatsApp-Config speichern fehlgeschlagen" }));
     } finally {
       setWaSaving(false);
     }
@@ -216,10 +216,10 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       if (existing.matrix) messenger.matrix = existing.matrix;
 
       await api.put(`/projects/${projectId}/settings`, { messenger });
-      setMessengerSuccess("Gespeichert!");
+      setMessengerSuccess(t("projectSettings.messenger.saved", { defaultValue: "Gespeichert!" }));
       setTimeout(() => setMessengerSuccess(""), 3000);
     } catch (e: any) {
-      setError(e?.message || "Messenger-Config speichern fehlgeschlagen");
+      setError(e?.message || t("projectSettings.messenger.saveFailed", { defaultValue: "Messenger-Config speichern fehlgeschlagen" }));
     } finally {
       setMessengerSaving(false);
     }
@@ -232,9 +232,12 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       const res = await fetch("/api/me/whatsapp/voice-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ voice: waVoiceName, text: "Hallo, ich bin dein HydraHive Assistent." }),
+        body: JSON.stringify({
+          voice: waVoiceName,
+          text: t("projectSettings.whatsapp.previewText", { defaultValue: "Hallo, ich bin dein HydraHive Assistent." }),
+        }),
       });
-      if (!res.ok) throw new Error("Preview fehlgeschlagen");
+      if (!res.ok) throw new Error(t("projectSettings.whatsapp.previewFailed", { defaultValue: "Preview fehlgeschlagen" }));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -273,7 +276,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       // Timeout nach 2 Minuten
       setTimeout(() => { clearInterval(poll); setWaConnecting(false); }, 120000);
     } catch (e: any) {
-      setError(e?.message || "WhatsApp-Verbindung fehlgeschlagen");
+      setError(e?.message || t("projectSettings.whatsapp.connectFailed", { defaultValue: "WhatsApp-Verbindung fehlgeschlagen" }));
       setWaConnecting(false);
     }
   }
@@ -285,7 +288,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setWaQr("");
       setWaPhone("");
     } catch (e: any) {
-      setError(e?.message || "Trennen fehlgeschlagen");
+      setError(e?.message || t("projectSettings.whatsapp.disconnectFailed", { defaultValue: "Trennen fehlgeschlagen" }));
     }
   }
 
@@ -313,7 +316,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       setTelegramBotTokenEnv(m.telegram?.bot_token_env || "");
       setTelegramChatIds((m.telegram?.chat_ids || []).join("\n"));
     } catch (e: any) {
-      setError(e?.message || "Fehler beim Laden");
+      setError(e?.message || t("projectSettings.loadFailed", { defaultValue: "Fehler beim Laden" }));
     } finally {
       setLoading(false);
     }
@@ -334,12 +337,15 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     try {
       const res = await api.post<any>(`/projects/${projectId}/bootstrap-memory${force ? "?force=true" : ""}`, {});
       if ((res as any).skipped) {
-        setBootstrapResult("Memory bereits vorhanden. Erzwingen mit 'Neu aufbauen'.");
+        setBootstrapResult(t("projectSettings.bootstrapMemory.skipped", { defaultValue: "Memory bereits vorhanden. Erzwingen mit 'Neu aufbauen'." }));
       } else {
-        setBootstrapResult("Memory-Aufbau gestartet — dauert einige Sekunden.");
+        setBootstrapResult(t("projectSettings.bootstrapMemory.started", { defaultValue: "Memory-Aufbau gestartet — dauert einige Sekunden." }));
       }
     } catch (e: any) {
-      setBootstrapResult(`Fehler: ${e?.message || "Unbekannt"}`);
+      setBootstrapResult(t("projectSettings.bootstrapMemory.error", {
+        message: e?.message || t("projectSettings.bootstrapMemory.unknown", { defaultValue: "Unbekannt" }),
+        defaultValue: "Fehler: {{message}}",
+      }));
     } finally {
       setBootstrapRunning(false);
     }
@@ -401,7 +407,9 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           <Bot className="h-4 w-4 text-primary" />
           {t("projectSettings.title", { defaultValue: "Agent-Settings" })}
           {data.is_v2 && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">v2</span>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              {t("projectSettings.versionBadge", { defaultValue: "v2" })}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -425,12 +433,12 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
           <div className="flex items-center gap-2 text-xs font-medium">
             <Cpu className="h-3.5 w-3.5 text-primary" />
-            LLM-Konfiguration
+            {t("projectSettings.llm.title", { defaultValue: "LLM-Konfiguration" })}
           </div>
 
           {/* Provider */}
           <div>
-            <label className="text-[11px] text-muted-foreground">Provider</label>
+            <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.provider", { defaultValue: "Provider" })}</label>
             <select value={provider} onChange={e => { setProvider(e.target.value); setModel(MODELS[e.target.value]?.[0] || ""); }}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
               {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -439,7 +447,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
           {/* Model */}
           <div>
-            <label className="text-[11px] text-muted-foreground">Modell</label>
+            <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.model", { defaultValue: "Modell" })}</label>
             <select value={model} onChange={e => setModel(e.target.value)}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
               {(MODELS[provider] || []).map(m => <option key={m} value={m}>{m}</option>)}
@@ -449,7 +457,9 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
           {/* Temperature */}
           <div>
-            <label className="text-[11px] text-muted-foreground">Temperature: {temperature}</label>
+            <label className="text-[11px] text-muted-foreground">
+              {t("projectSettings.llm.temperature", { value: temperature, defaultValue: "Temperature: {{value}}" })}
+            </label>
             <input type="range" min="0" max="1" step="0.1" value={temperature}
               onChange={e => setTemperature(parseFloat(e.target.value))}
               className="mt-0.5 w-full" />
@@ -457,17 +467,17 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
           {/* Max Tokens */}
           <div>
-            <label className="text-[11px] text-muted-foreground">Max Tokens</label>
+            <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.maxTokens", { defaultValue: "Max Tokens" })}</label>
             <input type="number" value={maxTokens} onChange={e => setMaxTokens(parseInt(e.target.value) || 4096)}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs" />
           </div>
 
           {/* API Key */}
           <div>
-            <label className="text-[11px] text-muted-foreground">API-Key (Env-Variable)</label>
+            <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.apiKey", { defaultValue: "API-Key (Env-Variable)" })}</label>
             <select value={apiKeyEnv} onChange={e => setApiKeyEnv(e.target.value)}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-              <option value="">Standard (aus Environment)</option>
+              <option value="">{t("projectSettings.llm.apiKeyDefault", { defaultValue: "Standard (aus Environment)" })}</option>
               {availableKeys.map(k => (
                 <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
               ))}
@@ -620,17 +630,22 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             waStatus === "connecting" || waConnecting ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
             "bg-muted text-muted-foreground"
           }`}>
-            {waStatus === "connected" ? `Verbunden${waPhone ? ` (${waPhone})` : ""}` :
-             waConnecting ? "Verbinde..." :
-             waStatus === "unavailable" ? "Bridge nicht erreichbar" :
-             "Nicht verbunden"}
+            {waStatus === "connected"
+              ? (waPhone
+                  ? t("projectSettings.whatsapp.status.connectedWithPhone", { phone: waPhone, defaultValue: "Verbunden ({{phone}})" })
+                  : t("projectSettings.whatsapp.status.connected", { defaultValue: "Verbunden" }))
+              : waConnecting
+                ? t("projectSettings.whatsapp.status.connecting", { defaultValue: "Verbinde..." })
+                : waStatus === "unavailable"
+                  ? t("projectSettings.whatsapp.status.unavailable", { defaultValue: "Bridge nicht erreichbar" })
+                  : t("projectSettings.whatsapp.status.disconnected", { defaultValue: "Nicht verbunden" })}
           </span>
         </div>
 
         {/* QR-Code */}
         {waQr && waStatus !== "connected" && (
           <div className="flex flex-col items-center gap-2 p-2">
-            <p className="text-xs text-muted-foreground">QR-Code mit WhatsApp scannen:</p>
+            <p className="text-xs text-muted-foreground">{t("projectSettings.whatsapp.qrHint", { defaultValue: "QR-Code mit WhatsApp scannen:" })}</p>
             <img src={waQr.startsWith("data:") ? waQr : `data:image/png;base64,${waQr}`} alt="WhatsApp QR" className="w-48 h-48 rounded-lg border" />
           </div>
         )}
@@ -641,12 +656,14 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             <button onClick={connectWhatsApp} disabled={waConnecting}
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs text-white transition hover:bg-green-700 disabled:opacity-50">
               {waConnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              {waConnecting ? "Warte auf QR-Scan..." : "WhatsApp verbinden"}
+              {waConnecting
+                ? t("projectSettings.whatsapp.waitingQr", { defaultValue: "Warte auf QR-Scan..." })
+                : t("projectSettings.whatsapp.btnConnect", { defaultValue: "WhatsApp verbinden" })}
             </button>
           ) : (
             <button onClick={disconnectWhatsApp}
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs text-destructive transition hover:bg-destructive/10">
-              WhatsApp trennen
+              {t("projectSettings.whatsapp.btnDisconnect", { defaultValue: "WhatsApp trennen" })}
             </button>
           )}
         </div>
@@ -655,47 +672,47 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
         {waStatus === "connected" && (
           <div className="space-y-3 border-t pt-3">
             <p className="text-[10px] text-muted-foreground">
-              Diese Einstellungen gelten fuer deine persoenliche WhatsApp-Verbindung.
+              {t("projectSettings.whatsapp.filterIntro", { defaultValue: "Diese Einstellungen gelten fuer deine persoenliche WhatsApp-Verbindung." })}
             </p>
 
             {/* Checkboxen */}
             <div className="flex gap-4">
               <label className="flex items-center gap-1.5 text-xs cursor-pointer">
                 <input type="checkbox" checked={waPrivateChats} onChange={e => setWaPrivateChats(e.target.checked)} className="h-3 w-3 rounded" />
-                Private Nachrichten
+                {t("projectSettings.whatsapp.privateChats", { defaultValue: "Private Nachrichten" })}
               </label>
               <label className="flex items-center gap-1.5 text-xs cursor-pointer">
                 <input type="checkbox" checked={waGroupChats} onChange={e => setWaGroupChats(e.target.checked)} className="h-3 w-3 rounded" />
-                Gruppen-Nachrichten
+                {t("projectSettings.whatsapp.groupChats", { defaultValue: "Gruppen-Nachrichten" })}
               </label>
             </div>
 
             {/* Keyword */}
             <div>
-              <label className="text-[11px] text-muted-foreground">Aktivierungs-Keyword (leer = immer antworten)</label>
+              <label className="text-[11px] text-muted-foreground">{t("projectSettings.whatsapp.keywordLabel", { defaultValue: "Aktivierungs-Keyword (leer = immer antworten)" })}</label>
               <input type="text" value={waRequireKeyword} onChange={e => setWaRequireKeyword(e.target.value)}
-                placeholder="z.B. !bot"
+                placeholder={t("projectSettings.whatsapp.keywordPlaceholder", { defaultValue: "z.B. !bot" })}
                 className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs" />
             </div>
 
             {/* Nummern-Listen */}
             <div className="grid gap-3 md:grid-cols-3">
               <div>
-                <label className="text-[11px] text-muted-foreground">Eigene Nummern (elevated)</label>
+                <label className="text-[11px] text-muted-foreground">{t("projectSettings.whatsapp.ownerNumbers", { defaultValue: "Eigene Nummern (elevated)" })}</label>
                 <textarea value={waOwnerNumbers} onChange={e => setWaOwnerNumbers(e.target.value)}
                   placeholder="+49123456789"
                   rows={3}
                   className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground">Whitelist (leer = alle)</label>
+                <label className="text-[11px] text-muted-foreground">{t("projectSettings.whatsapp.allowedNumbers", { defaultValue: "Whitelist (leer = alle)" })}</label>
                 <textarea value={waAllowedNumbers} onChange={e => setWaAllowedNumbers(e.target.value)}
                   placeholder="+49123456789"
                   rows={3}
                   className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs font-mono resize-y" />
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground">Blacklist</label>
+                <label className="text-[11px] text-muted-foreground">{t("projectSettings.whatsapp.blockedNumbers", { defaultValue: "Blacklist" })}</label>
                 <textarea value={waBlockedNumbers} onChange={e => setWaBlockedNumbers(e.target.value)}
                   placeholder="+49123456789"
                   rows={3}
@@ -707,17 +724,17 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Volume2 className="h-3 w-3" /> Sprachnachrichten
+                  <Volume2 className="h-3 w-3" /> {t("projectSettings.whatsapp.voiceMessages", { defaultValue: "Sprachnachrichten" })}
                 </label>
                 <select value={waVoiceMode} onChange={e => setWaVoiceMode(e.target.value)}
                   className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-                  <option value="never">Nie (nur Text)</option>
-                  <option value="echo">Nur Antwort auf Sprachnachrichten</option>
-                  <option value="always">Immer als Audio</option>
+                  <option value="never">{t("projectSettings.whatsapp.voiceMode.never", { defaultValue: "Nie (nur Text)" })}</option>
+                  <option value="echo">{t("projectSettings.whatsapp.voiceMode.echo", { defaultValue: "Nur Antwort auf Sprachnachrichten" })}</option>
+                  <option value="always">{t("projectSettings.whatsapp.voiceMode.always", { defaultValue: "Immer als Audio" })}</option>
                 </select>
               </div>
               <div>
-                <label className="text-[11px] text-muted-foreground">TTS-Stimme</label>
+                <label className="text-[11px] text-muted-foreground">{t("projectSettings.whatsapp.ttsVoice", { defaultValue: "TTS-Stimme" })}</label>
                 <div className="flex gap-1.5 mt-0.5">
                   <select value={waVoiceName} onChange={e => setWaVoiceName(e.target.value)}
                     className="flex-1 rounded-lg border bg-background px-2 py-1.5 text-xs">
@@ -728,7 +745,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
                   </select>
                   <button onClick={previewVoice} disabled={waPreviewPlaying}
                     className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
-                    title="Vorhoeren">
+                    title={t("projectSettings.whatsapp.previewTitle", { defaultValue: "Vorhoeren" })}>
                     {waPreviewPlaying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                   </button>
                 </div>
@@ -740,7 +757,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               <button onClick={saveWhatsAppConfig} disabled={waSaving}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs text-white transition hover:bg-green-700 disabled:opacity-50">
                 {waSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                WhatsApp-Config speichern
+                {t("projectSettings.whatsapp.saveBtn", { defaultValue: "WhatsApp-Config speichern" })}
               </button>
               {waSuccess && <span className="text-xs text-green-600">{waSuccess}</span>}
             </div>
@@ -752,9 +769,9 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
         <div className="flex items-center gap-2 text-xs font-medium">
           <MessageCircle className="h-3.5 w-3.5 text-indigo-500" />
-          Messenger-Routing
+          {t("projectSettings.messenger.title", { defaultValue: "Messenger-Routing" })}
           <span className="text-[10px] text-muted-foreground font-normal ml-1">
-            Welche Messenger-Kanaele leiten Nachrichten an dieses Projekt?
+            {t("projectSettings.messenger.subtitle", { defaultValue: "Welche Messenger-Kanaele leiten Nachrichten an dieses Projekt?" })}
           </span>
         </div>
 
@@ -765,17 +782,17 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               <Hash className="h-3 w-3" /> Discord
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground">Bot-Token (Env-Variable)</label>
+              <label className="text-[11px] text-muted-foreground">{t("projectSettings.messenger.discord.botToken", { defaultValue: "Bot-Token (Env-Variable)" })}</label>
               <select value={discordBotTokenEnv} onChange={e => setDiscordBotTokenEnv(e.target.value)}
                 className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-                <option value="">Nicht konfiguriert</option>
+                <option value="">{t("projectSettings.messenger.discord.notConfigured", { defaultValue: "Nicht konfiguriert" })}</option>
                 {availableKeys.map(k => (
                   <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground">Channel-IDs (eine pro Zeile)</label>
+              <label className="text-[11px] text-muted-foreground">{t("projectSettings.messenger.discord.channelIds", { defaultValue: "Channel-IDs (eine pro Zeile)" })}</label>
               <textarea value={discordChannels} onChange={e => setDiscordChannels(e.target.value)}
                 placeholder="123456789012345678"
                 rows={3}
@@ -789,17 +806,17 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
               <MessageCircle className="h-3 w-3" /> Telegram
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground">Bot-Token (Env-Variable)</label>
+              <label className="text-[11px] text-muted-foreground">{t("projectSettings.messenger.telegram.botToken", { defaultValue: "Bot-Token (Env-Variable)" })}</label>
               <select value={telegramBotTokenEnv} onChange={e => setTelegramBotTokenEnv(e.target.value)}
                 className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-                <option value="">Nicht konfiguriert</option>
+                <option value="">{t("projectSettings.messenger.telegram.notConfigured", { defaultValue: "Nicht konfiguriert" })}</option>
                 {availableKeys.map(k => (
                   <option key={k.name} value={k.name}>{k.name} ({k.preview})</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground">Chat-IDs (eine pro Zeile)</label>
+              <label className="text-[11px] text-muted-foreground">{t("projectSettings.messenger.telegram.chatIds", { defaultValue: "Chat-IDs (eine pro Zeile)" })}</label>
               <textarea value={telegramChatIds} onChange={e => setTelegramChatIds(e.target.value)}
                 placeholder="-1001234567890"
                 rows={3}
@@ -813,7 +830,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           <button onClick={saveMessengerConfig} disabled={messengerSaving}
             className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white transition hover:bg-indigo-700 disabled:opacity-50">
             {messengerSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            Messenger-Config speichern
+            {t("projectSettings.messenger.saveBtn", { defaultValue: "Messenger-Config speichern" })}
           </button>
           {messengerSuccess && <span className="text-xs text-green-600">{messengerSuccess}</span>}
         </div>
@@ -823,22 +840,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
       <div className="rounded-2xl border bg-background/55 p-3 space-y-2">
         <div className="flex items-center gap-2 text-xs font-medium">
           <Database className="h-3.5 w-3.5 text-primary" />
-          Memory aufbauen
+          {t("projectSettings.bootstrapMemory.title", { defaultValue: "Memory aufbauen" })}
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Scannt Projekt-Verzeichnis und erstellt eine strukturierte Memory-Basis
-          (Verzeichnisbaum, wichtige Dateien). Nur einmalig nötig — der Agent pflegt
-          die Memory danach selbst.
+          {t("projectSettings.bootstrapMemory.description", { defaultValue: "Scannt Projekt-Verzeichnis und erstellt eine strukturierte Memory-Basis (Verzeichnisbaum, wichtige Dateien). Nur einmalig nötig — der Agent pflegt die Memory danach selbst." })}
         </p>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => runBootstrapMemory(false)} disabled={bootstrapRunning}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50">
             {bootstrapRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Database className="h-3 w-3" />}
-            Memory aufbauen
+            {t("projectSettings.bootstrapMemory.btnBuild", { defaultValue: "Memory aufbauen" })}
           </button>
           <button onClick={() => runBootstrapMemory(true)} disabled={bootstrapRunning}
             className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition hover:bg-accent disabled:opacity-50">
-            Neu aufbauen
+            {t("projectSettings.bootstrapMemory.btnRebuild", { defaultValue: "Neu aufbauen" })}
           </button>
           {bootstrapResult && <span className="text-[10px] text-muted-foreground">{bootstrapResult}</span>}
         </div>
