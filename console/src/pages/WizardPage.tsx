@@ -362,7 +362,7 @@ function DoneStep({ goal, onFinish }: { goal: Goal | null; onFinish: () => void 
     organize: { route: "/my-agent", label: "Zum Assistenten", tip: "Dein Assistent kann Aufgaben planen, Texte schreiben und organisieren." },
     research: { route: "/my-agent", label: "Zum Assistenten", tip: "Aktiviere die Web-Suche unter Extensions für beste Recherche-Ergebnisse." },
     coding:   { route: "/projects", label: "Erstes Projekt erstellen", tip: "Erstelle ein Projekt und verknüpfe es mit einem Git-Repo." },
-    team:     { route: "/agents",   label: "Agenten verwalten", tip: "Erstelle spezialisierte Agenten und weise ihnen Rollen zu." },
+    team:     { route: "/projects", label: "Team-Projekt erstellen", tip: "Erstelle ein Projekt für dein Team und weise Agenten Rollen zu." },
   };
   const t = goal && tips[goal] ? tips[goal] : tips.chat;
 
@@ -427,7 +427,7 @@ export function WizardPage() {
     try { await api.wizardComplete(); } catch {}
     const tips: Record<string, string> = {
       chat: "/my-agent", organize: "/my-agent", research: "/my-agent",
-      coding: "/projects", team: "/agents",
+      coding: "/projects", team: "/projects",
     };
     navigate(goal ? tips[goal] || "/" : "/");
   }

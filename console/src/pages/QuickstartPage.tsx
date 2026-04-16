@@ -108,8 +108,8 @@ const STEPS_ENTWICKLER: StepDef[] = [
       return !!(c?.configured || c?.active);
     },
     actionLabel: "Server einrichten",
-    actionRoute: "/agents?tab=servers",
-    detail: "Unter Agents → Server kannst du SSH-Server hinzufügen. HydraHive generiert einen SSH-Key — trage den Public Key auf dem Zielserver in ~/.ssh/authorized_keys ein. Dein Agent nutzt dann server_shell statt manuelles SSH.",
+    actionRoute: "/target-systems",
+    detail: "Unter Zielsysteme kannst du Root-/Remote-Server hinzufügen und Projekten zuweisen. HydraHive generiert einen SSH-Key — trage den Public Key auf dem Zielserver in ~/.ssh/authorized_keys ein. Projekt-Agenten nutzen dann server_shell statt manuelles SSH.",
   },
   {
     id: "step-git",

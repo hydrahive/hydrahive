@@ -340,7 +340,7 @@ export function SearchPage() {
 {`tools:
   - web_search`}
             </pre>
-            <a href="/agents" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
+            <a href="/projects" className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1">
               <Search className="h-3 w-3" /> {t("searchPage.toAgents")}
             </a>
           </div>

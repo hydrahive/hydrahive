@@ -1263,7 +1263,7 @@
     "noEngines": "Keine Engines konfiguriert",
     "agentIntegration": "Agenten-Integration",
     "agentIntegrationDesc": "Tool web_search in der Agenten-Konfiguration aktivieren:",
-    "toAgents": "Zur Agenten-Verwaltung",
+    "toAgents": "Zu den Projekten",
     "loadError": "Fehler beim Laden",
     "genericError": "Fehler",
     "notInstalledTitle": "SearXNG ist nicht installiert",
