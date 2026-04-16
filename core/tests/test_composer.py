@@ -132,9 +132,20 @@ def test_preview_does_not_write_files(client_factory):
     assert not (personal_dir / "AGENT.md").exists()
 
 
+# #650: Helper für Save-Calls mit If-Match. Composer-Saves sind strict —
+# ohne Header → 428. Wir holen den aktuellen etag aus /profile, außer der
+# Test setzt If-Match explizit (z.B. für Mismatch- oder 428-Tests).
+def _save(client, body, **extra_headers):
+    headers = dict(extra_headers)
+    if "If-Match" not in headers:
+        prof = client.get("/me/agent/composer/profile")
+        headers["If-Match"] = prof.json()["etag"]
+    return client.put("/me/agent/composer", json=body, headers=headers)
+
+
 def test_save_writes_agent_md_and_invalidates_cache(client_factory):
     client, personal_dir, cache_calls, audit_calls = client_factory()
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise", "safety.prod_hands_off"]})
+    r = _save(client, {"selected": ["work_style.precise", "safety.prod_hands_off"]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["updated"] is True
@@ -153,7 +164,7 @@ def test_save_creates_backup_on_overwrite(client_factory):
     client, personal_dir, _, _ = client_factory()
     (personal_dir / "AGENT.md").write_text("handgeschrieben\n", encoding="utf-8")
 
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert r.json()["backup_created"] is True
     assert (personal_dir / "AGENT.md.backup").read_text(encoding="utf-8") == "handgeschrieben\n"
@@ -167,7 +178,7 @@ def test_save_does_not_touch_soul_or_yaml_or_tools(client_factory):
     soul_mtime = (personal_dir / "soul.md").stat().st_mtime_ns
     yaml_mtime = (personal_dir / "agent.yaml").stat().st_mtime_ns
 
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
 
     assert (personal_dir / "soul.md").read_text(encoding="utf-8") == soul_before
@@ -188,7 +199,10 @@ def test_save_rejects_unknown_block_ids(client_factory):
 
 def test_save_rejects_empty_selection(client_factory):
     client, personal_dir, _, _ = client_factory()
-    r = client.put("/me/agent/composer", json={"selected": []})
+    # #650: _perform_save wirft 400 für leere Selection erst NACH dem
+    # ETag-Guard. Wir setzen If-Match korrekt, damit der Business-Rule-
+    # Check (nicht der ETag-Guard) für diesen Test greift.
+    r = _save(client, {"selected": []})
     assert r.status_code == 400
     assert not (personal_dir / "AGENT.md").exists()
 
@@ -235,7 +249,7 @@ def test_evaluate_warnings_clean_on_full_preset():
 
 def test_profile_yaml_is_written_and_readable(client_factory):
     client, personal_dir, _, _ = client_factory()
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     profile_path = personal_dir / "agent_profile.yaml"
     assert profile_path.exists()
@@ -249,7 +263,7 @@ def test_profile_yaml_is_written_and_readable(client_factory):
 def test_agent_md_rendered_from_profile_matches_direct_render(client_factory):
     client, personal_dir, _, _ = client_factory()
     sel = ["work_style.precise", "comm.concise"]
-    r = client.put("/me/agent/composer", json={"selected": sel})
+    r = _save(client, {"selected": sel})
     assert r.status_code == 200
     md_written = (personal_dir / "AGENT.md").read_text(encoding="utf-8")
     profile_data = _yaml.safe_load((personal_dir / "agent_profile.yaml").read_text(encoding="utf-8"))
@@ -260,14 +274,14 @@ def test_agent_md_rendered_from_profile_matches_direct_render(client_factory):
 def test_backup_still_created(client_factory):
     client, personal_dir, _, _ = client_factory()
     (personal_dir / "AGENT.md").write_text("old\n", encoding="utf-8")
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert (personal_dir / "AGENT.md.backup").read_text(encoding="utf-8") == "old\n"
 
 
 def test_preset_applies_block_set(client_factory):
     client, personal_dir, _, _ = client_factory()
-    r = client.put("/me/agent/composer", json={
+    r = _save(client, {
         "selected": preset_selection("trusted_admin"),
         "preset": "trusted_admin",
     })
@@ -314,7 +328,7 @@ def test_deploy_discipline_partial_warning(client_factory):
 def test_load_profile_after_save_round_trip(client_factory):
     client, _, _, _ = client_factory()
     sel = ["work_style.precise", "comm.concise"]
-    r = client.put("/me/agent/composer", json={"selected": sel, "preset": None})
+    r = _save(client, {"selected": sel, "preset": None})
     assert r.status_code == 200
     r2 = client.get("/me/agent/composer/profile")
     assert r2.status_code == 200
@@ -385,7 +399,7 @@ def test_save_blocked_is_422_when_conflict_not_400(client_factory):
 def test_agent_md_mtime_matches_false_on_external_edit(client_factory):
     import time
     client, personal_dir, _, _ = client_factory()
-    client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    _save(client, {"selected": ["work_style.precise"]})
     time.sleep(0.1)
     # Extern AGENT.md ändern
     agent_md = personal_dir / "AGENT.md"
@@ -409,7 +423,7 @@ def test_versioned_backup_created_alongside_latest(client_factory):
     client, personal_dir, _, _ = client_factory()
     (personal_dir / "AGENT.md").write_text("old content\n", encoding="utf-8")
 
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     body = r.json()
     assert body["backup_created"] is True
@@ -424,7 +438,7 @@ def test_versioned_backup_created_alongside_latest(client_factory):
 def test_versioned_backup_filename_format(client_factory):
     client, personal_dir, _, _ = client_factory()
     (personal_dir / "AGENT.md").write_text("seed\n", encoding="utf-8")
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     name = r.json()["versioned_backup"]
     assert _re.match(r"^AGENT\.md\.\d{8}T\d{6}Z(-\d+)?\.backup$", name), name
@@ -451,7 +465,7 @@ def test_two_saves_same_second_yield_distinct_names(client_factory):
 def test_fresh_save_without_existing_agent_md_has_no_backup(client_factory):
     client, personal_dir, _, _ = client_factory()
     assert not (personal_dir / "AGENT.md").exists()
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     body = r.json()
     assert body["backup_created"] is False
@@ -465,7 +479,7 @@ def test_fresh_save_without_existing_agent_md_has_no_backup(client_factory):
 def test_versioned_backup_response_is_basename_only(client_factory):
     client, personal_dir, _, _ = client_factory()
     (personal_dir / "AGENT.md").write_text("x\n", encoding="utf-8")
-    r = client.put("/me/agent/composer", json={"selected": ["work_style.precise"]})
+    r = _save(client, {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     name = r.json()["versioned_backup"]
     assert name is not None

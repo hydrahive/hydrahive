@@ -27,7 +27,7 @@ interface ComposerApi {
   loadPresets: () => Promise<{presets: PresetDef[]}>;
   loadProfile: () => Promise<{selected: string[]; preset: string | null; warnings: ComposerWarning[]; agent_md_exists: boolean; agent_md_mtime_matches: boolean; etag: string}>;
   preview: (selected: string[], preset: string | null) => Promise<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>;
-  save: (selected: string[], preset: string | null, etag: string | null) => Promise<{backup_created: boolean; warnings: ComposerWarning[]; etag: string}>;
+  save: (selected: string[], preset: string | null, etag: string) => Promise<{backup_created: boolean; warnings: ComposerWarning[]; etag: string}>;
 }
 
 function buildApi(scope: "me" | "admin" | "project", agentId?: string, projectId?: string): ComposerApi {
@@ -168,6 +168,18 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
 
   async function doSave() {
     setConfirmOpen(false);
+    // #650: Composer-Save ist strict — ohne etag macht der Server ohnehin
+    // 428 auf. Wir stoppen vorher und bitten um Reload, statt einen API-Call
+    // zu verschwenden.
+    if (!etag) {
+      setMsg({
+        kind: "err",
+        text: t("composer.saveNoEtag", {
+          defaultValue: "Profil ist noch nicht vollständig geladen. Bitte Profil neu laden und erneut speichern.",
+        }),
+      });
+      return;
+    }
     setSaving(true); setMsg(null);
     try {
       const r = await composerApi.save(
@@ -193,7 +205,11 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
       setConflict(null);
     } catch (e) {
       const err = e as Error & { status?: number; detail?: { message?: string; current_etag?: string } };
-      if (err && err.status === 409 && err.detail && typeof err.detail === "object") {
+      // #650: 428 Precondition Required (If-Match fehlt) + 409 Conflict
+      // (Mismatch) beide in denselben Reload-Banner — die Semantik für den
+      // User ist identisch: Client-State veraltet, Profil neu laden.
+      if (err && (err.status === 409 || err.status === 428)
+          && err.detail && typeof err.detail === "object") {
         setConflict({
           currentEtag: err.detail.current_etag || "",
           message: err.detail.message || t("composer.conflictMessage", {

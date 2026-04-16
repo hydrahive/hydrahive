@@ -101,12 +101,19 @@ def test_regular_member_is_blocked_with_403(member_client):
     assert r.status_code == 403
 
 
+def _save_project(client, project_id: str, body: dict, **extra_headers):
+    """#650: Composer-Save strict — If-Match Pflicht."""
+    headers = dict(extra_headers)
+    if "If-Match" not in headers:
+        etag = client.get(f"/projects/{project_id}/composer/profile").json()["etag"]
+        headers["If-Match"] = etag
+    return client.put(f"/projects/{project_id}/composer", json=body, headers=headers)
+
+
 def test_admin_can_save_team_project(admin_client):
     client, projects_dir, cache_calls, audit_calls = admin_client
-    r = client.put(
-        "/projects/team_alpha/composer",
-        json={"selected": ["work_style.precise", "comm.concise"]},
-    )
+    r = _save_project(client, "team_alpha",
+        {"selected": ["work_style.precise", "comm.concise"]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["agent_id"] == "team_alpha"
@@ -123,10 +130,8 @@ def test_personal_project_owner_can_save(tmp_path):
         "till", "user", tmp_path,
         projects={"personal_till": None},
     )
-    r = client.put(
-        "/projects/personal_till/composer",
-        json={"selected": ["work_style.precise"]},
-    )
+    r = _save_project(client, "personal_till",
+        {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert (projects_dir / "personal_till" / "AGENT.md").exists()
     assert cache_calls == ["personal_till"]
@@ -166,10 +171,8 @@ def test_save_creates_backup_on_overwrite(admin_client):
     pdir = projects_dir / "team_alpha"
     (pdir / "AGENT.md").write_text("legacy hand-written\n", encoding="utf-8")
 
-    r = client.put(
-        "/projects/team_alpha/composer",
-        json={"selected": ["work_style.precise"]},
-    )
+    r = _save_project(client, "team_alpha",
+        {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert r.json()["backup_created"] is True
     assert (pdir / "AGENT.md.backup").read_text(encoding="utf-8") == "legacy hand-written\n"
@@ -182,10 +185,8 @@ def test_config_yaml_unchanged_after_save(admin_client):
     cfg_before = (pdir / "config.yaml").read_text(encoding="utf-8")
     cfg_mtime = (pdir / "config.yaml").stat().st_mtime_ns
 
-    r = client.put(
-        "/projects/team_alpha/composer",
-        json={"selected": ["work_style.precise"]},
-    )
+    r = _save_project(client, "team_alpha",
+        {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert (pdir / "config.yaml").read_text(encoding="utf-8") == cfg_before
     assert (pdir / "config.yaml").stat().st_mtime_ns == cfg_mtime
@@ -209,10 +210,8 @@ def test_project_config_picks_up_new_agent_md(admin_client):
     from hydrahive_core.project_config import load_project_config
 
     client, projects_dir, _, _ = admin_client
-    r = client.put(
-        "/projects/team_alpha/composer",
-        json={"selected": ["work_style.precise", "comm.concise"]},
-    )
+    r = _save_project(client, "team_alpha",
+        {"selected": ["work_style.precise", "comm.concise"]})
     assert r.status_code == 200
     pcfg = load_project_config(projects_dir / "team_alpha")
     assert pcfg is not None

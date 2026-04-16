@@ -1,7 +1,7 @@
 """Composer Concurrent-Edit-Schutz (#645 Follow-up, ETag/If-Match).
 
 Deckt alle drei Scopes ab (me / admin / project) über eine parametrisierte
-Fixture. Backward-Compat: fehlender If-Match = akzeptieren.
+Fixture. Seit #650 strict: fehlender If-Match → 428, Mismatch → 409.
 """
 from __future__ import annotations
 
@@ -205,15 +205,29 @@ def test_external_profile_yaml_edit_causes_409(scoped_client):
     assert r2.status_code == 409
 
 
-def test_save_without_if_match_is_accepted_backward_compat(scoped_client):
+def test_save_without_if_match_returns_428(scoped_client):
+    """#650: Composer-Saves sind strict. Fehlender If-Match → 428 mit
+    `current_etag` im Detail. Keine Seiteneffekte (Cache/Audit/Dateien)."""
     c = scoped_client["client"]
+    target = scoped_client["target"]
+    initial_cache = list(scoped_client["cache_calls"])
+    initial_audit = list(scoped_client["audit_calls"])
+
     r = c.put(
         scoped_client["save_url"],
         json={"selected": ["work_style.precise"]},
         # Kein If-Match-Header
     )
-    assert r.status_code == 200
-    assert "etag" in r.json()
+    assert r.status_code == 428
+    detail = r.json()["detail"]
+    assert "current_etag" in detail
+    assert isinstance(detail["current_etag"], str) and detail["current_etag"]
+    # Keine Seiteneffekte
+    assert scoped_client["cache_calls"] == initial_cache
+    assert scoped_client["audit_calls"] == initial_audit
+    assert not (target / "AGENT.md").exists()
+    assert not (target / "agent_profile.yaml").exists()
+    assert not (target / "AGENT.md.backup").exists()
 
 
 def test_save_with_invalid_if_match_returns_409(scoped_client):

@@ -108,12 +108,19 @@ def test_path_traversal_rejected(admin_client, bad):
     assert not any(agents_dir.parent.glob("AGENT.md"))
 
 
+def _admin_save(client, agent_id: str, body: dict, **extra_headers):
+    """#650: Composer-Save strict — If-Match Pflicht."""
+    headers = dict(extra_headers)
+    if "If-Match" not in headers:
+        etag = client.get(f"/admin/agents/{agent_id}/composer/profile").json()["etag"]
+        headers["If-Match"] = etag
+    return client.put(f"/admin/agents/{agent_id}/composer", json=body, headers=headers)
+
+
 def test_admin_save_writes_agent_md_and_profile_yaml(admin_client):
     client, agents_dir, cache_calls, audit_calls = admin_client
-    r = client.put(
-        "/admin/agents/ops_bot/composer",
-        json={"selected": ["work_style.precise", "comm.concise"]},
-    )
+    r = _admin_save(client, "ops_bot",
+        {"selected": ["work_style.precise", "comm.concise"]})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["updated"] is True
@@ -140,10 +147,8 @@ def test_admin_save_creates_backup_on_overwrite(admin_client):
     existing = agents_dir / "ops_bot" / "AGENT.md"
     existing.write_text("handgeschrieben\n", encoding="utf-8")
 
-    r = client.put(
-        "/admin/agents/ops_bot/composer",
-        json={"selected": ["work_style.precise"]},
-    )
+    r = _admin_save(client, "ops_bot",
+        {"selected": ["work_style.precise"]})
     assert r.status_code == 200
     assert r.json()["backup_created"] is True
     backup = agents_dir / "ops_bot" / "AGENT.md.backup"
@@ -158,10 +163,8 @@ def test_admin_save_does_not_touch_agent_yaml_or_soul(admin_client):
     yaml_mtime = (agent_dir / "agent.yaml").stat().st_mtime_ns
     soul_mtime = (agent_dir / "soul.md").stat().st_mtime_ns
 
-    r = client.put(
-        "/admin/agents/ops_bot/composer",
-        json={"selected": ["work_style.precise"]},
-    )
+    r = _admin_save(client, "ops_bot",
+        {"selected": ["work_style.precise"]})
     assert r.status_code == 200
 
     assert (agent_dir / "agent.yaml").read_text(encoding="utf-8") == agent_yaml_before
@@ -177,7 +180,7 @@ def test_admin_save_does_not_touch_agent_yaml_or_soul(admin_client):
 def test_admin_profile_roundtrip(admin_client):
     client, _, _, _ = admin_client
     sel = ["work_style.precise", "safety.prod_hands_off", "safety.read_only_default"]
-    r = client.put("/admin/agents/ops_bot/composer", json={"selected": sel})
+    r = _admin_save(client, "ops_bot", {"selected": sel})
     assert r.status_code == 200
     r2 = client.get("/admin/agents/ops_bot/composer/profile")
     assert r2.status_code == 200

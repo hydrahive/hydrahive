@@ -220,28 +220,6 @@ def _compute_etag(agent_dir: Path) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def _require_etag_match(agent_dir: Path, if_match: Optional[str]) -> None:
-    """Optionaler Concurrent-Edit-Schutz.
-
-    Kein `If-Match` → no-op (Backward-Compat V1).
-    Mismatch → 409 mit minimalem Detail `{message, current_etag}`.
-    Kein Write, Backup, Cache-Invalidate oder Audit darf nach einem 409
-    noch laufen — Aufrufer muss `_require_etag_match` vor `_perform_save`
-    platzieren.
-    """
-    if if_match is None:
-        return
-    current = _compute_etag(agent_dir)
-    if if_match != current:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "AGENT.md wurde seit dem Laden geändert. Bitte Profil neu laden.",
-                "current_etag": current,
-            },
-        )
-
-
 def _build_profile_response(agent_dir: Path) -> dict:
     profile, load_warnings = _load_profile(agent_dir)
     agent_md_exists, mtime_matches = _agent_md_mtime_matches(agent_dir)
@@ -473,11 +451,16 @@ def _read_backup_for_preview(target: Path) -> dict:
 
 
 def _require_etag_match_strict(agent_dir: Path, if_match: Optional[str]) -> None:
-    """Strict-Variante: Fehlender Header → 428, Mismatch → 409.
+    """Strict ETag-Guard für alle Composer-Writes.
 
-    Für Write-APIs wo Clients nicht „vergessen dürfen" zu synchronisieren
-    (Restore, #647). Unterscheidet sich bewusst von `_require_etag_match`,
-    das für Save absichtlich backward-compat None erlaubt.
+    Fehlender Header → 428 Precondition Required mit `current_etag`,
+    Mismatch → 409 Conflict mit `current_etag`. Beides mit
+    `detail={message, current_etag}`-Shape, den das Frontend zum
+    Reload-Banner verarbeitet.
+
+    Nach #647 (Restore) und #650 (Save/Admin/Project) der einzige
+    ETag-Guard — die frühere lax-Variante wurde entfernt, weil kein
+    Legacy-Client ohne If-Match mehr unterstützt wird.
     """
     current = _compute_etag(agent_dir)
     if if_match is None:
@@ -621,7 +604,7 @@ def register_composer_routes(
                 detail=f"Personal-Agent-Verzeichnis nicht gefunden: {agent_id}",
             )
 
-        _require_etag_match(agent_dir, if_match)
+        _require_etag_match_strict(agent_dir, if_match)
         return _perform_save(
             agent_dir,
             agent_id,
@@ -743,7 +726,7 @@ def register_admin_composer_routes(
         username, _role = auth
         agent_dir = _validate_admin_agent_id(agent_id, agents_root)
         _validate_save_input(body)
-        _require_etag_match(agent_dir, if_match)
+        _require_etag_match_strict(agent_dir, if_match)
         return _perform_save(
             agent_dir,
             agent_id,
@@ -911,7 +894,7 @@ def register_project_composer_routes(
         _require_project_composer_access(auth, project_id)
         username, _role = auth
         _validate_save_input(body)
-        _require_etag_match(project_dir, if_match)
+        _require_etag_match_strict(project_dir, if_match)
         return _perform_save(
             project_dir,
             project_id,

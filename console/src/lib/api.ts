@@ -158,19 +158,24 @@ export const api = {
   composerPresets: () => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>("/me/agent/composer/presets"),
   composerProfile: () => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>("/me/agent/composer/profile"),
   composerPreview: (selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>("/me/agent/composer/preview", {selected, preset: preset ?? null}),
-  composerSave: (selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
+  // #650: Composer-Save ist strict — If-Match ist Pflicht. Backend liefert
+  // 428 Precondition Required wenn der Header fehlt, 409 Conflict bei
+  // Mismatch. Signatur hart: etag muss vor dem Call geholt/validiert sein.
+  composerSave: (selected: string[], preset: string|null, etag: string) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>("/me/agent/composer", {selected, preset}, {"If-Match": etag}),
   // #645 Phase 1d — Admin-Agent-Composer
   adminComposerBlocks: (agentId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/blocks`),
   adminComposerPresets: (agentId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/presets`),
   adminComposerProfile: (agentId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/profile`),
   adminComposerPreview: (agentId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/preview`, {selected, preset: preset ?? null}),
-  adminComposerSave: (agentId: string, selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
+  // #650: siehe composerSave — If-Match Pflicht.
+  adminComposerSave: (agentId: string, selected: string[], preset: string|null, etag: string) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/admin/agents/${encodeURIComponent(agentId)}/composer`, {selected, preset}, {"If-Match": etag}),
   // #645 Phase 1e — Projekt-Boss-Composer
   projectComposerBlocks: (projectId: string) => api.get<{categories: {id:string; label:string; blocks:{id:string; label:string; description:string}[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/blocks`),
   projectComposerPresets: (projectId: string) => api.get<{presets: {id:string; label:string; description:string; selected:string[]}[]}>(`/projects/${encodeURIComponent(projectId)}/composer/presets`),
   projectComposerProfile: (projectId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer/profile`),
   projectComposerPreview: (projectId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/projects/${encodeURIComponent(projectId)}/composer/preview`, {selected, preset: preset ?? null}),
-  projectComposerSave: (projectId: string, selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
+  // #650: siehe composerSave — If-Match Pflicht.
+  projectComposerSave: (projectId: string, selected: string[], preset: string|null, etag: string) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset}, {"If-Match": etag}),
   // #647 Composer-Backups (list / preview / restore) — pro Scope. Restore
   // ist strict If-Match: Backend antwortet 428 wenn Header fehlt, 409 bei
   // Mismatch. UI sendet immer den aktuellen ETag.
