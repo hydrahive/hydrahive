@@ -1,83 +1,158 @@
-# HydraHive
+<p align="center">
+  <img src="console/public/hydrahive-logo.png" width="180" alt="HydraHive" />
+</p>
 
-**Self-hosted AI Agent Platform** — Multi-agent swarms, Matrix communication, project isolation.
+<h1 align="center">HydraHive</h1>
 
-> Install Linux → Install HydraHive → Manage everything through the web console.
+<p align="center">
+  <strong>Ein Stock für deine AI-Agenten.</strong><br/>
+  <em>A hive for your AI agents.</em>
+</p>
+
+<p align="center">
+  <a href="https://hydrahive.org"><img src="https://img.shields.io/badge/hydrahive.org-%F0%9F%90%9D-F59E0B?style=flat-square" alt="Website"></a>
+  <img src="https://img.shields.io/badge/Self--hosted-%E2%9C%93-10B981?style=flat-square" alt="Self-hosted">
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/License-MIT-6366F1?style=flat-square" alt="License">
+</p>
 
 ---
 
-## Features
+Jeder Mensch bekommt seinen **eigenen persönlichen Agenten**.
+Jedes Projekt bekommt seine **gemeinsamen Arbeits-Agenten**.
+Alles läuft auf **deiner Hardware**, **24/7** — egal, ob dein Laptop an ist.
 
-- **Multi-Agent Swarms** — Boss agent coordinates worker agents in parallel
-- **Project Isolation** — Each project gets its own Linux user, Samba share and Matrix room
-- **Multi-LLM** — Ollama (local), Claude (OAuth), OpenAI — configurable per agent with fallback chains
-- **Matrix Integration** — Agents are real Matrix bots; intervene directly via Element
-- **Discord Integration** — Personal agents can read and respond on Discord
-- **Web Search** — Built-in SearXNG metasearch engine (no API key, no tracking)
-- **QMD Skills** — Learned knowledge in Markdown files with YAML frontmatter
-- **Personal Agent** — Every user gets their own private agent (`personal_<username>`)
-- **Memory System** — Agents store knowledge persistently in Markdown files, auto-injected into system prompt
-- **A-MEM Shared Memory** — Central cross-agent knowledge base for errors, solutions and learnings
-- **Workstation Access** — Personal agents connect via SSH/SFTP to the user's workstation
-- **Git Tools** — Agents can commit, push and create pull requests on Gitea
-- **MCP Servers** — Attach external tool servers via streamableHttp (e.g. QMD Memory Search)
-- **Execution Modes** — safe/elevated/root for controlled privilege escalation
-- **Web Console** — Full management without SSH: agents, projects, users, logs, skills, MCP, search
-- **Streaming** — Responses appear token by token with stop-button interrupt
-- **Webhook System** — External triggers for agents (`/hooks/{project}/wake`)
-- **Audit Log** — All user actions logged
-- **One-Click Update** — Update from the web console (git pull + build + restart)
+> [!TIP]
+> **Warum gibt es HydraHive?**
+> Aus einer einfachen Frage heraus: *Warum muss mein Rechner laufen, damit die
+> Familie einen Assistenten hat?* Inzwischen ist daraus eine Plattform
+> geworden, auf der **Familien, Teams oder Einzelne ihr eigenes
+> AI-Ökosystem** bauen können — mit dem LLM ihrer Wahl, ohne
+> Cloud-Vendor-Lock-in, mit eigenen Tools und eigenen Daten.
 
-## Deployment Profiles
+---
 
-| Profile | GPU | LLM | Good for |
-|---------|-----|-----|----------|
-| **Lite** | No | Cloud APIs | VPS, testing, demo |
-| **Full** | Yes (PCIe passthrough) | Ollama + Cloud | Production, full control |
+## 🎁 Was drin ist
 
-Reference setup: GTX 1080 Ti (11 GB VRAM) on Proxmox VM, Ubuntu 24.04
+### 🤖 Deine Agenten, deine Regeln
+Persönlicher Agent pro User · Projekt-Agenten für Teams · Rollen, Permissions, Audit-Log · Composer für Agent-Prompts · eigenes Gedächtnis pro Agent
 
-## Quick Start
+### 🧠 Jedes LLM
+Anthropic · OpenAI · **Claude Max OAuth** · MiniMax · **NVIDIA NIM** · DeepSeek · Google · Ollama (lokal auf Server oder Workstation) · Fallback-Ketten
+
+### 🛠️ Alles an Tools
+Shell · Dateien lesen/schreiben · Web-Search (SearXNG, kein Tracking) · Gedächtnis · Agent-zu-Agent-Calls · **MCP-Server** anbinden · **Skills** installieren · **Hooks** definieren · Sub-Agent-Worktrees · Permission-Layers · WKS-SSH
+
+### 💬 Da, wo du bist
+Web-Console (React) · Matrix · Discord · WhatsApp · Mail · Voice-Input · Token-Streaming mit Stop-Button
+
+### 🖥️ Auf deiner Workstation
+Dein persönlicher Agent kann via SSH auf deinem Rechner arbeiten (mit Approval) · Workstation-eigenes Ollama einbinden · Samba-Share · individueller SSH-Port
+
+### 🏠 Zuhause, nicht in der Cloud
+Läuft auf deiner Hardware (Homelab · NAS · Proxmox-VM) · **One-Click-Installer** · Self-hosted, self-owned · Updates per Konsole · SSH Host-Key-Pinning für Target-Systeme
+
+---
+
+## 🏗️ Architektur
+
+```mermaid
+flowchart LR
+    User["👤 User<br/>Familie · Team"]
+    Browser["🌐 Web-Console<br/>(React)"]
+    Chat["💬 Chat-Apps<br/>Matrix · Discord · WhatsApp · Mail"]
+
+    Core["🧠 HydraHive Core<br/>FastAPI · Orchestrator · SQLite"]
+
+    Personal["🤖 Persönlicher<br/>Agent"]
+    Project["🤝 Projekt-<br/>Agent"]
+
+    LLMs["🎛️ LLM-Pool<br/>Claude · GPT · MiniMax<br/>NVIDIA · Ollama · ..."]
+    Tools["🛠️ Tools + Skills<br/>Shell · Memory · MCP · Hooks"]
+    Wks["🖥️ Workstation<br/>(per SSH, mit Approval)"]
+
+    User --> Browser
+    User --> Chat
+    Browser --> Core
+    Chat --> Core
+    Core --> Personal
+    Core --> Project
+    Personal --> LLMs
+    Project --> LLMs
+    Personal --> Tools
+    Project --> Tools
+    Personal -.-> Wks
+
+    classDef user fill:#F59E0B,stroke:#B45309,color:#fff
+    classDef ui fill:#6366F1,stroke:#4338CA,color:#fff
+    classDef core fill:#10B981,stroke:#047857,color:#fff
+    classDef agent fill:#EC4899,stroke:#BE185D,color:#fff
+    classDef infra fill:#0EA5E9,stroke:#0369A1,color:#fff
+
+    class User user
+    class Browser,Chat ui
+    class Core core
+    class Personal,Project agent
+    class LLMs,Tools,Wks infra
+```
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/hydrahive/hydrahive.git
 cd hydrahive
 sudo bash installer/install.sh
-# → open https://<IP> → Setup Wizard
+# → open https://<IP> → Setup-Wizard
 ```
 
-## Documentation
+### Deployment-Profile
 
-| Document | Content |
-|----------|---------|
-| [Handbook](docs/handbook.md) | Installation, getting started, all features |
-| [Technical Docs](docs/technical.md) | Architecture, modules, data flow |
-| [API Reference](docs/api-reference.md) | All REST endpoints |
-| [Developer Guide](docs/development.md) | Tools, skills, endpoints, adding console pages |
+| Profil | GPU | LLM | Gut für |
+|---|---|---|---|
+| 🪶 **Lite** | nein | Cloud-APIs | VPS · Demo · Testing |
+| 🦾 **Full** | ja (PCIe-Passthrough) | Ollama + Cloud | Produktion · volle Kontrolle |
 
-## Architecture
+> Referenz-Setup: **GTX 1080 Ti** (11 GB VRAM) auf Proxmox-VM, Ubuntu 24.04. Läuft aber auch auf kleineren Setups.
 
-```
-Browser (React) → nginx (HTTPS) → FastAPI Core → Orchestrator
-                                              ↓
-                                   Boss Agent → Worker Agents
-                                              ↓
-                                   conduwuit (Matrix) ← Element
-```
+---
 
-## Stack
+## 📚 Dokumentation
 
-- **Core:** Python 3.12, FastAPI, litellm, matrix-nio, Anthropic SDK
-- **Console:** React 18, TypeScript, Vite, Tailwind CSS
-- **Matrix:** conduwuit (Rust, single binary, RocksDB)
-- **Search:** SearXNG (native, no Docker)
-- **LLM:** Ollama + Anthropic OAuth + OpenAI
-- **Installer:** Bash + systemd (no Docker)
+| Dokument | Inhalt |
+|---|---|
+| 📖 [Handbook](docs/handbook.md) | Installation, Getting started, alle Features |
+| 🔧 [Technical Docs](docs/technical.md) | Architektur, Module, Data-Flow |
+| 🔌 [API Reference](docs/api-reference.md) | Alle REST-Endpoints |
+| 🛠️ [Developer Guide](docs/development.md) | Tools, Skills, Endpoints, Console-Pages hinzufügen |
+| 👥 [Enduser-Handbuch](docs/enduser-handbuch.md) | Für die Familie/das Team (DE) |
 
-## Status
+---
 
-🚧 Active development — stable core, features may change
+## 🧱 Stack
 
-## License
+**Core:** Python 3.12 · FastAPI · LiteLLM · matrix-nio · Anthropic SDK
+**Console:** React 18 · TypeScript · Vite · Tailwind CSS
+**Matrix:** conduwuit (Rust, single binary, RocksDB)
+**Search:** SearXNG (nativ, kein Docker)
+**Installer:** Bash + systemd (kein Docker)
 
-MIT
+---
+
+## 🚧 Status
+
+**Active development** — Stable Core, Features wachsen mit.
+Breaking-Changes werden im [Changelog](docs/changelog.md) markiert.
+
+---
+
+## 🪪 License
+
+[MIT](LICENSE)
+
+<p align="center">
+  <a href="https://hydrahive.org">🐝 hydrahive.org</a>
+</p>
