@@ -86,6 +86,7 @@ function LlmSection() {
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [minimaxKey, setMinimaxKey] = useState("");
+  const [nvidiaKey, setNvidiaKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -104,7 +105,7 @@ function LlmSection() {
   }, []);
 
   const configured = loaded
-    ? !!(providers.anthropic?.has_key || providers.openai?.has_key || providers.minimax?.has_key)
+    ? !!(providers.anthropic?.has_key || providers.openai?.has_key || providers.minimax?.has_key || providers.nvidia?.has_key)
     : null;
 
   async function save() {
@@ -116,12 +117,14 @@ function LlmSection() {
         await api.put("/llm/config/openai", { provider: "openai", api_key: openaiKey.trim(), enabled: true });
       if (minimaxKey.trim())
         await api.put("/llm/config/minimax", { provider: "minimax", api_key: minimaxKey.trim(), enabled: true });
+      if (nvidiaKey.trim())
+        await api.put("/llm/config/nvidia", { provider: "nvidia", api_key: nvidiaKey.trim(), enabled: true });
       if (systemModel)
         await api.setSystemDefaultModel(systemModel);
       // Reload
       const cfg = await api.get<{ providers: Record<string, LlmProvider> }>("/llm/config");
       setProviders(cfg.providers ?? {});
-      setAnthropicKey(""); setOpenaiKey(""); setMinimaxKey("");
+      setAnthropicKey(""); setOpenaiKey(""); setMinimaxKey(""); setNvidiaKey("");
       setMsg("Gespeichert");
       setTimeout(() => setMsg(""), 3000);
     } catch (e) {
@@ -157,6 +160,14 @@ function LlmSection() {
               {providers.minimax?.has_key && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
             </div>
           </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>NVIDIA API-Key</label>
+            <div className="flex items-center gap-2">
+              <input type="password" value={nvidiaKey} onChange={e => setNvidiaKey(e.target.value)}
+                placeholder={providers.nvidia?.has_key ? "•••••••••  (gesetzt)" : "NVIDIA_API_KEY"} className={inputCls} />
+              {providers.nvidia?.has_key && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
+            </div>
+          </div>
         </div>
         <div className="space-y-1.5">
           <label className={labelCls}>Standard-Modell</label>
@@ -168,7 +179,7 @@ function LlmSection() {
           <p className={hintCls}>Wird verwendet wenn ein Agent kein eigenes Modell konfiguriert hat.</p>
         </div>
         <div className="flex items-center gap-3">
-          <SaveBtn saving={saving} onClick={save} disabled={!anthropicKey.trim() && !openaiKey.trim() && !minimaxKey.trim() && !systemModel} />
+          <SaveBtn saving={saving} onClick={save} disabled={!anthropicKey.trim() && !openaiKey.trim() && !minimaxKey.trim() && !nvidiaKey.trim() && !systemModel} />
           {msg && <span className="text-sm text-green-500">{msg}</span>}
         </div>
       </div>

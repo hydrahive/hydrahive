@@ -96,6 +96,31 @@ def _has_minimax_provider_key(providers: dict | None = None) -> bool:
     return False
 
 
+def _has_nvidia_provider_key(providers: dict | None = None) -> bool:
+    """#684: True wenn ein echter NVIDIA-API-Key konfiguriert ist.
+
+    Analog zu _has_minimax_provider_key — reine Key-Prüfung, enabled/base_url
+    zählen NICHT. Quellen: providers.nvidia.api_key, NVIDIA_API_KEY (env),
+    NVIDIA_API_KEY=... in settings.llm_env.
+    """
+    if providers is None:
+        providers = _load_llm_config().get("providers", {})
+    nv = providers.get("nvidia", {}) or {}
+    if (nv.get("api_key") or "").strip():
+        return True
+    if os.environ.get("NVIDIA_API_KEY", "").strip():
+        return True
+    try:
+        for line in settings.llm_env.read_text().splitlines():
+            if not line.startswith("NVIDIA_API_KEY="):
+                continue
+            if line.split("=", 1)[1].strip():
+                return True
+    except OSError:
+        pass
+    return False
+
+
 def _cached_json_load(path: str, default: dict | None = None) -> dict:
     """Lädt JSON mit mtime-Check — nur re-read wenn Datei geändert (#391)."""
     import json as _json
@@ -302,6 +327,13 @@ def register_llm_routes(
         if _has_minimax_provider_key(providers):
             for model in ["MiniMax-M2.7"]:
                 models.append({"id": model, "label": model, "provider": "minimax"})
+
+        # #684: NVIDIA NIM — OpenAI-kompatibler Transport, eigener Endpoint + Key.
+        # Statische Phase-1-Liste; dynamische /v1/models-Discovery kommt später.
+        if _has_nvidia_provider_key(providers):
+            from .orchestrator_llm import NVIDIA_MODELS
+            for model in sorted(NVIDIA_MODELS):
+                models.append({"id": model, "label": model, "provider": "nvidia"})
 
         codex_file = settings.openai_codex_token
         if codex_file.exists():

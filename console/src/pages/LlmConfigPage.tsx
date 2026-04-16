@@ -182,6 +182,9 @@ export function LlmConfigPage() {
 
   // MiniMax base_url (#616) — optionaler Endpoint-Override
   const [minimaxBaseUrl, setMinimaxBaseUrl] = useState("");
+  // NVIDIA base_url (#684) — optionaler Endpoint-Override (on-prem NIM etc.)
+  const [nvidiaBaseUrl, setNvidiaBaseUrl] = useState("");
+  const [savingNvidiaBaseUrl, setSavingNvidiaBaseUrl] = useState(false);
   const [savingBaseUrl,  setSavingBaseUrl]  = useState(false);
 
   // Ref so exchange handler always sees current flow state
@@ -270,6 +273,10 @@ export function LlmConfigPage() {
       if (providerId === "minimax" && minimaxBaseUrl.trim()) {
         body.base_url = minimaxBaseUrl.trim();
       }
+      // #684: NVIDIA ebenfalls (für on-prem NIM-Deployments)
+      if (providerId === "nvidia" && nvidiaBaseUrl.trim()) {
+        body.base_url = nvidiaBaseUrl.trim();
+      }
       await api.put(`/llm/config/${providerId}`, body);
       setSaved(providerId);
       setKeys(k => ({ ...k, [providerId]: "" }));
@@ -277,6 +284,27 @@ export function LlmConfigPage() {
       await load();
     } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
     finally { setSaving(null); }
+  }
+
+  async function saveNvidiaBaseUrl() {
+    // #684: base_url ohne Key-Rotation speichern — analog saveMinimaxBaseUrl.
+    if (!nvidiaBaseUrl.trim()) return;
+    if (!providerStatus["nvidia"]?.has_key) {
+      alert(t("llm.nvidia.keyRequired", { defaultValue: "Bitte zuerst den NVIDIA API-Key speichern." }));
+      return;
+    }
+    setSavingNvidiaBaseUrl(true);
+    try {
+      await api.put(`/llm/config/nvidia`, {
+        provider: "nvidia",
+        enabled: true,
+        base_url: nvidiaBaseUrl.trim(),
+      });
+      setSaved("nvidia");
+      setTimeout(() => setSaved(null), 3000);
+      await load();
+    } catch(e) { alert(e instanceof Error ? e.message : t("common.error")); }
+    finally { setSavingNvidiaBaseUrl(false); }
   }
 
   async function saveMinimaxBaseUrl() {
@@ -475,6 +503,60 @@ export function LlmConfigPage() {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">{t("llm.minimax.endpointHint")}</p>
+        </div>
+      </div>
+
+      {/* NVIDIA NIM (#684) — OpenAI-compatible, Phase-1-Modellliste kuratiert */}
+      <div className="bg-card border rounded-lg p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <h2 className="font-medium text-sm">{t("llm.nvidia.title", { defaultValue: "NVIDIA NIM" })}</h2>
+              {providerStatus["nvidia"]?.has_key
+                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>{t("llm.nvidia.active", { defaultValue: "Aktiv" })}</span>
+                : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>{t("llm.nvidia.inactive", { defaultValue: "Nicht konfiguriert" })}</span>
+              }
+              {saved === "nvidia" && <span className="text-xs text-green-600">{t("common.saved")}</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">{t("llm.nvidia.subtitle", { defaultValue: "OpenAI-kompatible API auf build.nvidia.com — 7 kuratierte Phase-1-Modelle." })}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={keys["nvidia"] ?? ""}
+            onChange={e => setKeys(k => ({...k, nvidia: e.target.value}))}
+            placeholder={providerStatus["nvidia"]?.has_key
+              ? t("llm.nvidia.apiKeyPlaceholderSet", { defaultValue: "•••••••••  (gesetzt)" })
+              : t("llm.nvidia.apiKeyPlaceholderUnset", { defaultValue: "NVIDIA_API_KEY" })}
+            className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button onClick={() => saveKey("nvidia")}
+            disabled={saving === "nvidia" || !keys["nvidia"]?.trim()}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            <Save className="h-3.5 w-3.5"/>
+            {saving === "nvidia" ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("llm.nvidia.keyHelp", { defaultValue: "Key erhältst du auf build.nvidia.com." })}</p>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">{t("llm.nvidia.endpoint", { defaultValue: "Endpoint (optional)" })}</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nvidiaBaseUrl}
+              onChange={e => setNvidiaBaseUrl(e.target.value)}
+              placeholder={providerStatus["nvidia"]?.base_url || t("llm.nvidia.endpointPlaceholderDefault", { defaultValue: "https://integrate.api.nvidia.com/v1 (Default)" })}
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button onClick={saveNvidiaBaseUrl}
+              disabled={savingNvidiaBaseUrl || !nvidiaBaseUrl.trim()}
+              className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 transition-colors">
+              <Save className="h-3.5 w-3.5"/>
+              {savingNvidiaBaseUrl ? t("common.saving") : t("common.save")}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">{t("llm.nvidia.endpointHint", { defaultValue: "Leer lassen für Default. Für on-prem NIM-Deployments anpassen." })}</p>
         </div>
       </div>
 

@@ -1292,6 +1292,20 @@
       "endpointHint": "Leer lassen für Default. Für CN-Region ggf. api.minimax.chat/v1.",
       "keyRequired": "Bitte zuerst den MiniMax API-Key speichern.",
       "keyHelp": "Key erhältst du in der MiniMax Developer Console."
+    },
+    "nvidia": {
+      "title": "NVIDIA NIM",
+      "subtitle": "OpenAI-kompatible API auf build.nvidia.com — 7 kuratierte Phase-1-Modelle.",
+      "active": "Aktiv",
+      "inactive": "Nicht konfiguriert",
+      "apiKeyLabel": "NVIDIA API-Key",
+      "apiKeyPlaceholderSet": "••••••••••••••• (gesetzt)",
+      "apiKeyPlaceholderUnset": "NVIDIA_API_KEY",
+      "endpoint": "Endpoint (optional)",
+      "endpointPlaceholderDefault": "https://integrate.api.nvidia.com/v1 (Default)",
+      "endpointHint": "Leer lassen für Default. Für on-prem NIM-Deployments anpassen.",
+      "keyRequired": "Bitte zuerst den NVIDIA API-Key speichern.",
+      "keyHelp": "Key erhältst du auf build.nvidia.com."
     }
   },
   "notifications": {

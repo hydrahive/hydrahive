@@ -477,7 +477,8 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
         is_claude  = model.startswith(("claude-", "anthropic/"))
         is_openai  = model.startswith(("gpt-", "o1-", "o3-", "openai/", "openai-codex/"))
         is_minimax = model.startswith("MiniMax-") or model.startswith("minimax/")
-        is_ollama  = (not is_minimax) and (
+        is_nvidia  = _is_nvidia_model(model)
+        is_ollama  = (not is_minimax) and (not is_nvidia) and (
             model.startswith(("ollama/", "ollama_chat/")) or (
                 not is_claude and not is_openai and "/" not in model
             )
@@ -497,6 +498,25 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                 if _env_file.exists():
                     for line in _env_file.read_text().splitlines():
                         if line.startswith("MINIMAX_API_KEY=") and line.split("=", 1)[1].strip():
+                            return None
+            except OSError:
+                pass
+            continue
+
+        if is_nvidia:
+            if os.environ.get("NVIDIA_API_KEY", "").strip():
+                return None
+            try:
+                cfg = _load_llm_config()
+                if cfg.get("providers", {}).get("nvidia", {}).get("api_key", "").strip():
+                    return None
+            except Exception:
+                pass
+            try:
+                _env_file = settings.llm_env
+                if _env_file.exists():
+                    for line in _env_file.read_text().splitlines():
+                        if line.startswith("NVIDIA_API_KEY=") and line.split("=", 1)[1].strip():
                             return None
             except OSError:
                 pass
@@ -571,6 +591,22 @@ def _load_llm_config() -> dict:
 # (LiteLLM openai/ Prefix), aber eigener Endpoint + eigener API-Key.
 MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/v1"
 
+# #684: NVIDIA NIM als eigenständiger Provider (OpenAI-kompatibel, eigener Key +
+# eigener Endpoint). Phase-1-Startliste ist ein explizites Set — keine breite
+# Namespace-Prefix-Whitelist, damit "meta/..." etc. nicht später mit anderen
+# Providern kollidiert. Dynamische /v1/models-Discovery kommt später.
+NVIDIA_DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+NVIDIA_MODELS: frozenset[str] = frozenset({
+    "minimaxai/minimax-m2.7",
+    "minimaxai/minimax-m2.5",
+    "meta/llama-3.3-70b-instruct",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "deepseek-ai/deepseek-v3.2",
+    "qwen/qwen3-coder-480b-a35b-instruct",
+    "moonshotai/kimi-k2-thinking",
+})
+
 
 def _minimax_base_url() -> str:
     """Liefert den aktuellen MiniMax-Endpoint aus llm_config, sonst Default."""
@@ -582,6 +618,25 @@ def _minimax_base_url() -> str:
     except Exception:
         pass
     return MINIMAX_DEFAULT_BASE_URL
+
+
+def _nvidia_base_url() -> str:
+    """Liefert den aktuellen NVIDIA NIM-Endpoint aus llm_config, sonst Default."""
+    try:
+        cfg = _load_llm_config()
+        url = (cfg.get("providers", {}).get("nvidia", {}).get("base_url") or "").strip()
+        if url:
+            return url
+    except Exception:
+        pass
+    return NVIDIA_DEFAULT_BASE_URL
+
+
+def _is_nvidia_model(model: str) -> bool:
+    """#684: True wenn Model-ID in der Phase-1-Startliste ist. Set-basiert,
+    nicht präfix-basiert, um zukünftige Provider-Kollisionen (z.B. mit
+    OpenRouter, Vertex) zu vermeiden."""
+    return model in NVIDIA_MODELS
 
 
 def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
@@ -606,6 +661,23 @@ def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
                 key = ""
         if key:
             kwargs["api_key"] = key
+        return kwargs
+
+    # #684: NVIDIA NIM — OpenAI-kompatibler Transport, eigener Key + Endpoint.
+    if _is_nvidia_model(model_name):
+        kwargs["api_base"] = _nvidia_base_url()
+        _akv = getattr(getattr(agent_cfg, "llm", None), "api_key_env", "") or ""
+        key = os.environ.get(_akv, "") if _akv else ""
+        if not key:
+            key = os.environ.get("NVIDIA_API_KEY", "")
+        if not key:
+            try:
+                cfg = _load_llm_config()
+                key = (cfg.get("providers", {}).get("nvidia", {}).get("api_key") or "").strip()
+            except Exception:
+                key = ""
+        if key:
+            kwargs["api_key"] = key
     return kwargs
 
 
@@ -623,6 +695,12 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
         return f"openai/{model}", _minimax_base_url()
     if model.startswith("minimax/"):
         return f"openai/{model[len('minimax/'):]}", _minimax_base_url()
+
+    # #684: NVIDIA NIM — Set-basierte Erkennung der Phase-1-Modelle (bare
+    # Namespace-Form wie in der NVIDIA-Doku). Vor dem Ollama-Fallback, damit
+    # "meta/llama-3.3-70b-instruct" nicht als Ollama-Modell landet.
+    if _is_nvidia_model(model):
+        return f"openai/{model}", _nvidia_base_url()
 
     # Wenn kein ollama_base_url aber Modell Ollama: WKS-URL aus User-Config suchen
     if not ollama_base_url and (model.startswith("ollama/") or "/" not in model):
