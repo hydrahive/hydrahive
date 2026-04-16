@@ -113,6 +113,8 @@ _TOOL_POLICIES: dict[str, ToolPolicy] = {
     "shell_exec":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "project_shell":    ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "server_shell":     ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
+    "server_file_write": ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
+    "wks_shell_exec":   ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high", log_level="verbose"),
     "git_commit":       ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="medium"),
     "git_push":         ToolPolicy(ToolOpType.MUTATION, parallel_safe=False, cost="high"),
     # Meta, low cost

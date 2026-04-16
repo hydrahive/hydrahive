@@ -161,7 +161,17 @@ async def _execute_tool(
 ):
     """Führt ein einzelnes Tool aus. Gibt Fehler-Dict zurück wenn tool=None."""
     args = dict(tool_input or {})
-    effective_pid = args.pop("project_id", None) or project_id
+    # #584-C Security: Runtime-project_id IMMER Vorrang — sonst könnte ein Agent
+    # in Projekt A via Tool-Input `{"project_id": "projectB"}` gegen Projekt Bs
+    # Target-Auth resolven (Auth-Bypass). Wir ziehen das Feld aus args heraus
+    # (sonst landet es doppelt in **kwargs), ignorieren aber seinen Wert.
+    _maybe_injected_pid = args.pop("project_id", None)
+    if _maybe_injected_pid and _maybe_injected_pid != project_id:
+        logger.warning(
+            "Tool '%s' [agent=%s]: project_id im Tool-Input (%r) ignoriert — Runtime-Wert (%r) bleibt autoritativ.",
+            tool_name, getattr(boss_cfg, "id", "?"), _maybe_injected_pid, project_id,
+        )
+    effective_pid = project_id
     if tool is None:
         return _tool_denied_error(tool_name)
 

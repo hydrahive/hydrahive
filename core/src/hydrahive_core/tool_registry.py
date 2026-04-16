@@ -2267,7 +2267,283 @@ class ToolSearchTool(BaseTool):
 
 
 # =========================================================================
-# Register all 9 Core Tools
+# #584-C — Project-Target-Tools (server_shell, server_file_*, wks_shell_exec)
+# =========================================================================
+
+class ServerShellTool(BaseTool):
+    """SSH-Befehl auf zugewiesenem Root-/Remote-Server ausführen."""
+
+    @property
+    def id(self) -> str: return "server_shell"
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Server-Shell"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt einen Shell-Befehl auf einem dem Projekt zugewiesenen "
+            "Root-/Remote-Server via SSH aus (stdout/stderr/exit_code). "
+            "`server_id` muss in den Projekt-Zielsystemen stehen."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string", "description": "ID des zugewiesenen Servers"},
+                "command":   {"type": "string", "description": "Bash-Befehl"},
+                "timeout":   {"type": "integer", "description": "SSH-Timeout in s (Default 60, max 120)"},
+            },
+            "required": ["server_id", "command"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        server_id: str = "", command: str = "", timeout: int = 60,
+        **kwargs,
+    ) -> dict:
+        from .target_resolution import (
+            resolve_server_target, run_ssh_command, TargetAccessError,
+        )
+        try:
+            target = resolve_server_target(agent_id, server_id, project_id=project_id)
+        except TargetAccessError as e:
+            return {"error": str(e), "exit_code": -1, "server_id": server_id}
+
+        timeout = min(max(int(timeout or 60), 1), 120)
+        result = await run_ssh_command(
+            target.ip, target.ssh_user, target.ssh_port,
+            target.ssh_key_path, command, timeout=timeout,
+        )
+        result["server_id"] = server_id
+        result["command"] = command
+        return result
+
+
+class ServerFileReadTool(BaseTool):
+    """Datei von zugewiesenem Server lesen (via dd, POSIX-minimal)."""
+
+    @property
+    def id(self) -> str: return "server_file_read"
+    @property
+    def is_read_only(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Server-Datei lesen"
+    @property
+    def description(self) -> str:
+        return (
+            "Liest eine Datei von einem zugewiesenen Root-/Remote-Server. "
+            "Maximal max_bytes (Default 200000, max 1000000). "
+            "Für Textdateien optimiert (UTF-8)."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string"},
+                "path":      {"type": "string", "description": "Absoluter Pfad auf dem Ziel-Server"},
+                "max_bytes": {"type": "integer", "description": "Default 200000, max 1000000"},
+            },
+            "required": ["server_id", "path"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        server_id: str = "", path: str = "", max_bytes: int = 200_000,
+        **kwargs,
+    ) -> dict:
+        import shlex as _shlex
+        from .target_resolution import (
+            resolve_server_target, run_ssh_command, TargetAccessError,
+        )
+        try:
+            target = resolve_server_target(agent_id, server_id, project_id=project_id)
+        except TargetAccessError as e:
+            return {"error": str(e), "exit_code": -1, "server_id": server_id, "path": path}
+
+        if not path:
+            return {"error": "path fehlt.", "exit_code": -1}
+        max_bytes = min(max(int(max_bytes or 200_000), 1), 1_000_000)
+        # dd + head ist POSIX-minimal, kein python3 nötig. count=max_bytes+1 um
+        # truncation-Flag setzen zu können.
+        read_limit = max_bytes + 1
+        remote_cmd = (
+            f"dd if={_shlex.quote(path)} bs=1 count={read_limit} "
+            f"2>/dev/null | head -c {read_limit}"
+        )
+        result = await run_ssh_command(
+            target.ip, target.ssh_user, target.ssh_port,
+            target.ssh_key_path, remote_cmd, timeout=60,
+        )
+        if result.get("exit_code") != 0:
+            return {
+                "error": result.get("stderr") or result.get("error") or "read failed",
+                "exit_code": result.get("exit_code", -1),
+                "server_id": server_id, "path": path,
+            }
+        content = result.get("stdout", "")
+        content_bytes = len(content.encode("utf-8", errors="replace"))
+        truncated = content_bytes > max_bytes
+        if truncated:
+            # Naiv-sichere Kürzung auf Zeichenebene (Byte-Genauigkeit unnötig
+            # da UTF-8-Decode nur ungefähre Größe zeigt).
+            content = content[:max_bytes]
+        return {
+            "server_id": server_id,
+            "path": path,
+            "content": content,
+            "truncated": truncated,
+            "bytes": len(content),
+        }
+
+
+class ServerFileWriteTool(BaseTool):
+    """Datei auf zugewiesenem Server schreiben (atomar via base64)."""
+
+    @property
+    def id(self) -> str: return "server_file_write"
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def name(self) -> str: return "Server-Datei schreiben"
+    @property
+    def description(self) -> str:
+        return (
+            "Schreibt eine Datei atomar auf einen zugewiesenen Root-/Remote-Server. "
+            "Content wird base64-codiert übertragen (binary-safe). Maximal 1 MiB. "
+            "Optional `mode` (oktal, z.B. \"0644\")."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "server_id": {"type": "string"},
+                "path":      {"type": "string"},
+                "content":   {"type": "string"},
+                "mode":      {"type": "string", "description": "oktal z.B. '0644' (optional)"},
+            },
+            "required": ["server_id", "path", "content"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        server_id: str = "", path: str = "", content: str = "", mode: str = "",
+        **kwargs,
+    ) -> dict:
+        import base64 as _b64
+        import shlex as _shlex
+        import re as _re
+        from .target_resolution import (
+            resolve_server_target, run_ssh_command, TargetAccessError,
+        )
+        try:
+            target = resolve_server_target(agent_id, server_id, project_id=project_id)
+        except TargetAccessError as e:
+            return {"error": str(e), "exit_code": -1, "server_id": server_id, "path": path}
+
+        if not path:
+            return {"error": "path fehlt.", "exit_code": -1}
+        MAX_CONTENT = 1_048_576  # 1 MiB
+        payload = content or ""
+        payload_bytes = payload.encode("utf-8")
+        if len(payload_bytes) > MAX_CONTENT:
+            return {
+                "error": f"Content > {MAX_CONTENT} Bytes nicht erlaubt (aktuell {len(payload_bytes)}).",
+                "exit_code": -1,
+            }
+        b64 = _b64.b64encode(payload_bytes).decode("ascii")
+
+        mode_part = ""
+        if mode:
+            if not _re.match(r"^[0-7]{3,4}$", str(mode)):
+                return {"error": f"Ungültiger mode '{mode}' (erwartet: oktal, z.B. 0644).", "exit_code": -1}
+            mode_part = f" && chmod {mode} {_shlex.quote(path)}"
+
+        # Atomic via tmp-Datei im selben Verzeichnis + mv
+        remote_cmd = (
+            f"tmp=$(mktemp {_shlex.quote(path)}.XXXXXX) && "
+            f"printf %s {_shlex.quote(b64)} | base64 -d > \"$tmp\" && "
+            f"mv \"$tmp\" {_shlex.quote(path)}"
+            f"{mode_part}"
+        )
+        result = await run_ssh_command(
+            target.ip, target.ssh_user, target.ssh_port,
+            target.ssh_key_path, remote_cmd, timeout=60,
+        )
+        if result.get("exit_code") != 0:
+            return {
+                "error": result.get("stderr") or result.get("error") or "write failed",
+                "exit_code": result.get("exit_code", -1),
+                "server_id": server_id, "path": path,
+            }
+        return {
+            "server_id": server_id,
+            "path": path,
+            "bytes": len(payload_bytes),
+            "mode": mode or None,
+        }
+
+
+class WksShellExecTool(BaseTool):
+    """SSH-Befehl auf einer dem Projekt zugewiesenen Workstation ausführen."""
+
+    @property
+    def id(self) -> str: return "wks_shell_exec"
+    @property
+    def is_destructive(self) -> bool: return True
+    @property
+    def name(self) -> str: return "WKS-Shell"
+    @property
+    def description(self) -> str:
+        return (
+            "Führt einen Shell-Befehl auf der Workstation (WKS) eines Users aus — "
+            "NICHT auf einem Server. `username` ist optional wenn genau eine WKS "
+            "dem Projekt zugewiesen ist; bei mehreren ist er Pflicht."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "username": {"type": "string", "description": "WKS-Owner (optional bei genau 1 zugewiesener WKS)"},
+                "command":  {"type": "string", "description": "Bash-Befehl"},
+                "timeout":  {"type": "integer", "description": "SSH-Timeout in s (Default 60, max 120)"},
+            },
+            "required": ["command"],
+        }
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        command: str = "", username: str = "", timeout: int = 60,
+        **kwargs,
+    ) -> dict:
+        from .target_resolution import (
+            resolve_wks_target, run_ssh_command, TargetAccessError,
+        )
+        try:
+            target = resolve_wks_target(username or None, project_id=project_id)
+        except TargetAccessError as e:
+            return {"error": str(e), "exit_code": -1, "username": username}
+
+        timeout = min(max(int(timeout or 60), 1), 120)
+        result = await run_ssh_command(
+            target.ip, target.ssh_user, target.ssh_port,
+            target.ssh_key_path, command, timeout=timeout,
+        )
+        result["username"] = target.username
+        result["command"] = command
+        return result
+
+
+# =========================================================================
+# Register all Core Tools
 # =========================================================================
 
 registry.register(ShellExecTool())
@@ -2280,3 +2556,8 @@ registry.register(ReadMemoryTool())
 registry.register(WriteMemoryTool())
 registry.register(AskAgentTool())
 registry.register(ToolSearchTool())
+# #584-C: Projekt-Target-Tools
+registry.register(ServerShellTool())
+registry.register(ServerFileReadTool())
+registry.register(ServerFileWriteTool())
+registry.register(WksShellExecTool())
