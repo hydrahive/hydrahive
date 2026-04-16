@@ -17,6 +17,7 @@ Modalitäten schrittweise nach `core/` überführen.
 | `minimax_mcp_server.py` | MCP-Server (streamableHttp) für MiniMax-Tools | ~722 |
 | `minimax_tools.py` | Native Agent-Tool-Klassen (Image/Video/Music/TTS/STT/Vision) | ~531 |
 | `__init__.py` | Re-Exports | ~38 |
+| [`USAGE.md`](USAGE.md) | Ziel-Verhalten: API-Client, MCP-Server, Native Tools, Prompts | — |
 
 ## Drei Integrations-Wege (aus dem PoC)
 
