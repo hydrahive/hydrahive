@@ -387,6 +387,46 @@ def register_server_routes(
             raise HTTPException(404, "Host oder Fingerprint nicht gefunden")
         return None
 
+    # ── #686: Orphan-Cleanup für ssh_known_hosts ─────────────────────────
+
+    def _load_known_sets() -> tuple[set[str], set[str]]:
+        """Stammdaten für Orphan-Check. fail-closed bei korrupter
+        users.json, damit nicht versehentlich alle wks:*-Keys als orphan
+        erkannt werden. Fehlende Datei ist harmlos (leeres User-Set)."""
+        server_ids = {s["id"] for s in _load_servers() if s.get("id")}
+        users_path = settings.users_config
+        if not users_path.exists():
+            return server_ids, set()
+        try:
+            users = json.loads(users_path.read_text(encoding="utf-8"))
+        except Exception:
+            raise HTTPException(
+                500,
+                "users.json nicht lesbar — Orphan-Cleanup abgebrochen",
+            )
+        if not isinstance(users, dict):
+            raise HTTPException(
+                500,
+                "users.json hat unerwartetes Format — Orphan-Cleanup abgebrochen",
+            )
+        return server_ids, set(users.keys())
+
+    @admin_router.get("/admin/hostkeys/orphans")
+    def list_hostkey_orphans():
+        server_ids, usernames = _load_known_sets()
+        orphans = ssh_known_hosts.classify_orphans(server_ids, usernames)
+        return {"count": len(orphans), "orphans": orphans}
+
+    @admin_router.delete("/admin/hostkeys/orphans")
+    def delete_hostkey_orphans():
+        server_ids, usernames = _load_known_sets()
+        removed = ssh_known_hosts.remove_orphans(server_ids, usernames)
+        if removed:
+            logger.info(
+                "#686 hostkey orphan cleanup: %d entries removed", len(removed),
+            )
+        return {"removed_count": len(removed), "removed": removed}
+
     @admin_router.get("/admin/servers/{server_id}/pubkey")
     def get_server_pubkey(server_id: str):
         if not _SAFE_ID.match(server_id):

@@ -527,6 +527,161 @@ class TestGetVerifiedKeys:
         assert skh.get_verified_keys("server", "../x") == []
 
 
+class TestClassifyOrphans:
+    """#686: Store-Einträge ohne passendes Target identifizieren."""
+
+    def _seed_host(self, target_type, target_id, verified=False):
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        skh.record_scan_result(
+            target_type, target_id,
+            ip="1.2.3.4", ssh_port=22, ssh_user="x",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+        if verified:
+            skh.approve_key(target_type, target_id, fp)
+
+    def test_no_orphans_returns_empty(self, store):
+        self._seed_host("server", "prod-web")
+        self._seed_host("wks", "till")
+        orphans = skh.classify_orphans({"prod-web"}, {"till"})
+        assert orphans == []
+
+    def test_server_orphan_detected(self, store):
+        self._seed_host("server", "deleted-srv", verified=True)
+        orphans = skh.classify_orphans(set(), set())
+        assert len(orphans) == 1
+        assert orphans[0]["host_key"] == "server:deleted-srv"
+        assert orphans[0]["reason"] == "server_not_found"
+        assert orphans[0]["key_count"] == 1
+
+    def test_wks_orphan_detected_when_user_gone(self, store):
+        self._seed_host("wks", "gone-user")
+        orphans = skh.classify_orphans(set(), {"still-there"})
+        assert len(orphans) == 1
+        assert orphans[0]["host_key"] == "wks:gone-user"
+        assert orphans[0]["reason"] == "user_not_found"
+
+    def test_unknown_target_type_is_orphan(self, store):
+        # manuell am make_host_key-Guard vorbei — simuliert Hand-Edit
+        data = skh.load_known_hosts()
+        data["hosts"]["ftp:legacy"] = {
+            "target_type": "ftp", "target_id": "legacy",
+            "ip": "", "ssh_port": 22, "ssh_user": "",
+            "host_keys": {}, "status": "unknown", "last_checked": None,
+        }
+        skh.save_known_hosts(data)
+        orphans = skh.classify_orphans(set(), set())
+        assert len(orphans) == 1
+        assert orphans[0]["reason"] == "unknown_target_type"
+        assert orphans[0]["target_type"] == "ftp"
+        assert orphans[0]["target_id"] == "legacy"
+
+    def test_malformed_key_is_orphan(self, store):
+        data = skh.load_known_hosts()
+        data["hosts"]["no-separator-here"] = {"host_keys": {}, "status": "unknown"}
+        skh.save_known_hosts(data)
+        orphans = skh.classify_orphans(set(), set())
+        assert len(orphans) == 1
+        assert orphans[0]["reason"] == "malformed_key"
+        assert orphans[0]["target_type"] is None
+
+    def test_wks_with_empty_ip_is_not_orphan_if_user_exists(self, store):
+        """Konservativ: wks-Keys eines existierenden Users bleiben stehen,
+        auch wenn die IP zur Zeit leer ist (User pausiert WKS)."""
+        self._seed_host("wks", "paused-user")
+        orphans = skh.classify_orphans(set(), {"paused-user"})
+        assert orphans == []
+
+
+class TestRemoveOrphans:
+
+    def _seed(self):
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        # valid server
+        skh.record_scan_result(
+            "server", "keeper",
+            ip="1.2.3.4", ssh_port=22, ssh_user="root",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+        skh.approve_key("server", "keeper", fp)
+        # orphan server
+        skh.record_scan_result(
+            "server", "ghost",
+            ip="5.6.7.8", ssh_port=22, ssh_user="root",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_RSA_B64,
+                "fingerprint_sha256": skh.compute_fingerprint(_FAKE_RSA_B64),
+            }],
+        )
+        # orphan wks
+        skh.record_scan_result(
+            "wks", "exuser",
+            ip="10.0.0.99", ssh_port=22, ssh_user="exuser",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+
+    def test_removes_only_orphans_keeps_valid_approved(self, store):
+        self._seed()
+        removed = skh.remove_orphans({"keeper"}, set())
+        # "keeper" bleibt, "ghost" + "exuser" weg
+        removed_keys = {r["host_key"] for r in removed}
+        assert removed_keys == {"server:ghost", "wks:exuser"}
+        # Valid Server behält Approval
+        keeper = skh.get_host_entry("server", "keeper")
+        assert keeper is not None
+        assert keeper["status"] == "verified"
+        assert skh.get_host_entry("server", "ghost") is None
+        assert skh.get_host_entry("wks", "exuser") is None
+
+    def test_is_idempotent(self, store):
+        self._seed()
+        skh.remove_orphans({"keeper"}, set())
+        removed2 = skh.remove_orphans({"keeper"}, set())
+        assert removed2 == []
+
+    def test_empty_when_nothing_to_do(self, store):
+        fp = skh.compute_fingerprint(_FAKE_ED25519_B64)
+        skh.record_scan_result(
+            "server", "prod-web",
+            ip="1.2.3.4", ssh_port=22, ssh_user="root",
+            scanned_keys=[{
+                "algorithm": "ssh-ed25519",
+                "public_key": _FAKE_ED25519_B64,
+                "fingerprint_sha256": fp,
+            }],
+        )
+        assert skh.remove_orphans({"prod-web"}, set()) == []
+
+    def test_single_write_not_per_entry(self, store, monkeypatch):
+        """Sicherstellen dass remove_orphans nur einmal save_known_hosts
+        ruft, auch bei mehreren Orphans — atomare Semantik."""
+        self._seed()  # 2 orphans
+        calls = {"n": 0}
+        real_save = skh.save_known_hosts
+
+        def counting_save(data):
+            calls["n"] += 1
+            real_save(data)
+
+        monkeypatch.setattr("hydrahive_core.ssh_known_hosts.save_known_hosts", counting_save)
+        removed = skh.remove_orphans({"keeper"}, set())
+        assert len(removed) == 2
+        assert calls["n"] == 1
+
+
 class TestEnforcementMode:
 
     def test_default_warn(self, monkeypatch):

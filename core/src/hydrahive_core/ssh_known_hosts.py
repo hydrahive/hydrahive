@@ -361,6 +361,82 @@ def delete_key(
     return host
 
 
+def classify_orphans(
+    known_server_ids: set[str],
+    known_usernames: set[str],
+) -> list[dict]:
+    """#686: Findet Store-Einträge ohne passendes Target. Reiner Lookup
+    gegen den Store, keine IO außer load_known_hosts.
+
+    Orphan-Gründe:
+    - server_not_found:    "server:{id}", {id} nicht in known_server_ids
+    - user_not_found:      "wks:{username}", {username} nicht in known_usernames
+    - unknown_target_type: target_type != "server" und != "wks"
+    - malformed_key:       Store-Key ohne ":" (Hand-Edit-Fehler)
+
+    Konservativ: WKS-Keys eines existierenden Users mit leerem wks.ip
+    bleiben stehen — User kann WKS temporär deaktivieren.
+    """
+    store = load_known_hosts()
+    orphans: list[dict] = []
+    for host_key, entry in (store.get("hosts") or {}).items():
+        key_count = len(entry.get("host_keys") or {}) if isinstance(entry, dict) else 0
+        if ":" not in host_key:
+            orphans.append({
+                "host_key": host_key,
+                "target_type": None,
+                "target_id": None,
+                "reason": "malformed_key",
+                "key_count": key_count,
+            })
+            continue
+        ttype, tid = host_key.split(":", 1)
+        if ttype not in ALLOWED_TARGET_TYPES:
+            orphans.append({
+                "host_key": host_key,
+                "target_type": ttype,
+                "target_id": tid,
+                "reason": "unknown_target_type",
+                "key_count": key_count,
+            })
+            continue
+        if ttype == "server" and tid not in known_server_ids:
+            orphans.append({
+                "host_key": host_key,
+                "target_type": ttype,
+                "target_id": tid,
+                "reason": "server_not_found",
+                "key_count": key_count,
+            })
+        elif ttype == "wks" and tid not in known_usernames:
+            orphans.append({
+                "host_key": host_key,
+                "target_type": ttype,
+                "target_id": tid,
+                "reason": "user_not_found",
+                "key_count": key_count,
+            })
+    return orphans
+
+
+def remove_orphans(
+    known_server_ids: set[str],
+    known_usernames: set[str],
+) -> list[dict]:
+    """#686: Entfernt alle via classify_orphans identifizierten Einträge
+    in einem einzigen Store-Write. Liefert die entfernten Entries."""
+    orphans = classify_orphans(known_server_ids, known_usernames)
+    if not orphans:
+        return []
+    store = load_known_hosts()
+    hosts = store.get("hosts") or {}
+    for o in orphans:
+        hosts.pop(o["host_key"], None)
+    store["hosts"] = hosts
+    save_known_hosts(store)
+    return orphans
+
+
 def remove_host(target_type: str, target_id: str) -> bool:
     """Entfernt den gesamten Host-Entry aus dem Store. Idempotent.
 
