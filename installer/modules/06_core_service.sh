@@ -74,6 +74,34 @@ chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}" /agents /proje
 chown root:${HYDRAHIVE_USER} /etc/hydrahive
 chmod 750 /etc/hydrahive
 
+# #690: Feature-Verzeichnisse vorab anlegen mit korrekten Rechten.
+# /etc/hydrahive/{servers,skill_packages} — Daten: 0o750 root:hydrahive (analog /etc/hydrahive).
+# /etc/hydrahive/{server_keys,wks_keys}   — PRIVATE KEYS: 0o700 hydrahive:hydrahive.
+# /var/lib/hydrahive/{worktrees,users}    — Runtime-State: 0o750 hydrahive:hydrahive.
+# /opt/hydrahive/{skills/catalog,backups} — App-Daten: skills/catalog 0o755 admin-befüllt,
+#                                          backups 0o750 hydrahive:hydrahive.
+for _dir in servers skill_packages; do
+    mkdir -p "/etc/hydrahive/${_dir}"
+    chown root:${HYDRAHIVE_USER} "/etc/hydrahive/${_dir}"
+    chmod 750 "/etc/hydrahive/${_dir}"
+done
+for _dir in server_keys wks_keys; do
+    mkdir -p "/etc/hydrahive/${_dir}"
+    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "/etc/hydrahive/${_dir}"
+    chmod 700 "/etc/hydrahive/${_dir}"
+done
+for _dir in /var/lib/hydrahive/worktrees /var/lib/hydrahive/users; do
+    mkdir -p "${_dir}"
+    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${_dir}"
+    chmod 750 "${_dir}"
+done
+mkdir -p "${HYDRAHIVE_DIR}/skills/catalog"
+chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}/skills"
+chmod 755 "${HYDRAHIVE_DIR}/skills" "${HYDRAHIVE_DIR}/skills/catalog"
+mkdir -p "${HYDRAHIVE_DIR}/backups"
+chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}/backups"
+chmod 750 "${HYDRAHIVE_DIR}/backups"
+
 # --- Konfig-Dateien voranlegen (hydrahive-core braucht Schreibrechte) ---
 for _f in jwt_secret llm_env llm_config.json gitea_config.json users.json admin_credentials; do
     _path="/etc/hydrahive/${_f}"
