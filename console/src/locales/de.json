@@ -1549,6 +1549,22 @@
       "apiKey": "API-Key (Env-Variable)",
       "apiKeyDefault": "Standard (aus Environment)"
     },
+    "targets": {
+      "title": "Zugewiesene Zielsysteme",
+      "count": "{{count}} Ziele",
+      "manage": "In Zielsysteme verwalten",
+      "loading": "Zielsysteme laden...",
+      "loadFailed": "Zielsysteme konnten nicht geladen werden",
+      "empty": "Diesem Projekt sind noch keine Root-/Remote-Server oder WKS zugewiesen.",
+      "servers": "Root-/Remote-Server",
+      "wks": "WKS",
+      "noServers": "Keine Server zugewiesen.",
+      "noWks": "Keine WKS zugewiesen.",
+      "staleServer": "Server existiert nicht mehr",
+      "staleWks": "WKS existiert nicht mehr",
+      "staleHint": "Eintrag prüfen oder entfernen.",
+      "keyMissing": "SSH-Key fehlt."
+    },
     "whatsapp": {
       "saved": "Gespeichert!",
       "saveFailed": "WhatsApp-Config speichern fehlgeschlagen",

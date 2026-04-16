@@ -4,8 +4,9 @@
  * Zeigt und editiert: LLM-Config, AGENT.md, Execution-Mode.
  * Nutzt GET/PUT /projects/{id}/settings Endpoints.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { ProfileComposer } from "@/components/ProfileComposer";
@@ -23,6 +24,10 @@ import {
   Hash,
   Database,
   Sparkles,
+  Server,
+  Monitor,
+  ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 
 interface ProjectSettingsPanelProps {
@@ -54,6 +59,35 @@ interface SettingsData {
   };
 }
 
+interface ProjectTargetServer {
+  server_id: string;
+  name?: string;
+  ip?: string;
+  ssh_user?: string;
+  ssh_port?: number;
+  role?: string;
+  note?: string;
+  has_ssh_key?: boolean;
+  stale?: boolean;
+}
+
+interface ProjectTargetWks {
+  username: string;
+  ip?: string;
+  ssh_user?: string;
+  ssh_port?: number;
+  role?: string;
+  note?: string;
+  has_ssh_key?: boolean;
+  stale?: boolean;
+}
+
+interface ProjectTargetsResponse {
+  project_id: string;
+  servers: ProjectTargetServer[];
+  wks: ProjectTargetWks[];
+}
+
 const PROVIDERS = ["anthropic", "openai", "minimax", "google", "ollama", "deepseek"];
 
 const MODELS: Record<string, string[]> = {
@@ -77,6 +111,9 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [data, setData] = useState<SettingsData | null>(null);
+  const [targets, setTargets] = useState<ProjectTargetsResponse | null>(null);
+  const [targetsLoading, setTargetsLoading] = useState(false);
+  const [targetsError, setTargetsError] = useState("");
 
   // Editable fields
   const [provider, setProvider] = useState("anthropic");
@@ -129,6 +166,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
 
   useEffect(() => {
     loadSettings();
+    loadTargets();
     loadKeys();
     loadWhatsAppStatus();
     loadVoices();
@@ -332,6 +370,20 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     }
   }
 
+  async function loadTargets() {
+    setTargetsLoading(true);
+    setTargetsError("");
+    try {
+      const res = await api.get<ProjectTargetsResponse>(`/projects/${projectId}/targets`);
+      setTargets(res);
+    } catch (e: any) {
+      setTargets(null);
+      setTargetsError(e?.message || t("projectSettings.targets.loadFailed", { defaultValue: "Zielsysteme konnten nicht geladen werden" }));
+    } finally {
+      setTargetsLoading(false);
+    }
+  }
+
   async function runBootstrapMemory(force = false) {
     setBootstrapRunning(true);
     setBootstrapResult("");
@@ -428,6 +480,13 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           )}
         </div>
       </div>
+
+      <ProjectTargetsSummary
+        targets={targets}
+        loading={targetsLoading}
+        error={targetsError}
+        isAdmin={isAdmin}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* LLM-Config */}
@@ -859,6 +918,175 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
           {bootstrapResult && <span className="text-[10px] text-muted-foreground">{bootstrapResult}</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProjectTargetsSummary({
+  targets,
+  loading,
+  error,
+  isAdmin,
+}: {
+  targets: ProjectTargetsResponse | null;
+  loading: boolean;
+  error: string;
+  isAdmin: boolean;
+}) {
+  const { t } = useTranslation();
+  const servers = targets?.servers ?? [];
+  const wks = targets?.wks ?? [];
+  const hasTargets = servers.length > 0 || wks.length > 0;
+
+  return (
+    <div className="rounded-2xl border bg-background/55 p-3 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-medium">
+          <Server className="h-3.5 w-3.5 text-primary" />
+          {t("projectSettings.targets.title", { defaultValue: "Zugewiesene Zielsysteme" })}
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+            {t("projectSettings.targets.count", {
+              count: servers.length + wks.length,
+              defaultValue: "{{count}} Ziele",
+            })}
+          </span>
+        </div>
+        {isAdmin && (
+          <Link
+            to="/target-systems"
+            className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] transition hover:bg-accent"
+          >
+            {t("projectSettings.targets.manage", { defaultValue: "In Zielsysteme verwalten" })}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          {t("projectSettings.targets.loading", { defaultValue: "Zielsysteme laden..." })}
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && !hasTargets && (
+        <p className="text-[11px] text-muted-foreground">
+          {t("projectSettings.targets.empty", {
+            defaultValue: "Diesem Projekt sind noch keine Root-/Remote-Server oder WKS zugewiesen.",
+          })}
+        </p>
+      )}
+
+      {!loading && !error && hasTargets && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <TargetList
+            icon={<Server className="h-3.5 w-3.5 text-primary" />}
+            title={t("projectSettings.targets.servers", { defaultValue: "Root-/Remote-Server" })}
+            empty={t("projectSettings.targets.noServers", { defaultValue: "Keine Server zugewiesen." })}
+            items={servers.map(s => ({
+              id: s.server_id,
+              title: s.name || s.server_id,
+              subtitle: s.stale
+                ? t("projectSettings.targets.staleServer", { defaultValue: "Server existiert nicht mehr" })
+                : `${s.ssh_user || "ssh"}@${s.ip || "?"}:${s.ssh_port ?? 22}`,
+              role: s.role,
+              note: s.note,
+              stale: s.stale,
+              keyMissing: s.has_ssh_key === false && !s.stale,
+            }))}
+          />
+          <TargetList
+            icon={<Monitor className="h-3.5 w-3.5 text-cyan-500" />}
+            title={t("projectSettings.targets.wks", { defaultValue: "WKS" })}
+            empty={t("projectSettings.targets.noWks", { defaultValue: "Keine WKS zugewiesen." })}
+            items={wks.map(w => ({
+              id: w.username,
+              title: w.username,
+              subtitle: w.stale
+                ? t("projectSettings.targets.staleWks", { defaultValue: "WKS existiert nicht mehr" })
+                : `${w.ssh_user || w.username}@${w.ip || "?"}:${w.ssh_port ?? 22}`,
+              role: w.role,
+              note: w.note,
+              stale: w.stale,
+              keyMissing: w.has_ssh_key === false && !w.stale,
+            }))}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TargetList({
+  icon,
+  title,
+  empty,
+  items,
+}: {
+  icon: ReactNode;
+  title: string;
+  empty: string;
+  items: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    role?: string;
+    note?: string;
+    stale?: boolean;
+    keyMissing?: boolean;
+  }>;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="rounded-xl border bg-muted/20 p-2.5 space-y-2">
+      <div className="flex items-center gap-2 text-[11px] font-medium">
+        {icon}
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground">{empty}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map(item => (
+            <div
+              key={item.id}
+              className={`rounded-lg border bg-background px-2.5 py-2 text-[11px] ${
+                item.stale ? "border-amber-400/70 bg-amber-50/60 dark:bg-amber-950/20" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{item.title}</div>
+                  <div className="truncate font-mono text-[10px] text-muted-foreground">{item.subtitle}</div>
+                </div>
+                {item.role && (
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                    {item.role}
+                  </span>
+                )}
+              </div>
+              {item.note && (
+                <p className="mt-1 text-[10px] text-muted-foreground">{item.note}</p>
+              )}
+              {(item.stale || item.keyMissing) && (
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  {item.stale
+                    ? t("projectSettings.targets.staleHint", { defaultValue: "Eintrag prüfen oder entfernen." })
+                    : t("projectSettings.targets.keyMissing", { defaultValue: "SSH-Key fehlt." })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

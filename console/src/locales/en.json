@@ -1549,6 +1549,22 @@
       "apiKey": "API key (env variable)",
       "apiKeyDefault": "Default (from environment)"
     },
+    "targets": {
+      "title": "Assigned target systems",
+      "count": "{{count}} targets",
+      "manage": "Manage in Target Systems",
+      "loading": "Loading target systems...",
+      "loadFailed": "Could not load target systems",
+      "empty": "No root/remote servers or WKS are assigned to this project yet.",
+      "servers": "Root/remote servers",
+      "wks": "WKS",
+      "noServers": "No servers assigned.",
+      "noWks": "No WKS assigned.",
+      "staleServer": "Server no longer exists",
+      "staleWks": "WKS no longer exists",
+      "staleHint": "Review or remove this entry.",
+      "keyMissing": "SSH key missing."
+    },
     "whatsapp": {
       "saved": "Saved!",
       "saveFailed": "Saving WhatsApp config failed",
