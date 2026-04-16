@@ -285,7 +285,7 @@ export function LlmConfigPage() {
     // den Env-Eintrag. Deshalb nur speichern wenn Key schon gesetzt ist.
     if (!minimaxBaseUrl.trim()) return;
     if (!providerStatus["minimax"]?.has_key) {
-      alert(t("llm.minimax.keyRequired", { defaultValue: "Bitte zuerst den MiniMax API-Key speichern." }));
+      alert(t("llm.minimax.keyRequired"));
       return;
     }
     setSavingBaseUrl(true);
@@ -431,14 +431,14 @@ export function LlmConfigPage() {
         <div className="flex items-start justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <h2 className="font-medium text-sm">MiniMax API</h2>
+              <h2 className="font-medium text-sm">{t("llm.minimax.title")}</h2>
               {providerStatus["minimax"]?.has_key
-                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>Aktiv</span>
-                : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>Nicht konfiguriert</span>
+                ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle className="h-3.5 w-3.5"/>{t("llm.minimax.active")}</span>
+                : <span className="flex items-center gap-1 text-xs text-muted-foreground"><XCircle className="h-3.5 w-3.5"/>{t("llm.minimax.inactive")}</span>
               }
               {saved === "minimax" && <span className="text-xs text-green-600">{t("common.saved")}</span>}
             </div>
-            <p className="text-xs text-muted-foreground">OpenAI-compatible API — MiniMax-M2.7</p>
+            <p className="text-xs text-muted-foreground">{t("llm.minimax.subtitle")}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -446,7 +446,7 @@ export function LlmConfigPage() {
             type="password"
             value={keys["minimax"] ?? ""}
             onChange={e => setKeys(k => ({...k, minimax: e.target.value}))}
-            placeholder={providerStatus["minimax"]?.has_key ? "••••••••••••••• (gesetzt)" : "MINIMAX_API_KEY"}
+            placeholder={providerStatus["minimax"]?.has_key ? t("llm.minimax.apiKeyPlaceholderSet") : t("llm.minimax.apiKeyPlaceholderUnset")}
             className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <button onClick={() => saveKey("minimax")}
@@ -456,14 +456,15 @@ export function LlmConfigPage() {
             {saving === "minimax" ? t("common.saving") : t("common.save")}
           </button>
         </div>
+        <p className="text-xs text-muted-foreground">{t("llm.minimax.keyHelp")}</p>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Endpoint (optional)</label>
+          <label className="text-xs text-muted-foreground">{t("llm.minimax.endpoint")}</label>
           <div className="flex gap-2">
             <input
               type="text"
               value={minimaxBaseUrl}
               onChange={e => setMinimaxBaseUrl(e.target.value)}
-              placeholder={providerStatus["minimax"]?.base_url || "https://api.minimax.io/v1 (Default)"}
+              placeholder={providerStatus["minimax"]?.base_url || t("llm.minimax.endpointPlaceholderDefault")}
               className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <button onClick={saveMinimaxBaseUrl}
@@ -473,7 +474,7 @@ export function LlmConfigPage() {
               {savingBaseUrl ? t("common.saving") : t("common.save")}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">Leer lassen für Default. Für CN-Region ggf. api.minimax.chat/v1.</p>
+          <p className="text-xs text-muted-foreground">{t("llm.minimax.endpointHint")}</p>
         </div>
       </div>
 

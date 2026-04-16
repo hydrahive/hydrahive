@@ -31,6 +31,15 @@ const TEMPLATES = [
 
 const PROVIDERS = ["anthropic", "openai", "minimax", "google", "ollama", "deepseek"];
 
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai:    "OpenAI",
+  minimax:   "MiniMax",
+  google:    "Google",
+  ollama:    "Ollama",
+  deepseek:  "DeepSeek",
+};
+
 const MODELS: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
@@ -273,7 +282,7 @@ export function ProjectCreatePage() {
                 <label className="text-xs text-muted-foreground">Provider</label>
                 <select value={provider} onChange={e => { setProvider(e.target.value); setModel(MODELS[e.target.value]?.[0] || ""); }}
                   className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm">
-                  {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+                  {PROVIDERS.map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>)}
                 </select>
               </div>
               <div>

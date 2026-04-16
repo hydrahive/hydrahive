@@ -153,7 +153,7 @@ function LlmSection() {
             <label className={labelCls}>MiniMax API-Key</label>
             <div className="flex items-center gap-2">
               <input type="password" value={minimaxKey} onChange={e => setMinimaxKey(e.target.value)}
-                placeholder={providers.minimax?.has_key ? "mm-***  (gesetzt)" : "MINIMAX_API_KEY"} className={inputCls} />
+                placeholder={providers.minimax?.has_key ? "•••••••••  (gesetzt)" : "MINIMAX_API_KEY"} className={inputCls} />
               {providers.minimax?.has_key && <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />}
             </div>
           </div>

@@ -1277,6 +1277,22 @@
     "jsonNotEnabled": "JSON format is not enabled in settings.yml. Re-run the installer: sudo bash /opt/hydrahive/installer/modules/14_searxng.sh",
     "fixJsonBtn": "Fix JSON format"
   },
+  "llm": {
+    "minimax": {
+      "title": "MiniMax API",
+      "subtitle": "OpenAI-compatible API — MiniMax-M2.7",
+      "active": "Active",
+      "inactive": "Not configured",
+      "apiKeyLabel": "MiniMax API key",
+      "apiKeyPlaceholderSet": "••••••••••••••• (set)",
+      "apiKeyPlaceholderUnset": "MINIMAX_API_KEY",
+      "endpoint": "Endpoint (optional)",
+      "endpointPlaceholderDefault": "https://api.minimax.io/v1 (default)",
+      "endpointHint": "Leave empty for default. For the CN region use api.minimax.chat/v1 if needed.",
+      "keyRequired": "Please save the MiniMax API key first.",
+      "keyHelp": "Get a key from the MiniMax developer console."
+    }
+  },
   "notifications": {
     "title": "Notifications",
     "empty": "No notifications",

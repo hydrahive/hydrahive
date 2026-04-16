@@ -90,6 +90,15 @@ interface ProjectTargetsResponse {
 
 const PROVIDERS = ["anthropic", "openai", "minimax", "google", "ollama", "deepseek"];
 
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai:    "OpenAI",
+  minimax:   "MiniMax",
+  google:    "Google",
+  ollama:    "Ollama",
+  deepseek:  "DeepSeek",
+};
+
 const MODELS: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
@@ -501,7 +510,7 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.provider", { defaultValue: "Provider" })}</label>
             <select value={provider} onChange={e => { setProvider(e.target.value); setModel(MODELS[e.target.value]?.[0] || ""); }}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-              {PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+              {PROVIDERS.map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>)}
             </select>
           </div>
 
