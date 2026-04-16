@@ -25,6 +25,7 @@ from hydrahive_core.orchestrator_llm import (
     NVIDIA_DEFAULT_BASE_URL,
     NVIDIA_MODELS,
 )
+from hydrahive_core.llm_config_validation import LlmConfigValueError
 from hydrahive_core.router_llm import _has_nvidia_provider_key
 
 
@@ -137,6 +138,16 @@ class TestProviderCallKwargsNvidia:
                    return_value=fake_cfg):
             kw = _provider_call_kwargs("moonshotai/kimi-k2-thinking", _make_cfg())
         assert kw["api_base"] == "https://on-prem-nim.example/v1"
+
+    def test_non_ascii_config_key_wird_vor_litellm_abgewiesen(self, monkeypatch):
+        """Regression: kopierte Doku-Bloecke mit Gedankenstrich duerfen nicht
+        als Header an den OpenAI-Client gehen, sonst entsteht ein ascii codec
+        InternalServerError."""
+        monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+        fake_cfg = {"providers": {"nvidia": {"api_key": "nvapi-invalid—text"}}}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config",
+                   return_value=fake_cfg), pytest.raises(LlmConfigValueError):
+            _provider_call_kwargs("minimaxai/minimax-m2.7", _make_cfg())
 
     def test_minimax_und_nvidia_trennen_sich_sauber(self, monkeypatch):
         """Strict Namespace-Trennung: MiniMax-Direkt via "MiniMax-*" geht

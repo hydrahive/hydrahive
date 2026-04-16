@@ -7,6 +7,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from .llm_config_validation import (
+    LlmConfigValueError,
+    clean_provider_base_url,
+    clean_provider_secret,
+)
 from .settings import settings
 
 LLM_CONFIG_FILE = str(settings.llm_config)
@@ -258,20 +263,30 @@ def register_llm_routes(
         config = _load_llm_config()
         if "providers" not in config:
             config["providers"] = {}
+        try:
+            api_key = (
+                clean_provider_secret(req.api_key, label=f"{provider} api_key")
+                if req.api_key is not None
+                else None
+            )
+            base_url = clean_provider_base_url(req.base_url, label=f"{provider} base_url")
+        except LlmConfigValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
         # #616: bestehenden Eintrag erhalten — api_key=None (weggelassen) = nicht ändern.
         existing = dict(config["providers"].get(provider) or {})
         existing["enabled"] = req.enabled
-        if req.api_key is not None:
-            existing["api_key"] = req.api_key
+        if api_key is not None:
+            existing["api_key"] = api_key
         elif "api_key" not in existing:
             existing["api_key"] = ""
-        if req.base_url and req.base_url.strip():
-            existing["base_url"] = req.base_url.strip()
+        if base_url:
+            existing["base_url"] = base_url
         config["providers"][provider] = existing
 
         # Env-File nur aktualisieren wenn api_key explizit mitgeschickt wurde.
         # Andernfalls (None) bleibt der existierende Env-Eintrag unverändert.
-        if req.api_key is not None:
+        if api_key is not None:
             env_key_map = {
                 "claude_max": "ANTHROPIC_API_KEY",
                 "anthropic": "ANTHROPIC_API_KEY",
@@ -282,8 +297,8 @@ def register_llm_routes(
             lines = []
             if env_file.exists():
                 lines = [line for line in env_file.read_text().splitlines() if not line.startswith(f"{env_var}=")]
-            if req.api_key:
-                lines.append(f"{env_var}={req.api_key}")
+            if api_key:
+                lines.append(f"{env_var}={api_key}")
             env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
             env_file.chmod(0o600)
 

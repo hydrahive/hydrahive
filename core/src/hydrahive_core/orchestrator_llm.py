@@ -20,6 +20,7 @@ from pathlib import Path
 
 import litellm
 
+from .llm_config_validation import clean_provider_base_url, clean_provider_secret
 from .settings import settings
 
 logger = logging.getLogger(__name__)
@@ -614,7 +615,7 @@ def _minimax_base_url() -> str:
         cfg = _load_llm_config()
         url = (cfg.get("providers", {}).get("minimax", {}).get("base_url") or "").strip()
         if url:
-            return url
+            return clean_provider_base_url(url, label="MiniMax base_url")
     except Exception:
         pass
     return MINIMAX_DEFAULT_BASE_URL
@@ -626,7 +627,7 @@ def _nvidia_base_url() -> str:
         cfg = _load_llm_config()
         url = (cfg.get("providers", {}).get("nvidia", {}).get("base_url") or "").strip()
         if url:
-            return url
+            return clean_provider_base_url(url, label="NVIDIA base_url")
     except Exception:
         pass
     return NVIDIA_DEFAULT_BASE_URL
@@ -660,7 +661,7 @@ def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
             except Exception:
                 key = ""
         if key:
-            kwargs["api_key"] = key
+            kwargs["api_key"] = clean_provider_secret(key, label="MiniMax API-Key")
         return kwargs
 
     # #684: NVIDIA NIM — OpenAI-kompatibler Transport, eigener Key + Endpoint.
@@ -677,7 +678,7 @@ def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
             except Exception:
                 key = ""
         if key:
-            kwargs["api_key"] = key
+            kwargs["api_key"] = clean_provider_secret(key, label="NVIDIA API-Key")
     return kwargs
 
 
