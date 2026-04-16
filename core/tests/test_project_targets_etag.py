@@ -148,13 +148,24 @@ def _build_app(tmp_path):
 
     projects = {"proj-a": {"name": "Projekt A", "description": ""}}
 
+    # Viele Pflicht-Kwargs werden von den /targets-Endpoints nicht genutzt,
+    # müssen aber für register_project_routes() gesetzt sein.
     register_project_routes(
         auth_router=auth_router,
         admin_router=admin_router,
         require_auth=lambda: ("admin", "admin"),
         projects=projects,
-        _check_project_access=lambda auth, pid: None,
+        discovery=mock.MagicMock(),
+        runtime=mock.MagicMock(),
+        sessions=mock.MagicMock(),
+        orchestrator=mock.MagicMock(),
+        projects_dir=str(tmp_path / "projects"),
+        get_provisioner=lambda: mock.MagicMock(),
+        update_project_matrix_room=lambda *a, **kw: None,
+        update_project_matrix_space=lambda *a, **kw: None,
+        get_user_allowed_projects=lambda u, r: None,  # None = alle Projekte erlaubt
         audit_log=lambda *a, **kw: None,
+        check_message_rate=lambda *a, **kw: None,
         logger=mock.MagicMock(),
         invalidate_prompt_cache=lambda _pid: None,
     )
