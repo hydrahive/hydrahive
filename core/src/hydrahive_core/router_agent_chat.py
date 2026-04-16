@@ -337,6 +337,13 @@ def register_agent_chat_routes(
         _check_agent_access(agent_id, _a)
         from .orchestrator import _load_claude_oauth_token
         from .session_manager import Message, MessageRole
+        # #660: gleicher Builder wie Auto-Compaction — strukturierter
+        # Task-State + YAML-Frontmatter + Secret-Redaction.
+        from .compaction_summary import (
+            build_summary_prompt as _build_summary_prompt,
+            collect_task_state_facts as _collect_facts,
+            redact_summary_text as _redact_summary,
+        )
 
         context = agent_sessions.get_context(agent_id, max_messages=200)
         if not context:
@@ -354,11 +361,21 @@ def register_agent_chat_routes(
         if not conversation_text:
             return {"compacted": False, "reason": "Kein kompaktierbarer Inhalt"}
 
-        summary_prompt = (
-            "Fasse das folgende Gespräch zwischen User und Agent präzise auf Deutsch zusammen. "
-            "Behalte alle wichtigen Fakten, Entscheidungen, Zwischenergebnisse und offenen Fragen. "
-            "Schreibe die Zusammenfassung so, dass der Agent danach nahtlos weiterarbeiten kann. "
-            "Maximal 800 Wörter.\n\n---\n\n" + conversation_text
+        active_session = agent_sessions.get_active(agent_id)
+        facts = _collect_facts(active_session, None) if active_session else None
+        if facts is None:
+            from .compaction_summary import TaskStateFacts as _TSF
+            facts = _TSF()
+        summary_prompt_msgs = _build_summary_prompt(conversation_text, facts)
+        # Haiku nutzt System als `system=[{text:…}]`; User-Content separat.
+        # build_summary_prompt liefert [system, user]-Paar.
+        _system_text = next(
+            (m["content"] for m in summary_prompt_msgs if m["role"] == "system"),
+            "",
+        )
+        _user_text = next(
+            (m["content"] for m in summary_prompt_msgs if m["role"] == "user"),
+            "",
         )
 
         oauth_token = _load_claude_oauth_token()
@@ -375,8 +392,11 @@ def register_agent_chat_routes(
                 resp = await client.messages.create(
                     model="claude-haiku-4-5-20251001",
                     max_tokens=1200,
-                    system=[{"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY}],
-                    messages=[{"role": "user", "content": summary_prompt}],
+                    system=[
+                        {"type": "text", "text": ANTHROPIC_OAUTH_IDENTITY},
+                        {"type": "text", "text": _system_text},
+                    ],
+                    messages=[{"role": "user", "content": _user_text}],
                 )
                 summary = resp.content[0].text if resp.content else ""
             except Exception as e:
@@ -387,6 +407,8 @@ def register_agent_chat_routes(
 
         if not summary:
             return {"compacted": False, "reason": "Leere Zusammenfassung vom LLM"}
+        # #660: Redaction auch auf der LLM-Antwort vor Persist/Response.
+        summary = _redact_summary(summary)
 
         msg_count = len(context)
         summary_user = Message.create(

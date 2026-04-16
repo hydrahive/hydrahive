@@ -1056,6 +1056,42 @@ def _build_reinject_context(file_paths: list[str], *, max_chars_per_file: int = 
     )
 
 
+async def _compact_call(
+    boss_cfg, compact_model: str, messages: list[dict], max_tokens: int,
+) -> str:
+    """Module-Level LLM-Call für Compaction, mit OAuth-Fallback.
+
+    #628-Followup: Auf Kundenmaschinen ohne ANTHROPIC_API_KEY (nur OAuth
+    konfiguriert) würde litellm sofort fehlschlagen → Compaction crasht →
+    Notfall-Reset. Deshalb Claude-OAuth-Pfad zuerst, litellm als Fallback.
+
+    Module-Level statt inner function, damit Tests den Call mocken können
+    ohne Closure-Tricks (#660).
+    """
+    import os as _os
+    from .orchestrator_llm import _llm_with_retry
+
+    is_claude = compact_model.startswith(("claude-", "anthropic/"))
+    has_api_key = bool(_os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    if is_claude and not has_api_key:
+        from .orchestrator_llm import _anthropic_oauth_call, _load_claude_oauth_token
+        token = (
+            _os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            or _load_claude_oauth_token()
+            or ""
+        )
+        if token:
+            resp = await _anthropic_oauth_call(
+                boss_cfg, messages, None, token, compact_model,
+            )
+            return getattr(resp.choices[0].message, "content", "") or ""
+    resp = await _llm_with_retry(lambda: litellm.acompletion(
+        model=compact_model, messages=messages,
+        max_tokens=max_tokens, drop_params=True,
+    ))
+    return resp.choices[0].message.content or ""
+
+
 async def _compact_if_needed(
     sessions,
     project_id: str,
@@ -1079,31 +1115,7 @@ async def _compact_if_needed(
     Threshold (#349): erhöht auf 15k estimated (~40k real, wie OpenClaw).
     keep_last: 10 Messages (vorher 6).
     """
-    from .orchestrator_llm import _llm_with_retry
     from .session_manager import MessageRole
-
-    # #628-Followup: Compaction-LLM-Helper mit OAuth-Fallback (Bug entdeckt
-    # auf Kundenmaschine .86: litellm fordert ANTHROPIC_API_KEY, aber dort
-    # ist nur OAuth konfiguriert → Compaction crasht → Notfall-Reset)
-    async def _compact_call(messages: list[dict], max_tokens: int) -> str:
-        import os as _os
-        is_claude = compact_model.startswith(("claude-", "anthropic/"))
-        has_api_key = bool(_os.environ.get("ANTHROPIC_API_KEY", "").strip())
-        if is_claude and not has_api_key:
-            from .orchestrator_llm import _anthropic_oauth_call, _load_claude_oauth_token
-            token = (
-                _os.environ.get("ANTHROPIC_API_KEY", "").strip() or
-                _load_claude_oauth_token() or ""
-            )
-            if token:
-                resp = await _anthropic_oauth_call(boss_cfg, messages, None, token, compact_model)
-                return getattr(resp.choices[0].message, "content", "") or ""
-        # Fallback: regulärer litellm-Pfad
-        resp = await _llm_with_retry(lambda: litellm.acompletion(
-            model=compact_model, messages=messages,
-            max_tokens=max_tokens, drop_params=True,
-        ))
-        return resp.choices[0].message.content or ""
 
     # Agent-spezifischer Override oder Model-basierter Default
     if getattr(boss_cfg, "compaction_threshold", None):
@@ -1162,8 +1174,8 @@ async def _compact_if_needed(
     # #467: File-Pfade VOR Compaction extrahieren (Messages werden gleich entfernt)
     _edited_files = _extract_edited_files(session.messages)
 
-    # Tool-Interaktionen explizit miterfassen damit die Summary weiß
-    # welche Tools aufgerufen wurden und was sie zurückgegeben haben
+    # #660: Tool-Interaktionen explizit miterfassen, damit die Summary weiß,
+    # welche Tools aufgerufen wurden und was sie zurückgegeben haben.
     _history_parts = []
     for m in to_summarize:
         role = m.role.value.upper()
@@ -1178,55 +1190,34 @@ async def _compact_if_needed(
             _history_parts.append(f"{role}: {content}")
     history_lines = "\n".join(_history_parts)
 
-    # #349: Strukturierte Summary im OpenClaw-Format
-    _structured_format = (
-        "Erstelle eine strukturierte Zusammenfassung in diesem Format:\n\n"
-        "## Aktueller Arbeitskontext (WICHTIGSTER ABSCHNITT)\n"
-        "Was wird GERADE gemacht? Welche konkrete Aufgabe ist offen?\n"
-        "Welche Datei/welches Verzeichnis wird bearbeitet?\n"
-        "Was war die LETZTE Aktion und was wurde als nächstes erwartet?\n"
-        "Beispiel: 'Bearbeite /home/till/monopoly — bootstrap.gd gefixt, "
-        "User soll F5 drücken und Godot-Output melden.'\n\n"
-        "## Ziel\nWas ist das übergeordnete Ziel der Konversation?\n\n"
-        "## Kontext & Entscheidungen\nWichtige Fakten, Constraints, Pfade, getroffene Entscheidungen.\n\n"
-        "## Tool-Nutzung\nWelche Tools wurden aufgerufen und was war das Ergebnis? "
-        "(z.B. shell_exec: apt update → 121 Pakete verfügbar). "
-        "NUR tatsächlich ausgeführte Tool-Calls mit echten Ergebnissen auflisten.\n\n"
-        "## Fortschritt\n### Erledigt\n- [x] Was wurde abgeschlossen?\n\n"
-        "### In Arbeit\n- [ ] Woran wird gerade gearbeitet? (Dateipfade, konkreter Stand)\n\n"
-        "### Blockiert\n- **Problem**: Was blockiert und warum?\n\n"
-        "KRITISCH: Der 'Aktueller Arbeitskontext' Abschnitt ist das Wichtigste. "
-        "Ohne ihn weiß der Agent nach dem Laden der Zusammenfassung nicht woran er war.\n"
-        "Antworte NUR mit der Zusammenfassung, keine Einleitung oder Erklärung."
+    # #660: Strukturierter Task-State + Output-Schema-Prompt im neuen Modul.
+    # Fakten (working_state + deterministische Regex-Extraktion) werden dem
+    # LLM wörtlich vorgelegt. History und Existing-Summary werden dabei
+    # redacted (Secret-Patterns aus #657).
+    from .compaction_summary import (
+        build_summary_prompt as _build_summary_prompt,
+        collect_task_state_facts as _collect_facts,
+        redact_summary_text as _redact_summary,
+    )
+    _active = sessions.get_active(project_id)
+    _facts = _collect_facts(_active, boss_cfg) if _active else None
+    # Wenn keine Session da ist, entfällt der gesamte Compaction-Pfad weiter
+    # unten ohnehin; defensiver Fallback für Typ-Check:
+    from .compaction_summary import TaskStateFacts as _TSF
+    if _facts is None:
+        _facts = _TSF()
+    summary_prompt = _build_summary_prompt(
+        history_lines, _facts,
+        existing_summary=existing_summary,
     )
 
-    if existing_summary:
-        user_content = (
-            f"BISHERIGE ZUSAMMENFASSUNG:\n{existing_summary}\n\n"
-            f"NEUE NACHRICHTEN:\n{history_lines}"
-        )
-        system_instruction = (
-            "Du bekommst eine bisherige Zusammenfassung plus neue Nachrichten. "
-            "Aktualisiere die Zusammenfassung — behalte alles Wichtige, "
-            "verschiebe erledigte Punkte nach 'Erledigt'.\n\n"
-            + _structured_format
-        )
-    else:
-        user_content = history_lines
-        system_instruction = (
-            "Fasse die folgende Konversation zusammen.\n\n"
-            + _structured_format
-        )
-
-    summary_prompt = [
-        {"role": "system", "content": system_instruction},
-        {"role": "user",   "content": user_content},
-    ]
-
     try:
-        summary = await _compact_call(summary_prompt, max_tokens=1200)
+        summary = await _compact_call(boss_cfg, compact_model, summary_prompt, 1200)
         if not summary:
             return
+        # Redaction der LLM-Antwort vor Persist — das Modell könnte
+        # ein Secret aus der History in der Summary wiederholen.
+        summary = _redact_summary(summary)
 
         await sessions.compact(project_id, summary, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
         _metrics.record_compaction(project_id, stage=1)
@@ -1251,8 +1242,10 @@ async def _compact_if_needed(
                 )},
                 {"role": "user", "content": summary},
             ]
-            meta = await _compact_call(meta_prompt, max_tokens=350)
+            meta = await _compact_call(boss_cfg, compact_model, meta_prompt, 350)
             if meta:
+                # #660: Meta-Summary ebenfalls redacten vor Persist.
+                meta = _redact_summary(meta)
                 await sessions.compact(project_id, meta, keep_last=keep_last, keep_last_rounds=keep_last_rounds)
                 summary = meta
                 _metrics.record_compaction(project_id, stage=2)
