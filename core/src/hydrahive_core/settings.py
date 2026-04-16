@@ -153,6 +153,11 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "agent_servers.json"
 
     @property
+    def project_targets_config(self) -> Path:
+        """#584-A: Projekt-Target-Zuweisungen (Server + WKS pro Projekt)."""
+        return self.etc_dir / "project_targets.json"
+
+    @property
     def wks_keys_dir(self) -> Path:
         return self.etc_dir / "wks_keys"
 

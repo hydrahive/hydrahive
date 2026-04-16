@@ -99,6 +99,29 @@ def register_server_routes(
             srv.pop("ssh_key", None)  # Key nie im Response
         return {"servers": servers}
 
+    @admin_router.get("/admin/wks")
+    def list_all_wks():
+        """#584-A: Cross-User-WKS-Liste für Projekt-Target-Auswahl.
+        Admin-only. Liefert whitelisted Felder — keine Keys, keine ssh_key_path."""
+        try:
+            users = json.loads(settings.users_config.read_text(encoding="utf-8"))
+        except Exception:
+            users = {}
+        wks_keys_dir = settings.wks_keys_dir
+        out = []
+        for username, udata in sorted(users.items()):
+            wks = (udata or {}).get("wks") or {}
+            ip = (wks.get("ip") or "").strip()
+            out.append({
+                "username":    username,
+                "ip":          ip,
+                "ssh_user":    wks.get("ssh_user", username) or username,
+                "ssh_port":    22,
+                "configured":  bool(ip),
+                "has_ssh_key": (wks_keys_dir / username).exists(),
+            })
+        return {"wks": out}
+
     @admin_router.post("/admin/servers", status_code=201)
     def create_server(req: ServerRequest):
         sid = req.id or req.name.lower().replace(" ", "-").replace(".", "-")

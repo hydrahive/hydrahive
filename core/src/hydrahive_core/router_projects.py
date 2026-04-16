@@ -107,6 +107,24 @@ class ToolConfirmRequest(BaseModel):
     decision:     Literal["approve", "deny"]
 
 
+# #584-A: Projekt-Target-Zuweisungen (Server + WKS)
+class ProjectTargetServer(BaseModel):
+    server_id: str
+    role: str = ""
+    note: str = ""
+
+
+class ProjectTargetWks(BaseModel):
+    username: str
+    role: str = ""
+    note: str = ""
+
+
+class ProjectTargetsRequest(BaseModel):
+    servers: list[ProjectTargetServer] = []
+    wks:     list[ProjectTargetWks]    = []
+
+
 class GitCloneRequest(BaseModel):
     url: str
     branch: str = "main"
@@ -682,6 +700,126 @@ def register_project_routes(
         logger.info("v2-Projekt Settings aktualisiert: %s (warnings: %d)", project_id, len(_warnings))
 
         return {"updated": True, "project_id": project_id, "warnings": _warnings}
+
+    # ── #584-A: Projekt-Target-Zuweisungen ─────────────────────────────
+
+    def _hydrate_targets_response(project_id: str) -> dict:
+        """Baut die GET-Response aus gespeicherten Targets + Stammdaten.
+        Keine ssh_key_path, keine private keys im Output."""
+        import json as _json
+        from .project_targets import get_project_targets
+        from .router_servers import _load_servers, SERVERS_KEYS_DIR
+        from .settings import settings as _settings
+
+        raw = get_project_targets(project_id)
+        server_lookup = {s["id"]: s for s in _load_servers()}
+        try:
+            users = _json.loads(_settings.users_config.read_text(encoding="utf-8"))
+        except Exception:
+            users = {}
+
+        servers_out = []
+        for t in raw["servers"]:
+            srv = server_lookup.get(t["server_id"])
+            if not srv:
+                # Server wurde gelöscht, Zuweisung hängt → trotzdem ausgeben,
+                # damit Admin den Stale-Eintrag sieht und entfernen kann.
+                servers_out.append({
+                    "server_id": t["server_id"],
+                    "name": "", "ip": "", "ssh_user": "", "ssh_port": 22,
+                    "role": t.get("role", ""), "note": t.get("note", ""),
+                    "has_ssh_key": False, "stale": True,
+                })
+                continue
+            servers_out.append({
+                "server_id":  t["server_id"],
+                "name":       srv.get("name", ""),
+                "ip":         srv.get("ip", ""),
+                "ssh_user":   srv.get("ssh_user", "root"),
+                "ssh_port":   srv.get("ssh_port", 22),
+                "role":       t.get("role", ""),
+                "note":       t.get("note", ""),
+                "has_ssh_key": (SERVERS_KEYS_DIR / t["server_id"]).exists(),
+            })
+
+        wks_out = []
+        for t in raw["wks"]:
+            user = users.get(t["username"]) or {}
+            wks_entry = user.get("wks") or {}
+            wks_out.append({
+                "username":   t["username"],
+                "ip":         wks_entry.get("ip", ""),
+                "ssh_user":   wks_entry.get("ssh_user", t["username"]),
+                "ssh_port":   22,
+                "role":       t.get("role", ""),
+                "note":       t.get("note", ""),
+                "has_ssh_key": (_settings.wks_keys_dir / t["username"]).exists(),
+            })
+
+        return {"project_id": project_id, "servers": servers_out, "wks": wks_out}
+
+    @auth_router.get("/projects/{project_id}/targets")
+    def get_project_targets_endpoint(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        """Liefert Projekt-Targets + Stammdaten (read). Project-Access-Check."""
+        _check_project_access(auth, project_id)
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+        return _hydrate_targets_response(project_id)
+
+    @admin_router.put("/projects/{project_id}/targets")
+    def put_project_targets_endpoint(
+        project_id: str,
+        req: ProjectTargetsRequest,
+    ):
+        """Setzt Projekt-Targets (admin-only V1). Validiert Stammdaten-Existenz."""
+        import json as _json
+        from .project_targets import set_project_targets, TargetValidationError
+        from .router_servers import _load_servers
+        from .settings import settings as _settings
+
+        if not projects.get(project_id):
+            raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        existing_servers = {s["id"] for s in _load_servers()}
+        try:
+            users = _json.loads(_settings.users_config.read_text(encoding="utf-8"))
+        except Exception:
+            users = {}
+
+        # Stammdaten-Existenz prüfen
+        for s in req.servers:
+            if s.server_id not in existing_servers:
+                raise HTTPException(404, f"Server '{s.server_id}' nicht gefunden")
+        for w in req.wks:
+            if w.username not in users:
+                raise HTTPException(404, f"User '{w.username}' nicht gefunden")
+            wks_entry = (users[w.username] or {}).get("wks") or {}
+            if not (wks_entry.get("ip") or "").strip():
+                raise HTTPException(
+                    400,
+                    f"WKS für User '{w.username}' ist nicht konfiguriert (keine IP).",
+                )
+
+        try:
+            set_project_targets(project_id, req.model_dump())
+        except TargetValidationError as e:
+            raise HTTPException(400, str(e))
+
+        audit_log("project.targets_update", target=project_id, project_id=project_id,
+                  details={"servers": len(req.servers), "wks": len(req.wks)})
+        logger.info(
+            "Projekt-Targets aktualisiert: %s (servers=%d, wks=%d)",
+            project_id, len(req.servers), len(req.wks),
+        )
+        if invalidate_prompt_cache is not None:
+            try:
+                invalidate_prompt_cache(project_id)
+            except Exception as e:
+                logger.warning("invalidate_prompt_cache fehlgeschlagen: %s", e)
+        return _hydrate_targets_response(project_id)
 
     # ── v1: Projekt-Erstellung (Legacy) ────────────────────────────────
 

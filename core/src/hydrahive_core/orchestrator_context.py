@@ -416,32 +416,51 @@ async def build_system_prompt(
         except Exception:
             pass
 
-        # #636: Remote-Server-Injektion (aus altem Builder migriert).
-        try:
-            from .router_servers import _load_agent_servers, _load_servers
-            agent_servers_map = _load_agent_servers()
-            assigned_ids = agent_servers_map.get(boss_cfg.id, [])
-            if assigned_ids:
-                all_servers = {s["id"]: s for s in _load_servers()}
-                srv_lines = []
-                for sid in assigned_ids:
-                    srv = all_servers.get(sid)
-                    if srv:
-                        srv_lines.append(
-                            f"- **{srv.get('name', sid)}** (ID: `{sid}`): "
-                            f"`{srv.get('ssh_user', '?')}@{srv.get('ip', '?')}:{srv.get('ssh_port', 22)}`"
-                            + (f" — {srv.get('description', '')}" if srv.get("description") else "")
+        # #584-A: Projekt-Target-Injektion mit Legacy-Fallback.
+        # Bei v2-Projekt-Agents (Bridge agent_config_from_project) ist boss_cfg.id == project_id
+        # und boss_cfg.project_dir ist gesetzt. Dann Projekt-Targets bevorzugen;
+        # Legacy agent_servers-Block fällt weg, wenn Targets existieren — keine
+        # doppelte/widersprüchliche Liste.
+        _targets_injected = False
+        if getattr(boss_cfg, "project_dir", None) is not None:
+            try:
+                from .project_targets import render_project_targets_for_prompt
+                _targets_block = render_project_targets_for_prompt(boss_cfg.id)
+                if _targets_block:
+                    channels.servers = _targets_block
+                    _targets_injected = True
+            except Exception as _t_err:
+                logger.debug("Project-Target-Injection übersprungen: %s", _t_err)
+
+        # #636: Legacy Remote-Server-Injektion (agent_servers.json → agent-basiert).
+        # Nur aktiv, wenn #584-A-Targets leer/unset sind, damit der Prompt nicht
+        # zwei widersprüchliche Server-Listen zeigt.
+        if not _targets_injected:
+            try:
+                from .router_servers import _load_agent_servers, _load_servers
+                agent_servers_map = _load_agent_servers()
+                assigned_ids = agent_servers_map.get(boss_cfg.id, [])
+                if assigned_ids:
+                    all_servers = {s["id"]: s for s in _load_servers()}
+                    srv_lines = []
+                    for sid in assigned_ids:
+                        srv = all_servers.get(sid)
+                        if srv:
+                            srv_lines.append(
+                                f"- **{srv.get('name', sid)}** (ID: `{sid}`): "
+                                f"`{srv.get('ssh_user', '?')}@{srv.get('ip', '?')}:{srv.get('ssh_port', 22)}`"
+                                + (f" — {srv.get('description', '')}" if srv.get("description") else "")
+                            )
+                    if srv_lines:
+                        channels.servers = (
+                            "## Zugewiesene Remote-Server\n\n"
+                            "Diese Server sind dir zugewiesen. Nutze `server_shell` (mit `server_id`) "
+                            "um Befehle auszuführen, und `server_file_read`/`server_file_write` für Dateien. "
+                            "SSH-Keys werden automatisch geladen — NICHT manuell per ssh/shell_exec verbinden!\n\n"
+                            + "\n".join(srv_lines)
                         )
-                if srv_lines:
-                    channels.servers = (
-                        "## Zugewiesene Remote-Server\n\n"
-                        "Diese Server sind dir zugewiesen. Nutze `server_shell` (mit `server_id`) "
-                        "um Befehle auszuführen, und `server_file_read`/`server_file_write` für Dateien. "
-                        "SSH-Keys werden automatisch geladen — NICHT manuell per ssh/shell_exec verbinden!\n\n"
-                        + "\n".join(srv_lines)
-                    )
-        except Exception as _srv_err:
-            logger.debug("Server-Injection übersprungen: %s", _srv_err)
+            except Exception as _srv_err:
+                logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
         # #636: Memory-Schreib-Anweisung (aus altem Builder migriert) als statische Policy.
         if boss_cfg.agent_dir:
