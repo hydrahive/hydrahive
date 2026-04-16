@@ -320,10 +320,15 @@ async def run_ssh_command(
         else:
             # Kein Enforcement — aber niemals mehr System-known_hosts
             # beschreiben (auch bei target_type=None, User-Entscheidung #674-B).
+            # LogLevel=ERROR unterdrückt die "Warning: Permanently added ... to
+            # the list of known hosts"-Zeile, die OpenSSH trotz /dev/null
+            # weiterhin loggt. Bewusst NICHT im strict/verified-Pfad gesetzt,
+            # damit "Host key verification failed" dort durchkommt.
             args.extend([
                 "-o", "UserKnownHostsFile=/dev/null",
                 "-o", "GlobalKnownHostsFile=/dev/null",
                 "-o", "StrictHostKeyChecking=no",
+                "-o", "LogLevel=ERROR",
             ])
         args.extend([
             "-o", "ConnectTimeout=10",

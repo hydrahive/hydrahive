@@ -312,6 +312,8 @@ class TestRunSshCommand:
         # #674-B: Auch ohne target_type niemals System-known_hosts beschreiben
         assert "UserKnownHostsFile=/dev/null" in captured_args
         assert "GlobalKnownHostsFile=/dev/null" in captured_args
+        # #674-B Sprint 1.5: OpenSSH-INFO-Chatter im Fallback-Pfad unterdrücken
+        assert "LogLevel=ERROR" in captured_args
 
     async def test_redacts_key_path_in_stderr(self, env):
         key = env.server_keys_dir / "prod-web"
@@ -482,6 +484,7 @@ class TestRunSshCommandHostKeyEnforcement:
         # Fallback-Path: kein temp-known_hosts, sondern /dev/null
         assert "StrictHostKeyChecking=no" in captured_args
         assert "UserKnownHostsFile=/dev/null" in captured_args
+        assert "LogLevel=ERROR" in captured_args
 
     async def test_strict_mode_unknown_host_fails_closed(self, env, skh_mocks):
         """strict + kein verified Key → fail-closed, kein SSH-Call überhaupt."""
@@ -549,6 +552,9 @@ class TestRunSshCommandHostKeyEnforcement:
         assert result.get("host_key_changed") is not True
         assert "StrictHostKeyChecking=yes" in captured_args
         assert "GlobalKnownHostsFile=/dev/null" in captured_args
+        # Sprint 1.5: LogLevel=ERROR darf im strict/verified-Pfad NICHT gesetzt
+        # sein — stderr muss "Host key verification failed" liefern können.
+        assert "LogLevel=ERROR" not in captured_args
         # Cleanup: temp-File darf nach Call nicht mehr existieren
         assert known_hosts_during_call, "fake_exec hat UserKnownHostsFile nicht gesehen"
         for p in known_hosts_during_call:

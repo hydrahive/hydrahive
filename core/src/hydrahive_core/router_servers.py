@@ -260,6 +260,7 @@ def register_server_routes(
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "UserKnownHostsFile=/dev/null",
                 "-o", "GlobalKnownHostsFile=/dev/null",
+                "-o", "LogLevel=ERROR",
                 "-o", "ConnectTimeout=5",
                 "-o", "BatchMode=yes",
                 "-p", str(ssh_port),
