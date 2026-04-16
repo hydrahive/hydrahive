@@ -89,12 +89,13 @@ interface ProjectTargetsResponse {
   wks: ProjectTargetWks[];
 }
 
-const PROVIDERS = ["anthropic", "openai", "minimax", "google", "ollama", "deepseek"];
+const PROVIDERS = ["anthropic", "openai", "minimax", "nvidia", "google", "ollama", "deepseek"];
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: "Anthropic",
   openai:    "OpenAI",
   minimax:   "MiniMax",
+  nvidia:    "NVIDIA NIM",
   google:    "Google",
   ollama:    "Ollama",
   deepseek:  "DeepSeek",
@@ -104,6 +105,15 @@ const MODELS: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
   minimax: ["MiniMax-M2.7"],
+  nvidia: [
+    "minimaxai/minimax-m2.7",
+    "minimaxai/minimax-m2.5",
+    "meta/llama-3.3-70b-instruct",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    "deepseek-ai/deepseek-v3.2",
+    "qwen/qwen3-coder-480b-a35b-instruct",
+    "moonshotai/kimi-k2-thinking",
+  ],
   google: ["gemini-2.0-flash", "gemini-2.5-pro"],
   ollama: ["llama3.1", "qwen2.5:7b", "mistral"],
   deepseek: ["deepseek-r1"],
