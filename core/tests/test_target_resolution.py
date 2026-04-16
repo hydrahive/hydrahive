@@ -370,6 +370,48 @@ class TestRunSshCommand:
         # Aber nicht die komplette Originallänge
         assert len(result["stdout"]) < MAX_SSH_OUTPUT + 500
 
+    async def test_max_output_none_does_not_truncate_stdout(self, env):
+        """#670: max_output=None → Runner kappt stdout nicht, Aufrufer begrenzt
+        selbst per Remote-Command."""
+        huge = b"y" * (MAX_SSH_OUTPUT + 20_000)
+
+        async def fake_exec(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(huge, b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "dd if=/big bs=1 count=100000", timeout=5,
+                max_output=None,
+            )
+        # Komplette Länge erhalten — keine "gekürzt"-Marker
+        assert "gekürzt" not in result["stdout"]
+        assert len(result["stdout"]) == MAX_SSH_OUTPUT + 20_000
+
+    async def test_max_output_none_still_truncates_stderr(self, env):
+        """#670: stderr bleibt bei MAX_SSH_OUTPUT gekappt auch wenn
+        max_output=None — Diagnose-Kanal soll nie riesig werden."""
+        huge_err = b"e" * (MAX_SSH_OUTPUT + 5000)
+
+        async def fake_exec(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"ok", huge_err))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+            result = await run_ssh_command(
+                "1.2.3.4", "root", 22,
+                env.server_keys_dir / "prod-web",
+                "x", timeout=5, max_output=None,
+            )
+        assert "gekürzt" in result["stderr"]
+        assert len(result["stderr"]) < MAX_SSH_OUTPUT + 500
+
     async def test_exception_redacts_key(self, env):
         key = env.server_keys_dir / "prod-web"
 

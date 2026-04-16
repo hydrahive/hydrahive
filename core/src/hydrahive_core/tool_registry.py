@@ -2379,9 +2379,13 @@ class ServerFileReadTool(BaseTool):
             f"dd if={_shlex.quote(path)} bs=1 count={read_limit} "
             f"2>/dev/null | head -c {read_limit}"
         )
+        # #670: max_output=None — stdout wird NICHT vom Runner gekappt.
+        # Remote begrenzt bereits per `head -c read_limit` auf max_bytes+1,
+        # also bleibt der Speicher-Footprint beschränkt.
         result = await run_ssh_command(
             target.ip, target.ssh_user, target.ssh_port,
             target.ssh_key_path, remote_cmd, timeout=60,
+            max_output=None,
         )
         if result.get("exit_code") != 0:
             return {
@@ -2393,15 +2397,16 @@ class ServerFileReadTool(BaseTool):
         content_bytes = len(content.encode("utf-8", errors="replace"))
         truncated = content_bytes > max_bytes
         if truncated:
-            # Naiv-sichere Kürzung auf Zeichenebene (Byte-Genauigkeit unnötig
-            # da UTF-8-Decode nur ungefähre Größe zeigt).
+            # Naiv-sichere Kürzung auf Zeichenebene. Byte-Genauigkeit wäre nur
+            # bei harten Byte-Grenzen relevant; hier reicht Char-Kürzung, weil
+            # max_bytes primär als Kontext-Budget-Schutz dient.
             content = content[:max_bytes]
         return {
             "server_id": server_id,
             "path": path,
             "content": content,
             "truncated": truncated,
-            "bytes": len(content),
+            "bytes": len(content.encode("utf-8", errors="replace")),
         }
 
 

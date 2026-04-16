@@ -210,9 +210,18 @@ async def run_ssh_command(
     command: str,
     *,
     timeout: int = 60,
+    max_output: int | None = MAX_SSH_OUTPUT,
 ) -> dict:
     """Führt einen Command via SSH aus und liefert {stdout, stderr, exit_code}.
-    Output wird bei MAX_SSH_OUTPUT gekürzt, Key-Pfad in stderr/Exceptions redacted.
+
+    stdout wird auf max_output Zeichen gekürzt (Default MAX_SSH_OUTPUT=32000).
+    `max_output=None` schaltet stdout-Truncation aus — Aufrufer muss dann selbst
+    per Remote-Command (z.B. `head -c N`) begrenzen, damit der Runner nicht
+    unbeschränkt viel Speicher allokiert. Genutzt von server_file_read (#670),
+    damit max_bytes >32k tatsächlich funktioniert.
+
+    stderr wird stets auf MAX_SSH_OUTPUT gekürzt — das ist ein Diagnose-Kanal,
+    der nie groß werden sollte. Key-Pfad wird in stderr/Exceptions redacted.
     """
     args = [
         "ssh",
@@ -245,8 +254,8 @@ async def run_ssh_command(
         out = stdout_b.decode(errors="replace")
         err = stderr_b.decode(errors="replace")
 
-        if len(out) > MAX_SSH_OUTPUT:
-            out = out[:MAX_SSH_OUTPUT] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
+        if max_output is not None and len(out) > max_output:
+            out = out[:max_output] + f"\n...[stdout gekürzt: {len(out)} Zeichen total]"
         if len(err) > MAX_SSH_OUTPUT:
             err = err[:MAX_SSH_OUTPUT] + f"\n...[stderr gekürzt: {len(err)} Zeichen total]"
 

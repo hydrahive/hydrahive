@@ -127,8 +127,9 @@ class TestServerFileReadTool:
     async def test_uses_dd_and_quotes_path(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured["cmd"] = command
+            captured["max_output"] = kwargs.get("max_output", "DEFAULT")
             # dd liefert Inhalt — simuliere 100 Bytes
             return {"stdout": "x" * 100, "stderr": "", "exit_code": 0}
 
@@ -144,6 +145,8 @@ class TestServerFileReadTool:
         # shlex.quote quotet nur wenn nötig; simpler Pfad bleibt ohne Anführungszeichen
         assert "/etc/nginx/nginx.conf" in captured["cmd"]
         assert "head -c 201" in captured["cmd"]  # max_bytes + 1
+        # #670: server_file_read ruft Runner mit max_output=None auf, damit >32k lesbar ist
+        assert captured["max_output"] is None
         assert result["content"] == "x" * 100
         assert result["truncated"] is False
         assert result["bytes"] == 100
@@ -164,7 +167,7 @@ class TestServerFileReadTool:
     async def test_quotes_path_with_special_chars(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured["cmd"] = command
             return {"stdout": "", "stderr": "", "exit_code": 0}
 
@@ -187,7 +190,7 @@ class TestServerFileReadTool:
     async def test_max_bytes_clamped(self, env):
         captured = {}
 
-        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout):
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
             captured["cmd"] = command
             return {"stdout": "", "stderr": "", "exit_code": 0}
 
@@ -198,6 +201,42 @@ class TestServerFileReadTool:
             )
         # Clamped auf 1_000_000 → head -c 1000001
         assert "head -c 1000001" in captured["cmd"]
+
+    async def test_can_return_more_than_32k(self, env):
+        """#670: Bei max_bytes > 32k muss der Runner die Daten nicht kappen.
+        Vor dem Fix hätte run_ssh_command stdout bei 32000 abgeschnitten."""
+        payload = "A" * 50_000
+
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
+            # max_output=None muss gesetzt sein, sonst wäre das nur ein Test des Mocks
+            assert kwargs.get("max_output") is None, "server_file_read muss max_output=None setzen"
+            return {"stdout": payload, "stderr": "", "exit_code": 0}
+
+        with patch("hydrahive_core.target_resolution.run_ssh_command", side_effect=fake_run):
+            result = await ServerFileReadTool().execute(
+                agent_id="proj-a", project_id="proj-a",
+                server_id="prod-web", path="/tmp/big", max_bytes=60_000,
+            )
+        assert result["truncated"] is False
+        assert len(result["content"]) == 50_000
+        assert result["bytes"] == 50_000
+
+    async def test_truncated_when_remote_exceeds_max_bytes_above_32k(self, env):
+        """#670: Bei max_bytes=40000 und Remote liefert 40001 Bytes → truncated."""
+        payload = "B" * 40_001
+
+        async def fake_run(host, ssh_user, ssh_port, key_path, command, *, timeout, **kwargs):
+            assert kwargs.get("max_output") is None
+            return {"stdout": payload, "stderr": "", "exit_code": 0}
+
+        with patch("hydrahive_core.target_resolution.run_ssh_command", side_effect=fake_run):
+            result = await ServerFileReadTool().execute(
+                agent_id="proj-a", project_id="proj-a",
+                server_id="prod-web", path="/tmp/bigger", max_bytes=40_000,
+            )
+        assert result["truncated"] is True
+        assert len(result["content"]) == 40_000
+        assert result["bytes"] == 40_000
 
 
 # ═════════════════════════════════════════════════════ ServerFileWriteTool
