@@ -158,6 +158,11 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "project_targets.json"
 
     @property
+    def ssh_known_hosts_config(self) -> Path:
+        """#674-A: Host-Key-Pinning für Target-Tools (server_shell, wks_shell_exec)."""
+        return self.etc_dir / "ssh_known_hosts.json"
+
+    @property
     def wks_keys_dir(self) -> Path:
         return self.etc_dir / "wks_keys"
 

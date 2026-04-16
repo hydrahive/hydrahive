@@ -24,6 +24,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 
+from . import ssh_known_hosts
 from .settings import settings
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,12 @@ class ServerRequest(BaseModel):
     ssh_port: int = 22
     description: str = ""
     use_wks_key: bool = False
+
+
+class HostKeyVerifyRequest(BaseModel):
+    fingerprint_sha256: str
+    action: str  # "approve" | "reject"
+    approver: str = "admin"
 
 
 def _load_servers() -> list[dict]:
@@ -233,27 +240,134 @@ def register_server_routes(
         if not key_path.exists() and not wks_key.exists():
             return {"ok": False, "error": "Kein SSH-Key vorhanden"}
         use_key = str(key_path) if key_path.exists() else str(wks_key)
+
+        ssh_port = int(srv.get("ssh_port", 22) or 22)
+        ssh_user = srv.get("ssh_user", "root")
+        ip = srv.get("ip", "")
+
+        response: dict = {}
         try:
             proc = await asyncio.create_subprocess_exec(
                 "ssh", "-i", use_key,
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=5",
                 "-o", "BatchMode=yes",
-                "-p", str(srv.get("ssh_port", 22)),
-                "-l", srv["ssh_user"],
-                srv["ip"],
+                "-p", str(ssh_port),
+                "-l", ssh_user,
+                ip,
                 "echo ok",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
             if proc.returncode == 0:
-                return {"ok": True, "output": stdout.decode().strip()}
-            return {"ok": False, "error": stderr.decode().strip()[:200]}
+                response = {"ok": True, "output": stdout.decode().strip()}
+            else:
+                response = {"ok": False, "error": stderr.decode().strip()[:200]}
         except asyncio.TimeoutError:
-            return {"ok": False, "error": "Timeout (10s)"}
+            response = {"ok": False, "error": "Timeout (10s)"}
         except Exception as e:
-            return {"ok": False, "error": str(e)[:200]}
+            response = {"ok": False, "error": str(e)[:200]}
+
+        # #674-A: Zusätzlich Host-Keys via ssh-keyscan erfassen. Scan-Fehler
+        # kapseln — bestehender SSH-Test bleibt unabhängig davon gültig.
+        scan = await ssh_known_hosts.scan_host(ip, ssh_port)
+        if scan.get("keys"):
+            try:
+                ssh_known_hosts.record_scan_result(
+                    "server", server_id,
+                    ip=ip, ssh_port=ssh_port, ssh_user=ssh_user,
+                    scanned_keys=scan["keys"],
+                )
+            except Exception as exc:
+                logger.warning("record_scan_result fehlgeschlagen: %s", type(exc).__name__)
+        response["host_keys"] = {
+            "scan_error": scan.get("scan_error"),
+            "keys": [
+                {
+                    "algorithm": k["algorithm"],
+                    "fingerprint_sha256": k["fingerprint_sha256"],
+                }
+                for k in scan.get("keys") or []
+            ],
+        }
+        return response
+
+    # ── #674-A: Host-Key-Management für Target-Tools ──────────────────────
+
+    @admin_router.get("/admin/servers/{server_id}/hostkeys")
+    def list_server_hostkeys(server_id: str):
+        if not _SAFE_ID.match(server_id):
+            raise HTTPException(400, "Ungültige Server-ID")
+        entry = ssh_known_hosts.get_host_entry("server", server_id)
+        if not entry:
+            return {
+                "server_id": server_id,
+                "status": "unknown",
+                "host_keys": [],
+                "last_checked": None,
+                "enforcement_mode": ssh_known_hosts.get_enforcement_mode(),
+            }
+        return {
+            "server_id": server_id,
+            "status": entry.get("status", "unknown"),
+            "ip": entry.get("ip", ""),
+            "ssh_port": entry.get("ssh_port", 22),
+            "ssh_user": entry.get("ssh_user", ""),
+            "last_checked": entry.get("last_checked"),
+            "host_keys": [
+                {
+                    "fingerprint_sha256": hk["fingerprint_sha256"],
+                    "algorithm": hk.get("algorithm", ""),
+                    "status": hk.get("status", "unverified"),
+                    "verified_at": hk.get("verified_at"),
+                    "verified_by": hk.get("verified_by"),
+                    "verified_method": hk.get("verified_method"),
+                }
+                for hk in (entry.get("host_keys") or {}).values()
+            ],
+            "enforcement_mode": ssh_known_hosts.get_enforcement_mode(),
+        }
+
+    @admin_router.post("/admin/servers/{server_id}/verify-hostkey")
+    def verify_server_hostkey(server_id: str, req: HostKeyVerifyRequest):
+        if not _SAFE_ID.match(server_id):
+            raise HTTPException(400, "Ungültige Server-ID")
+        action = (req.action or "").strip().lower()
+        if action not in ("approve", "reject"):
+            raise HTTPException(400, "action muss 'approve' oder 'reject' sein")
+        try:
+            if action == "approve":
+                updated = ssh_known_hosts.approve_key(
+                    "server", server_id, req.fingerprint_sha256,
+                    approver=req.approver or "admin",
+                )
+            else:
+                updated = ssh_known_hosts.delete_key(
+                    "server", server_id, req.fingerprint_sha256,
+                )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if not updated:
+            raise HTTPException(404, "Host oder Fingerprint nicht gefunden")
+        return {"ok": True, "action": action, "status": updated.get("status")}
+
+    @admin_router.delete(
+        "/admin/servers/{server_id}/hostkeys/{fingerprint:path}",
+        status_code=204,
+    )
+    def delete_server_hostkey(server_id: str, fingerprint: str):
+        if not _SAFE_ID.match(server_id):
+            raise HTTPException(400, "Ungültige Server-ID")
+        try:
+            updated = ssh_known_hosts.delete_key(
+                "server", server_id, fingerprint,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if not updated:
+            raise HTTPException(404, "Host oder Fingerprint nicht gefunden")
+        return None
 
     @admin_router.get("/admin/servers/{server_id}/pubkey")
     def get_server_pubkey(server_id: str):
