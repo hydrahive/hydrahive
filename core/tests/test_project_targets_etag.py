@@ -176,9 +176,12 @@ def _build_app(tmp_path):
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
+    testclient = pytest.importorskip(
+        "fastapi.testclient",
+        reason="FastAPI TestClient nicht installiert; Router-Integration läuft in CI/venv.",
+    )
     app = _build_app(tmp_path)
-    return TestClient(app)
+    return testclient.TestClient(app)
 
 
 class TestPutIfMatchStrict:
