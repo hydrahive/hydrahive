@@ -1664,6 +1664,9 @@
   "targetSystems": {
     "title": "Zielsysteme",
     "subtitle": "WKS und Root-/Remote-Server verwalten und Projekten zuweisen.",
+    "conflictTitle": "Zuweisungen extern geändert",
+    "conflictDesc": "Die Projekt-Targets wurden seit dem Laden geändert — vermutlich von einem anderen Admin. Bitte neu laden, um den aktuellen Stand zu sehen.",
+    "reloadBtn": "Neu laden",
     "accessDenied": {
       "title": "Admin-Zugriff erforderlich",
       "desc": "Diese Seite verwaltet Infrastruktur-Zuweisungen und ist nur für Admins zugänglich."

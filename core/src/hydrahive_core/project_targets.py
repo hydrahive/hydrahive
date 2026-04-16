@@ -23,6 +23,7 @@ V1 (Phase #584-A):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -74,6 +75,27 @@ def get_project_targets(project_id: str) -> dict:
         "servers": list(entry.get("servers") or []),
         "wks":     list(entry.get("wks") or []),
     }
+
+
+def compute_project_targets_etag(project_id: str) -> str:
+    """#676: Deterministischer ETag pro Projekt aus normalisierten Targets.
+
+    Nicht Datei-Stat, weil project_targets.json global ist — Änderungen in
+    Projekt B dürfen das ETag von Projekt A nicht invalidieren.
+
+    Leeres/fehlendes Projekt → stabiler etag über leere Listen, damit der
+    erste PUT (strict If-Match) mit diesem GET-etag sauber klappt.
+    """
+    entry = get_project_targets(project_id)
+    # sort_keys stabilisiert die Reihenfolge; die Listen behalten ihre
+    # Eingabe-/Speicher-Reihenfolge, was für den ETag ausreicht — Reordering
+    # ist eine semantische Änderung und soll eine neue etag bedeuten.
+    raw = json.dumps(
+        {"servers": entry.get("servers") or [], "wks": entry.get("wks") or []},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def set_project_targets(project_id: str, targets: dict) -> dict:

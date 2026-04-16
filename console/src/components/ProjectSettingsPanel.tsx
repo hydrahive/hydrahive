@@ -84,6 +84,7 @@ interface ProjectTargetWks {
 
 interface ProjectTargetsResponse {
   project_id: string;
+  etag?: string;  // #676: optional — dieser Panel macht nur GET, keine Writes
   servers: ProjectTargetServer[];
   wks: ProjectTargetWks[];
 }

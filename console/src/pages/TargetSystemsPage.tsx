@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ServerCog, Plus, Pencil, Trash2, Check, Loader2, Monitor,
-  FolderKanban, Copy, AlertCircle, ShieldAlert,
+  FolderKanban, Copy, AlertCircle, AlertTriangle, ShieldAlert,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -62,8 +62,14 @@ interface ProjectTargetWksAssignment {
 
 interface ProjectTargetsResponse {
   project_id: string;
+  etag: string;
   servers: ProjectTargetServerAssignment[];
   wks: ProjectTargetWksAssignment[];
+}
+
+interface TargetsConflict {
+  currentEtag: string;
+  message: string;
 }
 
 interface ProjectTargetsPutBody {
@@ -100,10 +106,13 @@ export function TargetSystemsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // #676: Per-Projekt Konflikt-State. Key = project_id.
+  const [conflicts, setConflicts] = useState<Record<string, TargetsConflict>>({});
 
   async function loadAll() {
     setLoading(true);
     setError("");
+    setConflicts({});
     try {
       const [serversRes, wksRes, projectsRes] = await Promise.all([
         api.get<{ servers: RemoteServer[] }>("/admin/servers"),
@@ -146,13 +155,37 @@ export function TargetSystemsPage() {
   async function putTargets(projectId: string, body: ProjectTargetsPutBody) {
     setSaving(projectId);
     setError("");
+    const etag = targetsByProject[projectId]?.etag ?? "";
     try {
-      const resp = await api.put<ProjectTargetsResponse>(
-        `/projects/${projectId}/targets`, body,
+      const resp = await api.putWithHeaders<ProjectTargetsResponse>(
+        `/projects/${projectId}/targets`, body, {"If-Match": etag},
       );
       setTargetsByProject(prev => ({ ...prev, [projectId]: resp }));
+      // #676: Erfolgreicher Save räumt einen evtl. vorherigen Konflikt weg
+      setConflicts(prev => {
+        if (!(projectId in prev)) return prev;
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.error", { defaultValue: "Fehler" }));
+      const err = e as Error & { status?: number; detail?: { message?: string; current_etag?: string } };
+      if (err && (err.status === 409 || err.status === 428) && err.detail && typeof err.detail === "object") {
+        // #676: 428 (fehlendes If-Match) + 409 (stale) landen im selben
+        // Inline-Reload-Banner. Semantik für den Admin ist identisch:
+        // Client-State veraltet, bitte neu laden.
+        setConflicts(prev => ({
+          ...prev,
+          [projectId]: {
+            currentEtag: err.detail?.current_etag || "",
+            message: err.detail?.message || t("targetSystems.conflictDesc", {
+              defaultValue: "Projekt-Targets wurden seit dem Laden geändert.",
+            }),
+          },
+        }));
+      } else {
+        setError(err instanceof Error ? err.message : t("common.error", { defaultValue: "Fehler" }));
+      }
     } finally {
       setSaving(null);
     }
@@ -301,6 +334,8 @@ export function TargetSystemsPage() {
               wksEntries={wksEntries}
               targetsByProject={targetsByProject}
               saving={saving}
+              conflicts={conflicts}
+              onReload={loadAll}
               onUpsertServer={upsertServerAssignment}
               onRemoveServer={removeServerAssignment}
               onUpsertWks={upsertWksAssignment}
@@ -731,6 +766,8 @@ function ProjectsView(props: {
   wksEntries: AdminWksEntry[];
   targetsByProject: Record<string, ProjectTargetsResponse>;
   saving: string | null;
+  conflicts: Record<string, TargetsConflict>;
+  onReload: () => Promise<void>;
   onUpsertServer: (pid: string, sid: string, role: string, note: string) => Promise<void>;
   onRemoveServer: (pid: string, sid: string) => Promise<void>;
   onUpsertWks:    (pid: string, username: string, role: string, note: string) => Promise<void>;
@@ -738,6 +775,7 @@ function ProjectsView(props: {
 }) {
   const { t } = useTranslation();
   const { projects, servers, wksEntries, targetsByProject, saving,
+          conflicts, onReload,
           onUpsertServer, onRemoveServer, onUpsertWks, onRemoveWks } = props;
 
   if (projects.length === 0) {
@@ -752,6 +790,7 @@ function ProjectsView(props: {
     <div className="space-y-4">
       {projects.map(p => {
         const tg = targetsByProject[p.id];
+        const conflict = conflicts[p.id];
         return (
           <div key={p.id} className="rounded-xl border bg-card p-4 space-y-3">
             <div>
@@ -762,6 +801,27 @@ function ProjectsView(props: {
                 <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
               )}
             </div>
+
+            {/* #676: Inline-Konflikt-Banner wenn der letzte PUT ein 428/409 war */}
+            {conflict && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                    {t("targetSystems.conflictTitle")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {conflict.message || t("targetSystems.conflictDesc")}
+                  </p>
+                </div>
+                <button
+                  onClick={onReload}
+                  className="text-xs px-3 py-1.5 rounded-md bg-amber-600 text-white hover:bg-amber-700 transition-colors shrink-0"
+                >
+                  {t("targetSystems.reloadBtn")}
+                </button>
+              </div>
+            )}
 
             {/* Server-Sektion */}
             <ProjectTargetSubsection

@@ -1664,6 +1664,9 @@
   "targetSystems": {
     "title": "Target Systems",
     "subtitle": "Manage WKS and root/remote servers and assign them to projects.",
+    "conflictTitle": "Assignments changed externally",
+    "conflictDesc": "Project targets have been modified since you loaded the page — likely by another admin. Please reload to see the current state.",
+    "reloadBtn": "Reload",
     "accessDenied": {
       "title": "Admin access required",
       "desc": "This page manages infrastructure assignments and is only accessible to admins."

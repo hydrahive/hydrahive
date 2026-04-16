@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Literal
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from typing import Optional
 from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
@@ -707,7 +708,7 @@ def register_project_routes(
         """Baut die GET-Response aus gespeicherten Targets + Stammdaten.
         Keine ssh_key_path, keine private keys im Output."""
         import json as _json
-        from .project_targets import get_project_targets
+        from .project_targets import get_project_targets, compute_project_targets_etag
         from .router_servers import _load_servers, SERVERS_KEYS_DIR
         from .settings import settings as _settings
 
@@ -756,7 +757,38 @@ def register_project_routes(
                 "has_ssh_key": (_settings.wks_keys_dir / t["username"]).exists(),
             })
 
-        return {"project_id": project_id, "servers": servers_out, "wks": wks_out}
+        return {
+            "project_id": project_id,
+            "etag":       compute_project_targets_etag(project_id),
+            "servers":    servers_out,
+            "wks":        wks_out,
+        }
+
+    def _require_targets_etag_match_strict(project_id: str, if_match: Optional[str]) -> None:
+        """#676 Strict ETag-Guard für PUT /projects/{id}/targets.
+
+        Fehlender Header → 428 mit `current_etag`, Mismatch → 409 mit
+        `current_etag`. Shape {message, current_etag} konsistent zum
+        Composer-Muster (#650) — Frontend kann Reload-Banner 1:1 wiederverwenden.
+        """
+        from .project_targets import compute_project_targets_etag
+        current = compute_project_targets_etag(project_id)
+        if if_match is None:
+            raise HTTPException(
+                status_code=428,
+                detail={
+                    "message":      "If-Match Header erforderlich. Aktuellen ETag aus GET /projects/{id}/targets laden.",
+                    "current_etag": current,
+                },
+            )
+        if if_match != current:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message":      "Projekt-Targets wurden seit dem Laden geändert. Bitte neu laden.",
+                    "current_etag": current,
+                },
+            )
 
     @auth_router.get("/projects/{project_id}/targets")
     def get_project_targets_endpoint(
@@ -773,8 +805,13 @@ def register_project_routes(
     def put_project_targets_endpoint(
         project_id: str,
         req: ProjectTargetsRequest,
+        if_match: Optional[str] = Header(None, alias="If-Match"),
     ):
-        """Setzt Projekt-Targets (admin-only V1). Validiert Stammdaten-Existenz."""
+        """Setzt Projekt-Targets (admin-only V1). Validiert Stammdaten-Existenz.
+
+        #676: If-Match ist strict Pflicht. Fehlend → 428, stale → 409 (jeweils
+        mit current_etag im detail). Konsistent zum Composer-Muster.
+        """
         import json as _json
         from .project_targets import set_project_targets, TargetValidationError
         from .router_servers import _load_servers
@@ -782,6 +819,8 @@ def register_project_routes(
 
         if not projects.get(project_id):
             raise HTTPException(404, f"Projekt '{project_id}' nicht gefunden")
+
+        _require_targets_etag_match_strict(project_id, if_match)
 
         existing_servers = {s["id"] for s in _load_servers()}
         try:
