@@ -194,12 +194,26 @@ def register_agent_skill_routes(
         if agent_dir.parent.resolve() == _settings.projects_dir.resolve():
             project_dir = agent_dir
 
+        # #668: User-Layer aus Auth-Username. `internal` (HMAC-signed
+        # sub-calls) oder ungültige Namen → Layer übersprungen, NIE 500.
+        _req_username, _ = _a
+        _user_skills_dir: Path | None = None
+        if _req_username and _req_username != "internal":
+            try:
+                _user_skills_dir = _settings.user_skills_dir(_req_username)
+            except ValueError:
+                logger.warning(
+                    "skills-listing: ungültiger request_user %r — User-Layer übersprungen",
+                    _req_username,
+                )
+                _user_skills_dir = None
+
         catalog_dir = (Path(catalog_dir_provider()) if catalog_dir_provider
                        else None)
         resolved, errors = resolve_full_view(
             agent_dir=_skills_dir(agents_dir, agent_id),
             project_dir=(project_dir / "skills") if project_dir else None,
-            user_skills_dir=None,        # V1: nicht per Route adressiert
+            user_skills_dir=_user_skills_dir,
             system_catalog_dir=catalog_dir,
         )
 

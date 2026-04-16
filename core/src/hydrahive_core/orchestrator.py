@@ -549,7 +549,7 @@ class Orchestrator:
         try:
             while True:
                 try:
-                    future, project_cfg, content, sender, execution_mode = await asyncio.wait_for(
+                    future, project_cfg, content, sender, execution_mode, request_user = await asyncio.wait_for(
                         queue.get(), timeout=self._queue_idle_timeout_s
                     )
                 except asyncio.TimeoutError:
@@ -560,7 +560,8 @@ class Orchestrator:
                 self._queue_last_used[project_id] = asyncio.get_event_loop().time()
                 try:
                     result = await self._handle_message_impl(
-                        project_id, project_cfg, content, sender, execution_mode
+                        project_id, project_cfg, content, sender, execution_mode,
+                        request_user=request_user,
                     )
                     if not future.done():
                         future.set_result(result)
@@ -590,14 +591,19 @@ class Orchestrator:
         content:     str,
         sender:      str = "user",
         execution_mode: str | None = None,
+        request_user: str | None = None,
     ) -> tuple[str, list[str]]:
         """
         Oeffentlicher Einstiegspunkt — serialisiert ueber asyncio.Queue.
         Mehrere parallele Aufrufe ans gleiche Projekt werden sequenziell abgearbeitet.
+
+        #668: `request_user` trägt den authentifizierten Auth-User für die
+        User-Skill-Layer-Resolution. `None` (z.B. internal/ask_agent) →
+        User-Skills werden nicht geladen.
         """
         await self._ensure_worker(project_id)
         future: asyncio.Future = asyncio.get_event_loop().create_future()
-        await self._get_queue(project_id).put((future, project_cfg, content, sender, execution_mode))
+        await self._get_queue(project_id).put((future, project_cfg, content, sender, execution_mode, request_user))
         self._queue_last_used[project_id] = asyncio.get_event_loop().time()
         try:
             return await asyncio.wait_for(asyncio.shield(future), timeout=300.0)
@@ -615,6 +621,8 @@ class Orchestrator:
         content: str,
         sender: str,
         execution_mode: str | None = None,
+        *,
+        request_user: str | None = None,
     ):
         """
         Hauptpfad: User-Nachricht → Boss-Agent → Antwort.
@@ -686,6 +694,7 @@ class Orchestrator:
         _active_session = self._sessions.get_active(project_id)
         _static_p, _dynamic_p = await build_system_prompt(
             boss_cfg, content, invalidate=_refresh, session=_active_session,
+            request_user=request_user,
         )
         system_prompt = (_static_p + "\n\n" + _dynamic_p).strip() if _dynamic_p else _static_p
 
@@ -1019,9 +1028,12 @@ class Orchestrator:
         content:     str,
         sender:      str = "user",
         execution_mode: str | None = None,
+        *,
+        request_user: str | None = None,
     ):
         async for chunk in _handle_message_stream_fn(
-            self, project_id, project_cfg, content, sender, execution_mode
+            self, project_id, project_cfg, content, sender, execution_mode,
+            request_user=request_user,
         ):
             yield chunk
 

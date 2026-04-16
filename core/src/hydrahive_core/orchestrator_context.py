@@ -271,9 +271,30 @@ def _context_mode(user_text: str) -> str:
     return "full" if any(t in text for t in full_triggers) else "normal"
 
 
+def _resolve_user_skills_dir(request_user: str | None) -> "Path | None":
+    """#668: Ermittelt den User-Skill-Ordner für den aktuellen Request.
+
+    Liefert None, wenn kein echter authentifizierter User vorliegt
+    (`None` oder Internal-Marker `"internal"`) — dann bleibt der User-Layer
+    im Prompt inaktiv. Ungültige Usernames werden geloggt und übersprungen,
+    statt den Prompt-Build zu brechen.
+    """
+    if request_user is None or request_user == "internal":
+        return None
+    try:
+        return settings.user_skills_dir(request_user)
+    except ValueError:
+        logger.warning(
+            "skill-resolver: ungültiger request_user %r — User-Layer übersprungen",
+            request_user,
+        )
+        return None
+
+
 async def build_system_prompt(
     boss_cfg, user_text: str, *,
     invalidate: bool = False, session=None,
+    request_user: str | None = None,
 ) -> tuple[str, str]:
     """
     #636: Einziger autoritativer Builder. Wird von non-stream, OAuth-stream
@@ -470,16 +491,19 @@ async def build_system_prompt(
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
     if boss_cfg.agent_dir:
-        # #659: Multi-Layer-Resolver (agent > project > user). System/Catalog
-        # ist bewusst KEIN automatischer Prompt-Layer — Admin kontrolliert via
-        # `/skill install`, was prompt-wirksam wird.
-        # User-Layer-Runtime-Wiring: aktuell deaktiviert (kein sauberer
-        # owner_username am Orchestrator-Einstieg), siehe Follow-up in
-        # project_session_hydrahive_0416.md.
+        # #659/#668: Multi-Layer-Resolver (agent > project > user).
+        # System/Catalog ist bewusst KEIN automatischer Prompt-Layer —
+        # Admin kontrolliert via `/skill install`, was prompt-wirksam wird.
+        # User-Layer (#668): wird nur genutzt, wenn `request_user` ein
+        # echter auth-User ist; `None`/`"internal"`/invalid → übersprungen.
+        # Skill-Files liegen unter `<agent_dir>/skills/` (wie in `load_skills`);
+        # der Resolver erwartet das konkrete Skills-Verzeichnis.
+        _user_skills_dir = _resolve_user_skills_dir(request_user)
+        _proj_dir = getattr(boss_cfg, "project_dir", None)
         _resolved_prompt, _resolver_errors = resolve_prompt_skills(
-            agent_dir=boss_cfg.agent_dir,
-            project_dir=getattr(boss_cfg, "project_dir", None),
-            user_skills_dir=None,
+            agent_dir=boss_cfg.agent_dir / "skills",
+            project_dir=(_proj_dir / "skills") if _proj_dir else None,
+            user_skills_dir=_user_skills_dir,
         )
         if _resolver_errors:
             logger.debug("skill-resolver: %d Fehler ignoriert: %s",
@@ -879,7 +903,10 @@ def _extract_learnings(memory_dir: Path, summary: str) -> None:
         logger.debug("Learnings-Extraktion fehlgeschlagen: %s", e)
 
 
-def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], list[str]]:
+def get_skill_tool_constraints(
+    boss_cfg, user_text: str, *,
+    request_user: str | None = None,
+) -> tuple[list[str], list[str]]:
     """
     Gibt (allowed_tools, blocked_tools) der aktiven Skills zurück.
     Kombinationsregel über mehrere aktive Skills:
@@ -887,14 +914,18 @@ def get_skill_tool_constraints(boss_cfg, user_text: str) -> tuple[list[str], lis
     - blocked_tools: Vereinigung (jeder Skill kann Tools sperren)
     - blocked_tools gewinnt bei Konflikt
     Wenn kein aktiver Skill Tool-Constraints hat → leere Listen (keine Einschränkung).
+
+    #668: `request_user` aktiviert den User-Layer identisch zu
+    `build_system_prompt`. None/internal/invalid → User-Layer übersprungen.
     """
     if not boss_cfg.agent_dir:
         return [], []
-    # #659: gleicher Resolver wie build_system_prompt — konsistente Layer-Sicht.
+    # #659/#668: gleicher Resolver wie build_system_prompt — konsistente Layer-Sicht.
+    _proj_dir = getattr(boss_cfg, "project_dir", None)
     _resolved_prompt, _ = resolve_prompt_skills(
-        agent_dir=boss_cfg.agent_dir,
-        project_dir=getattr(boss_cfg, "project_dir", None),
-        user_skills_dir=None,
+        agent_dir=boss_cfg.agent_dir / "skills",
+        project_dir=(_proj_dir / "skills") if _proj_dir else None,
+        user_skills_dir=_resolve_user_skills_dir(request_user),
     )
     all_skills: list[Skill] = [
         r.effective.skill for r in _resolved_prompt

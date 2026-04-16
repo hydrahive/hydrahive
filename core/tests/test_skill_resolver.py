@@ -379,3 +379,126 @@ def test_router_layers_invalid_query(app_and_dirs):
     client, _, _ = app_and_dirs
     r = client.get("/agents/bob/skills?layers=bogus")
     assert r.status_code == 422  # FastAPI Query-Pattern-Reject
+
+
+# ── #668: Router User-Layer bei layers=effective|all ─────────────────────────
+
+@pytest.fixture
+def app_with_users(tmp_path, monkeypatch):
+    """Wie app_and_dirs, aber `settings.user_skills_dir` zeigt auf tmp_path
+    und die Auth-Fixture kann den Username pro Test variieren."""
+    from hydrahive_core.settings import settings as _settings
+    from hydrahive_core.skill_resolver import validate_username
+
+    users_base = tmp_path / "users"
+
+    def _fake_user_skills_dir(self, username: str) -> Path:
+        validate_username(username)  # Raise wie echtes settings
+        return users_base / username / "skills"
+
+    # Pydantic-Settings erlaubt kein Instance-setattr — Class-Method patchen.
+    monkeypatch.setattr(type(_settings), "user_skills_dir", _fake_user_skills_dir)
+
+    agents_dir = tmp_path / "agents"
+    catalog_dir = tmp_path / "catalog"
+    agents_dir.mkdir()
+    (agents_dir / "bob").mkdir()
+    (agents_dir / "bob" / "skills").mkdir()
+
+    app = FastAPI()
+    auth_router = APIRouter()
+    current_auth = {"username": "alice", "role": "user"}
+
+    def _require_auth():
+        return (current_auth["username"], current_auth["role"])
+
+    def _check_agent_write(agent_id, auth):
+        return
+
+    register_agent_skill_routes(
+        auth_router,
+        require_auth=_require_auth,
+        check_agent_write=_check_agent_write,
+        agents_dir=str(agents_dir),
+        logger=mock.MagicMock(),
+        catalog_dir_provider=lambda: catalog_dir,
+    )
+    app.include_router(auth_router)
+    return TestClient(app), agents_dir, users_base, current_auth
+
+
+def test_router_user_layer_effective_for_authenticated_user(app_with_users):
+    """User-Skill ohne agent/project-Override wird als effective geliefert."""
+    client, _, users_base, _auth = app_with_users
+    _write(users_base / "alice" / "skills", "alice-only", layer="user")
+
+    r = client.get("/agents/bob/skills?layers=all")
+    assert r.status_code == 200
+    data = r.json()
+    names = {s["name"]: s for s in data["skills"]}
+    assert "alice-only" in names
+    assert names["alice-only"]["effective"]["source"] == "user"
+
+
+def test_router_user_layer_shadowed_by_agent(app_with_users):
+    """Agent-Skill überschreibt User-Skill, User taucht als shadow."""
+    client, agents_dir, users_base, _auth = app_with_users
+    _write(agents_dir / "bob/skills", "common", layer="agent")
+    _write(users_base / "alice" / "skills", "common", layer="user")
+
+    r = client.get("/agents/bob/skills?layers=all")
+    data = r.json()
+    names = {s["name"]: s for s in data["skills"]}
+    assert names["common"]["effective"]["source"] == "agent"
+    assert any(s["source"] == "user"
+               for s in names["common"].get("shadows", []))
+
+
+def test_router_internal_request_skips_user_layer(app_with_users):
+    """Internal-signed sub-calls tragen `internal` → kein User-Layer."""
+    client, _, users_base, auth = app_with_users
+    auth["username"] = "internal"
+    auth["role"] = "admin"
+    _write(users_base / "internal" / "skills", "leak", layer="user")
+
+    r = client.get("/agents/bob/skills?layers=all")
+    data = r.json()
+    names = [s["name"] for s in data["skills"]]
+    avails = [a["name"] for a in data["available"]]
+    assert "leak" not in names
+    assert "leak" not in avails
+
+
+def test_router_invalid_username_does_not_500(app_with_users, monkeypatch):
+    """Falls `user_skills_dir` ValueError wirft, liefert die Route trotzdem
+    200 — der User-Layer wird still übersprungen."""
+    client, agents_dir, _, auth = app_with_users
+    _write(agents_dir / "bob/skills", "agent-skill", layer="agent")
+
+    from hydrahive_core.settings import settings as _settings
+
+    def _raises(self, username: str) -> Path:
+        raise ValueError("böse")
+
+    monkeypatch.setattr(type(_settings), "user_skills_dir", _raises)
+    auth["username"] = "whatever"
+
+    r = client.get("/agents/bob/skills?layers=all")
+    assert r.status_code == 200
+    names = [s["name"] for s in r.json()["skills"]]
+    assert "agent-skill" in names
+
+
+def test_router_installed_mode_unchanged_by_user_layer(app_with_users):
+    """layers=installed bleibt strikt agent-lokal, auch wenn User-Skills
+    auf der Platte liegen."""
+    client, agents_dir, users_base, _auth = app_with_users
+    _write(agents_dir / "bob/skills", "agent-one", layer="agent")
+    _write(users_base / "alice" / "skills", "user-one", layer="user")
+
+    r = client.get("/agents/bob/skills")  # default = installed
+    data = r.json()
+    stems = [s.get("skill") or s.get("filename") for s in data["skills"]]
+    assert "agent-one" in stems
+    assert "user-one" not in stems
+    assert "available" not in data

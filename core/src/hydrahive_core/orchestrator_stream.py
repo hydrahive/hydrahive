@@ -64,6 +64,8 @@ async def handle_message_stream(
     content: str,
     sender: str = "user",
     execution_mode: str | None = None,
+    *,
+    request_user: str | None = None,
 ):
     """
     Streaming-Version von handle_message.
@@ -127,6 +129,7 @@ async def handle_message_stream(
     _active_session = orch._sessions.get_active(project_id)
     _static_prompt, _dynamic_prompt = await build_system_prompt(
         boss_cfg, _content_str, invalidate=_refresh, session=_active_session,
+        request_user=request_user,
     )
     # v2 (#589): Worker-Kontext entfernt — kein Dispatch-Modell mehr
     system_prompt = (_static_prompt + "\n\n" + _dynamic_prompt).strip() if _dynamic_prompt else _static_prompt

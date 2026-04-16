@@ -436,6 +436,9 @@ def register_agent_chat_routes(
         # #278/#283: sender immer aus Auth ableiten, nie aus Body
         _username, _ = _a
         sender = _username if _username != "internal" else (req.sender or "user")
+        # #668: echter auth-User für den User-Skill-Layer. Internal (ask_agent/
+        # HMAC-signed sub-calls) trägt keinen echten User → Layer übersprungen.
+        request_user = _username if _username != "internal" else None
         check_message_rate(sender, agent_id)
         # Gruppen-Berechtigung prüfen (#165)
         if group_service and not group_service.has_agent_access(_username, agent_id):
@@ -468,6 +471,7 @@ def register_agent_chat_routes(
                 content=req.content,
                 sender=sender,
                 execution_mode=execution_mode,
+                request_user=request_user,
             )
         finally:
             if _ws_override_token is not None:
@@ -510,6 +514,8 @@ def register_agent_chat_routes(
         # #278/#283: sender immer aus Auth ableiten
         _username, _ = _a
         sender = _username if _username != "internal" else (req.sender or "user")
+        # #668: echter auth-User für den User-Skill-Layer (siehe non-stream).
+        request_user = _username if _username != "internal" else None
         check_message_rate(sender, agent_id)
         # Gruppen-Berechtigung prüfen (#165)
         if group_service and not group_service.has_agent_access(_username, agent_id):
@@ -622,6 +628,7 @@ def register_agent_chat_routes(
                             content=_user_content,
                             sender=sender,
                             execution_mode=execution_mode,
+                            request_user=request_user,
                         ):
                             _done_state["chunks"] += 1
                             yield chunk
