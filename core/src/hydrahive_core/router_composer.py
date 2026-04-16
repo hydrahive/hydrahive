@@ -354,6 +354,218 @@ def _perform_save(
     }
 
 
+# ===========================================================================
+# #647 — Backup-Listing, Preview, Restore (shared helpers)
+# ===========================================================================
+#
+# Backup-Konvention aus `_perform_save`:
+#   - `AGENT.md.backup`                  → letzter aktiver Stand (latest, rolling)
+#   - `AGENT.md.<YYYYMMDDTHHMMSSZ>.backup`  → versioniert (+ optional `-N`)
+# Listing und Restore operieren ausschließlich auf dieser Menge.
+#
+# Path-Traversal-Schutz: strikte Filename-Regex + `.resolve().relative_to()`.
+# Restore ist strict-ETag (`If-Match` Pflicht): 428 wenn fehlt, 409 wenn
+# mismatch, 200 bei match.
+
+_BACKUP_NAME_RE = re.compile(
+    r"^AGENT\.md\.(\d{8}T\d{6}Z(-\d+)?\.backup|backup)$"
+)
+_BACKUP_PREVIEW_MAX_BYTES = 1 * 1024 * 1024   # 1 MiB
+_BACKUP_LISTING_MAX = 500
+
+
+def _safe_backup_target(agent_dir: Path, name: str) -> Path:
+    """Resolve `<agent_dir>/<name>` mit strikter Regex und Traversal-Schutz.
+
+    Nur `AGENT.md.backup` und `AGENT.md.<UTC>.backup` (optional `-N`) sind
+    zulässig. Alles andere → 400.
+    """
+    if not isinstance(name, str) or not _BACKUP_NAME_RE.match(name):
+        raise HTTPException(status_code=400, detail=f"Ungültiger Backup-Name: {name!r}")
+    candidate = (agent_dir / name).resolve()
+    try:
+        candidate.relative_to(agent_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Pfad-Traversal abgelehnt.")
+    return candidate
+
+
+def _list_backups(agent_dir: Path) -> tuple[list[dict], bool]:
+    """Liefert (items, truncated).
+
+    Sortierung: versioned nach mtime DESC (neueste zuerst), dann
+    `AGENT.md.backup` als eigener Eintrag mit kind='latest' am Ende.
+    """
+    if not agent_dir.exists() or not agent_dir.is_dir():
+        return [], False
+
+    versioned: list[dict] = []
+    latest: dict | None = None
+    for p in agent_dir.iterdir():
+        if not p.is_file():
+            continue
+        n = p.name
+        if n == AGENT_MD_BACKUP:
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            latest = {
+                "name":       n,
+                "kind":       "latest",
+                "size_bytes": st.st_size,
+                "mtime":      datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                                    .isoformat(timespec="seconds"),
+            }
+            continue
+        if _VERSIONED_BACKUP_RE.match(n):
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            versioned.append({
+                "name":       n,
+                "kind":       "versioned",
+                "size_bytes": st.st_size,
+                "mtime":      datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                                    .isoformat(timespec="seconds"),
+                "_sort_ts":   st.st_mtime,
+            })
+    versioned.sort(key=lambda d: d["_sort_ts"], reverse=True)
+    for d in versioned:
+        d.pop("_sort_ts", None)
+
+    truncated = False
+    if len(versioned) > _BACKUP_LISTING_MAX:
+        versioned = versioned[:_BACKUP_LISTING_MAX]
+        truncated = True
+
+    items: list[dict] = list(versioned)
+    if latest is not None:
+        items.append(latest)
+    return items, truncated
+
+
+def _read_backup_for_preview(target: Path) -> dict:
+    """Liest Backup und wirft 404/413. Content byte-treu via utf-8."""
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Backup nicht gefunden.")
+    try:
+        st = target.stat()
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Backup-Stat fehlgeschlagen: {e}")
+    if st.st_size > _BACKUP_PREVIEW_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Backup größer als {_BACKUP_PREVIEW_MAX_BYTES} bytes — Preview verweigert.",
+        )
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Backup ist nicht UTF-8 und kann nicht previewed werden.")
+    return {
+        "name":       target.name,
+        "content":    content,
+        "size_bytes": st.st_size,
+        "mtime":      datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                              .isoformat(timespec="seconds"),
+    }
+
+
+def _require_etag_match_strict(agent_dir: Path, if_match: Optional[str]) -> None:
+    """Strict-Variante: Fehlender Header → 428, Mismatch → 409.
+
+    Für Write-APIs wo Clients nicht „vergessen dürfen" zu synchronisieren
+    (Restore, #647). Unterscheidet sich bewusst von `_require_etag_match`,
+    das für Save absichtlich backward-compat None erlaubt.
+    """
+    current = _compute_etag(agent_dir)
+    if if_match is None:
+        raise HTTPException(
+            status_code=428,
+            detail={
+                "message":      "If-Match Header erforderlich. Aktuellen ETag aus GET /composer/profile laden.",
+                "current_etag": current,
+            },
+        )
+    if if_match != current:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message":      "AGENT.md wurde seit dem Laden geändert. Bitte Profil neu laden.",
+                "current_etag": current,
+            },
+        )
+
+
+def _perform_restore(
+    agent_dir: Path,
+    agent_id: str,
+    backup_name: str,
+    if_match: Optional[str],
+    *,
+    invalidate_prompt_cache: Callable[[str], None],
+    logger,
+    audit_log,
+    audit_action: str,
+    audit_user: str,
+) -> dict:
+    """Restore-Ablauf, atomar in Bezug auf eine Request:
+
+    1. Pfad-/Name-Validation (Regex + resolve/relative_to) → 400.
+    2. Target existent? → 404.
+    3. If-Match strict (428/409).
+    4. Pre-Restore-Snapshot: current AGENT.md → neues `AGENT.md.<UTC>.backup`.
+    5. `AGENT.md.backup` = Pre-Restore-Content (rolling latest-Semantik).
+    6. `AGENT.md` = selected backup content (byte-treu).
+    7. Cache invalidate + Audit.
+    """
+    target = _safe_backup_target(agent_dir, backup_name)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Backup nicht gefunden.")
+
+    agent_md = agent_dir / AGENT_MD_FILENAME
+    # Strict ETag-Check: AGENT.md muss existieren und aktuellen Stand spiegeln.
+    _require_etag_match_strict(agent_dir, if_match)
+
+    pre_restore_snapshot: str | None = None
+    if agent_md.exists():
+        pre_restore_snapshot = _versioned_backup_name(agent_dir)
+        shutil.copy2(agent_md, agent_dir / pre_restore_snapshot)
+        # rolling latest: AGENT.md.backup zeigt auf den Stand VOR dem Restore.
+        shutil.copy2(agent_md, agent_dir / AGENT_MD_BACKUP)
+
+    # Restore: selected backup → AGENT.md (byte-treu).
+    shutil.copy2(target, agent_md)
+
+    try:
+        invalidate_prompt_cache(agent_id)
+    except Exception as e:
+        logger.warning("Composer-Restore: Prompt-Cache-Invalidierung fehlgeschlagen: %s", e)
+
+    audit_log(
+        audit_action,
+        user=audit_user,
+        target=agent_id,
+        details={
+            "from_backup":          backup_name,
+            "pre_restore_snapshot": pre_restore_snapshot,
+        },
+    )
+    logger.info(
+        "Composer Restore: agent=%s from=%s pre_snapshot=%s (%s)",
+        agent_id, backup_name, pre_restore_snapshot, audit_action,
+    )
+
+    return {
+        "restored":             True,
+        "agent_id":             agent_id,
+        "from_backup":          backup_name,
+        "pre_restore_snapshot": pre_restore_snapshot,
+        "etag":                 _compute_etag(agent_dir),
+    }
+
+
 def register_composer_routes(
     auth_router: APIRouter,
     *,
@@ -418,6 +630,44 @@ def register_composer_routes(
             logger=logger,
             audit_log=audit_log,
             audit_action="personal_agent.composer_save",
+            audit_user=username,
+        )
+
+    # #647: Backup-Listing / Preview / Restore (Personal-Scope).
+    @auth_router.get("/me/agent/composer/backups")
+    def personal_list_backups(auth: tuple[str, str] = Depends(require_auth)):
+        username, _role = auth
+        agent_id, _cfg = ensure_personal_agent(username)
+        agent_dir = Path(agents_dir) / agent_id
+        items, truncated = _list_backups(agent_dir)
+        return {"backups": items, "count": len(items), "truncated": truncated}
+
+    @auth_router.get("/me/agent/composer/backups/{name}")
+    def personal_preview_backup(
+        name: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        username, _role = auth
+        agent_id, _cfg = ensure_personal_agent(username)
+        agent_dir = Path(agents_dir) / agent_id
+        target = _safe_backup_target(agent_dir, name)
+        return _read_backup_for_preview(target)
+
+    @auth_router.post("/me/agent/composer/backups/{name}/restore")
+    def personal_restore_backup(
+        name: str,
+        if_match: Optional[str] = Header(None, alias="If-Match"),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        username, _role = auth
+        agent_id, _cfg = ensure_personal_agent(username)
+        agent_dir = Path(agents_dir) / agent_id
+        return _perform_restore(
+            agent_dir, agent_id, name, if_match,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="personal_agent.composer_restore",
             audit_user=username,
         )
 
@@ -502,6 +752,44 @@ def register_admin_composer_routes(
             logger=logger,
             audit_log=audit_log,
             audit_action="admin.agent.composer_save",
+            audit_user=username,
+        )
+
+    # #647: Backup-Listing / Preview / Restore (Admin-Scope).
+    @admin_router.get("/admin/agents/{agent_id}/composer/backups")
+    def admin_list_backups(
+        agent_id: str,
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        agent_dir = _validate_admin_agent_id(agent_id, agents_root)
+        items, truncated = _list_backups(agent_dir)
+        return {"backups": items, "count": len(items), "truncated": truncated}
+
+    @admin_router.get("/admin/agents/{agent_id}/composer/backups/{name}")
+    def admin_preview_backup(
+        agent_id: str,
+        name: str,
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        agent_dir = _validate_admin_agent_id(agent_id, agents_root)
+        target = _safe_backup_target(agent_dir, name)
+        return _read_backup_for_preview(target)
+
+    @admin_router.post("/admin/agents/{agent_id}/composer/backups/{name}/restore")
+    def admin_restore_backup(
+        agent_id: str,
+        name: str,
+        if_match: Optional[str] = Header(None, alias="If-Match"),
+        auth: tuple[str, str] = Depends(require_admin),
+    ):
+        agent_dir = _validate_admin_agent_id(agent_id, agents_root)
+        username, _role = auth
+        return _perform_restore(
+            agent_dir, agent_id, name, if_match,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="admin.agent.composer_restore",
             audit_user=username,
         )
 
@@ -632,5 +920,46 @@ def register_project_composer_routes(
             logger=logger,
             audit_log=audit_log,
             audit_action="project.composer_save",
+            audit_user=username,
+        )
+
+    # #647: Backup-Listing / Preview / Restore (Project-Scope).
+    @auth_router.get("/projects/{project_id}/composer/backups")
+    def project_list_backups(
+        project_id: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        project_dir = _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        items, truncated = _list_backups(project_dir)
+        return {"backups": items, "count": len(items), "truncated": truncated}
+
+    @auth_router.get("/projects/{project_id}/composer/backups/{name}")
+    def project_preview_backup(
+        project_id: str,
+        name: str,
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        project_dir = _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        target = _safe_backup_target(project_dir, name)
+        return _read_backup_for_preview(target)
+
+    @auth_router.post("/projects/{project_id}/composer/backups/{name}/restore")
+    def project_restore_backup(
+        project_id: str,
+        name: str,
+        if_match: Optional[str] = Header(None, alias="If-Match"),
+        auth: tuple[str, str] = Depends(require_auth),
+    ):
+        project_dir = _validate_project_id(project_id, projects_root)
+        _require_project_composer_access(auth, project_id)
+        username, _role = auth
+        return _perform_restore(
+            project_dir, project_id, name, if_match,
+            invalidate_prompt_cache=invalidate_prompt_cache,
+            logger=logger,
+            audit_log=audit_log,
+            audit_action="project.composer_restore",
             audit_user=username,
         )

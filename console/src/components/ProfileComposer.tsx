@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle, Info, AlertTriangle, Archive, Eye, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
-import { api, type ComposerWarning } from "@/lib/api";
+import { api, type ComposerBackup, type ComposerBackupPreview, type ComposerWarning } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface BlockDef { id: string; label: string; description: string }
@@ -428,6 +428,272 @@ export function ProfileComposer({ scope = "me", agentId, projectId, showSoulHint
         onCancel={() => setPresetSwitchTarget(null)}
         onConfirm={() => presetSwitchTarget && applyPreset(presetSwitchTarget)}
       />
+
+      {/* #647: Backup-Panel */}
+      <BackupPanel
+        scope={scope}
+        agentId={agentId}
+        projectId={projectId}
+        etag={etag}
+        onRestored={(newEtag) => {
+          setEtag(newEtag);
+          setConflict(null);
+          setMsg({ kind: "ok", text: t("composer.restoreOk", { defaultValue: "Wiederhergestellt aus Backup." }) });
+          // Profile neu laden, damit selected/preset mit dem wiederhergestellten Stand sync ist.
+          composerApi.loadProfile().then(p => {
+            setSelected(new Set(p.selected));
+            setPreset(p.preset ?? PRESET_CUSTOM);
+            setAgentMdExists(p.agent_md_exists);
+            setMtimeMatches(p.agent_md_mtime_matches);
+          }).catch(() => {/* ignore */});
+        }}
+      />
     </section>
+  );
+}
+
+
+// ─────────────────────────────────────────── #647 Backup-Panel
+
+type BackupApi = {
+  list:    () => Promise<{backups: ComposerBackup[]; count:number; truncated:boolean}>;
+  preview: (name: string) => Promise<ComposerBackupPreview>;
+  restore: (name: string, etag: string) => Promise<{restored: true; etag: string; from_backup: string; pre_restore_snapshot: string | null}>;
+};
+
+function buildBackupApi(scope: "me" | "admin" | "project", agentId?: string, projectId?: string): BackupApi {
+  if (scope === "admin") {
+    if (!agentId) throw new Error("BackupPanel: agentId erforderlich bei scope='admin'.");
+    return {
+      list:    () => api.adminComposerBackups(agentId),
+      preview: (n) => api.adminComposerBackupPreview(agentId, n),
+      restore: (n, e) => api.adminComposerBackupRestore(agentId, n, e),
+    };
+  }
+  if (scope === "project") {
+    if (!projectId) throw new Error("BackupPanel: projectId erforderlich bei scope='project'.");
+    return {
+      list:    () => api.projectComposerBackups(projectId),
+      preview: (n) => api.projectComposerBackupPreview(projectId, n),
+      restore: (n, e) => api.projectComposerBackupRestore(projectId, n, e),
+    };
+  }
+  return {
+    list:    () => api.composerBackups(),
+    preview: (n) => api.composerBackupPreview(n),
+    restore: (n, e) => api.composerBackupRestore(n, e),
+  };
+}
+
+interface BackupPanelProps {
+  scope:       "me" | "admin" | "project";
+  agentId?:    string;
+  projectId?:  string;
+  etag:        string | null;
+  onRestored:  (newEtag: string) => void;
+}
+
+function BackupPanel({ scope, agentId, projectId, etag, onRestored }: BackupPanelProps) {
+  const { t } = useTranslation();
+  const backupApi = useMemo(() => buildBackupApi(scope, agentId, projectId), [scope, agentId, projectId]);
+
+  const [open, setOpen] = useState(false);
+  const [backups, setBackups] = useState<ComposerBackup[] | null>(null);
+  const [count, setCount] = useState<number | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [previewName, setPreviewName] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const [restoreName, setRestoreName] = useState<string | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+
+  const loadBackups = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await backupApi.list();
+      setBackups(data.backups);
+      setCount(data.count);
+      setTruncated(data.truncated);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [backupApi]);
+
+  useEffect(() => {
+    if (open && backups === null) {
+      void loadBackups();
+    }
+  }, [open, backups, loadBackups]);
+
+  async function openPreview(name: string) {
+    setPreviewName(name);
+    setPreviewContent("");
+    setPreviewLoading(true);
+    try {
+      const data = await backupApi.preview(name);
+      setPreviewContent(data.content);
+    } catch (e: unknown) {
+      setPreviewContent(t("composer.backupPreviewErr", {
+        defaultValue: "Preview fehlgeschlagen: {{err}}",
+        err: e instanceof Error ? e.message : String(e),
+      }) as string);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function doRestore() {
+    if (!restoreName) return;
+    if (!etag) {
+      setErr(t("composer.backupNoEtag", {
+        defaultValue: "Kein aktueller ETag — Profil zuerst neu laden.",
+      }) as string);
+      setRestoreName(null);
+      return;
+    }
+    setRestoreBusy(true);
+    try {
+      const res = await backupApi.restore(restoreName, etag);
+      onRestored(res.etag);
+      setRestoreName(null);
+      // Liste neu laden — der Pre-Restore-Snapshot ist jetzt als neues Backup da.
+      await loadBackups();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRestoreBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border/70 bg-background">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold hover:bg-muted/50"
+      >
+        <span className="flex items-center gap-2">
+          <Archive className="h-3.5 w-3.5" />
+          {t("composer.backupsTitle", { defaultValue: "Backups verwalten" })}
+          {count !== null && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+              {count}
+            </span>
+          )}
+        </span>
+        <span className="text-[10px] text-muted-foreground">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-border/70 p-3 space-y-2">
+          {loading && (
+            <div className="text-xs text-muted-foreground">
+              {t("composer.backupsLoading", { defaultValue: "Lade…" })}
+            </div>
+          )}
+          {err && (
+            <div className="text-xs text-red-600 dark:text-red-400">{err}</div>
+          )}
+          {!loading && backups !== null && backups.length === 0 && (
+            <div className="text-xs text-muted-foreground">
+              {t("composer.backupsEmpty", {
+                defaultValue: "Noch keine Backups vorhanden. Backups entstehen automatisch beim Speichern.",
+              })}
+            </div>
+          )}
+          {!loading && backups && backups.length > 0 && (
+            <>
+              {truncated && (
+                <div className="text-[11px] text-amber-600 dark:text-amber-400">
+                  {t("composer.backupsTruncated", {
+                    defaultValue: "Liste auf 500 Einträge gekürzt.",
+                  })}
+                </div>
+              )}
+              <ul className="divide-y divide-border/60">
+                {backups.map(b => (
+                  <li key={b.name} className="flex items-center gap-2 py-1.5 text-xs">
+                    <span className="flex-1 font-mono text-[11px]">{b.name}</span>
+                    <span className="text-muted-foreground">
+                      {new Date(b.mtime).toLocaleString()}
+                    </span>
+                    <span className="text-muted-foreground">{b.size_bytes} B</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${b.kind === "latest" ? "bg-muted" : "bg-muted/50"}`}>
+                      {b.kind}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openPreview(b.name)}
+                      className="flex items-center gap-1 rounded border border-border/70 px-2 py-0.5 text-[11px] hover:bg-muted"
+                      title={t("composer.backupPreview", { defaultValue: "Preview" }) as string}
+                    >
+                      <Eye className="h-3 w-3" />
+                      {t("composer.backupPreview", { defaultValue: "Preview" })}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRestoreName(b.name)}
+                      className="flex items-center gap-1 rounded border border-red-300 dark:border-red-900 px-2 py-0.5 text-[11px] text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                      title={t("composer.backupRestore", { defaultValue: "Wiederherstellen" }) as string}
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      {t("composer.backupRestore", { defaultValue: "Wiederherstellen" })}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Preview-Modal: einfaches Overlay, kein Diff-Viewer */}
+      {previewName !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPreviewName(null)}>
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-md bg-background p-4 shadow-lg" onClick={e => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="font-mono text-xs">{previewName}</div>
+              <button type="button" onClick={() => setPreviewName(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                ✕
+              </button>
+            </div>
+            {previewLoading ? (
+              <div className="text-xs text-muted-foreground">
+                {t("composer.backupsLoading", { defaultValue: "Lade…" })}
+              </div>
+            ) : (
+              <pre className="whitespace-pre-wrap break-words text-xs">{previewContent}</pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={restoreName !== null}
+        variant="danger"
+        title={t("composer.restoreConfirmTitle", { defaultValue: "Backup wiederherstellen?" })}
+        message={t("composer.restoreConfirmMsg", {
+          defaultValue:
+            "AGENT.md wird mit dem Inhalt des ausgewählten Backups überschrieben. Der aktuelle Stand wird automatisch als neues Backup gesichert. soul.md und agent.yaml bleiben unverändert.",
+        })}
+        confirmLabel={t("composer.restoreConfirmOk", { defaultValue: "Wiederherstellen" })}
+        cancelLabel={t("composer.restoreConfirmCancel", { defaultValue: "Abbrechen" })}
+        onCancel={() => setRestoreName(null)}
+        onConfirm={doRestore}
+      />
+
+      {restoreBusy && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 text-xs text-white">
+          {t("composer.restoreBusy", { defaultValue: "Wiederherstellen…" })}
+        </div>
+      )}
+    </div>
   );
 }

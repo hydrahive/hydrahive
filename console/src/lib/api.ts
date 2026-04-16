@@ -33,6 +33,27 @@ export interface ComposerWarning {
   message:   string;
   block_ids: string[];
 }
+// #647: Composer-Backup Listing/Preview/Restore
+export type ComposerBackupKind = "versioned" | "latest";
+export interface ComposerBackup {
+  name:       string;
+  kind:       ComposerBackupKind;
+  size_bytes: number;
+  mtime:      string;   // ISO-UTC, frontend via new Date().toLocaleString()
+}
+export interface ComposerBackupPreview {
+  name:       string;
+  content:    string;
+  size_bytes: number;
+  mtime:      string;
+}
+export interface ComposerRestoreResult {
+  restored:             true;
+  agent_id:             string;
+  from_backup:          string;
+  pre_restore_snapshot: string | null;
+  etag:                 string;
+}
 
 const BASE = "/api";
 function getToken() { return localStorage.getItem("hydrahive_token") || ""; }
@@ -68,6 +89,8 @@ export const api = {
   put:    <T>(path: string, body: unknown) => request<T>(path, { method: "PUT",   body: JSON.stringify(body) }),
   putWithHeaders: <T>(path: string, body: unknown, headers: Record<string, string>) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body), headers }),
+  postWithHeaders: <T>(path: string, body: unknown, headers: Record<string, string>) =>
+    request<T>(path, { method: "POST", body: JSON.stringify(body), headers }),
   patch:  <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string)               => request<T>(path, { method: "DELETE" }),
   health:        ()           => api.get<{status:string}>("/health"),
@@ -148,6 +171,18 @@ export const api = {
   projectComposerProfile: (projectId: string) => api.get<{schema_version:number; preset:string|null; selected:string[]; updated_at:string|null; agent_md_exists:boolean; agent_md_mtime_matches:boolean; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer/profile`),
   projectComposerPreview: (projectId: string, selected: string[], preset?: string|null) => api.post<{markdown: string; warnings: ComposerWarning[]; save_blocked: boolean}>(`/projects/${encodeURIComponent(projectId)}/composer/preview`, {selected, preset: preset ?? null}),
   projectComposerSave: (projectId: string, selected: string[], preset?: string|null, etag?: string|null) => api.putWithHeaders<{updated:boolean; agent_id:string; backup_created:boolean; versioned_backup?: string|null; bytes_written:number; preset:string|null; etag:string; warnings:ComposerWarning[]}>(`/projects/${encodeURIComponent(projectId)}/composer`, {selected, preset: preset ?? null}, etag ? {"If-Match": etag} : {}),
+  // #647 Composer-Backups (list / preview / restore) — pro Scope. Restore
+  // ist strict If-Match: Backend antwortet 428 wenn Header fehlt, 409 bei
+  // Mismatch. UI sendet immer den aktuellen ETag.
+  composerBackups: () => api.get<{backups: ComposerBackup[]; count:number; truncated:boolean}>("/me/agent/composer/backups"),
+  composerBackupPreview: (name: string) => api.get<ComposerBackupPreview>(`/me/agent/composer/backups/${encodeURIComponent(name)}`),
+  composerBackupRestore: (name: string, etag: string) => api.postWithHeaders<ComposerRestoreResult>(`/me/agent/composer/backups/${encodeURIComponent(name)}/restore`, {}, {"If-Match": etag}),
+  adminComposerBackups: (agentId: string) => api.get<{backups: ComposerBackup[]; count:number; truncated:boolean}>(`/admin/agents/${encodeURIComponent(agentId)}/composer/backups`),
+  adminComposerBackupPreview: (agentId: string, name: string) => api.get<ComposerBackupPreview>(`/admin/agents/${encodeURIComponent(agentId)}/composer/backups/${encodeURIComponent(name)}`),
+  adminComposerBackupRestore: (agentId: string, name: string, etag: string) => api.postWithHeaders<ComposerRestoreResult>(`/admin/agents/${encodeURIComponent(agentId)}/composer/backups/${encodeURIComponent(name)}/restore`, {}, {"If-Match": etag}),
+  projectComposerBackups: (projectId: string) => api.get<{backups: ComposerBackup[]; count:number; truncated:boolean}>(`/projects/${encodeURIComponent(projectId)}/composer/backups`),
+  projectComposerBackupPreview: (projectId: string, name: string) => api.get<ComposerBackupPreview>(`/projects/${encodeURIComponent(projectId)}/composer/backups/${encodeURIComponent(name)}`),
+  projectComposerBackupRestore: (projectId: string, name: string, etag: string) => api.postWithHeaders<ComposerRestoreResult>(`/projects/${encodeURIComponent(projectId)}/composer/backups/${encodeURIComponent(name)}/restore`, {}, {"If-Match": etag}),
   myPlatforms:    () => api.get<{username:string;platforms: PlatformOverviewEntry[]}>("/me/platforms"),
   mcpServers:    () => api.get<{servers: McpServer[]}>("/mcp/servers"),
   createMcpServer: (d: unknown) => api.post<{server: McpServer}>("/mcp/servers", d),
