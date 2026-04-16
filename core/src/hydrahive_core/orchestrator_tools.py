@@ -161,15 +161,34 @@ async def _execute_tool(
 ):
     """Führt ein einzelnes Tool aus. Gibt Fehler-Dict zurück wenn tool=None."""
     args = dict(tool_input or {})
-    # #584-C Security: Runtime-project_id IMMER Vorrang — sonst könnte ein Agent
-    # in Projekt A via Tool-Input `{"project_id": "projectB"}` gegen Projekt Bs
-    # Target-Auth resolven (Auth-Bypass). Wir ziehen das Feld aus args heraus
-    # (sonst landet es doppelt in **kwargs), ignorieren aber seinen Wert.
+    # #584-C Security: Runtime-project_id IMMER Vorrang für Target-Tools — sonst
+    # könnte ein Agent in Projekt A via Tool-Input `{"project_id": "projectB"}`
+    # gegen Projekt Bs Target-Auth resolven (Auth-Bypass).
+    # Wir ziehen project_id immer aus args heraus (sonst doppeltes kwarg beim
+    # tool.execute()-Aufruf). Für ask_agent (#669) wird der gepoppte Wert als
+    # _requested_project_id zurückgelegt, damit AskAgentTool die Ziel-Session
+    # explizit setzen kann — ohne das Security-Modell der Target-Tools zu berühren.
+    _TARGET_TOOLS_NO_OVERRIDE = frozenset({
+        "server_shell", "server_file_read", "server_file_write", "wks_shell_exec",
+    })
     _maybe_injected_pid = args.pop("project_id", None)
-    if _maybe_injected_pid and _maybe_injected_pid != project_id:
-        logger.warning(
-            "Tool '%s' [agent=%s]: project_id im Tool-Input (%r) ignoriert — Runtime-Wert (%r) bleibt autoritativ.",
-            tool_name, getattr(boss_cfg, "id", "?"), _maybe_injected_pid, project_id,
+    if _maybe_injected_pid and tool_name == "ask_agent":
+        # ask_agent: expliziter Tool-Input-project_id immer als _requested_project_id
+        # weiterreichen — auch wenn gleich dem Runtime-Wert. Sonst würde z.B.
+        # "personal_till" == Runtime-Wert nicht weitergereicht und AskAgentTool
+        # fiele in den UUID-Session-Fallback (personal_*-Branch).
+        args["_requested_project_id"] = _maybe_injected_pid
+    elif _maybe_injected_pid and tool_name in _TARGET_TOOLS_NO_OVERRIDE:
+        # Target-Tools: Wert immer verwerfen; Warning nur bei Mismatch.
+        if _maybe_injected_pid != project_id:
+            logger.warning(
+                "Tool '%s' [agent=%s]: project_id im Tool-Input (%r) ignoriert — Runtime-Wert (%r) bleibt autoritativ.",
+                tool_name, getattr(boss_cfg, "id", "?"), _maybe_injected_pid, project_id,
+            )
+    elif _maybe_injected_pid:
+        logger.debug(
+            "Tool '%s' [agent=%s]: project_id im Tool-Input (%r) ignoriert.",
+            tool_name, getattr(boss_cfg, "id", "?"), _maybe_injected_pid,
         )
     effective_pid = project_id
     if tool is None:

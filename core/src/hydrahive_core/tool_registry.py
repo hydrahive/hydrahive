@@ -1671,7 +1671,11 @@ class AskAgentTool(BaseTool):
             sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
             headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
 
-        explicit_project_id = kwargs.get("project_id", "")
+        # #669: _execute_tool poppt project_id immer aus args (Security), legt
+        # für ask_agent den Wert aber als _requested_project_id zurück.
+        explicit_project_id = (
+            kwargs.get("_requested_project_id") or kwargs.get("project_id") or ""
+        )
         if explicit_project_id.strip():
             session_id = explicit_project_id.strip()
         elif project_id and not project_id.startswith("personal_"):
