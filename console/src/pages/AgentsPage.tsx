@@ -13,6 +13,7 @@ import { ToolsPage } from "@/pages/ToolsPage";
 import { A2APage } from "@/pages/A2APage";
 import { AgentBlueprintTab } from "@/pages/blueprint/AgentBlueprintTab";
 import { PluginsPage } from "@/pages/PluginsPage";
+import { ServerEditModal, type RemoteServer } from "@/components/ServerEditModal";
 
 interface AgentRuntime {
   status: string;
@@ -1142,11 +1143,6 @@ export function AgentsPage() {
 
 /* ── Remote-Server Verwaltung (#342) ─────────────────────────── */
 
-interface RemoteServer {
-  id: string; name: string; ip: string; ssh_user: string; ssh_port: number;
-  description: string; has_ssh_key?: boolean;
-}
-
 function ServersTab() {
   const { t } = useTranslation();
   const [servers, setServers] = useState<RemoteServer[]>([]);
@@ -1368,73 +1364,3 @@ function AgentServerAssignment({ servers }: { servers: RemoteServer[] }) {
   );
 }
 
-function ServerEditModal({ server, onSave, onClose }: {
-  server: RemoteServer | null;
-  onSave: (srv: { name: string; ip: string; ssh_user: string; ssh_port: number; description: string; use_wks_key?: boolean }) => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const [name, setName] = useState(server?.name || "");
-  const [ip, setIp] = useState(server?.ip || "");
-  const [sshUser, setSshUser] = useState(server?.ssh_user || "root");
-  const [sshPort, setSshPort] = useState(server?.ssh_port || 22);
-  const [desc, setDesc] = useState(server?.description || "");
-  const [useWksKey, setUseWksKey] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
-      <div className="bg-card border rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">{server ? "Server bearbeiten" : "Neuer Server"}</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Mein Home-Server"
-              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">IP / Hostname</label>
-              <input value={ip} onChange={e => setIp(e.target.value)} placeholder="192.168.1.100"
-                className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">SSH-User</label>
-                <input value={sshUser} onChange={e => setSshUser(e.target.value)} placeholder="root"
-                  className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Port</label>
-                <input type="number" value={sshPort} onChange={e => setSshPort(Number(e.target.value))}
-                  className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Beschreibung</label>
-            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Home-Lab Ubuntu Server"
-              className="w-full mt-1 rounded-lg border bg-background px-3 py-2 text-sm" />
-          </div>
-          {!server && (
-            <label className="flex items-center gap-2 cursor-pointer rounded-lg border bg-muted/30 px-3 py-2">
-              <input type="checkbox" checked={useWksKey} onChange={e => setUseWksKey(e.target.checked)} className="rounded" />
-              <div>
-                <span className="text-sm font-medium">Bestehenden WKS-Key verwenden</span>
-                <p className="text-xs text-muted-foreground">Nutzt den SSH-Key aus "Mein Agent → WKS" statt einen neuen zu generieren. Sinnvoll wenn der Key dort schon auf dem Ziel-Server eingerichtet ist.</p>
-              </div>
-            </label>
-          )}
-        </div>
-        <div className="flex justify-end pt-2">
-          <button onClick={() => onSave({ name, ip, ssh_user: sshUser, ssh_port: sshPort, description: desc, use_wks_key: useWksKey })}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
-            <Save size={14} /> {server ? "Speichern" : useWksKey ? "Server anlegen (WKS-Key)" : "Server anlegen + Key generieren"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

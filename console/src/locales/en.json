@@ -36,7 +36,8 @@
     "usermanagement": "Users & Permissions",
     "secrets": "Secrets",
     "more": "More",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "targetSystems": "Target Systems"
   },
   "usage": {
     "title": "API Usage",
@@ -278,7 +279,8 @@
     "setup": "Central configuration — everything in one place",
     "usermanagement": "Accounts, groups & access control",
     "secrets": "API keys & tokens for agents",
-    "mcp": "MCP servers"
+    "mcp": "MCP servers",
+    "targetSystems": "Manage WKS and root/remote servers"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1609,6 +1611,72 @@
       "started": "Memory build started — takes a few seconds.",
       "error": "Error: {{message}}",
       "unknown": "Unknown"
+    }
+  },
+  "serverEditModal": {
+    "titleEdit": "Edit server",
+    "titleNew": "New server",
+    "name": "Name",
+    "namePlaceholder": "My home server",
+    "ipHost": "IP / hostname",
+    "sshUser": "SSH user",
+    "port": "Port",
+    "description": "Description",
+    "descPlaceholder": "Home-lab Ubuntu server",
+    "useWksKey": "Use existing WKS key",
+    "useWksKeyHint": "Uses the SSH key from \"My Agent → WKS\" instead of generating a new one. Useful when that key is already set up on the target.",
+    "save": "Save",
+    "createWithWksKey": "Create server (WKS key)",
+    "createWithNewKey": "Create server + generate key"
+  },
+  "targetSystems": {
+    "title": "Target Systems",
+    "subtitle": "Manage WKS and root/remote servers and assign them to projects.",
+    "accessDenied": {
+      "title": "Admin access required",
+      "desc": "This page manages infrastructure assignments and is only accessible to admins."
+    },
+    "tabs": {
+      "servers": "Root Servers",
+      "wks": "WKS",
+      "projects": "Projects"
+    },
+    "servers": {
+      "listDesc": "Register root/remote servers as SSH targets and assign them to projects.",
+      "empty": "No servers registered yet. Click \"New\" to add an SSH target.",
+      "hasKey": "Key present",
+      "noKey": "No key",
+      "keyBtn": "Key",
+      "testBtn": "Test",
+      "testing": "Testing…",
+      "testOk": "Connected!",
+      "pubKeyHint": "Public key — add to ~/.ssh/authorized_keys on the target server:",
+      "assignmentsHeader": "Project assignments"
+    },
+    "wks": {
+      "configHint": "WKS is configured under \"My Agent → WKS\". This page only assigns WKS to projects.",
+      "empty": "No users available.",
+      "configuredBadge": "Configured",
+      "notConfiguredBadge": "Not configured",
+      "notConfigured": "WKS not set up"
+    },
+    "projects": {
+      "empty": "No projects available.",
+      "serversHeader": "Servers",
+      "wksHeader": "WKS",
+      "noServers": "No servers assigned.",
+      "noWks": "No WKS assigned.",
+      "staleHint": "Dangling entry — target no longer exists"
+    },
+    "assign": {
+      "add": "Assign",
+      "none": "Not assigned to any project.",
+      "pickProject": "Pick project…",
+      "pick": "pick…",
+      "role": "role",
+      "note": "note",
+      "rolePlaceholder": "role (e.g. web)",
+      "notePlaceholder": "note (optional)"
     }
   },
   "composer": {

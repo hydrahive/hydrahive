@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Plug,
   Code,
+  ServerCog,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -248,6 +249,7 @@ export function AdminLayout() {
     { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
     { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },
     { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
+    { to: "/target-systems", icon: ServerCog,       label: t("nav.targetSystems", { defaultValue: "Zielsysteme" }), hint: t("navHint.targetSystems", { defaultValue: "WKS und Root-/Remote-Server verwalten" }), adminOnly: true },
     { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
     { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
     { to: "/mcp",            icon: Plug,            label: t("nav.mcp", { defaultValue: "MCP-Server" }), hint: t("navHint.mcp", { defaultValue: "Model Context Protocol Server verwalten" }) },

@@ -36,7 +36,8 @@
     "usermanagement": "Benutzer & Rechte",
     "secrets": "Geheimnisse",
     "more": "Mehr",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "targetSystems": "Zielsysteme"
   },
   "usage": {
     "title": "API Usage",
@@ -278,7 +279,8 @@
     "setup": "Zentrale Konfiguration — alles an einem Ort",
     "usermanagement": "Benutzer, Gruppen & Berechtigungen",
     "secrets": "API-Keys & Tokens für Agenten",
-    "mcp": "MCP-Server"
+    "mcp": "MCP-Server",
+    "targetSystems": "WKS und Root-/Remote-Server verwalten"
   },
   "layout": {
     "controlFabric": "Control Fabric",
@@ -1609,6 +1611,72 @@
       "started": "Memory-Aufbau gestartet — dauert einige Sekunden.",
       "error": "Fehler: {{message}}",
       "unknown": "Unbekannt"
+    }
+  },
+  "serverEditModal": {
+    "titleEdit": "Server bearbeiten",
+    "titleNew": "Neuer Server",
+    "name": "Name",
+    "namePlaceholder": "Mein Home-Server",
+    "ipHost": "IP / Hostname",
+    "sshUser": "SSH-User",
+    "port": "Port",
+    "description": "Beschreibung",
+    "descPlaceholder": "Home-Lab Ubuntu Server",
+    "useWksKey": "Bestehenden WKS-Key verwenden",
+    "useWksKeyHint": "Nutzt den SSH-Key aus \"Mein Agent → WKS\" statt einen neuen zu generieren. Sinnvoll wenn der Key dort schon auf dem Ziel-Server eingerichtet ist.",
+    "save": "Speichern",
+    "createWithWksKey": "Server anlegen (WKS-Key)",
+    "createWithNewKey": "Server anlegen + Key generieren"
+  },
+  "targetSystems": {
+    "title": "Zielsysteme",
+    "subtitle": "WKS und Root-/Remote-Server verwalten und Projekten zuweisen.",
+    "accessDenied": {
+      "title": "Admin-Zugriff erforderlich",
+      "desc": "Diese Seite verwaltet Infrastruktur-Zuweisungen und ist nur für Admins zugänglich."
+    },
+    "tabs": {
+      "servers": "Root-Server",
+      "wks": "WKS",
+      "projects": "Projekte"
+    },
+    "servers": {
+      "listDesc": "Root-/Remote-Server als SSH-Ziele registrieren und Projekten zuweisen.",
+      "empty": "Noch keine Server registriert. Klicke auf „Neu\" um einen SSH-Zielserver hinzuzufügen.",
+      "hasKey": "Key vorhanden",
+      "noKey": "Kein Key",
+      "keyBtn": "Key",
+      "testBtn": "Test",
+      "testing": "Teste…",
+      "testOk": "Verbunden!",
+      "pubKeyHint": "Public Key — auf dem Ziel-Server in ~/.ssh/authorized_keys eintragen:",
+      "assignmentsHeader": "Projekt-Zuweisungen"
+    },
+    "wks": {
+      "configHint": "WKS wird unter „Mein Agent → WKS\" konfiguriert. Hier werden WKS nur Projekten zugewiesen.",
+      "empty": "Keine User vorhanden.",
+      "configuredBadge": "Konfiguriert",
+      "notConfiguredBadge": "Nicht konfiguriert",
+      "notConfigured": "WKS nicht eingerichtet"
+    },
+    "projects": {
+      "empty": "Keine Projekte vorhanden.",
+      "serversHeader": "Server",
+      "wksHeader": "WKS",
+      "noServers": "Keine Server zugewiesen.",
+      "noWks": "Keine WKS zugewiesen.",
+      "staleHint": "Eintrag hängt — Ziel existiert nicht mehr"
+    },
+    "assign": {
+      "add": "Zuweisen",
+      "none": "Keinem Projekt zugewiesen.",
+      "pickProject": "Projekt wählen…",
+      "pick": "auswählen…",
+      "role": "role",
+      "note": "note",
+      "rolePlaceholder": "role (z.B. web)",
+      "notePlaceholder": "note (optional)"
     }
   },
   "composer": {

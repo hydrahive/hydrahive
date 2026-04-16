@@ -34,6 +34,7 @@ const McpConfigPage          = lazy(() => import("@/pages/McpConfigPage").then((
 const QuickstartPage         = lazy(() => import("@/pages/QuickstartPage").then((m) => ({ default: m.QuickstartPage })));
 const PlaygroundPage         = lazy(() => import("@/pages/PlaygroundPage").then((m) => ({ default: m.PlaygroundPage })));
 const ProactivePage          = lazy(() => import("@/pages/ProactivePage").then((m) => ({ default: m.ProactivePage })));
+const TargetSystemsPage      = lazy(() => import("@/pages/TargetSystemsPage").then((m) => ({ default: m.TargetSystemsPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -116,6 +117,7 @@ export default function App() {
             <Route path="brain"             element={<HydraBrainPage />} />
             <Route path="voice"             element={<VoicePage />} />
             <Route path="system"            element={<SystemPage />} />
+            <Route path="target-systems"   element={<TargetSystemsPage />} />
             <Route path="audit"             element={<Navigate to="/dashboard?tab=audit" replace />} />
             <Route path="my-agent"          element={<MyAgentPage />} />
             <Route path="settings"          element={<SettingsPage />} />
