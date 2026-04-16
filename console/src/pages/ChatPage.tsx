@@ -134,6 +134,12 @@ export function ChatPage() {
         const cfg = d.config as any;
         if (cfg?.identity?.name) setProjectName(cfg.identity.name);
         if (cfg?.chat?.show_swarm) setShowSwarm(true);
+        // v2 projects store the effective LLM config directly on config.llm.
+        // Legacy projects may still point to a boss agent.
+        if (cfg?.llm?.model) {
+          setBossModel(cfg.llm);
+          return;
+        }
         const bossId = cfg?.agents?.boss;
         if (bossId) {
           api.get<Record<string, unknown>>(`/agents/${bossId}`)
