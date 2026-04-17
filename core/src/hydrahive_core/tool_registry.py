@@ -2740,6 +2740,178 @@ class ImageGenerateTool(BaseTool):
         return out
 
 
+# #688: MiniMax Text-to-Video (async submit-and-return, via Jobs-Framework).
+class VideoGenerateTool(BaseTool):
+    """Erzeugt ein Video per MiniMax text-to-video-API. Tool submittet einen
+    Job und **returnt sofort** mit ``{job_id, status=queued, poll_url, message}``.
+    Der Runner pollt MiniMax im Hintergrund (10 s Intervall, 15 min Cap), lädt
+    das MP4 und speichert es als Job-Artifact. Fortschritt und Ergebnis sind
+    über ``GET /me/jobs/{job_id}`` abfragbar.
+
+    Phase 2: nur Text-to-Video, model ``MiniMax-Hailuo-2.3``, duration=6,
+    resolution=1080P, n=1. Image-to-Video, first-and-last-frame und
+    subject-reference kommen in späteren Phasen."""
+
+    def __init__(self, job_service=None):
+        self._job_service = job_service
+
+    def set_job_service(self, job_service) -> None:
+        self._job_service = job_service
+
+    @property
+    def id(self) -> str: return "video_generate"
+
+    @property
+    def name(self) -> str: return "Video Generate"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Erzeugt ein Video aus einem Text-Prompt via MiniMax Hailuo. "
+            "Asynchron — Tool returnt sofort mit job_id. Video ist "
+            "typischerweise nach 5–15 Minuten fertig. Status via "
+            "GET /me/jobs/{job_id} oder /me/jobs/{job_id}/artifacts/video_0.mp4 "
+            "zum Download. Cancel via POST /me/jobs/{job_id}/cancel (lokales "
+            "Polling stoppt, MiniMax läuft ggf. zu Ende)."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Text-Beschreibung des gewünschten Videos.",
+                },
+                "duration": {
+                    "type": "integer",
+                    "enum": [6],
+                    "description": "Videolänge in Sekunden. Phase 2: nur 6.",
+                },
+                "resolution": {
+                    "type": "string",
+                    "enum": ["1080P"],
+                    "description": "Ausgabeauflösung. Phase 2: nur 1080P.",
+                },
+                "model": {
+                    "type": "string",
+                    "enum": ["MiniMax-Hailuo-2.3"],
+                    "description": "MiniMax-Modell. Phase 2 nur MiniMax-Hailuo-2.3.",
+                },
+            },
+            "required": ["prompt"],
+        }
+
+    @property
+    def parallel_safe(self) -> bool:
+        return True
+
+    @property
+    def is_destructive(self) -> bool:
+        return False
+
+    @property
+    def is_read_only(self) -> bool:
+        return False
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        prompt: str = "",
+        duration: int | None = None,
+        resolution: str = "",
+        model: str = "",
+        **kwargs,
+    ) -> dict:
+        from .minimax_video import (
+            ALLOWED_DURATIONS,
+            ALLOWED_MODELS,
+            ALLOWED_RESOLUTIONS,
+            DEFAULT_DURATION,
+            DEFAULT_MODEL,
+            DEFAULT_RESOLUTION,
+            MAX_INPUT_SUMMARY_PROMPT,
+            _minimax_video_api_key,
+            build_video_runner,
+        )
+
+        prompt_str = (prompt or "").strip()
+        if not prompt_str:
+            return {"error": "prompt ist leer"}
+
+        chosen_duration = duration if duration is not None else DEFAULT_DURATION
+        if chosen_duration not in ALLOWED_DURATIONS:
+            return {
+                "error":   f"duration '{chosen_duration}' in Phase 2 nicht unterstützt",
+                "allowed": sorted(ALLOWED_DURATIONS),
+            }
+
+        chosen_resolution = (resolution or "").strip() or DEFAULT_RESOLUTION
+        if chosen_resolution not in ALLOWED_RESOLUTIONS:
+            return {
+                "error":   f"resolution '{chosen_resolution}' in Phase 2 nicht unterstützt",
+                "allowed": sorted(ALLOWED_RESOLUTIONS),
+            }
+
+        chosen_model = (model or "").strip() or DEFAULT_MODEL
+        if chosen_model not in ALLOWED_MODELS:
+            return {
+                "error":   f"model '{chosen_model}' in Phase 2 nicht unterstützt",
+                "allowed": sorted(ALLOWED_MODELS),
+            }
+
+        if self._job_service is None:
+            return {"error": "video_generate: JobService nicht initialisiert"}
+
+        # Key-Check VOR submit — kein Job-Müll bei fehlendem Key.
+        if not _minimax_video_api_key():
+            return {
+                "error": (
+                    "MiniMax API-Key fehlt — Admin muss MINIMAX_API_KEY in "
+                    "der LLM-Config oder als Env-Variable setzen."
+                ),
+            }
+
+        runner = build_video_runner(
+            prompt=prompt_str,
+            model=chosen_model,
+            duration=chosen_duration,
+            resolution=chosen_resolution,
+        )
+
+        from .jobs_service import JobStorageError
+
+        try:
+            meta = self._job_service.submit(
+                type="video",
+                provider="minimax",
+                runner=runner,
+                input_summary={
+                    "prompt":     prompt_str[:MAX_INPUT_SUMMARY_PROMPT],
+                    "duration":   chosen_duration,
+                    "resolution": chosen_resolution,
+                    "model":      chosen_model,
+                },
+                created_by=None,
+                project_id=project_id or None,
+                agent_id=agent_id or None,
+            )
+        except JobStorageError:
+            return {"error": "jobs storage unavailable"}
+
+        # SUBMIT-AND-RETURN: nicht auf den Task warten. Der Runner läuft
+        # im Hintergrund und schreibt Progress/Artifacts ins Jobs-Store.
+        return {
+            "job_id":   meta.job_id,
+            "status":   meta.status,
+            "poll_url": f"/me/jobs/{meta.job_id}",
+            "message": (
+                "Video generation started. Poll the job status for progress "
+                "(expected 5–15 min). Use GET /me/jobs/<job_id> to check."
+            ),
+        }
+
+
 # =========================================================================
 # Register all Core Tools
 # =========================================================================
@@ -2761,3 +2933,5 @@ registry.register(ServerFileWriteTool())
 registry.register(WksShellExecTool())
 # #679: Image-Generation via MiniMax (JobService wird von main.py injectet).
 registry.register(ImageGenerateTool())
+# #688: Video-Generation via MiniMax (JobService wird von main.py injectet).
+registry.register(VideoGenerateTool())

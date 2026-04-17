@@ -224,17 +224,18 @@ agent_orchestrator = Orchestrator(discovery, runtime, agent_sessions)
 from .jobs_service import JobService as _JobService
 job_service      = _JobService()
 
-# #679: JobService-Singleton in den ImageGenerateTool injizieren. Das Tool
-# wird im tool_registry-Modul-Import bereits registriert (ohne Service), hier
-# hängen wir den Singleton nach dem Core-Startup dran.
+# #679/#688: JobService-Singleton in die Media-Tools injizieren. Die Tools
+# werden im tool_registry-Modul-Import bereits registriert (ohne Service),
+# hier hängen wir den Singleton nach dem Core-Startup dran.
 try:
     from .tool_registry import registry as _core_registry
-    _img_tool = _core_registry.get("image_generate")
-    if _img_tool is not None and hasattr(_img_tool, "set_job_service"):
-        _img_tool.set_job_service(job_service)
+    for _tool_id in ("image_generate", "video_generate"):
+        _media_tool = _core_registry.get(_tool_id)
+        if _media_tool is not None and hasattr(_media_tool, "set_job_service"):
+            _media_tool.set_job_service(job_service)
 except Exception as _exc:  # pragma: no cover — defensive
     logging.getLogger(__name__).warning(
-        "image_generate: job_service injection failed: %s", _exc,
+        "media tools: job_service injection failed: %s", _exc,
     )
 provisioner:  Provisioner | None = None              # initialisiert im Lifespan
 hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifespan
