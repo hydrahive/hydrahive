@@ -2567,6 +2567,179 @@ class WksShellExecTool(BaseTool):
         return result
 
 
+# #679: MiniMax Text-to-Image (via Jobs-Framework, #687).
+class ImageGenerateTool(BaseTool):
+    """Erzeugt ein Bild per MiniMax Image-01 und speichert es als Artifact.
+
+    Nutzt die bestehende MiniMax-Auth (Env MINIMAX_API_KEY > llm_config >
+    llm_env) — kein neuer Config-Block. Phase 1: synchron, n=1,
+    base64→PNG, default image-01. Video und Music kommen als eigene
+    Tools/Runner im gleichen Framework (#688/#689)."""
+
+    def __init__(self, job_service=None):
+        # job_service als Constructor-Arg — main.py injectet den Singleton
+        # nach der Modul-Level-Registrierung. Tests können einen tmp-
+        # JobService einsetzen ohne Monkeypatching.
+        self._job_service = job_service
+
+    def set_job_service(self, job_service) -> None:
+        self._job_service = job_service
+
+    @property
+    def id(self) -> str: return "image_generate"
+
+    @property
+    def name(self) -> str: return "Image Generate"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Erzeugt ein einzelnes Bild aus einem Text-Prompt via MiniMax "
+            "image-01. Gibt einen Job zurück mit fertigen Artifacts (PNG). "
+            "Nutzer kann das Bild anschließend unter der download_url abrufen. "
+            "Das Tool blockt synchron bis der Job fertig ist (~5–15 s)."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Text-Beschreibung des gewünschten Bildes.",
+                },
+                "aspect_ratio": {
+                    "type": "string",
+                    "enum": [
+                        "1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9",
+                    ],
+                    "description": "Seitenverhältnis. Default: 1:1.",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "MiniMax-Modell. Phase 1 nur image-01.",
+                    "enum": ["image-01"],
+                },
+            },
+            "required": ["prompt"],
+        }
+
+    @property
+    def parallel_safe(self) -> bool:
+        # Mehrere Bild-Requests parallel sind unproblematisch (kein
+        # gemeinsamer Disk-/DB-State außer dem Job-Store, der self-lockt).
+        return True
+
+    @property
+    def is_destructive(self) -> bool:
+        return False
+
+    @property
+    def is_read_only(self) -> bool:
+        return False
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        prompt: str = "",
+        aspect_ratio: str = "",
+        model: str = "",
+        **kwargs,
+    ) -> dict:
+        from .minimax_image import (
+            ALLOWED_ASPECT_RATIOS,
+            DEFAULT_ASPECT_RATIO,
+            DEFAULT_MODEL,
+            MAX_INPUT_SUMMARY_PROMPT,
+            _minimax_image_api_key,
+            build_image_runner,
+        )
+
+        prompt_str = (prompt or "").strip()
+        if not prompt_str:
+            return {"error": "prompt ist leer"}
+
+        ratio = (aspect_ratio or "").strip() or DEFAULT_ASPECT_RATIO
+        if ratio not in ALLOWED_ASPECT_RATIOS:
+            return {
+                "error": f"aspect_ratio '{ratio}' nicht erlaubt",
+                "allowed": sorted(ALLOWED_ASPECT_RATIOS),
+            }
+
+        chosen_model = (model or "").strip() or DEFAULT_MODEL
+        if chosen_model != DEFAULT_MODEL:
+            return {"error": f"model '{chosen_model}' in Phase 1 nicht unterstützt"}
+
+        if self._job_service is None:
+            return {"error": "image_generate: JobService nicht initialisiert"}
+
+        # #679: Key-Check VOR submit — kein Job-Müll, wenn Admin den Key
+        # nicht gesetzt hat.
+        if not _minimax_image_api_key():
+            return {
+                "error": (
+                    "MiniMax API-Key fehlt — Admin muss MINIMAX_API_KEY in "
+                    "der LLM-Config oder als Env-Variable setzen."
+                ),
+            }
+
+        runner = build_image_runner(
+            prompt=prompt_str, aspect_ratio=ratio, model=chosen_model,
+        )
+
+        # created_by bleibt None in Phase 1 — Tools haben keinen User-
+        # Kontext. Artifacts via /admin/jobs zugänglich; /me/jobs-Scope
+        # kommt mit Agent→Owner-Lookup (nicht Teil von #679).
+        from .jobs_service import JobStorageError
+
+        try:
+            meta = self._job_service.submit(
+                type="image",
+                provider="minimax",
+                runner=runner,
+                input_summary={
+                    "prompt": prompt_str[:MAX_INPUT_SUMMARY_PROMPT],
+                    "aspect_ratio": ratio,
+                    "model": chosen_model,
+                },
+                created_by=None,
+                project_id=project_id or None,
+                agent_id=agent_id or None,
+            )
+        except JobStorageError:
+            return {"error": "jobs storage unavailable"}
+
+        # Sync-Verhalten — auf den asyncio-Task warten, damit der Agent-
+        # Turn das Ergebnis direkt in der Tool-Response sieht.
+        task = self._job_service._tasks.get(meta.job_id)
+        if task is not None:
+            try:
+                await task
+            except Exception:  # pragma: no cover — Runner-Exceptions
+                # Handled im JobService._run via _finalize; wir lesen
+                # den finalen Status unten aus.
+                pass
+
+        final = self._job_service.get(meta.job_id)
+        artifacts = [
+            {
+                "filename":     a.get("filename"),
+                "size":         a.get("size"),
+                "mime":         a.get("mime"),
+                "download_url": f"/me/jobs/{final.job_id}/artifacts/{a.get('filename')}",
+            }
+            for a in (final.artifacts or [])
+        ]
+        out: dict = {
+            "job_id":    final.job_id,
+            "status":   final.status,
+            "artifacts": artifacts,
+        }
+        if final.error:
+            out["error"] = final.error
+        return out
+
+
 # =========================================================================
 # Register all Core Tools
 # =========================================================================
@@ -2586,3 +2759,5 @@ registry.register(ServerShellTool())
 registry.register(ServerFileReadTool())
 registry.register(ServerFileWriteTool())
 registry.register(WksShellExecTool())
+# #679: Image-Generation via MiniMax (JobService wird von main.py injectet).
+registry.register(ImageGenerateTool())
