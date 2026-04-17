@@ -292,7 +292,10 @@ class Orchestrator:
         )
         return allowed.get(tool_name)
 
-    async def _execute_tool(self, tool, *, boss_cfg, project_id, tool_name, tool_input=None, execution_mode=None):
+    async def _execute_tool(
+        self, tool, *, boss_cfg, project_id, tool_name, tool_input=None,
+        execution_mode=None, request_user: str | None = None,
+    ):
         from .hooks import parse_hooks_config, run_hooks
         self._runtime.set_activity(boss_cfg.id, f"Tool: {tool_name}")
 
@@ -316,6 +319,7 @@ class Orchestrator:
                 tool, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tool_name, tool_input=tool_input,
                 execution_mode=execution_mode,
+                request_user=request_user,
             )
 
             # #472: Agent-YAML Hook-System (after_tool)
@@ -910,7 +914,8 @@ class Orchestrator:
 
         if tool_calls:
             final_response, workers_used = await self._tool_loop(
-                boss_cfg, project_id, project_cfg, messages, response, execution_mode=execution_mode
+                boss_cfg, project_id, project_cfg, messages, response,
+                execution_mode=execution_mode, request_user=request_user,
             )
 
         # 8. Antwort in Session speichern (mit echten Token-Counts aus API)
@@ -1043,10 +1048,10 @@ class Orchestrator:
     # ----------------------------------------------------------------- Tool-Loop & Dispatch (delegiert)
 
     async def _tool_loop(self, boss_cfg, project_id, project_cfg, messages, response,
-                         max_rounds=None, execution_mode=None):
+                         max_rounds=None, execution_mode=None, request_user: str | None = None):
         return await _tool_loop_fn(
             self, boss_cfg, project_id, project_cfg, messages, response,
-            max_rounds, execution_mode,
+            max_rounds, execution_mode, request_user,
         )
 
     # v2 (#589): Dispatch-Wrapper entfernt —

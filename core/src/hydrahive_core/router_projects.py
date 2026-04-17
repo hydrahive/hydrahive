@@ -1173,6 +1173,7 @@ def register_project_routes(
         _check_project_access(auth, project_id)
         # #330: sender aus Auth, nicht aus Body
         sender = auth[0] if auth[0] != "internal" else (req.sender or "user")
+        request_user = auth[0] if auth[0] != "internal" else None
         check_message_rate(sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
@@ -1225,6 +1226,7 @@ def register_project_routes(
                     content=_user_content,
                     sender=sender,
                     execution_mode=execution_mode,
+                    request_user=request_user,
                 ):
                     # Chunk an den sendenden Client
                     yield chunk
@@ -1324,6 +1326,7 @@ def register_project_routes(
         _check_project_access(auth, project_id)
         # #330: sender aus Auth
         sender = auth[0] if auth[0] != "internal" else (req.sender or "user")
+        request_user = auth[0] if auth[0] != "internal" else None
         check_message_rate(sender, project_id)
         cfg = projects.get(project_id)
         if not cfg:
@@ -1351,6 +1354,7 @@ def register_project_routes(
             content=req.content,
             sender=sender,
             execution_mode=execution_mode,
+            request_user=request_user,
         )
         # v2: plugin_manager.emit entfernt
         # await plugin_manager.emit("message.after", project_id=project_id, content=req.content, response=response)

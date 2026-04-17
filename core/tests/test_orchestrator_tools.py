@@ -144,7 +144,35 @@ class TestExecuteTool:
         assert call_kwargs["project_id"] == "proj"
         assert call_kwargs["key"] == "value"
 
-    async def test_project_id_im_input_wird_ueberschrieben(self):
+    async def test_request_user_wird_an_kwargs_tools_weitergereicht(self):
+        tool = MagicMock()
+        tool.execute = AsyncMock(return_value={"ok": True})
+        await _execute_tool(
+            tool,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="my_tool",
+            tool_input={},
+            request_user="alice",
+        )
+        call_kwargs = tool.execute.call_args.kwargs
+        assert call_kwargs["_request_user"] == "alice"
+
+    async def test_internal_request_user_wird_nicht_weitergereicht(self):
+        tool = MagicMock()
+        tool.execute = AsyncMock(return_value={"ok": True})
+        await _execute_tool(
+            tool,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="my_tool",
+            tool_input={},
+            request_user="internal",
+        )
+        call_kwargs = tool.execute.call_args.kwargs
+        assert "_request_user" not in call_kwargs
+
+    async def test_project_id_im_input_wird_ignoriert(self):
         tool = MagicMock()
         tool.execute = AsyncMock(return_value={})
         await _execute_tool(
@@ -155,7 +183,7 @@ class TestExecuteTool:
             tool_input={"project_id": "override-proj"},
         )
         call_kwargs = tool.execute.call_args.kwargs
-        assert call_kwargs["project_id"] == "override-proj"
+        assert call_kwargs["project_id"] == "default-proj"
 
     async def test_leeres_tool_input(self):
         tool = MagicMock()

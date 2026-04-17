@@ -158,6 +158,7 @@ async def _execute_tool(
     tool_name:  str,
     tool_input: dict | None = None,
     execution_mode: str | None = None,
+    request_user: str | None = None,
 ):
     """Führt ein einzelnes Tool aus. Gibt Fehler-Dict zurück wenn tool=None."""
     args = dict(tool_input or {})
@@ -210,6 +211,8 @@ async def _execute_tool(
     extra = {}
     if has_kwargs:
         extra["_execution_mode"] = execution_mode or boss_cfg.effective_execution_mode(execution_mode)
+        if request_user and request_user != "internal":
+            extra["_request_user"] = request_user
     # #431: Tool-Timeout (Default 120s, konfigurierbar)
     import asyncio as _aio
     _TOOL_TIMEOUT = 120  # Default: 2 Minuten
@@ -322,6 +325,7 @@ async def execute_tool_call(
     tool_input: dict,
     execution_mode: str | None = None,
     user_text: str = "",
+    request_user: str | None = None,
     file_read_cache: dict[str, str] | None = None,
     tool_call_id: str = "",
     confirm_signal=None,
@@ -567,6 +571,7 @@ async def execute_tool_call(
             tool_name=tool_name,
             tool_input=tool_input,
             execution_mode=execution_mode,
+            request_user=request_user,
         )
         # #523: Turn Journal — TOOL_RESULT Event
         try:

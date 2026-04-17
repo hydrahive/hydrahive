@@ -1101,7 +1101,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertIn("file changed", result["stat"])
         self.assertIn("diff --git", result["diff"])
 
-    def test_execute_tool_uses_project_id_override_without_duplicate_kwarg(self):
+    def test_execute_tool_ignores_project_id_override_without_duplicate_kwarg(self):
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
         boss_cfg = AgentConfig.model_validate(
             {
@@ -1126,7 +1126,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
         tool.execute.assert_awaited_once_with(
             agent_id="personal_test",
-            project_id="hydrahive_dev",
+            project_id="personal_test",
         )
 
     def test_tool_loop_uses_agent_max_tool_rounds_and_breaks_on_repeat(self):

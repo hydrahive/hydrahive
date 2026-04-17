@@ -113,6 +113,7 @@ async def test_tool_returns_succeeded_with_artifact(tool, svc, monkeypatch, _pat
         agent_id="a1", project_id="p1",
         prompt="reggae groove",
         lyrics="rise up, shine bright",
+        _request_user="alice",
     )
     assert out["status"] == "succeeded"
     assert out["job_id"].startswith("job_")
@@ -133,7 +134,7 @@ async def test_tool_returns_succeeded_with_artifact(tool, svc, monkeypatch, _pat
     assert meta.input_summary["model"] == "music-2.6"
     assert meta.agent_id == "a1"
     assert meta.project_id == "p1"
-    assert meta.created_by is None
+    assert meta.created_by == "alice"
 
 
 @pytest.mark.asyncio

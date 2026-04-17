@@ -33,6 +33,7 @@ async def _tool_loop(
     response,
     max_rounds: int | None = None,
     execution_mode: str | None = None,
+    request_user: str | None = None,
 ) -> tuple[str, list[str]]:
     """
     Agentic Loop: LLM-Antwort → Tool-Calls ausführen → Ergebnisse einbauen → wiederholen.
@@ -197,6 +198,7 @@ async def _tool_loop(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=tc.function.name, tool_input=args,
                     execution_mode=execution_mode,
+                    request_user=request_user,
                     file_read_cache=_file_read_cache,
                     tool_call_id=tc.id,
                 )
@@ -218,6 +220,7 @@ async def _tool_loop(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc.function.name, tool_input=args,
                 execution_mode=execution_mode,
+                request_user=request_user,
                 file_read_cache=_file_read_cache,
                 tool_call_id=tc.id,
             )

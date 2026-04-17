@@ -515,6 +515,7 @@ async def _stream_codex(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                     execution_mode=execution_mode, user_text=content,
+                    request_user=request_user,
                     tool_call_id=tc.id,
                     confirm_signal=_codex_confirm_signal,
                 ))
@@ -543,6 +544,7 @@ async def _stream_codex(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc.function.name, tool_input=_parsed_args[tc.id],
                 execution_mode=execution_mode, user_text=content,
+                request_user=request_user,
                 tool_call_id=tc.id,
                 confirm_signal=_codex_confirm_signal,
             ))
@@ -878,6 +880,7 @@ async def _stream_anthropic_oauth(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=b.name, tool_input=b.input or {},
                     execution_mode=execution_mode, user_text=content,
+                    request_user=request_user,
                     file_read_cache=_oauth_file_read_cache,
                     tool_call_id=b.id,
                     confirm_signal=_oauth_confirm_signal,
@@ -909,6 +912,7 @@ async def _stream_anthropic_oauth(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=block.name, tool_input=_tc_input,
                 execution_mode=execution_mode, user_text=content,
+                request_user=request_user,
                 file_read_cache=_oauth_file_read_cache,
                 tool_call_id=block.id,
                 confirm_signal=_oauth_confirm_signal,
@@ -1197,6 +1201,7 @@ async def _stream_litellm(
                     orch, boss_cfg=boss_cfg, project_id=project_id,
                     tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                     execution_mode=execution_mode,
+                    request_user=request_user,
                     tool_call_id=tc["id"],
                     confirm_signal=_lm_confirm_signal,
                 ))
@@ -1224,6 +1229,7 @@ async def _stream_litellm(
                 orch, boss_cfg=boss_cfg, project_id=project_id,
                 tool_name=tc["name"], tool_input=_lm_parsed[tc["id"]],
                 execution_mode=execution_mode,
+                request_user=request_user,
                 tool_call_id=tc["id"],
                 confirm_signal=_lm_confirm_signal,
             ))

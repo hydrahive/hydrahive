@@ -111,6 +111,7 @@ async def test_tool_returns_job_id_and_artifact_urls(tool, svc, monkeypatch, _pa
     out = await tool.execute(
         agent_id="a1", project_id="p1",
         prompt="a cat in space", aspect_ratio="16:9",
+        _request_user="alice",
     )
     assert out["status"] == "succeeded"
     assert out["job_id"].startswith("job_")
@@ -129,7 +130,7 @@ async def test_tool_returns_job_id_and_artifact_urls(tool, svc, monkeypatch, _pa
     assert meta.input_summary["prompt"] == "a cat in space"
     assert meta.agent_id == "a1"
     assert meta.project_id == "p1"
-    assert meta.created_by is None   # Phase 1
+    assert meta.created_by == "alice"
 
 
 @pytest.mark.asyncio

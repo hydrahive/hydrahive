@@ -106,6 +106,7 @@ async def test_tool_returns_immediately_with_job_id(tool, svc, monkeypatch):
         tool.execute(
             agent_id="a1", project_id="p1",
             prompt="a dog on the moon",
+            _request_user="alice",
         ),
         timeout=0.5,   # Tool muss deutlich unter 500 ms zurück sein
     )
@@ -128,7 +129,7 @@ async def test_tool_returns_immediately_with_job_id(tool, svc, monkeypatch):
     assert meta.input_summary["model"] == "MiniMax-Hailuo-2.3"
     assert meta.agent_id == "a1"
     assert meta.project_id == "p1"
-    assert meta.created_by is None
+    assert meta.created_by == "alice"
 
     # Runner abrupt beenden, damit tmp_path-cleanup sauber läuft.
     blocking.set()

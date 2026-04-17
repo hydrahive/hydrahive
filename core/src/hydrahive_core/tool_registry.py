@@ -2688,9 +2688,13 @@ class ImageGenerateTool(BaseTool):
         )
 
         # created_by bleibt None in Phase 1 — Tools haben keinen User-
-        # Kontext. Artifacts via /admin/jobs zugänglich; /me/jobs-Scope
-        # kommt mit Agent→Owner-Lookup (nicht Teil von #679).
+        # Kontext nur bei internal/legacy-Flows. Normale User-Requests
+        # reichen _request_user durch, damit die zurückgegebenen /me/jobs-URLs
+        # auch wirklich per Ownership-Check zugänglich sind.
         from .jobs_service import JobStorageError
+
+        request_user = kwargs.get("_request_user")
+        created_by = request_user if isinstance(request_user, str) and request_user else None
 
         try:
             meta = self._job_service.submit(
@@ -2702,7 +2706,7 @@ class ImageGenerateTool(BaseTool):
                     "aspect_ratio": ratio,
                     "model": chosen_model,
                 },
-                created_by=None,
+                created_by=created_by,
                 project_id=project_id or None,
                 agent_id=agent_id or None,
             )
@@ -2881,6 +2885,9 @@ class VideoGenerateTool(BaseTool):
 
         from .jobs_service import JobStorageError
 
+        request_user = kwargs.get("_request_user")
+        created_by = request_user if isinstance(request_user, str) and request_user else None
+
         try:
             meta = self._job_service.submit(
                 type="video",
@@ -2892,7 +2899,7 @@ class VideoGenerateTool(BaseTool):
                     "resolution": chosen_resolution,
                     "model":      chosen_model,
                 },
-                created_by=None,
+                created_by=created_by,
                 project_id=project_id or None,
                 agent_id=agent_id or None,
             )
@@ -3058,6 +3065,9 @@ class MusicGenerateTool(BaseTool):
 
         from .jobs_service import JobStorageError
 
+        request_user = kwargs.get("_request_user")
+        created_by = request_user if isinstance(request_user, str) and request_user else None
+
         try:
             meta = self._job_service.submit(
                 type="music",
@@ -3069,7 +3079,7 @@ class MusicGenerateTool(BaseTool):
                     "instrumental": bool(instrumental),
                     "model":        chosen_model,
                 },
-                created_by=None,
+                created_by=created_by,
                 project_id=project_id or None,
                 agent_id=agent_id or None,
             )
