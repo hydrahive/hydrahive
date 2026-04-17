@@ -40,7 +40,6 @@ _TOOL_OP_TYPES: dict[str, ToolOpType] = {
     "shared_memory_write":  ToolOpType.MUTATION,
     "user_memory_write":    ToolOpType.MUTATION,
     "server_file_write":    ToolOpType.MUTATION,
-    "server_file_patch":    ToolOpType.MUTATION,
     "send_mail":            ToolOpType.MUTATION,
 
     # Reads — Inhalt kann aggressiv gekürzt werden (Agent hat ihn schon verarbeitet)
