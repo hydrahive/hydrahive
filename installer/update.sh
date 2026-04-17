@@ -448,14 +448,23 @@ MIGRATE_EOF
     # #687/#704: Runtime-State-Dirs idempotent absichern, damit bestehende
     # Instanzen nach einem Update neue Pfade kriegen (z.B. /var/lib/hydrahive/jobs)
     # bevor der Core die neu gezogene Version lädt.
-    _RUNTIME_HELPER="${HYDRAHIVE_DIR}/installer/lib/ensure_runtime_dirs.sh"
+    # Primär-Quelle: frisch geklonter Installer-Tree (TMPDIR_BASE). Fallback:
+    # bereits installierte Kopie unter HYDRAHIVE_DIR, falls dort schon vorhanden.
+    _RUNTIME_HELPER="${TMPDIR_BASE}/installer/lib/ensure_runtime_dirs.sh"
+    if [ ! -f "${_RUNTIME_HELPER}" ]; then
+        _RUNTIME_HELPER="${HYDRAHIVE_DIR}/installer/lib/ensure_runtime_dirs.sh"
+    fi
     if [ -f "${_RUNTIME_HELPER}" ]; then
         info "Sichere Runtime-State-Verzeichnisse..."
         # shellcheck source=./lib/ensure_runtime_dirs.sh
         HYDRAHIVE_USER="hydrahive" HYDRAHIVE_GROUP="hydrahive" source "${_RUNTIME_HELPER}"
     else
-        error "Runtime-Helper fehlt: ${_RUNTIME_HELPER} (Repo kaputt?) — Abbruch"
-        exit 1
+        # #703 Follow-up: nicht mehr hart abbrechen, nur warnen. Der Hotfix
+        # 8f17e4f macht Core-Komponenten gegen fehlende Runtime-Dirs tolerant,
+        # und ein hartes exit 1 an dieser Stelle ist selbst eine Bootstrap-Falle:
+        # bricht update.sh hier ab, wird die neue update.sh (die den Fix mitbringt)
+        # nie deployed, und die Instanz hängt fest.
+        warn "Runtime-Helper nicht gefunden (weder ${TMPDIR_BASE}/installer/lib/ noch ${HYDRAHIVE_DIR}/installer/lib/). Update läuft trotzdem weiter."
     fi
 
     info "Starte hydrahive-core neu..."
@@ -548,6 +557,14 @@ MIGRATE_EOF
         rsync -a "${TMPDIR_BASE}/installer/modules/" "${HYDRAHIVE_DIR}/installer/modules/"
         chmod +x "${HYDRAHIVE_DIR}/installer/modules/"*.sh 2>/dev/null || true
         info "Installer-Module aktualisiert"
+    fi
+    if [ -d "${TMPDIR_BASE}/installer/lib" ]; then
+        # #704/#703: lib/ enthält shared helpers (ensure_runtime_dirs.sh).
+        # Muss beim Update mitkopiert werden, sonst läuft der Runtime-Helper
+        # nicht aus /opt/hydrahive/installer/lib/.
+        mkdir -p "${HYDRAHIVE_DIR}/installer/lib"
+        rsync -a "${TMPDIR_BASE}/installer/lib/" "${HYDRAHIVE_DIR}/installer/lib/"
+        info "Installer-lib aktualisiert"
     fi
     if [ -d "${TMPDIR_BASE}/installer/extensions" ]; then
         mkdir -p "${HYDRAHIVE_DIR}/installer/extensions"
