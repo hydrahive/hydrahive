@@ -28,7 +28,7 @@ export interface LanguageEntry {
 export const LANGUAGES: LanguageEntry[] = [
   { code: "de", flag: "🇩🇪", name: "Deutsch" },
   { code: "en", flag: "🇬🇧", name: "English" },
-  // Tier 2 folgt (#681): 中文 · Español · Français
+  { code: "zh", flag: "🇨🇳", name: "中文" },  // #692 — LLM-initial, Tier A0+ (partial, EN-fallback)
 ];
 
 export function LanguageSwitcher() {
