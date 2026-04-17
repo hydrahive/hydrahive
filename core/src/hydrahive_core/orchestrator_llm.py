@@ -930,6 +930,78 @@ async def _anthropic_oauth_call(
     return SimpleNamespace(choices=[choice], model=model, usage=usage_ns)
 
 
+# ─────────────────────────────────────────────────── Codex Usage-Parser (#700)
+
+def _parse_codex_usage(usage: dict | None):
+    """Pure Parser für das `usage`-Dict aus Codex `response.completed`-Events.
+
+    Das ChatGPT-Codex-Backend ist nicht offiziell dokumentiert. Vermutete
+    Shape nach OpenAI Responses-API:
+
+        {
+          "input_tokens": 1200,
+          "output_tokens": 50,
+          "total_tokens": 1250,
+          "input_tokens_details": {"cached_tokens": 800},
+          "output_tokens_details": {"reasoning_tokens": 0}
+        }
+
+    Defensive Reihenfolge beim Cache-Read-Lookup:
+    1. ``usage.input_tokens_details.cached_tokens`` (Standard-Responses-API)
+    2. ``usage.cached_tokens`` (Fallback falls top-level)
+
+    Cache-Writes reportet die Responses-API nicht explizit (Prefix-Caching ist
+    automatisch). Bleibt deshalb 0.
+
+    Liefert immer ein SimpleNamespace mit allen vier Feldern — nie None,
+    nie fehlende Attribute. Bei ``usage is None`` alle Werte auf 0.
+    """
+    from types import SimpleNamespace
+
+    if not usage:
+        return SimpleNamespace(
+            prompt_tokens=0,
+            completion_tokens=0,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=0,
+        )
+
+    def _int(v) -> int:
+        try:
+            return int(v) if v is not None else 0
+        except (TypeError, ValueError):
+            return 0
+
+    cache_read = 0
+    details = usage.get("input_tokens_details")
+    if isinstance(details, dict):
+        cache_read = _int(details.get("cached_tokens"))
+    if not cache_read:
+        cache_read = _int(usage.get("cached_tokens"))
+
+    return SimpleNamespace(
+        prompt_tokens=_int(usage.get("input_tokens")),
+        completion_tokens=_int(usage.get("output_tokens")),
+        cache_read_input_tokens=cache_read,
+        cache_creation_input_tokens=0,
+    )
+
+
+def _accumulate_codex_usage(_usage: dict, resp_usage) -> None:
+    """Akkumuliert eine Codex-Response `usage` in den Session-Counter.
+
+    Idempotent gegen None/missing-attrs, damit Call-Sites keine Guards brauchen.
+    Wird in orchestrator_stream._stream_codex() nach jeder Codex-Antwort
+    (initial + Folge-Call nach Tool-Runde) gerufen.
+    """
+    if not resp_usage:
+        return
+    _usage["input"]       = _usage.get("input", 0)       + int(getattr(resp_usage, "prompt_tokens", 0) or 0)
+    _usage["output"]      = _usage.get("output", 0)      + int(getattr(resp_usage, "completion_tokens", 0) or 0)
+    _usage["cache_read"]  = _usage.get("cache_read", 0)  + int(getattr(resp_usage, "cache_read_input_tokens", 0) or 0)
+    _usage["cache_write"] = _usage.get("cache_write", 0) + int(getattr(resp_usage, "cache_creation_input_tokens", 0) or 0)
+
+
 async def _openai_codex_call(
     agent_cfg,
     messages:    list[dict],
@@ -1051,7 +1123,9 @@ async def _openai_codex_call(
 
     text = ""
     accumulated_fn: dict[str, dict] = {}  # item_id → {id, call_id, name, arguments}
-    _codex_usage: dict[str, int] = {"input": 0, "output": 0}
+    # #700: cache_read aus usage.input_tokens_details.cached_tokens; cache_write
+    # bleibt 0 (Responses-API macht implizites Prefix-Caching, kein Write-Event).
+    _codex_usage: dict[str, int] = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
 
     async with _httpx.AsyncClient(timeout=120) as client:
         async with client.stream(
@@ -1115,11 +1189,18 @@ async def _openai_codex_call(
                         accumulated_fn[cid]["arguments"] = ev.get("arguments", accumulated_fn[cid]["arguments"])
 
                 elif ev_type == "response.completed":
-                    # Token-Usage aus Codex response.completed Event
-                    usage = ev.get("response", {}).get("usage", {})
-                    if usage:
-                        _codex_usage["input"] = usage.get("input_tokens", 0)
-                        _codex_usage["output"] = usage.get("output_tokens", 0)
+                    # #700: Token-Usage aus Codex response.completed Event.
+                    # Pure Parser + defensiver Lookup auf input_tokens_details.cached_tokens.
+                    usage = ev.get("response", {}).get("usage", {}) or {}
+                    if usage and os.environ.get("HYDRAHIVE_CODEX_USAGE_SNIFF") == "1":
+                        # Nur Token-Zähler loggen — keine prompts, keine outputs,
+                        # keine tool_calls, keine secrets. Default aus.
+                        logger.info("codex_usage_sniff model=%s usage=%s", model_id, _json.dumps(usage))
+                    parsed = _parse_codex_usage(usage)
+                    _codex_usage["input"] = parsed.prompt_tokens
+                    _codex_usage["output"] = parsed.completion_tokens
+                    _codex_usage["cache_read"] = parsed.cache_read_input_tokens
+                    _codex_usage["cache_write"] = parsed.cache_creation_input_tokens
 
     tool_calls_out = [
         SimpleNamespace(
@@ -1143,6 +1224,10 @@ async def _openai_codex_call(
     usage = SimpleNamespace(
         prompt_tokens=_codex_usage["input"],
         completion_tokens=_codex_usage["output"],
+        # #700: Interface-Parität zum Anthropic-Usage — Aufrufer
+        # (orchestrator_stream._stream_codex) kann dieselben Attribute lesen.
+        cache_read_input_tokens=_codex_usage["cache_read"],
+        cache_creation_input_tokens=_codex_usage["cache_write"],
     )
     return SimpleNamespace(choices=[choice], model=model_id, usage=usage)
 
