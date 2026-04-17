@@ -1491,3 +1491,57 @@ def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
         "die aus router_projects zu importieren — Drift-Risiko bei Schema-"
         "Änderungen."
     )
+
+
+def test_invariant15_locale_key_parity_ignores_meta_namespaces():
+    """15 (#702-Followup): de.json, en.json und zh.json tragen exakt die
+    gleichen UI-Keys. `_meta` und jeder andere `_*`-Namespace (aktuell oder
+    zukünftig) werden ignoriert — das sind Script/Annotation-Felder, keine
+    UI-Strings.
+
+    Hintergrund: Die zh-CN-Rollout (Meta #692) hat de/en auf vollständige
+    Parität mit zh gebracht. Dieser Test stellt sicher, dass neue UI-Strings
+    niemals nur in einer Sprache landen — sonst kriegt der i18next-Fallback
+    in der anderen Sprache plötzlich einen Key-String statt einer Übersetzung
+    zu Gesicht."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    locales_dir = repo_root / "console" / "src" / "locales"
+
+    def is_ui_key(key: str) -> bool:
+        return not any(part.startswith("_") for part in key.split("."))
+
+    def flatten(obj, prefix: str = "") -> list[str]:
+        if isinstance(obj, dict):
+            out: list[str] = []
+            for k, v in obj.items():
+                path = f"{prefix}.{k}" if prefix else k
+                out.extend(flatten(v, path))
+            return out
+        return [prefix]
+
+    locales: dict[str, set[str]] = {}
+    for name in ("de", "en", "zh"):
+        data = _json.loads((locales_dir / f"{name}.json").read_text(encoding="utf-8"))
+        locales[name] = {k for k in flatten(data) if is_ui_key(k)}
+
+    de, en, zh = locales["de"], locales["en"], locales["zh"]
+    mismatches: list[str] = []
+    for a_name, a in (("de", de), ("en", en), ("zh", zh)):
+        for b_name, b in (("de", de), ("en", en), ("zh", zh)):
+            if a_name >= b_name:
+                continue
+            only_a = sorted(a - b)
+            only_b = sorted(b - a)
+            if only_a:
+                mismatches.append(f"{a_name} has {len(only_a)} keys not in {b_name} (first 5: {only_a[:5]})")
+            if only_b:
+                mismatches.append(f"{b_name} has {len(only_b)} keys not in {a_name} (first 5: {only_b[:5]})")
+
+    assert not mismatches, (
+        "Locale-Parität gebrochen — jeder UI-Key muss in allen drei Sprachen "
+        "existieren (ausgenommen _*-Namespaces wie _meta). Drift:\n  "
+        + "\n  ".join(mismatches)
+    )
