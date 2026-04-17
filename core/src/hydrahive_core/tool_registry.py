@@ -2912,6 +2912,201 @@ class VideoGenerateTool(BaseTool):
         }
 
 
+# #689: MiniMax Text-to-Music (sync, blockierend wie #679 Image).
+class MusicGenerateTool(BaseTool):
+    """Erzeugt einen Song per MiniMax music-2.6. Blockierender Tool-Call
+    (analog ImageGenerateTool), weil die MiniMax-Music-API synchron ist —
+    ein HTTP-POST liefert das fertige MP3 direkt im Response (hex-encoded).
+    Tool blockt typischerweise 10–30 s.
+
+    Dispatch-Regel:
+    - ``lyrics`` gesetzt → User-Lyrics werden verwendet.
+    - Kein ``lyrics``, ``instrumental=False`` → MiniMax generiert Lyrics
+      aus dem ``prompt`` (``lyrics_optimizer=True``).
+    - ``instrumental=True``, keine ``lyrics`` → rein instrumental.
+    - ``lyrics`` + ``instrumental=True`` → widersprüchlich, Tool-Error.
+
+    Phase 3: nur ``music-2.6``, MP3 via hex output. Kein URL-Flow, kein
+    Streaming, keine sample_rate/bitrate-Exposition."""
+
+    def __init__(self, job_service=None):
+        self._job_service = job_service
+
+    def set_job_service(self, job_service) -> None:
+        self._job_service = job_service
+
+    @property
+    def id(self) -> str: return "music_generate"
+
+    @property
+    def name(self) -> str: return "Music Generate"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Erzeugt einen Song aus einem Text-Prompt via MiniMax music-2.6. "
+            "Optional mit eigenen Lyrics oder rein instrumental. Blockt "
+            "synchron bis das MP3 fertig ist (~10–30 s). Gibt einen Job "
+            "mit fertigen Artifacts zurück. Cancel nach HTTP-Start stoppt "
+            "nur das lokale Artifact-Write; der Remote-Call läuft zu Ende."
+        )
+
+    @property
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type":        "string",
+                    "description": "Style/Mood/Scenario des Songs.",
+                },
+                "lyrics": {
+                    "type":        "string",
+                    "description": (
+                        "Optional: eigene Lyrics. Bei leer generiert "
+                        "MiniMax Lyrics aus dem prompt."
+                    ),
+                },
+                "instrumental": {
+                    "type":        "boolean",
+                    "description": (
+                        "Optional: rein instrumental. Nicht gleichzeitig "
+                        "mit lyrics."
+                    ),
+                },
+                "model": {
+                    "type":        "string",
+                    "enum":        ["music-2.6"],
+                    "description": "MiniMax-Modell. Phase 3 nur music-2.6.",
+                },
+            },
+            "required": ["prompt"],
+        }
+
+    @property
+    def parallel_safe(self) -> bool:
+        return True
+
+    @property
+    def is_destructive(self) -> bool:
+        return False
+
+    @property
+    def is_read_only(self) -> bool:
+        return False
+
+    async def execute(
+        self, agent_id: str, project_id: str,
+        prompt: str = "",
+        lyrics: str = "",
+        instrumental: bool = False,
+        model: str = "",
+        **kwargs,
+    ) -> dict:
+        from .minimax_music import (
+            ALLOWED_MODELS,
+            DEFAULT_MODEL,
+            MAX_INPUT_SUMMARY_LYRICS,
+            MAX_INPUT_SUMMARY_PROMPT,
+            MAX_LYRICS_LEN,
+            MAX_PROMPT_LEN,
+            _minimax_music_api_key,
+            build_music_runner,
+        )
+
+        prompt_str = (prompt or "").strip()
+        if not prompt_str:
+            return {"error": "prompt ist leer"}
+        if len(prompt_str) > MAX_PROMPT_LEN:
+            return {"error": f"prompt zu lang (max {MAX_PROMPT_LEN} Zeichen)"}
+
+        lyrics_str = (lyrics or "").strip()
+        if len(lyrics_str) > MAX_LYRICS_LEN:
+            return {"error": f"lyrics zu lang (max {MAX_LYRICS_LEN} Zeichen)"}
+
+        if lyrics_str and instrumental:
+            return {
+                "error": "lyrics und instrumental=true widersprechen sich — "
+                         "entweder User-Lyrics oder instrumental wählen.",
+            }
+
+        chosen_model = (model or "").strip() or DEFAULT_MODEL
+        if chosen_model not in ALLOWED_MODELS:
+            return {
+                "error":   f"model '{chosen_model}' in Phase 3 nicht unterstützt",
+                "allowed": sorted(ALLOWED_MODELS),
+            }
+
+        if self._job_service is None:
+            return {"error": "music_generate: JobService nicht initialisiert"}
+
+        # Key-Check VOR submit — kein Job-Müll ohne Key.
+        if not _minimax_music_api_key():
+            return {
+                "error": (
+                    "MiniMax API-Key fehlt — Admin muss MINIMAX_API_KEY in "
+                    "der LLM-Config oder als Env-Variable setzen."
+                ),
+            }
+
+        runner = build_music_runner(
+            prompt=prompt_str,
+            lyrics=lyrics_str,
+            instrumental=bool(instrumental),
+            model=chosen_model,
+        )
+
+        from .jobs_service import JobStorageError
+
+        try:
+            meta = self._job_service.submit(
+                type="music",
+                provider="minimax",
+                runner=runner,
+                input_summary={
+                    "prompt":       prompt_str[:MAX_INPUT_SUMMARY_PROMPT],
+                    "lyrics":       lyrics_str[:MAX_INPUT_SUMMARY_LYRICS],
+                    "instrumental": bool(instrumental),
+                    "model":        chosen_model,
+                },
+                created_by=None,
+                project_id=project_id or None,
+                agent_id=agent_id or None,
+            )
+        except JobStorageError:
+            return {"error": "jobs storage unavailable"}
+
+        # Blockierend: auf den Task warten, damit Agent-Turn direkt das
+        # Ergebnis sieht (analog #679 Image; Music-API ist sync).
+        task = self._job_service._tasks.get(meta.job_id)
+        if task is not None:
+            try:
+                await task
+            except Exception:  # pragma: no cover — Runner-Exceptions
+                # Handled im JobService._run via _finalize; finalen Status
+                # lesen wir unten.
+                pass
+
+        final = self._job_service.get(meta.job_id)
+        artifacts = [
+            {
+                "filename":     a.get("filename"),
+                "size":         a.get("size"),
+                "mime":         a.get("mime"),
+                "download_url": f"/me/jobs/{final.job_id}/artifacts/{a.get('filename')}",
+            }
+            for a in (final.artifacts or [])
+        ]
+        out: dict = {
+            "job_id":    final.job_id,
+            "status":    final.status,
+            "artifacts": artifacts,
+        }
+        if final.error:
+            out["error"] = final.error
+        return out
+
+
 # =========================================================================
 # Register all Core Tools
 # =========================================================================
@@ -2935,3 +3130,5 @@ registry.register(WksShellExecTool())
 registry.register(ImageGenerateTool())
 # #688: Video-Generation via MiniMax (JobService wird von main.py injectet).
 registry.register(VideoGenerateTool())
+# #689: Music-Generation via MiniMax (JobService wird von main.py injectet).
+registry.register(MusicGenerateTool())

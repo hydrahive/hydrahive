@@ -229,7 +229,7 @@ job_service      = _JobService()
 # hier hängen wir den Singleton nach dem Core-Startup dran.
 try:
     from .tool_registry import registry as _core_registry
-    for _tool_id in ("image_generate", "video_generate"):
+    for _tool_id in ("image_generate", "video_generate", "music_generate"):
         _media_tool = _core_registry.get(_tool_id)
         if _media_tool is not None and hasattr(_media_tool, "set_job_service"):
             _media_tool.set_job_service(job_service)
