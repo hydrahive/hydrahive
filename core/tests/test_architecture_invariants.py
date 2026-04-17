@@ -1612,6 +1612,34 @@ def test_invariant22_matrix_admin_retry_login_failure_does_not_abort_installer()
     )
 
 
+def test_invariant23_fresh_install_etc_dir_is_core_writable():
+    """23: /etc/hydrahive muss fuer den Core schreibbar sein.
+
+    Der Core laeuft als User ``hydrahive`` und schreibt beim ersten Start
+    Runtime-Config in /etc/hydrahive, u.a. ``migrations.json``. Wenn der
+    Installer das Verzeichnis nur ``750 root:hydrahive`` setzt, crasht der
+    Core beim Lifespan-Start mit PermissionError.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    core_sh = repo_root / "installer" / "modules" / "06_core_service.sh"
+    text = core_sh.read_text(encoding="utf-8")
+
+    assert "chmod 770 /etc/hydrahive" in text, (
+        "06_core_service.sh muss /etc/hydrahive fuer die hydrahive-Gruppe "
+        "schreibbar machen. Der Core legt dort Runtime-Config-Dateien an."
+    )
+    assert "chmod 750 /etc/hydrahive" not in text, (
+        "06_core_service.sh setzt /etc/hydrahive noch auf 750. Damit kann "
+        "User hydrahive keine neuen Dateien wie migrations.json anlegen."
+    )
+    assert "migrations.json" in text, (
+        "06_core_service.sh soll migrations.json voranlegen/chownen, weil "
+        "migrations.py diese Datei beim Core-Start schreibt."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die

@@ -70,9 +70,11 @@ chmod 440 /etc/sudoers.d/hydrahive
 # --- Verzeichnisse ---
 mkdir -p "${CORE_DIR}/src/hydrahive_core" /agents /projects /etc/hydrahive
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}" /agents /projects
-# /etc/hydrahive braucht hydrahive-Schreibrechte (jwt_secret, users.json etc.)
+# /etc/hydrahive braucht hydrahive-Schreibrechte. Der Core laeuft als
+# User hydrahive und legt beim ersten Start weitere Runtime-Config-Dateien
+# an (z.B. migrations.json, master.key, groups.json).
 chown root:${HYDRAHIVE_USER} /etc/hydrahive
-chmod 750 /etc/hydrahive
+chmod 770 /etc/hydrahive
 
 # #690: Feature-Verzeichnisse vorab anlegen mit korrekten Rechten.
 # /etc/hydrahive/{servers,skill_packages} — Daten: 0o750 root:hydrahive (analog /etc/hydrahive).
@@ -107,7 +109,7 @@ chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}/backups"
 chmod 750 "${HYDRAHIVE_DIR}/backups"
 
 # --- Konfig-Dateien voranlegen (hydrahive-core braucht Schreibrechte) ---
-for _f in jwt_secret llm_env llm_config.json gitea_config.json users.json admin_credentials; do
+for _f in jwt_secret internal_secret llm_env llm_config.json gitea_config.json users.json admin_credentials migrations.json; do
     _path="/etc/hydrahive/${_f}"
     if [ ! -f "${_path}" ]; then
         touch "${_path}"
