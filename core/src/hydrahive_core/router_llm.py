@@ -24,9 +24,10 @@ class LlmProviderConfig(BaseModel):
     # So kann base_url geändert werden, ohne den bestehenden Key zu verlieren.
     api_key: str | None = None
     enabled: bool = True
-    # #616: optionaler Endpoint-Override (aktuell nur für MiniMax relevant).
-    # Default wird providerseitig in _minimax_base_url() gesetzt.
-    base_url: str = ""
+    # #616/#682: optionaler Endpoint-Override (MiniMax, NVIDIA).
+    # None (weggelassen) = nicht ändern, "" = Override löschen (→ Provider-
+    # Default), alles andere setzt die URL nach Validierung.
+    base_url: str | None = None
 
 
 class CoachConfigRequest(BaseModel):
@@ -158,6 +159,38 @@ def _save_llm_config(config: dict) -> None:
     p.chmod(0o600)
 
 
+def _merge_provider_config(
+    existing: dict,
+    *,
+    api_key: str | None,
+    enabled: bool,
+    base_url: str | None,
+) -> dict:
+    """Mergt einen LLM-Provider-Request in den gespeicherten Provider-Eintrag.
+
+    Tri-state-Semantik:
+    - ``api_key`` / ``base_url`` = None: Feld nicht im Request → nicht ändern.
+    - ``base_url`` = "": Override explizit löschen (Provider-Default gilt wieder).
+    - Wert: Feld validiert setzen.
+
+    Die Validierung muss der Aufrufer bereits gemacht haben — diese Funktion
+    ist reine State-Transition.
+    """
+    merged = dict(existing)
+    merged["enabled"] = enabled
+    if api_key is not None:
+        merged["api_key"] = api_key
+    elif "api_key" not in merged:
+        merged["api_key"] = ""
+    if base_url is None:
+        pass  # Feld nicht im Request → Override unverändert
+    elif base_url == "":
+        merged.pop("base_url", None)
+    else:
+        merged["base_url"] = base_url
+    return merged
+
+
 def _pkce_pair() -> tuple[str, str]:
     import base64 as _b64
     import hashlib
@@ -269,20 +302,22 @@ def register_llm_routes(
                 if req.api_key is not None
                 else None
             )
-            base_url = clean_provider_base_url(req.base_url, label=f"{provider} base_url")
+            # #682: base_url tri-state — None=weglassen, ""=Override löschen,
+            # Wert=validieren+setzen.
+            if req.base_url is None:
+                base_url: str | None = None
+            else:
+                base_url = clean_provider_base_url(req.base_url, label=f"{provider} base_url")
         except LlmConfigValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-        # #616: bestehenden Eintrag erhalten — api_key=None (weggelassen) = nicht ändern.
-        existing = dict(config["providers"].get(provider) or {})
-        existing["enabled"] = req.enabled
-        if api_key is not None:
-            existing["api_key"] = api_key
-        elif "api_key" not in existing:
-            existing["api_key"] = ""
-        if base_url:
-            existing["base_url"] = base_url
-        config["providers"][provider] = existing
+        # #616/#682: bestehenden Eintrag mit tri-state Semantik mergen.
+        config["providers"][provider] = _merge_provider_config(
+            config["providers"].get(provider) or {},
+            api_key=api_key,
+            enabled=req.enabled,
+            base_url=base_url,
+        )
 
         # Env-File nur aktualisieren wenn api_key explizit mitgeschickt wurde.
         # Andernfalls (None) bleibt der existierende Env-Eintrag unverändert.

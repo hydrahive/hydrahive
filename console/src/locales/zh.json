@@ -1447,6 +1447,10 @@
       "endpoint": "端点（可选）",
       "endpointPlaceholderDefault": "https://api.minimax.io/v1 (默认)",
       "endpointHint": "留空使用默认。CN 区域可使用 api.minimax.chat/v1。",
+      "endpointPreset": "端点",
+      "endpointPresetGlobal": "全球 (api.minimax.io/v1)",
+      "endpointPresetChina": "中国 (api.minimax.chat/v1)",
+      "endpointPresetCustom": "自定义",
       "keyRequired": "请先保存 MiniMax API 密钥。",
       "keyHelp": "可在 MiniMax Developer Console 获取密钥。"
     },

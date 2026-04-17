@@ -1291,6 +1291,10 @@
       "endpoint": "Endpoint (optional)",
       "endpointPlaceholderDefault": "https://api.minimax.io/v1 (default)",
       "endpointHint": "Leave empty for default. For the CN region use api.minimax.chat/v1 if needed.",
+      "endpointPreset": "Endpoint",
+      "endpointPresetGlobal": "Global (api.minimax.io/v1)",
+      "endpointPresetChina": "China (api.minimax.chat/v1)",
+      "endpointPresetCustom": "Custom",
       "keyRequired": "Please save the MiniMax API key first.",
       "keyHelp": "Get a key from the MiniMax developer console."
     },

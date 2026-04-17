@@ -181,7 +181,11 @@ export function LlmConfigPage() {
   const [savedEmbed,     setSavedEmbed]     = useState(false);
 
   // MiniMax base_url (#616) — optionaler Endpoint-Override
+  // #682: Preset-Dropdown statt nackte Freitext-URL — CN-User müssen den
+  // Endpoint nicht raten. Global → "" (Provider-Default), China → fester URL,
+  // Custom → Freitext-Input weiterhin sichtbar.
   const [minimaxBaseUrl, setMinimaxBaseUrl] = useState("");
+  const [minimaxPreset, setMinimaxPreset] = useState<"global" | "china" | "custom">("global");
   // NVIDIA base_url (#684) — optionaler Endpoint-Override (on-prem NIM etc.)
   const [nvidiaBaseUrl, setNvidiaBaseUrl] = useState("");
   const [savingNvidiaBaseUrl, setSavingNvidiaBaseUrl] = useState(false);
@@ -220,6 +224,31 @@ export function LlmConfigPage() {
 
   useEffect(() => { load(); }, []);
   function refresh() { setRefreshing(true); load(); }
+
+  // #682: MiniMax-Endpoint-Preset aus gespeicherter URL ableiten.
+  // Trailing slashes und Case werden normalisiert.
+  const MINIMAX_DEFAULT_URL = "https://api.minimax.io/v1";
+  const MINIMAX_CHINA_URL   = "https://api.minimax.chat/v1";
+  function deriveMinimaxPreset(url: string): "global" | "china" | "custom" {
+    const normalized = url.trim().replace(/\/+$/, "").toLowerCase();
+    if (!normalized) return "global";
+    if (normalized === MINIMAX_DEFAULT_URL) return "global";
+    if (normalized === MINIMAX_CHINA_URL)   return "china";
+    return "custom";
+  }
+  function resolveMinimaxBaseUrl(preset: "global" | "china" | "custom", customInput: string): string {
+    if (preset === "global") return "";
+    if (preset === "china")  return MINIMAX_CHINA_URL;
+    return customInput.trim();
+  }
+
+  // Sync Preset + Custom-Input, wenn der providerStatus aus dem Backend kommt.
+  useEffect(() => {
+    const stored = providerStatus["minimax"]?.base_url ?? "";
+    const preset = deriveMinimaxPreset(stored);
+    setMinimaxPreset(preset);
+    setMinimaxBaseUrl(preset === "custom" ? stored : "");
+  }, [providerStatus["minimax"]?.base_url]);
 
   async function startOAuth(provider: string) {
     try {
@@ -269,9 +298,11 @@ export function LlmConfigPage() {
     setSaving(providerId);
     try {
       const body: Record<string, unknown> = { provider: providerId, api_key: keys[providerId], enabled: true };
-      // #616: MiniMax erlaubt optional einen Endpoint-Override
-      if (providerId === "minimax" && minimaxBaseUrl.trim()) {
-        body.base_url = minimaxBaseUrl.trim();
+      // #616/#682: MiniMax Endpoint-Preset beim Key-Save mitschreiben.
+      // Global (leer) auslassen → Backend schreibt kein Override, Default gilt.
+      if (providerId === "minimax") {
+        const url = resolveMinimaxBaseUrl(minimaxPreset, minimaxBaseUrl);
+        if (url) body.base_url = url;
       }
       // #684: NVIDIA ebenfalls (für on-prem NIM-Deployments)
       if (providerId === "nvidia" && nvidiaBaseUrl.trim()) {
@@ -311,7 +342,9 @@ export function LlmConfigPage() {
     // #616: base_url ohne Key-Rotation speichern — bestehenden Key beibehalten.
     // Payload mit leerem api_key schreibt dort "" — Backend entfernt dann
     // den Env-Eintrag. Deshalb nur speichern wenn Key schon gesetzt ist.
-    if (!minimaxBaseUrl.trim()) return;
+    // #682: Preset "global" schickt base_url="" → Backend löscht Override
+    // und fällt wieder auf MINIMAX_DEFAULT_BASE_URL zurück.
+    if (minimaxPreset === "custom" && !minimaxBaseUrl.trim()) return;
     if (!providerStatus["minimax"]?.has_key) {
       alert(t("llm.minimax.keyRequired"));
       return;
@@ -322,7 +355,7 @@ export function LlmConfigPage() {
       await api.put(`/llm/config/minimax`, {
         provider: "minimax",
         enabled: true,
-        base_url: minimaxBaseUrl.trim(),
+        base_url: resolveMinimaxBaseUrl(minimaxPreset, minimaxBaseUrl),
       });
       setSaved("minimax");
       setTimeout(() => setSaved(null), 3000);
@@ -485,24 +518,36 @@ export function LlmConfigPage() {
           </button>
         </div>
         <p className="text-xs text-muted-foreground">{t("llm.minimax.keyHelp")}</p>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">{t("llm.minimax.endpoint")}</label>
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">{t("llm.minimax.endpointPreset")}</label>
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={minimaxBaseUrl}
-              onChange={e => setMinimaxBaseUrl(e.target.value)}
-              placeholder={providerStatus["minimax"]?.base_url || t("llm.minimax.endpointPlaceholderDefault")}
-              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <select
+              value={minimaxPreset}
+              onChange={e => setMinimaxPreset(e.target.value as "global" | "china" | "custom")}
+              className="flex-1 px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+              <option value="global">{t("llm.minimax.endpointPresetGlobal")}</option>
+              <option value="china">{t("llm.minimax.endpointPresetChina")}</option>
+              <option value="custom">{t("llm.minimax.endpointPresetCustom")}</option>
+            </select>
             <button onClick={saveMinimaxBaseUrl}
-              disabled={savingBaseUrl || !minimaxBaseUrl.trim()}
+              disabled={savingBaseUrl || (minimaxPreset === "custom" && !minimaxBaseUrl.trim())}
               className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 transition-colors">
               <Save className="h-3.5 w-3.5"/>
               {savingBaseUrl ? t("common.saving") : t("common.save")}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground">{t("llm.minimax.endpointHint")}</p>
+          {minimaxPreset === "custom" && (
+            <>
+              <input
+                type="text"
+                value={minimaxBaseUrl}
+                onChange={e => setMinimaxBaseUrl(e.target.value)}
+                placeholder={t("llm.minimax.endpointPlaceholderDefault")}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <p className="text-xs text-muted-foreground">{t("llm.minimax.endpointHint")}</p>
+            </>
+          )}
         </div>
       </div>
 
