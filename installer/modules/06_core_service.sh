@@ -63,7 +63,7 @@ hydrahive ALL=(root) NOPASSWD: /usr/bin/fuser -k 8765/tcp
 # UFW Status (readonly)
 hydrahive ALL=(root) NOPASSWD: /usr/sbin/ufw status numbered
 
-Defaults\:hydrahive !requiretty
+Defaults:hydrahive !requiretty
 SUDOEOF
 chmod 440 /etc/sudoers.d/hydrahive
 

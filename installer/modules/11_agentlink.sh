@@ -47,6 +47,7 @@ systemctl is-active redis-server -q || { error "Redis startet nicht"; }
 success "Redis bereit"
 
 # ─── 3. AgentLink-Repo ───────────────────────────────────────────────────────
+git config --global --add safe.directory "${AGENTLINK_DIR}" >/dev/null 2>&1 || true
 if [ -d "${AGENTLINK_DIR}/.git" ]; then
     info "AgentLink-Repo aktualisieren..."
     git -C "${AGENTLINK_DIR}" pull -q || warn "AgentLink-Update fehlgeschlagen — fahre mit vorhandenem Stand fort"

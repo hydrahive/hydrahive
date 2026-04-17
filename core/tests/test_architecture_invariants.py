@@ -1640,6 +1640,55 @@ def test_invariant23_fresh_install_etc_dir_is_core_writable():
     )
 
 
+def test_invariant24_installer_sudoers_defaults_syntax_valid():
+    """24: Installer-generierte sudoers-Regeln duerfen kein escaptes
+    Defaults-Target enthalten.
+
+    Regression: ``Defaults\\:hydrahive`` ist in sudoers Syntax ungueltig und
+    erzeugt bei jedem sudo/systemctl-Aufruf Warnungen bzw. Fehler. Korrekt ist
+    ``Defaults:hydrahive``.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    core_sh = repo_root / "installer" / "modules" / "06_core_service.sh"
+    text = core_sh.read_text(encoding="utf-8")
+
+    assert "Defaults:hydrahive !requiretty" in text, (
+        "06_core_service.sh muss sudoers mit 'Defaults:hydrahive !requiretty' "
+        "schreiben."
+    )
+    assert "Defaults\\:hydrahive" not in text, (
+        "06_core_service.sh schreibt ein escaptes Defaults-Target. Das ist "
+        "sudoers-Syntaxfehler."
+    )
+
+
+def test_invariant25_agentlink_git_safe_directory_registered_before_pull():
+    """25: AgentLink-Reinstall darf nicht an Git dubious ownership haengen.
+
+    Der Installer laeuft als root, chown't /opt/hydrahive/agentlink aber auf
+    hydrahive. Git blockt danach root-Operationen ohne safe.directory.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    agentlink_sh = repo_root / "installer" / "modules" / "11_agentlink.sh"
+    text = agentlink_sh.read_text(encoding="utf-8")
+
+    safe_idx = text.find('git config --global --add safe.directory "${AGENTLINK_DIR}"')
+    pull_idx = text.find('git -C "${AGENTLINK_DIR}" pull')
+    assert safe_idx > -1, (
+        "11_agentlink.sh muss /opt/hydrahive/agentlink als Git safe.directory "
+        "registrieren."
+    )
+    assert pull_idx > -1, "11_agentlink.sh enthaelt keinen AgentLink git pull mehr."
+    assert safe_idx < pull_idx, (
+        "Git safe.directory muss vor dem ersten git -C ${AGENTLINK_DIR} pull "
+        "gesetzt werden."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die
