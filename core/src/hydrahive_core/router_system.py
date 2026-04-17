@@ -14,6 +14,86 @@ from pydantic import BaseModel
 from .router_core_misc import collect_core_journal_report
 from .settings import settings
 
+logger = logging.getLogger(__name__)
+
+
+# ────────────────────────────────────────────── Update-Status Stale-Normalisierung (#705)
+#
+# Beide Funktionen auf Modul-Ebene, damit sie aus Tests ohne FastAPI-Router-
+# Setup aufrufbar sind. Das Verhalten liegt bewusst **nur in der Response** —
+# die on-disk-Status-Datei wird hier nie geschrieben, nur gelesen.
+
+_UPDATE_SERVICE_UNITS: tuple[str, ...] = (
+    "hydrahive-selfupdate.service",
+    "hydrahive-autoupdate.service",
+)
+# Hart kurz — `systemctl is-active` antwortet sub-millisekündlich auf
+# funktionierenden Systemen. Bei DBus-Stall o. Ä. fallen wir schnell
+# auf die Fail-safe-True-Annahme zurück.
+_SYSTEMCTL_TIMEOUT_SECONDS = 1.5
+
+
+def _update_services_active() -> bool:
+    """True wenn irgendein Update-Service gerade aktiv läuft.
+
+    Fail-safe bei systemctl-Timeout, fehlendem Binary oder DBus-Problem:
+    True zurückgeben (annimm aktiv). So verhindern wir false-positive
+    Stale-Markierungen, die einen laufenden Update mitten im Build als
+    tot deklarieren würden.
+    """
+    for unit in _UPDATE_SERVICE_UNITS:
+        try:
+            r = subprocess.run(
+                ["systemctl", "is-active", "--quiet", unit],
+                timeout=_SYSTEMCTL_TIMEOUT_SECONDS,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            # Timeout, kein systemctl im PATH, Permission-Denied — alles
+            # ist unsicher. Fail-safe: Service als aktiv annehmen.
+            logger.debug("_update_services_active: %s → assume active: %s", unit, exc)
+            return True
+        if r.returncode == 0:
+            return True
+    return False
+
+
+def _apply_stale_normalization(status: dict) -> None:
+    """In-place-Normalisierung: wenn ``status["status"] == "running"`` aber
+    entweder Service nicht aktiv oder Age > 10 min, wird ``status`` auf
+    ``"ok"`` + ``stale=True`` + ``stale_reason`` überschrieben.
+
+    Mutation nur auf dem Response-Dict — die on-disk-Status-Datei bleibt
+    unverändert (kein auto-repair). Wenn der echte Update-Service später
+    korrekt fertig wird, überschreibt er die Datei selbst via on_error
+    oder dem Final-ok-Block in update.sh.
+    """
+    if status.get("status") != "running":
+        return
+
+    service_alive = _update_services_active()
+
+    age_exceeded = False
+    started_at = status.get("started_at")
+    if started_at:
+        try:
+            started = datetime.fromisoformat(started_at)
+            age = datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc)
+            age_exceeded = age > timedelta(minutes=10)
+        except Exception as exc:
+            logger.debug("_apply_stale_normalization: bad started_at %r: %s", started_at, exc)
+
+    if not service_alive:
+        status["status"] = "ok"
+        status["stale"] = True
+        status["stale_reason"] = "service_inactive"
+    elif age_exceeded:
+        status["status"] = "ok"
+        status["stale"] = True
+        status["stale_reason"] = "age_exceeded"
+
 
 class NetworkProfileRequest(BaseModel):
     profile: str
@@ -204,14 +284,9 @@ def register_system_routes(
                         status[key] = m.group(1)
         else:
             status = {"status": "never"}
-        if status.get("status") == "running" and status.get("started_at"):
-            try:
-                started = datetime.fromisoformat(status["started_at"])
-                if datetime.now(tz=timezone.utc) - started.astimezone(timezone.utc) > timedelta(minutes=10):
-                    status["status"] = "ok"
-                    status["stale"] = True
-            except Exception as e:
-                logger.debug("Failed to parse update started_at timestamp: %s", e)
+        # #705: Stale-Normalisierung per Service-Check + 10-Min-Zeit-Regel.
+        # Helper auf Modul-Ebene für Testbarkeit ohne FastAPI-Setup.
+        _apply_stale_normalization(status)
         status["available"] = False
         if status.get("status") not in {"running", "error"}:
             remote = _get_remote_head()
