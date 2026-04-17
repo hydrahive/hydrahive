@@ -195,13 +195,27 @@ class JobService:
         self._root = Path(root) if root is not None else settings.jobs_dir
         self._meta_dir = self._root / "meta"
         self._artifacts_dir = self._root / "artifacts"
-        self._meta_dir.mkdir(parents=True, exist_ok=True)
-        self._artifacts_dir.mkdir(parents=True, exist_ok=True)
+        # Permission-tolerant Init — auf Servern legt der Installer den Pfad
+        # an. Ist er nicht beschreibbar, läuft Core trotzdem hoch, und
+        # spätere submit()-Calls scheitern mit einer klaren Meldung.
+        self._fs_ok = True
+        for d in (self._meta_dir, self._artifacts_dir):
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except (PermissionError, OSError) as exc:
+                self._fs_ok = False
+                logger.warning(
+                    "jobs: cannot prepare %s (%s). submit/list disabled until "
+                    "the installer or an admin creates %s with write access "
+                    "for the core service user.",
+                    d, exc, self._root,
+                )
         # job_id → asyncio.Task (nur running)
         self._tasks: dict[str, asyncio.Task] = {}
         # job_id → True wenn Cancel angefordert
         self._cancelled: set[str] = set()
-        self._recover_stale()
+        if self._fs_ok:
+            self._recover_stale()
 
     # ── Paths ────────────────────────────────────────────────────────────
 
@@ -238,6 +252,8 @@ class JobService:
         project_id: str | None = None,
     ) -> list[JobMeta]:
         out: list[JobMeta] = []
+        if not self._meta_dir.exists():
+            return out
         for meta_file in sorted(self._meta_dir.glob("*.json")):
             try:
                 data = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -290,6 +306,11 @@ class JobService:
         ``input_summary`` darf **keine Secrets oder großen Prompts** enthalten.
         Caller ist für Sanitization verantwortlich.
         """
+        if not self._fs_ok:
+            raise JobError(
+                f"jobs storage not writable: {self._root}. Admin muss "
+                "Verzeichnis anlegen (installer oder manuell chown)."
+            )
         now = _now_iso()
         meta = JobMeta(
             job_id=_new_job_id(),

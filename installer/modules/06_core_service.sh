@@ -90,7 +90,7 @@ for _dir in server_keys wks_keys; do
     chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "/etc/hydrahive/${_dir}"
     chmod 700 "/etc/hydrahive/${_dir}"
 done
-for _dir in /var/lib/hydrahive/worktrees /var/lib/hydrahive/users; do
+for _dir in /var/lib/hydrahive/worktrees /var/lib/hydrahive/users /var/lib/hydrahive/jobs; do
     mkdir -p "${_dir}"
     chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${_dir}"
     chmod 750 "${_dir}"
