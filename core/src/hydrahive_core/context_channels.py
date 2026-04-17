@@ -48,6 +48,7 @@ class ContextChannels:
     policies: str = ""             # statische Verhaltens-/Memory-Regeln
 
     # ── Dynamic (query-abhängig, nicht cacheable) ───────────────────
+    runtime: str = ""              # tatsächlich konfiguriertes Runtime-Modell
     memory_hits: str = ""          # BM25-Treffer für aktuelle Query
     amem_hits: str = ""             # A-MEM globale Treffer
     working_state: str = ""         # WorkingState-Snapshot (#632) — Anomalien zuerst
@@ -66,9 +67,9 @@ class ContextChannels:
         "sources", "repos", "servers", "handbook", "blueprint", "workflow", "policies",
     )
     _DYNAMIC_SLOTS = (
-        "memory_hits", "amem_hits", "working_state", "forced_handoff",
-        "last_session", "skills", "repo_guidance", "deferred_tools",
-        "plan_mode", "frustration",
+        "runtime", "memory_hits", "amem_hits", "working_state",
+        "forced_handoff", "last_session", "skills", "repo_guidance",
+        "deferred_tools", "plan_mode", "frustration",
     )
 
     def to_static_str(self) -> str:

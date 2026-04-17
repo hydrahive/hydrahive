@@ -335,10 +335,13 @@ async def handle_message_stream(
             cache_read=_usage.get("cache_read", 0),
             cache_write=_usage.get("cache_write", 0),
         )
-        _done_payload: dict = {'done': True, 'session_id': None, 'usage': _usage}
-        if _is_fallback:
-            _done_payload['model'] = _model_name
-            _done_payload['is_fallback'] = True
+        _done_payload: dict = {
+            'done': True,
+            'session_id': None,
+            'usage': _usage,
+            'model': _model_name,
+            'is_fallback': _is_fallback,
+        }
         yield f"data: {_json.dumps(_done_payload)}\n\n"
 
         # #488: Prompt Speculation — Follow-up Vorschläge generieren

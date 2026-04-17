@@ -509,6 +509,19 @@ async def build_system_prompt(
             _STATIC_PROMPT_CACHE[_cache_key] = (static_cached, time.time(), h)
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
+    _llm_cfg = getattr(boss_cfg, "llm", None)
+    _runtime_model = str(getattr(_llm_cfg, "model", "") or "").strip()
+    if _runtime_model:
+        _provider = str(getattr(_llm_cfg, "provider", "") or "").strip()
+        _provider_line = f"- Provider: `{_provider}`\n" if _provider else ""
+        channels.runtime = (
+            "## Runtime-LLM\n\n"
+            "Dieses Projekt verwendet fuer diesen Turn folgendes LLM. "
+            "Falls Memory, Session-Summaries oder fruehere Kontextnotizen ein anderes Modell nennen, "
+            "sind diese Angaben veraltet und duerfen diese Runtime-Angabe nicht ueberschreiben.\n\n"
+            f"{_provider_line}- Modell: `{_runtime_model}`"
+        )
+
     if boss_cfg.agent_dir:
         # #659/#668: Multi-Layer-Resolver (agent > project > user).
         # System/Catalog ist bewusst KEIN automatischer Prompt-Layer —

@@ -65,6 +65,8 @@ def _make_agent_cfg(agent_dir=None, soul=None, identity="Test-Agent", tools=None
     cfg.agent_dir = Path(agent_dir) if agent_dir else None
     cfg.tools = tools or []
     cfg.id = "test-agent"
+    cfg.llm.provider = "nvidia"
+    cfg.llm.model = "qwen/qwen3-coder-480b-a35b-instruct"
     return cfg
 
 
@@ -119,6 +121,19 @@ class TestBuildSystemPrompt:
         cfg = _make_agent_cfg(agent_dir=str(tmp_path), soul="nicht_vorhanden.md")
         prompt = await _build_prompt_str(cfg, "Test")
         assert "Test-Agent" in prompt
+
+    async def test_runtime_modell_ueberschreibt_stale_memory_hinweis(self, tmp_path):
+        mem_dir = tmp_path / "memory"
+        mem_dir.mkdir()
+        (mem_dir / "session-summary-2026-04-17.md").write_text(
+            "Das System läuft auf Claude 3.5 Sonnet.",
+            encoding="utf-8",
+        )
+        cfg = _make_agent_cfg(agent_dir=str(tmp_path))
+        prompt = await _build_prompt_str(cfg, "Welches Modell nutzt du?")
+        assert "## Runtime-LLM" in prompt
+        assert "qwen/qwen3-coder-480b-a35b-instruct" in prompt
+        assert "veraltet" in prompt
 
 
 # ================================================================= _compact_if_needed
