@@ -604,15 +604,16 @@ def _load_or_create_internal_secret(secret_file: str = str(settings.internal_sec
 
 def _read_admin_password() -> str:
     """Admin-Passwort aus /etc/hydrahive/admin_credentials lesen."""
+    values: dict[str, str] = {}
     try:
         for line in Path(CRED_FILE).read_text().splitlines():
             if "=" in line:
                 k, v = line.split("=", 1)
                 if k.strip() in ("console_password", "matrix_admin_password"):
-                    return v.strip()
+                    values[k.strip()] = v.strip()
     except OSError:
         pass
-    return ""
+    return values.get("console_password") or values.get("matrix_admin_password") or ""
 
 
 # In-Memory Token-Blacklist (revoked JTIs)

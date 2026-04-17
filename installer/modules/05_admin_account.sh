@@ -15,6 +15,7 @@ REG_TOKEN=$(grep -E '^registration_token\s*=' "$CONDUWUIT_TOML" | sed 's/.*=\s*"
 
 ADMIN_USER="admin"
 ADMIN_MXID="@${ADMIN_USER}:${SERVER_NAME}"
+ACCESS_TOKEN=""
 
 # Admin-Passwort aus Datei lesen oder neu generieren
 CRED_FILE="/etc/hydrahive/admin_credentials"
@@ -48,21 +49,26 @@ elif [ "$ERRCODE" = "M_USER_IN_USE" ]; then
         success "Login als '${ADMIN_MXID}' erfolgreich"
         ACCESS_TOKEN=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
     else
-        error "Login fehlgeschlagen: $LOGIN_RESP"
+        warn "Matrix-Login als '${ADMIN_MXID}' fehlgeschlagen: $LOGIN_RESP"
+        warn "Installation wird fortgesetzt. Console-Login nutzt console_password; Matrix-Provisioning ggf. später reparieren."
     fi
 else
     error "Registrierung fehlgeschlagen: $REG_RESP"
 fi
 
 # --- Admin-Room prüfen ---
-ROOMS_RESP=$(curl -s "${CONDUWUIT_URL}/_matrix/client/v3/joined_rooms" \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}")
-ROOM_COUNT=$(echo "$ROOMS_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('joined_rooms',[])))" 2>/dev/null)
+if [ -n "${ACCESS_TOKEN}" ]; then
+    ROOMS_RESP=$(curl -s "${CONDUWUIT_URL}/_matrix/client/v3/joined_rooms" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}")
+    ROOM_COUNT=$(echo "$ROOMS_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('joined_rooms',[])))" 2>/dev/null)
 
-if [ "${ROOM_COUNT:-0}" -ge 1 ]; then
-    success "Admin-User ist Mitglied im Admin-Room — Server-Admin bestaetigt"
+    if [ "${ROOM_COUNT:-0}" -ge 1 ]; then
+        success "Admin-User ist Mitglied im Admin-Room — Server-Admin bestaetigt"
+    else
+        warn "Admin-Room nicht gefunden — ggf. erster Account war ein anderer User"
+    fi
 else
-    warn "Admin-Room nicht gefunden — ggf. erster Account war ein anderer User"
+    warn "Admin-Room-Pruefung uebersprungen — kein Matrix-Access-Token verfuegbar"
 fi
 
 info "Admin-MXID:  ${ADMIN_MXID}"

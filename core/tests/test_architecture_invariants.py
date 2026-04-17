@@ -1553,6 +1553,65 @@ def test_invariant20_fresh_install_core_healthcheck_has_real_start_budget():
     )
 
 
+def test_invariant21_console_login_prefers_console_password_over_matrix_password():
+    """21: Console-Login darf nicht von der Reihenfolge in admin_credentials
+    abhaengen.
+
+    Frischer Installer-Pfad: Modul 05 schreibt ``matrix_admin_password`` vor
+    Modul 06 ``console_password``. Die Console muss trotzdem immer
+    ``console_password`` bevorzugen, sonst wirkt der dokumentierte Login als
+    fehlgeschlagen.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    main_py = repo_root / "core" / "src" / "hydrahive_core" / "main.py"
+    text = main_py.read_text(encoding="utf-8")
+
+    assert "values.get(\"console_password\") or values.get(\"matrix_admin_password\")" in text, (
+        "main._read_admin_password muss console_password vor "
+        "matrix_admin_password bevorzugen. Reihenfolge in admin_credentials "
+        "darf den Console-Login nicht veraendern."
+    )
+    assert "return v.strip()" not in text[text.find("def _read_admin_password"):text.find("# In-Memory Token-Blacklist")], (
+        "_read_admin_password darf nicht den ersten passenden Eintrag "
+        "zurueckgeben; das nimmt auf frischen Installationen oft das Matrix-"
+        "Passwort statt des Console-Passworts."
+    )
+
+
+def test_invariant22_matrix_admin_retry_login_failure_does_not_abort_installer():
+    """22: Ein halb installierter Matrix-State darf Re-Install nicht stoppen.
+
+    Wenn der Matrix-Admin bereits existiert, aber das gespeicherte Passwort
+    nicht mehr passt, soll Modul 05 warnen und die Installation fortsetzen.
+    Sonst bleibt ein Retry nach einem fruehen Installationsabbruch in
+    ``Login fehlgeschlagen`` haengen, obwohl die Console separat reparierbar ist.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    admin_sh = repo_root / "installer" / "modules" / "05_admin_account.sh"
+    text = admin_sh.read_text(encoding="utf-8")
+
+    assert 'ACCESS_TOKEN=""' in text, (
+        "05_admin_account.sh muss ACCESS_TOKEN initialisieren, damit ein "
+        "fehlgeschlagener Matrix-Login nicht spaeter unbound-variable erzeugt."
+    )
+    assert 'warn "Matrix-Login als' in text, (
+        "05_admin_account.sh soll bei existierendem Admin mit Passwort-Mismatch "
+        "warnen statt die gesamte Installation abzubrechen."
+    )
+    assert 'error "Login fehlgeschlagen' not in text, (
+        "05_admin_account.sh bricht bei Matrix-Login-Mismatch noch hart ab. "
+        "Das blockiert Re-Install auf halb installierten Systemen."
+    )
+    assert 'if [ -n "${ACCESS_TOKEN}" ]; then' in text, (
+        "Admin-Room-Check darf nur laufen, wenn der Matrix-Login wirklich ein "
+        "Access-Token geliefert hat."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die
