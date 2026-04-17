@@ -57,9 +57,14 @@ fi
 # #305: npm-Fehler nicht maskieren
 info "Installiere npm-Abhaengigkeiten..."
 pushd "${CONSOLE_SRC}" > /dev/null || error "cd ${CONSOLE_SRC} fehlgeschlagen"
-if ! npm install --silent 2>&1 | grep -v "^npm warn"; then
+_npm_log="$(mktemp)"
+if ! npm install --silent >"${_npm_log}" 2>&1; then
+    grep -v "^npm warn" "${_npm_log}" || true
+    rm -f "${_npm_log}"
     error "npm install fehlgeschlagen — Console kann nicht gebaut werden"
 fi
+grep -v "^npm warn" "${_npm_log}" || true
+rm -f "${_npm_log}"
 success "npm-Abhaengigkeiten installiert"
 
 info "Baue Console (npm run build)..."

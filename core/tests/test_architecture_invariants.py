@@ -1493,6 +1493,66 @@ def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     )
 
 
+def test_invariant19_fresh_install_npm_success_not_masked_by_grep():
+    """19: Frische Installationen duerfen ein erfolgreiches, ausgabearmes
+    ``npm install --silent`` nicht als Fehler werten.
+
+    Regression: ``if ! npm install --silent 2>&1 | grep -v "^npm warn"; then``
+    ist unter ``set -o pipefail`` kaputt. Wenn npm erfolgreich ist und keine
+    Ausgabe produziert, beendet ``grep`` mit 1 und der Installer meldet
+    faelschlich "npm install fehlgeschlagen".
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    console_sh = repo_root / "installer" / "modules" / "07_console.sh"
+    text = console_sh.read_text(encoding="utf-8")
+
+    assert 'npm install --silent 2>&1 | grep -v "^npm warn"' not in text, (
+        "07_console.sh prueft npm install ueber eine grep-Pipeline. Unter "
+        "pipefail faellt ein erfolgreicher npm-Lauf ohne Ausgabe faelschlich "
+        "durch. Bitte npm-Exitcode direkt pruefen und die Ausgabe nur danach "
+        "fuer die Anzeige filtern."
+    )
+    assert 'if ! npm install --silent >"${_npm_log}" 2>&1; then' in text, (
+        "07_console.sh soll npm install in ein Log schreiben und direkt dessen "
+        "Exitcode auswerten."
+    )
+    assert 'grep -v "^npm warn" "${_npm_log}" || true' in text, (
+        "npm-Warnfilter darf nur Anzeige sein und den Installationsstatus "
+        "nicht beeinflussen."
+    )
+
+
+def test_invariant20_fresh_install_core_healthcheck_has_real_start_budget():
+    """20: Der Core-Healthcheck im frischen Installer braucht genug Budget.
+
+    Ubuntu-24.04-Grundinstallationen koennen beim ersten Core-Start laenger
+    als 9 Sekunden brauchen (Importe, Migrationen, kalte venv). Der Installer
+    darf deshalb nicht direkt "Core antwortet nicht" ausgeben, solange der
+    systemd-Service noch aktiv startet.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    core_sh = repo_root / "installer" / "modules" / "06_core_service.sh"
+    text = core_sh.read_text(encoding="utf-8")
+
+    assert "for i in $(seq 1 30)" in text, (
+        "06_core_service.sh gibt dem Core weniger als das erwartete "
+        "Startbudget. Frische Installationen sollen bis zu 60s auf /health "
+        "warten, bevor sie warnen."
+    )
+    assert 'systemctl is-active --quiet "${SERVICE_NAME}"' in text, (
+        "06_core_service.sh soll zwischen 'Service crasht' und 'Service "
+        "startet noch' unterscheiden."
+    )
+    assert 'journalctl -u "${SERVICE_NAME}" -n 30 --no-pager' in text, (
+        "Wenn hydrahive-core beim frischen Install crasht, muss der Installer "
+        "direkt die letzten Journal-Zeilen ausgeben."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die

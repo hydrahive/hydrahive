@@ -229,14 +229,19 @@ fi
 
 # Health-Check
 HEALTH_OK=0
-for i in 1 2 3; do
-    sleep 3
+for i in $(seq 1 30); do
+    sleep 2
     if curl -sf "http://127.0.0.1:8765/health" &>/dev/null; then
         success "hydrahive-core antwortet auf http://127.0.0.1:8765"
         HEALTH_OK=1
         break
     fi
-    info "Warte auf hydrahive-core... ($i/3)"
+    if ! systemctl is-active --quiet "${SERVICE_NAME}"; then
+        warn "hydrahive-core ist nicht aktiv — letzte Logs:"
+        journalctl -u "${SERVICE_NAME}" -n 30 --no-pager || true
+        break
+    fi
+    info "Warte auf hydrahive-core... ($i/30)"
 done
 if [ "${HEALTH_OK}" -eq 0 ]; then
     warn "hydrahive-core antwortet nicht — pruefe: journalctl -u ${SERVICE_NAME} -n 30"
