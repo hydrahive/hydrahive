@@ -239,7 +239,7 @@ async def handle_message_stream(
                         async for chunk in _stream_codex(
                             orch, boss_cfg, boss_id, project_id, content,
                             messages, litellm_tools, codex_token, _model_name,
-                            execution_mode, _usage,
+                            execution_mode, _usage, request_user=request_user,
                         ):
                             if isinstance(chunk, dict):
                                 full_response = chunk.get("_full_response", full_response)
@@ -262,6 +262,7 @@ async def handle_message_stream(
                         orch, boss_cfg, boss_id, project_id, content,
                         messages, litellm_tools, oauth_token, _model_name,
                         execution_mode, _usage,
+                        request_user=request_user,
                         static_prompt=_static_prompt, dynamic_prompt=_dynamic_prompt,
                     ):
                         if isinstance(chunk, dict):
@@ -275,7 +276,7 @@ async def handle_message_stream(
                     async for chunk in _stream_litellm(
                         orch, boss_cfg, boss_id, project_id, content,
                         messages, litellm_tools, _model_name,
-                        execution_mode, _usage,
+                        execution_mode, _usage, request_user=request_user,
                     ):
                         if isinstance(chunk, dict):
                             full_response = chunk.get("_full_response", full_response)
@@ -379,6 +380,7 @@ async def handle_message_stream(
                 _retry_session = orch._sessions.get_active(project_id)
                 _retry_static, _retry_dynamic = await _bsp_retry(
                     boss_cfg, content, session=_retry_session,
+                    request_user=request_user,
                 )
                 _retry_sys = (_retry_static + "\n\n" + _retry_dynamic).strip() if _retry_dynamic else _retry_static
                 _retry_msgs = [{"role": "system", "content": _retry_sys}] + _retry_history
@@ -414,6 +416,7 @@ async def _stream_codex(
     orch, boss_cfg, boss_id, project_id, content,
     messages, litellm_tools, codex_token, model_name,
     execution_mode, _usage,
+    *, request_user: str | None = None,
 ):
     """OpenAI Codex (ChatGPT Plus OAuth) — non-streaming mit Tool-Loop."""
     from .orchestrator_tools import _tool_call_signature as _tool_call_signature_fn
@@ -630,6 +633,7 @@ async def _stream_anthropic_oauth(
     orch, boss_cfg, boss_id, project_id, content,
     messages, litellm_tools, oauth_token, model_name,
     execution_mode, _usage,
+    *, request_user: str | None = None,
     static_prompt: str = "", dynamic_prompt: str = "",
 ):
     """Anthropic SDK Streaming mit OAuth."""
@@ -1011,6 +1015,7 @@ async def _stream_litellm(
     orch, boss_cfg, boss_id, project_id, content,
     messages, litellm_tools, model_name,
     execution_mode, _usage,
+    *, request_user: str | None = None,
 ):
     """litellm Streaming (Ollama / OpenAI / Anthropic API-Key / MiniMax) mit Tool-Loop."""
     import litellm

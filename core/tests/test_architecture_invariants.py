@@ -1733,6 +1733,30 @@ def test_invariant26_gitea_admin_cli_runs_as_git_user():
     )
 
 
+def test_invariant27_stream_helpers_accept_request_user():
+    """27: Streaming Tool-Loops muessen request_user explizit durchreichen.
+
+    Regression: Der Top-Level-Stream bekam ``request_user``, die provider-
+    spezifischen Helper referenzierten die Variable aber ohne Parameter. Im
+    Chat fuehrte jeder Tool-Call zu ``name 'request_user' is not defined``.
+    """
+    import inspect
+    from hydrahive_core import orchestrator_stream as _os
+
+    for fn_name in ("_stream_codex", "_stream_anthropic_oauth", "_stream_litellm"):
+        sig = inspect.signature(getattr(_os, fn_name))
+        assert "request_user" in sig.parameters, (
+            f"{fn_name} akzeptiert request_user nicht, nutzt es aber im "
+            "execute_tool_call-Pfad."
+        )
+
+    src = inspect.getsource(_os.handle_message_stream)
+    assert "request_user=request_user" in src, (
+        "handle_message_stream muss request_user an die provider-spezifischen "
+        "Stream-Helper weiterreichen."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die

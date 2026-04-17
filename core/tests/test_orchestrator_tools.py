@@ -18,6 +18,7 @@ from hydrahive_core.orchestrator_tools import (
     _truncate_tool_result,
     _tool_call_signature,
     _execute_tool,
+    execute_tool_call,
 )
 
 
@@ -196,3 +197,33 @@ class TestExecuteTool:
             tool_input=None,
         )
         assert result == {"done": True}
+
+
+class TestExecuteToolCall:
+
+    def _make_boss(self):
+        cfg = MagicMock()
+        cfg.id = "boss"
+        cfg.mcp_servers = []
+        cfg.risk_policy = "trusted"
+        return cfg
+
+    async def test_request_user_wird_an_orchestrator_execute_tool_weitergereicht(self):
+        tool = MagicMock()
+        orch = MagicMock()
+        orch._resolve_allowed_tool.return_value = tool
+        orch._execute_tool = AsyncMock(return_value={"ok": True})
+        orch._sessions.get_active.return_value = None
+
+        result, is_error = await execute_tool_call(
+            orch,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="shell_exec",
+            tool_input={"command": "uname -a"},
+            request_user="alice",
+        )
+
+        assert result == {"ok": True}
+        assert is_error is False
+        assert orch._execute_tool.await_args.kwargs["request_user"] == "alice"
