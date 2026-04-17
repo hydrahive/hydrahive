@@ -26,6 +26,7 @@ from .jobs_service import (
     JobMeta,
     JobNotFoundError,
     JobService,
+    JobStorageError,
     _noop_runner,
 )
 
@@ -104,15 +105,19 @@ def register_jobs_routes(
                 f"type '{req.type}' nicht submittable; erlaubt: "
                 f"{sorted(_ADMIN_SUBMITTABLE_TYPES)}",
             )
-        meta = job_service.submit(
-            type=req.type,
-            provider=req.provider or "internal",
-            runner=runner,
-            input_summary=dict(req.input_summary or {}),
-            created_by=None,          # Admin-Submit ist unspezifisch
-            project_id=req.project_id,
-            agent_id=req.agent_id,
-        )
+        try:
+            meta = job_service.submit(
+                type=req.type,
+                provider=req.provider or "internal",
+                runner=runner,
+                input_summary=dict(req.input_summary or {}),
+                created_by=None,          # Admin-Submit ist unspezifisch
+                project_id=req.project_id,
+                agent_id=req.agent_id,
+            )
+        except JobStorageError:
+            # #704 Sprint C: Storage nicht beschreibbar → 503 ohne Path-Leak.
+            raise HTTPException(503, "jobs storage unavailable")
         return _meta_public(meta)
 
     @admin_router.get("/admin/jobs")
@@ -134,6 +139,9 @@ def register_jobs_routes(
             return _meta_public(job_service.get(job_id))
         except JobNotFoundError:
             raise HTTPException(404, "job nicht gefunden")
+        except JobStorageError:
+            # Corrupt Meta — Operator sieht's im Log, User kriegt 503.
+            raise HTTPException(503, "job metadata unavailable")
         except JobError as exc:
             raise HTTPException(400, str(exc))
 
@@ -143,6 +151,8 @@ def register_jobs_routes(
             meta = job_service.cancel(job_id)
         except JobNotFoundError:
             raise HTTPException(404, "job nicht gefunden")
+        except JobStorageError:
+            raise HTTPException(503, "job metadata unavailable")
         except JobError as exc:
             raise HTTPException(400, str(exc))
         return _meta_public(meta)
@@ -159,6 +169,8 @@ def register_jobs_routes(
             meta = job_service.get(job_id)
         except JobNotFoundError:
             raise HTTPException(404, "job nicht gefunden")
+        except JobStorageError:
+            raise HTTPException(503, "job metadata unavailable")
         mime = _mime_for(meta, filename)
         return FileResponse(path, media_type=mime, filename=filename)
 
@@ -189,6 +201,8 @@ def register_jobs_routes(
             meta = job_service.cancel(job_id)
         except JobNotFoundError:
             raise HTTPException(404, "job nicht gefunden")
+        except JobStorageError:
+            raise HTTPException(503, "job metadata unavailable")
         except JobError as exc:
             raise HTTPException(400, str(exc))
         return _meta_public(meta)
@@ -229,6 +243,9 @@ def _load_owned_job_or_403(
         meta = job_service.get(job_id)
     except JobNotFoundError:
         raise HTTPException(404, "job nicht gefunden")
+    except JobStorageError:
+        # #704 Sprint C: corrupt meta → 503 mit generischer Message.
+        raise HTTPException(503, "job metadata unavailable")
     except JobError as exc:
         raise HTTPException(400, str(exc))
     if meta.created_by != username:

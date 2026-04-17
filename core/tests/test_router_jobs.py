@@ -286,3 +286,47 @@ def test_me_unauthenticated_401(client):
     c, set_user = client
     set_user(None)
     assert c.get("/me/jobs").status_code == 401
+
+
+# ────────────────────────────────────────────── #704 Sprint C: Degraded Responses
+
+
+def test_http_admin_submit_degraded_is_503(svc):
+    """JobStorageError aus submit → 503 ohne Path im Body."""
+    svc._fs_ok = False
+    app = FastAPI()
+    auth_router = APIRouter()
+    admin_router = APIRouter()
+    register_jobs_routes(auth_router, admin_router, require_auth=lambda: ("admin", "user"), job_service=svc)
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+    c = TestClient(app)
+
+    r = c.post("/admin/jobs", json={"type": "noop", "provider": "internal"})
+    assert r.status_code == 503
+    body = r.json()
+    assert "unavailable" in body["detail"].lower()
+    # Kein Pfad-Leak im Response-Body.
+    assert "/var/lib" not in body["detail"]
+    assert str(svc._root) not in body["detail"]
+
+
+def test_http_admin_get_corrupt_meta_is_503(svc):
+    """JobStorageError aus get → 503 ohne Path/job_id im Body."""
+    jid = "job_" + "c" * 16
+    (svc._meta_dir / f"{jid}.json").write_text("{not valid json", encoding="utf-8")
+
+    app = FastAPI()
+    auth_router = APIRouter()
+    admin_router = APIRouter()
+    register_jobs_routes(auth_router, admin_router, require_auth=lambda: ("admin", "user"), job_service=svc)
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+    c = TestClient(app)
+
+    r = c.get(f"/admin/jobs/{jid}")
+    assert r.status_code == 503
+    body = r.json()
+    assert "unavailable" in body["detail"].lower()
+    assert jid not in body["detail"]
+    assert "/var/lib" not in body["detail"]

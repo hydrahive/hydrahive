@@ -20,6 +20,7 @@ from hydrahive_core.jobs_service import (
     JobError,
     JobNotFoundError,
     JobService,
+    JobStorageError,
     _noop_runner,
     _RESTART_ERROR,
 )
@@ -361,3 +362,106 @@ def test_recover_keeps_terminal_statuses(tmp_path):
 def test_get_unknown_id(svc):
     with pytest.raises(JobNotFoundError):
         svc.get("job_" + "0" * 16)
+
+
+# ────────────────────────────────────────────── #704 Sprint D: Release-Safety
+
+
+class TestInitPermissionTolerance:
+    """Hotfix 8f17e4f: Core-Start darf bei fehlendem/readonly jobs_dir nicht
+    crashen — das ist genau die Regression, die den .220-Vorfall ausgelöst hat."""
+
+    def test_permission_denied_on_mkdir_sets_fs_ok_false(self, tmp_path, monkeypatch):
+        """Simuliert: `/var/lib/hydrahive/jobs` ist nicht beschreibbar beim Init."""
+        from pathlib import Path as _P
+
+        real_mkdir = _P.mkdir
+
+        def fake_mkdir(self, *args, **kwargs):
+            if "hydrahive_jobs_test" in str(self):
+                raise PermissionError(f"denied: {self}")
+            return real_mkdir(self, *args, **kwargs)
+
+        monkeypatch.setattr(_P, "mkdir", fake_mkdir)
+        svc = JobService(root=tmp_path / "hydrahive_jobs_test")
+        assert svc._fs_ok is False
+
+    def test_submit_degraded_raises_storage_error(self, tmp_path, monkeypatch):
+        """Bei _fs_ok=False muss submit() JobStorageError werfen, nicht
+        einen rohen PermissionError oder JobError mit Path-Leak."""
+        from pathlib import Path as _P
+
+        real_mkdir = _P.mkdir
+
+        def fake_mkdir(self, *args, **kwargs):
+            if "hydrahive_jobs_degraded" in str(self):
+                raise PermissionError("denied")
+            return real_mkdir(self, *args, **kwargs)
+
+        monkeypatch.setattr(_P, "mkdir", fake_mkdir)
+        svc = JobService(root=tmp_path / "hydrahive_jobs_degraded")
+
+        async def runner(ctx):  # pragma: no cover — nicht erreicht
+            pass
+
+        with pytest.raises(JobStorageError) as ei:
+            svc.submit(type="noop", provider="internal", runner=runner)
+        # Der Fehlertext ist generisch und enthält keinen Dateisystem-Pfad.
+        assert "unavailable" in str(ei.value).lower()
+        assert str(tmp_path) not in str(ei.value)
+        assert "/var/lib" not in str(ei.value)
+
+    def test_list_degraded_returns_empty(self, tmp_path, monkeypatch):
+        """Bei fehlendem meta_dir liefert list() leere Liste statt zu crashen."""
+        from pathlib import Path as _P
+
+        real_mkdir = _P.mkdir
+
+        def fake_mkdir(self, *args, **kwargs):
+            if "hydrahive_jobs_empty" in str(self):
+                raise PermissionError("denied")
+            return real_mkdir(self, *args, **kwargs)
+
+        monkeypatch.setattr(_P, "mkdir", fake_mkdir)
+        svc = JobService(root=tmp_path / "hydrahive_jobs_empty")
+        assert svc.list() == []
+
+
+class TestCorruptMetaHandling:
+    """#704 Sprint B: get() darf bei corrupt JSON / fehlenden Pflichtfeldern
+    nicht 500 mit Stack produzieren."""
+
+    def test_get_corrupt_json_raises_storage_error(self, svc, tmp_path):
+        jid = "job_" + "a" * 16
+        (svc._meta_dir / f"{jid}.json").write_text(
+            "{this is not valid json",
+            encoding="utf-8",
+        )
+        with pytest.raises(JobStorageError) as ei:
+            svc.get(jid)
+        # Fehlertext ist generisch, kein Pfad, kein Traceback-Fragment.
+        assert "corrupt" in str(ei.value).lower()
+        assert str(tmp_path) not in str(ei.value)
+        assert jid not in str(ei.value)  # auch job_id leakt nicht in Response-Text
+
+    def test_get_missing_required_fields_raises_storage_error(self, svc):
+        jid = "job_" + "b" * 16
+        (svc._meta_dir / f"{jid}.json").write_text(
+            '{"job_id": "' + jid + '", "type": "noop"}',  # fehlt provider, status, ...
+            encoding="utf-8",
+        )
+        with pytest.raises(JobStorageError):
+            svc.get(jid)
+
+    @pytest.mark.asyncio
+    async def test_list_still_skips_corrupt_after_sprint_b(self, svc):
+        """Regression: Sprint B fasst list() nicht an — Corrupt-Skip bleibt."""
+        (svc._meta_dir / "broken.json").write_text("not valid", encoding="utf-8")
+
+        async def runner(ctx):
+            pass
+        meta = svc.submit(type="noop", provider="internal", runner=runner, created_by="alice")
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        jobs = svc.list()
+        assert len(jobs) == 1
+        assert jobs[0].job_id == meta.job_id

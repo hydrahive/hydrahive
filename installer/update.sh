@@ -427,6 +427,19 @@ MIGRATE_EOF
     fi
 
     # --- 6. Service neustarten ---
+    # #687/#704: Runtime-State-Dirs idempotent absichern, damit bestehende
+    # Instanzen nach einem Update neue Pfade kriegen (z.B. /var/lib/hydrahive/jobs)
+    # bevor der Core die neu gezogene Version lädt.
+    _RUNTIME_HELPER="${HYDRAHIVE_DIR}/installer/lib/ensure_runtime_dirs.sh"
+    if [ -f "${_RUNTIME_HELPER}" ]; then
+        info "Sichere Runtime-State-Verzeichnisse..."
+        # shellcheck source=./lib/ensure_runtime_dirs.sh
+        HYDRAHIVE_USER="hydrahive" HYDRAHIVE_GROUP="hydrahive" source "${_RUNTIME_HELPER}"
+    else
+        error "Runtime-Helper fehlt: ${_RUNTIME_HELPER} (Repo kaputt?) — Abbruch"
+        exit 1
+    fi
+
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
     systemctl restart hydrahive-core

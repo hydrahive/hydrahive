@@ -1493,6 +1493,49 @@ def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     )
 
 
+def test_invariant16_update_sh_sources_runtime_dirs_before_core_restart():
+    """16 (#704 Sprint A/D): installer/update.sh muss den Runtime-Dirs-Helper
+    VOR ``systemctl restart hydrahive-core`` sourcen.
+
+    Grund: Vor dem #687/.220-Vorfall hat ``update.sh`` neue Runtime-State-Dirs
+    (``/var/lib/hydrahive/jobs``) nicht angelegt, sondern den Core gestartet,
+    der dann in der permission-tolerant-Degradation landete. Der Helper
+    ``installer/lib/ensure_runtime_dirs.sh`` ist der zentrale Touchpoint —
+    wenn er nicht vor dem Restart gesourced wird, ist die ganze Release-Safety
+    aus #703/#704 Sprint A umsonst.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    update_sh = repo_root / "installer" / "update.sh"
+    helper = repo_root / "installer" / "lib" / "ensure_runtime_dirs.sh"
+
+    assert helper.exists(), (
+        f"Runtime-Dirs-Helper fehlt: {helper.relative_to(repo_root)}. "
+        "Sprint A (#704) hat den Helper als shared touchpoint etabliert — "
+        "ohne ihn ist update.sh nicht absicherbar."
+    )
+
+    text = update_sh.read_text(encoding="utf-8")
+    # Reihenfolge: der Source-Aufruf muss VOR dem systemctl-restart stehen.
+    helper_rel = "installer/lib/ensure_runtime_dirs.sh"
+    source_idx = text.find("ensure_runtime_dirs.sh")
+    restart_idx = text.find("systemctl restart hydrahive-core")
+    assert source_idx > -1, (
+        f"update.sh sourced den Runtime-Helper nicht. Erwartet: "
+        f"'source ...{helper_rel}' vor 'systemctl restart hydrahive-core'."
+    )
+    assert restart_idx > -1, (
+        "update.sh enthält kein 'systemctl restart hydrahive-core' mehr — "
+        "Invariant ist obsolet oder das File wurde kaputt refactored."
+    )
+    assert source_idx < restart_idx, (
+        "update.sh sourced den Runtime-Helper NACH 'systemctl restart "
+        "hydrahive-core'. Der Helper MUSS vor dem Restart laufen, sonst "
+        "fängt der Core ein Update mit fehlenden Runtime-Dirs auf."
+    )
+
+
 def test_invariant15_locale_key_parity_ignores_meta_namespaces():
     """15 (#702-Followup): de.json, en.json und zh.json tragen exakt die
     gleichen UI-Keys. `_meta` und jeder andere `_*`-Namespace (aktuell oder

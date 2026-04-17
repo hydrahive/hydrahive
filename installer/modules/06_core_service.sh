@@ -90,11 +90,15 @@ for _dir in server_keys wks_keys; do
     chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "/etc/hydrahive/${_dir}"
     chmod 700 "/etc/hydrahive/${_dir}"
 done
-for _dir in /var/lib/hydrahive/worktrees /var/lib/hydrahive/users /var/lib/hydrahive/jobs; do
-    mkdir -p "${_dir}"
-    chown "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${_dir}"
-    chmod 750 "${_dir}"
-done
+# #687/#704: shared Helper — identisch von update.sh vor Core-Restart genutzt.
+_RUNTIME_HELPER="${HYDRAHIVE_DIR:-/opt/hydrahive}/installer/lib/ensure_runtime_dirs.sh"
+if [ ! -f "${_RUNTIME_HELPER}" ]; then
+    # Frischer Install: Helper liegt noch im geklonten Installer-Tree, nicht
+    # unter HYDRAHIVE_DIR. Resolve relativ zum Modul.
+    _RUNTIME_HELPER="$(dirname "${BASH_SOURCE[0]}")/../lib/ensure_runtime_dirs.sh"
+fi
+# shellcheck source=../lib/ensure_runtime_dirs.sh
+HYDRAHIVE_USER="${HYDRAHIVE_USER}" HYDRAHIVE_GROUP="${HYDRAHIVE_USER}" source "${_RUNTIME_HELPER}"
 mkdir -p "${HYDRAHIVE_DIR}/skills/catalog"
 chown -R "${HYDRAHIVE_USER}:${HYDRAHIVE_USER}" "${HYDRAHIVE_DIR}/skills"
 chmod 755 "${HYDRAHIVE_DIR}/skills" "${HYDRAHIVE_DIR}/skills/catalog"

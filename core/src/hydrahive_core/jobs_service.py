@@ -59,7 +59,14 @@ _RESTART_ERROR = "core restart before completion"
 
 
 class JobError(Exception):
-    """Allgemeiner Fehler im Job-Service."""
+    """Client-seitiger / Validation-Fehler (ungültige ID, ungültiger Name,
+    Traversal-Versuch). Router rendert als 400."""
+
+
+class JobStorageError(Exception):
+    """Server-seitiger Storage-Fehler (Pfad nicht beschreibbar, Meta corrupt).
+    Router rendert als 503 mit generischer Message — kein internal path im
+    Response-Body. Diagnostische Details landen im Logger."""
 
 
 class JobCancelled(Exception):
@@ -240,8 +247,15 @@ class JobService:
         path = self._meta_path(job_id)
         if not path.exists():
             raise JobNotFoundError(job_id)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return _meta_from_dict(data)
+        # #704 Sprint B: corrupt JSON oder fehlende Pflichtfelder →
+        # JobStorageError ohne Pfad/Traceback im Response, aber mit job_id
+        # im Logger für Operator-Diagnose.
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return _meta_from_dict(data)
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError, OSError) as exc:
+            logger.warning("jobs: meta corrupt for %s: %s", job_id, exc)
+            raise JobStorageError("job metadata corrupt") from None
 
     def list(
         self,
@@ -307,10 +321,10 @@ class JobService:
         Caller ist für Sanitization verantwortlich.
         """
         if not self._fs_ok:
-            raise JobError(
-                f"jobs storage not writable: {self._root}. Admin muss "
-                "Verzeichnis anlegen (installer oder manuell chown)."
-            )
+            # #704 Sprint C: JobStorageError → Router 503 ohne Path-Leak.
+            # Der Pfad steht im Init-Log-Warning und ist für Operator sichtbar.
+            logger.warning("jobs: submit denied — storage not writable at %s", self._root)
+            raise JobStorageError("jobs storage unavailable")
         now = _now_iso()
         meta = JobMeta(
             job_id=_new_job_id(),
