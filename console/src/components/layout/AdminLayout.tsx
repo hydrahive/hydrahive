@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { useTranslation } from "react-i18next";
-import i18n from "@/lib/i18n";
+import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { TourProvider, TourLauncher } from "@/components/tours/TourProvider";
 
 // ANSI-Farbcodes aus Log-Zeilen entfernen
@@ -409,12 +409,7 @@ export function AdminLayout() {
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {dark ? t("layout.light") : t("layout.dark")}
           </button>
-          <button
-            onClick={() => i18n.changeLanguage(i18n.language === "de" ? "en" : "de")}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
-          >
-            {i18n.language === "de" ? "EN" : "DE"}
-          </button>
+          <LanguageSwitcher />
           <button
             onClick={() => {
               logout();

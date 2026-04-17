@@ -312,6 +312,7 @@
     "light": "Light",
     "dark": "Dark",
     "logout": "Sign out",
+    "languageMenuLabel": "Choose language",
     "operationsConsole": "Operations Console",
     "systemView": "System view",
     "updateActive": "Update active",

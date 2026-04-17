@@ -312,6 +312,7 @@
     "light": "Hell",
     "dark": "Dunkel",
     "logout": "Ende",
+    "languageMenuLabel": "Sprache wählen",
     "operationsConsole": "Operations Console",
     "systemView": "Systemansicht",
     "updateActive": "Update aktiv",
