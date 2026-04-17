@@ -33,6 +33,7 @@ from .rate_limiter import RateLimiter
 from .router_agent_chat import register_agent_chat_routes
 from .router_agent_admin import register_agent_admin_routes
 from .router_agent_skills import register_agent_skill_routes
+from .router_jobs import register_jobs_routes
 from .router_skills_catalog import register_skills_catalog_routes
 from .router_backup_restore import register_backup_restore_routes
 from .router_composer import register_admin_composer_routes, register_composer_routes, register_project_composer_routes
@@ -216,6 +217,12 @@ orchestrator     = Orchestrator(discovery, runtime, sessions)
 group_service    = GroupService(users_fn=lambda: _load_users())
 agent_sessions   = SessionManager(AGENTS_DIR)          # Direkte Agenten-Chats
 agent_orchestrator = Orchestrator(discovery, runtime, agent_sessions)
+# #687: Async-Job-Fundament. Instanz hier auf Modul-Ebene, damit Router beim
+# Registrieren eine Referenz übergeben bekommt. _recover_stale() läuft im
+# __init__ und normalisiert queued/running-Meta-Dateien aus einem vorherigen
+# Core-Run zu failed.
+from .jobs_service import JobService as _JobService
+job_service      = _JobService()
 provisioner:  Provisioner | None = None              # initialisiert im Lifespan
 hb_scheduler: "AgentHeartbeatScheduler | None" = None  # initialisiert im Lifespan
 
@@ -1481,6 +1488,15 @@ register_skills_catalog_routes(
     require_auth=require_auth,
     catalog_dir_provider=lambda: settings.skills_catalog_dir,
     logger=logger,
+)
+
+
+# #687: Async-Job-Routes (admin + /me Scope).
+register_jobs_routes(
+    auth_router,
+    admin_router,
+    require_auth=require_auth,
+    job_service=job_service,
 )
 
 

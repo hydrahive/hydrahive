@@ -184,6 +184,23 @@ class HydraHiveSettings(BaseSettings):
         return Path("/var/lib/hydrahive/worktrees")
 
     @property
+    def jobs_dir(self) -> Path:
+        """Basisverzeichnis für asynchrone Long-Running-Jobs (#687).
+
+        Layout:
+          <jobs_dir>/meta/<job_id>.json    JobMeta
+          <jobs_dir>/artifacts/<job_id>/   Result-Artefakte
+
+        Override via Env HYDRAHIVE_JOBS_DIR (wird von jobs_service
+        direkt geprüft, damit Tests den Pfad monkeypatchen können).
+        """
+        import os
+        override = os.environ.get("HYDRAHIVE_JOBS_DIR")
+        if override:
+            return Path(override)
+        return Path("/var/lib/hydrahive/jobs")
+
+    @property
     def settings_file(self) -> Path:
         """Pfad zu settings.json (Hook-Konfiguration, #654).
 
