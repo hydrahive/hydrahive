@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, validator
 
+from . import ssh_known_hosts
 from .settings import settings
 
 
@@ -264,6 +265,14 @@ def discord_client_connected(username: str) -> bool:
 
 
 def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
+    """Dashboard-Hotpath — `ssh true` gegen den konfigurierten WKS-Host.
+
+    #685: host-key-aware. strict + kein verified Key → False (fail-closed),
+    warn + kein verified Key → SSH ohne Pinning (kompatibel zum Alt-Verhalten),
+    verified Key → temp known_hosts + StrictHostKeyChecking=yes; bei
+    exit_code!=0 und stderr-Match auf HOST_KEY_CHANGED_RE → False + log.
+    Kein ssh-keyscan, damit der /me/platforms-Endpoint schnell bleibt.
+    """
     ip = str(wks.get("ip", "")).strip()
     if not ip:
         return False
@@ -280,40 +289,58 @@ def _wks_connected(username: str, wks: dict, wks_keys_dir: Path) -> bool:
             ssh_port = 22
     except (TypeError, ValueError):
         ssh_port = 22
+
+    # #685: Policy-Resolution vor dem SSH-Call. Strict + unverified blockt
+    # fail-closed, damit kein MITM-Pfad offen bleibt.
+    policy = ssh_known_hosts.prepare_host_key_policy("wks", username, ip)
+    if policy.blocked:
+        logger.info(
+            "WKS-Connectivity blockiert (strict, unverified) für %s:%d",
+            ip, ssh_port,
+        )
+        return False
+
+    args = [
+        "ssh",
+        "-i", str(key_file),
+        "-o", "BatchMode=yes",
+        *policy.ssh_opts,
+        "-o", "ConnectTimeout=3",
+        "-p", str(ssh_port),
+        f"{ssh_user}@{ip}",
+        "true",
+    ]
+    # LC_ALL=C: OpenSSH-Meldungen englisch und stabil für stderr-Parsing.
+    import os as _os
+    env = _os.environ.copy()
+    env["LC_ALL"] = "C"
+    env["LANG"] = "C"
+
     try:
         result = _sp.run(
-            [
-                "ssh",
-                "-i",
-                str(key_file),
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "GlobalKnownHostsFile=/dev/null",
-                "-o",
-                "LogLevel=ERROR",
-                "-o",
-                "ConnectTimeout=3",
-                "-p",
-                str(ssh_port),
-                f"{ssh_user}@{ip}",
-                "true",
-            ],
+            args,
             capture_output=True,
             text=True,
             timeout=5,
+            env=env,
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
+        # #685: verified + exit_code!=0 → host_key_changed möglich.
+        if policy.verified and ssh_known_hosts.is_host_key_changed(result.stderr or ""):
+            logger.warning(
+                "WKS host_key_changed erkannt für %s (%s:%d)",
+                username, ip, ssh_port,
+            )
+        return False
     except FileNotFoundError:
         logger.debug("ssh nicht gefunden für WKS-Connectivity-Check (%s)", username)
         return False
     except Exception as e:
         logger.debug("WKS-Connectivity-Check für %s fehlgeschlagen: %s", username, e)
         return False
+    finally:
+        ssh_known_hosts.cleanup_known_hosts_path(policy.known_hosts_path)
 
 
 def _build_platform_overview(username: str, users: dict, wks_keys_dir: Path) -> list[dict]:
@@ -705,45 +732,74 @@ def register_user_integration_routes(
         if not key_file.exists():
             raise HTTPException(400, "Kein SSH-Key vorhanden")
 
+        # #685: Policy vor dem SSH-Call. Strict + unverified → fail-closed
+        # mit user-facing Hinweis auf Admin-Approval.
+        policy = ssh_known_hosts.prepare_host_key_policy("wks", username, ip)
+        if policy.blocked:
+            return {
+                "ok": False,
+                "error": policy.blocked_reason,
+                "ssh_port": ssh_port,
+                "host_key_mode": "strict",
+                "host_key_unverified": True,
+            }
+
+        args = [
+            "ssh",
+            "-i", str(key_file),
+            *policy.ssh_opts,
+            "-o", "ConnectTimeout=5",
+            "-o", "BatchMode=yes",
+            "-p", str(ssh_port),
+            f"{ssh_user}@{ip}",
+            "hostname && whoami",
+        ]
+        import os as _os
+        env = _os.environ.copy()
+        env["LC_ALL"] = "C"
+        env["LANG"] = "C"
+
         try:
             proc = await _asyncio.create_subprocess_exec(
-                "ssh",
-                "-i",
-                str(key_file),
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "GlobalKnownHostsFile=/dev/null",
-                "-o",
-                "LogLevel=ERROR",
-                "-o",
-                "ConnectTimeout=5",
-                "-o",
-                "BatchMode=yes",
-                "-p",
-                str(ssh_port),
-                f"{ssh_user}@{ip}",
-                "hostname && whoami",
+                *args,
                 stdout=_asyncio.subprocess.PIPE,
                 stderr=_asyncio.subprocess.PIPE,
+                env=env,
             )
             stdout, stderr = await _asyncio.wait_for(proc.communicate(), timeout=10)
             if proc.returncode == 0:
                 output = stdout.decode().strip()
                 lines = output.splitlines()
-                return {
+                resp = {
                     "ok": True,
                     "hostname": lines[0] if lines else "",
                     "user": lines[1] if len(lines) > 1 else "",
                     "ssh_port": ssh_port,   # #677: effektiver Port für UI
                 }
-            return {"ok": False, "error": stderr.decode().strip()[:300], "ssh_port": ssh_port}
+                if policy.host_key_unverified:
+                    resp["host_key_mode"] = "warn"
+                    resp["host_key_unverified"] = True
+                return resp
+            stderr_txt = stderr.decode().strip()
+            resp = {
+                "ok": False,
+                "error": stderr_txt[:300],
+                "ssh_port": ssh_port,
+            }
+            # #685: verified + exit_code!=0 → host_key_changed möglich → eigenes Flag.
+            if policy.verified and ssh_known_hosts.is_host_key_changed(stderr_txt):
+                resp["host_key_changed"] = True
+                resp["host_key_mode"] = policy.enforcement
+            elif policy.host_key_unverified:
+                resp["host_key_mode"] = "warn"
+                resp["host_key_unverified"] = True
+            return resp
         except _asyncio.TimeoutError:
             return {"ok": False, "error": "Timeout - Host nicht erreichbar"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+        finally:
+            ssh_known_hosts.cleanup_known_hosts_path(policy.known_hosts_path)
 
     @auth_router.get("/me/wks/ollama-models")
     async def get_wks_ollama_models(auth: tuple = Depends(require_auth)):

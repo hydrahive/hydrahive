@@ -25,6 +25,8 @@ import json
 import logging
 import os
 import re
+import tempfile
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -513,3 +515,153 @@ def verify_host_key(
         if verified_fps and not (verified_fps & observed_fps):
             return "changed"
     return _compute_host_status(stored)
+
+
+# ────────────────────────────────────────────── SSH-Policy-Resolution (#685)
+#
+# Zentrale Policy-Resolution für SSH-Aufrufe gegen Targets (Server/WKS).
+# Callsites (target_resolution.run_ssh_command, router_user_integrations WKS-
+# Pfade) rufen prepare_host_key_policy() auf und bauen daraus ihre SSH-Args.
+#
+# Gehört hierher (und nicht nach target_resolution), weil die Entscheidung
+# "verified / unverified / blocked" Store-Format-Wissen braucht; die
+# Mismatch-Regex erkennt Store-relevante OpenSSH-Meldungen.
+
+# Stabile OpenSSH-Fragmente bei Host-Key-Mismatch. SSH läuft mit LC_ALL=C,
+# damit die Meldungen englisch und verlässlich sind.
+HOST_KEY_CHANGED_RE = re.compile(
+    r"Host key verification failed"
+    r"|REMOTE HOST IDENTIFICATION HAS CHANGED"
+    r"|Offending .* key",
+)
+
+
+def _write_temp_known_hosts(host: str, verified_keys: list[dict]) -> str:
+    """Schreibt eine temporäre OpenSSH-known_hosts-Datei mit ausschließlich
+    verified Keys für `host`. Caller ist verantwortlich für Cleanup.
+
+    Format pro Zeile: ``<host> <algorithm> <public_key_base64>``
+    """
+    fd, path = tempfile.mkstemp(prefix="hydrahive_known_hosts_", suffix=".tmp")
+    try:
+        lines = []
+        for k in verified_keys:
+            algo = k.get("algorithm")
+            pub = k.get("public_key")
+            if algo and pub:
+                lines.append(f"{host} {algo} {pub}\n")
+        with os.fdopen(fd, "w", encoding="ascii") as f:
+            f.writelines(lines)
+        os.chmod(path, 0o600)
+        return path
+    except Exception:
+        try:
+            os.close(fd)
+        except Exception:
+            pass
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+        raise
+
+
+@dataclass(frozen=True)
+class HostKeyPolicy:
+    """Resolved SSH host-key policy für einen einzelnen SSH-Call.
+
+    Drei mögliche Endzustände:
+
+    - ``blocked=True`` → Aufrufer darf SSH nicht starten (strict-Mode ohne
+      verified Key). ``blocked_reason`` ist user-facing-Text.
+    - ``verified=True`` → temp known_hosts mit verified Keys + ``StrictHostKeyChecking=yes``.
+      Aufrufer prüft bei exit_code != 0 stderr gegen :data:`HOST_KEY_CHANGED_RE`.
+    - sonst (warn ohne verified) → ``UserKnownHostsFile=/dev/null`` + ``StrictHostKeyChecking=no``,
+      markiert ``host_key_unverified=True`` für die Response/Log.
+
+    Der Aufrufer ist verantwortlich für ``unlink(known_hosts_path)`` wenn gesetzt.
+    """
+    ssh_opts: list[str] = field(default_factory=list)
+    known_hosts_path: str | None = None
+    enforcement: Literal["warn", "strict"] = "warn"
+    verified: bool = False
+    host_key_unverified: bool = False
+    blocked: bool = False
+    blocked_reason: str = ""
+
+
+# Konstanter user-facing Text, in router_user_integrations / tool-results
+# einheitlich verwendbar.
+HOST_KEY_UNVERIFIED_REASON = (
+    "Host-Key nicht vertraut — Admin muss im Admin-Panel "
+    "unter Server → Host-Keys einen Fingerprint genehmigen."
+)
+
+
+def prepare_host_key_policy(
+    target_type: str,
+    target_id: str,
+    host: str,
+) -> HostKeyPolicy:
+    """Resolved die SSH-Host-Key-Policy für ein einzelnes Target.
+
+    Liest ``get_verified_keys()`` und ``get_enforcement_mode()``, baut daraus
+    SSH-Optionen, optional eine temporäre known_hosts-Datei und meldet, ob
+    der Aufrufer SSH überhaupt starten darf.
+
+    Ruft KEIN ssh-keyscan auf — die Funktion ist File-lokal und dashboard-safe.
+    """
+    enforcement = get_enforcement_mode()
+    try:
+        verified_keys = get_verified_keys(target_type, target_id)
+    except Exception as exc:  # pragma: no cover — defensive, Store sollte immer lesbar sein
+        logger.debug("get_verified_keys(%s,%s) failed: %s", target_type, target_id, exc)
+        verified_keys = []
+
+    if not verified_keys:
+        if enforcement == "strict":
+            return HostKeyPolicy(
+                enforcement="strict",
+                host_key_unverified=True,
+                blocked=True,
+                blocked_reason=HOST_KEY_UNVERIFIED_REASON,
+            )
+        return HostKeyPolicy(
+            ssh_opts=[
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "GlobalKnownHostsFile=/dev/null",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "LogLevel=ERROR",
+            ],
+            enforcement="warn",
+            host_key_unverified=True,
+        )
+
+    path = _write_temp_known_hosts(host, verified_keys)
+    return HostKeyPolicy(
+        ssh_opts=[
+            "-o", f"UserKnownHostsFile={path}",
+            "-o", "GlobalKnownHostsFile=/dev/null",
+            "-o", "StrictHostKeyChecking=yes",
+        ],
+        known_hosts_path=path,
+        enforcement=enforcement,
+        verified=True,
+    )
+
+
+def is_host_key_changed(stderr: str) -> bool:
+    """True wenn stderr eine OpenSSH-Mismatch-Meldung enthält."""
+    if not stderr:
+        return False
+    return bool(HOST_KEY_CHANGED_RE.search(stderr))
+
+
+def cleanup_known_hosts_path(path: str | None) -> None:
+    """Best-effort unlink der temporären known_hosts-Datei. Schluckt Fehler."""
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except Exception:
+        pass

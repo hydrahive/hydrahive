@@ -142,3 +142,105 @@ class TestMissingTokenDir:
         token_file = tmp_path / "testagent_discord.json"
         token_file.write_text('{"bot_token": ""}')
         assert discord_agent.load_discord_config("testagent") is None
+
+
+# ============================================================= WKS host-key policy (#685)
+
+class TestWksConnectedHostKeyEnforcement:
+    """#685: _wks_connected erkennt host-key-Policy.
+
+    - strict + kein verified Key → fail-closed (kein SSH-Call).
+    - warn + kein verified Key → SSH läuft kompatibel (Alt-Verhalten).
+    - verified + exit_code!=0 mit Host-Key-Mismatch → False + Log-Warning.
+    """
+
+    @pytest.fixture
+    def wks_env(self, tmp_path):
+        """Legt wks-keys-Dir + dummy Key für user 'till' an."""
+        wks_keys_dir = tmp_path / "wks-keys"
+        wks_keys_dir.mkdir()
+        (wks_keys_dir / "till").write_text("dummy-key-material", encoding="utf-8")
+        return {
+            "wks": {"ip": "10.0.0.50", "ssh_user": "till", "ssh_port": 22},
+            "wks_keys_dir": wks_keys_dir,
+        }
+
+    @pytest.fixture
+    def skh_state(self, monkeypatch):
+        from hydrahive_core import ssh_known_hosts as skh
+        state = {"mode": "warn", "verified_keys": []}
+        monkeypatch.setattr(skh, "get_enforcement_mode", lambda: state["mode"])
+        monkeypatch.setattr(skh, "get_verified_keys", lambda t, i: list(state["verified_keys"]))
+        return state
+
+    def test_strict_unverified_blocks_without_ssh_call(self, wks_env, skh_state, monkeypatch):
+        skh_state["mode"] = "strict"
+        skh_state["verified_keys"] = []
+        sp_calls = []
+        monkeypatch.setattr(rui._sp, "run", lambda *a, **kw: sp_calls.append((a, kw)) or None)
+
+        assert rui._wks_connected("till", wks_env["wks"], wks_env["wks_keys_dir"]) is False
+        # Kein SSH-Call angestoßen, weil policy.blocked=True
+        assert sp_calls == []
+
+    def test_warn_unverified_runs_ssh(self, wks_env, skh_state, monkeypatch):
+        from types import SimpleNamespace
+        skh_state["mode"] = "warn"
+        skh_state["verified_keys"] = []
+        sp_calls = []
+
+        def fake_run(args, **kw):
+            sp_calls.append(args)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(rui._sp, "run", fake_run)
+
+        assert rui._wks_connected("till", wks_env["wks"], wks_env["wks_keys_dir"]) is True
+        assert len(sp_calls) == 1
+        # warn-Mode: StrictHostKeyChecking=no mitgegeben
+        assert "StrictHostKeyChecking=no" in sp_calls[0]
+
+    def test_verified_host_key_changed_returns_false(self, wks_env, skh_state, monkeypatch):
+        from types import SimpleNamespace
+        skh_state["mode"] = "warn"
+        skh_state["verified_keys"] = [{
+            "algorithm": "ssh-ed25519",
+            "public_key": "AAAAC3NzaC1lZDI1NTE5AAAAIexample",
+            "fingerprint_sha256": "SHA256:aaaa1111bbbb2222",
+        }]
+
+        def fake_run(args, **kw):
+            return SimpleNamespace(
+                returncode=255,
+                stdout="",
+                stderr="@@@@@@@\nHost key verification failed.\n",
+            )
+
+        monkeypatch.setattr(rui._sp, "run", fake_run)
+
+        assert rui._wks_connected("till", wks_env["wks"], wks_env["wks_keys_dir"]) is False
+
+    def test_verified_pins_with_temp_known_hosts(self, wks_env, skh_state, monkeypatch):
+        from types import SimpleNamespace
+        skh_state["mode"] = "warn"
+        skh_state["verified_keys"] = [{
+            "algorithm": "ssh-ed25519",
+            "public_key": "AAAAC3NzaC1lZDI1NTE5AAAAIexample",
+            "fingerprint_sha256": "SHA256:aaaa1111bbbb2222",
+        }]
+        args_seen = []
+
+        def fake_run(args, **kw):
+            args_seen.extend(args)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(rui._sp, "run", fake_run)
+
+        assert rui._wks_connected("till", wks_env["wks"], wks_env["wks_keys_dir"]) is True
+        assert "StrictHostKeyChecking=yes" in args_seen
+        path_entries = [a for a in args_seen if isinstance(a, str) and a.startswith("UserKnownHostsFile=")]
+        assert len(path_entries) == 1
+
+    def test_missing_wks_config_returns_false(self, tmp_path, skh_state):
+        # Kein IP → False vor Policy-Resolution
+        assert rui._wks_connected("till", {"ip": ""}, tmp_path) is False

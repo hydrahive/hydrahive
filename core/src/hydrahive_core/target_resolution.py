@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import re
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,13 +33,9 @@ _SAFE_ID = re.compile(r"^[a-z0-9_-]+$")
 _DEFAULT_WKS_SSH_PORT = 22
 MAX_SSH_OUTPUT = 32000
 
-# #674-B: Stabile OpenSSH-Fragmente bei Host-Key-Mismatch. ssh läuft mit
-# LC_ALL=C, damit die Meldungen englisch und verlässlich sind.
-_HOST_KEY_CHANGED_RE = re.compile(
-    r"Host key verification failed"
-    r"|REMOTE HOST IDENTIFICATION HAS CHANGED"
-    r"|Offending .* key",
-)
+# #685: Host-key-Mismatch-Regex wohnt jetzt in ssh_known_hosts (Store-Wissen),
+# bleibt hier als Alias verfügbar für bestehende Call-Sites/Tests.
+_HOST_KEY_CHANGED_RE = ssh_known_hosts.HOST_KEY_CHANGED_RE
 
 
 class TargetAccessError(Exception):
@@ -227,34 +222,9 @@ def _redact_key(text: str, key_path: Path, known_hosts_path: str | None = None) 
     return text
 
 
-def _write_temp_known_hosts(host: str, verified_keys: list[dict]) -> str:
-    """Schreibt eine temporäre OpenSSH-known_hosts-Datei mit ausschließlich
-    verified Keys für `host`. Caller ist verantwortlich für Cleanup.
-
-    Format pro Zeile: `<host> <algorithm> <public_key_base64>`
-    """
-    fd, path = tempfile.mkstemp(prefix="hydrahive_known_hosts_", suffix=".tmp")
-    try:
-        lines = []
-        for k in verified_keys:
-            algo = k.get("algorithm")
-            pub = k.get("public_key")
-            if algo and pub:
-                lines.append(f"{host} {algo} {pub}\n")
-        with os.fdopen(fd, "w", encoding="ascii") as f:
-            f.writelines(lines)
-        os.chmod(path, 0o600)
-        return path
-    except Exception:
-        try:
-            os.close(fd)
-        except Exception:
-            pass
-        try:
-            os.unlink(path)
-        except Exception:
-            pass
-        raise
+# #685: temp-known_hosts-Write wohnt in ssh_known_hosts; Alias für stabile
+# Import-Pfade bestehender Tests / Module.
+_write_temp_known_hosts = ssh_known_hosts._write_temp_known_hosts
 
 
 async def run_ssh_command(
