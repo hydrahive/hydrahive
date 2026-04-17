@@ -1493,6 +1493,96 @@ def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     )
 
 
+def test_invariant17_core_independent_recovery_updater_wiring():
+    """17 (#703): Core-independent Recovery-Updater-Pfad muss intakt sein.
+
+    Gegen-Regression-Test für die Bootstrap-Falle aus dem #687-Vorfall: wenn
+    hydrahive-core beim Start crasht, ist der Web-Update-Button tot. Der
+    Recovery-Pfad muss unabhängig davon funktionieren.
+
+    Prüft:
+    - installer/hydrahive-selfupdate.timer existiert und triggert
+      hydrahive-autoupdate.service (nicht den normalen selfupdate-Service,
+      damit der disable_auto_update-Flag nur den automatischen Pfad betrifft).
+    - installer/hydrahive-autoupdate.service existiert und setzt
+      HYDRAHIVE_AUTO_UPDATE=1 als Environment.
+    - installer/install.sh installiert Timer + autoupdate.service und
+      aktiviert den Timer mit `enable --now`.
+    - installer/update.sh aktualisiert beide neuen Unit-Files.
+    - installer/update.sh respektiert den HYDRAHIVE_AUTO_UPDATE-Env
+      zusammen mit /etc/hydrahive/disable_auto_update.
+    - installer/update.sh hat `flock -n` für paralleles Locking.
+    - installer/uninstall.sh entfernt Timer + autoupdate.service.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    installer = repo_root / "installer"
+
+    timer_unit = installer / "hydrahive-selfupdate.timer"
+    auto_svc = installer / "hydrahive-autoupdate.service"
+    install_sh = installer / "install.sh"
+    update_sh = installer / "update.sh"
+    uninstall_sh = installer / "uninstall.sh"
+
+    assert timer_unit.exists(), f"Timer-Unit fehlt: {timer_unit.relative_to(repo_root)}"
+    assert auto_svc.exists(), f"Auto-Update-Service-Unit fehlt: {auto_svc.relative_to(repo_root)}"
+
+    timer_txt = timer_unit.read_text(encoding="utf-8")
+    # Timer ruft den Auto-Pfad, nicht den normalen selfupdate-Service.
+    assert "Unit=hydrahive-autoupdate.service" in timer_txt, (
+        "Timer muss hydrahive-autoupdate.service triggern, nicht "
+        "hydrahive-selfupdate.service — sonst greift der disable_auto_update-"
+        "Flag auch für Web-Button-Aufrufe."
+    )
+    assert "OnBootSec=" in timer_txt and "OnUnitActiveSec=" in timer_txt, (
+        "Timer muss OnBootSec (schneller Recovery nach Boot) und "
+        "OnUnitActiveSec (periodischer Safety-Net) definieren."
+    )
+    assert "WantedBy=timers.target" in timer_txt
+
+    auto_txt = auto_svc.read_text(encoding="utf-8")
+    assert "Environment=HYDRAHIVE_AUTO_UPDATE=1" in auto_txt, (
+        "hydrahive-autoupdate.service muss HYDRAHIVE_AUTO_UPDATE=1 setzen "
+        "— das ist der einzige Weg, wie update.sh Timer- von Admin-Aufrufen "
+        "unterscheidet."
+    )
+    assert "ExecStart=/bin/bash /opt/hydrahive/update.sh" in auto_txt
+
+    install_txt = install_sh.read_text(encoding="utf-8")
+    assert "hydrahive-autoupdate.service" in install_txt, (
+        "install.sh installiert hydrahive-autoupdate.service nicht."
+    )
+    assert "hydrahive-selfupdate.timer" in install_txt
+    assert "enable --now hydrahive-selfupdate.timer" in install_txt, (
+        "install.sh muss den Timer mit `enable --now` aktivieren — "
+        "Recovery-Safety-Net darf nicht erst aktiviert werden müssen."
+    )
+
+    update_txt = update_sh.read_text(encoding="utf-8")
+    assert "hydrahive-autoupdate.service" in update_txt, (
+        "update.sh aktualisiert hydrahive-autoupdate.service nicht."
+    )
+    assert "hydrahive-selfupdate.timer" in update_txt, (
+        "update.sh aktualisiert hydrahive-selfupdate.timer nicht."
+    )
+    assert "HYDRAHIVE_AUTO_UPDATE" in update_txt, (
+        "update.sh prüft HYDRAHIVE_AUTO_UPDATE nicht — der Auto-Update-"
+        "Kill-Switch wirkt sonst auch auf Web-Button und manuelle Runs."
+    )
+    assert "disable_auto_update" in update_txt, (
+        "update.sh prüft /etc/hydrahive/disable_auto_update nicht."
+    )
+    assert "flock -n" in update_txt, (
+        "update.sh fehlt `flock -n` — parallele Aufrufe können zwei "
+        "rsync/build/restart-Läufe gleichzeitig starten."
+    )
+
+    uninstall_txt = uninstall_sh.read_text(encoding="utf-8")
+    assert "hydrahive-autoupdate" in uninstall_txt
+    assert "hydrahive-selfupdate.timer" in uninstall_txt
+
+
 def test_invariant16_update_sh_sources_runtime_dirs_before_core_restart():
     """16 (#704 Sprint A/D): installer/update.sh muss den Runtime-Dirs-Helper
     VOR ``systemctl restart hydrahive-core`` sourcen.

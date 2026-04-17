@@ -1,0 +1,18 @@
+[Unit]
+Description=HydraHive periodic self-update (recovery safety net)
+Documentation=file:///opt/hydrahive/docs/handbook.md
+
+[Timer]
+# #703: Core-independent recovery path. Wenn hydrahive-core tot ist, kann
+# der Web-Update-Button keine Fixes ziehen — dieser Timer übernimmt.
+# Triggert hydrahive-autoupdate.service (nicht hydrahive-selfupdate.service),
+# damit nur AUTOMATISCHE Aufrufe durch /etc/hydrahive/disable_auto_update
+# blockbar sind.
+OnBootSec=10min
+OnUnitActiveSec=12h
+Persistent=true
+AccuracySec=30min
+Unit=hydrahive-autoupdate.service
+
+[Install]
+WantedBy=timers.target

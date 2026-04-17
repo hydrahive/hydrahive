@@ -1139,22 +1139,65 @@ Der Update läuft in einem isolierten systemd-Transient-Unit — der Core kann s
 sudo bash /opt/hydrahive/update.sh
 ```
 
-### Automatische Updates (systemd)
+### Automatische Updates und Recovery (systemd)
 
-Der `hydrahive-selfupdate.service` ermöglicht geplante automatische Updates:
+Drei Update-Pfade mit klar getrennten Zuständigkeiten:
+
+| Pfad | Service-Unit | Vom Flag blockbar? |
+|---|---|---|
+| **Web-Button** (Admin → „Update jetzt" in der Console) | `hydrahive-selfupdate.service` | nein — expliziter Admin-Klick |
+| **Manueller Bash-Aufruf** (`sudo bash /opt/hydrahive/update.sh`) | direkt, kein Service | nein |
+| **Automatischer Timer** (alle 12 h, 10 min nach Boot) | `hydrahive-autoupdate.service` via `hydrahive-selfupdate.timer` | **ja** |
+
+#### Kill-Switch für Auto-Updates
 
 ```bash
-# Status prüfen
-sudo systemctl status hydrahive-selfupdate
+# Timer-Auto-Updates deaktivieren (Web-Button und manueller Run bleiben aktiv):
+sudo touch /etc/hydrahive/disable_auto_update
 
-# Manuell auslösen
-sudo systemctl start hydrahive-selfupdate
+# Wieder aktivieren:
+sudo rm /etc/hydrahive/disable_auto_update
 
-# Automatisch täglich um 03:00 Uhr (Beispiel-Cron):
-# sudo crontab -e → 0 3 * * * systemctl start hydrahive-selfupdate
+# Timer komplett ausschalten (alternativer Weg, nicht backup-portabel):
+sudo systemctl disable --now hydrahive-selfupdate.timer
 ```
 
-Der `update.sh` aktualisiert sich beim Update selbst — die neueste Version liegt immer unter `/opt/hydrahive/update.sh`.
+Der Flag blockt nur den Timer-Pfad. Wenn der Admin gezielt updaten will, egal
+ob Web oder Shell, geht das weiter — das ist Absicht.
+
+#### Recovery bei Core-Crash
+
+Wenn `hydrahive-core` nach einem Update nicht mehr startet, fällt der
+Web-Update-Button auch aus (er läuft über den Core). Dafür gibt's den
+Recovery-Pfad über den Selfupdate-Service, der unabhängig vom Core ist:
+
+```bash
+# Update manuell auslösen — zieht den aktuellen main-Stand, restartet Core
+sudo systemctl start hydrahive-selfupdate.service
+
+# Live-Log während des Updates
+sudo journalctl -u hydrahive-selfupdate -f
+
+# Status nach dem Update
+cat /var/run/hydrahive-update.json
+```
+
+Der Timer springt zudem automatisch nach 10 min Uptime an. Wenn Admin den
+Flag nicht gesetzt hat und der Core noch nicht läuft, wird die Instanz
+sich innerhalb von 22 min (10 min OnBoot + 12 h max Retry) selbst heilen.
+
+Allgemeines Status-Prüfen:
+
+```bash
+sudo systemctl status hydrahive-selfupdate.timer
+sudo systemctl list-timers --all | grep hydrahive
+sudo systemctl status hydrahive-selfupdate hydrahive-autoupdate
+```
+
+Der `update.sh` aktualisiert sich beim Update selbst — die neueste Version
+liegt immer unter `/opt/hydrahive/update.sh`. Parallele Update-Läufe sind
+via `flock` auf `/var/run/hydrahive-update.lock` abgesichert; der zweite
+Aufruf beendet sich still.
 
 ---
 

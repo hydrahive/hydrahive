@@ -361,3 +361,20 @@ tail -f /var/log/nginx/access.log         # nginx Zugriffe
 tail -f /var/log/hydrahive-update.log     # Update-Log
 /var/run/hydrahive-update.json            # Letzter Update-Status
 ```
+
+## Update-Architektur (#703)
+
+Der Web-Update-Button in der Console hängt am laufenden `hydrahive-core` —
+wenn ein bad deploy den Core beim Start crasht, fällt die UI-Seite des
+Update-Flows mit aus. Als Core-unabhängiger Safety-Net läuft
+`hydrahive-selfupdate.timer` (alle 12 h, plus 10 min nach Boot) und
+triggert `hydrahive-autoupdate.service`, der ebenfalls `update.sh` ruft
+aber mit `HYDRAHIVE_AUTO_UPDATE=1` markiert ist. Dieser Pfad wird durch
+`/etc/hydrahive/disable_auto_update` deaktiviert, ohne den Web-Button
+oder einen manuellen `sudo bash update.sh` zu blockieren.
+
+Parallele Update-Läufe (Timer + Web + manuell) werden via `flock -n` auf
+`/var/run/hydrahive-update.lock` serialisiert. Der zweite Aufruf exitet
+still mit 0, damit systemd den Service nicht als failed markiert.
+
+Details: siehe `handbook.md`, Abschnitt „Automatische Updates und Recovery".

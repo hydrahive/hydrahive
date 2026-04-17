@@ -1,0 +1,20 @@
+[Unit]
+Description=HydraHive timer-driven auto-update (respects /etc/hydrahive/disable_auto_update)
+Documentation=file:///opt/hydrahive/docs/handbook.md
+After=network-online.target gitea.service
+Wants=network-online.target
+
+[Service]
+# #703: Separater Service-Pfad für den Timer — damit update.sh erkennen kann,
+# dass der Aufruf automatisch ist (HYDRAHIVE_AUTO_UPDATE=1) und bei gesetztem
+# /etc/hydrahive/disable_auto_update früh exitet. Der manuelle Web-Button
+# und `systemctl start hydrahive-selfupdate.service` nutzen weiterhin den
+# separaten hydrahive-selfupdate.service und sind NICHT vom Flag blockiert.
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/hydrahive
+Environment=HYDRAHIVE_AUTO_UPDATE=1
+ExecStart=/bin/bash /opt/hydrahive/update.sh
+StandardOutput=journal
+StandardError=journal

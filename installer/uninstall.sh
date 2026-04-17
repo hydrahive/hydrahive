@@ -44,6 +44,8 @@ SERVICES=(
     hydrahive-amem
     hydrahive-whatsapp-bridge
     hydrahive-selfupdate
+    hydrahive-autoupdate
+    hydrahive-selfupdate.timer
     gitea
     tailscaled
 )
@@ -70,6 +72,7 @@ for f in \
     /etc/systemd/system/hydrahive-amem.service \
     /etc/systemd/system/hydrahive-whatsapp-bridge.service \
     /etc/systemd/system/hydrahive-selfupdate.service \
+    /etc/systemd/system/hydrahive-autoupdate.service \
     /etc/systemd/system/hydrahive-selfupdate.timer \
     /lib/systemd/system/gitea.service \
     /etc/systemd/system/gitea.service; do

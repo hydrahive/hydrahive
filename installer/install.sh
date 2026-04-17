@@ -147,13 +147,21 @@ install -m 755 "$(dirname "${BASH_SOURCE[0]}")/apply-network-profile.sh" "${HYDR
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-network-profile.sudoers" /etc/sudoers.d/hydrahive-network-profile
 success "Network-Profile-Skript installiert"
 
-# Self-Update Service + sudo-Regel installieren
+# Self-Update Service + Auto-Update Service + Timer + sudo-Regel installieren
+# #703: zwei Services — selfupdate.service für manuelle/Web-Triggers,
+# autoupdate.service für Timer-Auto-Updates (mit HYDRAHIVE_AUTO_UPDATE=1).
 install -m 644 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-selfupdate.service" /etc/systemd/system/hydrahive-selfupdate.service
+install -m 644 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-autoupdate.service" /etc/systemd/system/hydrahive-autoupdate.service
+install -m 644 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-selfupdate.timer" /etc/systemd/system/hydrahive-selfupdate.timer
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-update.sudoers" /etc/sudoers.d/hydrahive-update
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-provisioner.sudoers" /etc/sudoers.d/hydrahive-provisioner
 install -m 440 "$(dirname "${BASH_SOURCE[0]}")/hydrahive-installer.sudoers" /etc/sudoers.d/hydrahive-installer
 systemctl daemon-reload
-success "Self-Update-Service installiert"
+# Recovery-Safety-Net direkt aktivieren — Kill-Switch für Admin, die
+# das nicht wollen: `touch /etc/hydrahive/disable_auto_update`.
+systemctl enable --now hydrahive-selfupdate.timer 2>/dev/null || \
+    warn "hydrahive-selfupdate.timer konnte nicht aktiviert werden — manuell prüfen"
+success "Self-Update + Auto-Update-Timer installiert"
 
 # Konfig-Dateien vorbereiten (hydrahive-core braucht Schreibrechte)
 for _f in jwt_secret internal_secret llm_env llm_config.json gitea_config.json; do

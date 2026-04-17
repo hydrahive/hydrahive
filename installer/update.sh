@@ -46,6 +46,24 @@ trap on_error ERR
 main() {
     [ "$(id -u)" -eq 0 ] || error "Bitte als root ausführen: sudo bash $0"
 
+    # #703: Auto-Update-Kill-Switch. Nur aktiv wenn via
+    # hydrahive-autoupdate.service (Timer) aufgerufen — Web-Trigger über
+    # hydrahive-selfupdate.service und `sudo bash update.sh` ignorieren
+    # den Flag absichtlich.
+    if [ "${HYDRAHIVE_AUTO_UPDATE:-0}" = "1" ] && [ -f /etc/hydrahive/disable_auto_update ]; then
+        info "auto-update disabled via /etc/hydrahive/disable_auto_update"
+        exit 0
+    fi
+
+    # #703: Locking gegen parallele Update-Läufe (Timer + Web-Button etc.).
+    # non-blocking — wer den Lock nicht kriegt, exitet still mit 0 damit
+    # systemd den Service nicht als failed markiert.
+    exec 200>/var/run/hydrahive-update.lock
+    if ! flock -n 200; then
+        info "Update läuft bereits (lockfile /var/run/hydrahive-update.lock) — Abbruch"
+        exit 0
+    fi
+
     # GitHub ist primäre Quelle — funktioniert für alle User
     # Lokales Gitea wird als Override genutzt wenn /etc/hydrahive/use_local_gitea existiert
     local CLONE_URL="${GITHUB_REPO}"
@@ -622,6 +640,19 @@ PYEOF
         cp "${TMPDIR_BASE}/installer/hydrahive-selfupdate.service" /etc/systemd/system/
         systemctl daemon-reload
         info "hydrahive-selfupdate.service aktualisiert"
+    fi
+    # #703: Auto-Update-Pfad (Timer + separater Service). Nur Dateien
+    # aktualisieren — enable/disable-State bleibt wie er ist, damit
+    # Admins die den Timer bewusst disabled haben nicht überrascht werden.
+    if [ -f "${TMPDIR_BASE}/installer/hydrahive-autoupdate.service" ]; then
+        cp "${TMPDIR_BASE}/installer/hydrahive-autoupdate.service" /etc/systemd/system/
+        systemctl daemon-reload
+        info "hydrahive-autoupdate.service aktualisiert"
+    fi
+    if [ -f "${TMPDIR_BASE}/installer/hydrahive-selfupdate.timer" ]; then
+        cp "${TMPDIR_BASE}/installer/hydrahive-selfupdate.timer" /etc/systemd/system/
+        systemctl daemon-reload
+        info "hydrahive-selfupdate.timer aktualisiert"
     fi
 
     # nginx-Konfig wird absichtlich NICHT automatisch aktualisiert.
