@@ -30,6 +30,13 @@ GITEA_ADMIN="hydrahive"
 GITEA_CONFIG_FILE="/etc/hydrahive/gitea_config.json"
 NGINX_GITEA_CONF="/etc/nginx/sites-available/gitea"
 
+_gitea_admin() {
+    sudo -u "${GITEA_USER}" env \
+        HOME="${GITEA_WORK_DIR}" \
+        GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
+        "${GITEA_BINARY}" "$@"
+}
+
 # Guard-Variable für frühzeitigen Abbruch (ersetzt bare `return` außerhalb Funktion)
 _GITEA_SKIP=0
 
@@ -207,38 +214,58 @@ if [ "${_GITEA_SKIP}" -eq 0 ]; then
 
     if [ "${EXISTING_USER}" = "missing" ]; then
         info "Lege Gitea-Admin '${GITEA_ADMIN}' an..."
-        "${GITEA_BINARY}" admin user create \
+        _gitea_admin_log="$(mktemp)"
+        if _gitea_admin admin user create \
             --config "${GITEA_CONF}" \
             --work-path "${GITEA_WORK_DIR}" \
             --username "${GITEA_ADMIN}" \
             --password "${GITEA_ADMIN_PASS}" \
             --email "admin@hydrahive.local" \
             --admin \
-            --must-change-password=false 2>&1 | grep -v "^$" || true
-        success "Gitea-Admin '${GITEA_ADMIN}' angelegt"
+            --must-change-password=false >"${_gitea_admin_log}" 2>&1; then
+            grep -v "^$" "${_gitea_admin_log}" || true
+            rm -f "${_gitea_admin_log}"
+            success "Gitea-Admin '${GITEA_ADMIN}' angelegt"
+        else
+            grep -v "^$" "${_gitea_admin_log}" || true
+            rm -f "${_gitea_admin_log}"
+            warn "Gitea-Admin '${GITEA_ADMIN}' konnte nicht angelegt werden — Token wird übersprungen"
+            _GITEA_SKIP=1
+        fi
     else
         info "Gitea-Admin '${GITEA_ADMIN}' bereits vorhanden — aktualisiere Passwort"
-        "${GITEA_BINARY}" admin user change-password \
+        _gitea_admin_log="$(mktemp)"
+        if _gitea_admin admin user change-password \
             --config "${GITEA_CONF}" \
             --work-path "${GITEA_WORK_DIR}" \
             --username "${GITEA_ADMIN}" \
-            --password "${GITEA_ADMIN_PASS}" 2>&1 | grep -v "^$" || true
-        info "Gitea-Admin '${GITEA_ADMIN}' Passwort aktualisiert"
+            --password "${GITEA_ADMIN_PASS}" >"${_gitea_admin_log}" 2>&1; then
+            grep -v "^$" "${_gitea_admin_log}" || true
+            rm -f "${_gitea_admin_log}"
+            info "Gitea-Admin '${GITEA_ADMIN}' Passwort aktualisiert"
+        else
+            grep -v "^$" "${_gitea_admin_log}" || true
+            rm -f "${_gitea_admin_log}"
+            warn "Gitea-Admin '${GITEA_ADMIN}' Passwort konnte nicht aktualisiert werden — Token wird übersprungen"
+            _GITEA_SKIP=1
+        fi
     fi
 
     # API-Token generieren (immer neu — vorherige werden ungültig nach Restart)
-    GITEA_TOKEN=$(sudo -u "${GITEA_USER}" GITEA_WORK_DIR="${GITEA_WORK_DIR}" \
-        "${GITEA_BINARY}" admin user generate-access-token \
-        --config "${GITEA_CONF}" \
-        --work-path "${GITEA_WORK_DIR}" \
-        --username "${GITEA_ADMIN}" \
-        --token-name "hydrahive-core-$(date +%s)" \
-        --scopes "write:repository,read:repository,write:user,read:user,write:issue,read:issue,write:notification" \
-        --raw 2>/dev/null | tr -d '[:space:]') || true
+    GITEA_TOKEN=""
+    if [ "${_GITEA_SKIP}" -eq 0 ]; then
+        GITEA_TOKEN=$(_gitea_admin admin user generate-access-token \
+            --config "${GITEA_CONF}" \
+            --work-path "${GITEA_WORK_DIR}" \
+            --username "${GITEA_ADMIN}" \
+            --token-name "hydrahive-core-$(date +%s)" \
+            --scopes "write:repository,read:repository,write:user,read:user,write:issue,read:issue,write:notification" \
+            --raw 2>/dev/null | tr -d '[:space:]') || true
 
-    if [ -z "${GITEA_TOKEN}" ]; then
-        warn "API-Token konnte nicht generiert werden — Git-Tools arbeiten ohne Authentifizierung"
-        GITEA_TOKEN=""
+        if [ -z "${GITEA_TOKEN}" ]; then
+            warn "API-Token konnte nicht generiert werden — Git-Tools arbeiten ohne Authentifizierung"
+            GITEA_TOKEN=""
+        fi
     fi
 
     # Token in /etc/hydrahive/gitea_config.json speichern

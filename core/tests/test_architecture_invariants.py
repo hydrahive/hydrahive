@@ -1689,6 +1689,50 @@ def test_invariant25_agentlink_git_safe_directory_registered_before_pull():
     )
 
 
+def test_invariant26_gitea_admin_cli_runs_as_git_user():
+    """26: Gitea Admin-CLI darf nicht als root laufen.
+
+    Gitea verweigert Admin-Kommandos als root ("Gitea is not supposed to be
+    run as root"). Der Installer muss Admin-User, Passwort-Update und
+    Token-Erzeugung konsequent ueber einen ``sudo -u git`` Wrapper ausfuehren
+    und darf Fehler nicht per Pipe/``|| true`` als Erfolg maskieren.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    gitea_sh = repo_root / "installer" / "modules" / "10_gitea.sh"
+    text = gitea_sh.read_text(encoding="utf-8")
+
+    assert "_gitea_admin() {" in text
+    assert 'sudo -u "${GITEA_USER}" env' in text, (
+        "10_gitea.sh braucht einen Wrapper, der Gitea-Admin-Kommandos als "
+        "Gitea-User ausfuehrt."
+    )
+    assert 'if _gitea_admin admin user create' in text, (
+        "Gitea Admin-User-Erstellung muss ueber _gitea_admin laufen und den "
+        "Exitcode auswerten."
+    )
+    assert 'if _gitea_admin admin user change-password' in text, (
+        "Gitea Passwort-Update muss ueber _gitea_admin laufen und den "
+        "Exitcode auswerten."
+    )
+    assert 'GITEA_TOKEN=$(_gitea_admin admin user generate-access-token' in text, (
+        "Gitea Token-Erzeugung muss ueber _gitea_admin laufen."
+    )
+    assert '"${GITEA_BINARY}" admin user create' not in text, (
+        "Gitea Admin-User-Erstellung laeuft noch direkt ueber das Binary, "
+        "also als root im Installer."
+    )
+    assert '"${GITEA_BINARY}" admin user change-password' not in text, (
+        "Gitea Passwort-Update laeuft noch direkt ueber das Binary, also als "
+        "root im Installer."
+    )
+    assert '| grep -v "^$" || true' not in text, (
+        "10_gitea.sh darf Gitea-CLI-Fehler nicht durch Pipe + || true "
+        "verschlucken."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die
