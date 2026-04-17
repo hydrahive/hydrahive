@@ -96,7 +96,7 @@ export function LanguageSwitcher() {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative h-full">
       <button
         ref={buttonRef}
         type="button"
@@ -104,12 +104,12 @@ export function LanguageSwitcher() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("layout.languageMenuLabel", { defaultValue: "Sprache wählen" })}
-        className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
+        className="flex h-full w-full items-center justify-center gap-1 rounded-2xl border border-white/10 bg-white/5 px-2 py-2 text-sm text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10"
       >
-        <span className="text-base leading-none" aria-hidden="true">{current.flag}</span>
+        <span className="text-sm leading-none" aria-hidden="true">{current.flag}</span>
         <span>{current.code.toUpperCase()}</span>
         <ChevronUp
-          className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-2.5 w-2.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           aria-hidden="true"
         />
       </button>
@@ -118,7 +118,7 @@ export function LanguageSwitcher() {
         <div
           role="menu"
           aria-label={t("layout.languageMenuLabel", { defaultValue: "Sprache wählen" })}
-          className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-white/10 bg-[hsl(var(--sidebar-background))] shadow-lg z-50"
+          className="absolute bottom-full left-0 mb-2 w-max min-w-full overflow-hidden rounded-2xl border border-white/10 bg-[hsl(var(--sidebar-background))] shadow-lg z-50"
         >
           {LANGUAGES.map((lang, i) => {
             const isActive = lang.code === current.code;
@@ -130,12 +130,12 @@ export function LanguageSwitcher() {
                 role="menuitemradio"
                 aria-checked={isActive}
                 onClick={() => choose(lang.code)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-sm text-left text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10 focus:bg-white/10 focus:outline-none ${isActive ? "bg-white/5 font-medium" : ""}`}
+                className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-2 text-sm text-left text-[hsl(var(--sidebar-foreground))] transition hover:bg-white/10 focus:bg-white/10 focus:outline-none ${isActive ? "bg-white/5 font-medium" : ""}`}
               >
                 <span className="text-base leading-none" aria-hidden="true">{lang.flag}</span>
                 <span>{lang.name}</span>
                 {isActive && (
-                  <span className="ml-auto text-xs text-[hsl(var(--sidebar-muted))]" aria-hidden="true">✓</span>
+                  <span className="ml-3 text-xs text-[hsl(var(--sidebar-muted))]" aria-hidden="true">✓</span>
                 )}
               </button>
             );
