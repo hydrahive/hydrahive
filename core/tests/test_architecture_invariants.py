@@ -1493,6 +1493,76 @@ def test_invariant9d_agent_router_reuses_tool_confirm_request_model():
     )
 
 
+def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
+    """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
+    Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die
+    Ziel-Instanz rsynct wurde.
+
+    Hintergrund — .220-Vorfall am 2026-04-17:
+    Der erste Sprint-A-Commit (321ad75) hat `update.sh` einen harten
+    ``error "Runtime-Helper fehlt"; exit 1`` verpasst, der den Helper nur
+    unter ``${HYDRAHIVE_DIR}/installer/lib/`` suchte. Diese Location
+    existierte aber auf keiner Instanz, weil `update.sh` das Verzeichnis
+    `installer/lib/` nie rsynct hatte. Ergebnis: update.sh crasht, neue
+    update.sh wird nie kopiert, Instanz hängt im Update-Loop fest — das
+    ist selbst die Bootstrap-Falle, die `#703` schließen sollte.
+
+    Hotfix 27ec3d8 hat drei Sachen geändert, die wir hier statisch
+    absichern:
+
+    1. Helper-Lookup primär aus ``${TMPDIR_BASE}/installer/lib/``
+       (frisch geklonter Tree, garantiert vorhanden wenn Repo intakt).
+    2. Fallback auf ``${HYDRAHIVE_DIR}/installer/lib/`` für den Fall,
+       dass TMPDIR den Tree nicht enthält (sollte nie passieren,
+       defensive Tiefe).
+    3. Wenn beide Pfade fehlen: ``warn`` statt ``error "Runtime-Helper
+       fehlt"`` / hartes ``exit 1``. Der Core-Hotfix 8f17e4f macht
+       Runtime-Dirs ohnehin tolerant; ein hartes Abbrechen hier ist
+       selbst die Falle.
+    4. ``installer/lib/`` wird nach ``${HYDRAHIVE_DIR}/installer/lib/``
+       rsynct — sonst findet Punkt 2 den Fallback nie.
+    """
+    from pathlib import Path as _Path
+    import re as _re
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    update_sh = repo_root / "installer" / "update.sh"
+    text = update_sh.read_text(encoding="utf-8")
+
+    # 1. Primär-Lookup aus TMPDIR_BASE.
+    assert '${TMPDIR_BASE}/installer/lib/ensure_runtime_dirs.sh' in text, (
+        "update.sh sucht Runtime-Helper nicht primär in ${TMPDIR_BASE}/installer/lib/ — "
+        "der frisch geklonte Tree ist die einzige garantierte Quelle."
+    )
+
+    # 2. Fallback-Lookup aus HYDRAHIVE_DIR.
+    assert '${HYDRAHIVE_DIR}/installer/lib/ensure_runtime_dirs.sh' in text, (
+        "update.sh hat keinen HYDRAHIVE_DIR-Fallback für den Runtime-Helper."
+    )
+
+    # 3. Kein harter Abbruch mehr im Helper-Block. Wir suchen nach der
+    #    alten Fehlermeldung — wenn sie zurückkehrt, ist das ein harter
+    #    ``error`` gefolgt von ``exit 1``, die exakte Bootstrap-Falle.
+    assert 'error "Runtime-Helper fehlt' not in text, (
+        "update.sh bricht bei fehlendem Runtime-Helper hart ab — das ist "
+        "genau die .220-Bootstrap-Falle aus #703 Hotfix 27ec3d8. Bitte auf "
+        "`warn` zurück, der Core-Hotfix 8f17e4f macht Runtime-Dirs ohnehin tolerant."
+    )
+
+    # 4. installer/lib/ wird in den Deployment-Tree rsynct.
+    # Wir prüfen, dass irgendwo `rsync` mit der lib-Source + HYDRAHIVE_DIR-Ziel
+    # vorkommt — flexibel, damit Formatierung (Zeilenumbrüche, Quotes) nicht bricht.
+    has_lib_rsync = _re.search(
+        r'rsync[^\n]*"\$\{TMPDIR_BASE\}/installer/lib/"[^\n]*"\$\{HYDRAHIVE_DIR\}/installer/lib/"',
+        text,
+    )
+    assert has_lib_rsync, (
+        "update.sh rsynct installer/lib/ nicht nach ${HYDRAHIVE_DIR}/installer/lib/. "
+        "Ohne diesen Step findet der HYDRAHIVE_DIR-Fallback den Helper nie und "
+        "wir verlassen uns allein auf TMPDIR — fragil."
+    )
+
+
 def test_invariant17_core_independent_recovery_updater_wiring():
     """17 (#703): Core-independent Recovery-Updater-Pfad muss intakt sein.
 
