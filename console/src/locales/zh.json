@@ -1,7 +1,7 @@
 {
   "_meta": {
     "note": "LLM-initial translation. Not native speaker quality. PRs welcome — see https://github.com/hydrahive/hydrahive/issues/692",
-    "tier": "A0 + A1 + A2 + B + C1 + C2 + C3 — 33 namespaces translated. Other sections fall back to English via i18next fallbackLng."
+    "tier": "A0 + A1 + A2 + B + C1 + C2 + C3 + C4 — all 40 namespaces translated. LLM-initial translation, PRs welcome for polish."
   },
   "nav": {
     "dashboard": "控制台",
@@ -1694,5 +1694,94 @@
     "step3": "步骤 3：添加对等节点",
     "step4": "步骤 4：测试连接",
     "step5": "步骤 5：激活"
+  },
+  "searchPage": {
+    "loading": "加载 SearXNG 状态中…",
+    "active": "● 活跃",
+    "inactive": "● 不活跃",
+    "title": "网络搜索",
+    "subtitle": "代理的本地元搜索引擎 — 无需 API 密钥、无追踪、多引擎并行。",
+    "statusLabel": "状态",
+    "refresh": "刷新",
+    "statusService": "systemd 服务",
+    "statusHttp": "HTTP :8888",
+    "statusInstall": "安装",
+    "statusConfig": "配置",
+    "notRunning": "SearXNG 未激活。安装方式：",
+    "testSearch": "测试搜索",
+    "enginesLabel": "引擎：",
+    "searchPlaceholder": "输入搜索查询…",
+    "searchButton": "搜索",
+    "resultCount": "{{count}} 条结果",
+    "suggestions": "建议：",
+    "configuredEngines": "已配置的引擎",
+    "noEngines": "未配置引擎",
+    "agentIntegration": "代理集成",
+    "agentIntegrationDesc": "在代理配置中启用 web_search 工具：",
+    "toAgents": "前往项目",
+    "loadError": "加载出错",
+    "genericError": "错误",
+    "notInstalledTitle": "SearXNG 未安装",
+    "notInstalledBody": "首次安装时未设置 SearXNG。点击「安装」以添加。",
+    "installBtn": "安装 SearXNG",
+    "installing": "安装中…",
+    "installSuccess": "安装成功！",
+    "installFailed": "安装失败 — 详见上方日志。",
+    "reload": "重新加载页面",
+    "statusJson": "JSON API",
+    "jsonNotEnabled": "settings.yml 中未启用 JSON 格式。重新运行安装器：sudo bash /opt/hydrahive/installer/modules/14_searxng.sh",
+    "fixJsonBtn": "修复 JSON 格式"
+  },
+  "schedules": {
+    "infoTitle": "定时任务",
+    "infoText": "Schedules 是自动执行的定时任务 — 例如每日报告、定期检查或每周汇总。使用 cron 表达式创建新的 schedule 并将其分配给代理和项目。",
+    "title": "定时任务",
+    "new": "新建 Schedule",
+    "newTitle": "创建 Schedule",
+    "editTitle": "编辑 Schedule",
+    "empty": "未配置 Schedule",
+    "confirmDelete": "删除 Schedule \"{{name}}\"？",
+    "fieldName": "名称",
+    "fieldProject": "项目",
+    "fieldAgent": "代理",
+    "fieldCron": "Cron 表达式",
+    "fieldTimezone": "时区",
+    "fieldMessage": "消息",
+    "fieldEnabled": "已启用",
+    "messagePlaceholder": "发送给代理的消息...",
+    "project": "项目",
+    "agent": "代理",
+    "lastRun": "上次运行",
+    "nextRun": "下次运行",
+    "enable": "启用",
+    "disable": "停用",
+    "runNow": "立即运行"
+  },
+  "heartbeat": {
+    "infoTitle": "什么是心跳任务？",
+    "infoText": "心跳任务是你的代理按计划运行的自动作业 — 例如检查邮件、创建报告或监控系统。你定义一条消息（任务）和一个时间计划。",
+    "helpTaskId": "任务的唯一名称（例如 'daily-report'、'check-mails'）",
+    "helpMessage": "代理将接收的指令 — 像给同事布置任务一样写",
+    "helpCron": "cron 格式的时间计划。示例：'0 8 * * *' = 每天 8:00，'*/30 * * * *' = 每 30 分钟，'0 9 * * 1' = 每周一 9:00",
+    "helpInterval": "cron 的替代方案：以秒为单位的间隔（例如 1800 = 每 30 分钟）"
+  },
+  "dexcom": {
+    "clickToLoad": "点击加载",
+    "history": "历史",
+    "liveTitle": "实时数据",
+    "loading": "加载中...",
+    "refresh": "刷新"
+  },
+  "brain": {
+    "infoTitle": "HydraBrain — 3D 系统总览",
+    "infoText": "3D 图表显示所有代理、工具、项目及其连接。用鼠标旋转视图，用滚轮缩放，点击节点查看详情。颜色：蓝色 = 代理，绿色 = 工具，橙色 = 项目，紫色 = 记忆。"
+  },
+  "account": {
+    "infoTitle": "你的账户",
+    "infoText": "在这里管理你的个人设置。更改密码、设置首选语言并配置个人资料。这些设置仅应用于你的账户，不会影响其他用户。"
+  },
+  "wks": {
+    "infoTitle": "工作站连接（WKS）",
+    "infoText": "通过 SSH 将你的代理连接到远程计算机。让你的代理能在 PC 或服务器上运行命令、读写文件。输入 IP 地址，生成 SSH 密钥并将其复制到目标机器。"
   }
 }
