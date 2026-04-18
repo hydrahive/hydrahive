@@ -12,11 +12,12 @@
  * wenn der Collab-Composer stabil ist.
  */
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Send, Square, X } from "lucide-react";
+import { ImagePlus, RefreshCw, Send, Square, X } from "lucide-react";
 import * as Y from "yjs";
 import getCaretCoordinates from "textarea-caret";
 import type { ProjectYjs } from "@/hooks/useProjectYjs";
 import type { HydraHiveRuntime } from "./hydrahive-runtime";
+import { CoachFeedbackCard } from "./ChatShell";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
 
@@ -165,27 +166,111 @@ export function CollabComposer({
     setTextareaVersion((v) => v + 1);
   };
 
-  const sendNow = async () => {
+  const sendNow = async (skipCoach = false) => {
     const text = yjs.ytext.toString().trim();
     if (!text || runtime.isRunning) return;
-    // Erst Y.Text clearen (remote users sehen sofort leer), dann senden.
-    // Bei Fehler bleibt der Server-Turn durch runtime selbst; der Y.Text
-    // ist aber schon leer. Zurückschreiben wäre unnatürlich — Till
-    // kann nochmal tippen, Fehler taucht als runtime.error auf.
-    yjs.clearText();
-    lastTextRef.current = "";
-    await runtime.sendText(text);
+    // sendText returnt true wenn Nachricht rausging, false wenn Coach
+    // (oder anderer Guard) sie abgefangen hat. Nur im Success-Fall Y.Text
+    // leeren — sonst verschwindet der Text beim User während die Coach-
+    // Card "Vorschlag übernehmen / trotzdem senden" anbietet.
+    const sent = await runtime.sendText(text, skipCoach);
+    if (sent) {
+      yjs.clearText();
+      lastTextRef.current = "";
+    }
+  };
+
+  const sendAnyway = () => {
+    const text = yjs.ytext.toString().trim();
+    if (!text) {
+      // Fallback auf aktuelles Coach-Feedback-Content wenn Textarea leer ist
+      const fb = runtime.coachFeedback?.content;
+      if (fb) void runtime.sendText(fb, true).then((ok) => { if (ok) yjs.clearText(); });
+      runtime.clearCoachFeedback();
+      return;
+    }
+    runtime.clearCoachFeedback();
+    void sendNow(true);
+  };
+
+  const useCoachSuggestion = () => {
+    const suggestion = runtime.coachFeedback?.suggestion;
+    if (!suggestion) return;
+    // Y.Text auf Suggestion umsetzen — alle Collab-User sehen das neue.
+    yjs.ydoc.transact(() => {
+      yjs.ytext.delete(0, yjs.ytext.length);
+      yjs.ytext.insert(0, suggestion);
+    }, "local");
+    runtime.clearCoachFeedback();
+    // Cursor ans Ende
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const len = suggestion.length;
+      try { ta.setSelectionRange(len, len); } catch { /* ignore */ }
+      ta.focus();
+    });
+  };
+
+  const useFollowUp = (text: string) => {
+    yjs.ydoc.transact(() => {
+      yjs.ytext.delete(0, yjs.ytext.length);
+      yjs.ytext.insert(0, text);
+    }, "local");
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      try { ta.setSelectionRange(text.length, text.length); } catch { /* ignore */ }
+      ta.focus();
+    });
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
-      void sendNow();
+      void sendNow(false);
     }
   };
 
   return (
     <>
+      {runtime.coachFeedback ? (
+        <div className="mx-auto mb-3 max-w-4xl">
+          <CoachFeedbackCard
+            reason={runtime.coachFeedback.reason}
+            suggestion={runtime.coachFeedback.suggestion}
+            onSendAnyway={sendAnyway}
+            onUseSuggestion={useCoachSuggestion}
+            onDismiss={runtime.clearCoachFeedback}
+          />
+        </div>
+      ) : null}
+      {runtime.followUpChips.length > 0 && !runtime.isRunning ? (
+        <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2">
+          {runtime.followUpChips.map((suggestion, index) => (
+            <button
+              key={`${suggestion}-${index}`}
+              type="button"
+              onClick={() => useFollowUp(suggestion)}
+              className="chip-candy rounded-full px-3 py-1.5 text-xs font-medium"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="mx-auto mb-2 flex max-w-4xl items-center gap-2">
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={runtime.coachEnabled}
+            onChange={(event) => runtime.toggleCoach(event.target.checked)}
+            className="h-3 w-3 rounded"
+          />
+          Prompt-Coach
+          {runtime.coachChecking ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+        </label>
+      </div>
       {runtime.pendingImages.length > 0 ? (
         <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2">
           {runtime.pendingImages.map((image, index) => (
@@ -266,7 +351,7 @@ export function CollabComposer({
         ) : null}
         <button
           type="button"
-          onClick={() => void sendNow()}
+          onClick={() => void sendNow(false)}
           disabled={disabled || runtime.isRunning}
           className={cn(
             "btn-candy inline-flex h-10 w-10 items-center justify-center rounded-xl",

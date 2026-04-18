@@ -460,7 +460,7 @@ function ConfirmBanner({
   );
 }
 
-function CoachFeedbackCard({
+export function CoachFeedbackCard({
   reason,
   suggestion,
   onSendAnyway,

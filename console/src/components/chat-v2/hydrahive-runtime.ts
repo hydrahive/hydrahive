@@ -340,9 +340,9 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     setMessages((prev) => prev.map((msg) => msg.id === id ? updater(msg) : msg));
   }, [ensureAssistant]);
 
-  const runSend = useCallback(async (content: string, skipCoach = false) => {
+  const runSend = useCallback(async (content: string, skipCoach = false): Promise<boolean> => {
     const images = pendingImages;
-    if ((!content && images.length === 0) || isRunning) return;
+    if ((!content && images.length === 0) || isRunning) return false;
 
     if (content.startsWith("/")) {
       const trimmed = content.slice(1);
@@ -352,10 +352,10 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
       if (onSlashCommandRef.current) {
         try {
           const handled = await onSlashCommandRef.current(cmd, args, content);
-          if (handled) return;
+          if (handled) return false;
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
-          return;
+          return false;
         }
       }
       // Built-in-Fallback: /clear und /help wirken auf jeder Chat-Page,
@@ -372,7 +372,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
         setError("");
         activeAssistantIdRef.current = null;
         broadcastAssistantIdRef.current = null;
-        return;
+        return false;
       }
       if (cmd === "/help") {
         setMessages((prev) => [...prev, systemMessage(
@@ -380,7 +380,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
           "`/clear` — Chat-Verlauf leeren\n" +
           "`/help` — diese Übersicht"
         )]);
-        return;
+        return false;
       }
     }
 
@@ -393,7 +393,7 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
         const feedback = await api.post<CoachFeedback>("/me/agent/coach", { content });
         if (!feedback.ok && feedback.suggestion) {
           setCoachFeedback({ ...feedback, content });
-          return;
+          return false;
         }
       } catch {
         // Coach ist optional; ein Fehler darf den Chat nicht blockieren.
@@ -478,14 +478,15 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
       abortRef.current = null;
       activeAssistantIdRef.current = null;
     }
+    return true;
   }, [coachEnabled, isRunning, pendingImages, target.extraBodyParams, target.streamEndpoint, updateAssistant]);
 
   const send = useCallback(async (message: AppendMessage) => {
     await runSend(appendMessageText(message));
   }, [runSend]);
 
-  const sendText = useCallback(async (content: string, skipCoach = false) => {
-    await runSend(content.trim(), skipCoach);
+  const sendText = useCallback(async (content: string, skipCoach = false): Promise<boolean> => {
+    return runSend(content.trim(), skipCoach);
   }, [runSend]);
 
   const cancel = useCallback(() => {
