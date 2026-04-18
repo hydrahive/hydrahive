@@ -3,9 +3,8 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  useMessage,
-  useMessagePart,
   type MessagePartState,
+  type ThreadMessage,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
 import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, X } from "lucide-react";
@@ -30,9 +29,10 @@ function partText(part: MessagePartState): string {
   return "";
 }
 
-function TokenBadge() {
-  const message = useMessage();
-  const custom = message.metadata.custom as {
+type MessageLike = ThreadMessage & { metadata?: { custom?: Record<string, unknown> }; status?: { type?: string } };
+
+function TokenBadge({ message }: { message: MessageLike }) {
+  const custom = (message.metadata?.custom ?? {}) as {
     tokenUsage?: { input?: number; output?: number; cache_read?: number; cache_write?: number; rounds?: number };
     model?: string;
   };
@@ -101,8 +101,7 @@ function ToolDataPart({ part }: { part: DataPart }) {
   );
 }
 
-function MessagePart() {
-  const part = useMessagePart();
+function MessagePart({ part }: { part: MessagePartState }) {
   if (part.type === "text" || part.type === "reasoning") {
     const text = partText(part);
     return (
@@ -111,15 +110,14 @@ function MessagePart() {
       </div>
     );
   }
-  if (part.type === "data") return <ToolDataPart part={part} />;
+  if (part.type === "data") return <ToolDataPart part={part as DataPart} />;
   if (part.type === "image") {
     return <img src={part.image} alt={part.filename ?? "image"} className="max-h-72 rounded-lg object-contain" />;
   }
   return null;
 }
 
-function ChatMessage() {
-  const message = useMessage();
+function ChatMessage({ message }: { message: MessageLike }) {
   const isUser = message.role === "user";
   return (
     <MessagePrimitive.Root className={cn("flex gap-3 px-4 py-4", isUser ? "justify-end" : "justify-start")}>
@@ -135,7 +133,7 @@ function ChatMessage() {
           : "border-border/70 bg-card/95 text-card-foreground"
       )}>
         <MessagePrimitive.Parts>
-          {() => <MessagePart />}
+          {({ part }) => <MessagePart part={part as MessagePartState} />}
         </MessagePrimitive.Parts>
         {message.status?.type === "running" && (
           <div className="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground">
@@ -143,7 +141,7 @@ function ChatMessage() {
             streamt
           </div>
         )}
-        <TokenBadge />
+        <TokenBadge message={message} />
       </div>
       {isUser && (
         <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -654,7 +652,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target }: ChatShellP
               </ThreadPrimitive.Empty>
               <div className="mx-auto w-full max-w-5xl py-3">
                 <ThreadPrimitive.Messages>
-                  {() => <ChatMessage />}
+                  {({ message }) => <ChatMessage message={message as MessageLike} />}
                 </ThreadPrimitive.Messages>
               </div>
               <Composer
