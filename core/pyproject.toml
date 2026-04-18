@@ -32,6 +32,12 @@ dependencies = [
     "playwright~=1.40",
     "edge-tts>=7.0",
     "paramiko~=4.0",
+    # #554: Collaborative Composer via Yjs/CRDT.
+    # pycrdt = Python bindings zum Rust yrs-crate (Nachfolger von y-py, das seit
+    # April 2025 archiviert ist). pycrdt-websocket liefert den ASGI-Adapter + eine
+    # SQLite-Persistence, die sich an FastAPI mounten lässt.
+    "pycrdt~=0.12",
+    "pycrdt-websocket~=0.16",
 ]
 
 [project.optional-dependencies]

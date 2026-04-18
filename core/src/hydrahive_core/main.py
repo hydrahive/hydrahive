@@ -502,6 +502,16 @@ async def lifespan(app: FastAPI):
     except Exception as _tj_err:
         logger.debug("Turn Journal cleanup: %s", _tj_err)
 
+    # #554: Collaborative Yjs-Composer Server starten (WS-Endpoint ist in
+    # router_projects registriert; der Server hält pro Projekt einen YRoom +
+    # SQLiteYStore. Graceful-Fallback auf ~/.hydrahive/yjs falls /var/lib
+    # nicht schreibbar ist).
+    try:
+        from .collab_yjs import start_yjs_server as _start_yjs
+        await _start_yjs()
+    except Exception as _yjs_err:
+        logger.warning("Yjs-Server konnte nicht starten: %s", _yjs_err)
+
     logger.info("HydraHive Core bereit")
     yield
     _folder_watcher_task.cancel()
@@ -518,6 +528,12 @@ async def lifespan(app: FastAPI):
     if agentlink_ws_task:
         agentlink_ws_task.cancel()
     logger.info("HydraHive Core faehrt herunter...")
+    # #554: Yjs-Server sauber schließen (Rooms + SQLite-Stores).
+    try:
+        from .collab_yjs import stop_yjs_server as _stop_yjs
+        await _stop_yjs()
+    except Exception as _yjs_err:
+        logger.debug("Yjs-Server Shutdown-Fehler: %s", _yjs_err)
     await runtime.stop()
     projects.stop()
     discovery.stop()
@@ -1558,6 +1574,7 @@ register_project_lifecycle_routes(
 register_project_routes(
     auth_router,
     admin_router,
+    public_router,
     require_auth=require_auth,
     projects=projects,
     discovery=discovery,

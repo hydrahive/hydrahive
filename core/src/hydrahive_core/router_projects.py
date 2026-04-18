@@ -5,12 +5,16 @@ from pathlib import Path
 from typing import Literal
 import re
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from typing import Optional
 from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
 from .session_manager import MessageRole
+
+# #554: Collab-Composer — gültige Room-Namen sind alphanumerisch plus "_-".
+# Schützt den SQLite-Pfad vor Path-Traversal durch freie Projekt-IDs.
+_COLLAB_ROOM_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # v2: plugin_manager entfernt
 
 
@@ -134,6 +138,7 @@ class GitCloneRequest(BaseModel):
 def register_project_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
+    public_router: APIRouter,
     *,
     require_auth,
     projects,
@@ -1283,6 +1288,63 @@ def register_project_routes(
 
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # #554: Collaborative Composer — WebSocket zu einem per-Projekt Yjs-Doc.
+    # Mehrere User teilen den Composer-Text live (screen-x für Prompts).
+    # Auth läuft über Query-Param `token`, weil Browser keine Custom-Header
+    # auf WebSockets setzen können. Der Token wird VOR websocket.accept()
+    # validiert — sonst verliert Yjs die Initial-Sync-Messages.
+    @public_router.websocket("/projects/{project_id}/collab")
+    async def collab_ws(
+        websocket: WebSocket,
+        project_id: str,
+        token: str = Query(..., description="JWT-Token (Bearer-Äquivalent für WS)"),
+    ):
+        from .collab_yjs import FastApiWsChannel, get_yjs_server
+
+        # Room-Name strikt validieren — verhindert Path-Traversal in der
+        # SQLite-Datei, da project_id in den Dateinamen einfließt.
+        if not _COLLAB_ROOM_NAME_RE.match(project_id):
+            await websocket.close(code=4400, reason="Ungültige Projekt-ID")
+            return
+
+        # Auth vor accept — sonst gehen Yjs-Initial-Messages verloren.
+        # _verify_jwt kommt aus main.py; Lazy-Import gegen Zirkularität.
+        from .main import _verify_jwt, _load_users as _lu
+        try:
+            username, role = _verify_jwt(token)
+        except HTTPException:
+            await websocket.close(code=4401, reason="Auth fehlgeschlagen")
+            return
+        if username not in _lu():
+            await websocket.close(code=4401, reason="User unbekannt")
+            return
+        try:
+            _check_project_access((username, role), project_id)
+        except HTTPException:
+            await websocket.close(code=4403, reason="Kein Projektzugang")
+            return
+
+        server = get_yjs_server()
+        if server is None:
+            await websocket.close(code=4503, reason="Yjs-Server nicht gestartet")
+            return
+
+        await websocket.accept()
+        channel = FastApiWsChannel(websocket, path=project_id)
+        logger.info("Collab-WS connected: %s → %s", username, project_id)
+        try:
+            await server.serve(channel)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.exception("Collab-WS serve error for project %s", project_id)
+        finally:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+            logger.info("Collab-WS disconnected: %s → %s", username, project_id)
 
     @auth_router.get("/projects/{project_id}/presence")
     def project_presence(
