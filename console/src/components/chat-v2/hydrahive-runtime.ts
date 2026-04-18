@@ -331,15 +331,42 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     const images = pendingImages;
     if ((!content && images.length === 0) || isRunning) return;
 
-    if (content.startsWith("/") && onSlashCommandRef.current) {
+    if (content.startsWith("/")) {
       const trimmed = content.slice(1);
-      const [cmd, ...rest] = trimmed.split(/\s+/);
+      const [rawCmd, ...rest] = trimmed.split(/\s+/);
+      const cmd = `/${rawCmd}`;
       const args = rest.join(" ").trim();
-      try {
-        const handled = await onSlashCommandRef.current(`/${cmd}`, args, content);
-        if (handled) return;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+      if (onSlashCommandRef.current) {
+        try {
+          const handled = await onSlashCommandRef.current(cmd, args, content);
+          if (handled) return;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+          return;
+        }
+      }
+      // Built-in-Fallback: /clear und /help wirken auf jeder Chat-Page,
+      // auch wenn die Page keinen eigenen onSlashCommand-Handler dafür hat.
+      // Wichtig damit /clear nicht an das LLM geht und Tokens frisst.
+      if (cmd === "/clear") {
+        try {
+          const sessionEndpoint = target.historyEndpoint.replace(/^\/api/, "").replace(/\/history$/, "");
+          await api.delete(sessionEndpoint);
+        } catch { /* Session evtl. schon weg */ }
+        try { localStorage.removeItem(`hh_lastsess_${target.historyEndpoint}`); } catch { /* quota */ }
+        setMessages([systemMessage("Chat-Verlauf geleert.")]);
+        setPendingConfirms([]);
+        setError("");
+        activeAssistantIdRef.current = null;
+        broadcastAssistantIdRef.current = null;
+        return;
+      }
+      if (cmd === "/help") {
+        setMessages((prev) => [...prev, systemMessage(
+          "**Commands:**\n\n" +
+          "`/clear` — Chat-Verlauf leeren\n" +
+          "`/help` — diese Übersicht"
+        )]);
         return;
       }
     }
