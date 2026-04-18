@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   HydraHive Console – Global Styles
+   ============================================================ */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-base text-ink font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Scrollbar – dezent, passt zum Theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.surface.border');
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.surface.hover');
+  }
+
+  /* Focus-Ring konsistent */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-boss/50 ring-offset-0;
+  }
+
+  /* Selection */
+  ::selection {
+    background: theme('colors.boss.deep');
+    color: theme('colors.boss.ink');
+  }
+}
+
+@layer components {
+  /* Agent-Card Basis – wird von React-Component benutzt */
+  .agent-card {
+    @apply bg-surface-card border border-surface-border rounded-md
+           p-3 transition-colors hover:bg-surface-hover;
+  }
+
+  .agent-card--boss     { @apply border-l-2 border-l-boss; }
+  .agent-card--worker   { @apply border-l-2 border-l-worker; }
+  .agent-card--personal { @apply border-l-2 border-l-personal; }
+  .agent-card--bridge   { @apply border-l-2 border-l-bridge; }
+
+  /* Status-Dot */
+  .status-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full;
+  }
+  .status-dot--active  { @apply bg-worker; }
+  .status-dot--idle    { @apply bg-personal; }
+  .status-dot--waiting { @apply bg-bridge; }
+  .status-dot--error   { background: #E24B4A; }
+
+  /* Type-Badge (BOSS, WORKER, PERSONAL, BRIDGE) */
+  .type-badge {
+    @apply text-[9px] font-medium tracking-wide px-1.5 py-0.5 rounded;
+  }
+  .type-badge--boss     { @apply bg-boss-deep text-boss-mute; }
+  .type-badge--worker   { @apply bg-worker-deep text-worker-soft; }
+  .type-badge--personal { @apply bg-personal-deep text-personal-soft; }
+  .type-badge--bridge   { @apply bg-bridge-deep text-bridge-soft; }
+
+  /* Primär-Button */
+  .btn-primary {
+    @apply bg-boss text-surface-base font-medium text-sm
+           px-3 py-1.5 rounded-md transition-opacity hover:opacity-90
+           active:scale-[0.98];
+  }
+
+  /* Ghost-Button */
+  .btn-ghost {
+    @apply bg-transparent text-boss-soft border border-boss-deep
+           text-sm px-3 py-1.5 rounded-md transition-colors
+           hover:bg-surface-card;
+  }
+
+  /* Input */
+  .input {
+    @apply bg-surface-card border border-surface-border rounded-md
+           text-ink text-sm px-3 py-2 placeholder:text-ink-subtle
+           focus:border-boss focus:outline-none
+           transition-colors;
+  }
+}
+
+@layer utilities {
+  /* Safe-Area für Mobile – wichtig für iOS Chat-Eingabe */
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* Mono-Text */
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,0 +1,91 @@
+/* ============================================================
+   theme-next.css — HydraHive Redesign v1 (2026-04)
+
+   Opt-in Stylesheet. WIRD NICHT automatisch geladen.
+
+   Um die neuen Utility-Klassen in einer Component zu nutzen:
+     import "../styles/theme-next.css";
+
+   Die Farben (surface, boss, worker, personal, bridge, ink) stehen
+   bereits in tailwind.config.js zur Verfügung — dafür ist kein Import
+   nötig. Diese Datei ergänzt nur benannte Utility-Klassen, die mit den
+   bestehenden .app-*/.hero-* Klassen aus src/index.css koexistieren.
+
+   Bewusst umbenannt gegenüber dem Quell-Theme:
+     .btn-primary   →  .btn-boss     (vermeidet Kollision mit bestehendem
+                                       "btn btn-primary" in ExtensionsPage/
+                                       CodeEditorPage)
+     .input         →  .input-boss   (zu generischer Name im Quell-Theme)
+
+   Kein @layer base hier — AdminFun-Visuals und Light-Mode aus index.css
+   sollen nicht überschrieben werden.
+
+   Quelle/Kontext: console/design-notes/2026-04_redesign-v1/
+   ============================================================ */
+
+@layer components {
+  /* Agent-Card Basis */
+  .agent-card {
+    @apply bg-surface-card border border-surface-border rounded-md
+           p-3 transition-colors hover:bg-surface-hover;
+  }
+  .agent-card--boss     { @apply border-l-2 border-l-boss; }
+  .agent-card--worker   { @apply border-l-2 border-l-worker; }
+  .agent-card--personal { @apply border-l-2 border-l-personal; }
+  .agent-card--bridge   { @apply border-l-2 border-l-bridge; }
+
+  /* Status-Dot (nicht zu verwechseln mit bestehendem .dot) */
+  .status-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full;
+  }
+  .status-dot--active  { @apply bg-worker; }
+  .status-dot--idle    { @apply bg-personal; }
+  .status-dot--waiting { @apply bg-bridge; }
+  .status-dot--error   { background: #E24B4A; }
+
+  /* Type-Badge (BOSS, WORKER, PERSONAL, BRIDGE) */
+  .type-badge {
+    @apply text-[9px] font-medium tracking-wide px-1.5 py-0.5 rounded;
+  }
+  .type-badge--boss     { @apply bg-boss-deep text-boss-mute; }
+  .type-badge--worker   { @apply bg-worker-deep text-worker-soft; }
+  .type-badge--personal { @apply bg-personal-deep text-personal-soft; }
+  .type-badge--bridge   { @apply bg-bridge-deep text-bridge-soft; }
+
+  /* Primär-Button (umbenannt: vorher .btn-primary — Kollision mit bestehendem
+     "btn btn-primary" in ExtensionsPage.tsx und CodeEditorPage.tsx) */
+  .btn-boss {
+    @apply bg-boss text-surface-base font-medium text-sm
+           px-3 py-1.5 rounded-md transition-opacity hover:opacity-90
+           active:scale-[0.98];
+  }
+
+  /* Ghost-Button */
+  .btn-ghost {
+    @apply bg-transparent text-boss-soft border border-boss-deep
+           text-sm px-3 py-1.5 rounded-md transition-colors
+           hover:bg-surface-card;
+  }
+
+  /* Input (umbenannt: vorher .input — zu generisch) */
+  .input-boss {
+    @apply bg-surface-card border border-surface-border rounded-md
+           text-ink text-sm px-3 py-2 placeholder:text-ink-subtle
+           focus:border-boss focus:outline-none
+           transition-colors;
+  }
+}
+
+@layer utilities {
+  /* Safe-Area für Mobile — wichtig für iOS Chat-Eingabe.
+     Hinweis: bestehender src/index.css hat `.safe-area-inset-bottom`,
+     das hier ist eine kompaktere Variante mit Minimum-Padding. */
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* Mono-Text mit tabular nums (für Zahlen-Kolumnen) */
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
