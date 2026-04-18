@@ -249,6 +249,8 @@ export function AdminLayout() {
     { to: "/brain",          icon: Brain,           label: t("nav.hydraBrain"),      hint: t("navHint.hydraBrain") },
     { to: "/search",         icon: Search,          label: t("nav.search", { defaultValue: "Web-Suche" }), hint: t("navHint.search", { defaultValue: "SearXNG Web-Suche verwalten" }) },
     { to: "/system",         icon: Monitor,         label: t("nav.system"),          hint: t("navHint.system") },
+    { to: "/hub?tab=extensions", icon: Rocket,      label: t("nav.extensions"),      hint: t("navHint.extensions"), adminOnly: true },
+    { to: "/voice",          icon: MessageSquare,   label: t("nav.voice"),           hint: t("navHint.voice"), adminOnly: true },
     { to: "/target-systems", icon: ServerCog,       label: t("nav.targetSystems", { defaultValue: "Zielsysteme" }), hint: t("navHint.targetSystems", { defaultValue: "WKS und Root-/Remote-Server verwalten" }), adminOnly: true },
     { to: "/usermanagement", icon: Shield,          label: t("nav.usermanagement"),  hint: t("navHint.usermanagement") },
     { to: "/settings",       icon: Settings,        label: t("nav.settings"),        hint: t("navHint.settings") },
@@ -275,7 +277,10 @@ export function AdminLayout() {
   }, [location.pathname]);
 
   const activeItem = useMemo(
-    () => nav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)) ?? nav[0],
+    () => nav.find((item) => {
+      const itemPath = item.to.split("?")[0];
+      return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`);
+    }) ?? nav[0],
     [location.pathname, nav],
   );
 
@@ -339,11 +344,12 @@ export function AdminLayout() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         {nav.map(({ to, icon: Icon, label, hint }) => {
+          const itemPath = to.split("?")[0];
           // #532: data-tour Attribute für Guided Tours
           const tourId = to === "/my-agent" ? "nav-myagent"
             : to === "/projects" ? "nav-projects"
             : to === "/settings" ? "nav-settings"
-            : to === "/hub" ? "nav-extensions"
+            : itemPath === "/hub" ? "nav-extensions"
             : undefined;
           return (
             <NavLink
