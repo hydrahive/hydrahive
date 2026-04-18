@@ -251,8 +251,10 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
   const [historyLoading, setHistoryLoading] = useState(false);
   const [viewSession, setViewSession] = useState<{ id: string; startedAt: string; messages: ExternalThreadMessage[] } | null>(null);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(target.kind === "agent" ? target.id : null);
+  const [debugEvents, setDebugEvents] = useState<Array<{ type: string; data: unknown; ts: number }>>([]);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
+  const broadcastAssistantIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -363,6 +365,10 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
         signal: controller.signal,
         onConnectionLost: () => setError("Verbindung verloren — bitte erneut senden."),
         onEvent: (evt) => {
+          setDebugEvents((prev) => {
+            const next = [...prev, { type: evt.type, data: evt, ts: Date.now() }];
+            return next.length > 200 ? next.slice(next.length - 200) : next;
+          });
           if (evt.type === "text") {
             updateAssistant((msg) => appendAssistantText(msg, evt.text));
           } else if (evt.type === "tool_call") {
@@ -569,11 +575,52 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     setMessages((prev) => [...prev, systemMessage(text)]);
   }, []);
 
+  const pushUserMessage = useCallback((text: string) => {
+    setMessages((prev) => [...prev, userMessage(text)]);
+  }, []);
+
+  const pushBroadcastText = useCallback((chunk: string) => {
+    setMessages((prev) => {
+      let activeId = broadcastAssistantIdRef.current;
+      if (!activeId) {
+        const msg = assistantMessage("", {}, true);
+        activeId = msg.id;
+        broadcastAssistantIdRef.current = activeId;
+        return [...prev, appendAssistantText(msg, chunk)];
+      }
+      return prev.map((m) => m.id === activeId ? appendAssistantText(m, chunk) : m);
+    });
+  }, []);
+
+  const finishBroadcast = useCallback((meta: { usage?: TokenUsage; model?: string; isFallback?: boolean } = {}) => {
+    const id = broadcastAssistantIdRef.current;
+    broadcastAssistantIdRef.current = null;
+    if (!id) return;
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== id || m.role !== "assistant") return m;
+      return {
+        ...m,
+        status: { type: "complete", reason: "stop" },
+        metadata: assistantMetadata({
+          ...((m.metadata?.custom as Record<string, unknown> | undefined) ?? {}),
+          ...(meta.usage !== undefined ? { tokenUsage: meta.usage } : {}),
+          ...(meta.model !== undefined ? { model: meta.model } : {}),
+          ...(meta.isFallback !== undefined ? { isFallback: meta.isFallback } : {}),
+        }),
+      };
+    }));
+  }, []);
+
   const resetMessages = useCallback((next: ExternalThreadMessage[] = []) => {
     setMessages(next);
     setPendingConfirms([]);
     setError("");
     activeAssistantIdRef.current = null;
+    broadcastAssistantIdRef.current = null;
+  }, []);
+
+  const clearDebugEvents = useCallback(() => {
+    setDebugEvents([]);
   }, []);
 
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
@@ -650,9 +697,14 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     cancel,
     confirmTool,
     pushSystemMessage,
+    pushUserMessage,
+    pushBroadcastText,
+    finishBroadcast,
     resetMessages,
+    debugEvents,
+    clearDebugEvents,
     agentId: target.kind === "project" ? null : agentSessionId,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool, pushSystemMessage, resetMessages, agentSessionId, target.kind]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool, pushSystemMessage, pushUserMessage, pushBroadcastText, finishBroadcast, resetMessages, debugEvents, clearDebugEvents, agentSessionId, target.kind]);
 }
 
 export type HydraHiveRuntime = ReturnType<typeof useHydraHiveRuntime>;
