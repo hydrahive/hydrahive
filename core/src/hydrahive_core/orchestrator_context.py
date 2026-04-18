@@ -205,6 +205,22 @@ def _load_core_policy_text() -> str:
     return text
 
 
+def _load_instance_policy_text() -> str:
+    """#711: Lädt die optionale instanzweite Admin-Policy.
+
+    Die Datei liegt unter /etc/hydrahive/instance_policy.md. Fehlende, leere
+    oder nicht lesbare Dateien haben keinen Effekt auf den Prompt-Build.
+    """
+    path = settings.instance_policy
+    try:
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("instance-policy: konnte %s nicht lesen: %s", path, exc)
+        return ""
+
+
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
@@ -507,26 +523,20 @@ async def build_system_prompt(
             except Exception as _srv_err:
                 logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
-        # #710: Core-Policy als versionierte Markdown-Datei statt Hardcode.
-        # Agent-unabhängig — greift auch wenn kein agent_dir gesetzt ist.
-        _core_policy_text = _load_core_policy_text()
-        if _core_policy_text:
-            channels.policies = _core_policy_text
+        # #710/#711: Policy-Kaskade als versionierter Static-Block.
+        # Reihenfolge: Core-Policy → optionale Instance-Policy.
+        _policy_parts = [
+            text for text in (_load_core_policy_text(), _load_instance_policy_text())
+            if text
+        ]
+        if _policy_parts:
+            channels.policies = "\n\n".join(_policy_parts)
 
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
             _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
             if _handbook_text:
                 channels.handbook = _handbook_text
-
-        # #711: Instance-Policy — optionale instanzweite Admin-Schicht.
-        # Resolver-Kaskade: core (handbook) → instance (/etc/hydrahive/instance_policy.md).
-        # Fehlende oder leere Datei ist graceful — kein Fehler, kein Fallback.
-        _instance_policy_path = settings.instance_policy
-        if _instance_policy_path.exists():
-            _instance_policy_text = _instance_policy_path.read_text(encoding="utf-8").strip()
-            if _instance_policy_text:
-                channels.instance_policy = _instance_policy_text
 
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
