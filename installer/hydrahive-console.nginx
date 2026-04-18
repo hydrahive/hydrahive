@@ -34,6 +34,27 @@ server {
         add_header Cache-Control "no-store, no-cache";
     }
 
+    # #554: Collaborative Composer WebSocket.
+    # Regex-Location hat Priorität vor der allgemeinen `/api/`-Location darunter.
+    # Wichtig: die /api/-Location killt den Upgrade-Header (Connection ""),
+    # deshalb muss die WS-Route ein eigenes proxy_pass mit Upgrade + Connection
+    # "upgrade" haben. Die `rewrite`-Zeile strippt den /api-Prefix, damit FastAPI
+    # den Pfad ohne Prefix bekommt (so wie /api/-Location es via trailing-slash
+    # proxy_pass tut).
+    location ~ ^/api/projects/[^/]+/collab$ {
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass         http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_connect_timeout 5s;
+    }
+
     location /api/ {
         # v2 (#603): Security-Header (add_header erbt nicht vom server-Block)
         include /etc/nginx/snippets/hydrahive-security-headers.conf;

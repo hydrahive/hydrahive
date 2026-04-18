@@ -691,6 +691,50 @@ PYEOF
             # Include schon drin — nur noch reloaden falls Snippet aktualisiert wurde
             nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1 || true
         fi
+
+        # #554 H5: Collab-WebSocket-Location einfügen (wenn noch nicht drin).
+        # Die allgemeine /api/-Location setzt Connection "" → tötet WS-Upgrades.
+        # Deshalb eine regex-Location VOR der /api/-Location mit Upgrade-Header.
+        if [ -n "${_nginx_cfg}" ] && ! grep -q "projects/\[\\^/\\]+/collab" "${_nginx_cfg}"; then
+            info "nginx-Config patchen: Collab-WebSocket-Location einfuegen (#554)"
+            _backup_collab="${_nginx_cfg}.bak-collab-$(date +%s)"
+            cp "${_nginx_cfg}" "${_backup_collab}"
+            python3 <<PYEOF
+import re
+p = "${_nginx_cfg}"
+txt = open(p).read()
+if "projects/[^/]+/collab" in txt:
+    raise SystemExit(0)
+block = (
+    "    # #554: Collaborative Composer — WebSocket-Upgrade.\n"
+    "    location ~ ^/api/projects/[^/]+/collab\$ {\n"
+    "        include /etc/nginx/snippets/hydrahive-security-headers.conf;\n"
+    "        rewrite ^/api(/.*)\$ \$1 break;\n"
+    "        proxy_pass         http://127.0.0.1:8765;\n"
+    "        proxy_http_version 1.1;\n"
+    "        proxy_set_header   Host              \$host;\n"
+    "        proxy_set_header   X-Real-IP         \$remote_addr;\n"
+    "        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;\n"
+    "        proxy_set_header   Upgrade           \$http_upgrade;\n"
+    "        proxy_set_header   Connection        \"upgrade\";\n"
+    "        proxy_read_timeout 3600s;\n"
+    "        proxy_connect_timeout 5s;\n"
+    "    }\n\n"
+)
+new_txt, count = re.subn(r"(\s*location /api/ \{)", "\n" + block + r"\1", txt, count=1)
+if count == 0:
+    raise SystemExit("marker 'location /api/ {' nicht gefunden")
+open(p, "w").write(new_txt)
+PYEOF
+            if nginx -t >/dev/null 2>&1; then
+                systemctl reload nginx >/dev/null 2>&1 && \
+                    info "nginx Collab-Location aktiv" || \
+                    warn "nginx reload fehlgeschlagen — Config gepatcht aber nicht aktiv"
+            else
+                warn "nginx -t nach Collab-Patch fehlgeschlagen — Rollback aus ${_backup_collab}"
+                cp "${_backup_collab}" "${_nginx_cfg}"
+            fi
+        fi
     fi
 
     # --- 10b. update.sh + Service-Datei selbst aktualisieren ---
