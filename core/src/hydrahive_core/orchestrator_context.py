@@ -221,7 +221,21 @@ def _load_instance_policy_text() -> str:
         return ""
 
 
-def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
+def _load_project_policy_text(project_dir: Path | None) -> str:
+    """#712: Lädt die optionale Projekt-Policy aus <project_dir>/policy.md."""
+    if not isinstance(project_dir, Path):
+        return ""
+    path = project_dir / "policy.md"
+    try:
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("project-policy: konnte %s nicht lesen: %s", path, exc)
+        return ""
+
+
+def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: Path | None = None) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
     # #710: Core-Policy-Datei muss in den Hash — Änderung soll Static-Cache
@@ -234,6 +248,10 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     instance_policy = settings.instance_policy
     if instance_policy.exists():
         parts.append(f"instance_policy:{instance_policy.stat().st_mtime:.0f}")
+    if isinstance(project_dir, Path):
+        project_policy = project_dir / "policy.md"
+        if project_policy.exists():
+            parts.append(f"project_policy:{project_policy.stat().st_mtime:.0f}")
     soul = agent_dir / "soul.md"
     if soul.exists():
         parts.append(f"soul:{soul.stat().st_mtime:.0f}")
@@ -256,7 +274,12 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
-def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | None:
+def _diagnose_cache_break(
+    agent_id: str,
+    agent_dir: Path,
+    mode: str,
+    project_dir: Path | None = None,
+) -> str | None:
     """#527: Identifiziert welches Segment den Cache-Break verursacht hat."""
     segments: dict[str, str] = {}
     segments["mode"] = mode
@@ -268,6 +291,10 @@ def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | No
     instance_policy = settings.instance_policy
     if instance_policy.exists():
         segments["instance_policy"] = f"{instance_policy.stat().st_mtime:.0f}"
+    if isinstance(project_dir, Path):
+        project_policy = project_dir / "policy.md"
+        if project_policy.exists():
+            segments["project_policy"] = f"{project_policy.stat().st_mtime:.0f}"
     soul = agent_dir / "soul.md"
     if soul.exists():
         segments["soul"] = f"{soul.stat().st_mtime:.0f}"
@@ -406,7 +433,11 @@ async def build_system_prompt(
         if cached:
             prompt_s, ts, h = cached
             if (time.time() - ts) < _PROMPT_CACHE_TTL:
-                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+                current_h = _prompt_cache_hash(
+                    boss_cfg.agent_dir,
+                    mode,
+                    project_dir=getattr(boss_cfg, "project_dir", None),
+                )
                 if current_h == h:
                     static_cached = prompt_s
 
@@ -523,10 +554,14 @@ async def build_system_prompt(
             except Exception as _srv_err:
                 logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
-        # #710/#711: Policy-Kaskade als versionierter Static-Block.
-        # Reihenfolge: Core-Policy → optionale Instance-Policy.
+        # #710/#711/#712: Policy-Kaskade als versionierter Static-Block.
+        # Reihenfolge: Core-Policy → optionale Instance-Policy → Project-Policy.
         _policy_parts = [
-            text for text in (_load_core_policy_text(), _load_instance_policy_text())
+            text for text in (
+                _load_core_policy_text(),
+                _load_instance_policy_text(),
+                _load_project_policy_text(getattr(boss_cfg, "project_dir", None)),
+            )
             if text
         ]
         if _policy_parts:
@@ -548,7 +583,11 @@ async def build_system_prompt(
 
         static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
-            h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+            h = _prompt_cache_hash(
+                boss_cfg.agent_dir,
+                mode,
+                project_dir=getattr(boss_cfg, "project_dir", None),
+            )
             _STATIC_PROMPT_CACHE[_cache_key] = (static_cached, time.time(), h)
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
