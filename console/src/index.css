@@ -75,8 +75,13 @@
     --foreground: 160 30% 92%;
     --card: 210 35% 10%;
     --card-foreground: 160 30% 92%;
-    --primary: 152 70% 50%;
-    --primary-foreground: 210 40% 8%;
+    /* Candy-Repalette (Till 2026-04-18): Primary von Grün auf Violet,
+       damit Menü/Tabs/Badges nicht mehr monoton grün sind. Grün bleibt
+       als --success für OK-Status (status-pill-ok). */
+    --primary: 268 78% 62%;
+    --primary-foreground: 0 0% 100%;
+    --success: 152 70% 50%;
+    --success-foreground: 210 40% 8%;
     --secondary: 210 20% 18%;
     --secondary-foreground: 160 30% 92%;
     --muted: 210 20% 16%;
@@ -337,8 +342,9 @@
   }
 
   .status-pill-ok {
-    background: hsl(var(--primary) / 0.14);
-    color: hsl(var(--primary));
+    /* Fallback auf --primary falls --success nicht gesetzt ist (Light-Mode). */
+    background: hsl(var(--success, var(--primary)) / 0.14);
+    color: hsl(var(--success, var(--primary)));
   }
 
   .hero-panel {
