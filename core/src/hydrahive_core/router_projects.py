@@ -1331,8 +1331,13 @@ def register_project_routes(
             return
 
         await websocket.accept()
-        channel = FastApiWsChannel(websocket, path=project_id)
-        logger.info("Collab-WS connected: %s → %s", username, project_id)
+        channel = FastApiWsChannel(websocket, path=project_id, label=f"{project_id}/{username}")
+        logger.info(
+            "Collab-WS connected: user=%s room=%s clients_before=%d",
+            username,
+            project_id,
+            len(server.rooms.get(project_id).clients) if project_id in server.rooms else 0,
+        )
         try:
             await server.serve(channel)
         except WebSocketDisconnect:
@@ -1344,7 +1349,12 @@ def register_project_routes(
                 await websocket.close()
             except Exception:
                 pass
-            logger.info("Collab-WS disconnected: %s → %s", username, project_id)
+            logger.info(
+                "Collab-WS disconnected: user=%s room=%s clients_after=%d",
+                username,
+                project_id,
+                len(server.rooms.get(project_id).clients) if project_id in server.rooms else 0,
+            )
 
     @auth_router.get("/projects/{project_id}/presence")
     def project_presence(

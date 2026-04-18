@@ -120,6 +120,23 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
         params: { token },
       },
     );
+    // Diagnostik (#554): Sync-Events laut rauslog damit wir bei Sync-
+    // Ausfällen sehen was zwischen Client und Server passiert.
+    provider.on("status", (evt: { status: string }) => {
+      console.debug(`[collab/${projectId}] ws`, evt.status);
+    });
+    provider.on("sync", (isSynced: boolean) => {
+      console.debug(`[collab/${projectId}] synced`, isSynced);
+    });
+    provider.on("connection-error", (err: Event) => {
+      console.warn(`[collab/${projectId}] connection-error`, err);
+    });
+    provider.on("connection-close", (evt: CloseEvent | null) => {
+      console.warn(`[collab/${projectId}] connection-close`, evt?.code, evt?.reason);
+    });
+    ydoc.on("update", (_update: Uint8Array, origin: unknown) => {
+      console.debug(`[collab/${projectId}] ydoc update origin=`, origin);
+    });
     return { ydoc, ytext, provider };
     // token + username in deps: bei Logout wird alles abgerissen, Re-Login
     // mit neuem Token baut einen frischen Provider auf.

@@ -141,15 +141,25 @@ class FastApiWsChannel:
     APIRouter einreiht.
     """
 
-    def __init__(self, websocket: WebSocket, path: str) -> None:
+    def __init__(self, websocket: WebSocket, path: str, label: str = "") -> None:
         self._ws = websocket
         self.path = path
+        self._label = label
+        self._sent = 0
+        self._recv = 0
 
     async def send(self, message: bytes) -> None:
         await self._ws.send_bytes(message)
+        self._sent += 1
+        if self._sent <= 5 or self._sent % 100 == 0:
+            logger.debug("collab-ws[%s] → send #%d bytes=%d", self._label, self._sent, len(message))
 
     async def recv(self) -> bytes:
-        return await self._ws.receive_bytes()
+        data = await self._ws.receive_bytes()
+        self._recv += 1
+        if self._recv <= 5 or self._recv % 100 == 0:
+            logger.debug("collab-ws[%s] ← recv #%d bytes=%d", self._label, self._recv, len(data))
+        return data
 
     def __aiter__(self):
         return self
