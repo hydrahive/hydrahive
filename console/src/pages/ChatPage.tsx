@@ -13,7 +13,7 @@ import { ChatShell } from "@/components/chat-v2/ChatShell";
 import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 import { useAuth } from "@/hooks/useAuth";
-import { useProjectYjs } from "@/hooks/useProjectYjs";
+import { useAwarenessUsers, useProjectYjs } from "@/hooks/useProjectYjs";
 import { insertIntoYjsComposer } from "@/components/chat-v2/CollabComposer";
 
 export function ChatPage() {
@@ -87,6 +87,7 @@ export function ChatPage() {
   const runtime = useHydraHiveRuntime(target, { onSlashCommand: handleSlashCommand });
   // #554: Y.Text-Composer für gemeinsames Tippen — null wenn noch nicht verbunden.
   const collab = useProjectYjs(id, user?.username);
+  const awarenessUsers = useAwarenessUsers(collab);
 
   // Subscribe fuer Typing-Indicator + Broadcast-Sync (#553)
   const handleBroadcast = useCallback((raw: Record<string, unknown>) => {
@@ -225,7 +226,7 @@ export function ChatPage() {
             runtime={runtime}
             hideHeader
             typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
-            presenceUsers={subscribe.onlineUsers}
+            presenceUsers={collab ? awarenessUsers : subscribe.onlineUsers}
             onComposerActivity={handleTyping}
             collab={collab}
           />

@@ -11,13 +11,22 @@
  * Buttons, Image-Uploads oder Follow-Up-Chips. Die kommen in H13 zurück
  * wenn der Collab-Composer stabil ist.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Send, Square, X } from "lucide-react";
 import * as Y from "yjs";
+import getCaretCoordinates from "textarea-caret";
 import type { ProjectYjs } from "@/hooks/useProjectYjs";
 import type { HydraHiveRuntime } from "./hydrahive-runtime";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
+
+type RemoteCursor = {
+  clientId: number;
+  name: string;
+  hue: string;
+  anchor: number;
+  head: number;
+};
 
 function computeDelta(oldStr: string, newStr: string): { start: number; removed: number; inserted: string } {
   // Kleine Diff-Heuristik: gemeinsamer Prefix + Suffix, Rest ist Insert + Delete.
@@ -50,6 +59,48 @@ export function CollabComposer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastTextRef = useRef<string>("");
+  const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
+  const [textareaVersion, setTextareaVersion] = useState(0);
+
+  // #554 H11: eigene Cursor-Position an awareness melden und remote-Cursor
+  // einsammeln. Wir triggern bei jedem relevanten Event ein Re-Layout der
+  // Overlay-Spans, damit die Position dem Caret folgt.
+  useEffect(() => {
+    const aw = yjs.awareness;
+    const localId = aw.clientID;
+    const handler = () => {
+      const next: RemoteCursor[] = [];
+      aw.getStates().forEach((state, clientId) => {
+        if (clientId === localId) return;
+        const user = (state?.user ?? {}) as { name?: string; hue?: string };
+        const cur = state?.cursor as { anchor?: number; head?: number } | undefined;
+        if (!cur || typeof cur.anchor !== "number" || typeof cur.head !== "number") return;
+        next.push({
+          clientId,
+          name: user.name || `user-${clientId}`,
+          hue: user.hue || "--candy-cyan",
+          anchor: cur.anchor,
+          head: cur.head,
+        });
+      });
+      setRemoteCursors(next);
+    };
+    handler();
+    aw.on("change", handler);
+    return () => {
+      aw.off("change", handler);
+    };
+  }, [yjs.awareness]);
+
+  // Eigenen Cursor senden wann immer sich selection oder text ändert.
+  const publishLocalCursor = () => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    yjs.awareness.setLocalStateField("cursor", {
+      anchor: ta.selectionStart,
+      head: ta.selectionEnd,
+    });
+  };
 
   /** Text am Cursor einfügen — für Voice-Transcripts + Slash-Chip-Writes. */
   const insertAtCursor = (text: string) => {
@@ -82,11 +133,12 @@ export function CollabComposer({
       const prevSelEnd = ta.selectionEnd;
       ta.value = remote;
       lastTextRef.current = remote;
-      // Cursor an Position halten — wenn der Remote-Change vor dem Cursor
-      // passierte, verschiebt sich der Cursor mit; sonst bleibt er.
       try {
         ta.setSelectionRange(prevSelStart, prevSelEnd);
       } catch { /* textarea may not yet be focused */ }
+      // Remote-Updates können die eigene Caret-Pixel-Position verschieben
+      // (Textänderung vor dem Cursor). Overlay neu rendern.
+      setTextareaVersion((v) => v + 1);
     };
     applyFromYjs();
     const handler = () => applyFromYjs();
@@ -109,6 +161,8 @@ export function CollabComposer({
       if (inserted) yjs.ytext.insert(start, inserted);
     }, "local");
     lastTextRef.current = after;
+    publishLocalCursor();
+    setTextareaVersion((v) => v + 1);
   };
 
   const sendNow = async () => {
@@ -175,16 +229,26 @@ export function CollabComposer({
         >
           <ImagePlus className={cn("h-4 w-4", runtime.pendingImages.length > 0 && "text-primary")} />
         </button>
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          autoFocus
-          disabled={disabled}
-          placeholder={yjs.connected ? "Gemeinsam tippen …" : "Verbinde …"}
-          onInput={onInput}
-          onKeyDown={onKeyDown}
-          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground sm:text-sm"
-        />
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            autoFocus
+            disabled={disabled}
+            placeholder={yjs.connected ? "Gemeinsam tippen …" : "Verbinde …"}
+            onInput={onInput}
+            onKeyDown={onKeyDown}
+            onKeyUp={publishLocalCursor}
+            onClick={publishLocalCursor}
+            onSelect={publishLocalCursor}
+            className="max-h-40 min-h-11 w-full resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground sm:text-sm"
+          />
+          <RemoteCursorOverlay
+            textarea={textareaRef.current}
+            cursors={remoteCursors}
+            refreshKey={textareaVersion}
+          />
+        </div>
         <VoiceChatButton
           onTranscript={(text) => insertAtCursor(text)}
           disabled={runtime.isRunning}
@@ -224,6 +288,63 @@ export function insertIntoYjsComposer(yjs: ProjectYjs, text: string): void {
   yjs.ydoc.transact(() => {
     yjs.ytext.insert(yjs.ytext.length, text);
   }, "local");
+}
+
+/** Overlay für Remote-Cursor-Marker über dem Composer-Textarea.
+ *
+ * getCaretCoordinates (textarea-caret) rendert eine unsichtbare Mirror-div
+ * im Hintergrund, um Pixel-Koordinaten für einen gegebenen Zeichen-Offset
+ * zu berechnen. Aufruf pro Frame bei Änderung — bei langen Texten evtl.
+ * langsam, für Prompt-Zeilen (< 500 Zeichen) unproblematisch.
+ *
+ * refreshKey erzwingt ein Re-Render bei Textänderung (dann stimmen die
+ * Koordinaten wieder mit dem neuen Layout überein).
+ */
+function RemoteCursorOverlay({
+  textarea,
+  cursors,
+  refreshKey,
+}: {
+  textarea: HTMLTextAreaElement | null;
+  cursors: RemoteCursor[];
+  refreshKey: number;
+}) {
+  void refreshKey;
+  if (!textarea || cursors.length === 0) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {cursors.map((c) => {
+        let coords: { top: number; left: number; height: number };
+        try {
+          coords = getCaretCoordinates(textarea, c.head);
+        } catch {
+          return null;
+        }
+        const color = `hsl(var(${c.hue}))`;
+        return (
+          <span key={c.clientId} style={{ left: coords.left, top: coords.top }} className="absolute">
+            <span
+              className="inline-block w-[2px] animate-pulse"
+              style={{
+                backgroundColor: color,
+                height: coords.height,
+              }}
+            />
+            <span
+              className="absolute -top-4 left-0 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold shadow-sm"
+              style={{
+                backgroundColor: `hsl(var(${c.hue}) / 0.85)`,
+                color: "#fff",
+                borderColor: color,
+              }}
+            >
+              {c.name}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export type { Y };

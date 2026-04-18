@@ -1,5 +1,5 @@
 /**
- * useProjectYjs — Collaborative Composer Hook (#554 H6/H7)
+ * useProjectYjs — Collaborative Composer Hook (#554 H6/H7/H10)
  *
  * Öffnet einen WebSocket zum Backend-Yjs-Server (/api/projects/{id}/collab),
  * liefert ein geteiltes Y.Text ("composer") + awareness zurück. Reconnect,
@@ -15,6 +15,53 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
+
+// Deterministic candy hue per username — passt zu den PresenceAvatar-
+// Farben oben im ChatShell, damit Avatar-Kreis UND Cursor-Marker im
+// Composer dieselbe Farbe pro User haben.
+const PRESENCE_HUE_VARS = [
+  "--candy-violet",
+  "--candy-pink",
+  "--candy-cyan",
+  "--candy-lime",
+  "--candy-amber",
+] as const;
+
+export function presenceHueVar(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return PRESENCE_HUE_VARS[h % PRESENCE_HUE_VARS.length];
+}
+
+/**
+ * Liefert die aktuellen awareness-User-Namen (alle inklusive self) als
+ * stable-sorted Array. Für die Header-Presence-Leiste (#554 H12, schließt
+ * #730 I). Deduplicated — mehrere Tabs eines Users zählen nur einmal.
+ */
+export function useAwarenessUsers(yjs: ProjectYjs | null): string[] {
+  const [users, setUsers] = useState<string[]>([]);
+  useEffect(() => {
+    if (!yjs) {
+      setUsers([]);
+      return;
+    }
+    const aw = yjs.awareness;
+    const update = () => {
+      const names = new Set<string>();
+      aw.getStates().forEach((state) => {
+        const name = (state?.user as { name?: string } | undefined)?.name;
+        if (name) names.add(name);
+      });
+      setUsers(Array.from(names).sort());
+    };
+    update();
+    aw.on("change", update);
+    return () => {
+      aw.off("change", update);
+    };
+  }, [yjs]);
+  return users;
+}
 
 export type ProjectYjs = {
   ydoc: Y.Doc;
@@ -76,9 +123,13 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
     };
     provider.on("status", onStatus);
     if (username) {
-      // Awareness-Identität setzen — wird für Cursor-Farben + Header-Avatare
-      // in H10-H12 genutzt. Hier nur das User-Feld, color kommt später.
-      provider.awareness.setLocalStateField("user", { name: username });
+      // Awareness-Identität + deterministische Candy-Hue-Variable setzen.
+      // Cursor-Marker + Header-Avatar lesen daraus die Farbe; so matchen die
+      // beiden Darstellungen per User (#730 I + #554 H10).
+      provider.awareness.setLocalStateField("user", {
+        name: username,
+        hue: presenceHueVar(username),
+      });
     }
     return () => {
       provider.off("status", onStatus);
