@@ -189,12 +189,21 @@ type: project
         _write_memory_file(memory_dir, "project_structure.md", structure_content, overwrite=True)
         files_written.append("project_structure.md")
 
-        # 3. MEMORY.md anlegen — NUR wenn nicht vorhanden (Agent pflegt sie selbst)
+        # 3. MEMORY.md anlegen — NUR wenn nicht vorhanden (Agent pflegt sie selbst).
+        # #714: Stub trägt einen kurzen Hinweis, dass Core-Verhaltensregeln aus der
+        # Core-Policy im System-Prompt kommen — damit neue Projekte keine Core-Regeln
+        # ins Memory duplizieren. Bewusst kurz: MEMORY.md wird bei jedem Turn als
+        # `channels.memory_index` gerendert; Prosa hier vergrößert den Prompt.
         from .memory_paths import MEMORY_INDEX_FILENAME
         index_written = _write_memory_file(
             memory_dir,
             MEMORY_INDEX_FILENAME,
-            f"# Memory-Index — {project_id}\n\n- [project_structure.md](project_structure.md) — Verzeichnisbaum, automatisch erstellt\n",
+            (
+                f"# Memory-Index — {project_id}\n"
+                "_Projekt-Index. Core-Verhaltensregeln kommen aus der Core-Policy im System-Prompt._\n"
+                "\n"
+                "- [project_structure.md](project_structure.md) — Verzeichnisbaum, automatisch erstellt\n"
+            ),
             overwrite=False,
         )
         if index_written:
