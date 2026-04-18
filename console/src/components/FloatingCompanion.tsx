@@ -183,9 +183,9 @@ export function FloatingCompanion() {
   }, [visible]);
 
   // Zentraler Kommentar-Trigger
-  function triggerComment(context: string) {
+  function triggerComment(context: string, force = false) {
     const now = Date.now();
-    if (now - lastCommentRef.current < 30000) return; // Throttle 30s
+    if (!force && now - lastCommentRef.current < 30000) return; // Throttle 30s
     lastCommentRef.current = now;
 
     setMood("think");
@@ -268,7 +268,7 @@ export function FloatingCompanion() {
     const lastVisit = localStorage.getItem("hh_companion_last_visit");
     if (lastVisit !== today) {
       localStorage.setItem("hh_companion_last_visit", today);
-      setTimeout(() => triggerComment("The user logged in for the first time today. Greet them!"), 2000);
+      setTimeout(() => triggerComment("The user logged in for the first time today. Greet them!", true), 2000);
     }
   }, [visible]);
 
