@@ -57,6 +57,9 @@ export interface ComposerRestoreResult {
 
 const BASE = "/api";
 function getToken() { return localStorage.getItem("hydrahive_token") || ""; }
+function apiPath(path: string) {
+  return path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path;
+}
 
 function notifyAuthExpired(path: string) {
   if (typeof window === "undefined") return;
@@ -68,7 +71,7 @@ function notifyAuthExpired(path: string) {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const tokenAtRequest = getToken();
-  const res = await fetch(`${BASE}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenAtRequest}`, ...(options.headers||{}) } });
+  const res = await fetch(`${BASE}${apiPath(path)}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenAtRequest}`, ...(options.headers||{}) } });
   if (!res.ok) {
     const e = await res.json().catch(()=>({detail:res.statusText}));
     // Only trigger logout if the token hasn't changed since this request was sent
