@@ -229,15 +229,15 @@ def register_agent_chat_routes(
         session = agent_sessions.get_session_by_id(agent_id, session_id)
         if not session:
             raise HTTPException(404, "Session nicht gefunden")
-        def _msg(m):
-            return {
-                "role": m.role.value if hasattr(m.role, "value") else m.role,
-                "content": m.content,
-                "timestamp": m.timestamp,
-                "agent_id": m.agent_id,
-            }
-        return {"id": session.id, "messages": [_msg(m) for m in session.messages],
-                "started_at": session.started_at, "ended_at": session.ended_at}
+        # Nutze as_history_message() damit das Frontend die Token-Usage-Metadata
+        # sieht (sonst verliert der Token-Badge die Werte beim Öffnen einer
+        # alten Session).
+        return {
+            "id": session.id,
+            "messages": [m.as_history_message() for m in session.messages],
+            "started_at": session.started_at,
+            "ended_at": session.ended_at,
+        }
 
     @auth_router.post("/agents/{agent_id}/memory", status_code=201)
     def write_agent_memory(agent_id: str, req: AgentMemoryRequest, _a: tuple = Depends(require_auth)):
@@ -286,17 +286,11 @@ def register_agent_chat_routes(
         session = await agent_sessions.resume_session(agent_id, session_id)
         if not session:
             raise HTTPException(404, "Session nicht gefunden")
-        def _msg(m):
-            return {
-                "role": m.role.value if hasattr(m.role, "value") else m.role,
-                "content": m.content,
-                "timestamp": m.timestamp,
-                "agent_id": m.agent_id,
-            }
+        # s.o.: Metadata mitliefern damit Token-Badge auf Resume bleibt.
         return {
             "resumed": True,
             "id": session.id,
-            "messages": [_msg(m) for m in session.messages],
+            "messages": [m.as_history_message() for m in session.messages],
         }
 
     # #424: Session Export/Import (Teleportation)

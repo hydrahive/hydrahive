@@ -169,19 +169,25 @@ function historyToMessage(raw: HistoryResponse["messages"][number]): ExternalThr
   return null;
 }
 
-function sessionMessageToThreadMessage(raw: SessionFull["messages"][number]): ExternalThreadMessage | null {
+function sessionMessageToThreadMessage(
+  raw: SessionFull["messages"][number] & { metadata?: HistoryResponse["messages"][number]["metadata"] }
+): ExternalThreadMessage | null {
   if (raw.role === "tool") return null;
   return historyToMessage({
     role: raw.role,
     content: raw.content,
+    metadata: raw.metadata,
   });
 }
 
-function resumedMessageToThreadMessage(raw: { role: string; content: string }): ExternalThreadMessage | null {
+function resumedMessageToThreadMessage(
+  raw: { role: string; content: string; metadata?: HistoryResponse["messages"][number]["metadata"] }
+): ExternalThreadMessage | null {
   if (raw.role !== "user" && raw.role !== "assistant" && raw.role !== "system") return null;
   return historyToMessage({
     role: raw.role,
     content: raw.content,
+    metadata: raw.metadata,
   });
 }
 

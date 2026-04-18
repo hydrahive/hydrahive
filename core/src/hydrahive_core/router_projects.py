@@ -1112,10 +1112,10 @@ def register_project_routes(
         return {
             "resumed": True,
             "id": session.id,
-            "messages": [
-                {"role": m.role.value, "content": m.content, "timestamp": m.timestamp}
-                for m in session.messages
-            ],
+            # as_history_message() bringt metadata (input_tokens / output_tokens /
+            # cache_*_tokens / model) mit — sonst fehlen Token-Badges im Frontend
+            # nach Resume einer alten Session.
+            "messages": [m.as_history_message() for m in session.messages],
         }
 
     # ──────────────────────────────────────────────────────────────────────
