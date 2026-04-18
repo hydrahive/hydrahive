@@ -695,7 +695,12 @@ PYEOF
         # #554 H5: Collab-WebSocket-Location einfügen (wenn noch nicht drin).
         # Die allgemeine /api/-Location setzt Connection "" → tötet WS-Upgrades.
         # Deshalb eine regex-Location VOR der /api/-Location mit Upgrade-Header.
-        if [ -n "${_nginx_cfg}" ] && ! grep -q "projects/\[\\^/\\]+/collab" "${_nginx_cfg}"; then
+        info "#554 H5 Patcher gestartet (_nginx_cfg=${_nginx_cfg:-<leer>})"
+        if [ -z "${_nginx_cfg}" ]; then
+            warn "#554 H5: keine nginx-Config gefunden unter /etc/nginx/sites-*/hydrahive-console — überspringe"
+        elif grep -q "projects/\[\\^/\\]+/collab" "${_nginx_cfg}"; then
+            info "#554 H5: Collab-Location schon in ${_nginx_cfg} vorhanden"
+        else
             info "nginx-Config patchen: Collab-WebSocket-Location einfuegen (#554)"
             _backup_collab="${_nginx_cfg}.bak-collab-$(date +%s)"
             cp "${_nginx_cfg}" "${_backup_collab}"
@@ -726,12 +731,12 @@ if count == 0:
     raise SystemExit("marker 'location /api/ {' nicht gefunden")
 open(p, "w").write(new_txt)
 PYEOF
-            if nginx -t >/dev/null 2>&1; then
-                systemctl reload nginx >/dev/null 2>&1 && \
-                    info "nginx Collab-Location aktiv" || \
-                    warn "nginx reload fehlgeschlagen — Config gepatcht aber nicht aktiv"
+            if nginx -t 2>&1 | head -20; then
+                systemctl reload nginx 2>&1 | head -5 && \
+                    info "#554 H5: nginx Collab-Location aktiv" || \
+                    warn "#554 H5: nginx reload fehlgeschlagen — Config gepatcht aber nicht aktiv"
             else
-                warn "nginx -t nach Collab-Patch fehlgeschlagen — Rollback aus ${_backup_collab}"
+                warn "#554 H5: nginx -t nach Collab-Patch fehlgeschlagen — Rollback aus ${_backup_collab}"
                 cp "${_backup_collab}" "${_nginx_cfg}"
             fi
         fi
