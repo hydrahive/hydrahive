@@ -135,12 +135,29 @@ class SharedSessionManager:
     def subscribe(self, project_id: str, username: str) -> asyncio.Queue:
         """Client meldet sich an — bekommt eine Queue für SSE-Events.
 
+        #726 K2b: wenn beim Projekt ein Stream aktiv ist, wird der bisherige
+        Verlauf (Buffer-Snapshot) sofort in die frische Queue geschrieben,
+        bevor sie in _subscribers landet. Damit sieht ein später-joiner die
+        vorherigen Chunks ohne Duplikate (atomic weil keine await-Punkte).
+
         Returns: asyncio.Queue die der SSE-Endpoint lesen kann.
         """
         self._subscribers.setdefault(project_id, set())
         self._presence.setdefault(project_id, ProjectPresence())
 
-        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        # Priming aus dem Replay-Buffer
+        buf = self._stream_buffers.get(project_id)
+        primed_events: list[str] = buf.snapshot() if buf and buf.is_active() else []
+        # Queue groß genug für Priming + Headroom — live-Broadcast darf nicht
+        # sofort volllaufen weil Priming den Großteil belegt hat.
+        capacity = max(100, len(primed_events) + 50)
+        queue: asyncio.Queue = asyncio.Queue(maxsize=capacity)
+        for ev in primed_events:
+            # put_nowait ist sicher weil capacity >= len(primed_events)
+            queue.put_nowait(ev)
+
+        # Erst NACH dem Priming in _subscribers — vermeidet dass das nächste
+        # broadcast() dieselben Events nochmal in die Queue kippt.
         self._subscribers[project_id].add(queue)
         self._presence[project_id].add(username)
         self._queue_user[queue] = (project_id, username)  # #608
@@ -148,8 +165,10 @@ class SharedSessionManager:
         # Presence-Update an alle Clients broadcasten
         self._broadcast_presence(project_id)
 
-        logger.info("SharedSession: %s subscribed to %s (%d clients)",
-                     username, project_id, len(self._subscribers[project_id]))
+        logger.info(
+            "SharedSession: %s subscribed to %s (%d clients, primed=%d events)",
+            username, project_id, len(self._subscribers[project_id]), len(primed_events),
+        )
         return queue
 
     def unsubscribe(self, project_id: str, queue: asyncio.Queue, username: str) -> None:
