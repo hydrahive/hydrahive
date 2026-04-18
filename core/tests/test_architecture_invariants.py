@@ -2112,3 +2112,79 @@ def test_invariant15_locale_key_parity_ignores_meta_namespaces():
         "existieren (ausgenommen _*-Namespaces wie _meta). Drift:\n  "
         + "\n  ".join(mismatches)
     )
+
+
+# ===========================================================================
+# Invariante 19 — Core-Policy als versionierte Markdown-Datei (#710)
+# ===========================================================================
+# Die repo-weite Default-Policy wird aus einer Markdown-Datei neben dem
+# hydrahive_core-Package geladen und in den static `policies`-Channel
+# gerendert. Kein großer Hardcode-String mehr im Builder. Der Cache-Hash
+# muss die Policy-Datei berücksichtigen, sonst bleiben Änderungen
+# bis TTL-Ablauf unsichtbar.
+# ===========================================================================
+
+
+def test_invariant19a_core_policy_markdown_exists():
+    """19a: Policy-Datei liegt versioniert im Package unter prompts/."""
+    from hydrahive_core import orchestrator_context as oc
+    assert oc._CORE_POLICY_PATH.exists(), (
+        f"Core-Policy fehlt: {oc._CORE_POLICY_PATH} — muss im Repo versioniert sein"
+    )
+    text = oc._CORE_POLICY_PATH.read_text(encoding="utf-8")
+    assert text.strip(), "Core-Policy darf nicht leer sein"
+
+
+def test_invariant19b_context_channels_has_policies_slot():
+    """19b: ContextChannels muss den static `policies`-Slot weiterhin
+    bereitstellen — wird von #710 befüllt, von späteren Issues
+    (#711/#712 Instance/Project-Policy) erweitert."""
+    from hydrahive_core.context_channels import ContextChannels
+    ch = ContextChannels()
+    assert hasattr(ch, "policies"), "ContextChannels hat keinen `policies`-Slot"
+    assert "policies" in ContextChannels._STATIC_SLOTS, (
+        "`policies` muss static (cacheable) bleiben, nicht dynamic werden"
+    )
+
+
+def test_invariant19c_orchestrator_no_large_policy_hardcode():
+    """19c: `orchestrator_context.py` darf keinen großen Policy-Hardcode
+    mehr tragen — Core-Regeln liegen in der Markdown-Datei.
+
+    Heuristik: Der alte Hardcode-Block enthielt die Zeile
+    'Nutze `write_memory` aktiv' als Fließtext. Nach #710 existiert diese
+    Zeile nur noch in der externen Policy-Datei, nicht im Python-Source.
+    """
+    import hydrahive_core.orchestrator_context as oc
+    src_path = Path(oc.__file__)
+    src = src_path.read_text(encoding="utf-8")
+    assert "Nutze `write_memory` aktiv" not in src, (
+        "orchestrator_context.py enthält den alten Policy-Hardcode noch — "
+        "muss in prompts/agent_default_policy.md ausgelagert sein (#710)."
+    )
+
+
+def test_invariant19d_cache_hash_includes_core_policy():
+    """19d: `_prompt_cache_hash` berücksichtigt die Policy-Datei. Ändern
+    des Policy-Pfads muss den Hash ändern, sonst bleibt jede Policy-
+    Änderung bis zum Cache-TTL unsichtbar."""
+    from hydrahive_core import orchestrator_context as oc
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        agent_dir = Path(td) / "agent"
+        agent_dir.mkdir()
+        empty_policy = Path(td) / "empty_policy.md"
+        empty_policy.write_text("dummy", encoding="utf-8")
+
+        h1 = oc._prompt_cache_hash(agent_dir, mode="normal")
+        orig = oc._CORE_POLICY_PATH
+        try:
+            oc._CORE_POLICY_PATH = empty_policy
+            h2 = oc._prompt_cache_hash(agent_dir, mode="normal")
+        finally:
+            oc._CORE_POLICY_PATH = orig
+
+        assert h1 != h2, (
+            "Cache-Hash reagiert nicht auf Policy-Pfad-Wechsel — Änderungen "
+            "an agent_default_policy.md bleiben sonst bis TTL-Ablauf unsichtbar"
+        )

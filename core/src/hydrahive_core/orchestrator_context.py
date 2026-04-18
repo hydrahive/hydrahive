@@ -175,9 +175,43 @@ def _history_token_budget(model: str, system_prompt_tokens: int = 0) -> int:
 _SEGMENT_HASHES: dict[str, dict[str, str]] = {}  # agent_id → {segment_name: hash}
 
 
+_CORE_POLICY_PATH: Path = Path(__file__).parent / "prompts" / "agent_default_policy.md"
+_CORE_POLICY_WARN_CHARS = 6000  # Warnung ab dieser Größe (entspricht ~1500 Tokens)
+
+
+def _load_core_policy_text() -> str:
+    """#710: Lädt die repo-weite Core-Policy aus der versionierten Markdown-Datei.
+
+    Gibt leeren String zurück, wenn die Datei fehlt oder nicht lesbar ist —
+    der Prompt-Build bricht in keinem Fall. Ungewöhnlich große Policies
+    (> _CORE_POLICY_WARN_CHARS) erzeugen einen Warn-Log, werden aber nicht
+    gekürzt. Der Pfad ist via Modul-Attribut (`_CORE_POLICY_PATH`) monkey-
+    patchbar — Tests können ihn gezielt umleiten.
+    """
+    try:
+        path = _CORE_POLICY_PATH
+        if not path.exists():
+            logger.debug("core-policy: Datei %s nicht vorhanden", path)
+            return ""
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("core-policy: konnte %s nicht lesen: %s", _CORE_POLICY_PATH, exc)
+        return ""
+    if text and len(text) > _CORE_POLICY_WARN_CHARS:
+        logger.warning(
+            "core-policy: %s ist %d Zeichen (> %d) — Budget prüfen",
+            _CORE_POLICY_PATH.name, len(text), _CORE_POLICY_WARN_CHARS,
+        )
+    return text
+
+
 def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
+    # #710: Core-Policy-Datei muss in den Hash — Änderung soll Static-Cache
+    # invalidieren, sonst bleiben Policy-Edits bis TTL-Ablauf unsichtbar.
+    if _CORE_POLICY_PATH.exists():
+        parts.append(f"core_policy:{_CORE_POLICY_PATH.stat().st_mtime:.0f}")
     handbook = settings.system_handbook
     if handbook.exists():
         parts.append(f"handbook:{handbook.stat().st_mtime:.0f}")
@@ -207,6 +241,8 @@ def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | No
     """#527: Identifiziert welches Segment den Cache-Break verursacht hat."""
     segments: dict[str, str] = {}
     segments["mode"] = mode
+    if _CORE_POLICY_PATH.exists():
+        segments["core_policy"] = f"{_CORE_POLICY_PATH.stat().st_mtime:.0f}"
     handbook = settings.system_handbook
     if handbook.exists():
         segments["handbook"] = f"{handbook.stat().st_mtime:.0f}"
@@ -465,32 +501,11 @@ async def build_system_prompt(
             except Exception as _srv_err:
                 logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
-        # #636: Memory-Schreib-Anweisung (aus altem Builder migriert) als statische Policy.
-        if boss_cfg.agent_dir:
-            channels.policies = (
-                "## Gedächtnis-Regel (Memory-System)\n\n"
-                "Nutze `write_memory` aktiv — genau wie ein erfahrener Entwickler Notizen macht.\n\n"
-                "**Wann schreiben:**\n"
-                "- Nach jedem implementierten Feature oder Fix\n"
-                "- Nach jeder wichtigen Analyse (Projektstruktur, Pfade, Abhängigkeiten)\n"
-                "- Nach Entscheidungen die du später begründen können möchtest\n"
-                "- Immer wenn du denkst 'das werde ich in der nächsten Session wieder brauchen'\n\n"
-                "**Format (Frontmatter + Inhalt):**\n"
-                "```\n"
-                "---\n"
-                "name: Kurzer Titel\n"
-                "description: Ein Satz was drin steht\n"
-                "type: project | feedback | reference\n"
-                "---\n\n"
-                "## Was wurde gemacht\n"
-                "...\n\n"
-                "**Why:** Warum war das nötig\n"
-                "**Status:** done | in_progress | blocked\n"
-                "```\n\n"
-                "**Kontext-IDs:** thematisch benennen, z.B. `ship_defense_packet`, `project_structure`, `open_issues`\n\n"
-                "**Wichtig:** Schreibe auch einen Index-Eintrag in `MEMORY.md` (context_id: `memory_index`) "
-                "damit du beim nächsten `read_memory` sofort weißt was du weißt."
-            )
+        # #710: Core-Policy als versionierte Markdown-Datei statt Hardcode.
+        # Agent-unabhängig — greift auch wenn kein agent_dir gesetzt ist.
+        _core_policy_text = _load_core_policy_text()
+        if _core_policy_text:
+            channels.policies = _core_policy_text
 
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
