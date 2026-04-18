@@ -267,9 +267,16 @@ main() {
         cat > /etc/hydrahive/instance_policy.md << 'EOF'
 # Instance Policy
 
-<!-- Hier instanzweite Regeln ergänzen die für alle Agenten dieser HydraHive-Instanz gelten.
-     Diese Datei wird NICHT durch Updates überschrieben.
-     Leer lassen = kein Effekt. -->
+Diese Datei enthält instanzweite Regeln für alle Agenten dieser HydraHive-Instanz.
+Sie wird durch Updates nicht überschrieben.
+
+## Token-Disziplin bei Codearbeiten
+
+1. Vor Codeänderungen maximal eine gebündelte Explorationsrunde: `git status --short`, gezielte `rg`-Suchen und relevante Dateiabschnitte mit `sed -n`. Keine sequentiellen Einzel-Greps ohne neue Erkenntnis.
+2. Vor Patches erst Kontext eindeutig machen: Dateiabschnitt lesen, dann genau patchen. Keine blind wiederholten `file_patch`-Retries.
+3. Testumgebung zuerst einmal feststellen: `which pytest || true`, `python3 -m pytest --version || true`. Wenn keine Testumgebung existiert: Syntax-Check + Bericht, nicht mehrere Suchrunden.
+4. Git-Flow direkt: `git status`, `git add ...`, `git commit ...`, `git push`. `git pull --rebase` nur wenn Push abgelehnt wird. Kein Tool-Discovery-Ritual für bekannte Git-Befehle.
+5. Wenn nach 10 Tool-Runden kein Patch steht: stoppen, Zwischenbefund liefern, Plan korrigieren.
 EOF
         chown hydrahive:hydrahive /etc/hydrahive/instance_policy.md
         chmod 644 /etc/hydrahive/instance_policy.md

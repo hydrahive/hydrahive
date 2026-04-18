@@ -742,7 +742,9 @@ class ShellExecTool(BaseTool):
         return (
             "Führt einen Bash-Befehl aus (stdout/stderr/exit_code). "
             "Nutze dieses Tool für: Git, System-Befehle, Pakete, SSH, curl, etc. "
-            "Timeout bis 600s. cwd Standard: /tmp."
+            "Timeout bis 600s. cwd Standard: /tmp. "
+            "Für Datei-Inhalt file_read oder file_search nutzen, nicht cat/head/tail; "
+            "mehrere Lookups in einem Befehl bündeln."
         )
 
     @property
@@ -934,7 +936,8 @@ class FileReadTool(BaseTool):
         return (
             "Liest den Inhalt einer Datei aus dem Projekt-Verzeichnis. "
             "Pfad relativ zum Projekt-Root. "
-            "Bei großen Dateien offset+limit nutzen — has_more=true zeigt weitere Daten an."
+            "Bei großen Dateien offset+limit nutzen — has_more=true zeigt weitere Daten an. "
+            "Vor breitem Lesen erst file_search nutzen; Grep ist billiger als Vollread."
         )
 
     @property
@@ -1011,7 +1014,8 @@ class FileWriteTool(BaseTool):
         return (
             "Schreibt Inhalt in eine Datei im Projekt-Verzeichnis. "
             "Erstellt Datei und Unterordner wenn nötig. "
-            "WICHTIG für große Dateien (>100 Zeilen): Erst overwrite, dann append."
+            "WICHTIG für große Dateien (>100 Zeilen): Erst overwrite, dann append. "
+            "Nur nach file_read auf gleichem Pfad; für Teil-Änderungen file_patch bevorzugen."
         )
 
     @property
@@ -1082,7 +1086,8 @@ class FilePatchTool(BaseTool):
         return (
             "Sucht einen Text-Abschnitt in einer Datei und ersetzt ihn. "
             "Ideal für gezielte Änderungen ohne die ganze Datei zu lesen. "
-            "Unterstützt mehrzeilige Suche und Ersetzung."
+            "Unterstützt mehrzeilige Suche und Ersetzung. "
+            "Bei punktuellen Änderungen dieses Tool file_write vorziehen; Suchtext exakt aus file_read übernehmen."
         )
 
     @property
@@ -1211,7 +1216,8 @@ class FileSearchTool(BaseTool):
     def description(self) -> str:
         return (
             "Durchsucht alle Dateien im Projektverzeichnis nach einem Text oder Pattern. "
-            "Gibt Dateinamen, Zeilennummern und Kontext zurück."
+            "Gibt Dateinamen, Zeilennummern und Kontext zurück. "
+            "Primär-Werkzeug für Wissensfragen im Projekt; vor file_read einsetzen."
         )
 
     @property
@@ -1374,7 +1380,8 @@ class ReadMemoryTool(BaseTool):
             "scope='project' (Standard): lokales Projekt-Memory. "
             "scope='global': globale Wissensdatenbank (A-MEM). "
             "Ohne filename: listet alle vorhandenen Dateien auf. "
-            "Mit filename/query: gibt den Inhalt zurück."
+            "Mit filename/query: gibt den Inhalt zurück. "
+            "Ohne filename zuerst Liste ziehen und MEMORY.md-Index scannen, dann gezielt 1-2 Dateien öffnen."
         )
 
     @property
@@ -1475,7 +1482,8 @@ class WriteMemoryTool(BaseTool):
             "scope='project' (Standard): lokales Projekt-Memory. "
             "scope='global': globale Wissensdatenbank (A-MEM). "
             "mode=overwrite ersetzt, append hängt an. "
-            "importance (0-1) und category steuern Lebensdauer."
+            "importance (0-1) und category steuern Lebensdauer. "
+            "Ein Eintrag pro Thema; Frontmatter Pflicht und MEMORY.md-Index ergänzen."
         )
 
     @property
@@ -1616,7 +1624,10 @@ class AskAgentTool(BaseTool):
     def name(self) -> str: return "Agenten fragen"
     @property
     def description(self) -> str:
-        return "Synchrone Frage/Task an einen anderen Agenten — antwortet direkt."
+        return (
+            "Synchrone Frage/Task an einen anderen Agenten — antwortet direkt. "
+            "Für breite Recherche über viele Dateien nutzen; nicht für triviale Einzelfragen."
+        )
 
     @property
     def parameters(self) -> dict:
