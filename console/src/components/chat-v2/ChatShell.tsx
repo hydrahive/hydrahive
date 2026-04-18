@@ -123,15 +123,15 @@ function ChatMessage({ message }: { message: MessageLike }) {
   return (
     <MessagePrimitive.Root className={cn("flex gap-3 px-4 py-4", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
-        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[hsl(var(--candy-cyan)/0.35)] to-[hsl(var(--candy-violet)/0.25)] text-primary shadow-[0_0_12px_hsl(var(--candy-cyan)/0.3)]">
           <Bot className="h-4 w-4" />
         </div>
       )}
       <div className={cn(
         "max-w-[min(860px,92vw)] rounded-2xl border px-4 py-3 shadow-sm",
         isUser
-          ? "border-primary/20 bg-primary text-primary-foreground"
-          : "border-border/70 bg-card/95 text-card-foreground"
+          ? "bubble-candy-user"
+          : "bubble-candy-assistant bg-card/95 text-card-foreground"
       )}>
         <MessagePrimitive.Parts>
           {({ part }) => <MessagePart part={part as MessagePartState} />}
@@ -482,7 +482,7 @@ function Composer({
           type="button"
           disabled={isRunning || pendingImages.length >= 5}
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn-glass inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Bild hochladen"
         >
           <ImagePlus className={cn("h-4 w-4", pendingImages.length > 0 && "text-primary")} />
@@ -501,13 +501,13 @@ function Composer({
         />
         <ComposerPrimitive.Cancel
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted",
+            "btn-glass inline-flex h-10 w-10 items-center justify-center rounded-xl",
             !isRunning && "hidden"
           )}
         >
           <Square className="h-4 w-4" />
         </ComposerPrimitive.Cancel>
-        <ComposerPrimitive.Send className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40">
+        <ComposerPrimitive.Send className="btn-candy inline-flex h-10 w-10 items-center justify-center rounded-xl">
           <Send className="h-4 w-4" />
         </ComposerPrimitive.Send>
       </ComposerPrimitive.Root>

@@ -100,6 +100,16 @@
     --shadow-soft: 210 50% 3%;
   }
 
+  /* Candy-Palette (Phase 1, Till 2026-04-18). Nur Farbtöne, keine Alpha —
+     die Nutzung legt die Transparenz fest. Bewusst in beiden Modi gleich. */
+  :root {
+    --candy-pink: 330 82% 60%;
+    --candy-violet: 268 78% 62%;
+    --candy-cyan: 188 90% 52%;
+    --candy-lime: 150 70% 52%;
+    --candy-amber: 28 90% 58%;
+  }
+
   * {
     @apply border-border;
   }
@@ -122,12 +132,85 @@
       linear-gradient(180deg, hsl(var(--background)), hsl(var(--shell)) 65%, hsl(var(--background)));
   }
 
+  /* Candy-Background im Dark-Mode: drei subtile radiale Hues an den Ecken
+     für Tiefe + Farbe (Phase 1). Light-Mode bleibt beim grünen Hero-Verlauf. */
+  .dark body {
+    background-image:
+      radial-gradient(circle at 8% 12%, hsl(var(--candy-pink) / 0.12), transparent 42%),
+      radial-gradient(circle at 92% 8%, hsl(var(--candy-violet) / 0.14), transparent 42%),
+      radial-gradient(circle at 12% 94%, hsl(var(--candy-cyan) / 0.10), transparent 46%),
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--shell)) 65%, hsl(var(--background)));
+  }
+
   #root {
     min-height: 100vh;
   }
 }
 
 @layer components {
+  /* Candy-Buttons & -Bubbles (Phase 1).
+     .btn-candy    = Primary CTA mit Gradient (cyan → violet → pink) + Glow
+     .btn-glass    = Secondary mit backdrop-blur + ring
+     .bubble-candy-user      = User-Chat-Bubble mit Gradient
+     .bubble-candy-assistant = Assistant-Bubble mit Cyan-Glow-Border
+     .card-candy-border      = generischer Akzent-Border-Glow für Panels */
+  .btn-candy {
+    background-image: linear-gradient(135deg,
+      hsl(var(--candy-cyan)) 0%,
+      hsl(var(--candy-violet)) 55%,
+      hsl(var(--candy-pink)) 100%);
+    color: #fff;
+    box-shadow: 0 4px 20px hsl(var(--candy-violet) / 0.32);
+    transition: box-shadow .2s, filter .2s, transform .05s;
+  }
+  .btn-candy:hover:not(:disabled) {
+    box-shadow: 0 6px 28px hsl(var(--candy-violet) / 0.5);
+    filter: brightness(1.08);
+  }
+  .btn-candy:active:not(:disabled) {
+    transform: scale(.98);
+  }
+  .btn-candy:disabled {
+    opacity: .4;
+    filter: saturate(.6);
+  }
+
+  .btn-glass {
+    background: hsl(var(--card) / 0.45);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid hsl(var(--candy-violet) / 0.28);
+    color: hsl(var(--foreground));
+    transition: background .2s, border-color .2s;
+  }
+  .btn-glass:hover:not(:disabled) {
+    background: hsl(var(--card) / 0.65);
+    border-color: hsl(var(--candy-violet) / 0.5);
+  }
+
+  .bubble-candy-user {
+    background-image: linear-gradient(135deg,
+      hsl(var(--candy-violet) / 0.95) 0%,
+      hsl(var(--candy-pink) / 0.9) 100%);
+    color: #fff;
+    border-color: hsl(var(--candy-violet) / 0.45) !important;
+    box-shadow: 0 4px 18px hsl(var(--candy-pink) / 0.22);
+  }
+
+  .bubble-candy-assistant {
+    border-color: hsl(var(--candy-cyan) / 0.35) !important;
+    box-shadow:
+      0 0 0 1px hsl(var(--candy-cyan) / 0.08),
+      0 4px 22px hsl(var(--candy-cyan) / 0.08);
+  }
+
+  .card-candy-border {
+    border-color: hsl(var(--candy-violet) / 0.3) !important;
+    box-shadow:
+      0 0 0 1px hsl(var(--candy-violet) / 0.06),
+      0 8px 32px hsl(var(--candy-violet) / 0.08);
+  }
+
   .app-shell {
     @apply min-h-screen text-foreground;
     background: transparent;
