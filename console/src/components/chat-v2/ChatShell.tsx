@@ -22,7 +22,7 @@ import {
   useHydraHiveRuntime,
 } from "./hydrahive-runtime";
 import { CollabComposer } from "./CollabComposer";
-import { useProjectYjs } from "@/hooks/useProjectYjs";
+import type { ProjectYjs } from "@/hooks/useProjectYjs";
 import type { SessionPreview } from "@/lib/api";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
@@ -733,10 +733,9 @@ export type ChatShellProps = {
   presenceUsers?: string[];
   onComposerActivity?: (hasText: boolean) => void;
   /** #554: wenn gesetzt, wird der Composer durch einen gemeinsamen Yjs-
-   * Composer ersetzt. Erwartet die projectId für den /collab-WS + den
-   * eigenen Usernamen für Awareness. */
-  collabProjectId?: string;
-  collabUsername?: string;
+   * Composer ersetzt. Der Hook useProjectYjs lebt im Page-Layer damit die
+   * Page auch selbst in den Y.Text schreiben kann (z.B. Slash-Chips). */
+  collab?: ProjectYjs | null;
 };
 
 export function ChatShell(props: ChatShellProps) {
@@ -754,11 +753,10 @@ function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps
   return <ChatShellInner {...rest} target={target} runtime={runtime} />;
 }
 
-function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, presenceUsers, onComposerActivity, collabProjectId, collabUsername }: ChatShellProps & { runtime: HydraHiveRuntime }) {
+function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, presenceUsers, onComposerActivity, collab }: ChatShellProps & { runtime: HydraHiveRuntime }) {
   const label = headerLabel ?? target?.label ?? "";
   const tts = useTtsPlayback();
-  // #554: gemeinsamer Y.Text-Composer — null wenn collab nicht aktiv
-  const yjs = useProjectYjs(collabProjectId, collabUsername);
+  const yjs = collab ?? null;
   const appendTranscript = (text: string) => {
     const composer = runtime.aui.composer();
     const current = composer.getState().text.trim();

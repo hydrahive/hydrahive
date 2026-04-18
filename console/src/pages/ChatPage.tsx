@@ -13,6 +13,8 @@ import { ChatShell } from "@/components/chat-v2/ChatShell";
 import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 import { useAuth } from "@/hooks/useAuth";
+import { useProjectYjs } from "@/hooks/useProjectYjs";
+import { insertIntoYjsComposer } from "@/components/chat-v2/CollabComposer";
 
 export function ChatPage() {
   const { t } = useTranslation();
@@ -83,6 +85,8 @@ export function ChatPage() {
     return false;
   }
   const runtime = useHydraHiveRuntime(target, { onSlashCommand: handleSlashCommand });
+  // #554: Y.Text-Composer für gemeinsames Tippen — null wenn noch nicht verbunden.
+  const collab = useProjectYjs(id, user?.username);
 
   // Subscribe fuer Typing-Indicator + Broadcast-Sync (#553)
   const handleBroadcast = useCallback((raw: Record<string, unknown>) => {
@@ -198,12 +202,18 @@ export function ChatPage() {
           </button>
         </div>
 
-        {/* Shortcut-Chips */}
+        {/* Shortcut-Chips — im Collab-Modus in den Y.Text, sonst in den aui-Composer */}
         <div className="flex flex-wrap gap-2 px-4 pt-3">
           {SLASH_COMMANDS.map((cmd) => (
             <button key={cmd.cmd}
               type="button"
-              onClick={() => runtime.aui.composer().setText(`${cmd.cmd} `)}
+              onClick={() => {
+                if (collab) {
+                  insertIntoYjsComposer(collab, `${cmd.cmd} `);
+                } else {
+                  runtime.aui.composer().setText(`${cmd.cmd} `);
+                }
+              }}
               className="chip-glass rounded-full px-3 py-1 text-[11px] transition">
               {cmd.cmd}
             </button>
@@ -217,8 +227,7 @@ export function ChatPage() {
             typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
             presenceUsers={subscribe.onlineUsers}
             onComposerActivity={handleTyping}
-            collabProjectId={id}
-            collabUsername={user?.username}
+            collab={collab}
           />
         </div>
       </div>
