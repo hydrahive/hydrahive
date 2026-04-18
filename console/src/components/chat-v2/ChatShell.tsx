@@ -124,9 +124,12 @@ function MessagePart({ part }: { part: MessagePartState }) {
   return null;
 }
 
-// #734 O: ein aktiver TTS-Stream zur Zeit. Beim Start einer neuen Wiedergabe
-// wird der bisherige Audio-Tag abgebrochen und die URL revoked.
+// #734 O: ein aktiver TTS-Stream zur Zeit. "activeId" ist unabhängig vom
+// Error-State gesetzt, solange das Audio-Element im DOM existiert — damit
+// es immer einen Stop-Button gibt (Till-Bug: Retry angezeigt während
+// Audio weiterlief).
 type TtsState = {
+  activeId: string | null;
   playingId: string | null;
   loadingId: string | null;
   errorId: string | null;
@@ -135,6 +138,7 @@ type TtsState = {
 };
 
 function useTtsPlayback(): TtsState {
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
@@ -143,11 +147,11 @@ function useTtsPlayback(): TtsState {
 
   const hardStop = useCallback(() => {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
+      try { audioRef.current.pause(); } catch { /* ignore */ }
+      try { audioRef.current.removeAttribute("src"); audioRef.current.load(); } catch { /* ignore */ }
     }
     if (urlRef.current) {
-      URL.revokeObjectURL(urlRef.current);
+      try { URL.revokeObjectURL(urlRef.current); } catch { /* ignore */ }
       urlRef.current = null;
     }
     audioRef.current = null;
@@ -155,6 +159,7 @@ function useTtsPlayback(): TtsState {
 
   const stop = useCallback(() => {
     hardStop();
+    setActiveId(null);
     setPlayingId(null);
     setLoadingId(null);
   }, [hardStop]);
@@ -163,6 +168,7 @@ function useTtsPlayback(): TtsState {
     hardStop();
     setErrorId(null);
     if (!text.trim()) return;
+    setActiveId(messageId);
     setLoadingId(messageId);
     setPlayingId(null);
     try {
@@ -171,22 +177,40 @@ function useTtsPlayback(): TtsState {
       urlRef.current = url;
       const audio = new Audio(url);
       audioRef.current = audio;
-      audio.onended = () => {
+      audio.addEventListener("playing", () => {
+        setPlayingId(messageId);
+        setLoadingId(null);
+      });
+      audio.addEventListener("pause", () => {
+        if (audio.ended) return;
         setPlayingId((id) => (id === messageId ? null : id));
+      });
+      audio.addEventListener("ended", () => {
+        setActiveId((id) => (id === messageId ? null : id));
+        setPlayingId((id) => (id === messageId ? null : id));
+        setLoadingId(null);
         if (urlRef.current === url) {
-          URL.revokeObjectURL(url);
+          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
           urlRef.current = null;
         }
-      };
-      audio.onerror = () => {
+        if (audioRef.current === audio) audioRef.current = null;
+      });
+      audio.addEventListener("error", () => {
+        // Audio hart stoppen falls Browser trotz onerror weiterspielt.
+        try { audio.pause(); } catch { /* ignore */ }
+        setActiveId((id) => (id === messageId ? null : id));
         setPlayingId(null);
         setLoadingId(null);
         setErrorId(messageId);
-      };
+        if (urlRef.current === url) {
+          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+          urlRef.current = null;
+        }
+        if (audioRef.current === audio) audioRef.current = null;
+      });
       await audio.play();
-      setLoadingId(null);
-      setPlayingId(messageId);
     } catch {
+      setActiveId(null);
       setLoadingId(null);
       setPlayingId(null);
       setErrorId(messageId);
@@ -195,7 +219,7 @@ function useTtsPlayback(): TtsState {
 
   useEffect(() => () => hardStop(), [hardStop]);
 
-  return { playingId, loadingId, errorId, speak, stop };
+  return { activeId, playingId, loadingId, errorId, speak, stop };
 }
 
 function messageSpeakableText(message: MessageLike): string {
@@ -211,28 +235,44 @@ function SpeakButton({ message, tts }: { message: MessageLike; tts: TtsState }) 
   if (message.status?.type === "running") return null;
   const text = messageSpeakableText(message);
   if (!text) return null;
+  const isActive = tts.activeId === message.id;     // Audio-Element existiert noch
   const isLoading = tts.loadingId === message.id;
   const isPlaying = tts.playingId === message.id;
-  const hasError = tts.errorId === message.id;
-  const Icon = isPlaying ? VolumeX : hasError ? VolumeX : Volume2;
-  const label = isPlaying ? "TTS stoppen" : hasError ? "TTS fehlgeschlagen — erneut versuchen" : "Vorlesen";
-  const onClick = () => (isPlaying ? tts.stop() : tts.speak(message.id, text));
+  const hasError = !isActive && tts.errorId === message.id;
+  // Priorität: aktive Wiedergabe → Stop (überschreibt error), sonst error → Retry, sonst Speak.
+  const mode = isActive ? "stop" : hasError ? "retry" : "idle";
+  const label = mode === "stop" ? "TTS stoppen" : mode === "retry" ? "TTS fehlgeschlagen — erneut versuchen" : "Vorlesen";
+  const onClick = () => {
+    if (mode === "stop") tts.stop();
+    else tts.speak(message.id, text);
+  };
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={isLoading}
       className={cn(
         "mt-2 inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] transition",
-        "border-[hsl(var(--candy-cyan)/0.4)] text-[hsl(var(--candy-cyan))] hover:bg-[hsl(var(--candy-cyan)/0.08)]",
-        hasError && "border-[hsl(var(--candy-pink)/0.5)] text-[hsl(var(--candy-pink))]",
-        isLoading && "opacity-60",
+        mode === "stop"
+          ? "border-[hsl(var(--candy-violet)/0.6)] bg-[hsl(var(--candy-violet)/0.12)] text-[hsl(var(--candy-violet))] hover:bg-[hsl(var(--candy-violet)/0.2)]"
+          : mode === "retry"
+            ? "border-[hsl(var(--candy-pink)/0.5)] text-[hsl(var(--candy-pink))] hover:bg-[hsl(var(--candy-pink)/0.08)]"
+            : "border-[hsl(var(--candy-cyan)/0.4)] text-[hsl(var(--candy-cyan))] hover:bg-[hsl(var(--candy-cyan)/0.08)]"
       )}
       title={label}
       aria-label={label}
     >
-      {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
-      <span className="font-medium">{isPlaying ? "Stop" : hasError ? "Retry" : "Speak"}</span>
+      {isLoading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : mode === "stop" ? (
+        <Square className="h-3.5 w-3.5" />
+      ) : mode === "retry" ? (
+        <VolumeX className="h-3.5 w-3.5" />
+      ) : (
+        <Volume2 className="h-3.5 w-3.5" />
+      )}
+      <span className="font-medium">
+        {mode === "stop" ? (isPlaying ? "Stop" : "Lädt…") : mode === "retry" ? "Retry" : "Speak"}
+      </span>
     </button>
   );
 }
