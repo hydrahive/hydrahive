@@ -88,7 +88,6 @@ export function FloatingCompanion() {
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   const lastCommentRef = useRef(0);
   const lastPathRef = useRef("");
-  const sleepTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [wander, setWander] = useState({ x: 0, y: 0 });
   const [state, setState] = useState<{
     happy: number; hunger: number; energy: number; is_sleeping: boolean;
@@ -189,7 +188,6 @@ export function FloatingCompanion() {
     if (now - lastCommentRef.current < 30000) return; // Throttle 30s
     lastCommentRef.current = now;
 
-    clearTimeout(sleepTimerRef.current);
     setMood("think");
 
     const token = localStorage.getItem("hydrahive_token") || "";
@@ -211,7 +209,8 @@ export function FloatingCompanion() {
           else if (text.match(/[😱🫣]/)) setMood("shock");
           else setMood("happy");
           setTimeout(() => setShowBubble(false), 6000);
-          sleepTimerRef.current = setTimeout(() => setMood("sleep"), 120000);
+          // Sleep state ist Server-Wahrheit (siehe fetchState / derive_mood) —
+          // kein clientseitiger Sleep-Timer mehr. Fix #738.
         } else {
           setMood("idle");
         }

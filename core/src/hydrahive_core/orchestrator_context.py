@@ -205,37 +205,28 @@ def _load_core_policy_text() -> str:
     return text
 
 
-def _load_instance_policy_text() -> str:
-    """#711: Lädt die optionale instanzweite Admin-Policy.
+def _load_project_policy_text(project_dir: "Path | None") -> str:
+    """#712: Lädt die projekt-spezifische Policy aus <project_dir>/policy.md.
 
-    Die Datei liegt unter /etc/hydrahive/instance_policy.md. Fehlende, leere
-    oder nicht lesbare Dateien haben keinen Effekt auf den Prompt-Build.
+    Gibt leeren String zurück, wenn project_dir None ist, die Datei fehlt,
+    leer ist oder nicht gelesen werden kann — der Prompt-Build bricht in
+    keinem Fall ab.
     """
-    path = settings.instance_policy
-    try:
-        if not path.exists():
-            return ""
-        return path.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        logger.warning("instance-policy: konnte %s nicht lesen: %s", path, exc)
-        return ""
-
-
-def _load_project_policy_text(project_dir: Path | None) -> str:
-    """#712: Lädt die optionale Projekt-Policy aus <project_dir>/policy.md."""
-    if not isinstance(project_dir, Path):
+    if project_dir is None:
         return ""
     path = project_dir / "policy.md"
     try:
         if not path.exists():
+            logger.debug("project-policy: Datei %s nicht vorhanden", path)
             return ""
-        return path.read_text(encoding="utf-8").strip()
+        text = path.read_text(encoding="utf-8").strip()
     except OSError as exc:
         logger.warning("project-policy: konnte %s nicht lesen: %s", path, exc)
         return ""
+    return text
 
 
-def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: Path | None = None) -> str:
+def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: "Path | None" = None) -> str:
     """Hash über alle Faktoren die den System-Prompt beeinflussen."""
     parts = [mode]
     # #710: Core-Policy-Datei muss in den Hash — Änderung soll Static-Cache
@@ -248,10 +239,11 @@ def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: Path | None = No
     instance_policy = settings.instance_policy
     if instance_policy.exists():
         parts.append(f"instance_policy:{instance_policy.stat().st_mtime:.0f}")
-    if isinstance(project_dir, Path):
-        project_policy = project_dir / "policy.md"
-        if project_policy.exists():
-            parts.append(f"project_policy:{project_policy.stat().st_mtime:.0f}")
+    # #712: Project-Policy
+    if project_dir is not None:
+        pp = project_dir / "policy.md"
+        if pp.exists():
+            parts.append(f"project_policy:{pp.stat().st_mtime:.0f}")
     soul = agent_dir / "soul.md"
     if soul.exists():
         parts.append(f"soul:{soul.stat().st_mtime:.0f}")
@@ -274,12 +266,7 @@ def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: Path | None = No
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
-def _diagnose_cache_break(
-    agent_id: str,
-    agent_dir: Path,
-    mode: str,
-    project_dir: Path | None = None,
-) -> str | None:
+def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str, project_dir: "Path | None" = None) -> str | None:
     """#527: Identifiziert welches Segment den Cache-Break verursacht hat."""
     segments: dict[str, str] = {}
     segments["mode"] = mode
@@ -291,10 +278,11 @@ def _diagnose_cache_break(
     instance_policy = settings.instance_policy
     if instance_policy.exists():
         segments["instance_policy"] = f"{instance_policy.stat().st_mtime:.0f}"
-    if isinstance(project_dir, Path):
-        project_policy = project_dir / "policy.md"
-        if project_policy.exists():
-            segments["project_policy"] = f"{project_policy.stat().st_mtime:.0f}"
+    # #712: Project-Policy
+    if project_dir is not None:
+        pp = project_dir / "policy.md"
+        if pp.exists():
+            segments["project_policy"] = f"{pp.stat().st_mtime:.0f}"
     soul = agent_dir / "soul.md"
     if soul.exists():
         segments["soul"] = f"{soul.stat().st_mtime:.0f}"
@@ -433,11 +421,7 @@ async def build_system_prompt(
         if cached:
             prompt_s, ts, h = cached
             if (time.time() - ts) < _PROMPT_CACHE_TTL:
-                current_h = _prompt_cache_hash(
-                    boss_cfg.agent_dir,
-                    mode,
-                    project_dir=getattr(boss_cfg, "project_dir", None),
-                )
+                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
                 if current_h == h:
                     static_cached = prompt_s
 
@@ -554,24 +538,26 @@ async def build_system_prompt(
             except Exception as _srv_err:
                 logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
-        # #710/#711/#712: Policy-Kaskade als versionierter Static-Block.
-        # Reihenfolge: Core-Policy → optionale Instance-Policy → Project-Policy.
-        _policy_parts = [
-            text for text in (
-                _load_core_policy_text(),
-                _load_instance_policy_text(),
-                _load_project_policy_text(getattr(boss_cfg, "project_dir", None)),
-            )
-            if text
-        ]
-        if _policy_parts:
-            channels.policies = "\n\n".join(_policy_parts)
+        # #710: Core-Policy als versionierte Markdown-Datei statt Hardcode.
+        # Agent-unabhängig — greift auch wenn kein agent_dir gesetzt ist.
+        _core_policy_text = _load_core_policy_text()
+        if _core_policy_text:
+            channels.policies = _core_policy_text
 
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
             _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
             if _handbook_text:
                 channels.handbook = _handbook_text
+
+        # #711: Instance-Policy — optionale instanzweite Admin-Schicht.
+        # Resolver-Kaskade: core (handbook) → instance (/etc/hydrahive/instance_policy.md).
+        # Fehlende oder leere Datei ist graceful — kein Fehler, kein Fallback.
+        _instance_policy_path = settings.instance_policy
+        if _instance_policy_path.exists():
+            _instance_policy_text = _instance_policy_path.read_text(encoding="utf-8").strip()
+            if _instance_policy_text:
+                channels.instance_policy = _instance_policy_text
 
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
@@ -583,11 +569,7 @@ async def build_system_prompt(
 
         static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
-            h = _prompt_cache_hash(
-                boss_cfg.agent_dir,
-                mode,
-                project_dir=getattr(boss_cfg, "project_dir", None),
-            )
+            h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
             _STATIC_PROMPT_CACHE[_cache_key] = (static_cached, time.time(), h)
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────
