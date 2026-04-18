@@ -387,7 +387,7 @@ function Composer({
     onComposerActivity(hasText);
   }, [hasText, onComposerActivity]);
   return (
-    <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 p-3 backdrop-blur">
+    <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
       {typingUsers && typingUsers.length > 0 ? (
         <div className="mx-auto mb-2 max-w-4xl text-xs text-muted-foreground italic">
           {typingUsers.length === 1

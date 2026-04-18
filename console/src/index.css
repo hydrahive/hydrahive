@@ -18,6 +18,19 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* Viewport-Höhe mit Keyboard-Awareness (#725).
+     3-Ebenen-Fallback:
+       1) 100vh          — alle Browser
+       2) 100dvh         — iOS 15.4+, Android 108+ (Dynamic Viewport Height)
+       3) --vv-height    — live via visualViewport-Listener in main.tsx
+     Auf Desktop ist dvh == vh, daher Noop. Auf Mobile schrumpft der Shell
+     mit der Bildschirmtastatur, und sticky Composer bleibt sichtbar. */
+  .h-viewport-safe {
+    height: 100vh;
+    height: 100dvh;
+    height: var(--vv-height, 100dvh);
+  }
+
   /* Touch-freundlichere Tap-Target-Größe */
   .tap-target {
     min-height: 44px;
