@@ -1,8 +1,7 @@
 /**
- * AgentChatPage — Agent-Chat mit Debug-Konsole (#491 refactored)
- *
- * Nutzt shared ChatView + useChatStream Hook.
- * Page-spezifisch: Agent-Header, Debug-Panel, History-Panel, Info-Sidebar.
+ * AgentChatPage — Agent-Chat (Chat v2, #728).
+ * Page-spezifisch: Agent-Header, Debug-Panel, Info-Sidebar.
+ * Chat-Kern läuft über ChatShell.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";

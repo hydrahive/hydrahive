@@ -1,8 +1,7 @@
 /**
- * ChatPage — Projekt-Chat mit Worker-Swarm-Anzeige (#491 refactored)
- *
- * Nutzt shared ChatView + useChatStream Hook.
- * Page-spezifisch: Projekt-Header, Swarm-Toggle, History, Live-Polling, Info-Sidebar.
+ * ChatPage — Projekt-Chat (Chat v2, #727/#728).
+ * Page-spezifisch: Projekt-Header, Swarm-Toggle, Typing/Broadcast-Sync,
+ * EKG-Monitor, Info-Sidebar. Chat-Kern läuft über ChatShell.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
