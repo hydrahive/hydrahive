@@ -356,6 +356,18 @@
     border-color: hsl(var(--border) / 0.9);
     box-shadow: 0 16px 60px hsl(var(--shadow-soft) / 0.18);
   }
+  /* Dark-Mode bekommt Candy-Hues im Hero statt des grünen Hero-Gradients */
+  .dark .hero-panel {
+    background:
+      radial-gradient(circle at 0% 0%, hsl(var(--candy-violet) / 0.22), transparent 40%),
+      radial-gradient(circle at 100% 0%, hsl(var(--candy-pink) / 0.18), transparent 45%),
+      radial-gradient(circle at 50% 100%, hsl(var(--candy-cyan) / 0.12), transparent 55%),
+      hsl(var(--panel) / 0.92);
+    border-color: hsl(var(--candy-violet) / 0.35);
+    box-shadow:
+      0 0 0 1px hsl(var(--candy-violet) / 0.1),
+      0 16px 60px hsl(var(--candy-violet) / 0.18);
+  }
 
   .hero-panel::after {
     content: "";
@@ -363,9 +375,25 @@
     background: linear-gradient(180deg, hsl(var(--primary) / 0.12), transparent 72%);
     pointer-events: none;
   }
+  .dark .hero-panel::after {
+    background: linear-gradient(180deg, hsl(var(--candy-pink) / 0.16), transparent 72%);
+  }
 
   .metric-card {
     @apply app-panel p-5;
+    transition: border-color .2s, box-shadow .2s, transform .1s;
+  }
+  .dark .metric-card {
+    border-color: hsl(var(--candy-violet) / 0.22) !important;
+    box-shadow:
+      0 0 0 1px hsl(var(--candy-violet) / 0.05),
+      0 6px 24px hsl(var(--candy-violet) / 0.08);
+  }
+  .dark .metric-card:hover {
+    border-color: hsl(var(--candy-cyan) / 0.45) !important;
+    box-shadow:
+      0 0 0 1px hsl(var(--candy-cyan) / 0.1),
+      0 8px 28px hsl(var(--candy-cyan) / 0.2);
   }
 
   .metric-kicker {
@@ -374,6 +402,16 @@
 
   .metric-value {
     @apply mt-3 text-3xl font-semibold tracking-tight;
+  }
+  /* Metric-Values mit Farbverlauf im Dark-Mode */
+  .dark .metric-value {
+    background-image: linear-gradient(135deg,
+      hsl(var(--candy-cyan)),
+      hsl(var(--candy-violet)) 60%,
+      hsl(var(--candy-pink)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   .metric-meta {
