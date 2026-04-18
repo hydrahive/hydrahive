@@ -171,49 +171,57 @@ function useTtsPlayback(): TtsState {
     setActiveId(messageId);
     setLoadingId(messageId);
     setPlayingId(null);
+    let blob: Blob;
     try {
-      const blob = await api.voiceTts(text);
-      const url = URL.createObjectURL(blob);
-      urlRef.current = url;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.addEventListener("playing", () => {
-        setPlayingId(messageId);
-        setLoadingId(null);
-      });
-      audio.addEventListener("pause", () => {
-        if (audio.ended) return;
-        setPlayingId((id) => (id === messageId ? null : id));
-      });
-      audio.addEventListener("ended", () => {
-        setActiveId((id) => (id === messageId ? null : id));
-        setPlayingId((id) => (id === messageId ? null : id));
-        setLoadingId(null);
-        if (urlRef.current === url) {
-          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
-          urlRef.current = null;
-        }
-        if (audioRef.current === audio) audioRef.current = null;
-      });
-      audio.addEventListener("error", () => {
-        // Audio hart stoppen falls Browser trotz onerror weiterspielt.
-        try { audio.pause(); } catch { /* ignore */ }
-        setActiveId((id) => (id === messageId ? null : id));
-        setPlayingId(null);
-        setLoadingId(null);
-        setErrorId(messageId);
-        if (urlRef.current === url) {
-          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
-          urlRef.current = null;
-        }
-        if (audioRef.current === audio) audioRef.current = null;
-      });
-      await audio.play();
+      blob = await api.voiceTts(text);
     } catch {
+      // TTS-API selbst tot — kein Audio erzeugt, Stop macht keinen Sinn.
       setActiveId(null);
       setLoadingId(null);
-      setPlayingId(null);
       setErrorId(messageId);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    urlRef.current = url;
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.addEventListener("playing", () => {
+      setPlayingId(messageId);
+      setLoadingId(null);
+    });
+    audio.addEventListener("pause", () => {
+      if (audio.ended) return;
+      setPlayingId((id) => (id === messageId ? null : id));
+    });
+    audio.addEventListener("ended", () => {
+      setActiveId((id) => (id === messageId ? null : id));
+      setPlayingId((id) => (id === messageId ? null : id));
+      setLoadingId(null);
+      if (urlRef.current === url) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+        urlRef.current = null;
+      }
+      if (audioRef.current === audio) audioRef.current = null;
+    });
+    audio.addEventListener("error", () => {
+      // Audio hart stoppen falls Browser trotz error-Event weiterspielt.
+      try { audio.pause(); } catch { /* ignore */ }
+      setActiveId((id) => (id === messageId ? null : id));
+      setPlayingId(null);
+      setLoadingId(null);
+      setErrorId(messageId);
+      if (urlRef.current === url) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+        urlRef.current = null;
+      }
+      if (audioRef.current === audio) audioRef.current = null;
+    });
+    try {
+      await audio.play();
+    } catch {
+      // play() kann in einigen Browsern rejecten (z.B. NotSupportedError) während
+      // der Stream trotzdem läuft. activeId bleibt deshalb gesetzt — den State
+      // räumt das 'ended'/'error'-Event auf. UI zeigt dadurch Stop statt Retry.
     }
   }, [hardStop]);
 
