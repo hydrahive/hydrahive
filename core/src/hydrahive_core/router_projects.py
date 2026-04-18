@@ -1340,10 +1340,14 @@ def register_project_routes(
         )
         try:
             await server.serve(channel)
-        except WebSocketDisconnect:
-            pass
+            logger.info("Collab-WS serve returned normally for %s/%s", project_id, username)
+        except WebSocketDisconnect as e:
+            logger.info("Collab-WS client disconnected: %s/%s code=%s", project_id, username, e.code)
         except Exception:
-            logger.exception("Collab-WS serve error for project %s", project_id)
+            # WICHTIG: pycrdt's serve unterdrückt Exceptions via exception_handler,
+            # aber FastAPI/ASGI-Fehler kommen hier an. Loggen damit wir sehen
+            # warum der WS stirbt (#554 Debug).
+            logger.exception("Collab-WS serve error for project %s user %s", project_id, username)
         finally:
             try:
                 await websocket.close()
@@ -1371,7 +1375,8 @@ def register_project_routes(
         clients = [getattr(c, "_label", getattr(c, "path", "?")) for c in room.clients]
         ydoc_text = ""
         try:
-            ydoc_text = str(room.ydoc.get_text("composer"))
+            from pycrdt import Text as _Text
+            ydoc_text = str(room.ydoc.get("composer", type=_Text))
         except Exception as e:
             ydoc_text = f"<err: {e}>"
         return {

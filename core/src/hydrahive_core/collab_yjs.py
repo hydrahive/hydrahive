@@ -149,16 +149,34 @@ class FastApiWsChannel:
         self._recv = 0
 
     async def send(self, message: bytes) -> None:
-        await self._ws.send_bytes(message)
+        try:
+            await self._ws.send_bytes(message)
+        except Exception as e:
+            logger.warning("collab-ws[%s] send failed: %s", self._label, e)
+            raise
         self._sent += 1
         if self._sent <= 5 or self._sent % 100 == 0:
-            logger.debug("collab-ws[%s] → send #%d bytes=%d", self._label, self._sent, len(message))
+            logger.info("collab-ws[%s] → send #%d bytes=%d", self._label, self._sent, len(message))
 
     async def recv(self) -> bytes:
-        data = await self._ws.receive_bytes()
+        # Starlette receive_bytes() assertet hart wenn Message text statt bytes
+        # ist. y-websocket-Clients senden binary, aber manche Proxies oder
+        # Polyfills könnten texten. Robust: raw receive() und selber konvertieren.
+        msg = await self._ws.receive()
+        mtype = msg.get("type")
+        if mtype == "websocket.disconnect":
+            raise WebSocketDisconnect(code=msg.get("code", 1000))
+        if mtype != "websocket.receive":
+            logger.warning("collab-ws[%s] unexpected frame type=%s, skip", self._label, mtype)
+            return b""
+        data = msg.get("bytes")
+        if data is None:
+            text = msg.get("text") or ""
+            logger.warning("collab-ws[%s] text frame (len=%d), encoding utf-8", self._label, len(text))
+            data = text.encode("utf-8")
         self._recv += 1
         if self._recv <= 5 or self._recv % 100 == 0:
-            logger.debug("collab-ws[%s] ← recv #%d bytes=%d", self._label, self._recv, len(data))
+            logger.info("collab-ws[%s] ← recv #%d bytes=%d", self._label, self._recv, len(data))
         return data
 
     def __aiter__(self):
