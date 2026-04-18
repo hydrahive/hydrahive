@@ -448,7 +448,7 @@ export function AdminLayout() {
 
   return (
     <TourProvider>
-    <div className="app-shell lg:grid lg:h-viewport-safe lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
+    <div className="app-shell lg:grid lg:h-screen lg:grid-cols-[18rem_minmax(0,1fr)] lg:overflow-hidden">
       {/* Update Live-Log Modal */}
       {showLog && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
@@ -513,8 +513,8 @@ export function AdminLayout() {
         </div>
       )}
 
-      <div className="hidden lg:block lg:h-viewport-safe lg:overflow-hidden">
-        <div className="sticky top-0 h-viewport-safe">{sidebar}</div>
+      <div className="hidden lg:block lg:h-screen lg:overflow-hidden">
+        <div className="sticky top-0 h-screen">{sidebar}</div>
       </div>
 
       {mobileOpen && (
@@ -525,7 +525,7 @@ export function AdminLayout() {
         </div>
       )}
 
-      <main className="relative min-w-0 flex h-viewport-safe flex-col overflow-hidden">
+      <main className="relative min-w-0 flex h-screen flex-col overflow-hidden">
         {/* Header */}
         <div className="sticky top-0 z-20 border-b border-border/60 bg-[hsl(var(--shell))/0.82] px-4 py-3 backdrop-blur md:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-3">
