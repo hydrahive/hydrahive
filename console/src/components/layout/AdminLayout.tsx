@@ -575,7 +575,7 @@ export function AdminLayout() {
         </div>
 
         {/* Content — Chat-Routen bekommen vollen Platz ohne Padding */}
-        {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat)/) ? (
+        {location.pathname.match(/^\/(chat\/|agents\/[^/]+\/chat|_chat-v2-demo\/)/) ? (
           <div className="flex-1 min-h-0 overflow-hidden pb-14 lg:pb-0">
             <Outlet />
           </div>

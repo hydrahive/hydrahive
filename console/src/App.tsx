@@ -16,6 +16,7 @@ const ProjectCreatePage = lazy(() => import("@/pages/ProjectCreatePage").then((m
 const SystemPage        = lazy(() => import("@/pages/SystemPage").then((m) => ({ default: m.SystemPage })));
 const ChatPage          = lazy(() => import("@/pages/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AgentChatPage     = lazy(() => import("@/pages/AgentChatPage").then((m) => ({ default: m.AgentChatPage })));
+const ChatV2DemoPage    = lazy(() => import("@/pages/ChatV2DemoPage").then((m) => ({ default: m.ChatV2DemoPage })));
 const MyAgentPage       = lazy(() => import("@/pages/MyAgentPage").then((m) => ({ default: m.MyAgentPage })));
 const SettingsPage      = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const WizardPage        = lazy(() => import("@/pages/WizardPage").then((m) => ({ default: m.WizardPage })));
@@ -109,6 +110,7 @@ export default function App() {
             <Route path="projects/new"      element={<ProjectCreatePage />} />
             <Route path="chat/:id"          element={<ChatPage />} />
             <Route path="agents/:id/chat"   element={<AgentChatPage />} />
+            <Route path="_chat-v2-demo/:id" element={<ChatV2DemoPage />} />
             <Route path="search"            element={<SearchPage />} />
             <Route path="code-editor"       element={<CodeEditorPage />} />
             <Route path="schedules"         element={<SchedulesPage />} />
