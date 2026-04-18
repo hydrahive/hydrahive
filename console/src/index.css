@@ -193,49 +193,55 @@
       hsl(var(--candy-violet) / 0.95) 0%,
       hsl(var(--candy-pink) / 0.9) 100%);
     color: #fff;
-    border-color: hsl(var(--candy-violet) / 0.45) !important;
-    box-shadow: 0 4px 18px hsl(var(--candy-pink) / 0.22);
+    border-color: hsl(var(--candy-violet) / 0.55) !important;
+    box-shadow: 0 4px 24px hsl(var(--candy-pink) / 0.35);
   }
 
   .bubble-candy-assistant {
-    border-color: hsl(var(--candy-cyan) / 0.35) !important;
+    border-color: hsl(var(--candy-cyan) / 0.55) !important;
     box-shadow:
-      0 0 0 1px hsl(var(--candy-cyan) / 0.08),
-      0 4px 22px hsl(var(--candy-cyan) / 0.08);
+      0 0 0 1px hsl(var(--candy-cyan) / 0.15),
+      0 4px 26px hsl(var(--candy-cyan) / 0.18);
   }
 
   .card-candy-border {
-    border-color: hsl(var(--candy-violet) / 0.3) !important;
+    border-color: hsl(var(--candy-violet) / 0.45) !important;
     box-shadow:
-      0 0 0 1px hsl(var(--candy-violet) / 0.06),
-      0 8px 32px hsl(var(--candy-violet) / 0.08);
+      0 0 0 1px hsl(var(--candy-violet) / 0.12),
+      0 8px 32px hsl(var(--candy-violet) / 0.18),
+      inset 0 1px 0 hsl(var(--candy-pink) / 0.05);
   }
 
   /* Candy-Badges — farbige Pille je Tool-Event-Typ (Phase 1.5) */
   .badge-candy-info {
-    border-color: hsl(var(--candy-cyan) / 0.35) !important;
-    background-color: hsl(var(--candy-cyan) / 0.08);
+    border-color: hsl(var(--candy-cyan) / 0.5) !important;
+    background-color: hsl(var(--candy-cyan) / 0.14);
     color: hsl(var(--candy-cyan));
+    box-shadow: 0 2px 12px hsl(var(--candy-cyan) / 0.12);
   }
   .badge-candy-tool {
-    border-color: hsl(var(--candy-violet) / 0.35) !important;
-    background-color: hsl(var(--candy-violet) / 0.08);
+    border-color: hsl(var(--candy-violet) / 0.5) !important;
+    background-color: hsl(var(--candy-violet) / 0.14);
     color: hsl(var(--candy-violet));
+    box-shadow: 0 2px 12px hsl(var(--candy-violet) / 0.14);
   }
   .badge-candy-result {
-    border-color: hsl(var(--candy-lime) / 0.35) !important;
-    background-color: hsl(var(--candy-lime) / 0.08);
+    border-color: hsl(var(--candy-lime) / 0.5) !important;
+    background-color: hsl(var(--candy-lime) / 0.12);
     color: hsl(var(--candy-lime));
+    box-shadow: 0 2px 12px hsl(var(--candy-lime) / 0.1);
   }
   .badge-candy-warn {
-    border-color: hsl(var(--candy-amber) / 0.4) !important;
-    background-color: hsl(var(--candy-amber) / 0.1);
+    border-color: hsl(var(--candy-amber) / 0.55) !important;
+    background-color: hsl(var(--candy-amber) / 0.16);
     color: hsl(var(--candy-amber));
+    box-shadow: 0 2px 12px hsl(var(--candy-amber) / 0.14);
   }
   .badge-candy-confirm {
-    border-color: hsl(var(--candy-pink) / 0.4) !important;
-    background-color: hsl(var(--candy-pink) / 0.1);
+    border-color: hsl(var(--candy-pink) / 0.55) !important;
+    background-color: hsl(var(--candy-pink) / 0.16);
     color: hsl(var(--candy-pink));
+    box-shadow: 0 2px 12px hsl(var(--candy-pink) / 0.18);
   }
 
   /* Chip-Varianten */
@@ -253,17 +259,20 @@
     box-shadow: 0 3px 16px hsl(var(--candy-violet) / 0.35);
   }
   .chip-glass {
-    background: hsl(var(--card) / 0.45);
+    background-image: linear-gradient(135deg,
+      hsl(var(--candy-cyan) / 0.18),
+      hsl(var(--candy-violet) / 0.12));
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
-    border: 1px solid hsl(var(--candy-cyan) / 0.25);
-    color: hsl(var(--muted-foreground));
-    transition: background .2s, border-color .2s, color .2s;
+    border: 1px solid hsl(var(--candy-cyan) / 0.5);
+    color: hsl(var(--candy-cyan));
+    box-shadow: 0 2px 10px hsl(var(--candy-cyan) / 0.1);
+    transition: filter .2s, border-color .2s, box-shadow .2s;
   }
   .chip-glass:hover:not(:disabled) {
-    background: hsl(var(--card) / 0.65);
-    border-color: hsl(var(--candy-cyan) / 0.5);
-    color: hsl(var(--foreground));
+    filter: brightness(1.15);
+    border-color: hsl(var(--candy-cyan) / 0.75);
+    box-shadow: 0 3px 14px hsl(var(--candy-cyan) / 0.25);
   }
 
   .app-shell {
