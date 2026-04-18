@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import { Bot, Check, ImagePlus, Loader2, Send, ShieldAlert, Square, User, X } from "lucide-react";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
+import VoiceChatButton from "@/components/VoiceChatButton";
 import { type ChatV2Target, type PendingImage, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
@@ -216,6 +217,7 @@ function Composer({
   pendingImages,
   onAddImages,
   onRemoveImage,
+  onTranscript,
   onConfirm,
 }: {
   isRunning: boolean;
@@ -224,6 +226,7 @@ function Composer({
   pendingImages: PendingImage[];
   onAddImages: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
+  onTranscript: (text: string) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -291,6 +294,11 @@ function Composer({
           placeholder="Nachricht schreiben..."
           className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground sm:text-sm"
         />
+        <VoiceChatButton
+          onTranscript={onTranscript}
+          disabled={isRunning}
+          className="!h-10 !w-10 !rounded-xl !border-border !p-0"
+        />
         <ComposerPrimitive.Cancel
           className={cn(
             "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted",
@@ -309,6 +317,12 @@ function Composer({
 
 export function ChatShell({ target }: { target: ChatV2Target }) {
   const runtime = useHydraHiveRuntime(target);
+  const appendTranscript = (text: string) => {
+    const composer = runtime.aui.composer();
+    const current = composer.getState().text.trim();
+    composer.setText(current ? `${current} ${text}` : text);
+  };
+
   return (
     <AuiProvider value={runtime.aui}>
       <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-background">
@@ -349,6 +363,7 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
             pendingImages={runtime.pendingImages}
             onAddImages={runtime.addImages}
             onRemoveImage={runtime.removeImage}
+            onTranscript={appendTranscript}
             onConfirm={runtime.confirmTool}
           />
         </ThreadPrimitive.Viewport>
