@@ -31,6 +31,12 @@ export type PendingToolConfirm = {
   session_id?: string;
 };
 
+export type PendingImage = {
+  data: string;
+  media_type: string;
+  preview: string;
+};
+
 export type ChatV2Target = {
   kind: "project" | "agent" | "me";
   id: string;
@@ -77,11 +83,19 @@ function assistantMetadata(custom: Record<string, unknown> = {}) {
   };
 }
 
-function userMessage(text: string): ExternalThreadMessage {
+function userMessage(text: string, images: PendingImage[] = []): ExternalThreadMessage {
   return {
     id: nextId("user"),
     role: "user",
-    content: [textPart(text)],
+    content: [
+      ...(text ? [textPart(text)] : []),
+      ...images.map((image) => ({
+        type: "image" as const,
+        image: image.preview,
+        filename: "upload",
+        mimeType: image.media_type,
+      })),
+    ],
     attachments: [],
     createdAt: new Date(),
     metadata: metadata(),
@@ -185,6 +199,7 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pendingConfirms, setPendingConfirms] = useState<PendingToolConfirm[]>([]);
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(() => new Set());
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
 
@@ -224,12 +239,14 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
 
   const send = useCallback(async (message: AppendMessage) => {
     const content = appendMessageText(message);
-    if (!content || isRunning) return;
+    const images = pendingImages;
+    if ((!content && images.length === 0) || isRunning) return;
     setError("");
     const controller = new AbortController();
     abortRef.current = controller;
     activeAssistantIdRef.current = null;
-    setMessages((prev) => [...prev, userMessage(content)]);
+    setMessages((prev) => [...prev, userMessage(content, images)]);
+    setPendingImages([]);
     setIsRunning(true);
 
     try {
@@ -237,6 +254,12 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
         url: target.streamEndpoint,
         body: {
           content,
+          ...(images.length > 0 ? {
+            images: images.map((image) => ({
+              data: image.data,
+              media_type: image.media_type,
+            })),
+          } : {}),
           ...(target.extraBodyParams ?? {}),
         },
         signal: controller.signal,
@@ -288,10 +311,40 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
       abortRef.current = null;
       activeAssistantIdRef.current = null;
     }
-  }, [isRunning, target.extraBodyParams, target.streamEndpoint, updateAssistant]);
+  }, [isRunning, pendingImages, target.extraBodyParams, target.streamEndpoint, updateAssistant]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
+  }, []);
+
+  const addImages = useCallback((files: FileList | File[]) => {
+    const list = Array.from(files)
+      .filter((file) => file.type.startsWith("image/"))
+      .slice(0, Math.max(0, 5 - pendingImages.length));
+    if (list.length === 0) return;
+
+    list.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = String(event.target?.result || "");
+        const [, base64 = ""] = dataUrl.split(",");
+        if (!base64) return;
+        setPendingImages((prev) => {
+          if (prev.length >= 5) return prev;
+          return [...prev, {
+            data: base64,
+            media_type: file.type || "image/png",
+            preview: dataUrl,
+          }];
+        });
+      };
+      reader.onerror = () => setError(`Bild konnte nicht gelesen werden: ${file.name}`);
+      reader.readAsDataURL(file);
+    });
+  }, [pendingImages.length]);
+
+  const removeImage = useCallback((index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
@@ -338,10 +391,13 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     sessionId,
     pendingConfirms,
     confirmingIds,
+    pendingImages,
+    addImages,
+    removeImage,
     send,
     cancel,
     confirmTool,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, send, cancel, confirmTool]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, addImages, removeImage, send, cancel, confirmTool]);
 }
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {

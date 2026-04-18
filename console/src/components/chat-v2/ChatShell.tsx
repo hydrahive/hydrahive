@@ -8,9 +8,10 @@ import {
   type MessagePartState,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, Loader2, Send, ShieldAlert, Square, User, X } from "lucide-react";
+import { Bot, Check, ImagePlus, Loader2, Send, ShieldAlert, Square, User, X } from "lucide-react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
-import { type ChatV2Target, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
+import { type ChatV2Target, type PendingImage, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
 
@@ -212,13 +213,20 @@ function Composer({
   isRunning,
   pendingConfirms,
   confirmingIds,
+  pendingImages,
+  onAddImages,
+  onRemoveImage,
   onConfirm,
 }: {
   isRunning: boolean;
   pendingConfirms: PendingToolConfirm[];
   confirmingIds: Set<string>;
+  pendingImages: PendingImage[];
+  onAddImages: (files: FileList | File[]) => void;
+  onRemoveImage: (index: number) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 p-3 backdrop-blur">
       {pendingConfirms.length > 0 ? (
@@ -233,7 +241,49 @@ function Composer({
           ))}
         </div>
       ) : null}
+      {pendingImages.length > 0 ? (
+        <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2">
+          {pendingImages.map((image, index) => (
+            <div key={`${image.preview}-${index}`} className="group relative">
+              <img
+                src={image.preview}
+                alt=""
+                className="h-16 w-16 rounded-xl border border-border object-cover shadow-sm"
+              />
+              <button
+                type="button"
+                onClick={() => onRemoveImage(index)}
+                className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow transition hover:bg-destructive hover:text-destructive-foreground"
+                aria-label="Bild entfernen"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <ComposerPrimitive.Root className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-lg">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const files = event.target.files;
+            if (files) onAddImages(files);
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          disabled={isRunning || pendingImages.length >= 5}
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Bild hochladen"
+        >
+          <ImagePlus className={cn("h-4 w-4", pendingImages.length > 0 && "text-primary")} />
+        </button>
         <ComposerPrimitive.Input
           rows={1}
           autoFocus
@@ -296,6 +346,9 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
             isRunning={runtime.isRunning}
             pendingConfirms={runtime.pendingConfirms}
             confirmingIds={runtime.confirmingIds}
+            pendingImages={runtime.pendingImages}
+            onAddImages={runtime.addImages}
+            onRemoveImage={runtime.removeImage}
             onConfirm={runtime.confirmTool}
           />
         </ThreadPrimitive.Viewport>
