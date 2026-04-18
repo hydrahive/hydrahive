@@ -42,10 +42,14 @@ function TokenBadge({ message }: { message: MessageLike }) {
   const input = usage.input ?? 0;
   const output = usage.output ?? 0;
   const cacheRead = usage.cache_read ?? 0;
-  const cachePct = input > 0 ? Math.round((cacheRead / input) * 100) : 0;
+  const cacheWrite = usage.cache_write ?? 0;
+  // Claude-API Semantik: input zählt nur neue, ungecachte Tokens; cache_read/
+  // cache_write sind getrennt. Effektiver Input = Summe, cache-Rate darauf.
+  const effectiveInput = input + cacheRead + cacheWrite;
+  const cachePct = effectiveInput > 0 ? Math.min(100, Math.round((cacheRead / effectiveInput) * 100)) : 0;
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground font-mono tabular-nums">
-      <span>↑ {input}</span>
+      <span>↑ {effectiveInput}</span>
       <span>↓ {output}</span>
       <span className={cn(cachePct > 0 ? "text-emerald-400" : "text-amber-400")}>◆ {cachePct}% cached</span>
       {usage.rounds ? <span>· {usage.rounds} Runden</span> : null}
