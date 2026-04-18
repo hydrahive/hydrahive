@@ -8,9 +8,9 @@ import {
   type MessagePartState,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Loader2, Send, Square, User } from "lucide-react";
+import { Bot, Check, Loader2, Send, ShieldAlert, Square, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type ChatV2Target, useHydraHiveRuntime } from "./hydrahive-runtime";
+import { type ChatV2Target, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
 
@@ -64,6 +64,13 @@ function ToolDataPart({ part }: { part: DataPart }) {
     return (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
         {String(data.tool_name ?? "tool")}: {String(data.tool_warning ?? "Warnung")}
+      </div>
+    );
+  }
+  if (part.name === "tool_confirm_required") {
+    return (
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+        Bestätigung nötig: {String(data.tool_name ?? "tool")} wartet unten im Composer-Bereich.
       </div>
     );
   }
@@ -137,9 +144,95 @@ function ChatMessage() {
   );
 }
 
-function Composer({ isRunning }: { isRunning: boolean }) {
+function previewToolInput(input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  const text = JSON.stringify(input, null, 2);
+  return text.length > 700 ? `${text.slice(0, 700)}…` : text;
+}
+
+function ConfirmBanner({
+  item,
+  disabled,
+  onConfirm,
+}: {
+  item: PendingToolConfirm;
+  disabled: boolean;
+  onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
+}) {
+  const input = previewToolInput(item.tool_input);
+  return (
+    <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-200">
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            Tool wartet auf Bestätigung
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="font-mono text-foreground">{item.tool_name}</span>
+            {" "}wurde als riskant eingestuft ({item.risk || "confirm"}).
+          </p>
+          {input ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                Tool-Argumente anzeigen
+              </summary>
+              <pre className="mt-2 max-h-44 overflow-auto rounded-xl bg-background/70 p-3 text-[11px] text-muted-foreground">
+                {input}
+              </pre>
+            </details>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onConfirm(item.tool_call_id, "approve")}
+            className="inline-flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Erlauben
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onConfirm(item.tool_call_id, "deny")}
+            className="inline-flex items-center gap-1 rounded-xl border border-destructive/50 px-3 py-2 text-xs font-semibold text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X className="h-3.5 w-3.5" />
+            Ablehnen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Composer({
+  isRunning,
+  pendingConfirms,
+  confirmingIds,
+  onConfirm,
+}: {
+  isRunning: boolean;
+  pendingConfirms: PendingToolConfirm[];
+  confirmingIds: Set<string>;
+  onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
+}) {
   return (
     <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 p-3 backdrop-blur">
+      {pendingConfirms.length > 0 ? (
+        <div className="mx-auto mb-3 max-w-4xl space-y-2">
+          {pendingConfirms.map((item) => (
+            <ConfirmBanner
+              key={item.tool_call_id}
+              item={item}
+              disabled={confirmingIds.has(item.tool_call_id)}
+              onConfirm={onConfirm}
+            />
+          ))}
+        </div>
+      ) : null}
       <ComposerPrimitive.Root className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-lg">
         <ComposerPrimitive.Input
           rows={1}
@@ -199,7 +292,12 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
               {() => <ChatMessage />}
             </ThreadPrimitive.Messages>
           </div>
-          <Composer isRunning={runtime.isRunning} />
+          <Composer
+            isRunning={runtime.isRunning}
+            pendingConfirms={runtime.pendingConfirms}
+            confirmingIds={runtime.confirmingIds}
+            onConfirm={runtime.confirmTool}
+          />
         </ThreadPrimitive.Viewport>
       </ThreadPrimitive.Root>
     </AuiProvider>

@@ -23,7 +23,16 @@ type HydrahiveMetadata = {
   isFallback?: boolean;
 };
 
+export type PendingToolConfirm = {
+  tool_call_id: string;
+  tool_name: string;
+  tool_input?: Record<string, unknown>;
+  risk?: string;
+  session_id?: string;
+};
+
 export type ChatV2Target = {
+  kind: "project" | "agent" | "me";
   id: string;
   label: string;
   streamEndpoint: string;
@@ -173,15 +182,20 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const [messages, setMessages] = useState<ExternalThreadMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pendingConfirms, setPendingConfirms] = useState<PendingToolConfirm[]>([]);
+  const [confirmingIds, setConfirmingIds] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setError("");
+    setPendingConfirms([]);
     api.get<HistoryResponse>(target.historyEndpoint)
       .then((history) => {
         if (cancelled) return;
+        setSessionId(history.session_id);
         const loaded = history.messages
           .map(historyToMessage)
           .filter((msg): msg is ExternalThreadMessage => msg !== null);
@@ -239,12 +253,24 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
           } else if (evt.type === "tool_warning") {
             updateAssistant((msg) => appendDataPart(msg, "tool_warning", evt));
           } else if (evt.type === "tool_confirm_required") {
+            setPendingConfirms((prev) => {
+              if (prev.some((item) => item.tool_call_id === evt.tool_call_id)) return prev;
+              return [...prev, {
+                tool_call_id: evt.tool_call_id,
+                tool_name: evt.tool_name,
+                tool_input: evt.tool_input,
+                risk: evt.risk,
+                session_id: evt.session_id,
+              }];
+            });
             updateAssistant((msg) => appendDataPart(msg, "tool_confirm_required", evt));
           } else if (evt.type === "context_info" || evt.type === "info") {
             updateAssistant((msg) => appendDataPart(msg, evt.type, evt));
           } else if (evt.type === "done") {
+            setPendingConfirms([]);
             updateAssistant((msg) => setAssistantDone(msg, evt));
           } else if (evt.type === "error") {
+            setPendingConfirms([]);
             throw new Error(evt.error);
           }
         },
@@ -268,6 +294,34 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     abortRef.current?.abort();
   }, []);
 
+  const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
+    const pending = pendingConfirms.find((item) => item.tool_call_id === toolCallId);
+    const sid = pending?.session_id || sessionId;
+    if (!sid) {
+      setError("Tool-Bestätigung fehlgeschlagen: Session fehlt.");
+      return;
+    }
+
+    setConfirmingIds((prev) => new Set(prev).add(toolCallId));
+    try {
+      if (target.kind === "project") {
+        await api.confirmToolCall(target.id, sid, toolCallId, decision);
+      } else {
+        await api.confirmToolCallAgent(target.id, sid, toolCallId, decision);
+      }
+      setPendingConfirms((prev) => prev.filter((item) => item.tool_call_id !== toolCallId));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
+    } finally {
+      setConfirmingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(toolCallId);
+        return next;
+      });
+    }
+  }, [pendingConfirms, sessionId, target.id, target.kind]);
+
   const thread = ExternalThread({
     messages,
     isRunning,
@@ -281,14 +335,19 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     messages,
     isRunning,
     error,
+    sessionId,
+    pendingConfirms,
+    confirmingIds,
     send,
     cancel,
-  }), [aui, messages, isRunning, error, send, cancel]);
+    confirmTool,
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, send, cancel, confirmTool]);
 }
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {
   if (kind === "agent") {
     return {
+      kind: "agent",
       id,
       label: `Agent ${id}`,
       streamEndpoint: `/api/agents/${id}/message/stream`,
@@ -297,6 +356,7 @@ export function buildChatV2Target(kind: string, id: string): ChatV2Target {
   }
   if (kind === "me") {
     return {
+      kind: "me",
       id: "me",
       label: "Mein Agent",
       streamEndpoint: "/api/me/agent/message/stream",
@@ -304,6 +364,7 @@ export function buildChatV2Target(kind: string, id: string): ChatV2Target {
     };
   }
   return {
+    kind: "project",
     id,
     label: `Projekt ${id}`,
     streamEndpoint: `/api/projects/${id}/message/stream`,
