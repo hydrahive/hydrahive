@@ -8,6 +8,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bot, Clock, Bug, Zap, Cpu, X, Sparkles, Terminal, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import OAuthUsageBar from "@/components/OAuthUsageBar";
 import { ChatShell } from "@/components/chat-v2/ChatShell";
 import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 
@@ -289,6 +290,9 @@ export function AgentChatPage() {
             })}
           </div>
         )}
+
+        {/* OAuth-Usage-Bar (Claude / Codex Quota) */}
+        <OAuthUsageBar />
 
         {/* Shortcut-Chips */}
         <div className="flex flex-wrap gap-2 px-4 pt-3">

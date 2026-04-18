@@ -15,6 +15,7 @@ import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 import { useAuth } from "@/hooks/useAuth";
 import { useAwarenessUsers, useProjectYjs } from "@/hooks/useProjectYjs";
 import { insertIntoYjsComposer } from "@/components/chat-v2/CollabComposer";
+import OAuthUsageBar from "@/components/OAuthUsageBar";
 
 export function ChatPage() {
   const { t } = useTranslation();
@@ -202,6 +203,9 @@ export function ChatPage() {
             {showSidebar ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
           </button>
         </div>
+
+        {/* OAuth-Usage-Bar (Claude / Codex Quota) — wie auf MyAgent */}
+        <OAuthUsageBar />
 
         {/* Shortcut-Chips — im Collab-Modus in den Y.Text, sonst in den aui-Composer */}
         <div className="flex flex-wrap gap-2 px-4 pt-3">
