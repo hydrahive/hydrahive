@@ -73,6 +73,50 @@ class ProjectPresence:
                 if ts > cutoff and self.refcount.get(u, 0) > 0]
 
 
+@dataclass
+class ProjectStreamBuffer:
+    """#726 K2a: Replay-Buffer pro Projekt für den aktuell laufenden Stream.
+
+    Neue Subscriber bekommen beim Connect die gesammelten Events zugespielt,
+    sehen also auch bereits gelaufene Chunks. Wird bei end() geleert — d.h.
+    fertig abgeschlossene Streams liegen nicht weiter im Speicher.
+
+    Achtung: pro Projekt gibt es zur Zeit genau einen laufenden Stream
+    (Turn-Lock), daher reicht ein einzelner Buffer pro Projekt.
+    """
+    stream_id: str | None = None
+    started_at: float | None = None
+    events: list[str] = field(default_factory=list)
+    # Obergrenze als Safety-Net — riesige Streams fressen sonst RAM bei late-joinern.
+    # 500 Chunks entsprechen ~200 KiB bei typischen Text-Chunks, für Replays völlig ausreichend.
+    MAX_EVENTS: int = 500
+
+    def start(self, stream_id: str) -> None:
+        self.stream_id = stream_id
+        self.started_at = time.time()
+        self.events = []
+
+    def append(self, event_str: str) -> None:
+        if self.stream_id is None:
+            return
+        self.events.append(event_str)
+        if len(self.events) > self.MAX_EVENTS:
+            # Ältesten Chunk kappen — besser Tail-Replay als OOM.
+            self.events.pop(0)
+
+    def end(self) -> None:
+        self.stream_id = None
+        self.started_at = None
+        self.events = []
+
+    def is_active(self) -> bool:
+        return self.stream_id is not None
+
+    def snapshot(self) -> list[str]:
+        """Schnappschuss der Events — Kopie, damit Iteration sicher ist."""
+        return list(self.events)
+
+
 class SharedSessionManager:
     """Verwaltet Shared Sessions für alle Projekte."""
 
@@ -85,6 +129,8 @@ class SharedSessionManager:
         self._presence: dict[str, ProjectPresence] = {}
         # #608: Queue → username-Mapping fuer Cleanup bei Queue-Drops
         self._queue_user: dict[asyncio.Queue, tuple[str, str]] = {}  # queue → (project_id, username)
+        # #726 K2a: Replay-Buffer für aktuell laufende Streams pro Projekt
+        self._stream_buffers: dict[str, ProjectStreamBuffer] = {}
 
     def subscribe(self, project_id: str, username: str) -> asyncio.Queue:
         """Client meldet sich an — bekommt eine Queue für SSE-Events.
@@ -127,6 +173,30 @@ class SharedSessionManager:
 
         logger.info("SharedSession: %s unsubscribed from %s", username, project_id)
 
+    # #726 K2a: Stream-Buffer Management
+    def start_stream(self, project_id: str, stream_id: str) -> None:
+        """Markiert: für Projekt läuft ab jetzt ein Stream. Wird beim
+        orchestrator.stream_chat-Einstieg aufgerufen. Gleichzeitige Streams
+        sind per Turn-Lock ausgeschlossen — wenn trotzdem einer aktiv war
+        wird er überschrieben (neuer Stream-ID)."""
+        buf = self._stream_buffers.setdefault(project_id, ProjectStreamBuffer())
+        buf.start(stream_id)
+
+    def end_stream(self, project_id: str) -> None:
+        """Stream beendet — Buffer leeren."""
+        buf = self._stream_buffers.get(project_id)
+        if buf is not None:
+            buf.end()
+            # leeren Eintrag abräumen damit dict nicht unkontrolliert wächst
+            if not buf.is_active():
+                self._stream_buffers.pop(project_id, None)
+
+    def get_stream_snapshot(self, project_id: str) -> list[str]:
+        """Schnappschuss der bisher gesendeten Events im aktuell laufenden
+        Stream. Leere Liste wenn kein Stream läuft."""
+        buf = self._stream_buffers.get(project_id)
+        return buf.snapshot() if buf and buf.is_active() else []
+
     def touch_presence(self, project_id: str, username: str) -> None:
         """#587: Heartbeat — Timestamp aktualisieren waehrend Client verbunden ist.
         Wird vom subscribe-Endpoint bei jedem Keepalive aufgerufen."""
@@ -138,7 +208,17 @@ class SharedSessionManager:
         """Sendet ein SSE-Event an alle verbundenen Clients eines Projekts.
 
         event_data: JSON-String der als SSE-Chunk gesendet wird.
+
+        #726 K2a: wenn ein Stream für das Projekt aktiv ist, wird das Event
+        zusätzlich in den Replay-Buffer geschrieben — damit spät verbundene
+        Subscriber den bisherigen Verlauf zugespielt bekommen können.
         """
+        # Buffer zuerst füllen — auch wenn keine Subscriber da sind, soll
+        # ein später-connectender Client noch den Verlauf bekommen.
+        buf = self._stream_buffers.get(project_id)
+        if buf is not None and buf.is_active():
+            buf.append(event_data)
+
         subs = self._subscribers.get(project_id)
         if not subs:
             return
