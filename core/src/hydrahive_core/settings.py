@@ -163,6 +163,11 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "ssh_known_hosts.json"
 
     @property
+    def tool_guard_config(self) -> Path:
+        """#717: Globaler ToolGuard für harte Tool-Policy vor Ausführung."""
+        return self.etc_dir / "tool_guard.json"
+
+    @property
     def wks_keys_dir(self) -> Path:
         return self.etc_dir / "wks_keys"
 

@@ -342,6 +342,48 @@ async def execute_tool_call(
     async-Generator-Loops), der das `tool_confirm_required`-Event ans
     Frontend signalisiert, BEVOR der Wait beginnt.
     """
+    # #717: ToolGuard — harte erste Stufe vor jeder anderen Logik.
+    # Verhindert Writes in stale HydraHive-Checkouts (z.B. ältere Clones
+    # unter /projects/hydrahivedev/repo). Diagnose bleibt erlaubt.
+    # Niemals raise. Für mutierende Tools fail-closed, damit ein Guard-Bug
+    # keine Schreibaktion unkontrolliert durchlässt.
+    _tool_guard_mutating_tools = {
+        "shell_exec", "project_shell", "server_shell", "wks_shell_exec",
+        "file_write", "file_patch", "server_file_write", "server_file_patch",
+    }
+    try:
+        from .tool_guard import check_tool_guard as _check_tool_guard
+        _guard_decision = _check_tool_guard(tool_name, tool_input, project_id=project_id)
+    except Exception as _guard_err:  # noqa: BLE001
+        logger.error(
+            "tool_guard unexpected failure: tool=%s err=%s",
+            tool_name, _guard_err,
+            exc_info=True,
+        )
+        if tool_name in _tool_guard_mutating_tools:
+            return {
+                "error": f"Tool '{tool_name}' blockiert — ToolGuard-Fehler.",
+                "risk": "tool_guard_error",
+                "code": "tool_guard_exception",
+                "hint": "Globaler ToolGuard ist fehlgeschlagen; mutierende Tools werden fail-closed blockiert.",
+                "tool_name": tool_name,
+            }, True
+        _guard_decision = None
+    if _guard_decision is not None and not _guard_decision.allowed:
+        logger.info(
+            "tool_guard blocked tool=%s code=%s detected=%s",
+            tool_name, _guard_decision.code, _guard_decision.detected_path,
+        )
+        return {
+            "error": _guard_decision.message,
+            "risk": "tool_guard_block",
+            "code": _guard_decision.code,
+            "hint": _guard_decision.hint,
+            "detected_path": _guard_decision.detected_path,
+            "canonical_path": _guard_decision.canonical_path,
+            "tool_name": tool_name,
+        }, True
+
     # #664: IsolationMode-Enforcement (built-in hard policy).
     # Läuft VOR MCP-Branch, Permission-Classifier und PreToolUse-Hook:
     # verbotene Calls sollen keine Admin-Hooks erreichen. Nur aktiv wenn
