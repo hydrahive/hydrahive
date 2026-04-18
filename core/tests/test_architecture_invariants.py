@@ -1664,6 +1664,44 @@ def test_invariant24_installer_sudoers_defaults_syntax_valid():
     )
 
 
+def test_invariant24b_extension_manifest_scripts_have_sudoers_entries():
+    """24b: Extension-Manager startet Manifest-Scripts via sudo -n.
+
+    Jede in ``installer/extensions/*.json`` referenzierte Install-/Uninstall-
+    Datei muss deshalb explizit in ``hydrahive-installer.sudoers`` stehen,
+    sonst endet der Web-Install mit "sudo: a password is required".
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    sudoers = (
+        repo_root / "installer" / "hydrahive-installer.sudoers"
+    ).read_text(encoding="utf-8")
+    manifests_dir = repo_root / "installer" / "extensions"
+
+    missing: list[str] = []
+    for manifest_path in sorted(manifests_dir.glob("*.json")):
+        manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        for key in ("install_script", "uninstall_script"):
+            script_rel = manifest.get(key)
+            if not script_rel:
+                continue
+            expected = (
+                "hydrahive ALL=(root) NOPASSWD: "
+                f"/bin/bash /opt/hydrahive/installer/{script_rel}"
+            )
+            if expected not in sudoers:
+                missing.append(f"{manifest_path.name}:{key}:{script_rel}")
+
+    assert not missing, (
+        "hydrahive-installer.sudoers fehlt NOPASSWD-Regeln fuer "
+        "Extension-Manifest-Scripts: " + ", ".join(missing)
+    )
+    assert "/opt/hydrahive/installer/extensions/install/*" not in sudoers
+    assert "/opt/hydrahive/installer/extensions/uninstall/*" not in sudoers
+
+
 def test_invariant25_agentlink_git_safe_directory_registered_before_pull():
     """25: AgentLink-Reinstall darf nicht an Git dubious ownership haengen.
 
