@@ -286,6 +286,7 @@ const PALETTE_ITEMS = [
 const MODELS = [
   "claude-sonnet-4-6",
   "claude-opus-4-6",
+  "claude-opus-4-7",
   "claude-haiku-4-5-20251001",
   "gpt-4.1",
   "gpt-4.1-mini",

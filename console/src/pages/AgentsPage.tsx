@@ -58,6 +58,7 @@ const DANGER_TOOLS = new Set(["project_shell", "create_agent", "delete_agent", "
 const KNOWN_MODELS = [
   // Anthropic (OAuth)
   "claude-opus-4-6",
+  "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5-20251001",
   // OpenAI Codex (OAuth) — Prefix openai-codex/
@@ -1363,4 +1364,3 @@ function AgentServerAssignment({ servers }: { servers: RemoteServer[] }) {
     </div>
   );
 }
-

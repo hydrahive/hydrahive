@@ -102,7 +102,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const MODELS: Record<string, string[]> = {
-  anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
+  anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6", "claude-opus-4-7"],
   openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
   minimax: ["MiniMax-M2.7"],
   nvidia: [

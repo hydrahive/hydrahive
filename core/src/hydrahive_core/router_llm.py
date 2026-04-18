@@ -365,7 +365,7 @@ def register_llm_routes(
             except OSError:
                 pass
         if has_anthropic:
-            for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]:
+            for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6", "claude-opus-4-7"]:
                 models.append({"id": model, "label": model, "provider": "anthropic"})
 
         openai_cfg = providers.get("openai", {})

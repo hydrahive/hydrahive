@@ -32,6 +32,10 @@ _PRICING: dict[str, dict[str, float]] = {
         "input": 15.00, "output": 75.00,
         "cache_write": 18.75, "cache_read": 1.50,
     },
+    "claude-opus-4-7": {
+        "input": 15.00, "output": 75.00,
+        "cache_write": 18.75, "cache_read": 1.50,
+    },
     # OpenAI Pricing Stand 2026-04
     "gpt-4o": {
         "input": 2.50, "output": 10.00,

@@ -408,7 +408,7 @@ export function LlmConfigPage() {
       <OAuthCard
         id="anthropic"
         label="Claude Max (Subscription)"
-        description="Claude Max/Pro via OAuth — claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5. Kein API-Key nötig."
+        description="Claude Max/Pro via OAuth — claude-opus-4-7, claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5. Kein API-Key nötig."
         configured={!!claudeStatus?.configured}
         statusExtra={claudeStatus?.configured ? (
           <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md ${
@@ -428,7 +428,7 @@ export function LlmConfigPage() {
                     : `✓ Token aktiv${claudeStatus?.remaining_days != null ? ` — noch ${claudeStatus.remaining_days.toFixed(0)} Tage gültig` : ""}`}
           </div>
         ) : undefined}
-        models={claudeStatus?.configured ? ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] : undefined}
+        models={claudeStatus?.configured ? ["claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"] : undefined}
         onStartOAuth={startOAuth}
       />
       {(saved === "claude_max" || saved === "anthropic") && (
@@ -755,7 +755,7 @@ export function LlmConfigPage() {
           <div className="flex-1 space-y-1">
             <label className="text-xs text-muted-foreground">Modell</label>
             {(() => {
-              const KNOWN = ["claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6","gpt-4o-mini","gpt-4o"];
+              const KNOWN = ["claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6","claude-opus-4-7","gpt-4o-mini","gpt-4o"];
               const apiIds = new Set(availModels.map(m => m.id));
               const allModels = [
                 ...availModels,
