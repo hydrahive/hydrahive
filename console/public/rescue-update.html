@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HydraHive Rescue Update</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090b10;
+        --panel: #111722;
+        --panel-2: #0d121b;
+        --text: #eef4ff;
+        --muted: #9aa8bd;
+        --line: #243044;
+        --ok: #35d07f;
+        --warn: #ffc857;
+        --bad: #ff5d73;
+        --accent: #66d9e8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(102, 217, 232, .18), transparent 32rem),
+          radial-gradient(circle at bottom right, rgba(53, 208, 127, .10), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+        font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(960px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(17, 23, 34, .96), rgba(13, 18, 27, .96));
+        box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+        overflow: hidden;
+      }
+      header {
+        padding: 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(28px, 4vw, 44px);
+        letter-spacing: -.04em;
+      }
+      p { margin: 0; color: var(--muted); }
+      section { padding: 24px 28px; }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        background: var(--accent);
+        color: #041014;
+        cursor: pointer;
+        font-weight: 750;
+        padding: 12px 16px;
+      }
+      button.secondary {
+        background: #1d2737;
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: .55;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, .03);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .ok { color: var(--ok); }
+      .warn { color: var(--warn); }
+      .bad { color: var(--bad); }
+      pre {
+        min-height: 320px;
+        max-height: 55vh;
+        overflow: auto;
+        margin: 0;
+        padding: 18px;
+        border-top: 1px solid var(--line);
+        background: #05070b;
+        color: #d7e3f5;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+      code {
+        color: #d7e3f5;
+        background: rgba(255,255,255,.06);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 1px 6px;
+      }
+      .hint {
+        border-top: 1px solid var(--line);
+        background: rgba(255,255,255,.025);
+      }
+      input {
+        width: min(100%, 560px);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #080c13;
+        color: var(--text);
+        padding: 11px 12px;
+      }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <header>
+          <h1>HydraHive Rescue Update</h1>
+          <p>Statischer Notfallpfad ohne React-Bundle. Nutze ihn, wenn die Console leer bleibt oder das normale Menü nicht lädt.</p>
+        </header>
+
+        <section>
+          <div class="row">
+            <button id="trigger">Update starten</button>
+            <button id="status" class="secondary">Status prüfen</button>
+            <button id="copy" class="secondary">Log kopieren</button>
+            <span id="tokenState" class="pill">Token: prüfe...</span>
+            <span id="updateState" class="pill">Status: unbekannt</span>
+          </div>
+        </section>
+
+        <section class="hint">
+          <p>
+            Diese Seite verwendet <code>localStorage.hydrahive_token</code>. Wenn kein Token vorhanden ist,
+            einmal normal einloggen oder den Token im Feld setzen.
+          </p>
+          <div class="row" style="margin-top: 12px">
+            <input id="tokenInput" placeholder="Optional: Bearer Token manuell einfügen" autocomplete="off" />
+            <button id="saveToken" class="secondary">Token speichern</button>
+          </div>
+        </section>
+
+        <pre id="log">Bereit.</pre>
+      </div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const logEl = $("log");
+      const tokenState = $("tokenState");
+      const updateState = $("updateState");
+      let pollTimer = null;
+
+      function token() {
+        return localStorage.getItem("hydrahive_token") || "";
+      }
+
+      function setTokenState() {
+        const hasToken = Boolean(token());
+        tokenState.textContent = hasToken ? "Token: vorhanden" : "Token: fehlt";
+        tokenState.className = "pill " + (hasToken ? "ok" : "bad");
+        $("trigger").disabled = !hasToken;
+        $("status").disabled = !hasToken;
+      }
+
+      function append(line) {
+        const stamp = new Date().toLocaleTimeString();
+        logEl.textContent += "\\n[" + stamp + "] " + line;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch("/api" + path, {
+          ...options,
+          headers: {
+            "Authorization": "Bearer " + token(),
+            "Content-Type": "application/json",
+            ...(options.headers || {}),
+          },
+        });
+        const text = await res.text();
+        let data;
+        try { data = text ? JSON.parse(text) : {}; }
+        catch { data = { raw: text }; }
+        if (!res.ok) {
+          const msg = data.detail || data.error || data.raw || ("HTTP " + res.status);
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      async function checkStatus() {
+        try {
+          const data = await api("/admin/update/status");
+          const status = data.status || "unknown";
+          updateState.textContent = "Status: " + status + (data.commit ? " · " + data.commit : "");
+          updateState.className = "pill " + (status === "ok" ? "ok" : status === "error" ? "bad" : "warn");
+          const tail = Array.isArray(data.log_tail) ? data.log_tail.slice(-80).join("\\n") : "";
+          logEl.textContent = "Status: " + JSON.stringify({
+            status: data.status,
+            commit: data.commit,
+            available: data.available,
+            started_at: data.started_at,
+            finished_at: data.finished_at,
+            error: data.error,
+          }, null, 2) + "\\n\\n" + tail;
+          logEl.scrollTop = logEl.scrollHeight;
+          if (status === "ok" || status === "error") stopPolling();
+          return data;
+        } catch (err) {
+          updateState.textContent = "Status: Fehler";
+          updateState.className = "pill bad";
+          append("Status-Fehler: " + (err && err.message ? err.message : String(err)));
+        }
+      }
+
+      function startPolling() {
+        stopPolling();
+        pollTimer = setInterval(checkStatus, 2500);
+      }
+
+      function stopPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+      }
+
+      $("trigger").addEventListener("click", async () => {
+        $("trigger").disabled = true;
+        append("Update wird gestartet...");
+        try {
+          const data = await api("/admin/update/trigger", { method: "POST", body: "{}" });
+          append(data.message || "Update gestartet.");
+          startPolling();
+        } catch (err) {
+          append("Update-Start fehlgeschlagen: " + (err && err.message ? err.message : String(err)));
+        } finally {
+          setTokenState();
+        }
+      });
+
+      $("status").addEventListener("click", checkStatus);
+      $("saveToken").addEventListener("click", () => {
+        const raw = $("tokenInput").value.trim().replace(/^Bearer\\s+/i, "");
+        if (raw) localStorage.setItem("hydrahive_token", raw);
+        setTokenState();
+        append(raw ? "Token gespeichert." : "Kein Token eingegeben.");
+      });
+      $("copy").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(logEl.textContent);
+          append("Log in Zwischenablage kopiert.");
+        } catch {
+          append("Kopieren fehlgeschlagen.");
+        }
+      });
+
+      setTokenState();
+      if (token()) checkStatus();
+    </script>
+  </body>
+</html>
