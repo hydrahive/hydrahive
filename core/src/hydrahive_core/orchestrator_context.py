@@ -215,6 +215,9 @@ def _prompt_cache_hash(agent_dir: Path, mode: str) -> str:
     handbook = settings.system_handbook
     if handbook.exists():
         parts.append(f"handbook:{handbook.stat().st_mtime:.0f}")
+    instance_policy = settings.instance_policy
+    if instance_policy.exists():
+        parts.append(f"instance_policy:{instance_policy.stat().st_mtime:.0f}")
     soul = agent_dir / "soul.md"
     if soul.exists():
         parts.append(f"soul:{soul.stat().st_mtime:.0f}")
@@ -246,6 +249,9 @@ def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str) -> str | No
     handbook = settings.system_handbook
     if handbook.exists():
         segments["handbook"] = f"{handbook.stat().st_mtime:.0f}"
+    instance_policy = settings.instance_policy
+    if instance_policy.exists():
+        segments["instance_policy"] = f"{instance_policy.stat().st_mtime:.0f}"
     soul = agent_dir / "soul.md"
     if soul.exists():
         segments["soul"] = f"{soul.stat().st_mtime:.0f}"
@@ -512,6 +518,15 @@ async def build_system_prompt(
             _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
             if _handbook_text:
                 channels.handbook = _handbook_text
+
+        # #711: Instance-Policy — optionale instanzweite Admin-Schicht.
+        # Resolver-Kaskade: core (handbook) → instance (/etc/hydrahive/instance_policy.md).
+        # Fehlende oder leere Datei ist graceful — kein Fehler, kein Fallback.
+        _instance_policy_path = settings.instance_policy
+        if _instance_policy_path.exists():
+            _instance_policy_text = _instance_policy_path.read_text(encoding="utf-8").strip()
+            if _instance_policy_text:
+                channels.instance_policy = _instance_policy_text
 
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)

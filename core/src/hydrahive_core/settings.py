@@ -295,6 +295,10 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "system_handbook.md"
 
     @property
+    def instance_policy(self) -> Path:
+        return self.etc_dir / "instance_policy.md"
+
+    @property
     def matrix_server_name_file(self) -> Path:
         return self.etc_dir / "matrix_server_name"
 

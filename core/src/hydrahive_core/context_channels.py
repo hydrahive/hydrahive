@@ -43,6 +43,7 @@ class ContextChannels:
     repos: str = ""                # zugewiesene Git-Repos
     servers: str = ""              # zugewiesene Remote-Server (#636 Migration)
     handbook: str = ""             # globales System-Handbook
+    instance_policy: str = ""      # instanzweite Admin-Policy (#711, /etc/hydrahive/instance_policy.md)
     blueprint: str = ""            # workflow_blueprint.json Kontext
     workflow: str = ""             # Agent-spezifischer Workflow
     policies: str = ""             # statische Verhaltens-/Memory-Regeln
@@ -64,7 +65,7 @@ class ContextChannels:
 
     _STATIC_SLOTS = (
         "agent_identity", "onboarding", "soul", "memory_index", "learning",
-        "sources", "repos", "servers", "handbook", "blueprint", "workflow", "policies",
+        "sources", "repos", "servers", "handbook", "instance_policy", "blueprint", "workflow", "policies",
     )
     _DYNAMIC_SLOTS = (
         "runtime", "memory_hits", "amem_hits", "working_state",

@@ -261,6 +261,21 @@ main() {
         info "System Handbook deployed"
     fi
 
+    # --- 5a2b. Instance-Policy Stub anlegen (#711) ---
+    # Stub wird NUR angelegt wenn nicht vorhanden — lokale Admin-Änderungen bleiben erhalten.
+    if [ ! -f "/etc/hydrahive/instance_policy.md" ]; then
+        cat > /etc/hydrahive/instance_policy.md << 'EOF'
+# Instance Policy
+
+<!-- Hier instanzweite Regeln ergänzen die für alle Agenten dieser HydraHive-Instanz gelten.
+     Diese Datei wird NICHT durch Updates überschrieben.
+     Leer lassen = kein Effekt. -->
+EOF
+        chown hydrahive:hydrahive /etc/hydrahive/instance_policy.md
+        chmod 644 /etc/hydrahive/instance_policy.md
+        info "Instance Policy Stub angelegt (#711)"
+    fi
+
     # --- 5a3. sysctl fuer bwrap-Sandbox (#605) ---
     # Ubuntu 24.04+ AppArmor-Restriction fuer unprivileged user namespaces aushebeln
     # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann.
