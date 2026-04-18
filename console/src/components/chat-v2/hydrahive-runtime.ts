@@ -50,7 +50,18 @@ export type ChatV2Target = {
   label: string;
   streamEndpoint: string;
   historyEndpoint: string;
+  interruptEndpoint?: string;
   extraBodyParams?: Record<string, unknown>;
+};
+
+export type SlashCommandHandler = (
+  cmd: string,
+  args: string,
+  raw: string,
+) => boolean | Promise<boolean>;
+
+export type HydraHiveRuntimeOptions = {
+  onSlashCommand?: SlashCommandHandler;
 };
 
 type HistoryResponse = {
@@ -219,7 +230,11 @@ function appendMessageText(message: AppendMessage): string {
     .trim();
 }
 
-export function useHydraHiveRuntime(target: ChatV2Target) {
+export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRuntimeOptions) {
+  const onSlashCommandRef = useRef<SlashCommandHandler | undefined>(options?.onSlashCommand);
+  useEffect(() => {
+    onSlashCommandRef.current = options?.onSlashCommand;
+  }, [options?.onSlashCommand]);
   const [messages, setMessages] = useState<ExternalThreadMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState("");
@@ -292,6 +307,20 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const runSend = useCallback(async (content: string, skipCoach = false) => {
     const images = pendingImages;
     if ((!content && images.length === 0) || isRunning) return;
+
+    if (content.startsWith("/") && onSlashCommandRef.current) {
+      const trimmed = content.slice(1);
+      const [cmd, ...rest] = trimmed.split(/\s+/);
+      const args = rest.join(" ").trim();
+      try {
+        const handled = await onSlashCommandRef.current(`/${cmd}`, args, content);
+        if (handled) return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+    }
+
     setError("");
     setCoachFeedback(null);
 
@@ -394,7 +423,10 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
-  }, []);
+    if (target.interruptEndpoint) {
+      api.post(target.interruptEndpoint.replace(/^\/api/, ""), {}).catch(() => {});
+    }
+  }, [target.interruptEndpoint]);
 
   const addImages = useCallback((files: FileList | File[]) => {
     const list = Array.from(files)
@@ -533,6 +565,17 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     setShowHistory(false);
   }, []);
 
+  const pushSystemMessage = useCallback((text: string) => {
+    setMessages((prev) => [...prev, systemMessage(text)]);
+  }, []);
+
+  const resetMessages = useCallback((next: ExternalThreadMessage[] = []) => {
+    setMessages(next);
+    setPendingConfirms([]);
+    setError("");
+    activeAssistantIdRef.current = null;
+  }, []);
+
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
     const pending = pendingConfirms.find((item) => item.tool_call_id === toolCallId);
     const sid = pending?.session_id || sessionId;
@@ -546,7 +589,12 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
       if (target.kind === "project") {
         await api.confirmToolCall(target.id, sid, toolCallId, decision);
       } else {
-        await api.confirmToolCallAgent(target.id, sid, toolCallId, decision);
+        const agentId = target.kind === "me" ? agentSessionId : target.id;
+        if (!agentId) {
+          setError("Tool-Bestätigung fehlgeschlagen: Agent-ID fehlt.");
+          return;
+        }
+        await api.confirmToolCallAgent(agentId, sid, toolCallId, decision);
       }
       setPendingConfirms((prev) => prev.filter((item) => item.tool_call_id !== toolCallId));
     } catch (err) {
@@ -559,7 +607,7 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
         return next;
       });
     }
-  }, [pendingConfirms, sessionId, target.id, target.kind]);
+  }, [pendingConfirms, sessionId, target.id, target.kind, agentSessionId]);
 
   const thread = ExternalThread({
     messages,
@@ -601,8 +649,13 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     sendText,
     cancel,
     confirmTool,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool]);
+    pushSystemMessage,
+    resetMessages,
+    agentId: target.kind === "project" ? null : agentSessionId,
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool, pushSystemMessage, resetMessages, agentSessionId, target.kind]);
 }
+
+export type HydraHiveRuntime = ReturnType<typeof useHydraHiveRuntime>;
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {
   if (kind === "agent") {
@@ -621,6 +674,7 @@ export function buildChatV2Target(kind: string, id: string): ChatV2Target {
       label: "Mein Agent",
       streamEndpoint: "/api/me/agent/message/stream",
       historyEndpoint: "/api/me/agent/session/history",
+      interruptEndpoint: "/api/me/agent/interrupt",
     };
   }
   return {

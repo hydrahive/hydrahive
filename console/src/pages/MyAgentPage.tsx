@@ -1,12 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Square, Bot, User, Terminal, Settings, BookOpen, Save, X, Plus, RefreshCw, Plug, Monitor, MessageSquare, CheckCircle, AlertCircle, Wifi, WifiOff, Sparkles, Shield, Smile, Mail, Phone, Timer, Trash2, Pencil, Workflow, Clock, ArrowLeft, RotateCcw, Download, Upload, KeyRound, Copy, Lightbulb, Menu, Puzzle, ChevronDown, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ButlerEmbed = lazy(() => import("./ButlerPage").then(m => ({ default: m.ButlerPage })));
-import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry, type SessionPreview } from "@/lib/api";
+import { api, McpServer, WksConfig, DiscordConfig, MailConfig, WhatsAppStatus, WhatsAppConfig, PlatformOverviewEntry } from "@/lib/api";
 import OAuthUsageBar from "@/components/OAuthUsageBar";
-import { ChatView } from "@/components/ChatView";
-import { useChatStream, mkMsg, type ChatMessage } from "@/hooks/useChatStream";
+import { ChatShell } from "@/components/chat-v2/ChatShell";
+import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { SkillsPanel } from "@/components/SkillsPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -98,61 +98,69 @@ export function MyAgentPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loadError,   setLoadError]  = useState("");
   const [agentInfo,  setAgentInfo]  = useState<AgentInfo | null>(null);
-  const [pastSessions, setPastSessions] = useState<SessionPreview[]>([]);
   const [agents,     setAgents]     = useState<string[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
 
-  // ── Chat Hook ────────────────────────────────────────────────────────────
-  const chat = useChatStream({
-    streamEndpoint: "/api/me/agent/message/stream",
-    historyEndpoint: "/api/me/agent/session/history",
-    onBeforeSend: (content) => {
-      window.dispatchEvent(new CustomEvent("hh-chat-sent", { detail: { text: content } }));
-    },
-    onAbort: () => {
-      const token = localStorage.getItem("hydrahive_token") || "";
-      fetch("/api/me/agent/interrupt", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-    },
-    onSlashCommand: (cmd, args) => {
-      const agentId = agentInfo?.agent_id;
-      if (cmd === "/help") { sysMsg("**Commands:**\n\n" + SLASH_COMMANDS.map(c=>`\`${c.cmd}\` — ${c.desc}`).join("\n")); return true; }
-      if (cmd === "/clear") {
-        api.delete("/me/agent/session").catch(() => {});
-        chat.setMessages([mkMsg("system", "Chat-Verlauf geleert.")]);
-        try { sessionStorage.removeItem(`hh_chat_${"/api/me/agent/session/history"}`); } catch {}
-        return true;
+  // ── Chat v2 Runtime (#727) ───────────────────────────────────────────────
+  const meTarget = useMemo(() => buildChatV2Target("me", "me"), []);
+  async function handleSlashCommand(cmd: string, args: string): Promise<boolean> {
+    const agentId = agentInfo?.agent_id;
+    if (cmd === "/help") {
+      runtime.pushSystemMessage("**Commands:**\n\n" + SLASH_COMMANDS.map(c => `\`${c.cmd}\` — ${c.desc}`).join("\n"));
+      return true;
+    }
+    if (cmd === "/clear") {
+      try { await api.delete("/me/agent/session"); } catch {}
+      runtime.resetMessages([]);
+      runtime.pushSystemMessage("Chat-Verlauf geleert.");
+      return true;
+    }
+    if (cmd === "/model") {
+      runtime.pushSystemMessage(`**Modell:** \`${agentInfo?.config?.llm?.model ?? "?"}\`\n**Temperatur:** ${agentInfo?.config?.llm?.temperature ?? "?"}`);
+      return true;
+    }
+    if (cmd === "/retry") {
+      const last = [...runtime.messages].reverse().find(m => m.role === "user");
+      if (!last) { runtime.pushSystemMessage("Keine Nachricht zum Wiederholen."); return true; }
+      const text = last.content
+        .filter((p) => p.type === "text")
+        .map((p) => (p as { type: "text"; text: string }).text)
+        .join(" ")
+        .trim();
+      if (text) void runtime.sendText(text);
+      return true;
+    }
+    if (cmd === "/remember") {
+      const fn = args ? args.replace(/[^a-z0-9_-]/gi, "-").toLowerCase() : new Date().toISOString().slice(0, 10);
+      const history = runtime.messages
+        .filter(m => m.role === "user" || m.role === "assistant")
+        .slice(-30)
+        .map(m => {
+          const text = m.content
+            .filter((p) => p.type === "text")
+            .map((p) => (p as { type: "text"; text: string }).text)
+            .join(" ");
+          return `**${m.role === "user" ? "User" : "Agent"}:** ${text}`;
+        })
+        .join("\n\n");
+      if (!history) { runtime.pushSystemMessage("Kein Verlauf."); return true; }
+      if (!agentId) { runtime.pushSystemMessage("Agent-ID noch nicht geladen."); return true; }
+      try {
+        await api.post(`/agents/${agentId}/memory`, { filename: fn, content: `# Session ${new Date().toLocaleString("de")}\n\n${history}` });
+        runtime.pushSystemMessage(`Gespeichert als \`${fn}.md\``);
+      } catch (e) {
+        runtime.pushSystemMessage(`Fehler: ${e instanceof Error ? e.message : String(e)}`);
       }
-      if (cmd === "/model") {
-        sysMsg(`**Modell:** \`${agentInfo?.config?.llm?.model ?? "?"}\`\n**Temperatur:** ${agentInfo?.config?.llm?.temperature ?? "?"}`);
-        return true;
-      }
-      if (cmd === "/retry") {
-        const last = [...chat.messages].reverse().find(m => m.role === "user");
-        if (!last) { sysMsg("Keine Nachricht zum Wiederholen."); return true; }
-        chat.send(last.content); return true;
-      }
-      if (cmd === "/remember") {
-        const fn = args ? args.replace(/[^a-z0-9_-]/gi,"-").toLowerCase() : new Date().toISOString().slice(0,10);
-        const history = chat.messages.filter(m=>m.role==="user"||m.role==="assistant").slice(-30)
-          .map(m=>`**${m.role==="user"?"User":"Agent"}:** ${m.content}`).join("\n\n");
-        if (!history) { sysMsg("Kein Verlauf."); return true; }
-        if (agentId) {
-          api.post(`/agents/${agentId}/memory`, { filename: fn, content: `# Session ${new Date().toLocaleString("de")}\n\n${history}` })
-            .then(() => sysMsg(`Gespeichert als \`${fn}.md\``))
-            .catch((e:Error) => sysMsg(`Fehler: ${e.message}`));
-        }
-        return true;
-      }
-      if (cmd === "/history") {
-        chat.setViewSession(null);
-        chat.setShowHistory(true);
-        return true;
-      }
-      sysMsg(`Unbekannter Command: \`${cmd}\`. /help für Übersicht.`); return true;
-    },
-  });
-
-  function sysMsg(c: string) { chat.setMessages(ms => [...ms, mkMsg("system", c)]); }
+      return true;
+    }
+    if (cmd === "/history") {
+      if (!runtime.showHistory) runtime.toggleHistory();
+      return true;
+    }
+    runtime.pushSystemMessage(`Unbekannter Command: \`${cmd}\`. /help für Übersicht.`);
+    return true;
+  }
+  const runtime = useHydraHiveRuntime(meTarget, { onSlashCommand: handleSlashCommand });
 
   // ── Daten laden ──────────────────────────────────────────────────────────
   async function loadAgent() {
@@ -171,43 +179,11 @@ export function MyAgentPage() {
   useEffect(() => {
     loadAgent();
     api.get<{ apps: typeof userApps }>("/me/user-apps").then(r => setUserApps(r.apps || [])).catch(() => {});
-    chat.loadHistory();
     api.get<Record<string,unknown>>("/agents").then(d => {
       setAgents(Object.keys(d).filter(id => !id.startsWith("personal_")));
     }).catch(() => {});
     api.mcpServers().then(d => setMcpServers(d.servers)).catch(() => {});
   }, []);
-
-  // Load past sessions when history panel opens
-  useEffect(() => {
-    if (!chat.showHistory || !agentInfo?.agent_id) return;
-    api.listSessions(agentInfo.agent_id, 30).then(d => setPastSessions(d.sessions)).catch(() => {});
-  }, [chat.showHistory, agentInfo?.agent_id]);
-
-  async function openPastSession(sid: string) {
-    if (!agentInfo?.agent_id) return;
-    try {
-      const d = await api.getSessionById(agentInfo.agent_id, sid);
-      const msgs = d.messages
-        .filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && !m.content))
-        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
-      chat.setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
-      chat.setShowHistory(false);
-    } catch {}
-  }
-
-  async function resumePastSession(sid: string) {
-    if (!agentInfo?.agent_id) return;
-    try {
-      const d = await api.resumeSession(agentInfo.agent_id, sid);
-      const msgs = d.messages
-        .filter(m => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && !m.content))
-        .map(m => mkMsg(m.role as "user" | "assistant", m.content));
-      chat.setMessages(msgs);
-      chat.setViewSession(null);
-      chat.setShowHistory(false);
-    } catch {}
-  }
 
   const identity = agentInfo?.config?.identity ?? "Mein Agent";
   const model    = agentInfo?.config?.llm?.model ?? "";
@@ -297,7 +273,7 @@ export function MyAgentPage() {
         );
       })()}
 
-      {/* ── Chat Tab ──────────────────────────────────────────────────────── */}
+      {/* ── Chat Tab (Chat v2, #727) ─────────────────────────────────────── */}
       {tab === "chat" && (
         <div className="flex-1 overflow-hidden flex flex-col pt-4 pb-4 pl-4 sm:pt-6 sm:pb-6 sm:pl-6 pr-4 sm:pr-6 min-h-0 min-w-0">
           <div className="grid flex-1 min-h-0 min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
@@ -318,14 +294,8 @@ export function MyAgentPage() {
                       <p className="text-xs text-muted-foreground">{t("myAgent.historySubtitle")}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {chat.activeTool && (
-                        <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          <code className="max-w-[10rem] truncate font-mono">{chat.activeTool.name}</code>
-                        </div>
-                      )}
-                      <button onClick={() => { chat.setShowHistory(h => !h); chat.setViewSession(null); }}
-                        className={`p-1.5 rounded-lg transition-colors ${chat.showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
+                      <button onClick={runtime.toggleHistory}
+                        className={`p-1.5 rounded-lg transition-colors ${runtime.showHistory ? "bg-primary/10 text-primary" : "hover:bg-muted text-muted-foreground"}`}
                         title="Vergangene Sessions"
                         aria-label="Toggle chat history">
                         <Clock className="h-4 w-4" />
@@ -333,126 +303,34 @@ export function MyAgentPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* History Panel */}
-                {chat.showHistory && (
-                  <div className="border-b border-border/60">
-                    <div className="flex items-center justify-between px-4 py-2 bg-muted/30">
-                      <span className="text-xs font-medium text-muted-foreground">Vergangene Sessions</span>
-                      <button onClick={() => chat.setShowHistory(false)} className="p-1 rounded hover:bg-accent" aria-label="Close history">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    {pastSessions.length === 0 ? (
-                      <p className="text-xs text-muted-foreground text-center py-6">Keine vergangenen Sessions</p>
-                    ) : (
-                      <div className="divide-y max-h-64 overflow-y-auto">
-                        {pastSessions.map(s => (
-                          <div key={s.id} className="flex items-stretch hover:bg-accent/50 transition-colors">
-                            <button onClick={() => openPastSession(s.id)}
-                              className="flex-1 text-left px-4 py-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium">{new Date(s.started_at).toLocaleString("de")}</span>
-                                <span className="text-xs text-muted-foreground">{s.message_count} Nachr.</span>
-                              </div>
-                              {s.preview && (
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">{s.preview}</p>
-                              )}
-                            </button>
-                            <button onClick={() => resumePastSession(s.id)}
-                              title="Chat fortsetzen"
-                              aria-label="Resume session"
-                              className="flex items-center px-3 text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* View past session banner */}
-                {chat.viewSession && (
-                  <div className="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-border/60 text-xs flex-shrink-0 gap-2">
-                    <span className="text-amber-600 dark:text-amber-400 font-medium truncate min-w-0">
-                      Vergangene Session — {new Date(chat.viewSession.startedAt).toLocaleString("de")}
-                    </span>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button onClick={() => { chat.setViewSession(null); chat.setShowHistory(true); }}
-                        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">
-                        <ArrowLeft className="h-3 w-3" /> Zurück
-                      </button>
-                      <button onClick={() => resumePastSession(chat.viewSession!.id)}
-                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-                        <RotateCcw className="h-3 w-3" /> Fortsetzen
-                      </button>
-                      <button onClick={() => { chat.setViewSession(null); api.delete("/me/agent/session").catch(() => {}); chat.setMessages([]); }}
-                        className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground">
-                        <Plus className="h-3 w-3" /> Neuer Chat
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Shared ChatView (#491) */}
-                <ChatView
-                  {...chat}
-                  t={t}
-                  showOAuthBar={false}
-                  slashCommands={SLASH_COMMANDS}
-                  onConfirmTool={async (toolCallId, decision) => {
-                    // #641-Followup: Agent-Endpoint mit echter agent_id
-                    // (nicht "me"); MyAgentPage nutzt schon andere session-
-                    // basierte Calls über /agents/{agent_id}/.
-                    const aid = agentInfo?.agent_id;
-                    const pc = chat.pendingConfirms.find(p => p.tool_call_id === toolCallId);
-                    const sid = pc?.session_id || chat.currentSessionId;
-                    if (!aid || !sid) {
-                      console.warn("[#641] confirmTool: agent_id oder session_id fehlt");
-                      return;
-                    }
-                    try {
-                      await api.confirmToolCallAgent(aid, sid, toolCallId, decision);
-                      chat.removePendingConfirm(toolCallId);
-                    } catch (err) {
-                      const msg = err instanceof Error
-                        ? err.message
-                        : (typeof err === "string" ? err : JSON.stringify(err));
-                      console.error(`[#641] confirmToolAgent(${decision}, ${toolCallId}) failed: ${msg}`);
-                      chat.setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
-                    }
-                  }}
-                  headerSlot={
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      {SLASH_COMMANDS.map((cmd) => (
-                        <button key={cmd.cmd}
-                          type="button"
-                          onClick={() => { chat.setInput(`${cmd.cmd} `); chat.textareaRef.current?.focus(); }}
-                          className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
-                          {cmd.cmd}
-                        </button>
-                      ))}
-                    </div>
-                  }
-                />
+                <div className="mb-0 flex flex-wrap gap-2 px-4 pt-3">
+                  {SLASH_COMMANDS.map((cmd) => (
+                    <button key={cmd.cmd}
+                      type="button"
+                      onClick={() => runtime.aui.composer().setText(`${cmd.cmd} `)}
+                      className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+                      {cmd.cmd}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1 min-h-0">
+                  <ChatShell runtime={runtime} hideHeader />
+                </div>
               </div>
             </section>
 
             <aside className="xl:sticky xl:top-24 xl:self-start pr-4 sm:pr-6">
               <div className="rounded-[28px] border border-border/60 bg-card/80 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur space-y-3">
-                {/* Agent-Name + Status */}
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold">{identity}</div>
                     <div className="text-xs text-muted-foreground font-mono">{agentInfo?.config?.llm?.model ?? t("myAgent.noModel")}</div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {chat.sending ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
+                    {runtime.isRunning ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> : <CheckCircle className="h-4 w-4 text-emerald-500" />}
                   </div>
                 </div>
 
-                {/* Kompakt-Stats */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
                     <div className="text-muted-foreground">{t("myAgent.mode")}</div>
@@ -460,11 +338,10 @@ export function MyAgentPage() {
                   </div>
                   <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2">
                     <div className="text-muted-foreground">{t("myAgent.historyCount")}</div>
-                    <div className="font-medium mt-0.5">{chat.messages.filter(m => m.role !== "system").length}</div>
+                    <div className="font-medium mt-0.5">{runtime.messages.filter(m => m.role !== "system").length}</div>
                   </div>
                 </div>
 
-                {/* Slash-Commands */}
                 <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-2 space-y-1.5">
                   {SLASH_COMMANDS.map((cmd) => (
                     <div key={cmd.cmd} className="flex items-center justify-between gap-2 text-xs">
@@ -474,12 +351,9 @@ export function MyAgentPage() {
                   ))}
                 </div>
 
-                {chat.activeTool && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-primary">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      <code className="font-mono truncate">{chat.activeTool.name}</code>
-                    </div>
+                {runtime.error && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {runtime.error}
                   </div>
                 )}
               </div>
@@ -593,7 +467,6 @@ export function MyAgentPage() {
       {tab.startsWith("app-") && (
         <UserAppTab appId={tab.replace("app-", "")} apps={userApps} />
       )}
-      {/* Lightbox is now rendered inside ChatView */}
     </div>
   );
 }

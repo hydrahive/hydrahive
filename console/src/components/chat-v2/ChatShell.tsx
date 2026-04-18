@@ -12,7 +12,14 @@ import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, Sh
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
-import { type ChatV2Target, type PendingImage, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
+import {
+  type ChatV2Target,
+  type HydraHiveRuntime,
+  type HydraHiveRuntimeOptions,
+  type PendingImage,
+  type PendingToolConfirm,
+  useHydraHiveRuntime,
+} from "./hydrahive-runtime";
 import type { SessionPreview } from "@/lib/api";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
@@ -490,8 +497,31 @@ function Composer({
   );
 }
 
-export function ChatShell({ target }: { target: ChatV2Target }) {
-  const runtime = useHydraHiveRuntime(target);
+export type ChatShellProps = {
+  target?: ChatV2Target;
+  runtime?: HydraHiveRuntime;
+  runtimeOptions?: HydraHiveRuntimeOptions;
+  hideHeader?: boolean;
+  headerLabel?: string;
+};
+
+export function ChatShell(props: ChatShellProps) {
+  if (props.runtime) {
+    return <ChatShellInner {...props} runtime={props.runtime} />;
+  }
+  if (!props.target) {
+    throw new Error("ChatShell requires either `target` or `runtime`.");
+  }
+  return <ChatShellWithTarget {...props} target={props.target} />;
+}
+
+function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps & { target: ChatV2Target }) {
+  const runtime = useHydraHiveRuntime(target, runtimeOptions);
+  return <ChatShellInner {...rest} target={target} runtime={runtime} />;
+}
+
+function ChatShellInner({ runtime, hideHeader, headerLabel, target }: ChatShellProps & { runtime: HydraHiveRuntime }) {
+  const label = headerLabel ?? target?.label ?? "";
   const appendTranscript = (text: string) => {
     const composer = runtime.aui.composer();
     const current = composer.getState().text.trim();
@@ -522,28 +552,30 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
   return (
     <AuiProvider value={runtime.aui}>
       <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-background">
-        <div className="border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat v2 Demo</div>
-              <h1 className="text-lg font-semibold text-foreground">{target.label}</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              {runtime.error ? <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div> : null}
-              <button
-                type="button"
-                onClick={runtime.toggleHistory}
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted",
-                  runtime.showHistory && "bg-muted text-foreground"
-                )}
-                title="Chat-Verlauf"
-              >
-                <History className="h-4 w-4" />
-              </button>
+        {hideHeader ? null : (
+          <div className="border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur">
+            <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat v2 Demo</div>
+                <h1 className="text-lg font-semibold text-foreground">{label}</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                {runtime.error ? <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div> : null}
+                <button
+                  type="button"
+                  onClick={runtime.toggleHistory}
+                  className={cn(
+                    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted",
+                    runtime.showHistory && "bg-muted text-foreground"
+                  )}
+                  title="Chat-Verlauf"
+                >
+                  <History className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           {runtime.showHistory ? (
             <HistoryPanel
