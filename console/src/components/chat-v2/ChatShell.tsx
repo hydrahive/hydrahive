@@ -8,10 +8,11 @@ import {
   type ThreadMessage,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, Volume2, VolumeX, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
+import { api } from "@/lib/api";
 import {
   type ChatV2Target,
   type HydraHiveRuntime,
@@ -123,7 +124,120 @@ function MessagePart({ part }: { part: MessagePartState }) {
   return null;
 }
 
-function ChatMessage({ message }: { message: MessageLike }) {
+// #734 O: ein aktiver TTS-Stream zur Zeit. Beim Start einer neuen Wiedergabe
+// wird der bisherige Audio-Tag abgebrochen und die URL revoked.
+type TtsState = {
+  playingId: string | null;
+  loadingId: string | null;
+  errorId: string | null;
+  speak: (messageId: string, text: string) => void;
+  stop: () => void;
+};
+
+function useTtsPlayback(): TtsState {
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  const hardStop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+    audioRef.current = null;
+  }, []);
+
+  const stop = useCallback(() => {
+    hardStop();
+    setPlayingId(null);
+    setLoadingId(null);
+  }, [hardStop]);
+
+  const speak = useCallback(async (messageId: string, text: string) => {
+    hardStop();
+    setErrorId(null);
+    if (!text.trim()) return;
+    setLoadingId(messageId);
+    setPlayingId(null);
+    try {
+      const blob = await api.voiceTts(text);
+      const url = URL.createObjectURL(blob);
+      urlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        setPlayingId((id) => (id === messageId ? null : id));
+        if (urlRef.current === url) {
+          URL.revokeObjectURL(url);
+          urlRef.current = null;
+        }
+      };
+      audio.onerror = () => {
+        setPlayingId(null);
+        setLoadingId(null);
+        setErrorId(messageId);
+      };
+      await audio.play();
+      setLoadingId(null);
+      setPlayingId(messageId);
+    } catch {
+      setLoadingId(null);
+      setPlayingId(null);
+      setErrorId(messageId);
+    }
+  }, [hardStop]);
+
+  useEffect(() => () => hardStop(), [hardStop]);
+
+  return { playingId, loadingId, errorId, speak, stop };
+}
+
+function messageSpeakableText(message: MessageLike): string {
+  return message.content
+    .filter((p: unknown) => (p as { type?: string }).type === "text")
+    .map((p) => (p as { type: "text"; text: string }).text)
+    .join(" ")
+    .trim();
+}
+
+function SpeakButton({ message, tts }: { message: MessageLike; tts: TtsState }) {
+  if (message.role !== "assistant") return null;
+  if (message.status?.type === "running") return null;
+  const text = messageSpeakableText(message);
+  if (!text) return null;
+  const isLoading = tts.loadingId === message.id;
+  const isPlaying = tts.playingId === message.id;
+  const hasError = tts.errorId === message.id;
+  const Icon = isPlaying ? VolumeX : hasError ? VolumeX : Volume2;
+  const label = isPlaying ? "TTS stoppen" : hasError ? "TTS fehlgeschlagen — erneut versuchen" : "Vorlesen";
+  const onClick = () => (isPlaying ? tts.stop() : tts.speak(message.id, text));
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isLoading}
+      className={cn(
+        "mt-2 inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] transition",
+        "border-[hsl(var(--candy-cyan)/0.4)] text-[hsl(var(--candy-cyan))] hover:bg-[hsl(var(--candy-cyan)/0.08)]",
+        hasError && "border-[hsl(var(--candy-pink)/0.5)] text-[hsl(var(--candy-pink))]",
+        isLoading && "opacity-60",
+      )}
+      title={label}
+      aria-label={label}
+    >
+      {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+      <span className="font-medium">{isPlaying ? "Stop" : hasError ? "Retry" : "Speak"}</span>
+    </button>
+  );
+}
+
+function ChatMessage({ message, tts }: { message: MessageLike; tts: TtsState }) {
   const isUser = message.role === "user";
   return (
     <MessagePrimitive.Root className={cn("flex gap-3 px-4 py-4", isUser ? "justify-end" : "justify-start")}>
@@ -148,6 +262,7 @@ function ChatMessage({ message }: { message: MessageLike }) {
           </div>
         )}
         <TokenBadge message={message} />
+        <SpeakButton message={message} tts={tts} />
       </div>
       {isUser && (
         <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[hsl(var(--candy-pink)/0.35)] to-[hsl(var(--candy-amber)/0.25)] text-[hsl(var(--candy-pink))] shadow-[0_0_12px_hsl(var(--candy-pink)/0.3)]">
@@ -547,6 +662,7 @@ function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps
 
 function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, onComposerActivity }: ChatShellProps & { runtime: HydraHiveRuntime }) {
   const label = headerLabel ?? target?.label ?? "";
+  const tts = useTtsPlayback();
   const appendTranscript = (text: string) => {
     const composer = runtime.aui.composer();
     const current = composer.getState().text.trim();
@@ -679,7 +795,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
               </ThreadPrimitive.Empty>
               <div className="mx-auto w-full max-w-5xl py-3">
                 <ThreadPrimitive.Messages>
-                  {({ message }) => <ChatMessage message={message as MessageLike} />}
+                  {({ message }) => <ChatMessage message={message as MessageLike} tts={tts} />}
                 </ThreadPrimitive.Messages>
               </div>
               <Composer
