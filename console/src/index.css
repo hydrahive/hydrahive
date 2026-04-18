@@ -23,6 +23,20 @@
     min-height: 44px;
     min-width: 44px;
   }
+
+  /* Viewport-Höhe mit iOS-Keyboard-Awareness (Mobile-Chat, #720).
+     3-Ebenen-Fallback:
+       1. 100vh   — Basis, in jedem Browser ohne Keyboard-Awareness
+       2. 100dvh  — Dynamic Viewport Height (iOS 15.4+, Android 108+)
+       3. --vv-height — visualViewport-API-Wert, gesetzt von main.tsx
+                       (reagiert live auf eingeblendete Tastatur)
+     Tailwind generiert drei separate `height`-Regeln; Browser nimmt die
+     letzte valide — bei voller Unterstützung also die --vv-height-Variante. */
+  .h-viewport-safe {
+    height: 100vh;
+    height: 100dvh;
+    height: var(--vv-height, 100dvh);
+  }
 }
 
 @layer base {

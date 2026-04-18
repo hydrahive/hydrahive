@@ -386,8 +386,10 @@ export function ChatView(props: ChatViewProps) {
         </div>
       )}
 
-      {/* Input Area */}
-      <div className="border-t px-4 py-3 flex-shrink-0">
+      {/* Input Area — #720 Mobile-Chat: pb mit env(safe-area-inset-bottom) damit
+          der Composer auf iPhone-Home-Indicator / iOS-Safari-Chrome nicht unter
+          die sichtbare Fläche rutscht. Mindestens 0.75rem Padding. */}
+      <div className="border-t px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex-shrink-0">
         {/* #641: Tool-Confirm-Banner — vor Coach + Composer */}
         {pendingConfirms.length > 0 && (
           <div className="mb-2 space-y-2">
@@ -494,7 +496,7 @@ export function ChatView(props: ChatViewProps) {
             placeholder={t("chat.messagePlaceholder", { defaultValue: "Nachricht schreiben..." })}
             rows={1}
             disabled={!!viewSession}
-            className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+            className="flex-1 min-w-0 px-3 py-2 text-base sm:text-sm border rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             style={{ maxHeight: "120px", overflowY: "auto" }} />
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
           <button onClick={() => setShowEmoji(e => !e)} className="hidden sm:flex p-2 rounded-xl hover:bg-accent text-muted-foreground" type="button">
