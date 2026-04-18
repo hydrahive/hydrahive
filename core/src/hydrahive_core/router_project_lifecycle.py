@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from .matrix_agent import BossMatrixAgent
+from .settings import settings
 
 
 def update_project_matrix_space(projects_dir: str, project_id: str, space_id: str, *, logger) -> None:
@@ -59,6 +60,7 @@ def register_project_lifecycle_routes(
 ) -> None:
     @admin_router.delete("/projects/{project_id}")
     async def delete_project(project_id: str, _a: tuple = Depends(require_admin)):
+        import shutil as _shutil
         import time as _time
 
         cfg = projects.get(project_id)
@@ -80,9 +82,22 @@ def register_project_lifecycle_routes(
             for w in deprov_warnings:
                 logger.warning("deprovision warning: %s", w)
 
+        deleted_root = settings.deleted_projects_dir
+        try:
+            deleted_root.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(500, f"Deleted-projects-Verzeichnis nicht nutzbar: {e}") from e
+
         timestamp = int(_time.time())
-        deleted_dir = Path(projects_dir) / f'_deleted_{project_id}_{timestamp}'
-        project_dir.rename(deleted_dir)
+        deleted_dir = deleted_root / f'{project_id}.{timestamp}'
+        suffix = 0
+        while deleted_dir.exists():
+            suffix += 1
+            deleted_dir = deleted_root / f'{project_id}.{timestamp}.{suffix}'
+        try:
+            _shutil.move(str(project_dir), str(deleted_dir))
+        except OSError as e:
+            raise HTTPException(500, f"Projekt konnte nicht verschoben werden: {e}") from e
 
         # Aus In-Memory-Registry entfernen damit create_project danach wieder funktioniert
         projects._unregister_dir(project_dir)

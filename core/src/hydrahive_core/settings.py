@@ -201,6 +201,19 @@ class HydraHiveSettings(BaseSettings):
         return Path("/var/lib/hydrahive/jobs")
 
     @property
+    def deleted_projects_dir(self) -> Path:
+        """Ablage für gelöschte Projekte außerhalb von /projects.
+
+        Der ProjectLoader scannt nur /projects. Gelöschte Projekte müssen
+        deshalb außerhalb dieses Baums liegen, bleiben aber als Backup erhalten.
+        """
+        import os
+        override = os.environ.get("HYDRAHIVE_DELETED_PROJECTS_DIR")
+        if override:
+            return Path(override)
+        return Path("/var/lib/hydrahive/deleted-projects")
+
+    @property
     def settings_file(self) -> Path:
         """Pfad zu settings.json (Hook-Konfiguration, #654).
 

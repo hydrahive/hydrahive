@@ -85,6 +85,7 @@ class ProjectLoader:
     def _register(self, project_dir: Path) -> ProjectConfig | None:
         config = load_project_config(project_dir)
         if config is None:
+            self._unregister_dir(project_dir)
             return None
         with self._lock:
             existing = self._projects.get(config.id)

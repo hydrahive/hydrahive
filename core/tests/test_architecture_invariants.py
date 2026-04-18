@@ -1757,6 +1757,40 @@ def test_invariant27_stream_helpers_accept_request_user():
     )
 
 
+def test_invariant28_deleted_projects_leave_projects_tree():
+    """28: DELETE /projects/{id} darf Backups nicht unter /projects ablegen.
+
+    Gelöschte Projekte unter /projects/_deleted_* bleiben im Watchdog-Scope und
+    können durch spätere File-Events wieder in die In-Memory-Registry driften.
+    Der Delete-Pfad muss deshalb außerhalb des ProjectLoader-Scanbaums liegen.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    lifecycle = repo_root / "core" / "src" / "hydrahive_core" / "router_project_lifecycle.py"
+    settings_py = repo_root / "core" / "src" / "hydrahive_core" / "settings.py"
+    runtime_helper = repo_root / "installer" / "lib" / "ensure_runtime_dirs.sh"
+
+    lifecycle_text = lifecycle.read_text(encoding="utf-8")
+    settings_text = settings_py.read_text(encoding="utf-8")
+    helper_text = runtime_helper.read_text(encoding="utf-8")
+
+    assert "settings.deleted_projects_dir" in lifecycle_text, (
+        "Projekt-Delete soll nach settings.deleted_projects_dir verschieben, "
+        "nicht nach /projects/_deleted_*."
+    )
+    assert "Path(projects_dir) / f'_deleted_" not in lifecycle_text, (
+        "Projekt-Delete legt Backups noch unter /projects/_deleted_* ab."
+    )
+    assert "HYDRAHIVE_DELETED_PROJECTS_DIR" in settings_text, (
+        "deleted_projects_dir soll per Env ueberschreibbar sein."
+    )
+    assert "/var/lib/hydrahive/deleted-projects" in helper_text, (
+        "Runtime-Helper muss /var/lib/hydrahive/deleted-projects beim "
+        "Install/Update anlegen."
+    )
+
+
 def test_invariant18_update_sh_runtime_helper_bootstrap_safe():
     """18 (#703 Hotfix 27ec3d8): update.sh darf nicht mehr in den
     Bootstrap-Deadlock laufen, wenn der Runtime-Helper noch nie auf die

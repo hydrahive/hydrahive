@@ -97,6 +97,26 @@ def test_scan_ueberspringt_fremde_config_yaml(tmp_projects_dir):
     assert "xiaozhi-config" not in pl.projects
 
 
+def test_register_entfernt_stale_eintrag_wenn_config_ungueltig(tmp_projects_dir, loader):
+    """Watchdog-Revalidierung darf invalid gewordene Projekte nicht in Memory behalten."""
+    project_dir = tmp_projects_dir / "proj-a"
+    assert "proj-a" in loader.projects
+
+    (project_dir / "config.yaml").write_text(
+        "\n".join([
+            "server:",
+            "  websocket: ws://example.invalid/xiaozhi/v1/",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    cfg = loader.register(project_dir)
+
+    assert cfg is None
+    assert "proj-a" not in loader.projects
+
+
 # ============================================================= get + members
 
 def test_get_liefert_projektconfig(loader):

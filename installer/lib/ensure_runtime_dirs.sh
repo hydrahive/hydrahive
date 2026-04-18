@@ -26,6 +26,7 @@ _HYDRAHIVE_RUNTIME_DIRS=(
     /var/lib/hydrahive/worktrees   # #651 Sub-Agent-Worktrees
     /var/lib/hydrahive/users       # #659 per-User mutable Daten
     /var/lib/hydrahive/jobs        # #687 Async-Job-Fundament
+    /var/lib/hydrahive/deleted-projects # gelöschte Projekte außerhalb /projects
 )
 
 ensure_hydrahive_runtime_dirs() {
