@@ -12,7 +12,7 @@
  * Hook gibt `null` zurück solange kein Projekt aktiv ist (z.B. während
  * Setup-Flows) — Caller muss damit umgehen können.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 
@@ -42,7 +42,7 @@ export function useAwarenessUsers(yjs: ProjectYjs | null): string[] {
   const [users, setUsers] = useState<string[]>([]);
   useEffect(() => {
     if (!yjs) {
-      setUsers([]);
+      setUsers((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     const aw = yjs.awareness;
@@ -52,7 +52,14 @@ export function useAwarenessUsers(yjs: ProjectYjs | null): string[] {
         const name = (state?.user as { name?: string } | undefined)?.name;
         if (name) names.add(name);
       });
-      setUsers(Array.from(names).sort());
+      const next = Array.from(names).sort();
+      // Nur setState wenn sich die User-Liste wirklich geändert hat — awareness
+      // feuert auch für Cursor-Moves, das soll KEIN Re-Render auslösen.
+      setUsers((prev) => {
+        if (prev.length !== next.length) return next;
+        for (let i = 0; i < prev.length; i++) if (prev[i] !== next[i]) return next;
+        return prev;
+      });
     };
     update();
     aw.on("change", update);
@@ -89,11 +96,12 @@ function buildServerUrl(projectId: string): string {
 
 export function useProjectYjs(projectId: string | undefined, username: string | undefined): ProjectYjs | null {
   const [connected, setConnected] = useState(false);
-  const tokenRef = useRef<string>(getAuthToken());
+  // Token-Version: beim Logout leert LoginPage localStorage, dann wechselt
+  // diese Variable → useMemo reißt den alten Provider ab + baut ihn NICHT
+  // neu (weil token=""). Kein Re-Connect mit totem Token mehr.
+  const token = getAuthToken();
   const docAndProvider = useMemo(() => {
-    if (!projectId) return null;
-    const token = tokenRef.current || getAuthToken();
-    if (!token) return null;
+    if (!projectId || !username || !token) return null;
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText("composer");
     // y-websocket bildet die URL als `${serverUrl}/${roomname}?${params}`.
@@ -113,7 +121,9 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       },
     );
     return { ydoc, ytext, provider };
-  }, [projectId]);
+    // token + username in deps: bei Logout wird alles abgerissen, Re-Login
+    // mit neuem Token baut einen frischen Provider auf.
+  }, [projectId, username, token]);
 
   useEffect(() => {
     if (!docAndProvider) return;
@@ -141,22 +151,23 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
     };
   }, [docAndProvider, username]);
 
-  if (!docAndProvider) return null;
-  const { ydoc, ytext, provider } = docAndProvider;
-
-  const clearText = () => {
-    // transaction-wrap, damit Delete + Notify atomar laufen.
-    ydoc.transact(() => {
-      ytext.delete(0, ytext.length);
-    });
-  };
-
-  return {
-    ydoc,
-    ytext,
-    provider,
-    awareness: provider.awareness,
-    connected,
-    clearText,
-  };
+  // Return-Wert memoizieren damit Consumer (ChatShell, Page) stabile
+  // Referenzen bekommen — sonst fliegt jede Parent-Re-Render-Kaskade los
+  // und kann in einen Loop laufen.
+  return useMemo<ProjectYjs | null>(() => {
+    if (!docAndProvider) return null;
+    const { ydoc, ytext, provider } = docAndProvider;
+    return {
+      ydoc,
+      ytext,
+      provider,
+      awareness: provider.awareness,
+      connected,
+      clearText: () => {
+        ydoc.transact(() => {
+          ytext.delete(0, ytext.length);
+        });
+      },
+    };
+  }, [docAndProvider, connected]);
 }
