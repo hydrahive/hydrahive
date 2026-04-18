@@ -120,10 +120,11 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
         params: { token },
         // #554: Cross-Browser-Sync muss über den HydraHive/pycrdt-Server
         // laufen. y-websocket nutzt sonst im selben Browser zusätzlich
-        // BroadcastChannel und kann Backend-Probleme verdecken. Der periodische
-        // Resync holt außerdem verpasste Server-Updates nach.
+        // BroadcastChannel und kann Backend-Probleme verdecken.
         disableBc: true,
-        resyncInterval: 2000,
+        // resyncInterval bewusst AUS — 2s resync flappte den connection-status
+        // und triggerte Scroll-Jumps durch re-render des Composers. y-websocket
+        // reconnected bei Verbindungsabbruch automatisch per Backoff.
       },
     );
     // Diagnostik (#554): Sync-Events laut rauslog damit wir bei Sync-

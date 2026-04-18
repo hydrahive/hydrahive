@@ -697,7 +697,6 @@ function Composer({
         </button>
         <ComposerPrimitive.Input
           rows={1}
-          autoFocus
           submitMode="enter"
           placeholder="Nachricht schreiben..."
           className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground sm:text-sm"

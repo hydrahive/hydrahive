@@ -317,9 +317,8 @@ export function CollabComposer({
           <textarea
             ref={textareaRef}
             rows={1}
-            autoFocus
             disabled={disabled}
-            placeholder={yjs.connected ? "Gemeinsam tippen …" : "Verbinde …"}
+            placeholder="Nachricht schreiben..."
             onInput={onInput}
             onKeyDown={onKeyDown}
             onKeyUp={publishLocalCursor}
