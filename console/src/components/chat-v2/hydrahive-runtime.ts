@@ -7,7 +7,7 @@ import {
   type ThreadAssistantMessagePart,
 } from "@assistant-ui/react";
 import { sseStream, type SSEEvent } from "@/lib/sseStream";
-import { api } from "@/lib/api";
+import { api, type SessionFull, type SessionPreview } from "@/lib/api";
 
 type TokenUsage = {
   input?: number;
@@ -67,6 +67,10 @@ type HistoryResponse = {
       model?: string;
     };
   }>;
+};
+
+type AgentInfoResponse = {
+  agent_id: string;
 };
 
 let idSeq = 0;
@@ -154,6 +158,22 @@ function historyToMessage(raw: HistoryResponse["messages"][number]): ExternalThr
   return null;
 }
 
+function sessionMessageToThreadMessage(raw: SessionFull["messages"][number]): ExternalThreadMessage | null {
+  if (raw.role === "tool") return null;
+  return historyToMessage({
+    role: raw.role,
+    content: raw.content,
+  });
+}
+
+function resumedMessageToThreadMessage(raw: { role: string; content: string }): ExternalThreadMessage | null {
+  if (raw.role !== "user" && raw.role !== "assistant" && raw.role !== "system") return null;
+  return historyToMessage({
+    role: raw.role,
+    content: raw.content,
+  });
+}
+
 function appendAssistantText(message: ExternalThreadMessage, chunk: string): ExternalThreadMessage {
   if (message.role !== "assistant") return message;
   const content: ThreadAssistantMessagePart[] = [...message.content];
@@ -211,6 +231,11 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
   const [coachFeedback, setCoachFeedback] = useState<CoachFeedback | null>(null);
   const [coachChecking, setCoachChecking] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessions, setSessions] = useState<SessionPreview[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [viewSession, setViewSession] = useState<{ id: string; startedAt: string; messages: ExternalThreadMessage[] } | null>(null);
+  const [agentSessionId, setAgentSessionId] = useState<string | null>(target.kind === "agent" ? target.id : null);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
 
@@ -232,6 +257,22 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
       });
     return () => { cancelled = true; };
   }, [target.historyEndpoint]);
+
+  useEffect(() => {
+    if (target.kind !== "me") {
+      setAgentSessionId(target.kind === "agent" ? target.id : null);
+      return;
+    }
+    let cancelled = false;
+    api.myAgent()
+      .then((info: AgentInfoResponse) => {
+        if (!cancelled) setAgentSessionId(info.agent_id);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentSessionId(null);
+      });
+    return () => { cancelled = true; };
+  }, [target.id, target.kind]);
 
   const ensureAssistant = useCallback(() => {
     let id = activeAssistantIdRef.current;
@@ -398,6 +439,100 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     setCoachFeedback(null);
   }, []);
 
+  const loadSessions = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      if (target.kind === "project") {
+        const response = await api.listProjectSessions(target.id, 30);
+        setSessions(response.sessions);
+      } else if (agentSessionId) {
+        const response = await api.listSessions(agentSessionId, 30);
+        setSessions(response.sessions);
+      } else {
+        setSessions([]);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Session-Liste konnte nicht geladen werden: ${msg}`);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [agentSessionId, target.id, target.kind]);
+
+  const toggleHistory = useCallback(() => {
+    setShowHistory((current) => {
+      const next = !current;
+      if (next) void loadSessions();
+      return next;
+    });
+    setViewSession(null);
+  }, [loadSessions]);
+
+  const openSession = useCallback(async (sessionIdToOpen: string) => {
+    setHistoryLoading(true);
+    try {
+      const session = target.kind === "project"
+        ? await api.get<SessionFull>(`/projects/${target.id}/sessions/${sessionIdToOpen}`)
+        : agentSessionId
+          ? await api.getSessionById(agentSessionId, sessionIdToOpen)
+          : null;
+      if (!session) return;
+      const loaded = session.messages
+        .filter((msg) => !(msg.role === "assistant" && !msg.content))
+        .map(sessionMessageToThreadMessage)
+        .filter((msg): msg is ExternalThreadMessage => msg !== null);
+      setViewSession({
+        id: session.id,
+        startedAt: session.started_at,
+        messages: loaded,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Session konnte nicht geladen werden: ${msg}`);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [agentSessionId, target.id, target.kind]);
+
+  const resumeSession = useCallback(async (sessionIdToResume: string) => {
+    setHistoryLoading(true);
+    try {
+      const response = target.kind === "project"
+        ? await api.resumeProjectSession(target.id, sessionIdToResume)
+        : agentSessionId
+          ? await api.resumeSession(agentSessionId, sessionIdToResume)
+          : null;
+      if (!response) return;
+      const loaded = response.messages
+        .filter((msg) => !(msg.role === "assistant" && !msg.content))
+        .map(resumedMessageToThreadMessage)
+        .filter((msg): msg is ExternalThreadMessage => msg !== null);
+      setMessages(loaded);
+      setSessionId(response.id);
+      setViewSession(null);
+      setShowHistory(false);
+      try {
+        localStorage.setItem(`hh_lastsess_${target.historyEndpoint}`, response.id);
+      } catch {
+        // ignore quota/private mode
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Session konnte nicht fortgesetzt werden: ${msg}`);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [agentSessionId, target.historyEndpoint, target.id, target.kind]);
+
+  const closeSessionView = useCallback(() => {
+    setViewSession(null);
+  }, []);
+
+  const closeHistory = useCallback(() => {
+    setViewSession(null);
+    setShowHistory(false);
+  }, []);
+
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
     const pending = pendingConfirms.find((item) => item.tool_call_id === toolCallId);
     const sid = pending?.session_id || sessionId;
@@ -447,16 +582,26 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     coachEnabled,
     coachFeedback,
     coachChecking,
+    showHistory,
+    sessions,
+    historyLoading,
+    viewSession,
     addImages,
     removeImage,
     clearFollowUpChips,
     toggleCoach,
     clearCoachFeedback,
+    loadSessions,
+    toggleHistory,
+    openSession,
+    resumeSession,
+    closeSessionView,
+    closeHistory,
     send,
     sendText,
     cancel,
     confirmTool,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, send, sendText, cancel, confirmTool]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool]);
 }
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {

@@ -8,11 +8,12 @@ import {
   type MessagePartState,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, ImagePlus, Loader2, RefreshCw, Send, ShieldAlert, Square, User, X } from "lucide-react";
+import { Bot, Check, History, ImagePlus, Loader2, RefreshCw, RotateCcw, Send, ShieldAlert, Square, User, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import { type ChatV2Target, type PendingImage, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
+import type { SessionPreview } from "@/lib/api";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
 
@@ -143,6 +144,79 @@ function ChatMessage() {
         </div>
       )}
     </MessagePrimitive.Root>
+  );
+}
+
+function formatSessionDate(value: string) {
+  try {
+    return new Date(value).toLocaleString("de-DE");
+  } catch {
+    return value;
+  }
+}
+
+function HistoryPanel({
+  sessions,
+  loading,
+  activeSessionId,
+  onOpen,
+  onResume,
+  onClose,
+}: {
+  sessions: SessionPreview[];
+  loading: boolean;
+  activeSessionId: string | null;
+  onOpen: (sessionId: string) => void;
+  onResume: (sessionId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="w-full border-b border-border bg-muted/20 lg:w-80 lg:border-b-0 lg:border-r">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Sessions</div>
+          <div className="text-sm text-foreground">Verlauf</div>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-muted">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="max-h-72 overflow-y-auto lg:max-h-none">
+        {loading ? (
+          <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            lade Sessions...
+          </div>
+        ) : sessions.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">Keine vergangenen Sessions.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {sessions.map((session) => (
+              <div key={session.id} className={cn("flex items-stretch", session.id === activeSessionId && "bg-primary/5")}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(session.id)}
+                  className="min-w-0 flex-1 px-4 py-3 text-left hover:bg-muted/70"
+                >
+                  <div className="truncate text-sm font-medium text-foreground">{session.preview || "(leer)"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {session.message_count} Messages · {formatSessionDate(session.started_at)}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onResume(session.id)}
+                  title="Session fortsetzen"
+                  className="border-l border-border px-3 text-primary hover:bg-primary/10"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -454,50 +528,125 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat v2 Demo</div>
               <h1 className="text-lg font-semibold text-foreground">{target.label}</h1>
             </div>
-            {runtime.error ? <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div> : null}
+            <div className="flex items-center gap-2">
+              {runtime.error ? <div className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">{runtime.error}</div> : null}
+              <button
+                type="button"
+                onClick={runtime.toggleHistory}
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted",
+                  runtime.showHistory && "bg-muted text-foreground"
+                )}
+                title="Chat-Verlauf"
+              >
+                <History className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
-        <ThreadPrimitive.Viewport
-          autoScroll
-          turnAnchor="bottom"
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          <ThreadPrimitive.Empty>
-            <div className="mx-auto flex max-w-xl flex-col items-center justify-center px-6 py-24 text-center text-muted-foreground">
-              <div className="mb-4 rounded-2xl border border-border bg-card p-4 text-foreground shadow-sm">
-                <Bot className="h-8 w-8" />
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          {runtime.showHistory ? (
+            <HistoryPanel
+              sessions={runtime.sessions}
+              loading={runtime.historyLoading}
+              activeSessionId={runtime.sessionId}
+              onOpen={(sessionId) => void runtime.openSession(sessionId)}
+              onResume={(sessionId) => void runtime.resumeSession(sessionId)}
+              onClose={runtime.closeHistory}
+            />
+          ) : null}
+          {runtime.viewSession ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2">
+                <button type="button" onClick={runtime.closeSessionView} className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted">
+                  Zurück
+                </button>
+                <span className="truncate px-3 text-xs text-muted-foreground">
+                  Session vom {formatSessionDate(runtime.viewSession.startedAt)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void runtime.resumeSession(runtime.viewSession!.id)}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Fortsetzen
+                </button>
               </div>
-              <h2 className="text-xl font-semibold text-foreground">Neuer Chat-Unterbau</h2>
-              <p className="mt-2 text-sm">
-                Diese Demo nutzt assistant-ui-Primitives und den HydraHive-SSE-Adapter. Alt-Chat bleibt parallel aktiv.
-              </p>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-5xl py-3">
+                  {runtime.viewSession.messages.map((message) => (
+                    <div key={message.id} className={cn("flex gap-3 px-4 py-4", message.role === "user" ? "justify-end" : "justify-start")}>
+                        {message.role !== "user" ? (
+                          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Bot className="h-4 w-4" />
+                          </div>
+                        ) : null}
+                        <div className={cn(
+                          "max-w-[min(860px,92vw)] rounded-2xl border px-4 py-3 shadow-sm",
+                          message.role === "user"
+                            ? "border-primary/20 bg-primary text-primary-foreground"
+                            : "border-border/70 bg-card/95 text-card-foreground"
+                        )}>
+                          {message.content.map((part, index) => part.type === "text" ? (
+                            <div key={index} className="prose prose-sm max-w-none dark:prose-invert">
+                              <ReactMarkdown>{part.text}</ReactMarkdown>
+                            </div>
+                          ) : null)}
+                        </div>
+                        {message.role === "user" ? (
+                          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                            <User className="h-4 w-4" />
+                          </div>
+                        ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-          </ThreadPrimitive.Empty>
-          <div className="mx-auto w-full max-w-5xl py-3">
-            <ThreadPrimitive.Messages>
-              {() => <ChatMessage />}
-            </ThreadPrimitive.Messages>
-          </div>
-          <Composer
-            isRunning={runtime.isRunning}
-            pendingConfirms={runtime.pendingConfirms}
-            confirmingIds={runtime.confirmingIds}
-            pendingImages={runtime.pendingImages}
-            followUpChips={runtime.followUpChips}
-            coachEnabled={runtime.coachEnabled}
-            coachChecking={runtime.coachChecking}
-            coachFeedback={runtime.coachFeedback}
-            onAddImages={runtime.addImages}
-            onRemoveImage={runtime.removeImage}
-            onUseSuggestion={useSuggestion}
-            onToggleCoach={runtime.toggleCoach}
-            onSendAnyway={sendAnyway}
-            onUseCoachSuggestion={useCoachSuggestion}
-            onDismissCoach={runtime.clearCoachFeedback}
-            onTranscript={appendTranscript}
-            onConfirm={runtime.confirmTool}
-          />
-        </ThreadPrimitive.Viewport>
+          ) : (
+            <ThreadPrimitive.Viewport
+              autoScroll
+              turnAnchor="bottom"
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <ThreadPrimitive.Empty>
+                <div className="mx-auto flex max-w-xl flex-col items-center justify-center px-6 py-24 text-center text-muted-foreground">
+                  <div className="mb-4 rounded-2xl border border-border bg-card p-4 text-foreground shadow-sm">
+                    <Bot className="h-8 w-8" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-foreground">Neuer Chat-Unterbau</h2>
+                  <p className="mt-2 text-sm">
+                    Diese Demo nutzt assistant-ui-Primitives und den HydraHive-SSE-Adapter. Alt-Chat bleibt parallel aktiv.
+                  </p>
+                </div>
+              </ThreadPrimitive.Empty>
+              <div className="mx-auto w-full max-w-5xl py-3">
+                <ThreadPrimitive.Messages>
+                  {() => <ChatMessage />}
+                </ThreadPrimitive.Messages>
+              </div>
+              <Composer
+                isRunning={runtime.isRunning}
+                pendingConfirms={runtime.pendingConfirms}
+                confirmingIds={runtime.confirmingIds}
+                pendingImages={runtime.pendingImages}
+                followUpChips={runtime.followUpChips}
+                coachEnabled={runtime.coachEnabled}
+                coachChecking={runtime.coachChecking}
+                coachFeedback={runtime.coachFeedback}
+                onAddImages={runtime.addImages}
+                onRemoveImage={runtime.removeImage}
+                onUseSuggestion={useSuggestion}
+                onToggleCoach={runtime.toggleCoach}
+                onSendAnyway={sendAnyway}
+                onUseCoachSuggestion={useCoachSuggestion}
+                onDismissCoach={runtime.clearCoachFeedback}
+                onTranscript={appendTranscript}
+                onConfirm={runtime.confirmTool}
+              />
+            </ThreadPrimitive.Viewport>
+          )}
+        </div>
       </ThreadPrimitive.Root>
     </AuiProvider>
   );
