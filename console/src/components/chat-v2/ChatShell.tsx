@@ -456,6 +456,34 @@ function CoachFeedbackCard({
   );
 }
 
+// #730 I (Avatar-Teil): deterministische Candy-Hue aus User-String.
+// Kein echter Hash — wir brauchen nur eine stabile Zuweisung, keine Krypto.
+const PRESENCE_HUES = ["--candy-violet", "--candy-pink", "--candy-cyan", "--candy-lime", "--candy-amber"] as const;
+
+function presenceHue(user: string): string {
+  let h = 0;
+  for (let i = 0; i < user.length; i++) h = (h * 31 + user.charCodeAt(i)) >>> 0;
+  return PRESENCE_HUES[h % PRESENCE_HUES.length];
+}
+
+function PresenceAvatar({ user }: { user: string }) {
+  const hue = presenceHue(user);
+  const initial = user.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      title={user}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold"
+      style={{
+        backgroundColor: `hsl(var(${hue}) / 0.2)`,
+        color: `hsl(var(${hue}))`,
+        borderColor: `hsl(var(${hue}) / 0.5)`,
+      }}
+    >
+      {initial}
+    </span>
+  );
+}
+
 function Composer({
   isRunning,
   pendingConfirms,
@@ -466,6 +494,7 @@ function Composer({
   coachChecking,
   coachFeedback,
   typingUsers,
+  presenceUsers,
   onAddImages,
   onRemoveImage,
   onUseSuggestion,
@@ -486,6 +515,7 @@ function Composer({
   coachChecking: boolean;
   coachFeedback: { reason?: string; suggestion?: string } | null;
   typingUsers?: string[];
+  presenceUsers?: string[];
   onAddImages: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onUseSuggestion: (text: string) => void;
@@ -508,6 +538,14 @@ function Composer({
   }, [hasText, onComposerActivity]);
   return (
     <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
+      {presenceUsers && presenceUsers.length > 1 ? (
+        <div className="mx-auto mb-2 flex max-w-4xl flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="uppercase tracking-[0.18em]">online</span>
+          {presenceUsers.map((u) => (
+            <PresenceAvatar key={u} user={u} />
+          ))}
+        </div>
+      ) : null}
       {typingUsers && typingUsers.length > 0 ? (
         <div className="mx-auto mb-2 max-w-4xl text-xs text-muted-foreground italic">
           {typingUsers.length === 1
@@ -642,6 +680,7 @@ export type ChatShellProps = {
   hideHeader?: boolean;
   headerLabel?: string;
   typingUsers?: string[];
+  presenceUsers?: string[];
   onComposerActivity?: (hasText: boolean) => void;
 };
 
@@ -660,7 +699,7 @@ function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps
   return <ChatShellInner {...rest} target={target} runtime={runtime} />;
 }
 
-function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, onComposerActivity }: ChatShellProps & { runtime: HydraHiveRuntime }) {
+function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, presenceUsers, onComposerActivity }: ChatShellProps & { runtime: HydraHiveRuntime }) {
   const label = headerLabel ?? target?.label ?? "";
   const tts = useTtsPlayback();
   const appendTranscript = (text: string) => {
@@ -808,6 +847,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                 coachChecking={runtime.coachChecking}
                 coachFeedback={runtime.coachFeedback}
                 typingUsers={typingUsers}
+                presenceUsers={presenceUsers}
                 onAddImages={runtime.addImages}
                 onRemoveImage={runtime.removeImage}
                 onUseSuggestion={useSuggestion}

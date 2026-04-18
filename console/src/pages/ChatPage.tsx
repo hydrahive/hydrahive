@@ -213,6 +213,7 @@ export function ChatPage() {
             runtime={runtime}
             hideHeader
             typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
+            presenceUsers={subscribe.onlineUsers}
             onComposerActivity={handleTyping}
           />
         </div>
