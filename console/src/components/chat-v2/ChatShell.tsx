@@ -8,8 +8,8 @@ import {
   type MessagePartState,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
-import { Bot, Check, ImagePlus, Loader2, Send, ShieldAlert, Square, User, X } from "lucide-react";
-import { useRef } from "react";
+import { Bot, Check, ImagePlus, Loader2, RefreshCw, Send, ShieldAlert, Square, User, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import VoiceChatButton from "@/components/VoiceChatButton";
 import { type ChatV2Target, type PendingImage, type PendingToolConfirm, useHydraHiveRuntime } from "./hydrahive-runtime";
@@ -210,15 +210,68 @@ function ConfirmBanner({
   );
 }
 
+function CoachFeedbackCard({
+  reason,
+  suggestion,
+  onSendAnyway,
+  onUseSuggestion,
+  onDismiss,
+}: {
+  reason?: string;
+  suggestion?: string;
+  onSendAnyway: () => void;
+  onUseSuggestion: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm">
+      <p className="font-semibold text-orange-300">{reason || "Prompt-Coach empfiehlt eine Anpassung."}</p>
+      {suggestion ? <p className="mt-1 text-muted-foreground">{suggestion}</p> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {suggestion ? (
+          <button
+            type="button"
+            onClick={onUseSuggestion}
+            className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            Vorschlag übernehmen
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onSendAnyway}
+          className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
+        >
+          Trotzdem senden
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-muted"
+        >
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Composer({
   isRunning,
   pendingConfirms,
   confirmingIds,
   pendingImages,
   followUpChips,
+  coachEnabled,
+  coachChecking,
+  coachFeedback,
   onAddImages,
   onRemoveImage,
   onUseSuggestion,
+  onToggleCoach,
+  onSendAnyway,
+  onUseCoachSuggestion,
+  onDismissCoach,
   onTranscript,
   onConfirm,
 }: {
@@ -227,9 +280,16 @@ function Composer({
   confirmingIds: Set<string>;
   pendingImages: PendingImage[];
   followUpChips: string[];
+  coachEnabled: boolean;
+  coachChecking: boolean;
+  coachFeedback: { reason?: string; suggestion?: string } | null;
   onAddImages: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onUseSuggestion: (text: string) => void;
+  onToggleCoach: (enabled: boolean) => void;
+  onSendAnyway: () => void;
+  onUseCoachSuggestion: () => void;
+  onDismissCoach: () => void;
   onTranscript: (text: string) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
 }) {
@@ -246,6 +306,17 @@ function Composer({
               onConfirm={onConfirm}
             />
           ))}
+        </div>
+      ) : null}
+      {coachFeedback ? (
+        <div className="mx-auto mb-3 max-w-4xl">
+          <CoachFeedbackCard
+            reason={coachFeedback.reason}
+            suggestion={coachFeedback.suggestion}
+            onSendAnyway={onSendAnyway}
+            onUseSuggestion={onUseCoachSuggestion}
+            onDismiss={onDismissCoach}
+          />
         </div>
       ) : null}
       {followUpChips.length > 0 && !isRunning ? (
@@ -283,6 +354,18 @@ function Composer({
           ))}
         </div>
       ) : null}
+      <div className="mx-auto mb-2 flex max-w-4xl items-center gap-2">
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={coachEnabled}
+            onChange={(event) => onToggleCoach(event.target.checked)}
+            className="h-3 w-3 rounded"
+          />
+          Prompt-Coach
+          {coachChecking ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+        </label>
+      </div>
       <ComposerPrimitive.Root className="mx-auto flex max-w-4xl items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-lg">
         <input
           ref={fileInputRef}
@@ -344,6 +427,23 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
     runtime.aui.composer().setText(text);
     runtime.clearFollowUpChips();
   };
+  const useCoachSuggestion = () => {
+    const suggestion = runtime.coachFeedback?.suggestion;
+    if (!suggestion) return;
+    runtime.aui.composer().setText(suggestion);
+    runtime.clearCoachFeedback();
+  };
+  const sendAnyway = () => {
+    const composer = runtime.aui.composer();
+    const content = composer.getState().text || runtime.coachFeedback?.content || "";
+    runtime.clearCoachFeedback();
+    composer.setText("");
+    void runtime.sendText(content, true);
+  };
+  useEffect(() => {
+    if (!runtime.coachFeedback?.content) return;
+    runtime.aui.composer().setText(runtime.coachFeedback.content);
+  }, [runtime.aui, runtime.coachFeedback?.content]);
 
   return (
     <AuiProvider value={runtime.aui}>
@@ -384,9 +484,16 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
             confirmingIds={runtime.confirmingIds}
             pendingImages={runtime.pendingImages}
             followUpChips={runtime.followUpChips}
+            coachEnabled={runtime.coachEnabled}
+            coachChecking={runtime.coachChecking}
+            coachFeedback={runtime.coachFeedback}
             onAddImages={runtime.addImages}
             onRemoveImage={runtime.removeImage}
             onUseSuggestion={useSuggestion}
+            onToggleCoach={runtime.toggleCoach}
+            onSendAnyway={sendAnyway}
+            onUseCoachSuggestion={useCoachSuggestion}
+            onDismissCoach={runtime.clearCoachFeedback}
             onTranscript={appendTranscript}
             onConfirm={runtime.confirmTool}
           />

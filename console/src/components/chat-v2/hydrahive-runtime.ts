@@ -37,6 +37,13 @@ export type PendingImage = {
   preview: string;
 };
 
+export type CoachFeedback = {
+  ok: boolean;
+  content?: string;
+  suggestion?: string;
+  reason?: string;
+};
+
 export type ChatV2Target = {
   kind: "project" | "agent" | "me";
   id: string;
@@ -201,6 +208,9 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(() => new Set());
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [followUpChips, setFollowUpChips] = useState<string[]>([]);
+  const [coachEnabled, setCoachEnabled] = useState(() => localStorage.getItem("hh_prompt_coach") === "1");
+  const [coachFeedback, setCoachFeedback] = useState<CoachFeedback | null>(null);
+  const [coachChecking, setCoachChecking] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
 
@@ -238,11 +248,27 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     setMessages((prev) => prev.map((msg) => msg.id === id ? updater(msg) : msg));
   }, [ensureAssistant]);
 
-  const send = useCallback(async (message: AppendMessage) => {
-    const content = appendMessageText(message);
+  const runSend = useCallback(async (content: string, skipCoach = false) => {
     const images = pendingImages;
     if ((!content && images.length === 0) || isRunning) return;
     setError("");
+    setCoachFeedback(null);
+
+    if (coachEnabled && !skipCoach && content) {
+      setCoachChecking(true);
+      try {
+        const feedback = await api.post<CoachFeedback>("/me/agent/coach", { content });
+        if (!feedback.ok && feedback.suggestion) {
+          setCoachFeedback({ ...feedback, content });
+          return;
+        }
+      } catch {
+        // Coach ist optional; ein Fehler darf den Chat nicht blockieren.
+      } finally {
+        setCoachChecking(false);
+      }
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
     activeAssistantIdRef.current = null;
@@ -315,7 +341,15 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
       abortRef.current = null;
       activeAssistantIdRef.current = null;
     }
-  }, [isRunning, pendingImages, target.extraBodyParams, target.streamEndpoint, updateAssistant]);
+  }, [coachEnabled, isRunning, pendingImages, target.extraBodyParams, target.streamEndpoint, updateAssistant]);
+
+  const send = useCallback(async (message: AppendMessage) => {
+    await runSend(appendMessageText(message));
+  }, [runSend]);
+
+  const sendText = useCallback(async (content: string, skipCoach = false) => {
+    await runSend(content.trim(), skipCoach);
+  }, [runSend]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -353,6 +387,15 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
 
   const clearFollowUpChips = useCallback(() => {
     setFollowUpChips([]);
+  }, []);
+
+  const toggleCoach = useCallback((enabled: boolean) => {
+    setCoachEnabled(enabled);
+    localStorage.setItem("hh_prompt_coach", enabled ? "1" : "0");
+  }, []);
+
+  const clearCoachFeedback = useCallback(() => {
+    setCoachFeedback(null);
   }, []);
 
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
@@ -401,13 +444,19 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     confirmingIds,
     pendingImages,
     followUpChips,
+    coachEnabled,
+    coachFeedback,
+    coachChecking,
     addImages,
     removeImage,
     clearFollowUpChips,
+    toggleCoach,
+    clearCoachFeedback,
     send,
+    sendText,
     cancel,
     confirmTool,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, addImages, removeImage, clearFollowUpChips, send, cancel, confirmTool]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, send, sendText, cancel, confirmTool]);
 }
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {
