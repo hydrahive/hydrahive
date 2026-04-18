@@ -1356,6 +1356,33 @@ def register_project_routes(
                 len(server.rooms.get(project_id).clients) if project_id in server.rooms else 0,
             )
 
+    # #554 Debug: Collab-Room-State einsehen
+    @auth_router.get("/projects/{project_id}/collab/state")
+    def collab_state(project_id: str, _auth: tuple[str, str] = Depends(require_auth)):
+        _check_project_access(_auth, project_id)
+        from .collab_yjs import get_yjs_server
+        server = get_yjs_server()
+        if server is None:
+            return {"server": "not_started"}
+        room = server.rooms.get(project_id)
+        if room is None:
+            return {"server": "up", "room": None, "active_rooms": list(server.rooms.keys())}
+        # paths aus den clients ziehen (Channel-Protokoll hat .path)
+        clients = [getattr(c, "_label", getattr(c, "path", "?")) for c in room.clients]
+        ydoc_text = ""
+        try:
+            ydoc_text = str(room.ydoc.get_text("composer"))
+        except Exception as e:
+            ydoc_text = f"<err: {e}>"
+        return {
+            "server": "up",
+            "room": project_id,
+            "client_count": len(room.clients),
+            "clients": clients,
+            "ydoc_composer_text": ydoc_text,
+            "ydoc_composer_len": len(ydoc_text),
+        }
+
     @auth_router.get("/projects/{project_id}/presence")
     def project_presence(
         project_id: str,
