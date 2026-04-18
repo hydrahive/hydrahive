@@ -124,7 +124,13 @@ class SessionImportRequest(BaseModel):
     session_b64: str
 
 
-def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str) -> None:
+def _save_session_transcript(
+    agent_dir: Path,
+    context: list[dict],
+    agent_id: str,
+    *,
+    projects_dir: str | None = None,
+) -> None:
     """Speichert vollständiges Transkript + kurzen Session-Inject (analog OpenClaw)."""
     if not context:
         return
@@ -154,9 +160,10 @@ def _save_session_transcript(agent_dir: Path, context: list[dict], agent_id: str
     transcript_file.write_text("\n\n".join(lines), encoding="utf-8")
     transcript_file.chmod(0o600)
 
-    # Kurzfassung → memory/_last_session.md (Session-Inject)
-    memory_dir = agent_dir / "memory"
-    memory_dir.mkdir(exist_ok=True)
+    # Kurzfassung → kanonisches Projekt-Memory (Session-Inject)
+    from .memory_paths import agent_memory_dir
+    memory_dir = agent_memory_dir(agent_id, agent_id, projects_root=projects_dir)
+    memory_dir.mkdir(parents=True, exist_ok=True)
     short = [f"# Letzte Session (vor Clear, {now.strftime('%Y-%m-%d %H:%M')})\n"]
     for msg in context:
         role = msg.get("role", "")
@@ -353,7 +360,12 @@ def register_agent_chat_routes(
     async def agent_session_clear(agent_id: str, _a: tuple = Depends(require_auth)):
         _check_agent_access(agent_id, _a)
         context = agent_sessions.get_context(agent_id, max_messages=200)
-        _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
+        _save_session_transcript(
+            Path(agents_dir) / agent_id,
+            context,
+            agent_id,
+            projects_dir=projects_dir,
+        )
         await agent_sessions.end_session(agent_id)
         return {"cleared": True}
 

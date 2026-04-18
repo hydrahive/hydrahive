@@ -1529,6 +1529,7 @@ register_agent_admin_routes(
     discovery=discovery,
     runtime=runtime,
     agents_dir=AGENTS_DIR,
+    projects_dir=PROJECTS_DIR,
     audit_log=audit_log,
     logger=logger,
     load_agent_config_direct=load_agent_config_direct,

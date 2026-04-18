@@ -102,6 +102,7 @@ def register_agent_admin_routes(
     discovery,
     runtime,
     agents_dir: str,
+    projects_dir: str | None = None,
     audit_log,
     logger,
     load_agent_config_direct,
@@ -153,7 +154,8 @@ def register_agent_admin_routes(
         agent_dir = Path(agents_dir) / req.id
         agent_dir.mkdir(parents=True, exist_ok=True)
         (agent_dir / "skills").mkdir(exist_ok=True)
-        (agent_dir / "memory").mkdir(exist_ok=True)
+        from .memory_paths import agent_memory_dir
+        agent_memory_dir(req.id, req.id, projects_root=projects_dir).mkdir(parents=True, exist_ok=True)
 
         agent_data = build_agent_admin_data(req)
 

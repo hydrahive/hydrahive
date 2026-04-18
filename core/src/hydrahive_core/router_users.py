@@ -353,7 +353,8 @@ def register_user_routes(
             export["agent_config"] = _yaml.safe_load(agent_yaml.read_text(encoding="utf-8"))
 
         # Memory
-        memory_dir = agent_dir / "memory"
+        from .memory_paths import agent_memory_dir
+        memory_dir = agent_memory_dir(personal_id, personal_id, projects_root=projects_dir)
         if memory_dir.exists():
             export["memory"] = {}
             for f in memory_dir.iterdir():
@@ -540,7 +541,12 @@ def register_user_routes(
         username, _role = auth
         agent_id = f"personal_{username}"
         context = agent_sessions.get_context(agent_id, max_messages=200)
-        _save_session_transcript(Path(agents_dir) / agent_id, context, agent_id)
+        _save_session_transcript(
+            Path(agents_dir) / agent_id,
+            context,
+            agent_id,
+            projects_dir=projects_dir,
+        )
         await agent_sessions.end_session(agent_id)
         return {"cleared": True}
 
@@ -710,10 +716,11 @@ def register_user_routes(
             pass
 
         # Memory löschen
-        memory_dir = Path(agents_dir) / personal_id / "memory"
+        from .memory_paths import agent_memory_dir
+        memory_dir = agent_memory_dir(personal_id, personal_id, projects_root=projects_dir)
         if memory_dir.exists():
             _shutil.rmtree(memory_dir)
-            memory_dir.mkdir(exist_ok=True)
+            memory_dir.mkdir(parents=True, exist_ok=True)
             deleted_items.append("memory")
 
         # Session-Dateien löschen (legacy .json)

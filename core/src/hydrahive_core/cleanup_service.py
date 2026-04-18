@@ -117,9 +117,9 @@ def cleanup_orphaned_personal_projects(projects_dir: str, users: dict) -> int:
     return deleted
 
 
-def prune_weak_memory_chunks(agents_dir: str) -> int:
+def prune_weak_memory_chunks(memory_roots_dir: str) -> int:
     """
-    Ebbinghaus Decay Prune: läuft über alle Agenten-Verzeichnisse,
+    Ebbinghaus Decay Prune: läuft über alle Projekt-Memory-Roots,
     recomputed Stärken und löscht Chunks unter PRUNE_THRESHOLD.
     Gibt Gesamtanzahl gelöschter Chunks zurück.
     """
@@ -127,10 +127,10 @@ def prune_weak_memory_chunks(agents_dir: str) -> int:
     from .memory_decay import recompute_all_strengths, prune_weak_chunks
 
     total_pruned = 0
-    for agent_dir in Path(agents_dir).iterdir():
-        if not agent_dir.is_dir():
+    for memory_root in Path(memory_roots_dir).iterdir():
+        if not memory_root.is_dir():
             continue
-        db_path = agent_dir / "memory_index.db"
+        db_path = memory_root / "memory_index.db"
         if not db_path.exists():
             continue
         try:
@@ -143,34 +143,28 @@ def prune_weak_memory_chunks(agents_dir: str) -> int:
                     conn.commit()
                     total_pruned += len(pruned)
                     logger.info(
-                        "memory_decay prune: %d Chunks für Agent %s entfernt",
-                        len(pruned), agent_dir.name,
+                        "memory_decay prune: %d Chunks für Projekt %s entfernt",
+                        len(pruned), memory_root.name,
                     )
             finally:
                 conn.close()
         except Exception as e:
-            logger.warning("memory_decay prune fehlgeschlagen für %s: %s", agent_dir.name, e)
+            logger.warning("memory_decay prune fehlgeschlagen für %s: %s", memory_root.name, e)
     return total_pruned
 
 
-def cleanup_stale_indices(agents_dir: str, known_agent_ids: set[str]) -> int:
-    """Löscht FAISS/SQLite-Indizes von Agenten die nicht mehr existieren."""
+def cleanup_stale_indices(memory_roots_dir: str, known_project_ids: set[str]) -> int:
+    """Löscht FAISS/SQLite-Indizes von Projekten die nicht mehr existieren."""
     deleted = 0
-    for agent_dir in Path(agents_dir).iterdir():
-        if not agent_dir.is_dir():
+    for memory_root in Path(memory_roots_dir).iterdir():
+        if not memory_root.is_dir():
             continue
-        if agent_dir.name in known_agent_ids:
+        if memory_root.name in known_project_ids:
             continue
-        # Agent-Verzeichnis selbst existiert noch → skip
-        # (cleanup_stale_indices wird nur für wirklich fehlende Agents aufgerufen)
-    # Prüfe index-Dateien direkt auf bekannte Agenten
-    for agent_dir in Path(agents_dir).iterdir():
-        if not agent_dir.is_dir():
-            continue
-        if agent_dir.name not in known_agent_ids:
-            # Agent existiert nicht mehr → Indizes löschen
+        if memory_root.name not in known_project_ids:
+            # Projekt existiert nicht mehr → Indizes löschen
             for suffix in ("*.faiss", "*.index", "memory_search.db"):
-                for f in agent_dir.glob(suffix):
+                for f in memory_root.glob(suffix):
                     try:
                         f.unlink()
                         deleted += 1
@@ -251,14 +245,14 @@ class CleanupService:
             except Exception:
                 pass
 
-        known_agents = {d.name for d in Path(self._agents_dir).iterdir() if d.is_dir()} if Path(self._agents_dir).is_dir() else set()
+        known_projects = {d.name for d in Path(self._projects_dir).iterdir() if d.is_dir()} if Path(self._projects_dir).is_dir() else set()
 
         t0 = time.time()
         transcripts   = cleanup_old_transcripts(self._agents_dir, cfg["transcript_days"])
         backups       = cleanup_old_backups(self._backups_dir, cfg["backup_keep"])
         orphans       = cleanup_orphaned_personal_projects(self._projects_dir, users)
-        stale_idx     = cleanup_stale_indices(self._agents_dir, known_agents)
-        memory_pruned = prune_weak_memory_chunks(self._agents_dir)
+        stale_idx     = cleanup_stale_indices(self._projects_dir, known_projects)
+        memory_pruned = prune_weak_memory_chunks(self._projects_dir)
         disk          = get_disk_usage("/")
         elapsed_ms    = round((time.time() - t0) * 1000)
 

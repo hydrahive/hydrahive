@@ -702,7 +702,8 @@ def register_system_routes(
             soul_path = cfg.agent_dir / (cfg.soul or "soul.md")
             if soul_path.exists():
                 sys_prompt_size += estimate_tokens(soul_path.read_text(encoding="utf-8"))
-            memory_dir = cfg.agent_dir / "memory"
+            from .memory_paths import agent_memory_dir
+            memory_dir = agent_memory_dir(agent_id, agent_id, projects_root=projects_dir)
             if memory_dir.exists():
                 for f in memory_dir.glob("*.md"):
                     sys_prompt_size += estimate_tokens(f.read_text(encoding="utf-8"))
