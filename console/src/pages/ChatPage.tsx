@@ -4,14 +4,14 @@
  * Nutzt shared ChatView + useChatStream Hook.
  * Page-spezifisch: Projekt-Header, Swarm-Toggle, History, Live-Polling, Info-Sidebar.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Bot, Network, History, X, RotateCcw, Plus, Sparkles, Terminal, PanelRightClose, PanelRightOpen, Activity } from "lucide-react";
+import { ArrowLeft, Bot, Network, History, Sparkles, PanelRightClose, PanelRightOpen, Activity } from "lucide-react";
 import { EkgMonitor } from "@/components/EkgMonitor";
 import { useTranslation } from "react-i18next";
-import { api, type SessionPreview, type SessionFull } from "@/lib/api";
-import { ChatView } from "@/components/ChatView";
-import { useChatStream, mkMsg } from "@/hooks/useChatStream";
+import { api } from "@/lib/api";
+import { ChatShell } from "@/components/chat-v2/ChatShell";
+import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
 
 export function ChatPage() {
@@ -26,11 +26,6 @@ export function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showMonitor, setShowMonitor] = useState(false);
 
-  // History
-  const [historyList, setHistoryList] = useState<SessionPreview[]>([]);
-
-  const broadcastBuf = useRef<string>("");
-  const broadcastMsgId = useRef<string | null>(null);
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTyping = useCallback((active: boolean) => {
@@ -54,79 +49,68 @@ export function ChatPage() {
     { cmd: "/remember", desc: t("slashCommands.remember") },
   ];
 
-  const chat = useChatStream({
-    streamEndpoint: `/api/projects/${id}/message/stream`,
-    historyEndpoint: `/api/projects/${id}/session/history`,
-    onSlashCommand: (cmd, args) => {
-      if (cmd === "/status") {
-        chat.setMessages(ms => [...ms, mkMsg("system", `Projekt: ${projectName}\nModell: ${bossModel.model ?? "unbekannt"}`)]);
-        return true;
+  const target = useMemo(() => buildChatV2Target("project", id ?? ""), [id]);
+  async function handleSlashCommand(cmd: string, args: string): Promise<boolean> {
+    if (cmd === "/status") {
+      runtime.pushSystemMessage(`Projekt: ${projectName}\nModell: ${bossModel.model ?? "unbekannt"}`);
+      return true;
+    }
+    if (cmd === "/model") {
+      runtime.pushSystemMessage(`Modell: ${bossModel.model ?? "unbekannt"}`);
+      return true;
+    }
+    if (cmd === "/retry") {
+      const last = [...runtime.messages].reverse().find(m => m.role === "user");
+      if (!last) { runtime.pushSystemMessage("Keine Nachricht zum Wiederholen."); return true; }
+      const text = last.content
+        .filter((p) => p.type === "text")
+        .map((p) => (p as { type: "text"; text: string }).text)
+        .join(" ")
+        .trim();
+      if (text) void runtime.sendText(text);
+      return true;
+    }
+    if (cmd === "/remember") {
+      try {
+        await api.post(`/projects/${id}/memory`, { filename: "user-notes", content: args, mode: "append" });
+        runtime.pushSystemMessage("Gespeichert.");
+      } catch (e) {
+        runtime.pushSystemMessage(`Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`);
       }
-      if (cmd === "/model") {
-        chat.setMessages(ms => [...ms, mkMsg("system", `Modell: ${bossModel.model ?? "unbekannt"}`)]);
-        return true;
-      }
-      if (cmd === "/retry") {
-        const lastUser = [...chat.messages].reverse().find(m => m.role === "user");
-        if (lastUser) chat.send(lastUser.content);
-        return true;
-      }
-      if (cmd === "/remember") {
-        api.post(`/projects/${id}/memory`, { filename: "user-notes", content: args, mode: "append" }).catch(() => {});
-        chat.setMessages(ms => [...ms, mkMsg("system", "Gespeichert.")]);
-        return true;
-      }
-      return false;
-    },
-  });
+      return true;
+    }
+    return false;
+  }
+  const runtime = useHydraHiveRuntime(target, { onSlashCommand: handleSlashCommand });
 
   // Subscribe fuer Typing-Indicator + Broadcast-Sync (#553)
   const handleBroadcast = useCallback((raw: Record<string, unknown>) => {
-    if (chat.sending) return;
+    if (runtime.isRunning) return;
 
     if (raw.text !== undefined) {
-      if (!broadcastMsgId.current) {
-        broadcastMsgId.current = `broadcast-${Date.now()}`;
-        broadcastBuf.current = "";
-        chat.setMessages(ms => [...ms, mkMsg("assistant", "")]);
-      }
-      broadcastBuf.current += String(raw.text);
-      const txt = broadcastBuf.current;
-      chat.setMessages(ms => {
-        const last = ms[ms.length - 1];
-        if (last && last.role === "assistant") {
-          return [...ms.slice(0, -1), { ...last, content: txt }];
-        }
-        return ms;
-      });
+      runtime.pushBroadcastText(String(raw.text));
     } else if (raw.done) {
-      // Token-Usage + Model-Info auf letzte Assistant-Message setzen
-      const usage = raw.usage as any;
+      const usage = raw.usage as { input?: number; output?: number; rounds?: number; cache_read?: number; cache_write?: number } | undefined;
       const model = raw.model as string | undefined;
-      if (usage || model) {
-        chat.setMessages(ms => {
-          const last = ms[ms.length - 1];
-          if (last && last.role === "assistant") {
-            return [...ms.slice(0, -1), {
-              ...last,
-              tokenUsage: usage ? { input: usage.input, output: usage.output, rounds: usage.rounds, cache_read: usage.cache_read, cache_write: usage.cache_write } : undefined,
-              model: model,
-              isFallback: !!raw.is_fallback,
-            }];
-          }
-          return ms;
-        });
-      }
-      broadcastMsgId.current = null;
-      broadcastBuf.current = "";
+      runtime.finishBroadcast({
+        usage: usage ? {
+          input: usage.input,
+          output: usage.output,
+          rounds: usage.rounds,
+          cache_read: usage.cache_read,
+          cache_write: usage.cache_write,
+        } : undefined,
+        model,
+        isFallback: !!raw.is_fallback,
+      });
     } else if (raw._user_message) {
-      chat.setMessages(ms => [...ms, mkMsg("user", String(raw._user_message))]);
+      runtime.pushUserMessage(String(raw._user_message));
     }
-  }, [chat.sending]);
+  }, [runtime]);
 
   const subscribe = useProjectSubscribe(id, handleBroadcast);
 
-  // Load project info + history (mit Auto-Resume aus localStorage)
+  // Load project info
   useEffect(() => {
     if (!id) return;
     api.get<Record<string, unknown>>(`/projects/${id}`)
@@ -147,60 +131,33 @@ export function ChatPage() {
             .catch(() => {});
         }
       }).catch(() => {});
-    // Auto-Resume: letzte bekannte Session-ID aus localStorage holen, am Server
-    // wieder aktiv setzen, dann Verlauf laden. Wenn Backend bereits dieselbe
-    // Session aktiv hat ist resumeProjectSession ein No-Op.
-    const lastSid = (() => {
-      try { return localStorage.getItem(`hh_lastsess_/api/projects/${id}/session/history`); }
-      catch { return null; }
-    })();
-    const init = async () => {
-      if (lastSid) {
-        try { await api.resumeProjectSession(id, lastSid); } catch { /* Session evtl. gelöscht */ }
-      }
-      chat.loadHistory();
-    };
-    init();
   }, [id]);
 
-  // Persistiere aktuelle Session-ID damit nach Tab-Schließen Auto-Resume klappt
+  // Auto-Resume: letzte bekannte Session-ID aus localStorage reaktivieren.
+  // runtime.resumeSession ruft api.resumeProjectSession und ersetzt Messages;
+  // läuft bewusst nach runtime's initialem history-Load (race egal).
   useEffect(() => {
-    if (!id || !chat.currentSessionId) return;
-    try { localStorage.setItem(`hh_lastsess_/api/projects/${id}/session/history`, chat.currentSessionId); }
-    catch { /* quota */ }
-  }, [id, chat.currentSessionId]);
-
-  // v2 (#602): 3s-Polling entfernt — Real-Time Sync laeuft ueber useProjectSubscribe.
-  // Recovery-Polling NUR wenn SSE-Verbindung tot ist (mit Backoff).
-  useEffect(() => {
-    if (!id || chat.sending) return;
-    if (subscribe.isConnected) return;  // SSE laeuft → kein Polling
-    const poll = setInterval(() => {
-      chat.loadHistory();
-    }, 10000);  // Nur Fallback bei Disconnect — 10s statt 3s
-    return () => clearInterval(poll);
-  }, [id, chat.sending, subscribe.isConnected]);
-
-  // Past Sessions laden wenn History-Panel geöffnet wird
-  useEffect(() => {
-    if (!chat.showHistory || !id) return;
-    api.listProjectSessions(id, 30)
-      .then(d => setHistoryList(d.sessions || []))
-      .catch(() => {});
-  }, [chat.showHistory, id]);
-
-  async function resumePastSession(sid: string) {
     if (!id) return;
+    let cancelled = false;
     try {
-      const d = await api.resumeProjectSession(id, sid);
-      const msgs = (d.messages || [])
-        .filter((m: any) => (m.role === "user" || m.role === "assistant") && !(m.role === "assistant" && !m.content))
-        .map((m: any) => mkMsg(m.role as "user" | "assistant", m.content));
-      chat.setMessages(msgs);
-      chat.setViewSession(null);
-      chat.setShowHistory(false);
-    } catch {}
-  }
+      const lastSid = localStorage.getItem(`hh_lastsess_/api/projects/${id}/session/history`);
+      if (lastSid) {
+        runtime.resumeSession(lastSid).catch(() => {/* Session evtl. gelöscht */});
+      }
+    } catch { /* localStorage nicht verfügbar */ }
+    return () => { cancelled = true; void cancelled; };
+  }, [id]);
+
+  // v2 (#602): 3s-Polling entfernt — Real-Time Sync via useProjectSubscribe.
+  // Recovery-Polling NUR wenn SSE-Verbindung tot ist (10s Fallback).
+  useEffect(() => {
+    if (!id || runtime.isRunning) return;
+    if (subscribe.isConnected) return;
+    const poll = setInterval(() => {
+      void runtime.reloadHistory();
+    }, 10000);
+    return () => clearInterval(poll);
+  }, [id, runtime.isRunning, subscribe.isConnected, runtime.reloadHistory]);
 
   return (
     <section className="flex h-full min-h-0 overflow-hidden">
@@ -223,8 +180,8 @@ export function ChatPage() {
             title="Worker-Swarm">
             <Network className="h-4 w-4" />
           </button>
-          <button onClick={() => { chat.setShowHistory(h => !h); chat.setViewSession(null); }}
-            className={`p-1.5 rounded-md transition-colors ${chat.showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
+          <button onClick={runtime.toggleHistory}
+            className={`p-1.5 rounded-md transition-colors ${runtime.showHistory ? "bg-accent text-accent-foreground" : "hover:bg-accent text-muted-foreground"}`}
             title="Chat-Verlauf">
             <History className="h-4 w-4" />
           </button>
@@ -240,115 +197,26 @@ export function ChatPage() {
           </button>
         </div>
 
-        {/* History Panel — Session-Liste */}
-        {chat.showHistory && !chat.viewSession && (
-          <div className="flex-1 overflow-y-auto border-b bg-muted/20">
-            <div className="flex items-center justify-between px-4 py-2 border-b">
-              <span className="text-xs font-medium text-muted-foreground">{t("chat.pastSessions", { defaultValue: "Vergangene Sessions" })}</span>
-              <button onClick={() => { chat.setShowHistory(false); chat.setViewSession(null); }} className="p-1 rounded hover:bg-accent"><X className="h-3.5 w-3.5" /></button>
-            </div>
-            {historyList.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-6">Keine vergangenen Sessions</p>
-            ) : (
-              <div className="divide-y max-h-full overflow-y-auto">
-                {historyList.map(s => (
-                  <div key={s.id} className="flex items-stretch hover:bg-accent/50 transition-colors">
-                    <button onClick={() => {
-                      api.get<SessionFull>(`/projects/${id}/sessions/${s.id}`)
-                        .then(d => {
-                          const msgs = d.messages.map((m: any) => mkMsg(m.role, m.content));
-                          chat.setViewSession({ id: d.id, messages: msgs, startedAt: d.started_at });
-                        }).catch(() => {});
-                    }}
-                      className="flex-1 text-left px-4 py-3 text-xs">
-                      <div className="font-medium">{s.preview || "(leer)"}</div>
-                      <div className="text-muted-foreground">{s.message_count} Messages · {new Date(s.started_at).toLocaleDateString("de-DE")}</div>
-                    </button>
-                    <button onClick={() => resumePastSession(s.id)}
-                      title="Chat fortsetzen"
-                      className="flex items-center px-3 text-primary hover:bg-primary/10 border-l transition-colors flex-shrink-0">
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Shortcut-Chips */}
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
+          {SLASH_COMMANDS.map((cmd) => (
+            <button key={cmd.cmd}
+              type="button"
+              onClick={() => runtime.aui.composer().setText(`${cmd.cmd} `)}
+              className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+              {cmd.cmd}
+            </button>
+          ))}
+        </div>
 
-        {/* History Panel — Session-Ansicht */}
-        {chat.viewSession && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0">
-              <span className="text-xs text-muted-foreground">
-                Session vom {new Date(chat.viewSession.startedAt).toLocaleString("de-DE")}
-              </span>
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => { chat.setViewSession(null); chat.setShowHistory(true); }}
-                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground text-xs">
-                  <ArrowLeft className="h-3 w-3" /> Zurück
-                </button>
-                <button onClick={() => resumePastSession(chat.viewSession!.id)}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs">
-                  <RotateCcw className="h-3 w-3" /> Fortsetzen
-                </button>
-                <button onClick={() => { chat.setViewSession(null); chat.setShowHistory(false); }}
-                  className="flex items-center gap-1 px-2 py-1 rounded border hover:bg-accent transition-colors text-muted-foreground text-xs">
-                  <Plus className="h-3 w-3" /> Neuer Chat
-                </button>
-              </div>
-            </div>
-            <div className="mx-4 mt-3 flex items-center gap-2 rounded-xl border bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-              <span>{t("chat.historyReadOnly", { defaultValue: "Du siehst eine vergangene Session — nur lesen." })}</span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {chat.viewSession.messages.map((m, i) => (
-                <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
-                  <div className={`inline-block max-w-[85%] rounded-lg px-3 py-2 ${
-                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                  }`}>
-                    <pre className="whitespace-pre-wrap font-sans text-xs">{m.content}</pre>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Chat */}
-        {!chat.showHistory && !chat.viewSession && (
-          <ChatView
-            {...chat}
-            t={t}
-            showWorkers={showSwarm}
-            slashCommands={SLASH_COMMANDS}
-            typingUsers={subscribe.typingUsers}
-            onTyping={handleTyping}
-            onConfirmTool={async (toolCallId, decision) => {
-              // #641: Backend-Endpoint braucht project_id + session_id.
-              // session_id steht im pendingConfirms-Eintrag selbst — fallback
-              // auf chat.currentSessionId.
-              const pc = chat.pendingConfirms.find(p => p.tool_call_id === toolCallId);
-              const sid = pc?.session_id || chat.currentSessionId;
-              if (!id || !sid) {
-                console.warn("[#641] confirmTool: project_id oder session_id fehlt");
-                return;
-              }
-              try {
-                await api.confirmToolCall(id, sid, toolCallId, decision);
-                chat.removePendingConfirm(toolCallId);
-              } catch (err) {
-                // Lesbare Fehlermeldung statt [object Object] im Log.
-                const msg = err instanceof Error
-                  ? err.message
-                  : (typeof err === "string" ? err : JSON.stringify(err));
-                console.error(`[#641] confirmTool(${decision}, ${toolCallId}) failed: ${msg}`);
-                chat.setError(`Tool-Bestätigung fehlgeschlagen: ${msg}`);
-                // Eintrag bleibt im Banner — User kann erneut versuchen.
-              }
-            }}
+        <div className="flex-1 min-h-0">
+          <ChatShell
+            runtime={runtime}
+            hideHeader
+            typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
+            onComposerActivity={handleTyping}
           />
-        )}
+        </div>
       </div>
 
       {/* Info-Sidebar (Desktop only) */}
@@ -363,19 +231,8 @@ export function ChatPage() {
                   <span className="rounded-2xl bg-primary/12 p-2 text-primary"><Sparkles className="h-4 w-4" /></span>
                   <div>
                     <p className="text-sm font-medium">{t("chat.streaming", { defaultValue: "Streaming" })}</p>
-                    <p className="text-xs text-muted-foreground">{chat.sending ? t("chat.streamingBuilding", { defaultValue: "Antwort wird generiert …" }) : t("chat.streamingIdle", { defaultValue: "Bereit" })}</p>
+                    <p className="text-xs text-muted-foreground">{runtime.isRunning ? t("chat.streamingBuilding", { defaultValue: "Antwort wird generiert …" }) : t("chat.streamingIdle", { defaultValue: "Bereit" })}</p>
                   </div>
-                </div>
-                <div className="rounded-2xl border bg-background/75 px-3 py-3">
-                  <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.activeTool", { defaultValue: "Aktives Tool" })}</p>
-                  {chat.activeTool ? (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-sm font-medium text-primary flex items-center gap-1"><Terminal className="h-3 w-3" />{chat.activeTool.name}</p>
-                      <p className="break-all text-xs text-muted-foreground">{chat.activeTool.detail || t("chat.noToolDetail", { defaultValue: "Keine Details" })}</p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">{t("chat.noTool", { defaultValue: "Kein Tool aktiv" })}</p>
-                  )}
                 </div>
               </div>
             </div>
@@ -396,7 +253,7 @@ export function ChatPage() {
                 </div>
                 <div className="rounded-2xl bg-secondary/40 px-3 py-3">
                   <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.history", { defaultValue: "Verlauf" })}</p>
-                  <p className="mt-1 font-medium">{chat.messages.length} {chat.messages.length === 1 ? "Nachricht" : "Nachrichten"}</p>
+                  <p className="mt-1 font-medium">{runtime.messages.length} {runtime.messages.length === 1 ? "Nachricht" : "Nachrichten"}</p>
                 </div>
               </div>
             </div>

@@ -256,6 +256,21 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
   const activeAssistantIdRef = useRef<string | null>(null);
   const broadcastAssistantIdRef = useRef<string | null>(null);
 
+  const reloadHistory = useCallback(async () => {
+    try {
+      const history = await api.get<HistoryResponse>(target.historyEndpoint);
+      setSessionId(history.session_id);
+      const loaded = history.messages
+        .map(historyToMessage)
+        .filter((msg): msg is ExternalThreadMessage => msg !== null);
+      setMessages(loaded);
+      activeAssistantIdRef.current = null;
+      broadcastAssistantIdRef.current = null;
+    } catch {
+      // stay on current messages on failure
+    }
+  }, [target.historyEndpoint]);
+
   useEffect(() => {
     let cancelled = false;
     setError("");
@@ -701,10 +716,11 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     pushBroadcastText,
     finishBroadcast,
     resetMessages,
+    reloadHistory,
     debugEvents,
     clearDebugEvents,
     agentId: target.kind === "project" ? null : agentSessionId,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool, pushSystemMessage, pushUserMessage, pushBroadcastText, finishBroadcast, resetMessages, debugEvents, clearDebugEvents, agentSessionId, target.kind]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, coachEnabled, coachFeedback, coachChecking, showHistory, sessions, historyLoading, viewSession, addImages, removeImage, clearFollowUpChips, toggleCoach, clearCoachFeedback, loadSessions, toggleHistory, openSession, resumeSession, closeSessionView, closeHistory, send, sendText, cancel, confirmTool, pushSystemMessage, pushUserMessage, pushBroadcastText, finishBroadcast, resetMessages, reloadHistory, debugEvents, clearDebugEvents, agentSessionId, target.kind]);
 }
 
 export type HydraHiveRuntime = ReturnType<typeof useHydraHiveRuntime>;

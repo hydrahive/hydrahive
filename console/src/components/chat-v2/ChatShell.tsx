@@ -3,6 +3,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAuiState,
   type MessagePartState,
   type ThreadMessage,
 } from "@assistant-ui/react";
@@ -344,6 +345,7 @@ function Composer({
   coachEnabled,
   coachChecking,
   coachFeedback,
+  typingUsers,
   onAddImages,
   onRemoveImage,
   onUseSuggestion,
@@ -353,6 +355,7 @@ function Composer({
   onDismissCoach,
   onTranscript,
   onConfirm,
+  onComposerActivity,
 }: {
   isRunning: boolean;
   pendingConfirms: PendingToolConfirm[];
@@ -362,6 +365,7 @@ function Composer({
   coachEnabled: boolean;
   coachChecking: boolean;
   coachFeedback: { reason?: string; suggestion?: string } | null;
+  typingUsers?: string[];
   onAddImages: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onUseSuggestion: (text: string) => void;
@@ -371,10 +375,26 @@ function Composer({
   onDismissCoach: () => void;
   onTranscript: (text: string) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
+  onComposerActivity?: (hasText: boolean) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasText = useAuiState((s: any) => Boolean(s?.thread?.composer?.text?.trim?.()));
+  const lastActivityRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!onComposerActivity) return;
+    if (lastActivityRef.current === hasText) return;
+    lastActivityRef.current = hasText;
+    onComposerActivity(hasText);
+  }, [hasText, onComposerActivity]);
   return (
     <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 p-3 backdrop-blur">
+      {typingUsers && typingUsers.length > 0 ? (
+        <div className="mx-auto mb-2 max-w-4xl text-xs text-muted-foreground italic">
+          {typingUsers.length === 1
+            ? `${typingUsers[0]} tippt …`
+            : `${typingUsers.join(", ")} tippen …`}
+        </div>
+      ) : null}
       {pendingConfirms.length > 0 ? (
         <div className="mx-auto mb-3 max-w-4xl space-y-2">
           {pendingConfirms.map((item) => (
@@ -501,6 +521,8 @@ export type ChatShellProps = {
   runtimeOptions?: HydraHiveRuntimeOptions;
   hideHeader?: boolean;
   headerLabel?: string;
+  typingUsers?: string[];
+  onComposerActivity?: (hasText: boolean) => void;
 };
 
 export function ChatShell(props: ChatShellProps) {
@@ -518,7 +540,7 @@ function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps
   return <ChatShellInner {...rest} target={target} runtime={runtime} />;
 }
 
-function ChatShellInner({ runtime, hideHeader, headerLabel, target }: ChatShellProps & { runtime: HydraHiveRuntime }) {
+function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, onComposerActivity }: ChatShellProps & { runtime: HydraHiveRuntime }) {
   const label = headerLabel ?? target?.label ?? "";
   const appendTranscript = (text: string) => {
     const composer = runtime.aui.composer();
@@ -664,6 +686,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target }: ChatShellP
                 coachEnabled={runtime.coachEnabled}
                 coachChecking={runtime.coachChecking}
                 coachFeedback={runtime.coachFeedback}
+                typingUsers={typingUsers}
                 onAddImages={runtime.addImages}
                 onRemoveImage={runtime.removeImage}
                 onUseSuggestion={useSuggestion}
@@ -673,6 +696,7 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target }: ChatShellP
                 onDismissCoach={runtime.clearCoachFeedback}
                 onTranscript={appendTranscript}
                 onConfirm={runtime.confirmTool}
+                onComposerActivity={onComposerActivity}
               />
             </ThreadPrimitive.Viewport>
           )}
