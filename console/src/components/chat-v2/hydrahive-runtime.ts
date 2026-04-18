@@ -200,6 +200,7 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
   const [pendingConfirms, setPendingConfirms] = useState<PendingToolConfirm[]>([]);
   const [confirmingIds, setConfirmingIds] = useState<Set<string>>(() => new Set());
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [followUpChips, setFollowUpChips] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
 
@@ -247,6 +248,7 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     activeAssistantIdRef.current = null;
     setMessages((prev) => [...prev, userMessage(content, images)]);
     setPendingImages([]);
+    setFollowUpChips([]);
     setIsRunning(true);
 
     try {
@@ -295,6 +297,8 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
           } else if (evt.type === "error") {
             setPendingConfirms([]);
             throw new Error(evt.error);
+          } else if (evt.type === "suggestions") {
+            setFollowUpChips(evt.suggestions);
           }
         },
       });
@@ -347,6 +351,10 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     setPendingImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const clearFollowUpChips = useCallback(() => {
+    setFollowUpChips([]);
+  }, []);
+
   const confirmTool = useCallback(async (toolCallId: string, decision: "approve" | "deny") => {
     const pending = pendingConfirms.find((item) => item.tool_call_id === toolCallId);
     const sid = pending?.session_id || sessionId;
@@ -392,12 +400,14 @@ export function useHydraHiveRuntime(target: ChatV2Target) {
     pendingConfirms,
     confirmingIds,
     pendingImages,
+    followUpChips,
     addImages,
     removeImage,
+    clearFollowUpChips,
     send,
     cancel,
     confirmTool,
-  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, addImages, removeImage, send, cancel, confirmTool]);
+  }), [aui, messages, isRunning, error, sessionId, pendingConfirms, confirmingIds, pendingImages, followUpChips, addImages, removeImage, clearFollowUpChips, send, cancel, confirmTool]);
 }
 
 export function buildChatV2Target(kind: string, id: string): ChatV2Target {

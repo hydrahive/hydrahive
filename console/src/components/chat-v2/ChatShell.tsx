@@ -215,8 +215,10 @@ function Composer({
   pendingConfirms,
   confirmingIds,
   pendingImages,
+  followUpChips,
   onAddImages,
   onRemoveImage,
+  onUseSuggestion,
   onTranscript,
   onConfirm,
 }: {
@@ -224,8 +226,10 @@ function Composer({
   pendingConfirms: PendingToolConfirm[];
   confirmingIds: Set<string>;
   pendingImages: PendingImage[];
+  followUpChips: string[];
   onAddImages: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
+  onUseSuggestion: (text: string) => void;
   onTranscript: (text: string) => void;
   onConfirm: (toolCallId: string, decision: "approve" | "deny") => void;
 }) {
@@ -241,6 +245,20 @@ function Composer({
               disabled={confirmingIds.has(item.tool_call_id)}
               onConfirm={onConfirm}
             />
+          ))}
+        </div>
+      ) : null}
+      {followUpChips.length > 0 && !isRunning ? (
+        <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2">
+          {followUpChips.map((suggestion, index) => (
+            <button
+              key={`${suggestion}-${index}`}
+              type="button"
+              onClick={() => onUseSuggestion(suggestion)}
+              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/15"
+            >
+              {suggestion}
+            </button>
           ))}
         </div>
       ) : null}
@@ -322,6 +340,10 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
     const current = composer.getState().text.trim();
     composer.setText(current ? `${current} ${text}` : text);
   };
+  const useSuggestion = (text: string) => {
+    runtime.aui.composer().setText(text);
+    runtime.clearFollowUpChips();
+  };
 
   return (
     <AuiProvider value={runtime.aui}>
@@ -361,8 +383,10 @@ export function ChatShell({ target }: { target: ChatV2Target }) {
             pendingConfirms={runtime.pendingConfirms}
             confirmingIds={runtime.confirmingIds}
             pendingImages={runtime.pendingImages}
+            followUpChips={runtime.followUpChips}
             onAddImages={runtime.addImages}
             onRemoveImage={runtime.removeImage}
+            onUseSuggestion={useSuggestion}
             onTranscript={appendTranscript}
             onConfirm={runtime.confirmTool}
           />
