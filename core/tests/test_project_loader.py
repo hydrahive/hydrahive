@@ -71,6 +71,32 @@ def test_scan_ueberspringt_dir_ohne_config(loader):
     assert "proj-no-config" not in loader.projects
 
 
+def test_scan_ueberspringt_fremde_config_yaml(tmp_projects_dir):
+    """Nicht jede App-config.yaml unter /projects ist ein HydraHive-Projekt."""
+    from hydrahive_core.project_loader import ProjectLoader
+
+    xiao = tmp_projects_dir / "xiaozhi-config"
+    xiao.mkdir()
+    (xiao / "config.yaml").write_text(
+        "\n".join([
+            "server:",
+            "  websocket: ws://example.invalid/xiaozhi/v1/",
+            "selected_module:",
+            "  LLM: OpenAILLM",
+            "tts:",
+            "  EdgeTTS:",
+            "    voice: de-DE-ConradNeural",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    pl = ProjectLoader(projects_dir=tmp_projects_dir)
+    pl._scan_all()
+
+    assert "xiaozhi-config" not in pl.projects
+
+
 # ============================================================= get + members
 
 def test_get_liefert_projektconfig(loader):

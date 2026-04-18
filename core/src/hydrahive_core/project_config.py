@@ -24,6 +24,19 @@ from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
+_V2_PROJECT_SIGNATURE_KEYS = frozenset({
+    "version",
+    "identity",
+    "llm",
+    "members",
+    "filesystem",
+    "system",
+    "plugins",
+    "repos",
+    "sources",
+    "github_repo",
+})
+
 
 # =========================================================================
 # v2: LLM-Konfiguration direkt im Projekt
@@ -214,6 +227,13 @@ def _load_v2_config(project_dir: Path) -> ProjectConfig | None:
 
     if not isinstance(raw, dict):
         logger.warning("config.yaml in %s ist kein Mapping", project_dir)
+        return None
+
+    if not any(key in raw for key in _V2_PROJECT_SIGNATURE_KEYS):
+        logger.warning(
+            "config.yaml in %s hat keine HydraHive-Projekt-Signatur; wird ignoriert",
+            project_dir,
+        )
         return None
 
     # id aus Verzeichnisname wenn nicht in YAML
