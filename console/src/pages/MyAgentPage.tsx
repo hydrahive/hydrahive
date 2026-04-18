@@ -308,7 +308,7 @@ export function MyAgentPage() {
                     <button key={cmd.cmd}
                       type="button"
                       onClick={() => runtime.aui.composer().setText(`${cmd.cmd} `)}
-                      className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+                      className="chip-glass rounded-full px-3 py-1 text-[11px] transition">
                       {cmd.cmd}
                     </button>
                   ))}
@@ -320,7 +320,7 @@ export function MyAgentPage() {
             </section>
 
             <aside className="xl:sticky xl:top-24 xl:self-start pr-4 sm:pr-6">
-              <div className="rounded-[28px] border border-border/60 bg-card/80 p-4 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur space-y-3">
+              <div className="card-candy-border rounded-[28px] border bg-card/80 p-4 backdrop-blur space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold">{identity}</div>

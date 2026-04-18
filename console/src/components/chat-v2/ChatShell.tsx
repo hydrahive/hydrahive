@@ -58,7 +58,7 @@ function ToolDataPart({ part }: { part: DataPart }) {
   const data = part.data as Record<string, unknown>;
   if (part.name === "context_info" || part.name === "info") {
     return (
-      <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+      <div className="badge-candy-info rounded-lg border px-3 py-2 text-xs">
         {part.name === "info" ? String(data.info ?? "") : `Context: ${data.history_tokens ?? 0} History · ${data.tool_tokens ?? 0} Tools`}
       </div>
     );
@@ -73,14 +73,14 @@ function ToolDataPart({ part }: { part: DataPart }) {
   }
   if (part.name === "tool_warning") {
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+      <div className="badge-candy-warn rounded-lg border px-3 py-2 text-sm">
         {String(data.tool_name ?? "tool")}: {String(data.tool_warning ?? "Warnung")}
       </div>
     );
   }
   if (part.name === "tool_confirm_required") {
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+      <div className="badge-candy-confirm rounded-lg border px-3 py-2 text-sm">
         Bestätigung nötig: {String(data.tool_name ?? "tool")} wartet unten im Composer-Bereich.
       </div>
     );
@@ -92,10 +92,11 @@ function ToolDataPart({ part }: { part: DataPart }) {
       : part.name === "tool_confirm_required"
         ? `Bestätigung nötig: ${String(data.tool_name ?? "tool")}`
         : part.name;
+  const badgeClass = part.name === "tool_call" ? "badge-candy-tool" : "badge-candy-result";
   return (
-    <details className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
-      <summary className="cursor-pointer text-muted-foreground">{title}</summary>
-      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+    <details className={cn("rounded-lg border px-3 py-2 text-sm", badgeClass)}>
+      <summary className="cursor-pointer">{title}</summary>
+      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-foreground/70">
         {JSON.stringify(data, null, 2)}
       </pre>
     </details>
@@ -145,7 +146,7 @@ function ChatMessage({ message }: { message: MessageLike }) {
         <TokenBadge message={message} />
       </div>
       {isUser && (
-        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[hsl(var(--candy-pink)/0.35)] to-[hsl(var(--candy-amber)/0.25)] text-[hsl(var(--candy-pink))] shadow-[0_0_12px_hsl(var(--candy-pink)/0.3)]">
           <User className="h-4 w-4" />
         </div>
       )}
@@ -425,7 +426,7 @@ function Composer({
               key={`${suggestion}-${index}`}
               type="button"
               onClick={() => onUseSuggestion(suggestion)}
-              className="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/15"
+              className="chip-candy rounded-full px-3 py-1.5 text-xs font-medium"
             >
               {suggestion}
             </button>

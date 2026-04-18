@@ -211,6 +211,61 @@
       0 8px 32px hsl(var(--candy-violet) / 0.08);
   }
 
+  /* Candy-Badges — farbige Pille je Tool-Event-Typ (Phase 1.5) */
+  .badge-candy-info {
+    border-color: hsl(var(--candy-cyan) / 0.35) !important;
+    background-color: hsl(var(--candy-cyan) / 0.08);
+    color: hsl(var(--candy-cyan));
+  }
+  .badge-candy-tool {
+    border-color: hsl(var(--candy-violet) / 0.35) !important;
+    background-color: hsl(var(--candy-violet) / 0.08);
+    color: hsl(var(--candy-violet));
+  }
+  .badge-candy-result {
+    border-color: hsl(var(--candy-lime) / 0.35) !important;
+    background-color: hsl(var(--candy-lime) / 0.08);
+    color: hsl(var(--candy-lime));
+  }
+  .badge-candy-warn {
+    border-color: hsl(var(--candy-amber) / 0.4) !important;
+    background-color: hsl(var(--candy-amber) / 0.1);
+    color: hsl(var(--candy-amber));
+  }
+  .badge-candy-confirm {
+    border-color: hsl(var(--candy-pink) / 0.4) !important;
+    background-color: hsl(var(--candy-pink) / 0.1);
+    color: hsl(var(--candy-pink));
+  }
+
+  /* Chip-Varianten */
+  .chip-candy {
+    background-image: linear-gradient(135deg,
+      hsl(var(--candy-violet) / 0.7),
+      hsl(var(--candy-pink) / 0.6));
+    color: #fff;
+    border: 1px solid hsl(var(--candy-violet) / 0.45);
+    box-shadow: 0 2px 12px hsl(var(--candy-violet) / 0.2);
+    transition: filter .2s, box-shadow .2s;
+  }
+  .chip-candy:hover:not(:disabled) {
+    filter: brightness(1.12);
+    box-shadow: 0 3px 16px hsl(var(--candy-violet) / 0.35);
+  }
+  .chip-glass {
+    background: hsl(var(--card) / 0.45);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid hsl(var(--candy-cyan) / 0.25);
+    color: hsl(var(--muted-foreground));
+    transition: background .2s, border-color .2s, color .2s;
+  }
+  .chip-glass:hover:not(:disabled) {
+    background: hsl(var(--card) / 0.65);
+    border-color: hsl(var(--candy-cyan) / 0.5);
+    color: hsl(var(--foreground));
+  }
+
   .app-shell {
     @apply min-h-screen text-foreground;
     background: transparent;

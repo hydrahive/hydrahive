@@ -202,7 +202,7 @@ export function ChatPage() {
             <button key={cmd.cmd}
               type="button"
               onClick={() => runtime.aui.composer().setText(`${cmd.cmd} `)}
-              className="rounded-full border border-border/70 bg-card px-3 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground">
+              className="chip-glass rounded-full px-3 py-1 text-[11px] transition">
               {cmd.cmd}
             </button>
           ))}
@@ -223,7 +223,7 @@ export function ChatPage() {
         <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 border-l bg-muted/10 p-4 overflow-y-auto">
           <div className="space-y-4">
             {/* Live Panel */}
-            <div className="rounded-2xl border bg-background/75 p-4">
+            <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
               <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.livePanel", { defaultValue: "Live" })}</p>
               <div className="mt-3 space-y-3">
                 <div className="flex items-start gap-3">
@@ -237,7 +237,7 @@ export function ChatPage() {
             </div>
 
             {/* Projekt-Info */}
-            <div className="rounded-2xl border bg-background/75 p-4">
+            <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
               <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.projectPanel", { defaultValue: "Projekt" })}</p>
               <div className="mt-3 space-y-3 text-sm">
                 <div className="rounded-2xl bg-secondary/40 px-3 py-3">
@@ -258,7 +258,7 @@ export function ChatPage() {
             </div>
 
             {/* Shortcuts */}
-            <div className="rounded-2xl border bg-background/75 p-4">
+            <div className="card-candy-border rounded-2xl border bg-background/75 p-4">
               <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">{t("chat.shortcuts", { defaultValue: "Shortcuts" })}</p>
               <div className="mt-3 space-y-2">
                 {SLASH_COMMANDS.map(c => (
