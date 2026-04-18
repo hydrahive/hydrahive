@@ -25,7 +25,9 @@
     "react-i18next": "^16.6.6",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.23.0",
-    "tailwind-merge": "^2.3.0"
+    "tailwind-merge": "^2.3.0",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

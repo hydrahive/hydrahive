@@ -12,11 +12,13 @@ import { api } from "@/lib/api";
 import { ChatShell } from "@/components/chat-v2/ChatShell";
 import { buildChatV2Target, useHydraHiveRuntime } from "@/components/chat-v2/hydrahive-runtime";
 import { useProjectSubscribe } from "@/hooks/useProjectSubscribe";
+import { useAuth } from "@/hooks/useAuth";
 
 export function ChatPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Project info
   const [projectName, setProjectName] = useState(id ?? "");
@@ -215,6 +217,8 @@ export function ChatPage() {
             typingUsers={Array.from(subscribe.typingUsers.entries()).filter(([, active]) => active).map(([user]) => user)}
             presenceUsers={subscribe.onlineUsers}
             onComposerActivity={handleTyping}
+            collabProjectId={id}
+            collabUsername={user?.username}
           />
         </div>
       </div>

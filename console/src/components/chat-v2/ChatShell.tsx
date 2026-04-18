@@ -21,6 +21,8 @@ import {
   type PendingToolConfirm,
   useHydraHiveRuntime,
 } from "./hydrahive-runtime";
+import { CollabComposer } from "./CollabComposer";
+import { useProjectYjs } from "@/hooks/useProjectYjs";
 import type { SessionPreview } from "@/lib/api";
 
 type DataPart = Extract<MessagePartState, { type: "data" }>;
@@ -730,6 +732,11 @@ export type ChatShellProps = {
   typingUsers?: string[];
   presenceUsers?: string[];
   onComposerActivity?: (hasText: boolean) => void;
+  /** #554: wenn gesetzt, wird der Composer durch einen gemeinsamen Yjs-
+   * Composer ersetzt. Erwartet die projectId für den /collab-WS + den
+   * eigenen Usernamen für Awareness. */
+  collabProjectId?: string;
+  collabUsername?: string;
 };
 
 export function ChatShell(props: ChatShellProps) {
@@ -747,9 +754,11 @@ function ChatShellWithTarget({ target, runtimeOptions, ...rest }: ChatShellProps
   return <ChatShellInner {...rest} target={target} runtime={runtime} />;
 }
 
-function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, presenceUsers, onComposerActivity }: ChatShellProps & { runtime: HydraHiveRuntime }) {
+function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers, presenceUsers, onComposerActivity, collabProjectId, collabUsername }: ChatShellProps & { runtime: HydraHiveRuntime }) {
   const label = headerLabel ?? target?.label ?? "";
   const tts = useTtsPlayback();
+  // #554: gemeinsamer Y.Text-Composer — null wenn collab nicht aktiv
+  const yjs = useProjectYjs(collabProjectId, collabUsername);
   const appendTranscript = (text: string) => {
     const composer = runtime.aui.composer();
     const current = composer.getState().text.trim();
@@ -885,28 +894,53 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                   {({ message }) => <ChatMessage message={message as MessageLike} tts={tts} />}
                 </ThreadPrimitive.Messages>
               </div>
-              <Composer
-                isRunning={runtime.isRunning}
-                pendingConfirms={runtime.pendingConfirms}
-                confirmingIds={runtime.confirmingIds}
-                pendingImages={runtime.pendingImages}
-                followUpChips={runtime.followUpChips}
-                coachEnabled={runtime.coachEnabled}
-                coachChecking={runtime.coachChecking}
-                coachFeedback={runtime.coachFeedback}
-                typingUsers={typingUsers}
-                presenceUsers={presenceUsers}
-                onAddImages={runtime.addImages}
-                onRemoveImage={runtime.removeImage}
-                onUseSuggestion={useSuggestion}
-                onToggleCoach={runtime.toggleCoach}
-                onSendAnyway={sendAnyway}
-                onUseCoachSuggestion={useCoachSuggestion}
-                onDismissCoach={runtime.clearCoachFeedback}
-                onTranscript={appendTranscript}
-                onConfirm={runtime.confirmTool}
-                onComposerActivity={onComposerActivity}
-              />
+              {yjs ? (
+                // #554: Collab-Modus — Y.Text ersetzt den Standard-Composer.
+                // Coach / Voice / Images / Follow-Up-Chips fallen hier weg
+                // (kommen in H13 zurück). Pending-Confirms + Typing-Banner
+                // bleiben sichtbar über den normalen Pfad.
+                <ThreadPrimitive.ViewportFooter className="sticky bottom-0 border-t border-border/70 bg-background/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
+                  {presenceUsers && presenceUsers.length > 1 ? (
+                    <div className="mx-auto mb-2 flex max-w-4xl flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="uppercase tracking-[0.18em]">online</span>
+                      {presenceUsers.map((u) => (
+                        <PresenceAvatar key={u} user={u} />
+                      ))}
+                    </div>
+                  ) : null}
+                  {typingUsers && typingUsers.length > 0 ? (
+                    <div className="mx-auto mb-2 max-w-4xl text-xs text-muted-foreground italic">
+                      {typingUsers.length === 1
+                        ? `${typingUsers[0]} tippt …`
+                        : `${typingUsers.join(", ")} tippen …`}
+                    </div>
+                  ) : null}
+                  <CollabComposer yjs={yjs} runtime={runtime} />
+                </ThreadPrimitive.ViewportFooter>
+              ) : (
+                <Composer
+                  isRunning={runtime.isRunning}
+                  pendingConfirms={runtime.pendingConfirms}
+                  confirmingIds={runtime.confirmingIds}
+                  pendingImages={runtime.pendingImages}
+                  followUpChips={runtime.followUpChips}
+                  coachEnabled={runtime.coachEnabled}
+                  coachChecking={runtime.coachChecking}
+                  coachFeedback={runtime.coachFeedback}
+                  typingUsers={typingUsers}
+                  presenceUsers={presenceUsers}
+                  onAddImages={runtime.addImages}
+                  onRemoveImage={runtime.removeImage}
+                  onUseSuggestion={useSuggestion}
+                  onToggleCoach={runtime.toggleCoach}
+                  onSendAnyway={sendAnyway}
+                  onUseCoachSuggestion={useCoachSuggestion}
+                  onDismissCoach={runtime.clearCoachFeedback}
+                  onTranscript={appendTranscript}
+                  onConfirm={runtime.confirmTool}
+                  onComposerActivity={onComposerActivity}
+                />
+              )}
             </ThreadPrimitive.Viewport>
           )}
         </div>
