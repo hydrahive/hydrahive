@@ -283,6 +283,30 @@ EOF
         info "Instance Policy Stub angelegt (#711)"
     fi
 
+    # --- 5a2c. ToolGuard Config-Stub anlegen (#717 / #719) ---
+    # Stub nur anlegen wenn fehlt. Guard startet per Default als deaktiviert —
+    # Admin muss canonical_path für die Instanz setzen und enabled=true wählen,
+    # sonst könnte die Block-Message einen Pfad nennen, der auf der Instanz
+    # gar nicht existiert (Default /home/till/octopos ist nur auf Tills Dev-
+    # System sinnvoll).
+    if [ ! -f "/etc/hydrahive/tool_guard.json" ]; then
+        cat > /etc/hydrahive/tool_guard.json << 'EOF'
+{
+  "_comment": "HydraHive ToolGuard config (#717). Guard blockiert Schreibaktionen in stale Checkouts. canonical_path = Pfad, in dem Writes erlaubt sind. stale_write_roots = Pfade, in denen nur Diagnose erlaubt ist. Fuer diese Instanz: canonical_path setzen (z.B. /var/lib/hydrahive/workspace oder /home/<admin>/hydrahive) und enabled=true. Solange enabled=false, laeuft der Guard nicht scharf.",
+  "canonical_path": "",
+  "stale_write_roots": [
+    "/projects/hydrahivedev/repo",
+    "/home/octopos/hydrahive",
+    "/opt/hydrahive/core"
+  ],
+  "enabled": false
+}
+EOF
+        chown hydrahive:hydrahive /etc/hydrahive/tool_guard.json
+        chmod 644 /etc/hydrahive/tool_guard.json
+        info "ToolGuard Config-Stub angelegt (#719) — enabled=false bis Admin canonical_path setzt"
+    fi
+
     # --- 5a3. sysctl fuer bwrap-Sandbox (#605) ---
     # Ubuntu 24.04+ AppArmor-Restriction fuer unprivileged user namespaces aushebeln
     # damit bwrap (shell_exec Sandbox) UID-Maps setzen kann.
