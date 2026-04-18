@@ -1207,12 +1207,18 @@ def register_project_routes(
 
         # v2: Shared Sessions — Turn-Lock + Broadcast
         from .shared_session import shared_sessions as _ss
+        import uuid as _uuid
 
         if not _ss.acquire_turn(project_id, sender):
             _turn_owner = _ss.turn_owner(project_id)
             raise HTTPException(
                 409, f"Projekt ist gerade belegt von '{_turn_owner}'. Bitte warten."
             )
+
+        # #726 K2c: Replay-Buffer starten. Muss VOR dem _user_message-Broadcast
+        # passieren, damit late-joiner auch die User-Nachricht im Priming sehen.
+        _stream_id = _uuid.uuid4().hex[:8]
+        _ss.start_stream(project_id, _stream_id)
 
         # User-Nachricht an alle Subscriber broadcasten (fuer Multi-Browser-Sync)
         import json as _json
@@ -1236,6 +1242,7 @@ def register_project_routes(
                         _ss.broadcast(project_id, chunk[6:].strip())
             finally:
                 _ss.release_turn(project_id, sender)
+                _ss.end_stream(project_id)
 
         return _SR(event_stream(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
