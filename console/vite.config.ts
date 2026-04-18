@@ -11,6 +11,10 @@ if (process.env.ANALYZE) {
   } catch { /* rollup-plugin-visualizer nicht installiert — ignorieren */ }
 }
 
+function isReactCoreModule(id: string): boolean {
+  return /node_modules\/(react|react-dom|scheduler)\//.test(id);
+}
+
 export default defineConfig({
   plugins,
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
@@ -22,12 +26,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
+          if (isReactCoreModule(id)) return "react-vendor";
           if (id.includes("react-force-graph") || id.includes("three") || id.includes("3d-force-graph")) return "react-force-graph-3d";
           if (id.includes("emoji-picker-react")) return "emoji-picker-react";
           if (id.includes("@xyflow")) return "xyflow";
           if (id.includes("react-markdown") || id.includes("remark") || id.includes("rehype")) return "markdown";
           if (id.includes("react-router-dom") || id.includes("@remix-run")) return "router";
-          if (id.includes("react-dom") || id.includes("/react/")) return "react-vendor";
           if (id.includes("lucide-react")) return "icons";
         },
       },
