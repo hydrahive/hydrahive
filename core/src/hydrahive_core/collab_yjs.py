@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import deque
 from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -33,6 +35,28 @@ logger = logging.getLogger(__name__)
 # nicht schreibbar (z.B. lokale Dev-Runs ohne root), fällt start_yjs_server
 # auf ~/.hydrahive/yjs/ zurück.
 DEFAULT_STORE_DIR = Path("/var/lib/hydrahive/yjs")
+_DEBUG_EVENTS_MAX = 200
+_debug_events: deque[dict] = deque(maxlen=_DEBUG_EVENTS_MAX)
+
+
+def _record_debug_event(event: str, **data) -> None:
+    payload = {
+        "ts": round(time.time(), 3),
+        "event": event,
+        **data,
+    }
+    _debug_events.append(payload)
+    logger.info("collab-yjs %s %s", event, data)
+
+
+def record_yjs_debug_event(event: str, **data) -> None:
+    _record_debug_event(event, **data)
+
+
+def get_yjs_debug_events(limit: int = 50) -> list[dict]:
+    if limit <= 0:
+        return []
+    return list(_debug_events)[-limit:]
 
 
 class HydraHiveYjsServer(WebsocketServer):
@@ -54,6 +78,7 @@ class HydraHiveYjsServer(WebsocketServer):
             ystore = SQLiteYStore(str(db_path), log=self.log)
             room = YRoom(ready=self.rooms_ready, log=self.log, ystore=ystore)
             self.rooms[name] = room
+            _record_debug_event("room_created", room=name, store=str(db_path))
             logger.info("Yjs-Room erstellt: %s (store=%s)", name, db_path)
         room = self.rooms[name]
         await self.start_room(room)
@@ -108,6 +133,7 @@ async def start_yjs_server() -> HydraHiveYjsServer:
     )
     _yjs_server_task = asyncio.create_task(_yjs_server.start())
     await _yjs_server.started.wait()
+    _record_debug_event("server_started", store=str(store_dir))
     logger.info("Yjs-WebsocketServer gestartet (store=%s)", store_dir)
     return _yjs_server
 
@@ -117,6 +143,7 @@ async def stop_yjs_server() -> None:
     global _yjs_server, _yjs_server_task
     if _yjs_server is None:
         return
+    _record_debug_event("server_stopping")
     try:
         await _yjs_server.stop()
     except Exception:
@@ -129,6 +156,7 @@ async def stop_yjs_server() -> None:
             pass
     _yjs_server = None
     _yjs_server_task = None
+    _record_debug_event("server_stopped")
 
 
 class FastApiWsChannel:
@@ -152,10 +180,12 @@ class FastApiWsChannel:
         try:
             await self._ws.send_bytes(message)
         except Exception as e:
+            _record_debug_event("send_failed", label=self._label, error=repr(e))
             logger.warning("collab-ws[%s] send failed: %s", self._label, e)
             raise
         self._sent += 1
         if self._sent <= 5 or self._sent % 100 == 0:
+            _record_debug_event("send", label=self._label, count=self._sent, bytes=len(message))
             logger.info("collab-ws[%s] → send #%d bytes=%d", self._label, self._sent, len(message))
 
     async def recv(self) -> bytes:
@@ -165,17 +195,21 @@ class FastApiWsChannel:
         msg = await self._ws.receive()
         mtype = msg.get("type")
         if mtype == "websocket.disconnect":
+            _record_debug_event("disconnect_frame", label=self._label, code=msg.get("code", 1000))
             raise WebSocketDisconnect(code=msg.get("code", 1000))
         if mtype != "websocket.receive":
+            _record_debug_event("unexpected_frame", label=self._label, frame_type=mtype)
             logger.warning("collab-ws[%s] unexpected frame type=%s, skip", self._label, mtype)
             return b""
         data = msg.get("bytes")
         if data is None:
             text = msg.get("text") or ""
+            _record_debug_event("text_frame", label=self._label, chars=len(text))
             logger.warning("collab-ws[%s] text frame (len=%d), encoding utf-8", self._label, len(text))
             data = text.encode("utf-8")
         self._recv += 1
         if self._recv <= 5 or self._recv % 100 == 0:
+            _record_debug_event("recv", label=self._label, count=self._recv, bytes=len(data))
             logger.info("collab-ws[%s] ← recv #%d bytes=%d", self._label, self._recv, len(data))
         return data
 
@@ -186,4 +220,5 @@ class FastApiWsChannel:
         try:
             return await self.recv()
         except WebSocketDisconnect:
+            _record_debug_event("stop_iteration", label=self._label)
             raise StopAsyncIteration()
