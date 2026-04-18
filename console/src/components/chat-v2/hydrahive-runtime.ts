@@ -277,6 +277,19 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
     }
   }, [target.historyEndpoint]);
 
+  // #726 K1: sessionId bei jedem Wechsel in localStorage persistieren, damit
+  // der Auto-Resume-Hook beim nächsten Page-Mount weiß wo er wieder einsteigen
+  // soll. Covered: initial history-Load, resumeSession. Neu-erstellte Sessions
+  // kommen dran, sobald Backend die ID in das done-Event schreibt (Follow-up).
+  useEffect(() => {
+    if (!sessionId) return;
+    try {
+      localStorage.setItem(`hh_lastsess_${target.historyEndpoint}`, sessionId);
+    } catch {
+      /* quota / private-mode */
+    }
+  }, [sessionId, target.historyEndpoint]);
+
   useEffect(() => {
     let cancelled = false;
     setError("");

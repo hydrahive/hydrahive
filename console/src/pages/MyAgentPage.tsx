@@ -185,6 +185,16 @@ export function MyAgentPage() {
     api.mcpServers().then(d => setMcpServers(d.servers)).catch(() => {});
   }, []);
 
+  // #726 K1: Auto-Resume letzte Session aus localStorage. Runtime.agentId
+  // kommt async via api.myAgent() — deshalb warten bis aufgelöst.
+  useEffect(() => {
+    if (!runtime.agentId) return;
+    try {
+      const lastSid = localStorage.getItem(`hh_lastsess_/api/me/agent/session/history`);
+      if (lastSid) runtime.resumeSession(lastSid).catch(() => {/* Session evtl. gelöscht */});
+    } catch { /* localStorage nicht verfügbar */ }
+  }, [runtime.agentId]);
+
   const identity = agentInfo?.config?.identity ?? "Mein Agent";
   const model    = agentInfo?.config?.llm?.model ?? "";
   const exec     = modeSummary(agentInfo?.config?.execution_modes);

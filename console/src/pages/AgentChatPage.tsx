@@ -191,6 +191,17 @@ export function AgentChatPage() {
       }).catch(() => {});
   }, [id]);
 
+  // #726 K1: Auto-Resume letzte Session aus localStorage (analog ChatPage).
+  // Ohne das landet man beim erneuten Öffnen in einem leeren Chat und muss
+  // über History-Panel manuell reingehen.
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const lastSid = localStorage.getItem(`hh_lastsess_/api/agents/${id}/session/history`);
+      if (lastSid) runtime.resumeSession(lastSid).catch(() => {/* Session evtl. gelöscht */});
+    } catch { /* localStorage nicht verfügbar */ }
+  }, [id]);
+
   return (
     <section className="flex h-full min-h-0 overflow-hidden">
       {/* Main Column */}
