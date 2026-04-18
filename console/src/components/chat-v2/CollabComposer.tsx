@@ -169,15 +169,14 @@ export function CollabComposer({
   const sendNow = async (skipCoach = false) => {
     const text = yjs.ytext.toString().trim();
     if (!text || runtime.isRunning) return;
-    // sendText returnt true wenn Nachricht rausging, false wenn Coach
-    // (oder anderer Guard) sie abgefangen hat. Nur im Success-Fall Y.Text
-    // leeren — sonst verschwindet der Text beim User während die Coach-
-    // Card "Vorschlag übernehmen / trotzdem senden" anbietet.
-    const sent = await runtime.sendText(text, skipCoach);
-    if (sent) {
-      yjs.clearText();
-      lastTextRef.current = "";
-    }
+    // Optimistic clear: leeren BEVOR wir auf den Stream warten, sonst bleibt
+    // der Text bis die Antwort fertig ist im Feld (Till-Bug). Falls Coach
+    // die Nachricht abfängt, steht der Originaltext in coachFeedback.content
+    // und der User kann per "Trotzdem senden" / "Vorschlag übernehmen"
+    // reagieren — brauchen den Y.Text dafür nicht zurückzuspielen.
+    yjs.clearText();
+    lastTextRef.current = "";
+    await runtime.sendText(text, skipCoach);
   };
 
   const sendAnyway = () => {
