@@ -83,6 +83,43 @@ class AgentMemoryRequest(BaseModel):
     mode: str = "overwrite"
 
 
+def write_agent_memory_file(
+    *,
+    agent_id: str,
+    filename: str,
+    content: str,
+    mode: str = "overwrite",
+    agents_dir: str,
+    projects_dir: str | None = None,
+) -> dict:
+    """Write external memory API content to the canonical project memory dir."""
+    import re as _re
+
+    if not _re.match(r"^[a-z0-9_-]+$", agent_id):
+        raise HTTPException(400, "Ungültige agent_id")
+    safe_name = filename.strip().removesuffix(".md")
+    clean_content = content.strip()
+    if not _re.match(r"^[a-z0-9_-]+$", safe_name):
+        raise HTTPException(400, "Ungültiger Dateiname (nur a-z, 0-9, -, _)")
+    if not clean_content:
+        raise HTTPException(400, "content fehlt")
+
+    projects_root = projects_dir or str(_hh_settings.projects_dir)
+    agent_dir = Path(agents_dir) / agent_id
+    project_dir = Path(projects_root) / agent_id
+    if not agent_dir.exists() and not project_dir.exists():
+        raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+
+    from .memory_paths import agent_memory_dir
+
+    memory_dir = agent_memory_dir(agent_id, agent_id, projects_root=projects_root)
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    target = memory_dir / f"{safe_name}.md"
+    target.open("a" if mode == "append" else "w", encoding="utf-8").write(clean_content)
+    target.chmod(0o600)
+    return {"saved": True, "filename": f"{safe_name}.md", "bytes": len(clean_content.encode())}
+
+
 class SessionImportRequest(BaseModel):
     session_b64: str
 
@@ -149,6 +186,7 @@ def register_agent_chat_routes(
     agent_sessions,
     agent_orchestrator,
     agents_dir: str,
+    projects_dir: str | None = None,
     audit_log,
     logger,
     incoming_message_model,
@@ -196,28 +234,15 @@ def register_agent_chat_routes(
 
     @auth_router.post("/agents/{agent_id}/memory", status_code=201)
     def write_agent_memory(agent_id: str, req: AgentMemoryRequest, _a: tuple = Depends(require_auth)):
-        import re as _re
-
         _check_agent_access(agent_id, _a)
-        # #277: agent_id gegen Path Traversal absichern
-        if not _re.match(r"^[a-z0-9_-]+$", agent_id):
-            raise HTTPException(400, "Ungültige agent_id")
-        filename = req.filename.strip().removesuffix(".md")
-        content = req.content.strip()
-        mode = req.mode
-        if not _re.match(r"^[a-z0-9_-]+$", filename):
-            raise HTTPException(400, "Ungültiger Dateiname (nur a-z, 0-9, -, _)")
-        if not content:
-            raise HTTPException(400, "content fehlt")
-        agent_dir = Path(agents_dir) / agent_id
-        if not agent_dir.exists():
-            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
-        memory_dir = agent_dir / "memory"
-        memory_dir.mkdir(exist_ok=True)
-        p = memory_dir / f"{filename}.md"
-        p.open("a" if mode == "append" else "w", encoding="utf-8").write(content)
-        p.chmod(0o600)
-        return {"saved": True, "filename": f"{filename}.md", "bytes": len(content.encode())}
+        return write_agent_memory_file(
+            agent_id=agent_id,
+            filename=req.filename,
+            content=req.content,
+            mode=req.mode,
+            agents_dir=agents_dir,
+            projects_dir=projects_dir,
+        )
 
     # #641-Followup: CONFIRM-Roundtrip analog zu router_projects.
     # Pending-Store (tool_confirmation._pending) ist session-universell —

@@ -6,6 +6,7 @@ Jede Migration hat eine ID und wird nur einmal ausgeführt (Tracking in migratio
 """
 import json
 import logging
+import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -198,6 +199,106 @@ def _m004_json_to_sqlite():
                         migrated_count, base_dir)
 
 
+def _m005_consolidate_agent_memory():
+    """Merge legacy /agents/<id>/memory into /projects/<id>/memory (#706)."""
+    from .memory_paths import (
+        LEGACY_MEMORY_INDEX_FILENAME,
+        MEMORY_INDEX_FILENAME,
+        agent_memory_dir,
+        legacy_agent_memory_dir,
+    )
+
+    def _unique_dest(dst_dir: Path, filename: str) -> Path:
+        candidate = dst_dir / filename
+        if not candidate.exists():
+            return candidate
+        suffix = candidate.suffix
+        stem = candidate.name[: -len(suffix)] if suffix else candidate.name
+        for i in range(1, 1000):
+            legacy_name = f"{stem}.agent-legacy{'' if i == 1 else f'-{i}'}{suffix}"
+            candidate = dst_dir / legacy_name
+            if not candidate.exists():
+                return candidate
+        raise RuntimeError(f"Keine kollisionsfreie Legacy-Memory-Datei fuer {filename}")
+
+    def _merge_index_text(memory_dir: Path, source_path: Path, *, heading: str) -> None:
+        text = source_path.read_text(encoding="utf-8", errors="replace").strip()
+        if not text:
+            try:
+                source_path.unlink()
+            except OSError:
+                pass
+            return
+
+        target = memory_dir / MEMORY_INDEX_FILENAME
+        if not target.exists():
+            if source_path == target:
+                return
+            shutil.move(str(source_path), str(target))
+            return
+
+        existing = target.read_text(encoding="utf-8", errors="replace")
+        if text not in existing:
+            target.write_text(
+                existing.rstrip() + f"\n\n## {heading}\n\n" + text + "\n",
+                encoding="utf-8",
+            )
+        if source_path != target:
+            try:
+                source_path.unlink()
+            except OSError:
+                pass
+
+    if not settings.agents_dir.exists():
+        return
+
+    migrated_files = 0
+    for agent_dir in sorted(settings.agents_dir.iterdir()):
+        if not agent_dir.is_dir():
+            continue
+        legacy_memory = legacy_agent_memory_dir(agent_dir.name)
+        if not legacy_memory.is_dir():
+            continue
+
+        memory_dir = agent_memory_dir(agent_dir.name)
+        memory_dir.mkdir(parents=True, exist_ok=True)
+
+        # First normalize any v2 bootstrap INDEX.md already present in /projects.
+        project_index = memory_dir / LEGACY_MEMORY_INDEX_FILENAME
+        if project_index.exists():
+            _merge_index_text(memory_dir, project_index, heading="Legacy INDEX.md")
+
+        for item in sorted(legacy_memory.iterdir()):
+            if not item.is_file():
+                continue
+            if item.name in (MEMORY_INDEX_FILENAME, LEGACY_MEMORY_INDEX_FILENAME):
+                _merge_index_text(
+                    memory_dir,
+                    item,
+                    heading=f"Legacy /agents/{agent_dir.name}/memory/{item.name}",
+                )
+            else:
+                dest = _unique_dest(memory_dir, item.name)
+                shutil.move(str(item), str(dest))
+            migrated_files += 1
+
+        try:
+            legacy_memory.rmdir()
+            logger.info("Migration 005: Legacy-Memory geleert: %s", legacy_memory)
+        except OSError:
+            logger.warning(
+                "Migration 005: Legacy-Memory bleibt bestehen (nicht leer): %s",
+                legacy_memory,
+            )
+
+    if migrated_files:
+        logger.info(
+            "Migration 005: %d Legacy-Memory-Dateien nach %s konsolidiert",
+            migrated_files,
+            settings.projects_dir,
+        )
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 MIGRATIONS = [
@@ -205,6 +306,7 @@ MIGRATIONS = [
     ("002_ensure_session_dirs", _m002_ensure_session_dirs),
     ("003_cleanup_stale_locks", _m003_cleanup_stale_locks),
     ("004_json_to_sqlite", _m004_json_to_sqlite),
+    ("005_consolidate_agent_memory", _m005_consolidate_agent_memory),
 ]
 
 

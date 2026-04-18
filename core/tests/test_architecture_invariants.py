@@ -1702,6 +1702,34 @@ def test_invariant24b_extension_manifest_scripts_have_sudoers_entries():
     assert "/opt/hydrahive/installer/extensions/uninstall/*" not in sudoers
 
 
+def test_invariant24c_memory_tools_use_project_memory_paths():
+    """24c (#706): read/write_memory und externe Memory-API dürfen nicht mehr
+    hart nach /agents/<id>/memory schreiben.
+    """
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    tool_registry = (
+        repo_root / "core" / "src" / "hydrahive_core" / "tool_registry.py"
+    ).read_text(encoding="utf-8")
+    router_agent_chat = (
+        repo_root / "core" / "src" / "hydrahive_core" / "router_agent_chat.py"
+    ).read_text(encoding="utf-8")
+
+    forbidden = (
+        'AGENTS_ROOT / agent_id / "memory"',
+        "AGENTS_ROOT / agent_id / 'memory'",
+        'Path(agents_dir) / agent_id / "memory"',
+        "Path(agents_dir) / agent_id / 'memory'",
+    )
+    for needle in forbidden:
+        assert needle not in tool_registry
+        assert needle not in router_agent_chat
+
+    assert "agent_memory_dir(" in tool_registry
+    assert "agent_memory_dir(" in router_agent_chat
+
+
 def test_invariant25_agentlink_git_safe_directory_registered_before_pull():
     """25: AgentLink-Reinstall darf nicht an Git dubious ownership haengen.
 

@@ -380,12 +380,15 @@ async def build_system_prompt(
         if boss_cfg.agent_dir:
             memory_dir = boss_cfg.agent_dir / "memory"
             if memory_dir.exists():
-                index_path = memory_dir / "INDEX.md"
+                from .memory_paths import MEMORY_INDEX_FILENAME, LEGACY_MEMORY_INDEX_FILENAME
+                index_path = memory_dir / MEMORY_INDEX_FILENAME
+                if not index_path.exists():
+                    index_path = memory_dir / LEGACY_MEMORY_INDEX_FILENAME
                 if index_path.exists():
                     index_text = index_path.read_text(encoding="utf-8").strip()
                     if index_text:
                         if len(index_text) > 1500:
-                            index_text = index_text[:1500] + "\n…[INDEX.md gekürzt]"
+                            index_text = index_text[:1500] + f"\n…[{index_path.name} gekürzt]"
                         channels.memory_index = f"## Persistentes Gedächtnis\n\n### Index\n{index_text}"
                 # #636: konsistentes Memory-Budget statt hardcoded
                 from .context_lifecycle import get_memory_budget as _gmb

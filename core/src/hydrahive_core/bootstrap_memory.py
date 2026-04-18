@@ -3,7 +3,7 @@ bootstrap_memory.py — P1 Bootstrap-Memory für neue/bestehende Projekte (#614)
 
 Scannt ein Projekt-Verzeichnis und schreibt eine strukturierte Memory-Basis:
   - memory/project_structure.md  (Verzeichnisbaum, wichtige Dateien)
-  - memory/INDEX.md              (nur anlegen wenn nicht vorhanden)
+  - memory/MEMORY.md             (nur anlegen wenn nicht vorhanden)
   - memory/.bootstrap_done       (Sentinel — verhindert Wiederholung)
 
 Wird aufgerufen via:
@@ -189,15 +189,16 @@ type: project
         _write_memory_file(memory_dir, "project_structure.md", structure_content, overwrite=True)
         files_written.append("project_structure.md")
 
-        # 3. INDEX.md anlegen — NUR wenn nicht vorhanden (Agent pflegt sie selbst)
+        # 3. MEMORY.md anlegen — NUR wenn nicht vorhanden (Agent pflegt sie selbst)
+        from .memory_paths import MEMORY_INDEX_FILENAME
         index_written = _write_memory_file(
             memory_dir,
-            "INDEX.md",
+            MEMORY_INDEX_FILENAME,
             f"# Memory-Index — {project_id}\n\n- [project_structure.md](project_structure.md) — Verzeichnisbaum, automatisch erstellt\n",
             overwrite=False,
         )
         if index_written:
-            files_written.append("INDEX.md")
+            files_written.append(MEMORY_INDEX_FILENAME)
 
         # 4. Berechtigungen setzen
         try:

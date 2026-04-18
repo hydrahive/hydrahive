@@ -1397,7 +1397,9 @@ class ReadMemoryTool(BaseTool):
         import sqlite3 as _sqlite3
         from .memory_decay import touch_recall as _touch_recall
 
-        memory_dir = AGENTS_ROOT / agent_id / "memory"
+        from .memory_paths import agent_memory_dir, memory_index_db_path
+
+        memory_dir = agent_memory_dir(agent_id, project_id, projects_root=PROJECTS_ROOT)
         if not filename:
             if not memory_dir.exists():
                 return {"files": [], "count": 0}
@@ -1413,7 +1415,7 @@ class ReadMemoryTool(BaseTool):
 
         content = p.read_text(encoding="utf-8")
 
-        db_path = AGENTS_ROOT / agent_id / "memory_index.db"
+        db_path = memory_index_db_path(agent_id, project_id, projects_root=PROJECTS_ROOT)
         if db_path.exists():
             try:
                 _conn = _sqlite3.connect(str(db_path))
@@ -1520,11 +1522,12 @@ class WriteMemoryTool(BaseTool):
         except ValueError as e:
             return {"error": str(e)}
 
-        agent_dir = AGENTS_ROOT / agent_id
-        memory_dir = agent_dir / "memory"
+        from .memory_paths import agent_memory_dir, memory_index_db_path
+
+        memory_dir = agent_memory_dir(agent_id, project_id, projects_root=PROJECTS_ROOT)
         memory_dir.mkdir(parents=True, exist_ok=True)
 
-        db_path = agent_dir / "memory_index.db"
+        db_path = memory_index_db_path(agent_id, project_id, projects_root=PROJECTS_ROOT)
         if db_path.exists():
             try:
                 _conn = _sqlite3.connect(str(db_path))
@@ -1542,7 +1545,7 @@ class WriteMemoryTool(BaseTool):
         try:
             _loop = asyncio.get_event_loop()
             similar = await _loop.run_in_executor(
-                None, lambda: _find_similar(agent_dir, content, threshold=0.65)
+                None, lambda: _find_similar(memory_dir.parent, content, threshold=0.65)
             )
             if similar is not None:
                 similar_text, sim_score = similar

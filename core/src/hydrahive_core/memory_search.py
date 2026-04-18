@@ -6,8 +6,8 @@ Ab #93: Ebbinghaus Decay — Chunks werden importance-gewichtet und
 selbstbereinigend. Stale Chunks fliegen automatisch raus.
 
 Architektur:
-- Pro Agent eine SQLite DB: /agents/{id}/memory_index.db (BM25 + Decay-Meta)
-- Pro Agent ein FAISS-Index: /agents/{id}/memory_index.faiss (Semantic)
+- Pro Agent eine SQLite DB: /projects/{id}/memory_index.db (BM25 + Decay-Meta)
+- Pro Agent ein FAISS-Index: /projects/{id}/memory_index.faiss (Semantic)
 - Lazy re-indexing: Dateien werden nur bei mtime/size-Änderung neu indexiert
 - Chunks: Split by markdown headers, max 1500 chars/Chunk
 - Hybrid: BM25 top-k/2 + Semantic top-k/2, dedup, max k Ergebnisse

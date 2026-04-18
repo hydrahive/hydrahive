@@ -319,14 +319,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Discord-Setup fehlgeschlagen: %s", e)
 
-    # Systemtopologie in alle persönlichen Agenten schreiben (bei jedem Start aktuell halten)
+    # Systemtopologie ins kanonische Projekt-Memory schreiben (bei jedem Start aktuell halten)
+    from .memory_paths import agent_memory_dir as _agent_memory_dir
     for _agent_dir in Path(AGENTS_DIR).iterdir():
-        _mem_dir = _agent_dir / "memory"
-        if _mem_dir.is_dir():
-            try:
-                _write_system_topology(_mem_dir / "system_topology.md")
-            except Exception as _e:
-                logger.debug("system_topology für %s: %s", _agent_dir.name, _e)
+        try:
+            _mem_dir = _agent_memory_dir(_agent_dir.name, projects_root=PROJECTS_DIR)
+            _mem_dir.mkdir(parents=True, exist_ok=True)
+            _write_system_topology(_mem_dir / "system_topology.md")
+        except Exception as _e:
+            logger.debug("system_topology für %s: %s", _agent_dir.name, _e)
 
     # WhatsApp-Sessions für alle Projekte mit aktiver Config wiederherstellen (#615)
     try:
@@ -944,6 +945,7 @@ register_agent_chat_routes(
     agent_sessions=agent_sessions,
     agent_orchestrator=agent_orchestrator,
     agents_dir=AGENTS_DIR,
+    projects_dir=PROJECTS_DIR,
     audit_log=audit_log,
     logger=logger,
     incoming_message_model=IncomingMessage,
@@ -1091,8 +1093,8 @@ Die WKS sind keine Server — dort laufen keine HydraHive-Services.
 ## Wichtige Pfade auf dem Server
 
 ```
-/agents/{{id}}/          — Agent-Daten (soul.md, agent.yaml, memory/, skills/)
-/agents/{{id}}/memory/   — Auto-injizierte Memory-Dateien (diese Datei!)
+/agents/{{id}}/          — Legacy-Agent-Daten (soul.md, agent.yaml, skills/)
+/projects/{{id}}/memory/ — Persistentes Agent-Memory (diese Datei!)
 /etc/hydrahive/            — Konfiguration (JWT, LLM, WKS, etc.)
 /etc/hydrahive/          — Secrets
 /opt/hydrahive/            — HydraHive-Code + venv
@@ -1202,7 +1204,6 @@ def _create_personal_agent(username: str, group: str = "standard") -> str:
     agent_dir = Path(AGENTS_DIR) / agent_id
     agent_dir.mkdir(parents=True, exist_ok=True)
     (agent_dir / "skills").mkdir(exist_ok=True)
-    (agent_dir / "memory").mkdir(exist_ok=True)
 
     model = "claude-haiku-4-5-20251001"
     try:
@@ -1275,9 +1276,12 @@ def _create_personal_agent(username: str, group: str = "standard") -> str:
         f"Danach erscheint diese Anleitung nicht mehr.\n",
         encoding="utf-8",
     )
-    _write_system_topology(agent_dir / "memory" / "system_topology.md")
-    _write_default_skills(agent_dir / "skills")
     _ensure_personal_project_manifest(username)
+    from .memory_paths import agent_memory_dir as _agent_memory_dir
+    _mem_dir = _agent_memory_dir(agent_id, projects_root=PROJECTS_DIR)
+    _mem_dir.mkdir(parents=True, exist_ok=True)
+    _write_system_topology(_mem_dir / "system_topology.md")
+    _write_default_skills(agent_dir / "skills")
     discovery._register(agent_dir)
     logger.info("Persönlicher Agent angelegt: %s (model=%s)", agent_id, model)
     audit_log("personal_agent.create", user=username, target=agent_id)

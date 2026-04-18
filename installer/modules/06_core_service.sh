@@ -155,13 +155,13 @@ else
     error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
 fi
 
-# --- System-Agenten anlegen (idempotent — vorhandene soul.md/memory bleibt erhalten) ---
+# --- System-Agenten anlegen (idempotent — agent.yaml/soul.md bleiben Legacy-Agent-Metadaten) ---
 REPO_AGENTS="${REPO_ROOT}/agents"
 if [ -d "${REPO_AGENTS}" ]; then
     for _agent_src in "${REPO_AGENTS}"/*/; do
         _agent_id="$(basename "${_agent_src}")"
         _agent_dst="/agents/${_agent_id}"
-        mkdir -p "${_agent_dst}/memory"
+        mkdir -p "${_agent_dst}"
         # agent.yaml und soul.md immer aktualisieren
         [ -f "${_agent_src}/agent.yaml" ] && cp "${_agent_src}/agent.yaml" "${_agent_dst}/agent.yaml"
         [ -f "${_agent_src}/soul.md"    ] && cp "${_agent_src}/soul.md"    "${_agent_dst}/soul.md"

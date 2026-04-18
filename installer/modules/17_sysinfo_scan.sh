@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 17_sysinfo_scan.sh — System-Zustand in hydrahive_sysinfo Memory schreiben
+# 17_sysinfo_scan.sh — System-Zustand in hydrahive_sysinfo Projekt-Memory schreiben
 # Wird von update.sh nach Core-Neustart aufgerufen.
 # Erzeugt lesbare Markdown-Snapshots für den System-Experten-Agenten.
 set -euo pipefail
 
-AGENT_MEMORY="/agents/hydrahive_sysinfo/memory"
+AGENT_MEMORY="/projects/hydrahive_sysinfo/memory"
 HYDRAHIVE_DIR="/opt/hydrahive"
 TS=$(date -Iseconds)
 
