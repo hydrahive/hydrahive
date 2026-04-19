@@ -60,6 +60,7 @@ export function CollabComposer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastTextRef = useRef<string>("");
+  const [textValue, setTextValue] = useState("");
   const [remoteCursors, setRemoteCursors] = useState<RemoteCursor[]>([]);
   const [textareaVersion, setTextareaVersion] = useState(0);
 
@@ -125,18 +126,21 @@ export function CollabComposer({
   // Wir behalten die Cursor-Position heuristisch bei (falls vor dem Edit war,
   // bleibt sie; falls danach, verschiebt sich mit dem Delta).
   useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
     const applyFromYjs = () => {
       const remote = yjs.ytext.toString();
       if (remote === lastTextRef.current) return;
-      const prevSelStart = ta.selectionStart;
-      const prevSelEnd = ta.selectionEnd;
-      ta.value = remote;
+      const ta = textareaRef.current;
+      const prevSelStart = ta?.selectionStart ?? remote.length;
+      const prevSelEnd = ta?.selectionEnd ?? remote.length;
       lastTextRef.current = remote;
-      try {
-        ta.setSelectionRange(prevSelStart, prevSelEnd);
-      } catch { /* textarea may not yet be focused */ }
+      setTextValue(remote);
+      requestAnimationFrame(() => {
+        const nextTa = textareaRef.current;
+        if (!nextTa) return;
+        try {
+          nextTa.setSelectionRange(prevSelStart, prevSelEnd);
+        } catch { /* textarea may not yet be focused */ }
+      });
       // Remote-Updates können die eigene Caret-Pixel-Position verschieben
       // (Textänderung vor dem Cursor). Overlay neu rendern.
       setTextareaVersion((v) => v + 1);
@@ -157,11 +161,12 @@ export function CollabComposer({
     const after = ta.value;
     if (before === after) return;
     const { start, removed, inserted } = computeDelta(before, after);
+    lastTextRef.current = after;
+    setTextValue(after);
     yjs.ydoc.transact(() => {
       if (removed > 0) yjs.ytext.delete(start, removed);
       if (inserted) yjs.ytext.insert(start, inserted);
     }, "local");
-    lastTextRef.current = after;
     publishLocalCursor();
     setTextareaVersion((v) => v + 1);
   };
@@ -176,6 +181,7 @@ export function CollabComposer({
     // reagieren — brauchen den Y.Text dafür nicht zurückzuspielen.
     yjs.clearText();
     lastTextRef.current = "";
+    setTextValue("");
     await runtime.sendText(text, skipCoach);
   };
 
@@ -316,10 +322,11 @@ export function CollabComposer({
         <div className="relative flex-1">
           <textarea
             ref={textareaRef}
+            value={textValue}
             rows={1}
             disabled={disabled}
             placeholder="Nachricht schreiben..."
-            onInput={onInput}
+            onChange={onInput}
             onKeyDown={onKeyDown}
             onKeyUp={publishLocalCursor}
             onClick={publishLocalCursor}
