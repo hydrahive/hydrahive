@@ -290,9 +290,11 @@ def _settings_app(username: str, role: str, tmp_path: Path, *, project_id: str, 
     app = FastAPI()
     auth_router = APIRouter()
     admin_router = APIRouter()
+    public_router = APIRouter()
     register_project_routes(
         auth_router,
         admin_router,
+        public_router,
         require_auth=lambda: (username, role),
         projects=_StubProjects(),
         discovery=mock.MagicMock(agents={}),
@@ -406,9 +408,11 @@ def test_settings_agent_md_write_invalidates_cache():
     app = FastAPI()
     auth_router = APIRouter()
     admin_router = APIRouter()
+    public_router = APIRouter()
     register_project_routes(
         auth_router,
         admin_router,
+        public_router,
         require_auth=lambda: ("bob", "admin"),
         projects=_StubProjects(),
         discovery=mock.MagicMock(agents={}),

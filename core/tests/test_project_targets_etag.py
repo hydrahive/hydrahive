@@ -145,14 +145,16 @@ def _build_app(tmp_path):
     app = FastAPI()
     auth_router = APIRouter()
     admin_router = APIRouter()
+    public_router = APIRouter()
 
     projects = {"proj-a": {"name": "Projekt A", "description": ""}}
 
     # Viele Pflicht-Kwargs werden von den /targets-Endpoints nicht genutzt,
     # müssen aber für register_project_routes() gesetzt sein.
     register_project_routes(
-        auth_router=auth_router,
-        admin_router=admin_router,
+        auth_router,
+        admin_router,
+        public_router,
         require_auth=lambda: ("admin", "admin"),
         projects=projects,
         discovery=mock.MagicMock(),
