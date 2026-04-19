@@ -87,6 +87,7 @@ export function FloatingCompanion() {
   const [showBubble, setShowBubble] = useState(false);
   const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   const lastCommentRef = useRef(0);
+  const lastInteractRef = useRef(0);
   const lastPathRef = useRef("");
   const [wander, setWander] = useState({ x: 0, y: 0 });
   const [state, setState] = useState<{
@@ -218,12 +219,27 @@ export function FloatingCompanion() {
       .catch(() => setMood("idle"));
   }
 
-  // Trigger: Seitenwechsel (immer)
+  // Trigger: Seitenwechsel + erster Besuch heute
+  // Greeting hat Vorrang: beim ersten Mount des Tages wird NUR das Greeting
+  // gefeuert, kein Page-Change-Comment — sonst schluckt der 30s-Throttle das
+  // Greeting. Fix #740.
   useEffect(() => {
     if (!visible) return;
     const path = location.pathname;
     if (path === lastPathRef.current) return;
+    const isFirstMount = lastPathRef.current === "";
     lastPathRef.current = path;
+
+    if (isFirstMount) {
+      const today = new Date().toISOString().slice(0, 10);
+      const lastVisit = localStorage.getItem("hh_companion_last_visit");
+      if (lastVisit !== today) {
+        localStorage.setItem("hh_companion_last_visit", today);
+        setTimeout(() => triggerComment("The user logged in for the first time today. Greet them!", true), 1500);
+        return;
+      }
+    }
+
     const context = Object.entries(PAGE_CONTEXTS).find(([p]) => path.startsWith(p))?.[1]
       || "The user is navigating in the console.";
     triggerComment(context);
@@ -261,17 +277,6 @@ export function FloatingCompanion() {
     return () => window.removeEventListener("hh-error", handler);
   }, [visible]);
 
-  // Trigger: Erster Besuch heute
-  useEffect(() => {
-    if (!visible) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const lastVisit = localStorage.getItem("hh_companion_last_visit");
-    if (lastVisit !== today) {
-      localStorage.setItem("hh_companion_last_visit", today);
-      setTimeout(() => triggerComment("The user logged in for the first time today. Greet them!", true), 2000);
-    }
-  }, [visible]);
-
   // Trigger: Zufällig alle 3-5 Minuten ein idle-Kommentar
   useEffect(() => {
     if (!visible) return;
@@ -306,7 +311,11 @@ export function FloatingCompanion() {
         title={state
           ? `Happy ${Math.round(state.happy)} · Hunger ${Math.round(state.hunger)} · Energy ${Math.round(state.energy)}\nAge: ${state.age_days}d · Pets: ${state.pet_count} · Feeds: ${state.feed_count}\nClick: streicheln · Rechtsklick: füttern`
           : "👋"}
-        onClick={() => {
+        onClick={(e) => {
+          if (e.button !== 0) return;
+          const now = Date.now();
+          if (now - lastInteractRef.current < 300) return;
+          lastInteractRef.current = now;
           if (mood === "sleep" || state?.is_sleeping) {
             interact("wake");
             return;
@@ -315,6 +324,9 @@ export function FloatingCompanion() {
         }}
         onContextMenu={(e) => {
           e.preventDefault();
+          const now = Date.now();
+          if (now - lastInteractRef.current < 300) return;
+          lastInteractRef.current = now;
           interact("feed");
         }}
       >
@@ -342,7 +354,7 @@ export function FloatingCompanion() {
 /** Aktivierungs-Helper: 5x auf ein Element klicken → Toggle */
 export function useCompanionActivation() {
   const clickCount = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   return () => {
     clickCount.current++;
