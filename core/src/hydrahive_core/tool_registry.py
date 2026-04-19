@@ -20,6 +20,7 @@ import asyncio
 import contextvars
 import json
 import logging
+import os
 import re as _re_shell
 import shlex as _shlex_shell
 from abc import ABC, abstractmethod
@@ -876,11 +877,38 @@ class ShellExecTool(BaseTool):
                 exec_command = f"sudo -n -u {_shlex.quote(_proj_user)} bash -c {_quoted}"
                 logger.info("shell_exec [%s] (UNRESTRICTED/user=%s): %s",
                             agent_id, _proj_user, command[:120])
-            else:
-                # Fallback: kein proj_<id>-User vorhanden → root via sudo
+            elif os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
+                # Explizite Dev-Escape-Hatch. In Prod nicht setzen.
+                # #747: frueher war das der Silent-Default.
                 exec_command = f"sudo bash -c {_quoted}"
-                logger.info("shell_exec [%s] (UNRESTRICTED/sudo-root fallback): %s",
-                            agent_id, command[:120])
+                logger.warning(
+                    "shell_exec [%s] (UNRESTRICTED/ROOT via Env-Override): %s",
+                    agent_id, command[:120],
+                )
+            else:
+                # #747: Hard-Block statt Silent-Fallback auf root.
+                # Vorher lief der Command als root via `sudo bash -c`, ohne
+                # dass User/Admin es merken konnte ("unrestricted" klingt nach
+                # Projekt-User, war aber root). Dev-Setups sollen entweder
+                # `execution_mode=elevated` nutzen (bwrap-sandboxed) oder den
+                # proj_<id>-User via POST /projects/{id}/provision anlegen.
+                logger.warning(
+                    "shell_exec [%s] (UNRESTRICTED) verweigert: proj_%s-User fehlt",
+                    agent_id, project_id or "<none>",
+                )
+                return {
+                    "error": (
+                        f"shell_exec im unrestricted-Modus verweigert: System-User "
+                        f"'proj_{project_id}' existiert nicht. Projekt provisionieren "
+                        f"(POST /projects/{project_id}/provision) oder "
+                        f"execution_mode=elevated verwenden (bwrap-sandboxed)."
+                        if project_id else
+                        "shell_exec im unrestricted-Modus verweigert: kein Projekt-"
+                        "Kontext gesetzt und kein proj_<id>-User verfuegbar."
+                    ),
+                    "command":   command,
+                    "exit_code": -1,
+                }
         else:
             exec_command = command
             logger.info("shell_exec [%s]: %s", agent_id, command[:120])
