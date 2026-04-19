@@ -1,8 +1,21 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
 import { CapabilitiesProvider } from "@/hooks/useCapabilities";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+function GuardLoading() {
+  const { t } = useTranslation();
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span className="text-sm">{t("common.loading")}</span>
+      </div>
+    </div>
+  );
+}
 
 const AdminLayout       = lazy(() => import("@/components/layout/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const LoginPage         = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -64,7 +77,7 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
       .finally(() => setChecked(true));
   }, [isAuthenticated, navigate]);
 
-  if (!checked) return null;
+  if (!checked) return <GuardLoading />;
   return <>{children}</>;
 }
 
@@ -82,7 +95,7 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
       .finally(() => setChecked(true));
   }, [navigate]);
 
-  if (!checked) return null;
+  if (!checked) return <GuardLoading />;
   return <>{children}</>;
 }
 
