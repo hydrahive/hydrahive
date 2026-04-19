@@ -609,6 +609,23 @@ def register_core_misc_routes(
             logger.error("Nginx-Log-Abfrage fehlgeschlagen: %s", e)
             raise HTTPException(500, "Log-Abfrage fehlgeschlagen")
 
+    @admin_router.get("/admin/memory/legacy-feedback")
+    def get_legacy_feedback_report():
+        """#715: Findet Projekt-Memory-Dateien die Core-Policy duplizieren.
+
+        Liefert Report ueber feedback_*.md Dateien in /projects/{id}/memory/
+        die in der Legacy-Allowlist stehen und Core-Regeln (#708) duplizieren.
+        Loescht nichts — reine Diagnose. Cleanup via scripts/dedupe_legacy_feedback.py.
+        """
+        from .memory_diagnose import scan_legacy_feedback, summarize_report
+        from .settings import settings as _s
+        try:
+            hits = scan_legacy_feedback(_s.projects_dir)
+            return summarize_report(hits)
+        except Exception as e:
+            logger.error("Legacy-Feedback-Scan fehlgeschlagen: %s", e)
+            raise HTTPException(500, f"Scan fehlgeschlagen: {e}")
+
     @admin_router.get("/agents/{agent_id}/logs")
     def get_agent_logs(agent_id: str, lines: int = 100):
         """Agent-spezifische Logs (gefiltert aus Core-Journal)."""
