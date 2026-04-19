@@ -357,6 +357,10 @@ class HydraHiveSettings(BaseSettings):
     boss_policy_enabled: bool = False      # Auto-Verification nach Mutations
     worktree_isolation: bool = False       # Git-Worktrees für Worker-Tasks
 
+    # #760: CORS allow-list für Direktzugriff auf Port 8765 (bypass nginx).
+    # Leer (Default) = nur same-origin; Dev-Setups mit Vite: ["http://localhost:5173"]
+    cors_allowed_origins: list[str] = []
+
 
 # Singleton
 settings = HydraHiveSettings()

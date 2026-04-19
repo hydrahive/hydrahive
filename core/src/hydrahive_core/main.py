@@ -818,6 +818,20 @@ app = FastAPI(
 )
 
 
+# #760: CORS — Schutz bei Direktzugriff auf Port 8765 (bypass nginx).
+# nginx macht im Standard-Deploy zusätzlich CORS; die Middleware hier
+# verhindert dass ein Dev-/Direktzugriff komplett offen ist. Leere
+# allow_origins → nur same-origin, keine CORS-Header für Cross-Origin.
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # #365: Request-ID Middleware für Distributed Tracing
 import uuid as _uuid
 from starlette.middleware.base import BaseHTTPMiddleware
