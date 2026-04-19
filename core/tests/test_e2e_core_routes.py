@@ -87,7 +87,6 @@ def _build_smoke_patches() -> list:
         mock.patch.object(main.runtime,        "start", return_value=None),
         mock.patch.object(main.runtime,        "stop",  return_value=None),
         mock.patch("hydrahive_core.main._load_or_create_jwt_secret", return_value="test-jwt-secret"),
-        mock.patch("hydrahive_core.main.USERS_FILE", Path("/dev/null")),
         mock.patch.object(main.rate_limiter,   "check_login"),   # verhindert 10-Login-Limit über Test-Sessions
     ]
 

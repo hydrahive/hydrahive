@@ -27,9 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/var/log/hydrahive/notifications.db")
+DB_PATH = settings.log_dir / "notifications.db"
 
 
 @dataclass

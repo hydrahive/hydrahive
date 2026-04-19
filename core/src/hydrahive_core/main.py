@@ -861,7 +861,7 @@ IncomingMessage = register_core_misc_routes(
 
 # ================================================================== Audit-Log
 
-AUDIT_LOG_FILE = Path("/var/log/hydrahive/audit.jsonl")
+AUDIT_LOG_FILE = settings.log_dir / "audit.jsonl"
 
 
 def _ensure_audit_log_path() -> None:

@@ -19,9 +19,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/var/log/hydrahive/tamagotchi.db")
+DB_PATH = settings.log_dir / "tamagotchi.db"
 
 # Decay-Raten pro Stunde (awake)
 HAPPY_DECAY        = 4.0     # -4 happy/h

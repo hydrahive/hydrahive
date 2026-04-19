@@ -14,9 +14,11 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+from .settings import settings
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("/var/log/hydrahive/turn_journal.db")
+DB_PATH = settings.log_dir / "turn_journal.db"
 
 
 class EventType(str, Enum):

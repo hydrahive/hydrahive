@@ -21,6 +21,7 @@ class HydraHiveSettings(BaseSettings):
     opt_dir: Path = Path("/opt/hydrahive")
     agents_dir: Path = Path("/agents")
     projects_dir: Path = Path("/projects")
+    log_dir: Path = Path("/var/log/hydrahive")
 
     # ── Konfig-Dateien (etc_dir) ──────────────────────────────────────────
 

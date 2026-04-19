@@ -50,7 +50,7 @@ def finished_noop(svc: JobService):
         await asyncio.wait_for(task, timeout=2)
         return meta.job_id
 
-    return asyncio.get_event_loop().run_until_complete(run())
+    return asyncio.run(run())
 
 
 @pytest.fixture
@@ -84,13 +84,16 @@ def client(svc):
 
 
 def _http_submit_as(svc: JobService, username: str) -> str:
-    meta = svc.submit(
-        type="noop", provider="internal", runner=_noop_runner,
-        created_by=username,
-    )
-    task = svc._tasks[meta.job_id]
-    asyncio.get_event_loop().run_until_complete(asyncio.wait_for(task, timeout=2))
-    return meta.job_id
+    async def run() -> str:
+        meta = svc.submit(
+            type="noop", provider="internal", runner=_noop_runner,
+            created_by=username,
+        )
+        task = svc._tasks[meta.job_id]
+        await asyncio.wait_for(task, timeout=2)
+        return meta.job_id
+
+    return asyncio.run(run())
 
 
 # ────────────────────────────────────────────── Helper: Ownership

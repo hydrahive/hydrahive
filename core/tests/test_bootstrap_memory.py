@@ -27,7 +27,7 @@ from hydrahive_core.memory_paths import MEMORY_INDEX_FILENAME
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _new_project(tmp_path: Path, pid: str = "test-bootstrap") -> Path:

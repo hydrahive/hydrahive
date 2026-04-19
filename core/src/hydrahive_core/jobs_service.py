@@ -341,10 +341,23 @@ class JobService:
         self._write_meta(meta)
         # Artifact-Dir lazy anlegen (erster record_artifact), damit leere
         # Jobs keinen leeren Ordner hinterlassen.
-        task = asyncio.create_task(
-            self._run(meta.job_id, runner),
-            name=f"job-{meta.job_id}",
-        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            task = loop.create_task(
+                self._run(meta.job_id, runner),
+                name=f"job-{meta.job_id}",
+            )
+        else:
+            task = loop.create_task(
+                self._run(meta.job_id, runner),
+                name=f"job-{meta.job_id}",
+            )
         self._tasks[meta.job_id] = task
         return meta
 

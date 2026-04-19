@@ -205,6 +205,27 @@ def _load_core_policy_text() -> str:
     return text
 
 
+def _load_instance_policy_text() -> str:
+    """#711: Lädt die optionale instanzweite Policy aus /etc/hydrahive.
+
+    Fehlende, leere oder unlesbare Dateien sind graceful und dürfen den
+    Prompt-Build nicht abbrechen.
+    """
+    path = settings.instance_policy
+    if not isinstance(path, Path):
+        logger.debug("instance-policy: ungültiger Pfad %r — übersprungen", path)
+        return ""
+    try:
+        if not path.exists():
+            logger.debug("instance-policy: Datei %s nicht vorhanden", path)
+            return ""
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("instance-policy: konnte %s nicht lesen: %s", path, exc)
+        return ""
+    return text
+
+
 def _load_project_policy_text(project_dir: "Path | None") -> str:
     """#712: Lädt die projekt-spezifische Policy aus <project_dir>/policy.md.
 
@@ -212,7 +233,7 @@ def _load_project_policy_text(project_dir: "Path | None") -> str:
     leer ist oder nicht gelesen werden kann — der Prompt-Build bricht in
     keinem Fall ab.
     """
-    if project_dir is None:
+    if not isinstance(project_dir, Path):
         return ""
     path = project_dir / "policy.md"
     try:
@@ -240,7 +261,7 @@ def _prompt_cache_hash(agent_dir: Path, mode: str, project_dir: "Path | None" = 
     if instance_policy.exists():
         parts.append(f"instance_policy:{instance_policy.stat().st_mtime:.0f}")
     # #712: Project-Policy
-    if project_dir is not None:
+    if isinstance(project_dir, Path):
         pp = project_dir / "policy.md"
         if pp.exists():
             parts.append(f"project_policy:{pp.stat().st_mtime:.0f}")
@@ -279,7 +300,7 @@ def _diagnose_cache_break(agent_id: str, agent_dir: Path, mode: str, project_dir
     if instance_policy.exists():
         segments["instance_policy"] = f"{instance_policy.stat().st_mtime:.0f}"
     # #712: Project-Policy
-    if project_dir is not None:
+    if isinstance(project_dir, Path):
         pp = project_dir / "policy.md"
         if pp.exists():
             segments["project_policy"] = f"{pp.stat().st_mtime:.0f}"
@@ -421,7 +442,11 @@ async def build_system_prompt(
         if cached:
             prompt_s, ts, h = cached
             if (time.time() - ts) < _PROMPT_CACHE_TTL:
-                current_h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+                current_h = _prompt_cache_hash(
+                    boss_cfg.agent_dir,
+                    mode,
+                    project_dir=getattr(boss_cfg, "project_dir", None),
+                )
                 if current_h == h:
                     static_cached = prompt_s
 
@@ -538,26 +563,21 @@ async def build_system_prompt(
             except Exception as _srv_err:
                 logger.debug("Server-Injection übersprungen: %s", _srv_err)
 
-        # #710: Core-Policy als versionierte Markdown-Datei statt Hardcode.
-        # Agent-unabhängig — greift auch wenn kein agent_dir gesetzt ist.
-        _core_policy_text = _load_core_policy_text()
-        if _core_policy_text:
-            channels.policies = _core_policy_text
-
         _handbook_path = settings.system_handbook
         if _handbook_path.exists():
             _handbook_text = _handbook_path.read_text(encoding="utf-8").strip()
             if _handbook_text:
                 channels.handbook = _handbook_text
 
-        # #711: Instance-Policy — optionale instanzweite Admin-Schicht.
-        # Resolver-Kaskade: core (handbook) → instance (/etc/hydrahive/instance_policy.md).
-        # Fehlende oder leere Datei ist graceful — kein Fehler, kein Fallback.
-        _instance_policy_path = settings.instance_policy
-        if _instance_policy_path.exists():
-            _instance_policy_text = _instance_policy_path.read_text(encoding="utf-8").strip()
-            if _instance_policy_text:
-                channels.instance_policy = _instance_policy_text
+        # #710/#711/#712: Policy-Kaskade in genau einem Static-Slot.
+        # Reihenfolge ist absichtlich Core → Instance → Project, damit lokale
+        # Regeln näher am Ende stehen ohne zusätzliche ContextChannels-Slots.
+        _policy_parts = [
+            _load_core_policy_text(),
+            _load_instance_policy_text(),
+            _load_project_policy_text(getattr(boss_cfg, "project_dir", None)),
+        ]
+        channels.policies = "\n\n".join(p for p in _policy_parts if p)
 
         if boss_cfg.agent_dir:
             blueprint_ctx = _load_agent_blueprint_context(boss_cfg.agent_dir)
@@ -569,7 +589,11 @@ async def build_system_prompt(
 
         static_cached = channels.to_static_str()
         if boss_cfg.agent_dir:
-            h = _prompt_cache_hash(boss_cfg.agent_dir, mode)
+            h = _prompt_cache_hash(
+                boss_cfg.agent_dir,
+                mode,
+                project_dir=getattr(boss_cfg, "project_dir", None),
+            )
             _STATIC_PROMPT_CACHE[_cache_key] = (static_cached, time.time(), h)
 
     # ── Dynamic-Channels füllen ───────────────────────────────────────

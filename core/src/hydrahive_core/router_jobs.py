@@ -96,7 +96,7 @@ def register_jobs_routes(
     # ── Admin-Scope ──────────────────────────────────────────────────────
 
     @admin_router.post("/admin/jobs", status_code=201)
-    def admin_submit_job(req: JobSubmitRequest):
+    async def admin_submit_job(req: JobSubmitRequest):
         """Phase-1-Smoke: nur ``type='noop'`` erlaubt."""
         runner = _ADMIN_SUBMITTABLE_TYPES.get(req.type)
         if runner is None:
