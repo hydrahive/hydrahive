@@ -1291,32 +1291,21 @@ def register_project_routes(
 
     # #554: Collaborative Composer — WebSocket zu einem per-Projekt Yjs-Doc.
     # Mehrere User teilen den Composer-Text live (screen-x für Prompts).
-    # Auth: #766 Cookie-first (Browser sendet hydrahive_token-Cookie
-    # automatisch bei same-origin); Query-Param `token` als Fallback für
-    # CLI/Tool-Clients die keinen Cookie-Jar haben. Der Token wird VOR
-    # websocket.accept() validiert — sonst verliert Yjs die Initial-Sync-
-    # Messages.
+    # Auth läuft über Query-Param `token`, weil Browser keine Custom-Header
+    # auf WebSockets setzen können. Der Token wird VOR websocket.accept()
+    # validiert — sonst verliert Yjs die Initial-Sync-Messages.
     @public_router.websocket("/projects/{project_id}/collab")
     async def collab_ws(
         websocket: WebSocket,
         project_id: str,
-        token: str | None = Query(None, description="JWT-Token (optional — Cookie-Fallback für Browser-Clients)"),
+        token: str = Query(..., description="JWT-Token (Bearer-Äquivalent für WS)"),
     ):
-        from .auth_utils import AUTH_COOKIE_NAME
         from .collab_yjs import FastApiWsChannel, get_yjs_server, record_yjs_debug_event
 
         # Room-Name strikt validieren — verhindert Path-Traversal in der
         # SQLite-Datei, da project_id in den Dateinamen einfließt.
         if not _COLLAB_ROOM_NAME_RE.match(project_id):
             await websocket.close(code=4400, reason="Ungültige Projekt-ID")
-            return
-
-        # #766: Token aus Query-Param ODER Cookie (Browser-Default).
-        # Query-Priority für Backward-Compat mit bestehenden Clients.
-        if not token:
-            token = websocket.cookies.get(AUTH_COOKIE_NAME, "")
-        if not token:
-            await websocket.close(code=4401, reason="Kein Token")
             return
 
         # Auth vor accept — sonst gehen Yjs-Initial-Messages verloren.
