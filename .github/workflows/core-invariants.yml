@@ -99,3 +99,6 @@ jobs:
       - name: Build (vite)
         working-directory: console
         run: npm run build
+
+      - name: Verify CSP inline-script hash (#751)
+        run: python3 scripts/verify_csp_hash.py
