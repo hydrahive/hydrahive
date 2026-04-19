@@ -106,7 +106,12 @@ async def start_telegram_bot(
         chat_id  = chat.id
         user_id  = str(user.id)
         from_name = user.full_name or user.username or user_id
-        _dbg("received", agent=agent_id, user=from_name, user_id=user_id, text=(msg.text or "")[:80], is_group=is_group)
+        # Butler kann uns auf einen anderen Agenten umleiten. Wir schreiben
+        # aber NICHT die closure-Variable `agent_id` um — sonst markiert
+        # Python die Variable als local und der Zugriff oben bricht mit
+        # UnboundLocalError (2026-04-19, Telegram-Debug-Marathon).
+        active_agent = agent_id
+        _dbg("received", agent=active_agent, user=from_name, user_id=user_id, text=(msg.text or "")[:80], is_group=is_group)
 
         # Gruppen-/Privat-Filter
         if is_group and not cfg.get("allow_groups", False):
@@ -141,7 +146,7 @@ async def start_telegram_bot(
                 else:
                     text = "[Sprachnachricht — Transkription fehlgeschlagen]"
             except Exception as e:
-                logger.warning("Telegram Audio-Transkription für %s: %s", agent_id, e)
+                logger.warning("Telegram Audio-Transkription für %s: %s", active_agent, e)
                 text = "[Sprachnachricht]"
 
         if not text:
@@ -189,18 +194,18 @@ async def start_telegram_bot(
                     _instr = str(_p.get("instruction", "")).strip()
                     if _instr:
                         from .butler_executor import get_agent_display_name as _gname
-                        _name = _gname(agent_id)
+                        _name = _gname(active_agent)
                         enriched = f"Dein Name ist {_name}.\n[BUTLER-VORGABE: {_instr}]\n{enriched}"
                 if _sub in ("agent_reply", "agent_reply_guided", "forward"):
                     _aid = str(_p.get("agent_id", "")).strip()
                     if _aid:
-                        agent_id = _aid  # noqa: PLW2901
+                        active_agent = _aid
         except Exception as _be:
             logger.debug("Butler check Telegram: %s", _be)
 
         # v2: Messenger-Router für Projekt-Lookup
         from .messenger_router import messenger_router as _mr
-        _project_id = _mr.resolve_telegram(str(chat_id)) or agent_id
+        _project_id = _mr.resolve_telegram(str(chat_id)) or active_agent
 
         # v2: Projekt-scoped Butler-Flows prüfen (#566)
         try:
@@ -237,11 +242,11 @@ async def start_telegram_bot(
         virtual_cfg = _real_cfg or _PC(
             id=_project_id,
             identity=_PI(name=_project_id),
-            agents=_PA(boss=agent_id, workers=[]),
+            agents=_PA(boss=active_agent, workers=[]),
         )
 
         try:
-            _dbg("orch_start", agent=agent_id, project=_project_id)
+            _dbg("orch_start", agent=active_agent, project=_project_id)
             response_parts: list[str] = []
             chunk_count = 0
             async for chunk in orchestrator.handle_message_stream(
@@ -274,9 +279,9 @@ async def start_telegram_bot(
 
             response = "".join(response_parts).strip()
             if not response:
-                _dbg("empty_response", agent=agent_id)
+                _dbg("empty_response", agent=active_agent)
                 return
-            _dbg("sending", agent=agent_id, chars=len(response), preview=response[:60])
+            _dbg("sending", agent=active_agent, chars=len(response), preview=response[:60])
 
             if is_audio:
                 try:
@@ -296,8 +301,8 @@ async def start_telegram_bot(
                 await context.bot.send_message(chat_id=chat_id, text=response[i:i+4096])
 
         except Exception as e:
-            _dbg("handler_exc", agent=agent_id, err=str(e)[:120], tb=traceback.format_exc()[-500:])
-            logger.error("Telegram-Handler für %s: %s", agent_id, e)
+            _dbg("handler_exc", agent=active_agent, err=str(e)[:120], tb=traceback.format_exc()[-500:])
+            logger.error("Telegram-Handler für %s: %s", active_agent, e)
 
     # Raw-Probe: sieht jedes Update vor dem eigentlichen MessageHandler.
     # Wenn `_handle_message` bei filters.ALL stumm bleibt aber raw_update
