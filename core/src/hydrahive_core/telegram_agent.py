@@ -231,9 +231,20 @@ async def start_telegram_bot(
                 sender=f"telegram:{user_id}",
                 execution_mode=execution_mode,
             ):
-                data = chunk if isinstance(chunk, dict) else {}
-                if "text" in data:
-                    response_parts.append(data["text"])
+                # orchestrator.handle_message_stream yielded SSE-Strings der Form
+                # "data: {...}\n\n" — vorher wurde das als dict geprüft, was NIE
+                # matched → Telegram-Bot blieb stumm (2026-04-19).
+                if not isinstance(chunk, str):
+                    continue
+                for line in chunk.splitlines():
+                    if not line.startswith("data: "):
+                        continue
+                    try:
+                        data = json.loads(line[6:].strip())
+                    except Exception:
+                        continue
+                    if isinstance(data, dict) and "text" in data:
+                        response_parts.append(data["text"])
 
             response = "".join(response_parts).strip()
             if not response:
