@@ -327,7 +327,23 @@ def register_core_misc_routes(
             logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
             return {"created": True, "username": req.username, "role": "admin"}
 
-    @public_router.post("/auth/login")
+    @public_router.post(
+        "/auth/login",
+        summary="Login — Dual-Mode Auth (Cookie + Bearer)",
+        description=(
+            "Prüft Credentials und stellt ein JWT aus.\n\n"
+            "**Response liefert das Token auf ZWEI Wegen:**\n"
+            "- `Set-Cookie: hydrahive_token=<jwt>` — httpOnly, SameSite=Lax. "
+            "Gedacht für Browser-Clients (Console). Nachfolgende Requests "
+            "brauchen kein `Authorization`-Header — `credentials:'include'` reicht.\n"
+            "- Response-Body `access_token` — für API-Clients (CLI, MCP, "
+            "externe Scripts, CI). Als `Authorization: Bearer <jwt>` an "
+            "Folge-Requests anhängen.\n\n"
+            "**Produktentscheidung (#767):** Browser nutzt den Cookie-Pfad, "
+            "CLI/MCP/API-Clients den Bearer-Pfad. Backend akzeptiert beide "
+            "dauerhaft parallel — kein Breaking-Change geplant."
+        ),
+    )
     def login(req: LoginRequest, request: Request, response: Response):
         check_login_rate(request.client.host if request.client else "unknown")
         # #763: Cookie-Lebensdauer matcht JWT_EXPIRE_H (aus main). Lazy-Import
