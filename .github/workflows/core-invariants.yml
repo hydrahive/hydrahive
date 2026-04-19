@@ -37,6 +37,24 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
-      - name: Run architecture invariants + composer tests
+      - name: Run architecture + composer + security/isolation/tool tests
         working-directory: core
-        run: python -m pytest tests/test_architecture_invariants.py tests/test_composer.py tests/test_composer_admin.py tests/test_composer_project.py tests/test_prompt_cache_namespace.py tests/test_composer_etag.py tests/test_browser_ssrf.py -q
+        run: |
+          python -m pytest \
+            tests/test_architecture_invariants.py \
+            tests/test_composer.py \
+            tests/test_composer_admin.py \
+            tests/test_composer_project.py \
+            tests/test_prompt_cache_namespace.py \
+            tests/test_composer_etag.py \
+            tests/test_browser_ssrf.py \
+            tests/test_security.py \
+            tests/test_security_regressions.py \
+            tests/test_tool_guard.py \
+            tests/test_shell_sandbox.py \
+            tests/test_isolation_enforcement.py \
+            tests/test_subagent_isolation.py \
+            tests/test_subagent_write_scope.py \
+            tests/test_review_guards.py \
+            tests/test_access_control.py \
+            -q
