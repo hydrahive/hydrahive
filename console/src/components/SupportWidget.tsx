@@ -46,12 +46,11 @@ export function SupportWidget() {
     setSending(true);
 
     try {
-      const token = localStorage.getItem("hydrahive_token") ?? "";
       const res = await fetch(`/api/agents/${AGENT_ID}/message/stream`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({ content }),
       });

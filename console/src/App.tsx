@@ -61,9 +61,8 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) { setChecked(true); return; }
     if (sessionStorage.getItem("hh_wizard_done")) { setChecked(true); return; }
-    const token = localStorage.getItem("hydrahive_token") || "";
     fetch("/api/me/wizard-status", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     })
       .then(r => r.json())
       .then((d: { done: boolean }) => {

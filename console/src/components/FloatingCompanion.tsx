@@ -98,10 +98,11 @@ export function FloatingCompanion() {
 
   // State vom Server ziehen — authoritative Mood-Quelle
   const fetchState = () => {
-    const token = localStorage.getItem("hydrahive_token") || "";
-    if (!token) return;
+    // #764: localStorage-Check bleibt als "skip wenn nicht eingeloggt"-Heuristik,
+    // Auth selbst läuft über Cookie.
+    if (!localStorage.getItem("hydrahive_token")) return;
     fetch("/api/agents/personal_admin/tamagotchi/state", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -123,11 +124,11 @@ export function FloatingCompanion() {
 
   // Click = streicheln
   const interact = (kind: "pet" | "feed" | "sleep" | "wake") => {
-    const token = localStorage.getItem("hydrahive_token") || "";
-    if (!token) return;
+    if (!localStorage.getItem("hydrahive_token")) return;
     fetch("/api/agents/personal_admin/tamagotchi/interact", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind }),
     })
       .then(r => r.ok ? r.json() : null)
@@ -191,11 +192,11 @@ export function FloatingCompanion() {
 
     setMood("think");
 
-    const token = localStorage.getItem("hydrahive_token") || "";
     const lang = document.documentElement.lang || (navigator.language?.startsWith("de") ? "de" : "en");
     fetch("/api/agents/personal_admin/tamagotchi", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ context, lang }),
     })
       .then(r => r.ok ? r.json() : null)

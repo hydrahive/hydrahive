@@ -87,9 +87,8 @@ export function AdminFunPlayer() {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem("hydrahive_token") || "";
         const res = await fetch(`/api/admin/adminfun/stream/${encodeURIComponent(settings.current_track)}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
@@ -234,10 +233,9 @@ export function AdminFunPlayer() {
     try {
       const form = new FormData();
       form.append("file", file);
-      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/admin/adminfun/upload", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: form,
       });
       if (!res.ok) {

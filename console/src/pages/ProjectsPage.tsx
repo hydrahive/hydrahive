@@ -117,8 +117,7 @@ function ProjectsContent() {
 
   useEffect(() => {
     load();
-    const token = localStorage.getItem("hydrahive_token") || "";
-    fetch("/api/admin/codeserver/status", { headers: { Authorization: `Bearer ${token}` } })
+    fetch("/api/admin/codeserver/status", { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.password) setCodeserverPassword(d.password); })
       .catch(e => console.error("Failed to load code-server status", e));

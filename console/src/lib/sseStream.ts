@@ -41,10 +41,11 @@ function isPermanentError(status: number): boolean {
  * Throws bei Fehler. Resolved wenn Stream normal endet (evt.done).
  */
 export async function sseStream(opts: SSEStreamOptions): Promise<void> {
-  const token = localStorage.getItem("hydrahive_token") || "";
+  // #764 Phase 2: Cookie-Auth. fetch-basiertes SSE erlaubt credentials:'include'.
   const res = await fetch(opts.url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts.body),
     signal: opts.signal,
   });

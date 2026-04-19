@@ -16,9 +16,10 @@ import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const API = "/api";
+// #764 Phase 2: Cookie-Auth via credentials:'include' im fetch.
+// Helper liefert nur noch Content-Type; fetch-Callsites müssen credentials setzen.
 function authHeaders() {
-  const token = localStorage.getItem("hydrahive_token") || "";
-  return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  return { "Content-Type": "application/json" };
 }
 
 // ── Node-Definitionen ─────────────────────────────────────────────────────────
@@ -217,7 +218,7 @@ function PipelineEditor({ pipeline, onSaved, onClose }: {
       const body = JSON.stringify({ name, enabled: pipeline?.enabled ?? true, nodes, edges });
       const url = pipeline ? `${API}/pipelines/${pipeline.id}` : `${API}/pipelines`;
       const method = pipeline ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: authHeaders(), body });
+      const res = await fetch(url, { method, credentials: "include", headers: authHeaders(), body });
       if (!res.ok) throw new Error(await res.text());
       onSaved();
     } catch (e) {
@@ -305,7 +306,7 @@ export function FilePipelineTab() {
 
   async function load() {
     try {
-      const res = await fetch(`${API}/pipelines`, { headers: authHeaders() });
+      const res = await fetch(`${API}/pipelines`, { credentials: "include", headers: authHeaders() });
       const data = await res.json();
       setPipelines(data);
     } catch { /* ignore */ }
@@ -315,7 +316,7 @@ export function FilePipelineTab() {
   useEffect(() => { load(); }, []);
 
   async function toggle(p: Pipeline) {
-    await fetch(`${API}/pipelines/${p.id}/toggle`, { method: "PATCH", headers: authHeaders() });
+    await fetch(`${API}/pipelines/${p.id}/toggle`, { method: "PATCH", credentials: "include", headers: authHeaders() });
     load();
   }
 
@@ -324,7 +325,7 @@ export function FilePipelineTab() {
       title: t("confirm.titleDelete"),
       message: t("confirm.deletePipeline", { name: p.name }),
       action: async () => {
-        await fetch(`${API}/pipelines/${p.id}`, { method: "DELETE", headers: authHeaders() });
+        await fetch(`${API}/pipelines/${p.id}`, { method: "DELETE", credentials: "include", headers: authHeaders() });
         load();
       },
     });
@@ -336,6 +337,7 @@ export function FilePipelineTab() {
     try {
       const res = await fetch(`${API}/pipelines/${p.id}/run`, {
         method: "POST",
+        credentials: "include",
         headers: authHeaders(),
         body: JSON.stringify({ file_path: runPath }),
       });

@@ -160,9 +160,8 @@ export function ExtensionsPage() {
     if (!quiet) setLoading(true);
     else setRefreshing(true);
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/admin/extensions", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setExtensions(await res.json());
@@ -191,12 +190,11 @@ export function ExtensionsPage() {
     setLog([]);
     setLogDone(null);
 
-    const token = localStorage.getItem("hydrahive_token") || "";
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
       const res = await fetch(`/api/admin/extensions/${id}/${action}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {

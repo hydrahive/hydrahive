@@ -44,7 +44,6 @@ const GROUP_LABELS: Record<string, string> = {
 export function OnboardingWizardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const token = localStorage.getItem("hydrahive_token") || "";
 
   const [group,   setGroup]   = useState<string>("standard");
   const [loading, setLoading] = useState(true);
@@ -54,7 +53,7 @@ export function OnboardingWizardPage() {
 
   useEffect(() => {
     fetch("/api/me/wizard-status", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     })
       .then(r => r.json())
       .then((d: { done: boolean; group: string }) => {
@@ -67,7 +66,7 @@ export function OnboardingWizardPage() {
       })
       .catch(() => setError("Wizard-Status konnte nicht geladen werden"))
       .finally(() => setLoading(false));
-  }, [navigate, token]);
+  }, [navigate]);
 
   function toggle(id: string) {
     setEnabled(prev => ({ ...prev, [id]: !prev[id] }));
@@ -83,7 +82,8 @@ export function OnboardingWizardPage() {
     try {
       const res = await fetch("/api/me/wizard", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tools }),
       });
       if (!res.ok) {

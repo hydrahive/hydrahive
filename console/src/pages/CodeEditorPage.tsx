@@ -27,9 +27,8 @@ export function CodeEditorPage() {
 
   async function load() {
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/admin/codeserver/status", {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setStatus(await res.json());
@@ -53,10 +52,9 @@ export function CodeEditorPage() {
     setInstallDone(null);
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/admin/codeserver/install", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {

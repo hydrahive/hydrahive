@@ -93,10 +93,9 @@ function useUpdateStatus(isAdmin: boolean) {
 
     pollRef.current = setInterval(async () => {
       if (finished) { clearInterval(pollRef.current!); pollRef.current = null; return; }
-      const token = localStorage.getItem("hydrahive_token") || "";
       try {
         const res = await fetch("/api/admin/update/status", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (!res.ok) {
           retries++;

@@ -33,14 +33,13 @@ export function NotificationBell() {
   useEffect(() => {
     loadAll();
 
-    // SSE-Stream für Live-Updates (fetch statt EventSource → Authorization-Header, kein Token in URL)
-    const token = localStorage.getItem("hydrahive_token") || "";
+    // SSE-Stream für Live-Updates (fetch statt EventSource — Cookie-Auth via credentials:'include')
     let active = true;
     const ctrl = new AbortController();
     (async () => {
       try {
         const res = await fetch("/api/notifications/stream", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) return;

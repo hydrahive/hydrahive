@@ -55,10 +55,9 @@ export function SearchPage() {
     setInstalling(true);
     setInstallLog([]);
     setInstallDone(null);
-    const token = localStorage.getItem("hydrahive_token") || "";
     const res = await fetch("/api/admin/searxng/install", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     });
     if (!res.ok || !res.body) {
       setInstallLog([`Fehler: HTTP ${res.status}`]);

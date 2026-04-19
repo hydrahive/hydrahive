@@ -16,7 +16,6 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.E
 
 export function MigrationPage() {
   const { t } = useTranslation();
-  const token = localStorage.getItem("hydrahive_token") || "";
 
   // ── Export ──────────────────────────────────────────────────────────────
   const [exportLoading, setExportLoading] = useState(false);
@@ -28,7 +27,7 @@ export function MigrationPage() {
     try {
       const res = await fetch(`/api/admin/migration/export?include_amem=${exportAmem}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ detail: res.statusText }));
@@ -63,7 +62,7 @@ export function MigrationPage() {
       form.append("file", importFile);
       const res = await fetch("/api/admin/migration/import", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: form,
       });
       if (!res.ok) {
@@ -104,7 +103,7 @@ export function MigrationPage() {
     try {
       const res = await fetch("/api/admin/migration/transfer", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: form,
       });
       if (!res.ok) {

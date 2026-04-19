@@ -1376,9 +1376,8 @@ function AgentBackupSection() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleExport() {
-    const token = localStorage.getItem("hydrahive_token") ?? "";
     const res = await fetch("/api/me/agent/export", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     });
     if (!res.ok) { alert(t("common.error")); return; }
     const blob = await res.blob();
@@ -1396,12 +1395,11 @@ function AgentBackupSection() {
     if (!file) return;
     setImporting(true); setImportMsg("");
     try {
-      const token = localStorage.getItem("hydrahive_token") ?? "";
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/me/agent/import", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: fd,
       });
       const data = await res.json();
@@ -2454,10 +2452,10 @@ function WhatsAppTab() {
                   <button type="button" onClick={async () => {
                     setPreviewPlaying(cfg.voice_name);
                     try {
-                      const token = localStorage.getItem("hydrahive_token") || "";
                       const res = await fetch("/api/me/whatsapp/voice-preview", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ voice: cfg.voice_name }),
                       });
                       if (res.ok) {

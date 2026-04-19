@@ -287,10 +287,10 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   async function previewVoice() {
     setWaPreviewPlaying(true);
     try {
-      const token = localStorage.getItem("hydrahive_token") || "";
       const res = await fetch("/api/me/whatsapp/voice-preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voice: waVoiceName,
           text: t("projectSettings.whatsapp.previewText", { defaultValue: "Hallo, ich bin dein HydraHive Assistent." }),
