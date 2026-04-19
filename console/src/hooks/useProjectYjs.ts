@@ -117,9 +117,13 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
       ydoc,
       {
         connect: true,
-        // #766: Kein params:{token} mehr — Browser sendet den
-        // httpOnly hydrahive_token-Cookie automatisch beim WS-Handshake
-        // (same-origin). Backend liest ihn aus websocket.cookies.
+        // #766-Partial-Rollback: Browser-Cookie-Auth für WebSocket-Handshake
+        // funktionierte nicht zuverlässig (Collab-Sync brach — keine
+        // WS-Connects auf Backend-Seite nach Deploy). Query-Param-Token
+        // ist der funktionierende Pfad. Backend akzeptiert weiterhin
+        // Cookie als Fallback (für CLI/Tool-Clients ohne Query-Token).
+        // Cookie-WS-Debug wird separat angegangen.
+        params: { token },
         // #554: Cross-Browser-Sync muss über den HydraHive/pycrdt-Server
         // laufen. y-websocket nutzt sonst im selben Browser zusätzlich
         // BroadcastChannel und kann Backend-Probleme verdecken.
