@@ -28,28 +28,27 @@ GIT_MUTATE  — Lokale Git-Mutation (commit/branch/pull/reset/clone).
 GIT_PUSH    — Remote-Push (git_push). Separat, da auch in full_worktree
               blockiert (Auto-Merge-Sperre).
 NETWORK     — Netzwerk-Calls OHNE lokalen Schreibeffekt (V1-Klassifikation).
-              Für V1 umfasst NETWORK konkret: ask_agent. ask_agent gilt
-              isolations-technisch als "lokal nicht-schreibend" — der
-              aufgerufene Sub-Agent läuft selbst in eigenem Kontext, evtl.
-              mit eigener Isolation. TRANSITIVE Effekte des Ziel-Agenten
-              (Schreibzugriffe dort, Netz-/Remote-Operationen) werden erst
-              bei Runtime-Integration (#662/#653) adressiert. In V1 heißt
-              NETWORK=allow also NICHT, dass das Ziel-Agent-Verhalten
-              ebenfalls in dieser Sandbox gefangen wäre.
+              Für V1 umfasst NETWORK konkret: ask_agent. Der aufgerufene
+              Ziel-Agent läuft selbst in eigenem Kontext und ist NICHT
+              transitiv von der Isolation des Callers erfasst — ein in
+              read_only/patch_only gefangener Sub-Agent könnte sonst via
+              ask_agent einen uninsulierten Agent spawnen (#754). Deshalb
+              ist NETWORK in read_only/patch_only BLOCKED; nur
+              full_worktree erlaubt ask_agent.
 META        — Tool-Meta (tool_search, get_final_message).
 UNKNOWN     — Nicht klassifiziertes Tool. Fail-closed in read_only/
               patch_only, fail-open in full_worktree (dort ist das
               Isolations-Modell selbst bereits full write).
 
-Policy-Matrix (V1)
-------------------
+Policy-Matrix (V1 + #754)
+-------------------------
               read_only  patch_only  full_worktree
 READ          allow      allow       allow
 WRITE         block      block       allow
 SHELL         block      block       allow
 GIT_MUTATE    block      block       allow
 GIT_PUSH      block      block       block
-NETWORK       allow      allow       allow
+NETWORK       block      block       allow     (ask_agent, Transitivitäts-Schutz)
 META          allow      allow       allow
 UNKNOWN       block      block       allow
 """
@@ -113,15 +112,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
 
 # Matrix: (mode, category) → allowed?
 _ALLOW: set[tuple[IsolationMode, ToolCategory]] = {
-    # Everyone allows READ/NETWORK/META
+    # Everyone allows READ/META
     (m, c)
     for m in IsolationMode
-    for c in (ToolCategory.READ, ToolCategory.NETWORK, ToolCategory.META)
+    for c in (ToolCategory.READ, ToolCategory.META)
 } | {
-    # full_worktree: WRITE, SHELL, GIT_MUTATE, UNKNOWN erlaubt (GIT_PUSH bleibt blocked)
+    # full_worktree: WRITE, SHELL, GIT_MUTATE, NETWORK, UNKNOWN erlaubt
+    # (GIT_PUSH bleibt blocked; NETWORK in read_only/patch_only block — #754)
     (IsolationMode.FULL_WORKTREE, ToolCategory.WRITE),
     (IsolationMode.FULL_WORKTREE, ToolCategory.SHELL),
     (IsolationMode.FULL_WORKTREE, ToolCategory.GIT_MUTATE),
+    (IsolationMode.FULL_WORKTREE, ToolCategory.NETWORK),
     (IsolationMode.FULL_WORKTREE, ToolCategory.UNKNOWN),
 }
 

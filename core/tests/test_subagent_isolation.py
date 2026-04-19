@@ -96,7 +96,7 @@ MATRIX = {
     (IsolationMode.READ_ONLY,      ToolCategory.SHELL):      False,
     (IsolationMode.READ_ONLY,      ToolCategory.GIT_MUTATE): False,
     (IsolationMode.READ_ONLY,      ToolCategory.GIT_PUSH):   False,
-    (IsolationMode.READ_ONLY,      ToolCategory.NETWORK):    True,
+    (IsolationMode.READ_ONLY,      ToolCategory.NETWORK):    False,
     (IsolationMode.READ_ONLY,      ToolCategory.META):       True,
     (IsolationMode.READ_ONLY,      ToolCategory.UNKNOWN):    False,
 
@@ -105,7 +105,7 @@ MATRIX = {
     (IsolationMode.PATCH_ONLY,     ToolCategory.SHELL):      False,
     (IsolationMode.PATCH_ONLY,     ToolCategory.GIT_MUTATE): False,
     (IsolationMode.PATCH_ONLY,     ToolCategory.GIT_PUSH):   False,
-    (IsolationMode.PATCH_ONLY,     ToolCategory.NETWORK):    True,
+    (IsolationMode.PATCH_ONLY,     ToolCategory.NETWORK):    False,
     (IsolationMode.PATCH_ONLY,     ToolCategory.META):       True,
     (IsolationMode.PATCH_ONLY,     ToolCategory.UNKNOWN):    False,
 
@@ -166,13 +166,26 @@ def test_full_worktree_blocks_git_push():
     assert "git_push" in d.reason
 
 
-def test_read_only_allows_ask_agent():
-    # ask_agent ist in V1 als NETWORK / lokal-nicht-schreibend klassifiziert.
-    # Transitive Effekte des aufgerufenen Ziel-Agenten werden NICHT von
-    # dieser Policy erfasst — das passiert erst bei Runtime-Integration
-    # (#662/#653). allow=True bedeutet hier: der Aufruf selbst ist aus
-    # Sicht des lokalen Workspace kein Write.
+def test_read_only_blocks_ask_agent():
+    # #754: ask_agent (NETWORK) ist in read_only/patch_only geblockt.
+    # Sonst könnte ein isolierter Sub-Agent via ask_agent einen
+    # uninsulierten Ziel-Agent spawnen und die Isolation umgehen
+    # (Transitivitäts-Lücke). Nur full_worktree erlaubt ask_agent.
     d = allow_tool(IsolationMode.READ_ONLY, "ask_agent")
+    assert d.allowed is False
+    assert "network" in d.reason.lower()
+
+
+def test_patch_only_blocks_ask_agent():
+    # #754: analog read_only — patch_only blockt NETWORK.
+    d = allow_tool(IsolationMode.PATCH_ONLY, "ask_agent")
+    assert d.allowed is False
+
+
+def test_full_worktree_allows_ask_agent():
+    # full_worktree erlaubt ask_agent — hier existiert keine harte
+    # Isolations-Garantie, die durch Transitivität umgangen werden könnte.
+    d = allow_tool(IsolationMode.FULL_WORKTREE, "ask_agent")
     assert d.allowed is True
 
 
