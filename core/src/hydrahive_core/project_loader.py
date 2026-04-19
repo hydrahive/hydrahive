@@ -87,6 +87,22 @@ class ProjectLoader:
         if config is None:
             self._unregister_dir(project_dir)
             return None
+        # #707: Phantom-Projekte filtern. Templates in installer/templates/*
+        # haben identity.name="" — landen sie (via alter Installer-Version,
+        # Backup-Restore oder fehlerhaftem Copy-Flow) in /projects/, erscheinen
+        # sie ohne Fix als zombie-artige "Default-Projekte", die nach Löschung
+        # wiederkommen. Ein reales, vom User angelegtes Projekt hat immer einen
+        # Namen (Wizard erzwingt non-empty, Models akzeptieren keinen Reset auf "").
+        name = (getattr(getattr(config, "identity", None), "name", "") or "").strip()
+        if not name:
+            with self._lock:
+                self._projects.pop(config.id, None)
+            logger.warning(
+                "Projekt-Verzeichnis ohne Namen uebersprungen: %s (template-leak?) — "
+                "entweder identity.name setzen oder Verzeichnis nach _deleted_ umbenennen",
+                project_dir,
+            )
+            return None
         with self._lock:
             existing = self._projects.get(config.id)
             self._projects[config.id] = config

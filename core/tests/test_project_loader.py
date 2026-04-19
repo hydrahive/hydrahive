@@ -154,6 +154,57 @@ def test_register_manuell_nach_create(tmp_projects_dir, loader):
     assert "proj-new" in loader.projects
 
 
+# ============================================================= #707 Phantom-Filter
+
+def test_scan_ueberspringt_template_leak_ohne_name(tmp_projects_dir):
+    """#707: Eine Template-config.yaml (identity.name='') darf nicht als Projekt auftauchen.
+
+    Reproduziert das Phantom-Problem: alte Installer-Versionen haben
+    installer/templates/*/ nach /projects/ kopiert. Templates haben leeren
+    name — ohne Filter taucht das als Phantom-Projekt in der API auf und
+    kehrt nach Lösch-Versuchen durch Restart wieder zurück.
+    """
+    from hydrahive_core.project_loader import ProjectLoader
+
+    phantom = tmp_projects_dir / "blank"
+    phantom.mkdir()
+    (phantom / "config.yaml").write_text(
+        "\n".join([
+            'version: "2.0.0"',
+            "identity:",
+            '  name: ""',
+            '  description: ""',
+            "llm:",
+            "  provider: anthropic",
+            "  model: claude-sonnet-4-6",
+            "members: []",
+            "",
+        ]),
+        encoding="utf-8",
+    )
+
+    pl = ProjectLoader(projects_dir=tmp_projects_dir)
+    pl._scan_all()
+
+    assert "blank" not in pl.projects
+
+
+def test_register_filtert_phantom_projekt_aus_bestehendem_state(tmp_projects_dir, loader):
+    """#707: Wird ein bestehendes Projekt auf name='' geändert, fliegt es aus dem State."""
+    project_dir = tmp_projects_dir / "proj-a"
+    assert "proj-a" in loader.projects
+
+    (project_dir / "config.yaml").write_text(
+        'id: proj-a\nversion: "2.0.0"\nidentity:\n  name: ""\n',
+        encoding="utf-8",
+    )
+
+    cfg = loader.register(project_dir)
+
+    assert cfg is None
+    assert "proj-a" not in loader.projects
+
+
 # ============================================================= Globaler Singleton
 
 def test_global_loader_set_get():
