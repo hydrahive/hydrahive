@@ -48,6 +48,7 @@ jobs:
             tests/test_prompt_cache_namespace.py \
             tests/test_composer_etag.py \
             tests/test_browser_ssrf.py \
+            tests/test_browser_evaluate_guard.py \
             tests/test_unrestricted_root_block.py \
             tests/test_security.py \
             tests/test_security_regressions.py \

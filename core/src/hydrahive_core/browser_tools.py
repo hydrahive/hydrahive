@@ -506,7 +506,7 @@ class BrowserEvaluateTool(BaseTool):
         return (
             "Führt JavaScript auf der aktuellen Browser-Seite aus und gibt das Ergebnis zurück. "
             "Nützlich um Daten aus dem DOM zu extrahieren oder Aktionen auszuführen die keine "
-            "direkten Selektoren haben."
+            "direkten Selektoren haben. Nur im execution_mode='unrestricted' verfügbar (#752)."
         )
 
     @property
@@ -529,6 +529,20 @@ class BrowserEvaluateTool(BaseTool):
         script:    str,
         **kwargs,
     ) -> dict:
+        # #752: browser_evaluate führt beliebiges JS im Page-Context aus
+        # (Cookie-Exfil, DOM-Manipulation, XHR). Nur unrestricted freischalten.
+        if kwargs.get("_execution_mode") != "unrestricted":
+            logger.warning(
+                "browser_evaluate blockiert: agent=%s execution_mode=%s",
+                agent_id, kwargs.get("_execution_mode"),
+            )
+            return {
+                "error": (
+                    "browser_evaluate ist auf execution_mode='unrestricted' beschränkt (#752). "
+                    "Nutze browser_screenshot/browser_click/browser_fill/browser_navigate für "
+                    "Standard-Operationen oder setze execution_mode=unrestricted (Admin-only)."
+                ),
+            }
         try:
             page = await _get_page(agent_id)
             result = await page.evaluate(script)
