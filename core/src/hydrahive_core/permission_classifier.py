@@ -122,8 +122,18 @@ def classify_static(tool_name: str, tool_input: dict) -> RiskLevel | None:
 
 # ── LLM-Classifier (Fallback für unbekannte Aktionen) ────────────────────────
 
-_CLASSIFIER_CACHE: dict[str, tuple[RiskLevel, float]] = {}  # key → (level, timestamp)
-_CACHE_TTL = 300  # 5 Minuten Cache
+# #749: Bounded LRU + TTL + thread-safe. Vorher unbounded `dict` — bei langem
+# Betrieb mit vielen unterschiedlichen Tool-Inputs wuchs der Cache linear.
+from threading import RLock
+
+from cachetools import TTLCache
+
+_CACHE_TTL = 300  # 5 Minuten
+_CACHE_MAXSIZE = 10_000
+_CLASSIFIER_CACHE: TTLCache[str, RiskLevel] = TTLCache(
+    maxsize=_CACHE_MAXSIZE, ttl=_CACHE_TTL,
+)
+_CLASSIFIER_CACHE_LOCK = RLock()
 
 _CLASSIFIER_PROMPT = """Du bist ein Sicherheits-Classifier für ein Multi-Agent-System.
 Bewerte die folgende Tool-Aktion auf einer Risiko-Skala:
@@ -136,14 +146,14 @@ Antworte NUR mit einem Wort: allow, confirm oder deny."""
 
 
 async def classify_llm(tool_name: str, tool_input: dict) -> RiskLevel:
-    """LLM-basierte Klassifizierung. Cached für 5 Minuten."""
+    """LLM-basierte Klassifizierung. Cached bounded (TTLCache)."""
     import json
     cache_key = f"{tool_name}:{json.dumps(tool_input, sort_keys=True)[:200]}"
 
-    # Cache prüfen
-    cached = _CLASSIFIER_CACHE.get(cache_key)
-    if cached and time.time() - cached[1] < _CACHE_TTL:
-        return cached[0]
+    with _CLASSIFIER_CACHE_LOCK:
+        cached = _CLASSIFIER_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
 
     try:
         import litellm
@@ -162,7 +172,8 @@ async def classify_llm(tool_name: str, tool_input: dict) -> RiskLevel:
             level = RiskLevel(answer)
         else:
             level = RiskLevel.CONFIRM  # Bei Unsicherheit: bestätigen
-        _CLASSIFIER_CACHE[cache_key] = (level, time.time())
+        with _CLASSIFIER_CACHE_LOCK:
+            _CLASSIFIER_CACHE[cache_key] = level
         logger.debug("LLM-Classifier: %s(%s) → %s", tool_name, str(tool_input)[:60], level.value)
         return level
     except Exception as e:
