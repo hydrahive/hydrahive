@@ -80,7 +80,7 @@ async def start_telegram_bot(
 ) -> dict:
     """Startet den Telegram-Bot für einen Agenten als Background-Task."""
     from telegram import Update
-    from telegram.ext import Application, ContextTypes, MessageHandler, filters
+    from telegram.ext import Application, ContextTypes, MessageHandler, TypeHandler, filters
 
     if agent_id in _bot_tasks and not _bot_tasks[agent_id].done():
         return {"status": "already_running"}
@@ -299,7 +299,30 @@ async def start_telegram_bot(
             _dbg("handler_exc", agent=agent_id, err=str(e)[:120], tb=traceback.format_exc()[-500:])
             logger.error("Telegram-Handler für %s: %s", agent_id, e)
 
+    # Raw-Probe: sieht jedes Update vor dem eigentlichen MessageHandler.
+    # Wenn `_handle_message` bei filters.ALL stumm bleibt aber raw_update
+    # events aufschlägt, wissen wir dass der Dispatcher funktioniert und
+    # der filter der Schuldige ist.
+    async def _raw_probe(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            _dbg(
+                "raw_update",
+                update_id=getattr(update, "update_id", None),
+                has_message=update.message is not None,
+                has_edited=update.edited_message is not None,
+                type=type(update).__name__,
+            )
+        except Exception as _pe:
+            _dbg("raw_probe_err", err=str(_pe)[:120])
+
+    app.add_handler(TypeHandler(Update, _raw_probe), group=-1)
     app.add_handler(MessageHandler(filters.ALL, _handle_message))
+
+    async def _err_probe(_update, context):
+        exc = getattr(context, "error", None)
+        _dbg("dispatch_err", err=str(exc)[:160], tb=(traceback.format_exc()[-400:] if exc else ""))
+
+    app.add_error_handler(_err_probe)
 
     async def _run_bot():
         _dbg("run_bot_enter", agent=agent_id)
