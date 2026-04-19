@@ -2317,7 +2317,36 @@ class ToolSearchTool(BaseTool):
 # =========================================================================
 
 class ServerShellTool(BaseTool):
-    """SSH-Befehl auf zugewiesenem Root-/Remote-Server ausführen."""
+    """SSH-Befehl auf zugewiesenem Root-/Remote-Server ausführen.
+
+    Security-Boundary (#758):
+    ------------------------
+    Im Gegensatz zu ShellExecTool (lokal, bwrap-Sandbox) läuft
+    ServerShellTool OHNE lokales Sandboxing. Die Isolations-Grenze ist
+    **der SSH-User + sudoers-Config auf dem Ziel-Host**, nicht bwrap —
+    aus zwei Gründen:
+
+    1. Portabilität: bwrap existiert auf vielen Remote-Hosts nicht
+       (ältere Distros, Container, LXC, BSD). Hard-abhängig machen würde
+       das Tool de facto unbrauchbar für einen Großteil der Target-
+       Systeme.
+    2. Schicht-Verantwortung: Der lokal sandboxed Shell schützt den
+       HydraHive-Core-Prozess auf diesem Host. Remote ist der Schutz
+       eine Sache des Ziel-Admins (SSH-User-Rechte, sudoers-Scope,
+       optional AppArmor/SELinux auf Ziel-Seite).
+
+    Geltende Defensivmaßnahmen CORE-seitig:
+    - Server-Registrierung + explizite Projekt-Zuweisung (nicht jedes
+      Projekt sieht jeden Server)
+    - Blocklist + Keyword-Check auf dem Command-String (shared mit
+      shell_exec — destruktive Patterns wie rm -rf, dd, mkfs, apt
+      werden abgelehnt)
+    - Timeout-Cap (max 120s), SSH-Session-Limit
+    - Audit-Log pro Call (command, server_id, agent, exit_code)
+
+    Empfehlung für Ziel-Hosts: nicht-privilegierter SSH-User, minimaler
+    sudoers-Scope, ggf. firejail/apparmor als optionale Remote-Sandbox.
+    """
 
     @property
     def id(self) -> str: return "server_shell"
@@ -2556,7 +2585,19 @@ class ServerFileWriteTool(BaseTool):
 
 
 class WksShellExecTool(BaseTool):
-    """SSH-Befehl auf einer dem Projekt zugewiesenen Workstation ausführen."""
+    """SSH-Befehl auf einer dem Projekt zugewiesenen Workstation ausführen.
+
+    Security-Boundary (#758): Identisch zu ServerShellTool — kein
+    lokales bwrap-Sandboxing. Isolations-Grenze ist der SSH-User auf
+    der Workstation + die sudoers/User-Scope-Config dort. Begründung
+    siehe ServerShellTool-Docstring.
+
+    Besonderheit WKS gegenüber Server:
+    - Die Workstation gehört einem End-User (`username`-Feld), nicht
+      einem Projekt direkt. Zuweisung erfolgt über Projekt-WKS-Mapping.
+    - WKS-User ist typischerweise kein Admin — sudoers-Scope sollte
+      entsprechend eng sein (default: nichts ohne explizite Freigabe).
+    """
 
     @property
     def id(self) -> str: return "wks_shell_exec"
