@@ -94,8 +94,9 @@ export function useProjectSubscribe(projectId: string | undefined, onBroadcast?:
     let cancelled = false;
 
     async function connect() {
-      const token = localStorage.getItem("hydrahive_token") || "";
-      if (!token || cancelled) return;
+      // #766: localStorage-Check als "skip wenn nicht eingeloggt"-Heuristik.
+      // Auth selbst läuft über Cookie (credentials:'include').
+      if (!localStorage.getItem("hydrahive_token") || cancelled) return;
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -105,7 +106,7 @@ export function useProjectSubscribe(projectId: string | undefined, onBroadcast?:
         const subscribeUrl = `${window.location.origin}/api/projects/${projectId}/subscribe`;
         const res = await fetch(subscribeUrl, {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
           signal: controller.signal,
           redirect: "follow",
         });
