@@ -302,19 +302,29 @@ async def start_telegram_bot(
     app.add_handler(MessageHandler(filters.ALL, _handle_message))
 
     async def _run_bot():
+        _dbg("run_bot_enter", agent=agent_id)
         try:
             await app.initialize()
+            _dbg("app_initialized", agent=agent_id)
             await app.start()
+            _dbg("app_started", agent=agent_id)
             await app.updater.start_polling(drop_pending_updates=True)
+            _dbg("polling_started", agent=agent_id, running=bool(getattr(app.updater, "running", False)))
             logger.info("Telegram-Bot für '%s' läuft", agent_id)
-            # Warte bis Task gecancelled wird
+            # Heartbeat: alle 30s prüfen ob updater noch polling macht.
+            # Wenn der interne Polling-Task stirbt, sehen wir das hier.
             while True:
-                await asyncio.sleep(60)
+                await asyncio.sleep(30)
+                _dbg("heartbeat", agent=agent_id,
+                     updater_running=bool(getattr(app.updater, "running", False)))
         except asyncio.CancelledError:
+            _dbg("run_bot_cancel", agent=agent_id)
             logger.info("Telegram-Bot für '%s' wird gestoppt", agent_id)
         except Exception as e:
+            _dbg("run_bot_exc", agent=agent_id, err=str(e)[:160], tb=traceback.format_exc()[-500:])
             logger.error("Telegram-Bot für '%s' abgestürzt: %s", agent_id, e)
         finally:
+            _dbg("run_bot_exit", agent=agent_id)
             try:
                 await app.updater.stop()
                 await app.stop()
