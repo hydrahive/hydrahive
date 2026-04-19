@@ -361,6 +361,10 @@ class HydraHiveSettings(BaseSettings):
     # Leer (Default) = nur same-origin; Dev-Setups mit Vite: ["http://localhost:5173"]
     cors_allowed_origins: list[str] = []
 
+    # #763 (Phase 1 von #748): Auth-Cookie Secure-Flag.
+    # True (Default) = Cookie nur über HTTPS. Für Dev ohne TLS auf False.
+    auth_cookie_secure: bool = True
+
 
 # Singleton
 settings = HydraHiveSettings()

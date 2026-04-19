@@ -8,11 +8,12 @@ from collections import Counter
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from .auth_utils import clear_auth_cookie, set_auth_cookie
 from .settings import settings
 
 _bearer = HTTPBearer(auto_error=False)
@@ -327,8 +328,13 @@ def register_core_misc_routes(
             return {"created": True, "username": req.username, "role": "admin"}
 
     @public_router.post("/auth/login")
-    def login(req: LoginRequest, request: Request):
+    def login(req: LoginRequest, request: Request, response: Response):
         check_login_rate(request.client.host if request.client else "unknown")
+        # #763: Cookie-Lebensdauer matcht JWT_EXPIRE_H (aus main). Lazy-Import
+        # um Zirkel zu vermeiden.
+        from .main import JWT_EXPIRE_H as _jwt_expire_h
+        _cookie_max_age = _jwt_expire_h * 3600
+        _cookie_secure = getattr(settings, "auth_cookie_secure", True)
         users = load_users()
         if users:
             user = users.get(req.username)
@@ -344,6 +350,8 @@ def register_core_misc_routes(
                 token = make_jwt(req.username, role, group)
                 logger.info("Login erfolgreich (users.json): %s", req.username)
                 perms = group_service.get_permissions(req.username) if group_service else {}
+                # #763 Phase 1: httpOnly-Cookie zusätzlich zum Body-Token.
+                set_auth_cookie(response, token, _cookie_max_age, _cookie_secure)
                 return {"access_token": token, "token_type": "bearer", "role": role, "group": group, "username": req.username, "permissions": perms}
             raise HTTPException(401, "Ungültige Zugangsdaten")
 
@@ -354,13 +362,20 @@ def register_core_misc_routes(
             raise HTTPException(401, "Ungültige Zugangsdaten")
         token = make_jwt(req.username, "admin", "admin")
         logger.info("Login erfolgreich (admin_credentials): %s", req.username)
+        # #763 Phase 1: httpOnly-Cookie zusätzlich zum Body-Token.
+        set_auth_cookie(response, token, _cookie_max_age, _cookie_secure)
         return {"access_token": token, "token_type": "bearer", "role": "admin", "group": "admin", "username": req.username, "permissions": {"pages": ["*"], "tools": ["*"], "plugins": ["*"], "agents": ["*"]}}
 
     @auth_router.post("/auth/logout")
-    def logout(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)):
-        """Token revoken — JTI wird in Blacklist eingetragen."""
+    def logout(response: Response, creds: HTTPAuthorizationCredentials | None = Depends(_bearer)):
+        """Token revoken — JTI wird in Blacklist eingetragen. #763: Cookie löschen."""
+        # #763: Cookie auch bei fehlendem Bearer-Header löschen (z.B. wenn
+        # Client nur Cookie-Auth nutzt und Middleware den Header synthetisch
+        # gesetzt hat, aber bei expliziter Abmeldung kein Client-Header).
+        clear_auth_cookie(response)
         if not creds:
-            raise HTTPException(401, "Kein Token")
+            # Kein Token zum Revoken — Cookie ist aber geclearnt, Logout okay.
+            return {"logged_out": True}
         from jose import JWTError, jwt as jose_jwt
         try:
             payload = jose_jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])

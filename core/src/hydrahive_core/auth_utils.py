@@ -1,11 +1,32 @@
 """
-auth_utils.py — Passwort-Hashing Utilities
+auth_utils.py — Passwort-Hashing + Auth-Cookie-Helper
 
 Ausgelagert aus main.py damit die Funktionen testbar sind
 ohne den kompletten FastAPI-Stack zu importieren.
 """
 import hashlib
 import secrets
+
+# #763 (Phase 1 von #748): Auth-Cookie-Name (shared zwischen main-Middleware
+# und router_core_misc Login/Logout).
+AUTH_COOKIE_NAME = "hydrahive_token"
+
+
+def set_auth_cookie(response, token: str, max_age_s: int, secure: bool = True) -> None:
+    """Setzt den JWT als httpOnly-Cookie mit SameSite=Strict."""
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        max_age=max_age_s,
+        httponly=True,
+        secure=secure,
+        samesite="strict",
+        path="/",
+    )
+
+
+def clear_auth_cookie(response) -> None:
+    response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
 
 
 def hash_password(password: str) -> str:

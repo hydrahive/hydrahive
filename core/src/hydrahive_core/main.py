@@ -847,6 +847,27 @@ class _RequestIDMiddleware(BaseHTTPMiddleware):
 app.add_middleware(_RequestIDMiddleware)
 
 
+# #763 (Phase 1 von #748): Auth-Cookie als Bearer-Fallback.
+# Wenn KEIN Authorization-Header gesetzt ist, aber ein `hydrahive_token`-
+# Cookie vorhanden ist, wird der Header synthetisch aus dem Cookie
+# gesetzt. Dadurch bleibt die bestehende Bearer-only `require_auth`-Kette
+# unverändert — Cookie-Support ist komplett transparent.
+# Bearer-Header behält Priorität (CLI/MCP/Third-Party-Clients unberührt).
+from .auth_utils import AUTH_COOKIE_NAME
+
+class _AuthCookieMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if b"authorization" not in {h[0].lower() for h in request.scope.get("headers", [])}:
+            cookie_token = request.cookies.get(AUTH_COOKIE_NAME)
+            if cookie_token:
+                new_headers = list(request.scope.get("headers", []))
+                new_headers.append((b"authorization", f"Bearer {cookie_token}".encode()))
+                request.scope["headers"] = new_headers
+        return await call_next(request)
+
+app.add_middleware(_AuthCookieMiddleware)
+
+
 # ================================================================== Auth (#56)
 IncomingMessage = register_core_misc_routes(
     public_router,
