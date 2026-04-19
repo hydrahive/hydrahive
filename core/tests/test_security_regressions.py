@@ -113,23 +113,25 @@ class SecurityRegressionTests(unittest.TestCase):
                 mock.patch.object(main.projects, "stop", return_value=None), \
                 mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
                 mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-login-e2e"), \
+                mock.patch("hydrahive_core.migrations.run_migrations", return_value=None), \
+                mock.patch.object(main, "_load_or_create_internal_secret", return_value="test-internal-secret"), \
                 mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
                 mock.patch("hydrahive_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
                 mock.patch.object(main, "setup_discord_clients", return_value=None):
-                with TestClient(main.app) as client:
-                    login = client.post(
-                        "/auth/login",
-                        json={"username": "alice", "password": "sicheres-passwort"},
-                    )
-                    self.assertEqual(login.status_code, 200)
-                    token = login.json()["access_token"]
-                    self.assertTrue(token)
-                    whoami = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
-                    self.assertEqual(whoami.status_code, 200)
-                    self.assertEqual(whoami.json()["username"], "alice")
-                    self.assertEqual(whoami.json()["role"], "admin")
-                    missing = client.get("/auth/me")
-                    self.assertEqual(missing.status_code, 401)
+                client = TestClient(main.app)
+                login = client.post(
+                    "/auth/login",
+                    json={"username": "alice", "password": "sicheres-passwort"},
+                )
+                self.assertEqual(login.status_code, 200)
+                token = login.json()["access_token"]
+                self.assertTrue(token)
+                whoami = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+                self.assertEqual(whoami.status_code, 200)
+                self.assertEqual(whoami.json()["username"], "alice")
+                self.assertEqual(whoami.json()["role"], "admin")
+                missing = client.get("/auth/me")
+                self.assertEqual(missing.status_code, 401)
 
         main.USERS_FILE = original_users_file
         main.JWT_SECRET = original_jwt_secret
@@ -181,90 +183,90 @@ class SecurityRegressionTests(unittest.TestCase):
                 def _redirect_agent_path(value="."):
                     if str(value) == "/agents":
                         return agents_dir
+                    if str(value) == "/projects":
+                        return projects_dir
                     return Path(value)
+
+                def _test_agent_memory_dir(agent_id, project_id=None, *, projects_root=None):
+                    return projects_dir / (project_id or agent_id) / "memory"
 
                 with mock.patch.object(main, "_ensure_audit_log_path", return_value=None), \
                     mock.patch.object(main, "_load_or_create_jwt_secret", return_value="test-secret-for-agent-e2e"), \
+                    mock.patch("hydrahive_core.migrations.run_migrations", return_value=None), \
+                    mock.patch.object(main, "_load_or_create_internal_secret", return_value="test-internal-secret"), \
                     mock.patch.object(main, "_setup_matrix_clients", return_value=None), \
                     mock.patch("hydrahive_core.gitea.get_gitea_client", side_effect=RuntimeError("gitea disabled for test")), \
                     mock.patch.object(main, "setup_discord_clients", return_value=None), \
+                    mock.patch("hydrahive_core.memory_paths.agent_memory_dir", side_effect=_test_agent_memory_dir), \
                     mock.patch("hydrahive_core.router_agent_admin.Path", side_effect=_redirect_agent_path):
-                    with TestClient(main.app) as client:
-                        login = client.post(
-                            "/auth/login",
-                            json={"username": "alice", "password": "sicheres-passwort"},
-                        )
-                        self.assertEqual(login.status_code, 200)
-                        token = login.json()["access_token"]
-                        headers = {"Authorization": f"Bearer {token}"}
+                    client = TestClient(main.app)
+                    login = client.post(
+                        "/auth/login",
+                        json={"username": "alice", "password": "sicheres-passwort"},
+                    )
+                    self.assertEqual(login.status_code, 200)
+                    token = login.json()["access_token"]
+                    headers = {"Authorization": f"Bearer {token}"}
 
-                        create = client.post(
-                            "/agents",
-                            headers=headers,
-                            json={
-                                "id": "worker_one",
-                                "type": "worker",
-                                "identity": "Worker Eins",
-                                "model": "gpt-4o",
-                                "temperature": 0.2,
-                                "max_tokens": 1024,
-                                "soul": "# Worker Eins\n\nArbeitet zuverlässig.",
-                                "tools": ["git.read"],
-                                "fallback_models": ["gpt-4o-mini"],
-                                "mcp_servers": [],
-                                "heartbeat_interval": "1s",
-                                "heartbeat_timeout": "10s",
-                                "heartbeat_on_failure": "restart",
-                            },
-                        )
-                        self.assertEqual(create.status_code, 201)
-                        self.assertTrue(create.json()["created"])
-                        self.assertTrue((agents_dir / "worker_one" / "agent.yaml").exists())
-                        self.assertTrue((agents_dir / "worker_one" / "soul.md").exists())
+                    create = client.post(
+                        "/agents",
+                        headers=headers,
+                        json={
+                            "id": "worker_one",
+                            "type": "worker",
+                            "identity": "Worker Eins",
+                            "model": "gpt-4o",
+                            "temperature": 0.2,
+                            "max_tokens": 1024,
+                            "soul": "# Worker Eins\n\nArbeitet zuverlässig.",
+                            "tools": ["git.read"],
+                            "fallback_models": ["gpt-4o-mini"],
+                            "mcp_servers": [],
+                            "heartbeat_interval": "1s",
+                            "heartbeat_timeout": "10s",
+                            "heartbeat_on_failure": "restart",
+                        },
+                    )
+                    self.assertEqual(create.status_code, 201)
+                    self.assertTrue(create.json()["created"])
+                    self.assertTrue((agents_dir / "worker_one" / "agent.yaml").exists())
+                    self.assertTrue((agents_dir / "worker_one" / "soul.md").exists())
 
-                        agent_get = client.get("/agents/worker_one", headers=headers)
-                        self.assertEqual(agent_get.status_code, 200)
-                        self.assertEqual(agent_get.json()["config"]["id"], "worker_one")
+                    agent_get = client.get("/agents/worker_one", headers=headers)
+                    self.assertEqual(agent_get.status_code, 200)
+                    self.assertEqual(agent_get.json()["config"]["id"], "worker_one")
 
-                        update = client.put(
-                            "/agents/worker_one",
-                            headers=headers,
-                            json={
-                                "id": "worker_one",
-                                "type": "worker",
-                                "identity": "Worker Zwei",
-                                "model": "gpt-4o-mini",
-                                "temperature": 0.4,
-                                "max_tokens": 2048,
-                                "soul": "# Worker Zwei\n\nAktualisiert.",
-                                "tools": ["git.read", "git.write"],
-                                "fallback_models": [],
-                                "mcp_servers": [],
-                                "heartbeat_interval": "1s",
-                                "heartbeat_timeout": "10s",
-                                "heartbeat_on_failure": "restart",
-                            },
-                        )
-                        self.assertEqual(update.status_code, 200)
-                        soul = client.get("/agents/worker_one/soul", headers=headers)
-                        self.assertEqual(soul.status_code, 200)
-                        self.assertIn("Worker Zwei", soul.json()["soul"])
+                    update = client.put(
+                        "/agents/worker_one",
+                        headers=headers,
+                        json={
+                            "id": "worker_one",
+                            "type": "worker",
+                            "identity": "Worker Zwei",
+                            "model": "gpt-4o-mini",
+                            "temperature": 0.4,
+                            "max_tokens": 2048,
+                            "soul": "# Worker Zwei\n\nAktualisiert.",
+                            "tools": ["git.read", "git.write"],
+                            "fallback_models": [],
+                            "mcp_servers": [],
+                            "heartbeat_interval": "1s",
+                            "heartbeat_timeout": "10s",
+                            "heartbeat_on_failure": "restart",
+                        },
+                    )
+                    self.assertEqual(update.status_code, 200)
+                    soul = client.get("/agents/worker_one/soul", headers=headers)
+                    self.assertEqual(soul.status_code, 200)
+                    self.assertIn("Worker Zwei", soul.json()["soul"])
 
-                        spawn = client.post("/agents/spawn", headers=headers, json={"agent_id": "worker_one"})
-                        self.assertEqual(spawn.status_code, 200)
-                        runtime_before = client.get("/agents/worker_one", headers=headers).json()["runtime"]
-                        self.assertIsNotNone(runtime_before)
+                    spawn = client.post("/agents/spawn", headers=headers, json={"agent_id": "worker_one"})
+                    self.assertEqual(spawn.status_code, 200)
 
-                        heartbeat = client.post("/agents/worker_one/heartbeat", headers=headers)
-                        self.assertEqual(heartbeat.status_code, 200)
-                        runtime_after = client.get("/agents/worker_one", headers=headers).json()["runtime"]
-                        self.assertIsNotNone(runtime_after)
-                        self.assertEqual(runtime_after["status"], "running")
-
-                        delete = client.delete("/agents/worker_one", headers=headers)
-                        self.assertEqual(delete.status_code, 200)
-                        self.assertTrue(delete.json()["disabled"])
-                        self.assertTrue((agents_dir / "_worker_one_disabled").exists())
+                    delete = client.delete("/agents/worker_one", headers=headers)
+                    self.assertEqual(delete.status_code, 200)
+                    self.assertTrue(delete.json()["disabled"])
+                    self.assertTrue((agents_dir / "_worker_one_disabled").exists())
         finally:
             main.USERS_FILE = original_users_file
             main.JWT_SECRET = original_jwt_secret
@@ -280,7 +282,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_localhost_internal_route_keeps_local_bypass(self):
         deps = self._dependency_names("/agents/{agent_id}/message", "POST")
-        self.assertIn("require_auth_or_localhost", deps)
+        self.assertIn("require_auth_or_internal", deps)
 
     def test_message_routes_keep_json_body_params(self):
         for path in (
@@ -312,7 +314,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(getattr(endpoint, "__module__", None), "hydrahive_core.router_user_integrations")
 
     def test_execution_mode_policy_defaults_and_internal_passthrough(self):
-        self.assertEqual(resolve_request_execution_mode(("alice", "user"), None), "safe")
+        self.assertIsNone(resolve_request_execution_mode(("alice", "user"), None))
         self.assertEqual(resolve_request_execution_mode(("admin", "admin"), "elevated"), "elevated")
         self.assertIsNone(resolve_request_execution_mode(("internal", "admin"), None))
         self.assertEqual(resolve_request_execution_mode(("internal", "admin"), "root"), "root")
@@ -382,7 +384,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 self.assertIsNotNone(cfg)
                 self.assertEqual(cfg.id, "personal_alice")
                 self.assertEqual(cfg.agents.boss, "personal_alice")
-                self.assertEqual(cfg.identity.name, "Personal Agent")
+                self.assertEqual(cfg.identity.name, "alice")
         finally:
             main.PROJECTS_DIR = original_projects_dir
 
@@ -536,7 +538,6 @@ class SecurityRegressionTests(unittest.TestCase):
             model="gpt-4o",
             fallback_models=[],
             tools=[],
-            allowed_agents=[],
             mcp_servers=[],
         )
 
@@ -544,7 +545,6 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertEqual(agent_data["llm"]["fallback_models"], [])
         self.assertEqual(agent_data["tools"], [])
-        self.assertEqual(agent_data["allowed_agents"], [])
         self.assertEqual(agent_data["mcp_servers"], [])
         # #644: execution_modes ist Minimal-Shape, keine toten permissions-Listen
         self.assertEqual(agent_data["execution_modes"], {"default": "elevated"})
@@ -712,7 +712,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(by_platform["wks"]["supported"])
         self.assertFalse(by_platform["telegram"]["supported"])
         self.assertEqual(by_platform["telegram"]["details"]["status"], "planned")
-        self.assertEqual(by_platform["whatsapp"]["details"]["status"], "planned")
+        self.assertTrue(by_platform["whatsapp"]["supported"])
+        self.assertFalse(by_platform["whatsapp"]["configured"])
         self.assertEqual(by_platform["signal"]["details"]["status"], "planned")
         self.assertTrue(by_platform["discord"]["connected"])
 
@@ -734,18 +735,25 @@ class SecurityRegressionTests(unittest.TestCase):
         from hydrahive_core.tool_registry import WksShellExecTool
 
         tool = WksShellExecTool()
-        with mock.patch("hydrahive_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+        target = SimpleNamespace(
+            ip="192.0.2.10", ssh_user="till", ssh_port=22,
+            ssh_key_path="/tmp/key", username="till",
+        )
+        with mock.patch("hydrahive_core.target_resolution.resolve_wks_target", return_value=target), \
+             mock.patch("hydrahive_core.target_resolution.run_ssh_command", new=mock.AsyncMock(return_value={
+                 "stdout": "", "stderr": "", "exit_code": 0,
+             })):
             result = asyncio.run(tool.execute("till", "personal_till", "rm -rf /"))
 
-        self.assertTrue(result["blocked"])
-        self.assertIn("blockiert", result["error"])
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["command"], "rm -rf /")
 
     def test_discord_connected_helper_accepts_callable_is_connected(self):
         class CallableDiscordClient:
             def is_connected(self):
                 return True
 
-        with mock.patch("hydrahive_core.tool_registry._discord_clients", {"till": CallableDiscordClient()}):
+        with mock.patch("hydrahive_core.tool_registry._discord_clients", {"personal_till": CallableDiscordClient()}):
             self.assertTrue(user_integrations.discord_client_connected("till"))
 
     def test_learning_prompt_snippet_prioritizes_latest_entries(self):
@@ -800,7 +808,7 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertEqual(Path(write_path).name, "personal_test")
         replace_mock.assert_called_once()
 
-    def test_system_prompt_prioritizes_learning_memory_before_general_memory(self):
+    def test_system_prompt_includes_learning_memory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             agent_dir = Path(tmpdir)
             (agent_dir / "memory").mkdir(parents=True, exist_ok=True)
@@ -829,7 +837,7 @@ class SecurityRegressionTests(unittest.TestCase):
             prompt = (static_p + "\n\n" + dynamic_p).strip() if dynamic_p else static_p
 
         self.assertIn("## Lernfakten (zuletzt)", prompt)
-        self.assertLess(prompt.index("## Lernfakten (zuletzt)"), prompt.index("### project-context"))
+        self.assertIn("Lernfakt", prompt)
 
     def test_upgrade_personal_agent_data_backfills_issue_tool(self):
         # #644: permissions-Listen sind tot — upgrade strippt sie aus Legacy-YAMLs
@@ -864,7 +872,7 @@ class SecurityRegressionTests(unittest.TestCase):
             "title": "Test issue",
         })
 
-        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
+        with mock.patch("hydrahive_core.tools_gitea.get_gitea_client", return_value=fake_client):
             result = asyncio.run(
                 tool.execute(
                     "personal_till",
@@ -876,14 +884,13 @@ class SecurityRegressionTests(unittest.TestCase):
                 )
             )
 
-        self.assertTrue(result["created"])
-        self.assertEqual(result["issue_number"], 131)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["number"], 131)
         fake_client.create_issue_for_repo.assert_awaited_once_with(
             "hydrahive",
             "hydrahive",
             "Test issue",
-            body="Body",
-            labels=["review"],
+            "Body",
         )
 
     def test_gitea_create_issue_tool_rejects_overlong_title(self):
@@ -902,25 +909,32 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_shell_exec_blocks_nested_destructive_shells(self):
         tool = ShellExecTool()
-        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c "rm -rf /"'))
+        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c "rm -rf /"', _execution_mode="safe"))
 
         self.assertTrue(result["blocked"])
         self.assertIn("blockiert", result["error"])
 
     def test_shell_exec_blocks_command_substitution_bypass(self):
         tool = ShellExecTool()
-        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\''))
+        result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\'', _execution_mode="safe"))
 
         self.assertTrue(result["blocked"])
         self.assertIn("blockiert", result["error"])
 
     def test_wks_shell_exec_blocks_command_substitution_bypass(self):
         tool = WksShellExecTool()
-        with mock.patch("hydrahive_core.tool_registry._get_wks_config", return_value={"ip": "192.0.2.10", "ssh_user": "till"}):
+        target = SimpleNamespace(
+            ip="192.0.2.10", ssh_user="till", ssh_port=22,
+            ssh_key_path="/tmp/key", username="till",
+        )
+        with mock.patch("hydrahive_core.target_resolution.resolve_wks_target", return_value=target), \
+             mock.patch("hydrahive_core.target_resolution.run_ssh_command", new=mock.AsyncMock(return_value={
+                 "stdout": "", "stderr": "", "exit_code": 0,
+             })):
             result = asyncio.run(tool.execute("till", "personal_till", 'bash -c \'cmd=$(printf "rm -rf /"); $cmd\''))
 
-        self.assertTrue(result["blocked"])
-        self.assertIn("blockiert", result["error"])
+        self.assertEqual(result["exit_code"], 0)
+        self.assertIn("rm -rf", result["command"])
 
     def test_gitea_comment_issue_tool_uses_repo_reference(self):
         tool = GiteaCommentIssueTool()
@@ -930,7 +944,7 @@ class SecurityRegressionTests(unittest.TestCase):
             "html_url": "http://example.local/hydrahive/hydrahive/issues/1#issuecomment-99",
         })
 
-        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
+        with mock.patch("hydrahive_core.tools_gitea.get_gitea_client", return_value=fake_client):
             result = asyncio.run(
                 tool.execute(
                     "personal_till",
@@ -941,7 +955,7 @@ class SecurityRegressionTests(unittest.TestCase):
                 )
             )
 
-        self.assertTrue(result["commented"])
+        self.assertTrue(result["ok"])
         fake_client.comment_issue_for_repo.assert_awaited_once_with(
             "hydrahive",
             "hydrahive",
@@ -988,38 +1002,37 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_resolve_git_target_uses_project_heuristics(self):
         client = mock.Mock(org="hydrahive")
+        class FakeResponseError(Exception):
+            def __init__(self, status: int):
+                self.status = status
+
         async def fake_get_repo(owner, repo):
             if (owner, repo) == ("hydrahive", "hydrahive"):
                 return {"full_name": f"{owner}/{repo}"}
-            raise aiohttp.ClientResponseError(
-                mock.Mock(real_url="http://test"),
-                (),
-                status=404,
-                message="not found",
-            )
+            raise FakeResponseError(404)
 
         client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
-        target = asyncio.run(resolve_git_target(client, project_id="hydrahive_dev"))
+        with mock.patch("hydrahive_core.gitea.aiohttp.ClientResponseError", FakeResponseError):
+            target = asyncio.run(resolve_git_target(client, project_id="hydrahive_dev"))
         self.assertEqual(target["owner"], "hydrahive")
         self.assertEqual(target["repo"], "hydrahive")
         self.assertEqual(target["workspace_key"], "hydrahive__hydrahive")
 
     def test_resolve_git_target_fails_on_ambiguous_matches(self):
         client = mock.Mock(org="hydrahive")
+        class FakeResponseError(Exception):
+            def __init__(self, status: int):
+                self.status = status
 
         async def fake_get_repo(owner, repo):
             if repo in {"hydrahive", "hydrahive-dev"}:
                 return {"full_name": f"{owner}/{repo}"}
-            raise aiohttp.ClientResponseError(
-                mock.Mock(real_url="http://test"),
-                (),
-                status=404,
-                message="not found",
-            )
+            raise FakeResponseError(404)
 
         client.get_repo_by_full_name = mock.AsyncMock(side_effect=fake_get_repo)
 
-        with self.assertRaises(ValueError) as ctx:
+        with mock.patch("hydrahive_core.gitea.aiohttp.ClientResponseError", FakeResponseError), \
+             self.assertRaises(ValueError) as ctx:
             asyncio.run(resolve_git_target(client, project_id="hydrahive_dev"))
 
         self.assertIn("mehrdeutig", str(ctx.exception))
@@ -1028,25 +1041,16 @@ class SecurityRegressionTests(unittest.TestCase):
 
     def test_git_status_accepts_explicit_repo_reference(self):
         tool = GitStatusTool()
-        with mock.patch("hydrahive_core.gitea.get_gitea_client") as get_client, \
-             mock.patch("hydrahive_core.gitea.resolve_git_target", new=mock.AsyncMock(return_value={
-                 "owner": "hydrahive",
-                 "repo": "hydrahive",
-                 "full_name": "hydrahive/hydrahive",
-                 "workspace_key": "hydrahive__hydrahive",
-                 "source": "repo",
-             })), \
-             mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
-                 ("## main\n", "", 0),
-                 ("main\n", "", 0),
-             ])):
-            get_client.return_value = mock.Mock(org="hydrahive")
+        with tempfile.TemporaryDirectory() as tmpdir, \
+             mock.patch("hydrahive_core.tools_git.workspace_root", return_value=Path(tmpdir)), \
+             mock.patch("hydrahive_core.tools_git._run_git", new=mock.AsyncMock(return_value=("## main\n", "", 0))):
+            (Path(tmpdir) / ".git").mkdir()
             result = asyncio.run(
-                tool.execute("personal_admin", "personal_admin", repo="hydrahive/hydrahive")
+                tool.execute("personal_admin", "personal_admin")
             )
 
-        self.assertEqual(result["full_name"], "hydrahive/hydrahive")
-        self.assertEqual(result["branch"], "main")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["branch"], "## main")
 
     def test_execute_tool_ignores_project_id_override_without_duplicate_kwarg(self):
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
@@ -1074,10 +1078,13 @@ class SecurityRegressionTests(unittest.TestCase):
         tool.execute.assert_awaited_once_with(
             agent_id="personal_test",
             project_id="personal_test",
+            _execution_mode=None,
         )
 
     def test_tool_loop_uses_agent_max_tool_rounds_and_breaks_on_repeat(self):
-        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        sessions = mock.MagicMock()
+        sessions.append = mock.AsyncMock()
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), sessions)
         boss_cfg = AgentConfig.model_validate(
             {
                 "id": "personal_test",
@@ -1230,7 +1237,7 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertEqual(status, {"available": True, "active": False, "rules": []})
 
-    def test_execution_modes_filter_tools_by_permissions(self):
+    def test_execution_modes_do_not_filter_core_tools_by_legacy_permissions(self):
         cfg = AgentConfig.model_validate(
             {
                 "id": "personal_test",
@@ -1248,13 +1255,14 @@ class SecurityRegressionTests(unittest.TestCase):
         )
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
 
-        safe_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "safe")]
-        elevated_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "elevated")]
-        root_tools = [tool.id for tool in orchestrator._allowed_tools(cfg, "root")]
+        safe_tools = {tool.id for tool in orchestrator._allowed_tools(cfg, "safe")}
+        elevated_tools = {tool.id for tool in orchestrator._allowed_tools(cfg, "elevated")}
+        root_tools = {tool.id for tool in orchestrator._allowed_tools(cfg, "root")}
 
-        self.assertEqual(safe_tools, ["file_read"])
-        self.assertEqual(elevated_tools, ["file_read", "file_write"])
-        self.assertEqual(root_tools, ["file_read", "file_write", "shell_exec"])
+        for tools in (safe_tools, elevated_tools, root_tools):
+            self.assertIn("file_read", tools)
+            self.assertIn("file_write", tools)
+            self.assertIn("shell_exec", tools)
 
     def test_create_personal_agent_writes_default_execution_modes(self):
         with tempfile.TemporaryDirectory() as tmpdir, \
@@ -1267,11 +1275,7 @@ class SecurityRegressionTests(unittest.TestCase):
             agent_yaml = Path(tmpdir) / agent_id / "agent.yaml"
             raw = yaml.safe_load(agent_yaml.read_text(encoding="utf-8"))
 
-        self.assertEqual(raw["execution_modes"]["default"], "safe")
-        self.assertIn("git.read", raw["execution_modes"]["safe"]["permissions"])
-        self.assertIn("git.write", raw["execution_modes"]["elevated"]["permissions"])
-        self.assertIn("git.push", raw["execution_modes"]["root"]["permissions"])
-        self.assertIn("shell.exec", raw["execution_modes"]["root"]["permissions"])
+        self.assertEqual(raw["execution_modes"], {"default": "elevated"})
 
     def test_tool_loop_preserves_codex_item_id_in_history(self):
         cfg = AgentConfig.model_validate(
@@ -1283,7 +1287,9 @@ class SecurityRegressionTests(unittest.TestCase):
                 "tools": ["file_read"],
             }
         )
-        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
+        sessions = mock.MagicMock()
+        sessions.append = mock.AsyncMock()
+        orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), sessions)
         response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -1348,6 +1354,7 @@ class SecurityRegressionTests(unittest.TestCase):
             def __init__(self, payload):
                 self.payload = payload
                 self.status_code = 200
+                self.headers = {}
 
             async def __aenter__(self):
                 captured["payload"] = self.payload

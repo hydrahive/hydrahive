@@ -53,6 +53,11 @@ _MOCK_MODULES = [
 
 for mod_name in _MOCK_MODULES:
     if mod_name not in sys.modules:
+        try:
+            __import__(mod_name)
+            continue
+        except ImportError:
+            pass
         # Hierarchische Mocks: discord.ext braucht discord als Parent
         parts = mod_name.split(".")
         for i in range(1, len(parts) + 1):

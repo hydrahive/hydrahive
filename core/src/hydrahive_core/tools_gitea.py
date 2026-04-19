@@ -47,6 +47,14 @@ def _parse_err(e: Exception) -> dict:
     return {"error": f"{type(e).__name__}: {e}"}
 
 
+def _validate_gitea_issue_text(title: str, body: str = "") -> str | None:
+    if len(title or "") > 256:
+        return "Issue-Titel zu lang (max 256 Zeichen)"
+    if len(body or "") > 20000:
+        return "Issue-Body zu lang (max 20000 Zeichen)"
+    return None
+
+
 class _GiteaToolBase(BaseTool):
     @property
     def always_loaded(self) -> bool: return False
@@ -88,6 +96,8 @@ class GiteaCreateIssueTool(_GiteaToolBase):
         repo: str, title: str, body: str = "", **kwargs,
     ) -> dict:
         try:
+            if err := _validate_gitea_issue_text(title, body):
+                return {"error": err}
             owner, name = _resolve_with_default_org(repo)
             client = get_gitea_client()
             result = await client.create_issue_for_repo(owner, name, title, body)
