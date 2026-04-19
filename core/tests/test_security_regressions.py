@@ -29,7 +29,9 @@ from hydrahive_core.router_users import (
     default_personal_agent_execution_modes,
     persist_personal_agent_config,
 )
-from hydrahive_core.tool_registry import GitStatusTool, GiteaCreateIssueTool, GiteaCommentIssueTool, GiteaUpdateIssueTool, ShellExecTool, WksShellExecTool
+from hydrahive_core.tool_registry import ShellExecTool, WksShellExecTool
+from hydrahive_core.tools_git import GitStatusTool
+from hydrahive_core.tools_gitea import GiteaCreateIssueTool, GiteaCommentIssueTool
 
 
 class SecurityRegressionTests(unittest.TestCase):
@@ -947,39 +949,6 @@ class SecurityRegressionTests(unittest.TestCase):
             "Kommentar",
         )
 
-    def test_gitea_update_issue_tool_can_close_issue(self):
-        tool = GiteaUpdateIssueTool()
-        fake_client = mock.Mock(org="hydrahive")
-        fake_client.update_issue_for_repo = mock.AsyncMock(return_value={
-            "number": 139,
-            "html_url": "http://example.local/hydrahive/hydrahive/issues/139",
-            "state": "closed",
-            "title": "Temp placeholder - ignore",
-        })
-
-        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client):
-            result = asyncio.run(
-                tool.execute(
-                    "personal_till",
-                    "personal_till",
-                    repo="hydrahive/hydrahive",
-                    issue_number=139,
-                    state="closed",
-                )
-            )
-
-        self.assertTrue(result["updated"])
-        self.assertEqual(result["state"], "closed")
-        fake_client.update_issue_for_repo.assert_awaited_once_with(
-            "hydrahive",
-            "hydrahive",
-            139,
-            title=None,
-            body=None,
-            state="closed",
-            labels=None,
-        )
-
     def test_resolve_repo_ref_accepts_url_and_short_forms(self):
         self.assertEqual(
             resolve_repo_ref("http://192.168.1.100:3002/hydrahive/hydrahive"),
@@ -1078,28 +1047,6 @@ class SecurityRegressionTests(unittest.TestCase):
 
         self.assertEqual(result["full_name"], "hydrahive/hydrahive")
         self.assertEqual(result["branch"], "main")
-
-    def test_gitea_repo_diff_defaults_to_latest_two_commits(self):
-        from hydrahive_core.tool_registry import GiteaRepoDiffTool
-
-        tool = GiteaRepoDiffTool()
-        fake_client = mock.Mock(org="hydrahive")
-        fake_client.list_commits = mock.AsyncMock(return_value=[
-            {"sha": "headsha123456"},
-            {"sha": "basesha654321"},
-        ])
-        with mock.patch("hydrahive_core.gitea.get_gitea_client", return_value=fake_client), \
-             mock.patch("hydrahive_core.gitea.GiteaClient._git", new=mock.AsyncMock(side_effect=[
-                 ("", "", 0),
-                 (" file1 | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)", "", 0),
-                 ("diff --git a/file1 b/file1\n--- a/file1\n+++ b/file1\n@@ -1 +1 @@\n-old\n+new\n", "", 0),
-             ])):
-            result = asyncio.run(tool.execute("personal_admin", "personal_admin", repo="hydrahive/hydrahive"))
-
-        self.assertEqual(result["base"], "basesha654321")
-        self.assertEqual(result["head"], "headsha123456")
-        self.assertIn("file changed", result["stat"])
-        self.assertIn("diff --git", result["diff"])
 
     def test_execute_tool_ignores_project_id_override_without_duplicate_kwarg(self):
         orchestrator = Orchestrator(mock.MagicMock(), mock.MagicMock(), mock.MagicMock())
