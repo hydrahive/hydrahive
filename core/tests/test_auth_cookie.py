@@ -49,7 +49,8 @@ def test_set_auth_cookie_calls_response_set_cookie():
     assert kwargs["max_age"] == 3600
     assert kwargs["httponly"] is True
     assert kwargs["secure"] is True
-    assert kwargs["samesite"] == "strict"
+    # #766: Lax statt Strict damit WebSocket-Handshakes den Cookie bekommen.
+    assert kwargs["samesite"] == "lax"
     assert kwargs["path"] == "/"
 
 
@@ -59,8 +60,8 @@ def test_set_auth_cookie_insecure_for_dev():
     set_auth_cookie(response, "t", max_age_s=60, secure=False)
     kwargs = response.set_cookie.call_args.kwargs
     assert kwargs["secure"] is False
-    # SameSite bleibt strict — auch bei insecure
-    assert kwargs["samesite"] == "strict"
+    # SameSite bleibt lax — auch bei insecure
+    assert kwargs["samesite"] == "lax"
 
 
 def test_clear_auth_cookie_calls_delete():

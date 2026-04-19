@@ -13,14 +13,21 @@ AUTH_COOKIE_NAME = "hydrahive_token"
 
 
 def set_auth_cookie(response, token: str, max_age_s: int, secure: bool = True) -> None:
-    """Setzt den JWT als httpOnly-Cookie mit SameSite=Strict."""
+    """Setzt den JWT als httpOnly-Cookie mit SameSite=Lax.
+
+    Lax statt Strict (#766): Chromium sendet SameSite=Strict-Cookies bei
+    WebSocket-Handshakes inkonsistent — das brach den Collab-Composer.
+    Lax ist für Self-Hosted-Single-User akzeptabel: CSRF bei nicht-GET
+    bleibt geblockt (POST/PUT/DELETE); GET-Navigation von fremden Sites
+    sendet zwar Cookie, aber unsere GET-Endpoints sind read-only.
+    """
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=token,
         max_age=max_age_s,
         httponly=True,
         secure=secure,
-        samesite="strict",
+        samesite="lax",
         path="/",
     )
 
