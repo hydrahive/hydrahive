@@ -128,9 +128,11 @@ export function useProjectYjs(projectId: string | undefined, username: string | 
         // laufen. y-websocket nutzt sonst im selben Browser zusätzlich
         // BroadcastChannel und kann Backend-Probleme verdecken.
         disableBc: true,
-        // resyncInterval bewusst AUS — 2s resync flappte den connection-status
-        // und triggerte Scroll-Jumps durch re-render des Composers. y-websocket
-        // reconnected bei Verbindungsabbruch automatisch per Backoff.
+        // #554: 2s Server-Resync ist Pflicht — ohne das fehlen Cross-Browser
+        // ydoc-Updates (awareness kommt durch, aber Text nicht). Scroll-Jump-
+        // Ursachen (autoFocus, dynamischer Placeholder) sind in ddf18a1
+        // separat gefixt; der resyncInterval löst keinen Scroll-Jump mehr aus.
+        resyncInterval: 2000,
       },
     );
     // Diagnostik (#554): Sync-Events laut rauslog damit wir bei Sync-
