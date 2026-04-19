@@ -79,6 +79,11 @@ class PatchAgentToolsRequest(BaseModel):
     tools: list[str]
 
 
+class PatchCompactionThresholdRequest(BaseModel):
+    # None = Global-Default nutzen; int = Override in estimated Tokens.
+    threshold: int | None = None
+
+
 class WorkflowDataRequest(BaseModel):
     nodes: list = []
     edges: list = []
@@ -225,6 +230,30 @@ def register_agent_admin_routes(
         discovery._register(agent_dir)
         logger.info("Agent aktualisiert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
+
+    @admin_router.patch("/agents/{agent_id}/compaction-threshold")
+    async def patch_agent_compaction_threshold(
+        agent_id: str,
+        req: PatchCompactionThresholdRequest,
+        _a: tuple = Depends(require_admin),
+    ):
+        """Setzt oder entfernt compaction_threshold (estimated Tokens) pro Agent.
+        None = globalen Default nutzen (40k für Claude/GPT, 8k sonst)."""
+        import yaml as _yaml
+        _validate_agent_id(agent_id)
+        agent_dir = Path(agents_dir) / agent_id
+        yaml_path = agent_dir / "agent.yaml"
+        if not yaml_path.exists():
+            raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
+        raw = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        if req.threshold is None:
+            raw.pop("compaction_threshold", None)
+        else:
+            raw["compaction_threshold"] = int(req.threshold)
+        yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, default_flow_style=False), encoding="utf-8")
+        discovery._register(agent_dir)
+        logger.info("Agent compaction_threshold aktualisiert: %s -> %s", agent_id, req.threshold)
+        return {"updated": True, "agent_id": agent_id, "compaction_threshold": req.threshold}
 
     @admin_router.patch("/agents/{agent_id}/tools")
     async def patch_agent_tools(agent_id: str, req: PatchAgentToolsRequest, _a: tuple = Depends(require_admin)):
