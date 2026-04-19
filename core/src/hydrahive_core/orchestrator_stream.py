@@ -89,6 +89,28 @@ async def handle_message_stream(
     if not boss_cfg:
         yield f"data: {_json.dumps({'error': f'Boss-Agent {boss_id} nicht gefunden'})}\n\n"
         return
+
+    # #750: Token-Budget Pre-Check vor erstem LLM-Call (Streaming-Pfad).
+    # Hard-Stop verhindert Token-Burn in hängenden/loopenden Agents.
+    _rl = getattr(_tool_reg, "_rate_limiter", None)
+    if _rl is not None:
+        from .rate_limiter import TokenBudgetExceeded as _TBE
+        try:
+            _rl.check_token_budget(boss_cfg.id)
+        except _TBE as _budget_exc:
+            _msg = (
+                f"⛔ Token-Budget überschritten (#750): Agent '{boss_cfg.id}' hat "
+                f"~{_budget_exc.tokens_used} Tokens in der letzten Stunde verbraucht "
+                f"(Hard-Limit: {_budget_exc.limit}). Der Agent pausiert bis sich das "
+                "1-Stunden-Fenster leert."
+            )
+            await orch._sessions.append(
+                project_id, MessageRole.ASSISTANT, _msg, agent_id=boss_cfg.id,
+            )
+            yield f"data: {_json.dumps({'text': _msg})}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'reason': 'token_budget_hard_stop'})}\n\n"
+            return
+
     _handoff_mtime_at_prompt = orch._forced_abort_handoff_mtime(boss_cfg)
 
     # Stale Interrupt-Flags löschen (von eventuell vorangegangenem abgebrochenem Request)

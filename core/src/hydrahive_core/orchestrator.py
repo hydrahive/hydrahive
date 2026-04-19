@@ -691,6 +691,28 @@ class Orchestrator:
             boss_cfg = self._discovery.get(project_cfg.agents.boss)
         if not boss_cfg:
             return f"[Fehler] Boss-Agent '{getattr(project_cfg.agents, 'boss', project_cfg.id)}' nicht gefunden.", []
+
+        # #750: Token-Budget Pre-Check vor erstem LLM-Call.
+        # Hard-Stop verhindert Token-Burn in hängenden/loopenden Agents.
+        # Bei Überschreitung: saubere Assistant-Message in Session + return.
+        _rl = getattr(_tool_reg, "_rate_limiter", None)
+        if _rl is not None:
+            from .rate_limiter import TokenBudgetExceeded as _TBE
+            try:
+                _rl.check_token_budget(boss_cfg.id)
+            except _TBE as _budget_exc:
+                _msg = (
+                    f"⛔ Token-Budget überschritten (#750): Agent '{boss_cfg.id}' hat "
+                    f"~{_budget_exc.tokens_used} Tokens in der letzten Stunde verbraucht "
+                    f"(Hard-Limit: {_budget_exc.limit}). Der Agent pausiert bis sich das "
+                    "1-Stunden-Fenster leert. Admin kann den Threshold in den "
+                    "Rate-Limit-Settings (agent_token_hard_per_hour) anpassen."
+                )
+                await self._sessions.append(
+                    project_id, MessageRole.ASSISTANT, _msg, agent_id=boss_cfg.id,
+                )
+                return _msg, []
+
         _handoff_mtime_at_prompt = self._forced_abort_handoff_mtime(boss_cfg)
 
         # 3. System-Prompt aufbauen (Soul + A-MEM + Skills) — !refresh invalidiert Cache.

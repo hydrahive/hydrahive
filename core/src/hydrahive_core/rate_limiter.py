@@ -39,11 +39,27 @@ class RateLimitSettings:
     # Agent-interne Calls (ask_agent, delegate_agent, spawn_agent)
     agent_call_max: int = 30       # max. interne Calls pro Agent pro Minute
     agent_call_window_s: int = 60
-    # Token-Budget-Warning (grobe Schätzung, nicht exact)
-    agent_token_warn_per_hour: int = 500_000
+    # Token-Budget (grobe Schätzung, nicht exact)
+    agent_token_warn_per_hour: int = 500_000   # logger.warning
+    # #750 Hard-Stop: raise TokenBudgetExceeded bei Überschreitung.
+    # 0 = disabled. Check vor LLM-Call greift am Entry des Orchestrators.
+    agent_token_hard_per_hour: int = 2_000_000
     max_login_keys: int = 10000
     max_message_keys: int = 50000
     redis_retry_after_s: int = 30
+
+
+class TokenBudgetExceeded(RuntimeError):
+    """#750: Agent hat das Hard-Stop-Token-Budget überschritten. Subclass
+    von RuntimeError für Backward-Compat mit bestehenden Handlern."""
+    def __init__(self, agent_id: str, tokens_used: int, limit: int) -> None:
+        self.agent_id = agent_id
+        self.tokens_used = tokens_used
+        self.limit = limit
+        super().__init__(
+            f"Agent '{agent_id}' hat das Token-Hard-Limit überschritten: "
+            f"{tokens_used} > {limit} Tokens in der letzten Stunde."
+        )
 
 
 class RateLimiter:
@@ -233,7 +249,13 @@ class RateLimiter:
             )
 
     def track_token_usage(self, agent_id: str, tokens: int) -> None:
-        """Tokn-Verbrauch eines Agents tracken und Warning loggen wenn zu hoch."""
+        """Token-Verbrauch eines Agents tracken, Warning + Hard-Stop (#750).
+
+        Raises TokenBudgetExceeded wenn der Hard-Threshold nach dem Update
+        überschritten wurde. Das aktuelle Usage-Event ist gespeichert, der
+        nächste LLM-Call wird durch den Entry-Check im Orchestrator
+        blockiert — diese Exception hier ist die letzte Verteidigungslinie.
+        """
         now = time.time()
         hour_ago = now - 3600
         usage = self._agent_token_usage[agent_id]
@@ -241,12 +263,34 @@ class RateLimiter:
         self._agent_token_usage[agent_id] = [(t, n) for t, n in usage if t > hour_ago]
         self._agent_token_usage[agent_id].append((now, tokens))
         total_hour = sum(n for _, n in self._agent_token_usage[agent_id])
-        if total_hour > self.settings.agent_token_warn_per_hour:
+        warn = self.settings.agent_token_warn_per_hour
+        hard = self.settings.agent_token_hard_per_hour
+        if warn > 0 and total_hour > warn:
             self.logger.warning(
                 "Token-Budget-Warnung: Agent '%s' hat ~%d Tokens in der letzten Stunde verbraucht "
-                "(Limit: %d). Prüfe auf Agent-Loops oder unerwartete Aktivität.",
-                agent_id, total_hour, self.settings.agent_token_warn_per_hour,
+                "(Warn-Limit: %d). Prüfe auf Agent-Loops oder unerwartete Aktivität.",
+                agent_id, total_hour, warn,
             )
+        if hard > 0 and total_hour > hard:
+            self.logger.error(
+                "AUDIT[token_budget_hard]: agent=%s tokens=%d limit=%d — Hard-Stop.",
+                agent_id, total_hour, hard,
+            )
+            raise TokenBudgetExceeded(agent_id, total_hour, hard)
+
+    def check_token_budget(self, agent_id: str) -> None:
+        """#750: Pre-Call-Gate. Raist TokenBudgetExceeded wenn der Agent
+        bereits über dem Hard-Limit liegt. Im Orchestrator VOR dem nächsten
+        LLM-Call aufrufen, um Token-Burn zu vermeiden.
+
+        Disabled wenn agent_token_hard_per_hour == 0.
+        """
+        hard = self.settings.agent_token_hard_per_hour
+        if hard <= 0:
+            return
+        total = self.get_token_usage_hour(agent_id)
+        if total > hard:
+            raise TokenBudgetExceeded(agent_id, total, hard)
 
     def get_token_usage_hour(self, agent_id: str) -> int:
         """Gibt den geschätzten Token-Verbrauch des Agents in der letzten Stunde zurück."""

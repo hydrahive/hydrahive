@@ -9,7 +9,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from hydrahive_core.rate_limiter import RateLimiter, RateLimitSettings
+from hydrahive_core.rate_limiter import (
+    RateLimiter,
+    RateLimitSettings,
+    TokenBudgetExceeded,
+)
 
 
 # ============================================================= Agent-Call-Limiting
@@ -78,6 +82,104 @@ def test_get_token_usage_hour():
 def test_get_token_usage_hour_unbekannter_agent():
     rl = RateLimiter()
     assert rl.get_token_usage_hour("unbekannt") == 0
+
+
+# ============================================================= #750 Hard-Stop
+
+def test_token_hard_stop_raises_on_overflow():
+    """Einzelner Track-Call der das Hard-Limit überschreitet raist."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=100_000,
+        agent_token_hard_per_hour=200_000,
+    ))
+    with pytest.raises(TokenBudgetExceeded) as exc:
+        rl.track_token_usage("agent-hard", 250_000)
+    assert exc.value.agent_id == "agent-hard"
+    assert exc.value.tokens_used == 250_000
+    assert exc.value.limit == 200_000
+
+
+def test_token_hard_stop_accumulates_over_multiple_calls():
+    """Mehrere Track-Calls akkumulieren bis Hard-Limit erreicht ist."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=100_000,
+        agent_token_hard_per_hour=100_000,
+    ))
+    rl.track_token_usage("agent-acc", 40_000)  # 40k, ok
+    rl.track_token_usage("agent-acc", 40_000)  # 80k, ok
+    with pytest.raises(TokenBudgetExceeded):
+        rl.track_token_usage("agent-acc", 30_000)  # 110k, über hard
+
+
+def test_token_hard_stop_disabled_wenn_zero():
+    """agent_token_hard_per_hour=0 → Hard-Stop disabled."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=1_000,
+        agent_token_hard_per_hour=0,
+    ))
+    # Millionen Tokens, kein Raise
+    rl.track_token_usage("agent-disabled", 5_000_000)
+    rl.track_token_usage("agent-disabled", 5_000_000)
+    assert rl.get_token_usage_hour("agent-disabled") == 10_000_000
+
+
+def test_token_hard_stop_audit_log(caplog):
+    """Audit-Log wird bei Hard-Stop geschrieben."""
+    import logging
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=500,
+        agent_token_hard_per_hour=1_000,
+    ))
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(TokenBudgetExceeded):
+            rl.track_token_usage("agent-audit", 2_000)
+    assert "AUDIT[token_budget_hard]" in caplog.text
+    assert "agent-audit" in caplog.text
+
+
+def test_token_warn_alone_does_not_raise():
+    """Warn-Threshold überschreiten raist nicht wenn Hard noch nicht erreicht."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=1_000,
+        agent_token_hard_per_hour=10_000,
+    ))
+    # Warn greift, Hard nicht → kein Raise
+    rl.track_token_usage("agent-warn", 1_500)
+    assert rl.get_token_usage_hour("agent-warn") == 1_500
+
+
+def test_check_token_budget_ok_unter_limit():
+    """check_token_budget raist nicht wenn unter Hard-Limit."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_hard_per_hour=100_000,
+    ))
+    rl.track_token_usage("agent-chk", 50_000)
+    rl.check_token_budget("agent-chk")  # darf nicht werfen
+
+
+def test_check_token_budget_raises_ueber_limit():
+    """check_token_budget raist wenn Hard-Limit bereits erreicht."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_warn_per_hour=100_000,
+        agent_token_hard_per_hour=100_000,
+    ))
+    # Akkumuliere knapp unter Hard (ohne Raise)
+    rl.track_token_usage("agent-chk2", 90_000)
+    # Dann einen Call direkt über Hard — track raist hier schon
+    with pytest.raises(TokenBudgetExceeded):
+        rl.track_token_usage("agent-chk2", 20_000)
+    # check_token_budget sieht den akkumulierten Stand UND raist weiter
+    with pytest.raises(TokenBudgetExceeded):
+        rl.check_token_budget("agent-chk2")
+
+
+def test_check_token_budget_disabled_wenn_zero():
+    """check_token_budget mit hard=0 ist no-op."""
+    rl = RateLimiter(settings=RateLimitSettings(
+        agent_token_hard_per_hour=0,
+    ))
+    rl.track_token_usage("agent-free", 10_000_000)
+    rl.check_token_budget("agent-free")  # darf nicht werfen
 
 
 # ============================================================= Tool-Registry-Wiring

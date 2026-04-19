@@ -1973,6 +1973,7 @@ def get_resources():
             for agent_id in discovery.agents
         },
         "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+        "token_hard_threshold": rate_limiter.settings.agent_token_hard_per_hour,
     }
 
 
@@ -1987,6 +1988,7 @@ def get_metrics():
     return {
         "token_usage_last_hour": agent_tokens,
         "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+        "token_hard_threshold": rate_limiter.settings.agent_token_hard_per_hour,
         "agent_call_limit_per_min": rate_limiter.settings.agent_call_max,
         "sentry_active": bool(_SENTRY_DSN),
     }
@@ -2160,6 +2162,7 @@ def get_agents_live(_a=Depends(require_admin)):
             "heartbeat_interval":  rs.get("heartbeat_interval"),
             "tokens_1h":        tokens_1h,
             "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            "token_hard_threshold": rate_limiter.settings.agent_token_hard_per_hour,
             "token_history":    rate_limiter.get_token_history(agent_id, minutes=60, bucket_minutes=5),
             # #373: Performance Metrics
             "total_requests":   rs.get("total_requests", 0),
@@ -2183,6 +2186,7 @@ def get_agents_live(_a=Depends(require_admin)):
                 "heartbeat_interval":  None,
                 "tokens_1h":        rate_limiter.get_token_usage_hour(cfg.id),
                 "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+                "token_hard_threshold": rate_limiter.settings.agent_token_hard_per_hour,
             })
     # v2: Projekte als "Agenten" anzeigen die kein eigenes Agent-Verzeichnis haben
     for pid, pcfg in projects.projects.items():
@@ -2202,6 +2206,7 @@ def get_agents_live(_a=Depends(require_admin)):
             "heartbeat_interval":  None,
             "tokens_1h":        rate_limiter.get_token_usage_hour(pid),
             "token_warn_threshold": rate_limiter.settings.agent_token_warn_per_hour,
+            "token_hard_threshold": rate_limiter.settings.agent_token_hard_per_hour,
             "token_history":    rate_limiter.get_token_history(pid, minutes=60, bucket_minutes=5),
             "total_requests":   0,
             "avg_response_ms":  0,
