@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,13 +86,13 @@ _WRITE_BINS: frozenset[str] = frozenset({
 })
 
 # Pattern (binary, substring): wenn beides zutrifft, gilt als write.
+# python/python3 `open(...)` wird separat via _classify_python_opens geprüft
+# (mode-sensitiv statt grober Substring-Heuristik).
 _WRITE_KEYWORD_PATTERNS: tuple[tuple[str, str], ...] = (
     ("python",  ".write("),
     ("python",  ".write_text"),
-    ("python",  "open("),        # grobe Heuristik — fängt open(..., 'w')
     ("python3", ".write("),
     ("python3", ".write_text"),
-    ("python3", "open("),
     ("node",    "writeFile"),
     ("node",    "writeFileSync"),
     ("perl",    "-i"),
@@ -105,6 +106,60 @@ _WRITE_KEYWORD_PATTERNS: tuple[tuple[str, str], ...] = (
     ("yarn",    "install"),
     ("yarn",    "build"),
 )
+
+
+# open( mit optional zweitem Arg. Drei Match-Fälle:
+#   open(path)                 → group(1)=None, group(2)=None    → read default
+#   open(path, 'mode')         → group(1)='mode', group(2)=None  → mode-parse
+#   open(path, <anything-else>) → group(1)=None, group(2)='…'    → Unparseable
+_OPEN_CALL_RE = re.compile(
+    r"""\bopen\s*\(\s*          # open(
+        [^,)]+                  # erstes Arg (path / expression)
+        (?:\s*,\s*              # optional: Komma → zweites Arg existiert
+            (?:['"]([^'"]*)['"]   # group(1): Mode-Literal
+             |([^,)]+)           # group(2): Nicht-Literal (Variable/Expr)
+            )
+        )?
+    """,
+    re.VERBOSE,
+)
+
+
+def _classify_python_opens(rest_str: str) -> str | None:
+    """Klassifiziert alle open(...)-Aufrufe in einem Python-Command.
+
+    Rückgabe:
+      'write' — mindestens ein open(...) hat write-Mode, ODER ein zweites
+                Argument ist nicht als Literal parseable (safer default).
+      'read'  — mindestens ein open(...) gefunden und alle sind read-only.
+      None    — kein open(...) im Command.
+    """
+    matches = list(_OPEN_CALL_RE.finditer(rest_str))
+    if not matches:
+        return None
+
+    saw_read = False
+    for m in matches:
+        literal_mode = m.group(1)
+        nonliteral_arg = m.group(2)
+        if nonliteral_arg is not None:
+            # open(f, mode) / open(f, get_mode()) → nicht auflösbar → safer write
+            return "write"
+        if literal_mode is None:
+            # open(path) ohne zweites Arg → Python-Default 'r' → read
+            saw_read = True
+            continue
+        # Write-Indikatoren: w, a, x, + (r+ ist auch write)
+        if any(ch in literal_mode for ch in ("w", "a", "x", "+")):
+            return "write"
+        # Reine Read-Modes: nur Buchstaben aus {r, b, t, U}
+        if literal_mode and all(ch in "rbtU" for ch in literal_mode):
+            saw_read = True
+            continue
+        # Leer oder unbekannt → safer write
+        return "write"
+
+    return "read" if saw_read else "write"
 
 
 @dataclass
@@ -320,6 +375,13 @@ def _classify_shell_command(command: str) -> tuple[str, str]:
         for bin_name, kw in _WRITE_KEYWORD_PATTERNS:
             if first_base == bin_name and kw in rest_str:
                 return "write", f"{first_base} … {kw}"
+        # python/python3: mode-sensitives open(...) vor dem Fallback prüfen.
+        if first_base in {"python", "python3"}:
+            open_cls = _classify_python_opens(rest_str)
+            if open_cls == "write":
+                return "write", f"{first_base} … open(..., write-mode)"
+            if open_cls == "read":
+                return "read", f"{first_base} … open(..., read-mode)"
         # Unbekanntes Script → safer: write
         return "write", f"Script-Aufruf '{first_base}' — potenziell schreibend"
 

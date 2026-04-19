@@ -340,3 +340,82 @@ def test_unknown_tool_name_allowed():
 def test_invalid_tool_input_shape_safe():
     dec = check_tool_guard("shell_exec", None)  # type: ignore[arg-type]
     assert dec.allowed, "Null-Input darf nicht abstürzen"
+
+
+# ─────────────────────────────────────────────── #759 python open() mode-sensitiv
+
+from hydrahive_core.tool_guard import _classify_python_opens
+
+
+@pytest.mark.parametrize("rest_str,expected", [
+    # read-modes
+    ("open('f').read()", "read"),
+    ("open('f', 'r').read()", "read"),
+    ("open('f', 'rb').read()", "read"),
+    ("open('f', 'rt').read()", "read"),
+    ("open('f', 'br').read()", "read"),
+    ('open("/etc/hostname").read()', "read"),
+    # write-modes
+    ("open('f', 'w').write('x')", "write"),
+    ("open('f', 'a').close()", "write"),
+    ("open('f', 'x')", "write"),
+    ("open('f', 'wb').write(b'')", "write"),
+    ("open('f', 'r+').read()", "write"),  # r+ ist auch write
+    ("open('f', 'ab')", "write"),
+    # Unparseable Mode → safer write
+    ("open(f, mode)", "write"),  # Variable, keine Literal-Quotes
+    ("open('f', '')", "write"),  # leerer mode
+    # multi-open: ein write → write
+    ("open('a').read(); open('b', 'w').write('x')", "write"),
+    # multi-open: alle read → read
+    ("x = open('a').read(); y = open('b', 'rb').read()", "read"),
+    # kein open → None
+    ("print('hello')", None),
+    ("subprocess.run(['ls'])", None),
+])
+def test_classify_python_opens(rest_str, expected):
+    assert _classify_python_opens(rest_str) == expected
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 -c \"print(open('/etc/hostname').read())\"",
+    "python3 -c \"data = open('f', 'r').read()\"",
+    "python -c \"open('f', 'rb').read()\"",
+])
+def test_python_open_readmode_allowed_in_stale(cmd):
+    """#759: reine open()-read Commands dürfen im stale Checkout laufen."""
+    dec = check_tool_guard("shell_exec", {"command": cmd, "cwd": STALE_REPO})
+    assert dec.allowed, f"{cmd!r} ist read-only, darf in stale nicht blocken"
+
+
+@pytest.mark.parametrize("cmd", [
+    "python3 -c \"open('x','w').write('y')\"",  # bestehend, bleibt write
+    "python -c \"open('f', 'a').close()\"",
+    "python3 -c \"open('f', 'r+').write('x')\"",
+    "python -c \"open('f', 'wb').write(b'')\"",
+    "python3 -c \"open(f, mode).write('x')\"",  # unparseable → safer write
+])
+def test_python_open_writemode_blocked_in_stale(cmd):
+    """#759: open()-writes bleiben im stale Checkout blockiert."""
+    dec = check_tool_guard("shell_exec", {"command": cmd, "cwd": STALE_REPO})
+    assert not dec.allowed, f"{cmd!r} schreibt, muss in stale blockiert sein"
+    assert dec.code == "write_in_stale_checkout"
+
+
+def test_python_explicit_write_method_still_blocks():
+    """`.write_text` wird weiter über Pattern-Liste gefangen (vor open-Check)."""
+    dec = check_tool_guard("shell_exec", {
+        "command": "python3 -c \"Path('f').write_text('x')\"",
+        "cwd": STALE_REPO,
+    })
+    assert not dec.allowed
+    assert dec.code == "write_in_stale_checkout"
+
+
+def test_python_no_open_falls_through_to_safer_write():
+    """Python-Script ohne open() und ohne .write → Fallback `write`."""
+    dec = check_tool_guard("shell_exec", {
+        "command": "python3 script.py",
+        "cwd": STALE_REPO,
+    })
+    assert not dec.allowed, "Unbekannter Script-Aufruf bleibt safer=write"
