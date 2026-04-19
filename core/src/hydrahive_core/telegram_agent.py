@@ -12,6 +12,9 @@ import asyncio
 import json
 import logging
 import os
+import time
+import traceback
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,6 +31,18 @@ TOKEN_DIR = settings.agent_tokens_dir
 _bot_tasks: dict[str, asyncio.Task] = {}
 # Bot-App-Instanzen: agent_id → Application (für send)
 _bot_apps: dict[str, object] = {}
+# Ring-Buffer für Debug-Events (200 Einträge, accessible via admin endpoint)
+_tg_debug: deque[dict] = deque(maxlen=200)
+
+
+def _dbg(event: str, **data) -> None:
+    _tg_debug.append({"ts": round(time.time(), 3), "event": event, **data})
+
+
+def get_telegram_debug_events(limit: int = 100) -> list[dict]:
+    if limit <= 0:
+        return []
+    return list(_tg_debug)[-limit:]
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -77,18 +92,21 @@ async def start_telegram_bot(
 
     async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.message:
+            _dbg("no_message", update_id=getattr(update, "update_id", None))
             return
 
         msg = update.message
         chat = msg.chat
         user = msg.from_user
         if not user:
+            _dbg("no_user")
             return
 
         is_group = chat.type in ("group", "supergroup", "channel")
         chat_id  = chat.id
         user_id  = str(user.id)
         from_name = user.full_name or user.username or user_id
+        _dbg("received", agent=agent_id, user=from_name, user_id=user_id, text=(msg.text or "")[:80], is_group=is_group)
 
         # Gruppen-/Privat-Filter
         if is_group and not cfg.get("allow_groups", False):
@@ -223,7 +241,9 @@ async def start_telegram_bot(
         )
 
         try:
+            _dbg("orch_start", agent=agent_id, project=_project_id)
             response_parts: list[str] = []
+            chunk_count = 0
             async for chunk in orchestrator.handle_message_stream(
                 project_id=_project_id,
                 project_cfg=virtual_cfg,
@@ -231,24 +251,32 @@ async def start_telegram_bot(
                 sender=f"telegram:{user_id}",
                 execution_mode=execution_mode,
             ):
+                chunk_count += 1
                 # orchestrator.handle_message_stream yielded SSE-Strings der Form
                 # "data: {...}\n\n" — vorher wurde das als dict geprüft, was NIE
                 # matched → Telegram-Bot blieb stumm (2026-04-19).
                 if not isinstance(chunk, str):
+                    if chunk_count <= 3:
+                        _dbg("non_str_chunk", type=type(chunk).__name__)
                     continue
                 for line in chunk.splitlines():
                     if not line.startswith("data: "):
                         continue
                     try:
                         data = json.loads(line[6:].strip())
-                    except Exception:
+                    except Exception as pe:
+                        if chunk_count <= 3:
+                            _dbg("parse_err", err=str(pe)[:60])
                         continue
                     if isinstance(data, dict) and "text" in data:
                         response_parts.append(data["text"])
+            _dbg("orch_end", chunks=chunk_count, response_len=len(response_parts))
 
             response = "".join(response_parts).strip()
             if not response:
+                _dbg("empty_response", agent=agent_id)
                 return
+            _dbg("sending", agent=agent_id, chars=len(response), preview=response[:60])
 
             if is_audio:
                 try:
@@ -268,6 +296,7 @@ async def start_telegram_bot(
                 await context.bot.send_message(chat_id=chat_id, text=response[i:i+4096])
 
         except Exception as e:
+            _dbg("handler_exc", agent=agent_id, err=str(e)[:120], tb=traceback.format_exc()[-500:])
             logger.error("Telegram-Handler für %s: %s", agent_id, e)
 
     app.add_handler(MessageHandler(filters.ALL, _handle_message))

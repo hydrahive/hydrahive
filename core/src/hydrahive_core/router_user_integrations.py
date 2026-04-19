@@ -1642,3 +1642,16 @@ def register_user_integration_routes(
         delete_telegram_config(username)
         audit_log("telegram.disconnect", details={"user": username})
         return {"disconnected": True}
+
+    @auth_router.get("/me/telegram/debug")
+    async def my_telegram_debug(limit: int = 100, auth: tuple = Depends(require_auth)):
+        # In-Memory-Debug-Log des Telegram-Handlers. Wir haben keinen
+        # SSH-Zugriff auf .220, deshalb exposen wir den Ring-Buffer über HTTP
+        # um Handler-Pfade diagnostizieren zu können (#Telegram-Debug).
+        from .telegram_agent import get_telegram_debug_events, get_bot_status
+        _username_from_auth(auth)
+        agent_id = f"personal_{_username_from_auth(auth)}"
+        return {
+            "status": get_bot_status(agent_id),
+            "events": get_telegram_debug_events(limit),
+        }
