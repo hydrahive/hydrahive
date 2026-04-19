@@ -112,14 +112,7 @@ export const api = {
   listGithubRepos: () => api.get<{full_name:string;html_url:string;description:string;private:boolean;language:string|null;pushed_at:string|null}[]>("/github/repos"),
   updateProject:  (id: string, d: {name?:string;description?:string}) => api.put(`/projects/${id}`, d),
   deleteProject:  (id: string) => api.delete(`/projects/${id}`),
-  // v1 deprecated — nur noch fuer AgentsPage (wird in #575 entfernt)
-  createAgent:  (d: unknown) => api.post("/agents", d),
-  updateAgent:  (id: string, d: unknown) => api.put(`/agents/${id}`, d),
-  deleteAgent:  (id: string) => api.delete(`/agents/${id}`),
   updateUser:   (username: string, d: {role?:string;allowed_projects?:string[];datasources?:string[];wks_ip?:string}) => api.put(`/users/${username}`, d),
-  patchAgentHeartbeat: (id: string, d: {enabled: boolean; interval: string; timeout: string; on_failure: string}) =>
-    api.patch<{ok: boolean}>(`/agents/${id}/heartbeat`, d),
-  getAgentSoul: (id: string) => api.get<{soul:string;exists:boolean}>(`/agents/${id}/soul`),
   tools:        ()           => api.get<Record<string,unknown>>("/tools"),
   sendMessage:   (id: string, content: string) =>
     api.post<{response:string;workers:string[];session_id:string}>(`/projects/${id}/message`, { content }),

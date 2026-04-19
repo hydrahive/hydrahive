@@ -8,7 +8,6 @@ const AdminLayout       = lazy(() => import("@/components/layout/AdminLayout").t
 const LoginPage         = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
 const SetupPage         = lazy(() => import("@/pages/SetupPage").then((m) => ({ default: m.SetupPage })));
 const DashboardPage     = lazy(() => import("@/pages/DashboardPage").then((m) => ({ default: m.DashboardPage })));
-const AgentsPage        = lazy(() => import("@/pages/AgentsPage").then((m) => ({ default: m.AgentsPage })));
 const ToolsPage         = lazy(() => import("@/pages/ToolsPage").then((m) => ({ default: m.ToolsPage })));
 const A2APage           = lazy(() => import("@/pages/A2APage").then((m) => ({ default: m.A2APage })));
 const ProjectsPage      = lazy(() => import("@/pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));
@@ -102,7 +101,6 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"         element={<DashboardPage />} />
             <Route path="agents"            element={<Navigate to="/projects" replace />} />
-            <Route path="agents-legacy"     element={<AgentsPage />} />
             <Route path="activity"          element={<Navigate to="/dashboard?tab=activity" replace />} />
             <Route path="usage"             element={<Navigate to="/dashboard?tab=usage" replace />} />
             <Route path="projects"          element={<ProjectsPage />} />

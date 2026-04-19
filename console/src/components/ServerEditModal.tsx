@@ -2,7 +2,6 @@
  * ServerEditModal.tsx — Modal für Create/Update eines Remote-Servers.
  *
  * Wiederverwendet von:
- * - AgentsPage (Legacy agents-legacy/servers)
  * - TargetSystemsPage (#584-B)
  *
  * Props-only, kein globaler State. Selbständig i18n-fähig.
