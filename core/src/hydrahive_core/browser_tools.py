@@ -19,11 +19,104 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import logging
+import os
+import socket
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# SSRF-Schutz (#745)
+# ---------------------------------------------------------------------------
+
+class UnsafeURLError(ValueError):
+    """URL waere Server-Side-Request-Forgery-Vektor (loopback, private Netze,
+    Cloud-Metadata, nicht-erlaubte Schemas)."""
+
+
+_ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+
+def _is_private_ip(ip: str) -> bool:
+    """True wenn IPv4/IPv6-Adresse in einem Bereich ist, den ein Agent nie
+    von sich aus ansteuern sollte: loopback, private, link-local,
+    Cloud-Metadata (169.254.169.254), reserved, multicast."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        # kein gueltiges IP-Literal → Hostname, Caller macht DNS-Lookup
+        return False
+    return bool(
+        addr.is_loopback
+        or addr.is_private
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
+
+
+def _validate_safe_url(url: str) -> str:
+    """Validiert eine URL gegen SSRF. Wirft UnsafeURLError bei Problemen,
+    gibt die URL sonst unveraendert zurueck.
+
+    Schutzstufen:
+    1. Schema-Allowlist: nur http/https (blockt file://, javascript:, ftp://, data:)
+    2. Hostname-Parse: muss vorhanden sein
+    3. Loopback-Namen blocken (localhost, localhost.localdomain, broadcasthost)
+    4. IP-Literal-Block: loopback/private/link-local/reserved/multicast
+    5. DNS-Resolve + Block: Hostname der zu einer privaten IP aufloest
+       (schuetzt gegen DNS-Rebinding und interne Hostnames)
+
+    Env-Override HYDRAHIVE_BROWSER_ALLOW_PRIVATE=1 schaltet den Block aus.
+    Nur fuer Dev/Debug — in Prod nicht setzen. Schema-Check bleibt aktiv.
+    """
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in _ALLOWED_SCHEMES:
+        raise UnsafeURLError(
+            f"Schema '{scheme}' nicht erlaubt (nur http/https): {url}"
+        )
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise UnsafeURLError(f"Hostname fehlt: {url}")
+
+    if os.environ.get("HYDRAHIVE_BROWSER_ALLOW_PRIVATE") == "1":
+        logger.warning(
+            "browser_navigate: SSRF-Check uebersprungen wegen "
+            "HYDRAHIVE_BROWSER_ALLOW_PRIVATE=1 (url=%s)", url
+        )
+        return url
+
+    if host in {"localhost", "localhost.localdomain", "broadcasthost", "ip6-localhost", "ip6-loopback"}:
+        raise UnsafeURLError(f"Loopback-Hostname nicht erlaubt: {host}")
+
+    # IP-Literal direkt im URL (inkl. IPv6 in eckigen Klammern, urllib strippt die schon)
+    if _is_private_ip(host):
+        raise UnsafeURLError(f"Private/Loopback-IP nicht erlaubt: {host}")
+
+    # Hostname → DNS-Resolve → IPs pruefen (schuetzt vor DNS-Rebinding + internen Namen)
+    try:
+        infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        raise UnsafeURLError(f"DNS-Resolution fehlgeschlagen ({host}): {e}") from e
+    for info in infos:
+        sockaddr = info[4]
+        resolved_ip = sockaddr[0]
+        # IPv6-Scope-ID wegschneiden (z.B. "fe80::1%eth0")
+        if "%" in resolved_ip:
+            resolved_ip = resolved_ip.split("%", 1)[0]
+        if _is_private_ip(resolved_ip):
+            raise UnsafeURLError(
+                f"Hostname {host!r} loest auf private/loopback-IP {resolved_ip} auf"
+            )
+
+    return url
 
 # ---------------------------------------------------------------------------
 # Session-Management
@@ -193,6 +286,15 @@ class BrowserNavigateTool(BaseTool):
         timeout:   int = 30000,
         **kwargs,
     ) -> dict:
+        # #745: SSRF-Validierung vor Page-Load. Wirft UnsafeURLError, die wir in
+        # einen sauberen error-dict-Return umwandeln (kein Stacktrace leaken).
+        try:
+            _validate_safe_url(url)
+        except UnsafeURLError as e:
+            logger.warning("browser_navigate blockiert (SSRF): agent=%s url=%s reason=%s",
+                           agent_id, url, e)
+            return {"error": f"URL nicht erlaubt: {e}"}
+
         try:
             page = await _get_page(agent_id)
 
