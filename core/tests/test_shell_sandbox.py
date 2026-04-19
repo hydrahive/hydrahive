@@ -326,9 +326,10 @@ def test_elevated_mode_keine_blocklist(bwrap_kaputt):
 def test_unrestricted_mode_umgeht_sandbox_check(bwrap_kaputt, monkeypatch):
     """unrestricted laeuft auch ohne bwrap — keine fail-closed Verweigerung.
 
-    Wir patchen subprocess um den tatsaechlichen Aufruf zu verhindern,
-    testen aber dass der Mode nicht fail-closed abbricht.
+    Seit #747 braucht unrestricted zusaetzlich einen existierenden
+    proj_<id>-User. Wir mocken pwd.getpwnam, damit der User "existiert".
     """
+    import unittest.mock as _mock
     tool = ShellExecTool()
     calls = {"count": 0}
 
@@ -344,11 +345,12 @@ def test_unrestricted_mode_umgeht_sandbox_check(bwrap_kaputt, monkeypatch):
 
     monkeypatch.setattr("asyncio.create_subprocess_shell", _fake_exec)
 
-    result = asyncio.run(tool.execute(
-        agent_id="x", project_id="p1",
-        command="echo hallo",
-        _execution_mode="unrestricted",
-    ))
+    with _mock.patch("pwd.getpwnam", return_value=_mock.MagicMock()):
+        result = asyncio.run(tool.execute(
+            agent_id="x", project_id="p1",
+            command="echo hallo",
+            _execution_mode="unrestricted",
+        ))
     # unrestricted wird NICHT blockiert (kein blocked=True)
     assert result.get("blocked") is not True
     # Und der (gemockte) Subprocess wurde aufgerufen
