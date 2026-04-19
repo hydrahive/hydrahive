@@ -1340,21 +1340,22 @@ def register_project_routes(
         )
         record_yjs_debug_event(
             "serve_enter",
+            room=project_id,
             label=f"{project_id}/{username}",
             clients_before=len(server.rooms.get(project_id).clients) if project_id in server.rooms else 0,
         )
         try:
             await server.serve(channel)
-            record_yjs_debug_event("serve_return", label=f"{project_id}/{username}")
+            record_yjs_debug_event("serve_return", room=project_id, label=f"{project_id}/{username}")
             logger.info("Collab-WS serve returned normally for %s/%s", project_id, username)
         except WebSocketDisconnect as e:
-            record_yjs_debug_event("serve_disconnect", label=f"{project_id}/{username}", code=e.code)
+            record_yjs_debug_event("serve_disconnect", room=project_id, label=f"{project_id}/{username}", code=e.code)
             logger.info("Collab-WS client disconnected: %s/%s code=%s", project_id, username, e.code)
         except Exception as e:
             # WICHTIG: pycrdt's serve unterdrückt Exceptions via exception_handler,
             # aber FastAPI/ASGI-Fehler kommen hier an. Loggen damit wir sehen
             # warum der WS stirbt (#554 Debug).
-            record_yjs_debug_event("serve_exception", label=f"{project_id}/{username}", error=repr(e))
+            record_yjs_debug_event("serve_exception", room=project_id, label=f"{project_id}/{username}", error=repr(e))
             logger.exception("Collab-WS serve error for project %s user %s", project_id, username)
         finally:
             try:
@@ -1369,6 +1370,7 @@ def register_project_routes(
             )
             record_yjs_debug_event(
                 "serve_finally",
+                room=project_id,
                 label=f"{project_id}/{username}",
                 clients_after=len(server.rooms.get(project_id).clients) if project_id in server.rooms else 0,
             )
@@ -1380,14 +1382,14 @@ def register_project_routes(
         from .collab_yjs import get_yjs_debug_events, get_yjs_server
         server = get_yjs_server()
         if server is None:
-            return {"server": "not_started", "debug_events": get_yjs_debug_events()}
+            return {"server": "not_started", "debug_events": get_yjs_debug_events(room=project_id)}
         room = server.rooms.get(project_id)
         if room is None:
             return {
                 "server": "up",
                 "room": None,
                 "active_rooms": list(server.rooms.keys()),
-                "debug_events": get_yjs_debug_events(),
+                "debug_events": get_yjs_debug_events(room=project_id),
             }
         # paths aus den clients ziehen (Channel-Protokoll hat .path)
         clients = [getattr(c, "_label", getattr(c, "path", "?")) for c in room.clients]
@@ -1404,7 +1406,7 @@ def register_project_routes(
             "clients": clients,
             "ydoc_composer_text": ydoc_text,
             "ydoc_composer_len": len(ydoc_text),
-            "debug_events": get_yjs_debug_events(),
+            "debug_events": get_yjs_debug_events(room=project_id),
         }
 
     @auth_router.get("/projects/{project_id}/presence")

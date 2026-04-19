@@ -20,10 +20,20 @@ import asyncio
 import logging
 import time
 from collections import deque
+from inspect import isawaitable
 from pathlib import Path
 
+from anyio import create_task_group
 from fastapi import WebSocket, WebSocketDisconnect
 
+from pycrdt import (
+    YMessageType,
+    YSyncMessageType,
+    create_sync_message,
+    handle_sync_message,
+    is_awareness_disconnect_message,
+    read_message,
+)
 from pycrdt.store import SQLiteYStore
 from pycrdt.websocket.websocket_server import WebsocketServer
 from pycrdt.websocket.yroom import YRoom
@@ -40,6 +50,8 @@ _debug_events: deque[dict] = deque(maxlen=_DEBUG_EVENTS_MAX)
 
 
 def _record_debug_event(event: str, **data) -> None:
+    if "room" not in data and isinstance(data.get("label"), str):
+        data["room"] = data["label"].split("/", 1)[0]
     payload = {
         "ts": round(time.time(), 3),
         "event": event,
@@ -53,10 +65,149 @@ def record_yjs_debug_event(event: str, **data) -> None:
     _record_debug_event(event, **data)
 
 
-def get_yjs_debug_events(limit: int = 50) -> list[dict]:
+def get_yjs_debug_events(limit: int = 50, room: str | None = None) -> list[dict]:
     if limit <= 0:
         return []
-    return list(_debug_events)[-limit:]
+    events = list(_debug_events)
+    if room:
+        events = [event for event in events if event.get("room") in {room, None}]
+    return events[-limit:]
+
+
+def reset_yjs_debug_events() -> None:
+    _debug_events.clear()
+
+
+def _classify_yjs_message(message: bytes) -> dict:
+    if not message:
+        return {"message_kind": "empty", "bytes": 0}
+
+    result = {"bytes": len(message)}
+    try:
+        message_type = YMessageType(message[0])
+    except Exception:
+        result["message_kind"] = f"unknown:{message[0]}"
+        return result
+
+    result["message_kind"] = message_type.name.lower()
+    if message_type == YMessageType.SYNC and len(message) > 1:
+        try:
+            result["sync_type"] = YSyncMessageType(message[1]).name.lower()
+        except Exception:
+            result["sync_type"] = f"unknown:{message[1]}"
+    return result
+
+
+class DebugYRoom(YRoom):
+    """YRoom mit Debug-Events für #769.
+
+    Die Logik bleibt nah an pycrdts YRoom.serve(), ergänzt aber Events an den
+    Stellen, an denen wir für Cross-Client-Sync unterscheiden müssen:
+    Client-Lifecycle, Sync-Messages, Awareness-Messages und Doc-Updates.
+    """
+
+    def __init__(self, room_name: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.room_name = room_name
+        self._debug_doc_subscription = self.ydoc.observe(self._record_doc_update)
+
+    def _record_doc_update(self, event) -> None:
+        update = getattr(event, "update", None)
+        update_len = len(update) if isinstance(update, (bytes, bytearray, memoryview)) else None
+        _record_debug_event(
+            "doc_update",
+            room=self.room_name,
+            bytes=update_len,
+            event_type=type(event).__name__,
+        )
+
+    async def serve(self, channel):
+        try:
+            async with create_task_group() as tg:
+                self.clients.add(channel)
+                _record_debug_event(
+                    "client_added",
+                    room=self.room_name,
+                    label=getattr(channel, "_label", getattr(channel, "path", "?")),
+                    client_count=len(self.clients),
+                )
+                sync_message = create_sync_message(self.ydoc)
+                await channel.send(sync_message)
+                _record_debug_event(
+                    "initial_sync_sent",
+                    room=self.room_name,
+                    label=getattr(channel, "_label", getattr(channel, "path", "?")),
+                    bytes=len(sync_message),
+                    client_count=len(self.clients),
+                )
+                async for message in channel:
+                    message_info = _classify_yjs_message(message)
+                    label = getattr(channel, "_label", getattr(channel, "path", "?"))
+
+                    skip = False
+                    if self.on_message:
+                        _skip = self.on_message(message)
+                        skip = await _skip if isawaitable(_skip) else _skip
+                    if skip:
+                        _record_debug_event(
+                            "message_skipped",
+                            room=self.room_name,
+                            label=label,
+                            **message_info,
+                        )
+                        continue
+
+                    message_type = message[0] if message else None
+                    if message_type == YMessageType.SYNC:
+                        _record_debug_event(
+                            "sync_message",
+                            room=self.room_name,
+                            label=label,
+                            client_count=len(self.clients),
+                            **message_info,
+                        )
+                        reply = handle_sync_message(message[1:], self.ydoc)
+                        if reply is not None:
+                            _record_debug_event(
+                                "sync_reply",
+                                room=self.room_name,
+                                label=label,
+                                bytes=len(reply),
+                                client_count=len(self.clients),
+                            )
+                            tg.start_soon(channel.send, reply)
+                    elif message_type == YMessageType.AWARENESS:
+                        disconnection = is_awareness_disconnect_message(message[1:])
+                        _record_debug_event(
+                            "awareness_message",
+                            room=self.room_name,
+                            label=label,
+                            client_count=len(self.clients),
+                            disconnect=disconnection,
+                            **message_info,
+                        )
+                        for client in self.clients:
+                            if disconnection and client == channel:
+                                continue
+                            tg.start_soon(client.send, message)
+                        self.awareness.apply_awareness_update(read_message(message[1:]), self)
+                    else:
+                        _record_debug_event(
+                            "unknown_message",
+                            room=self.room_name,
+                            label=label,
+                            **message_info,
+                        )
+        except Exception as exception:
+            self._handle_exception(exception)
+        finally:
+            self.clients.discard(channel)
+            _record_debug_event(
+                "client_removed",
+                room=self.room_name,
+                label=getattr(channel, "_label", getattr(channel, "path", "?")),
+                client_count=len(self.clients),
+            )
 
 
 class HydraHiveYjsServer(WebsocketServer):
@@ -76,7 +227,7 @@ class HydraHiveYjsServer(WebsocketServer):
         if name not in self.rooms:
             db_path = self.store_dir / f"{name}.sqlite"
             ystore = SQLiteYStore(str(db_path), log=self.log)
-            room = YRoom(ready=self.rooms_ready, log=self.log, ystore=ystore)
+            room = DebugYRoom(name, ready=self.rooms_ready, log=self.log, ystore=ystore)
             self.rooms[name] = room
             _record_debug_event("room_created", room=name, store=str(db_path))
             logger.info("Yjs-Room erstellt: %s (store=%s)", name, db_path)
