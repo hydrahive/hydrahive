@@ -58,7 +58,19 @@ jobs:
             tests/test_subagent_write_scope.py \
             tests/test_review_guards.py \
             tests/test_access_control.py \
+            --cov=hydrahive_core \
+            --cov-report=xml \
+            --cov-report=term \
             -q
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: core/coverage.xml
+          retention-days: 30
+          if-no-files-found: warn
 
   frontend:
     name: frontend
