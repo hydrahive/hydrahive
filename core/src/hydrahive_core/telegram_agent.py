@@ -249,6 +249,17 @@ async def start_telegram_bot(
             _dbg("orch_start", agent=active_agent, project=_project_id)
             response_parts: list[str] = []
             chunk_count = 0
+            # Live-Edit-State: bei Text-Antworten (nicht Voice) schieben wir
+            # den wachsenden Buffer als edit_message_text nach. Erste Nachricht
+            # nach ~1.5s oder 30 Zeichen, weitere edits alle ~1.2s (Telegram-
+            # Rate-Limit liegt bei ~1/s pro Chat).
+            _stream_msg = None          # telegram.Message oder None
+            _stream_last_text = ""
+            _stream_last_edit = 0.0
+            _stream_start = time.monotonic()
+            _stream_cap = 4000          # Edit bis 4000; Rest am Ende als Folge-Messages
+            _stream_first_delay = 1.5
+            _stream_edit_gap = 1.2
             async for chunk in orchestrator.handle_message_stream(
                 project_id=_project_id,
                 project_cfg=virtual_cfg,
@@ -275,6 +286,33 @@ async def start_telegram_bot(
                         continue
                     if isinstance(data, dict) and "text" in data:
                         response_parts.append(data["text"])
+
+                # Live-Edit-Push nach jedem chunk — aber nur für Text (Voice
+                # sammelt weiter und sendet erst am Ende als Sprach-Nachricht).
+                if is_audio:
+                    continue
+                now = time.monotonic()
+                buf = "".join(response_parts)
+                edit_text = buf[:_stream_cap].strip()
+                if not edit_text:
+                    continue
+                try:
+                    if _stream_msg is None:
+                        if (now - _stream_start) >= _stream_first_delay or len(edit_text) >= 30:
+                            _stream_msg = await context.bot.send_message(chat_id=chat_id, text=edit_text)
+                            _stream_last_text = edit_text
+                            _stream_last_edit = now
+                            _dbg("stream_init", chars=len(edit_text))
+                    elif (now - _stream_last_edit) >= _stream_edit_gap and edit_text != _stream_last_text:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id, message_id=_stream_msg.message_id, text=edit_text,
+                        )
+                        _stream_last_text = edit_text
+                        _stream_last_edit = now
+                except Exception as _se:
+                    # Telegram flaggt identischen Text + rate-limits als Error.
+                    # Nicht abbrechen — am Ende kommt der finale send_message.
+                    _dbg("stream_edit_err", err=str(_se)[:120])
             _dbg("orch_end", chunks=chunk_count, response_len=len(response_parts))
 
             response = "".join(response_parts).strip()
@@ -296,9 +334,24 @@ async def start_telegram_bot(
                 except Exception as e:
                     logger.warning("Telegram TTS fehlgeschlagen: %s — sende als Text", e)
 
-            # Text aufteilen (Telegram-Limit: 4096 Zeichen)
-            for i in range(0, len(response), 4096):
-                await context.bot.send_message(chat_id=chat_id, text=response[i:i+4096])
+            # Finales Editieren + ggf. Folge-Messages für den Rest.
+            if _stream_msg is not None:
+                final_first = response[:_stream_cap]
+                if final_first and final_first != _stream_last_text:
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=chat_id, message_id=_stream_msg.message_id, text=final_first,
+                        )
+                    except Exception as _fe:
+                        _dbg("stream_final_edit_err", err=str(_fe)[:120])
+                rest = response[_stream_cap:]
+                for i in range(0, len(rest), 4096):
+                    await context.bot.send_message(chat_id=chat_id, text=rest[i:i+4096])
+            else:
+                # Stream endete ohne jede Zwischen-Message (z.B. sehr kurze Antwort,
+                # die VOR dem 1.5s-Delay kam). Normal splitten.
+                for i in range(0, len(response), 4096):
+                    await context.bot.send_message(chat_id=chat_id, text=response[i:i+4096])
 
         except Exception as e:
             _dbg("handler_exc", agent=active_agent, err=str(e)[:120], tb=traceback.format_exc()[-500:])
