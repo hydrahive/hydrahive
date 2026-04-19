@@ -52,6 +52,7 @@ jobs:
             tests/test_permission_classifier_cache.py \
             tests/test_rate_limiter.py \
             tests/test_auth_cookie.py \
+            tests/test_sse_cookie_auth.py \
             tests/test_unrestricted_root_block.py \
             tests/test_security.py \
             tests/test_security_regressions.py \
