@@ -151,6 +151,32 @@ out=$(HYDRAHIVE_SCAN_ROOT="$t" HYDRAHIVE_SCAN_ALLOWLIST="$t/.allowlist" \
 if [ "$rc" -eq 0 ]; then pass "trufflehog-stub ohne Findings → exit 0"; else fail "stub clean should pass, got $rc: $out"; fi
 rm -f "$stub"; rm -rf "$t"
 
+# ── Test 11: Beide Scanner fehlen → exit != 0 (#757) ─────────────────────────
+# Minimal-PATH, der rg NICHT enthält. trufflehog via TRUFFLEHOG_BIN="" abgeklemmt,
+# Docker-Opt-in aus. Ziel: "grünes CI ohne echten Scan" darf nicht passieren.
+t=$(make_tree); : > "$t/.allowlist"; echo "clean file" > "$t/file.txt"
+fake_path=$(mktemp -d)
+for bin in sed grep paste dirname cat rm mkdir mktemp true false "[" test; do
+  src=$(command -v "$bin" 2>/dev/null || true)
+  [ -n "$src" ] && ln -s "$src" "$fake_path/$bin"
+done
+bash_bin="$(command -v bash)"
+out_noscan=$(PATH="$fake_path" TRUFFLEHOG_BIN="" HYDRAHIVE_SECRET_SCAN_DOCKER=0 \
+      HYDRAHIVE_SCAN_ROOT="$t" HYDRAHIVE_SCAN_ALLOWLIST="$t/.allowlist" \
+      "$bash_bin" "$SCAN" --fast 2>&1); rc_noscan=$?
+if [ "$rc_noscan" -ne 0 ]; then
+  pass "ohne Scanner (kein rg + kein trufflehog) blockiert"
+else
+  fail "ohne Scanner sollte != 0 sein, got $rc_noscan: $out_noscan"
+fi
+if echo "$out_noscan" | grep -qi 'kein secret-scanner\|kein scanner\|scan ungültig'; then
+  pass "Error-Message nennt fehlende Scanner"
+else
+  fail "erwartete Scanner-Fehlermeldung: $out_noscan"
+fi
+rm -rf "$t" "$fake_path"
+
+
 # ── Test 10: Redaction greift für Nicht-Secret-Strings NICHT ─────────────────
 # Lange hex-Strings ohne bekanntes Secret-Prefix sollen durchkommen
 # (Redaction ist zielgerichtet, nicht breitband).

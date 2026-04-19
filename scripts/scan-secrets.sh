@@ -90,7 +90,7 @@ run_trufflehog_fast() {
       if ! docker image inspect trufflesecurity/trufflehog:latest >/dev/null 2>&1; then
         warn "Docker-Image trufflesecurity/trufflehog nicht lokal. Kein automatischer Pull."
         warn "Manuell: docker pull trufflesecurity/trufflehog:latest"
-        return 0
+        return 2
       fi
       local out
       out=$(docker run --rm -v "$REPO_DIR:/repo" trufflesecurity/trufflehog:latest \
@@ -101,7 +101,7 @@ run_trufflehog_fast() {
     warn "trufflehog nicht gefunden (TRUFFLEHOG_BIN oder PATH)."
     warn "Verifizierter Scan übersprungen. rg-Pattern-Scan läuft weiter."
     warn "Opt-in Docker: HYDRAHIVE_SECRET_SCAN_DOCKER=1"
-    return 0
+    return 2
   fi
 
   info "trufflehog ($bin) — filesystem --only-verified"
@@ -133,7 +133,7 @@ parse_trufflehog_output() {
 run_rg_patterns() {
   if ! command -v rg >/dev/null 2>&1; then
     warn "rg (ripgrep) fehlt — Pattern-Scan übersprungen."
-    return 0
+    return 2
   fi
   info "rg — Pattern-Scan (PAT, AWS, Slack, Anthropic, Private Keys)"
   local out
@@ -170,8 +170,21 @@ if [ "$MODE" = "fast" ]; then
   echo "Repo: $REPO_DIR"
   [ -f "$ALLOWLIST" ] && echo "Allowlist: $ALLOWLIST"
   fail=0
-  run_trufflehog_fast || fail=1
-  run_rg_patterns || fail=1
+  ran=0
+  # Return-Codes: 0=clean, 1=findings, 2=scanner-missing (nicht gelaufen)
+  rc_tf=0; run_trufflehog_fast || rc_tf=$?
+  [ "$rc_tf" -ne 2 ] && ran=$((ran+1))
+  [ "$rc_tf" -eq 1 ] && fail=1
+  rc_rg=0; run_rg_patterns || rc_rg=$?
+  [ "$rc_rg" -ne 2 ] && ran=$((ran+1))
+  [ "$rc_rg" -eq 1 ] && fail=1
+  if [ "$ran" -eq 0 ]; then
+    red "Kein Secret-Scanner verfügbar — Scan ungültig, Push/Deploy blockiert."
+    echo "[HINT] Installiere trufflehog oder ripgrep." >&2
+    echo "[HINT] Opt-in Docker: HYDRAHIVE_SECRET_SCAN_DOCKER=1" >&2
+    echo "[HINT] Bypass (nur mit Grund): HYDRAHIVE_SKIP_SECRET_SCAN=1" >&2
+    exit 1
+  fi
   if [ "$fail" -ne 0 ]; then
     red "Secret-Scan: Fundstellen — Push/Deploy blockiert."
     echo "[HINT] Allowlist: $ALLOWLIST" >&2
@@ -188,6 +201,7 @@ echo "=== HydraHive Secret Scan (full) ==="
 echo "Repo: $REPO_DIR"
 PASS=0
 FAIL=0
+RAN=0
 
 if [ "${HYDRAHIVE_SECRET_SCAN_DOCKER:-0}" = "1" ] && command -v docker >/dev/null 2>&1; then
   info "1/4 gitleaks — Arbeitsbaum (Docker opt-in)"
@@ -197,11 +211,11 @@ if [ "${HYDRAHIVE_SECRET_SCAN_DOCKER:-0}" = "1" ] && command -v docker >/dev/nul
     REAL=$(printf '%s\n' "$GL_OUT" | grep "File:" | filter_allowlist || true)
     if [ -z "$REAL" ]; then
       green "gitleaks Arbeitsbaum: sauber / nur Allowlist"
-      PASS=$((PASS+1))
+      PASS=$((PASS+1)); RAN=$((RAN+1))
     else
       red "gitleaks Arbeitsbaum:"
       printf '%s\n' "$REAL" | redact >&2
-      FAIL=$((FAIL+1))
+      FAIL=$((FAIL+1)); RAN=$((RAN+1))
     fi
   else
     warn "gitleaks-Image nicht lokal — kein Auto-Pull. Überspringe."
@@ -214,11 +228,11 @@ if [ "${HYDRAHIVE_SECRET_SCAN_DOCKER:-0}" = "1" ] && command -v docker >/dev/nul
     REAL=$(printf '%s\n' "$GL_HIST" | grep "File:" | filter_allowlist || true)
     if [ -z "$REAL" ]; then
       green "gitleaks History: sauber / nur Allowlist"
-      PASS=$((PASS+1))
+      PASS=$((PASS+1)); RAN=$((RAN+1))
     else
       red "gitleaks History:"
       printf '%s\n' "$REAL" | redact >&2
-      FAIL=$((FAIL+1))
+      FAIL=$((FAIL+1)); RAN=$((RAN+1))
     fi
   fi
 else
@@ -226,22 +240,29 @@ else
 fi
 
 info "3/4 trufflehog — Filesystem (--only-verified)"
-if run_trufflehog_fast; then
-  PASS=$((PASS+1))
-else
-  FAIL=$((FAIL+1))
+rc_tf=0; run_trufflehog_fast || rc_tf=$?
+if [ "$rc_tf" -eq 0 ]; then
+  PASS=$((PASS+1)); RAN=$((RAN+1))
+elif [ "$rc_tf" -eq 1 ]; then
+  FAIL=$((FAIL+1)); RAN=$((RAN+1))
 fi
 
 info "4/4 rg — Pattern-Scan"
-if run_rg_patterns; then
-  PASS=$((PASS+1))
-else
-  FAIL=$((FAIL+1))
+rc_rg=0; run_rg_patterns || rc_rg=$?
+if [ "$rc_rg" -eq 0 ]; then
+  PASS=$((PASS+1)); RAN=$((RAN+1))
+elif [ "$rc_rg" -eq 1 ]; then
+  FAIL=$((FAIL+1)); RAN=$((RAN+1))
 fi
 
 echo ""
 echo "════════════════════════════════════"
-echo "Ergebnis: $PASS OK, $FAIL FAIL"
+echo "Ergebnis: $PASS OK, $FAIL FAIL (Scanner gelaufen: $RAN)"
+if [ "$RAN" -eq 0 ]; then
+  red "Kein Secret-Scanner verfügbar — Scan ungültig."
+  echo "[HINT] Installiere trufflehog oder ripgrep (optional: gitleaks + HYDRAHIVE_SECRET_SCAN_DOCKER=1)." >&2
+  exit 1
+fi
 if [ "$FAIL" -eq 0 ]; then
   green "Scan sauber."
   exit 0
