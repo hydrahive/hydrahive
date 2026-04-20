@@ -144,6 +144,55 @@ if ! grep -q '^console_password=' "${CRED_FILE}" 2>/dev/null; then
 fi
 export CONSOLE_PASS
 
+# --- BL-15: Admin-Hash in users.json mit console_password syncronisieren ---
+# Problem: Bei Re-Install passt der alte bcrypt-Hash in users.json nicht mehr
+# zum console_password in admin_credentials (wenn ein Admin sein Passwort via
+# API geaendert hat UND dann neu installiert wird, oder wenn der Hash aus
+# einem frueheren Install veraltet ist). Wir syncen den Hash hier immer auf
+# das aktuelle console_password — damit ist admin_credentials die Source of
+# Truth und Login klappt nach jedem Installer-Lauf.
+# Hash-Format identisch zu core/src/hydrahive_core/auth_utils.hash_password:
+#   pbkdf2b:{salt_hex}:{hash_hex}, PBKDF2-SHA256, 260k iterations, 16-byte salt.
+CONSOLE_PASS="${CONSOLE_PASS}" python3 - <<'PY' || warn "BL-15: Admin-Hash-Sync fehlgeschlagen — Login ggf. ueber admin_credentials-Fallback"
+import json, hashlib, secrets, os, sys
+users_file = "/etc/hydrahive/users.json"
+console_pass = os.environ.get("CONSOLE_PASS") or ""
+if not console_pass:
+    sys.exit(0)
+
+try:
+    with open(users_file) as f:
+        users = json.load(f)
+except Exception:
+    users = {}
+
+admin = users.get("admin", {}) or {}
+
+# Wenn bereits ein korrekter Hash drin steht (Re-Install mit unveraendertem
+# console_password): nicht neu schreiben.
+existing = admin.get("password_hash", "")
+if existing.startswith("pbkdf2b:"):
+    try:
+        _, salt_hex, h_hex = existing.split(":", 2)
+        salt = bytes.fromhex(salt_hex)
+        check = hashlib.pbkdf2_hmac("sha256", console_pass.encode(), salt, 260_000)
+        if check.hex() == h_hex:
+            print("[BL-15] admin-Hash in users.json bereits aktuell")
+            sys.exit(0)
+    except Exception:
+        pass
+
+salt = secrets.token_bytes(16)
+h = hashlib.pbkdf2_hmac("sha256", console_pass.encode(), salt, 260_000)
+admin["password_hash"] = f"pbkdf2b:{salt.hex()}:{h.hex()}"
+admin.setdefault("role", "admin")
+admin.setdefault("group", "admin")
+users["admin"] = admin
+with open(users_file, "w") as f:
+    json.dump(users, f, indent=2)
+print("[BL-15] admin-Hash in users.json aktualisiert")
+PY
+
 # --- Core-Quellcode kopieren (Installer läuft aus dem geklonten Repo) ---
 info "Kopiere hydrahive-core Quellcode..."
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
