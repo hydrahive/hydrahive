@@ -258,6 +258,18 @@ async def lifespan(app: FastAPI):
             "NIEMALS in Prod setzen."
         )
 
+    # #779: Rate-Limiter-Backend Info beim Start. Wenn kein Redis verfuegbar
+    # ist, laeuft das Rate-Limiting prozess-lokal — bei Multi-Worker-Deployments
+    # (z.B. uvicorn --workers 4) greift das Loop-Detection-Limit nur pro
+    # Prozess. Distributed-Enforcement erfordert Redis-Backend.
+    if rate_limiter._redis_client is None:
+        logger.warning(
+            "AUDIT [RATE-LIMIT] Redis-Backend nicht aktiv — Rate-Limits greifen "
+            "nur PRO PROZESS. Multi-Worker-Setups brauchen Redis: setze "
+            "HYDRAHIVE_RATE_LIMIT_REDIS_URL=redis://... und starte Core neu. "
+            "Single-Worker-Deployments sind nicht betroffen."
+        )
+
     # #777: SSH-Host-Key-Enforcement Info beim Start. Default ist seit #777
     # 'strict' — unverifizierte Hosts blocken SSH-Calls. Wenn Admin bestehende
     # Server noch nicht genehmigt hat, warn prominent damit der Admin es

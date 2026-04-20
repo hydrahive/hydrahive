@@ -213,3 +213,21 @@ misconfiguration.*
   at startup listing the number of unverified hosts.
 - **Recommendation**: always leave the default. Approve fingerprints via
   the admin panel on first connection (TOFU with admin-approval).
+
+### Rate-Limiting in Multi-Worker Deployments
+
+HydraHive's rate limiter (`rate_limiter.py`) uses Redis for distributed
+enforcement and falls back to in-memory tracking when Redis is unavailable.
+
+- **Single-worker deployments** (`systemd` default, one uvicorn process):
+  in-memory tracking is sufficient. No action required.
+- **Multi-worker deployments** (e.g., `uvicorn --workers 4`, `gunicorn`):
+  rate limits become **per-process**. A client can exceed the configured
+  limit by distributing requests across workers. The agent-call-loop
+  detection limit (`#779`) is particularly affected.
+- **Mitigation**: set `HYDRAHIVE_RATE_LIMIT_REDIS_URL=redis://localhost:6379/0`
+  and restart the core. Redis is already installed as part of the base
+  HydraHive setup (used by AgentLink).
+
+The core logs `AUDIT [RATE-LIMIT]` at `WARNING` level at startup when the
+in-memory fallback is active.
