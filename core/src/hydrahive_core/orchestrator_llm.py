@@ -1328,7 +1328,14 @@ async def _llm_call_single(
     # #628: Message-Normalisierung vor Cache-Control + LLM-Call (kanonische Form)
     from .message_normalization import normalize_messages_for_call
     messages = normalize_messages_for_call(messages)
-    cached_messages = _apply_cache_control(messages, use_anthropic_wire_format)
+    # #P3-FIX: _apply_cache_control braucht is_anthropic=True für MiniMax
+    # (MiniMax's Anthropic-Endpoint akzeptiert cache_control: ephemeral).
+    # use_anthropic_wire_format=False → to_anthropic_format wird nicht
+    # aufgerufen → MiniMax erhält OpenAI-Chat-Messages mit cache_control-
+    # Markern, LiteLLM reicht sie durch. Siehe test_minimax_provider.py:
+    # test_minimax_litellm_call_behaelt_openai_tool_messages.
+    _use_cache_control = use_anthropic_wire_format or _is_direct_minimax_model(model_name, model)
+    cached_messages = _apply_cache_control(messages, _use_cache_control)
     # #637-Followup: echte Anthropic-API-Key-Calls ohne OAuth brauchen die
     # OpenAI→Anthropic-Konvertierung vor litellm. MiniMax ist eine Ausnahme:
     # Token-Plan läuft über /anthropic, aber LiteLLM validiert OpenAI-Chat-
