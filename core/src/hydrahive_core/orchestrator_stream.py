@@ -1156,19 +1156,20 @@ async def _stream_litellm(
 
         async for chunk in _stream:
             if getattr(chunk, "usage", None):
-                # ===== P3-DEBUG: komplette Usage-Felder vom Streaming-Chunk loggen =====
-                try:
-                    _u = chunk.usage
-                    _usage_dict = {k: getattr(_u, k, None) for k in dir(_u)
-                                   if not k.startswith("_") and not callable(getattr(_u, k, None))}
-                    logger.warning("[P3-DEBUG-STREAM] model=%s usage=%s", model, _usage_dict)
-                except Exception as _ex:
-                    logger.warning("[P3-DEBUG-STREAM] usage inspection failed: %s", _ex)
-                # ===== ENDE P3-DEBUG =====
-                _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)
-                _usage["output"]      += getattr(chunk.usage, "completion_tokens", 0)
-                _usage["cache_write"] += getattr(chunk.usage, "cache_creation_input_tokens", 0)
-                _usage["cache_read"]  += getattr(chunk.usage, "cache_read_input_tokens", 0)
+                _input   = getattr(chunk.usage, "prompt_tokens", 0) or 0
+                _output  = getattr(chunk.usage, "completion_tokens", 0) or 0
+                _c_write = getattr(chunk.usage, "cache_creation_input_tokens", 0) or 0
+                _c_read  = getattr(chunk.usage, "cache_read_input_tokens", 0) or 0
+                _usage["input"]       += _input
+                _usage["output"]      += _output
+                _usage["cache_write"] += _c_write
+                _usage["cache_read"]  += _c_read
+                if _c_write or _c_read:
+                    logger.info(
+                        "cache [%s] input=%d cache_write=%d cache_read=%d (≈%.0f%% gecacht)",
+                        model, _input, _c_write, _c_read,
+                        100 * _c_read / max(_input, 1),
+                    )
             choice = chunk.choices[0]
             delta  = choice.delta
             if delta.content:
