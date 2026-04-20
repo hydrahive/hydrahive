@@ -34,6 +34,12 @@ fi
 
 # (Migration octopos→hydrahive entfernt — nicht mehr nötig)
 
+# BL-02: Git safe.directory für HYDRAHIVE_DIR setzen. Wenn das Repo nach
+# /opt/hydrahive geklont ist (häufiger Sysadmin-Weg), hat sudo-git später
+# Probleme ("fatal: detected dubious ownership"). --system = systemweit,
+# überlebt User-Wechsel. Idempotent.
+git config --system --add safe.directory "${HYDRAHIVE_DIR}" 2>/dev/null || true
+
 # --- Dangling nginx-Symlinks bereinigen (von fehlgeschlagenen Vorinstalls) ---
 for _sl in /etc/nginx/sites-enabled/*; do
     [ -L "$_sl" ] && [ ! -e "$_sl" ] && rm -f "$_sl" && warn "Veralteten nginx-Symlink entfernt: $_sl"
