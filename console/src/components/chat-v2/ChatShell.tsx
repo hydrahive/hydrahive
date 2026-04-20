@@ -72,9 +72,26 @@ function ToolDataPart({ part }: { part: DataPart }) {
   }
   if (part.name === "tool_image") {
     const src = String(data.tool_image ?? "");
+    const toolName = String(data.tool_name ?? "tool-image");
+    // #791: Download-Link fuer generierte Bilder. Data-URIs werden korrekt
+    // angezeigt; HTTP-URLs bleiben als Fallback (ziehen sich Cookies via
+    // user-click statt bei passivem <img>-Load).
+    const downloadName = toolName.replace(/[^a-z0-9._-]+/gi, "_") + (src.includes("image/png") ? ".png" : src.includes("image/jpeg") ? ".jpg" : ".img");
     return (
-      <div className="rounded-xl border border-border/60 bg-card/70 p-2">
-        {src ? <img src={src} alt={String(data.tool_name ?? "tool image")} className="max-h-72 rounded-lg object-contain" /> : null}
+      <div className="rounded-xl border border-border/60 bg-card/70 p-2 space-y-1">
+        {src ? (
+          <>
+            <img src={src} alt={toolName} className="max-h-72 rounded-lg object-contain" />
+            <a
+              href={src}
+              download={downloadName}
+              className="block text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+              title="Bild speichern"
+            >
+              ⬇ {downloadName}
+            </a>
+          </>
+        ) : null}
       </div>
     );
   }

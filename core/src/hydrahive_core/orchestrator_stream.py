@@ -49,11 +49,14 @@ async def _keepalive_comment_stream():
 def _extract_tool_image(result: Any, tool_name: str) -> str | None:
     """SSE-Event-JSON für Inline-Bild-Anzeige im Chat.
 
-    Unterstützte Tool-Result-Shapes:
-    - ``{"image_base64": "...", "format": "png"}`` → data-URI (legacy, z.B.
-      Browser-Screenshot-Tools die direkt bytes liefern).
+    Unterstützte Tool-Result-Shapes (Priorität absteigend):
+    - ``{"image_data_uri": "data:image/png;base64,..."}`` → direkt einbettbar
+      (#791 Phase 1: image_generate legt das zusaetzlich ins Result).
+    - ``{"image_base64": "...", "format": "png"}`` → data-URI (legacy).
     - ``{"artifacts": [{"mime": "image/...", "download_url": "/me/jobs/..."}]}``
-      → HTTP-URL (#773 Followup: image_generate via Jobs-Framework).
+      → HTTP-URL (nur als letzter Fallback — <img>-Tag schickt keine Cookies
+      mit, darum 403 auf /me/jobs/*/artifacts/*; die data_uri-Variante ist
+      der robuste Pfad).
 
     Event-Shape: ``{"type": "tool_image", "tool_image": <src>, "tool_name": <id>}``.
 
@@ -61,6 +64,15 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
     """
     if not isinstance(result, dict):
         return None
+
+    # #791: Bevorzugt data-URI (umgeht das Cookie-Problem bei <img>-Tags).
+    data_uri = result.get("image_data_uri")
+    if isinstance(data_uri, str) and data_uri.startswith("data:image/"):
+        return _json.dumps({
+            "type": "tool_image",
+            "tool_image": data_uri,
+            "tool_name": tool_name,
+        })
 
     if "image_base64" in result:
         fmt = result.get("format", "png")
@@ -71,8 +83,7 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
         })
 
     # #773 Followup: Jobs-basierte Media-Tools (image/video/music) liefern
-    # Artifacts mit download_url. Für images das erste Artifact inline
-    # zeigen — der Browser fetcht die URL per Cookie-Auth (#748 Phase 4).
+    # Artifacts mit download_url. Als Fallback wenn image_data_uri fehlt.
     artifacts = result.get("artifacts")
     if isinstance(artifacts, list):
         for a in artifacts:

@@ -2946,6 +2946,26 @@ class ImageGenerateTool(BaseTool):
             "status":   final.status,
             "artifacts": artifacts,
         }
+
+        # #791 Phase 1: Base64-Data-URI fuer inline <img>-Anzeige. Der Browser
+        # schickt bei <img>-Tags keine Auth-Cookies, darum antwortet
+        # /me/jobs/*/artifacts/* mit 403. Loesung: die Image-Bytes hier als
+        # data:-URI ins Tool-Result legen, dann kann das Frontend das Bild
+        # direkt einbetten — kein zweiter Auth-Request noetig.
+        # Greift nur bei erstem image/*-Artifact (typisch 1 Bild pro Call).
+        if final.status == "completed" and final.artifacts:
+            first = final.artifacts[0]
+            mime = first.get("mime", "image/png")
+            fname = first.get("filename")
+            if fname and mime.startswith("image/"):
+                try:
+                    import base64 as _b64
+                    path = self._job_service.artifact_path(final.job_id, fname)
+                    data = path.read_bytes()
+                    out["image_data_uri"] = f"data:{mime};base64,{_b64.b64encode(data).decode('ascii')}"
+                except Exception as _data_uri_err:
+                    logger.debug("image_generate: data-URI build failed: %s", _data_uri_err)
+
         if final.error:
             out["error"] = final.error
         return out
