@@ -3,7 +3,7 @@ test_minimax_provider.py — Tests für #616 MiniMax-M2 als LLM-Provider.
 
 Prüft:
 - _resolve_model: MiniMax-Modelle werden NICHT als Ollama interpretiert und landen
-  mit openai/-Transport + MiniMax-Endpoint.
+  mit anthropic/-Transport + MiniMax-Endpoint.
 - _provider_call_kwargs: liefert api_base + api_key nur für MiniMax-Modelle,
   respektiert api_key_env-Vorrang.
 - check_llm_provider_available: OK mit MINIMAX_API_KEY, Fehlermeldung ohne Key.
@@ -32,11 +32,11 @@ from hydrahive_core.router_llm import _has_minimax_provider_key
 
 class TestResolveModelMinimax:
 
-    def test_bare_name_mappt_auf_openai_transport(self):
+    def test_bare_name_mappt_auf_anthropic_transport(self):
         """#616 Kernfall: bare 'MiniMax-M2.7' darf NICHT als Ollama enden."""
         with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
             model, base = _resolve_model("MiniMax-M2.7")
-        assert model == "openai/MiniMax-M2.7"
+        assert model == "anthropic/MiniMax-M2.7"
         assert base == MINIMAX_DEFAULT_BASE_URL
 
     def test_bare_name_nicht_als_ollama(self):
@@ -44,21 +44,21 @@ class TestResolveModelMinimax:
         with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
             model, _ = _resolve_model("MiniMax-M2.7", ollama_base_url="http://localhost:11434")
         assert not model.startswith("ollama")
-        assert model == "openai/MiniMax-M2.7"
+        assert model == "anthropic/MiniMax-M2.7"
 
     def test_minimax_prefix_form_wird_akzeptiert(self):
         """Robustheit: minimax/ Prefix-Form wird auf denselben Transport gemappt."""
         with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
             model, base = _resolve_model("minimax/MiniMax-M2.7")
-        assert model == "openai/MiniMax-M2.7"
+        assert model == "anthropic/MiniMax-M2.7"
         assert base == MINIMAX_DEFAULT_BASE_URL
 
     def test_base_url_aus_llm_config(self):
         """Custom base_url aus providers.minimax.base_url wird genutzt."""
-        fake_cfg = {"providers": {"minimax": {"base_url": "https://api.example.eu/v1"}}}
+        fake_cfg = {"providers": {"minimax": {"base_url": "https://api.example.eu/anthropic"}}}
         with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg):
             _, base = _resolve_model("MiniMax-M2.7")
-        assert base == "https://api.example.eu/v1"
+        assert base == "https://api.example.eu/anthropic"
 
 
 # ================================================================= _provider_call_kwargs
@@ -108,10 +108,10 @@ class TestProviderCallKwargs:
 
     def test_custom_base_url_aus_config(self, monkeypatch):
         monkeypatch.setenv("MINIMAX_API_KEY", "x")
-        fake_cfg = {"providers": {"minimax": {"base_url": "https://eu.minimax.example/v1", "api_key": "y"}}}
+        fake_cfg = {"providers": {"minimax": {"base_url": "https://eu.minimax.example/anthropic", "api_key": "y"}}}
         with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg):
             kw = _provider_call_kwargs("MiniMax-M2.7", _make_cfg())
-        assert kw["api_base"] == "https://eu.minimax.example/v1"
+        assert kw["api_base"] == "https://eu.minimax.example/anthropic"
 
 
 # ================================================================= check_llm_provider_available
@@ -188,7 +188,7 @@ class TestHasMinimaxKey:
             assert _has_minimax_provider_key({
                 "minimax": {
                     "enabled": True,
-                    "base_url": "https://api.minimax.io/v1",
+                    "base_url": "https://api.minimax.io/anthropic",
                     "api_key": "",
                 }
             }) is False
@@ -264,7 +264,7 @@ class TestLlmCallSingleKwargs:
             mock_litellm.acompletion = AsyncMock(side_effect=fake_acompletion)
             await _llm_call_single("MiniMax-M2.7", cfg, [{"role": "user", "content": "Hi"}], None)
 
-        assert captured.get("model") == "openai/MiniMax-M2.7"
+        assert captured.get("model") == "anthropic/MiniMax-M2.7"
         assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
         assert captured.get("api_key") == "mm-secret"
 
@@ -308,6 +308,6 @@ class TestCompactCallMinimaxKwargs:
             )
 
         assert result == "summary"
-        assert captured.get("model") == "openai/MiniMax-M2.7"
+        assert captured.get("model") == "anthropic/MiniMax-M2.7"
         assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
         assert captured.get("api_key") == "mm-compact-secret"

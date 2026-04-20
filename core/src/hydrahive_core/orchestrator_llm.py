@@ -588,9 +588,10 @@ def _load_llm_config() -> dict:
 
 # ---------------------------------------------------------------- Model-Resolution
 
-# #616: MiniMax-M2 als eigenständiger Provider. Nutzt OpenAI-kompatiblen Transport
-# (LiteLLM openai/ Prefix), aber eigener Endpoint + eigener API-Key.
-MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/v1"
+# #616/#771: MiniMax-M2 als eigenständiger Provider. Token-Plan-Keys sind
+# mit dem Anthropic-kompatiblen Endpoint am stabilsten; OpenClaw und die
+# MiniMax-Coding-Tool-Doku empfehlen diesen Transport für Agenten.
+MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/anthropic"
 
 # #684: NVIDIA NIM als eigenständiger Provider (OpenAI-kompatibel, eigener Key +
 # eigener Endpoint). Phase-1-Startliste ist ein explizites Set — keine breite
@@ -642,7 +643,7 @@ def _is_nvidia_model(model: str) -> bool:
 
 def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
     """#616: Provider-spezifische litellm-kwargs (api_base, api_key) für
-    OpenAI-kompatible Endpoints mit separatem Key (z.B. MiniMax).
+    kompatible Endpoints mit separatem Key (z.B. MiniMax).
 
     Vorrang für api_key: agent_cfg.llm.api_key_env > MINIMAX_API_KEY (env) > providers.minimax.api_key.
     Für andere Provider: leeres dict — bestehende Pfade bleiben unverändert.
@@ -687,15 +688,17 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
     Gibt (litellm_model, api_base) zurück.
     Provider-Prefix (z.B. anthropic/, openai/) → direkt weiterreichen.
     Claude/GPT-Modellnamen → passenden Provider-Prefix ergänzen.
-    MiniMax-Modelle → OpenAI-kompatibler Transport mit MiniMax-Endpoint (#616).
+    MiniMax-Modelle → Anthropic-kompatibler Transport mit MiniMax-Endpoint (#771).
     Kein Prefix, kein bekannter Cloud-Name → Ollama auf localhost.
     ollama_base_url: wenn gesetzt, wird statt localhost dieser Endpunkt genutzt (WKS-Ollama).
     """
-    # #616: MiniMax vor Ollama-Fallback checken, damit "MiniMax-M2.7" nicht als Ollama-Modell gemappt wird
+    # #771: MiniMax vor Ollama-Fallback checken, damit "MiniMax-M2.7" nicht
+    # als Ollama-Modell gemappt wird. Token-Plan-Keys laufen über den von
+    # MiniMax/OpenClaw empfohlenen Anthropic-kompatiblen Endpoint.
     if model.startswith("MiniMax-"):
-        return f"openai/{model}", _minimax_base_url()
+        return f"anthropic/{model}", _minimax_base_url()
     if model.startswith("minimax/"):
-        return f"openai/{model[len('minimax/'):]}", _minimax_base_url()
+        return f"anthropic/{model[len('minimax/'):]}", _minimax_base_url()
 
     # #684: NVIDIA NIM — Set-basierte Erkennung der Phase-1-Modelle (bare
     # Namespace-Form wie in der NVIDIA-Doku). Vor dem Ollama-Fallback, damit
