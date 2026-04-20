@@ -210,6 +210,49 @@ if [ -d "${_DEFAULT_PROJECTS_DIR}" ]; then
     fi
 fi
 
+# ── BL-08: Service-Health-Gate vor End-Banner ──────────────────────────────
+# Exit 1 wenn kritische Services nicht aktiv — verhindert dass der User den
+# Success-Banner sieht obwohl das System nicht läuft (täuschender Exit 0).
+FAIL_COUNT=0
+FAILED_SERVICES=""
+
+# Kritische Units — müssen active sein.
+# Achtung: hydrahive-conduwuit (nicht conduwuit — deb-Paket-Service ist
+# bewusst disabled durch BL-07-Fix in 04_tuwunel.sh).
+for _unit in hydrahive-core hydrahive-conduwuit nginx redis-server; do
+  if ! systemctl is-active --quiet "${_unit}" 2>/dev/null; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAILED_SERVICES="${FAILED_SERVICES} ${_unit}"
+  fi
+done
+
+# Optionale Units — nur fail wenn installiert (Unit-File existiert) aber inactive.
+for _unit in hydrahive-agentlink hydrahive-codeserver hydrahive-amem; do
+  if ! systemctl list-unit-files "${_unit}.service" 2>/dev/null | grep -q "${_unit}.service"; then
+    continue
+  fi
+  if ! systemctl is-active --quiet "${_unit}" 2>/dev/null; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAILED_SERVICES="${FAILED_SERVICES} ${_unit}"
+  fi
+done
+
+if [ "${FAIL_COUNT}" -gt 0 ]; then
+  echo ""
+  echo -e "${RED}╔════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${RED}║  INSTALLATION UNVOLLSTAENDIG — ${FAIL_COUNT} Service(s) tot  ║${NC}"
+  echo -e "${RED}╚════════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "${RED}Tote Services:${NC}${FAILED_SERVICES}"
+  echo ""
+  echo "Logs pruefen:"
+  for _u in ${FAILED_SERVICES}; do
+    echo "  journalctl -u ${_u} -n 20 --no-pager"
+  done
+  echo ""
+  exit 1
+fi
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Installation abgeschlossen       ║${NC}"
