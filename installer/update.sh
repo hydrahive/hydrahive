@@ -533,6 +533,49 @@ MIGRATE_EOF
         warn "Runtime-Helper nicht gefunden (weder ${TMPDIR_BASE}/installer/lib/ noch ${HYDRAHIVE_DIR}/installer/lib/). Update läuft trotzdem weiter."
     fi
 
+    # BL-15 Follow-up: Installer-Module werden von update.sh NICHT re-run,
+    # daher greift der BL-15-Hash-Sync (06_core_service.sh) bei reinen Updates
+    # nicht. Wir rufen die Kern-Logik hier idempotent nochmal auf, damit auch
+    # bestehende Installationen den Admin-Hash in users.json synchron halten
+    # mit dem console_password in admin_credentials. Idempotent — bei
+    # passendem Hash wird nichts geschrieben.
+    if [ -f /etc/hydrahive/admin_credentials ] && [ -f /etc/hydrahive/users.json ]; then
+        info "BL-15: Admin-Hash/Passwort-Sync pruefen..."
+        CONSOLE_PASS=$(grep -E '^console_password=' /etc/hydrahive/admin_credentials | cut -d= -f2-) || CONSOLE_PASS=""
+        if [ -n "${CONSOLE_PASS}" ]; then
+            CONSOLE_PASS="${CONSOLE_PASS}" python3 - <<'PY' || warn "BL-15 Sync fehlgeschlagen — Login ggf. ueber Fallback"
+import json, hashlib, secrets, os, sys
+pwd = os.environ.get("CONSOLE_PASS", "")
+if not pwd:
+    sys.exit(0)
+try:
+    with open("/etc/hydrahive/users.json") as f:
+        users = json.load(f)
+except Exception:
+    users = {}
+admin = users.get("admin", {}) or {}
+existing = admin.get("password_hash", "")
+if existing.startswith("pbkdf2b:"):
+    try:
+        _, salt_hex, h_hex = existing.split(":", 2)
+        check = hashlib.pbkdf2_hmac("sha256", pwd.encode(), bytes.fromhex(salt_hex), 260_000)
+        if check.hex() == h_hex:
+            sys.exit(0)  # Hash bereits aktuell, nichts zu tun
+    except Exception:
+        pass
+salt = secrets.token_bytes(16)
+h = hashlib.pbkdf2_hmac("sha256", pwd.encode(), salt, 260_000)
+admin["password_hash"] = f"pbkdf2b:{salt.hex()}:{h.hex()}"
+admin.setdefault("role", "admin")
+admin.setdefault("group", "admin")
+users["admin"] = admin
+with open("/etc/hydrahive/users.json", "w") as f:
+    json.dump(users, f, indent=2)
+print("[BL-15 update.sh] admin-Hash in users.json aktualisiert")
+PY
+        fi
+    fi
+
     info "Starte hydrahive-core neu..."
     systemctl daemon-reload
     systemctl restart hydrahive-core
