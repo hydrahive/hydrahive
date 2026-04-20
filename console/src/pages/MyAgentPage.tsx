@@ -50,17 +50,13 @@ function modeSummary(cfg?: AgentCfg["execution_modes"]) {
   return { defaultMode: cfg?.default ?? "safe" };
 }
 
+// #28-IA-Sprint Schritt 3: KNOWN_MODELS ist nur noch Not-Fallback wenn
+// /api/llm/available-models nicht antwortet (Netzwerk/Boot-Race).
+// Normalfall: Dropdown zieht ausschliesslich aus availableModels — so
+// sieht der User nur Models fuer die ein Key konfiguriert ist.
+// Minimal gehalten damit bei API-Fehler wenigstens Claude waehlbar ist.
 const KNOWN_MODELS = [
   "claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6","claude-opus-4-7",
-  "gpt-4o-mini","gpt-4o",
-  "MiniMax-M2.7",
-  // BL-17: OpenAI Codex OAuth — Fallback-Liste wenn /llm/available-models
-  // keine Antwort liefert. Prefix "openai-codex/" triggert den OAuth-Pfad
-  // in orchestrator_llm.py:1308.
-  "openai-codex/gpt-5.1","openai-codex/gpt-5.1-codex-max","openai-codex/gpt-5.1-codex-mini",
-  "openai-codex/gpt-5.2","openai-codex/gpt-5.2-codex","openai-codex/gpt-5.3-codex",
-  "openai-codex/gpt-5.3-codex-spark","openai-codex/gpt-5.4",
-  "ollama/mistral:latest","ollama/llama3.1:8b","ollama/llama3.2:3b",
 ];
 
 // SLASH_COMMANDS moved inside MyAgentPage component to use live t() calls
@@ -1187,15 +1183,12 @@ function SettingsPanel({
                 {model && !availableModels.find(m => m.id === model) && (
                   <option value={model}>{model}</option>
                 )}
-                {/* API-Modelle + Fallback-Modelle (dedupliziert) */}
-                {(() => {
-                  const apiIds = new Set(availableModels.map(m => m.id));
-                  const all = [
-                    ...availableModels.map(m => ({ id: m.id, label: m.label })),
-                    ...KNOWN_MODELS.filter(m => !apiIds.has(m)).map(m => ({ id: m, label: m })),
-                  ];
-                  return all.map(m => <option key={m.id} value={m.id}>{m.label}</option>);
-                })()}
+                {/* #28-IA Schritt 3: strikt dynamisch. KNOWN_MODELS wird nur
+                    verwendet wenn die API gar nichts liefert (Fallback). */}
+                {(availableModels.length > 0
+                  ? availableModels.map(m => ({ id: m.id, label: m.label }))
+                  : KNOWN_MODELS.map(m => ({ id: m, label: m }))
+                ).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
             </div>
             <div className="space-y-1">
