@@ -483,6 +483,7 @@ def register_user_routes(
 
         virtual_cfg = _PC(
             id=agent_id,
+            version="1.0.0",
             identity=_PI(name=cfg.identity),
             agents=_PA(boss=agent_id, workers=[]),
         )

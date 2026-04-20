@@ -1172,6 +1172,11 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertEqual((agent_dir / "soul.md").read_text(encoding="utf-8"), "# Soul")
             loader.assert_called_once_with(agent_dir)
 
+    def test_personal_agent_stream_route_uses_discovery_agent_not_v2_project_bridge(self):
+        route = self._route("/me/agent/message/stream", "POST")
+        source = route.endpoint.__code__.co_consts
+        self.assertIn("1.0.0", source)
+
     def test_agent_runtime_reload_config_updates_existing_handle_model(self):
         async def run():
             runtime = AgentRuntime()
