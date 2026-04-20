@@ -99,10 +99,16 @@ def _minimax_image_api_key() -> str | None:
 
 
 def _minimax_image_base_url() -> str:
-    """Delegiert an den bestehenden LLM-Base-URL-Resolver."""
-    from .orchestrator_llm import _minimax_base_url
+    """#773 Followup: Image-Endpoint = /v1 (nicht /anthropic wie der Chat).
 
-    return _minimax_base_url()
+    Zusammenlegen mit ``_minimax_base_url`` war der Live-Bug: der Chat-
+    Resolver liefert ``/anthropic`` (Token-Plan), daraus wurde
+    ``/anthropic/image_generation`` → 404. Image nutzt jetzt
+    ``_minimax_media_base_url`` mit Default ``/v1``.
+    """
+    from .orchestrator_llm import _minimax_media_base_url
+
+    return _minimax_media_base_url()
 
 
 # ─────────────────────────────────────────────── HTTP-Client

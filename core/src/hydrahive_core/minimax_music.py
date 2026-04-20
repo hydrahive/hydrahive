@@ -116,8 +116,9 @@ def _minimax_music_api_key() -> str | None:
 
 
 def _minimax_music_base_url() -> str:
-    from .orchestrator_llm import _minimax_base_url
-    return _minimax_base_url()
+    # #773 Followup: Media-Endpoint = /v1, nicht /anthropic (Chat).
+    from .orchestrator_llm import _minimax_media_base_url
+    return _minimax_media_base_url()
 
 
 # ─────────────────────────────────────────────── Error-Helper

@@ -593,6 +593,12 @@ def _load_llm_config() -> dict:
 # MiniMax-Coding-Tool-Doku empfehlen diesen Transport für Agenten.
 MINIMAX_DEFAULT_BASE_URL = "https://api.minimax.io/anthropic"
 
+# #773 Followup: MiniMax-Media-Endpoints (Image/Video/Music) haben eine
+# andere Base als der Chat-Endpoint — /v1 statt /anthropic. Wenn beide
+# zusammengelegt werden (wie vor dem Fix), landen Media-Requests auf
+# /anthropic/image_generation → 404. Media und Chat trennen.
+MINIMAX_DEFAULT_MEDIA_BASE_URL = "https://api.minimax.io/v1"
+
 # #684: NVIDIA NIM als eigenständiger Provider (OpenAI-kompatibel, eigener Key +
 # eigener Endpoint). Phase-1-Startliste ist ein explizites Set — keine breite
 # Namespace-Prefix-Whitelist, damit "meta/..." etc. nicht später mit anderen
@@ -611,7 +617,11 @@ NVIDIA_MODELS: frozenset[str] = frozenset({
 
 
 def _minimax_base_url() -> str:
-    """Liefert den aktuellen MiniMax-Endpoint aus llm_config, sonst Default."""
+    """Liefert den aktuellen MiniMax-Chat-Endpoint aus llm_config, sonst Default.
+
+    Gilt NUR für Chat (M2.7). Media-Tools (Image/Video/Music) haben eine
+    eigene Base — siehe :func:`_minimax_media_base_url`.
+    """
     try:
         cfg = _load_llm_config()
         url = (cfg.get("providers", {}).get("minimax", {}).get("base_url") or "").strip()
@@ -620,6 +630,24 @@ def _minimax_base_url() -> str:
     except Exception:
         pass
     return MINIMAX_DEFAULT_BASE_URL
+
+
+def _minimax_media_base_url() -> str:
+    """#773 Followup: Liefert den MiniMax-Media-Endpoint (Image/Video/Music).
+
+    Quellen: ``providers.minimax.media_base_url`` > Default ``/v1``.
+    Bewusst getrennt von ``_minimax_base_url()`` — der Chat-Endpoint ist
+    ``/anthropic``, der Media-Endpoint ``/v1``. Ein gemeinsamer Resolver
+    kappt eine der beiden Routen (vor dem Fix: Image-Calls → 404).
+    """
+    try:
+        cfg = _load_llm_config()
+        url = (cfg.get("providers", {}).get("minimax", {}).get("media_base_url") or "").strip()
+        if url:
+            return clean_provider_base_url(url, label="MiniMax media_base_url")
+    except Exception:
+        pass
+    return MINIMAX_DEFAULT_MEDIA_BASE_URL
 
 
 def _nvidia_base_url() -> str:

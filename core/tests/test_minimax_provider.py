@@ -24,6 +24,9 @@ from hydrahive_core.orchestrator_llm import (
     _provider_call_kwargs,
     check_llm_provider_available,
     MINIMAX_DEFAULT_BASE_URL,
+    MINIMAX_DEFAULT_MEDIA_BASE_URL,
+    _minimax_base_url,
+    _minimax_media_base_url,
 )
 from hydrahive_core.router_llm import _has_minimax_provider_key
 
@@ -438,3 +441,63 @@ class TestCompactCallMinimaxKwargs:
         assert captured.get("model") == "anthropic/MiniMax-M2.7"
         assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
         assert captured.get("api_key") == "mm-compact-secret"
+
+
+# ================================================================= _minimax_media_base_url
+
+class TestMinimaxMediaBaseUrl:
+    """#773 Followup: Media-Endpoint ist /v1, Chat-Endpoint ist /anthropic.
+
+    Vor dem Fix delegierten alle drei Media-Resolver (image/video/music) an
+    `_minimax_base_url()`, das seit Commit 0357e74 /anthropic liefert.
+    Ergebnis: Image-Calls gingen auf /anthropic/image_generation → 404.
+    """
+
+    def test_default_ist_v1_nicht_anthropic(self):
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
+            url = _minimax_media_base_url()
+        assert url == MINIMAX_DEFAULT_MEDIA_BASE_URL
+        assert url.endswith("/v1")
+        assert "/anthropic" not in url
+
+    def test_media_base_url_nie_identisch_mit_chat_base_url(self):
+        """Kern-Invariante: Chat und Media dürfen nicht denselben Endpoint haben.
+        Wenn sie identisch wären, wäre einer von beiden ein 404."""
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
+            assert _minimax_media_base_url() != _minimax_base_url()
+
+    def test_media_base_url_aus_llm_config(self):
+        fake_cfg = {"providers": {"minimax": {"media_base_url": "https://eu.minimax.example/v1"}}}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg):
+            url = _minimax_media_base_url()
+        assert url == "https://eu.minimax.example/v1"
+
+    def test_chat_base_url_override_greift_nicht_auf_media(self):
+        """providers.minimax.base_url ist Chat-only — Media nimmt den Default."""
+        fake_cfg = {"providers": {"minimax": {"base_url": "https://api.minimax.io/anthropic"}}}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg):
+            assert _minimax_base_url() == "https://api.minimax.io/anthropic"
+            assert _minimax_media_base_url() == MINIMAX_DEFAULT_MEDIA_BASE_URL
+
+    def test_image_wrapper_nutzt_media_base_url(self):
+        """Regression: _minimax_image_base_url() darf NICHT an _minimax_base_url
+        delegieren — sonst kommt /anthropic zurück und Image-Requests → 404."""
+        from hydrahive_core.minimax_image import _minimax_image_base_url
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
+            url = _minimax_image_base_url()
+        assert url == MINIMAX_DEFAULT_MEDIA_BASE_URL
+        assert "/anthropic" not in url
+
+    def test_video_wrapper_nutzt_media_base_url(self):
+        from hydrahive_core.minimax_video import _minimax_video_base_url
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
+            url = _minimax_video_base_url()
+        assert url == MINIMAX_DEFAULT_MEDIA_BASE_URL
+        assert "/anthropic" not in url
+
+    def test_music_wrapper_nutzt_media_base_url(self):
+        from hydrahive_core.minimax_music import _minimax_music_base_url
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value={"providers": {}}):
+            url = _minimax_music_base_url()
+        assert url == MINIMAX_DEFAULT_MEDIA_BASE_URL
+        assert "/anthropic" not in url
