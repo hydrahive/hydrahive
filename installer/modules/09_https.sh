@@ -23,7 +23,7 @@ server {
     listen 127.0.0.1:8080;
     server_name localhost;
 
-    root /opt/hydrahive/console;
+    root /var/www/hydrahive-console;
     index index.html;
 
     error_page 502 503 /502.html;
@@ -135,7 +135,7 @@ server {
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 10m;
 
-    root /opt/hydrahive/console;
+    root /var/www/hydrahive-console;
     index index.html;
 
     # 502/503 nur für Browser-Navigationen → auto-refreshende Wartungsseite

@@ -7,7 +7,7 @@
 #   2. Core rsync → /opt/hydrahive/core/
 #   3. pip install -e . im venv
 #   4. Console npm ci + build
-#   5. dist/ → /opt/hydrahive/console/
+#   5. dist/ → /var/www/hydrahive-console/
 #   6. hydrahive-core neustarten
 #
 # WICHTIG: Alle Schritte in main() gewrapped damit bash den ganzen Script
@@ -250,10 +250,30 @@ main() {
 
     # --- 5. Console deployen ---
     info "Deploye Console..."
-    mkdir -p "${HYDRAHIVE_DIR}/console"
-    rsync -a --delete "${CONSOLE_SRC}/dist/" "${HYDRAHIVE_DIR}/console/"
-    chown -R www-data:www-data "${HYDRAHIVE_DIR}/console/"
+    mkdir -p /var/www/hydrahive-console/
+    rsync -a --delete "${CONSOLE_SRC}/dist/" /var/www/hydrahive-console/
+    chown -R www-data:www-data /var/www/hydrahive-console/
     success "Console deployed"
+
+    # --- 5a. nginx-Config-Migration: alter Pfad /opt/hydrahive/console → neuer /var/www/hydrahive-console ---
+    # BL-14-Strukturfix: bestehende Installationen haben nginx root noch auf /opt/hydrahive/console.
+    # Patch idempotent, greift nur wenn alter Pfad noch drin steht.
+    _NGINX_MIGRATED=0
+    for _cfg in /etc/nginx/sites-available/hydrahive-console /etc/nginx/sites-available/hydrahive-console-https; do
+        if [ -f "${_cfg}" ] && grep -q "root /opt/hydrahive/console" "${_cfg}"; then
+            sed -i 's|root /opt/hydrahive/console|root /var/www/hydrahive-console|g' "${_cfg}"
+            _NGINX_MIGRATED=1
+            info "nginx root migriert in ${_cfg}: /opt/hydrahive/console → /var/www/hydrahive-console"
+        fi
+    done
+    if [ "${_NGINX_MIGRATED}" -eq 1 ]; then
+        if nginx -t &>/dev/null; then
+            systemctl reload nginx && success "nginx neu geladen nach Pfad-Migration"
+        else
+            warn "nginx -t meldet Fehler nach Pfad-Migration — nicht reloaded"
+            nginx -t
+        fi
+    fi
 
     # --- 5a2. System Handbook deployen (Anti-Documentation-Drift #170) ---
     if [ -f "${TMPDIR_BASE}/installer/system_handbook.md" ]; then

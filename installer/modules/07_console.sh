@@ -2,12 +2,12 @@
 # HydraHive Installer - Modul 07: hydrahive-console (React + nginx)
 #
 # - Baut die Console aus dem Repo-Verzeichnis (npm ci + npm run build)
-# - Kopiert dist/ nach /opt/hydrahive/console/
+# - Kopiert dist/ nach /var/www/hydrahive-console/
 # - Schreibt nginx-Konfiguration (Port 80, Proxy /api/ → Core :8765)
 # - Idempotent: erneuter Aufruf aktualisiert Build + Konfiguration
 
 CONSOLE_SRC="$(realpath "$(dirname "${BASH_SOURCE[0]}")/../../console")"
-CONSOLE_DIST="/opt/hydrahive/console"
+CONSOLE_DIST="/var/www/hydrahive-console/"
 NGINX_CONF="/etc/nginx/sites-available/hydrahive-console"
 NGINX_ENABLED="/etc/nginx/sites-enabled/hydrahive-console"
 NGINX_DEFAULT="/etc/nginx/sites-enabled/default"
@@ -72,23 +72,13 @@ npm run build --silent
 popd > /dev/null
 success "Console gebaut: ${CONSOLE_SRC}/dist/"
 
-# --- Build nach /opt/hydrahive/console/ kopieren ---
-# BL-14: Wenn REPO_ROOT == HYDRAHIVE_DIR, dann CONSOLE_SRC == CONSOLE_DIST.parent.
-# rm -rf CONSOLE_DIST/* wuerde das gerade gebaute dist/ zerstoeren.
-# Loesung: SRC==DST → nur chown (Build liegt schon am Ziel), sonst normal kopieren.
-SRC_REAL=$(realpath "${CONSOLE_SRC}" 2>/dev/null)
-DST_REAL=$(realpath "${CONSOLE_DIST}" 2>/dev/null)
-if [ "${SRC_REAL}" = "${DST_REAL}" ]; then
-    info "Installer-Dir == HYDRAHIVE_DIR — dist/ liegt bereits am Zielort (${SRC_REAL})"
-    chown -R www-data:www-data "${CONSOLE_DIST}"
-    success "Console-Dateien bereits am Ziel (nur Rechte korrigiert)"
-else
-    mkdir -p "${CONSOLE_DIST}"
-    rm -rf "${CONSOLE_DIST:?}"/*
-    cp -r "${CONSOLE_SRC}/dist/." "${CONSOLE_DIST}/"
-    chown -R www-data:www-data "${CONSOLE_DIST}"
-    success "Console-Dateien nach ${CONSOLE_DIST} kopiert"
-fi
+# --- Build nach /var/www/hydrahive-console/ kopieren ---
+# Strukturell getrennt: /var/www/ ≠ /opt/ — rm/cp immer sicher
+mkdir -p "${CONSOLE_DIST}"
+rm -rf "${CONSOLE_DIST:?}"/*
+cp -r "${CONSOLE_SRC}/dist/." "${CONSOLE_DIST}/"
+chown -R www-data:www-data "${CONSOLE_DIST}"
+success "Console-Dateien nach ${CONSOLE_DIST} kopiert"
 
 # --- nginx-Konfiguration ---
 cat > "${NGINX_CONF}" << 'NGINXCONF'
@@ -96,7 +86,7 @@ server {
     listen 80;
     server_name _;
 
-    root /opt/hydrahive/console;
+    root /var/www/hydrahive-console;
     index index.html;
 
     # 502/503 nur für Browser-Navigationen → auto-refreshende Wartungsseite
