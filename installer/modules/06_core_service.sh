@@ -150,10 +150,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_CORE="${REPO_ROOT}/core"
 
 if [ -d "${REPO_CORE}/src/hydrahive_core" ]; then
-    cp -r "${REPO_CORE}/src" "${CORE_DIR}/"
-    cp "${REPO_CORE}/pyproject.toml" "${CORE_DIR}/"
-    [ -d "${REPO_CORE}/tests" ] && cp -r "${REPO_CORE}/tests" "${CORE_DIR}/"
-    success "hydrahive-core Quellcode bereit (${CORE_DIR})"
+    # BL-03 Guard: cp -r schlägt mit "same file" fehl wenn Installer aus /opt/hydrahive
+    # gestartet wurde (HYDRAHIVE_DIR == REPO_ROOT).realpath-Vergleich verhindert das.
+    SRC_INODE=$(realpath "${REPO_CORE}/src" 2>/dev/null)
+    DST_INODE=$(realpath "${CORE_DIR}/src" 2>/dev/null)
+    if [ "${SRC_INODE}" = "${DST_INODE}" ]; then
+        info "Installer-Dir == HYDRAHIVE_DIR — nutze bestehende Dateien direkt (${SRC_INODE})"
+    else
+        cp -r "${REPO_CORE}/src" "${CORE_DIR}/"
+        cp "${REPO_CORE}/pyproject.toml" "${CORE_DIR}/"
+        [ -d "${REPO_CORE}/tests" ] && cp -r "${REPO_CORE}/tests" "${CORE_DIR}/"
+        success "hydrahive-core Quellcode bereit (${CORE_DIR})"
+    fi
 else
     error "core/src nicht gefunden (${REPO_CORE}) — Installer muss aus dem geklonten Repo ausgefuehrt werden"
 fi
