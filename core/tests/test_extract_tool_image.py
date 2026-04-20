@@ -23,8 +23,19 @@ def test_image_base64_ergibt_data_uri_event():
     raw = _extract_tool_image(result, "browser_screenshot")
     assert raw is not None
     data = json.loads(raw)
+    assert data["type"] == "tool_image"  # Frontend-Parser matched darauf
     assert data["tool_image"] == "data:image/png;base64,AAAA"
     assert data["tool_name"] == "browser_screenshot"
+
+
+def test_artifacts_event_hat_type_feld():
+    """Regression: ohne `type: tool_image` im JSON findet der SSE-Parser
+    das Event nicht und UI zeigt kein Bild an."""
+    result = {
+        "artifacts": [{"mime": "image/png", "download_url": "/x.png"}],
+    }
+    data = json.loads(_extract_tool_image(result, "image_generate"))
+    assert data["type"] == "tool_image"
 
 
 def test_image_base64_format_default_png():

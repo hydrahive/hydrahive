@@ -55,6 +55,12 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
     - ``{"artifacts": [{"mime": "image/...", "download_url": "/me/jobs/..."}]}``
       → HTTP-URL (#773 Followup: image_generate via Jobs-Framework).
 
+    Event-Shape: ``{"type": "tool_image", "tool_image": <src>, "tool_name": <id>}``.
+    Das ``type``-Feld ist Pflicht — der Frontend-SSE-Parser in
+    ``hydrahive-runtime.ts`` matched genau darauf. Ohne ``type`` geht das
+    Event verloren (alter Bug: Events wurden emittiert, aber nie im UI
+    sichtbar, weil der Parser sie nicht demultiplexen konnte).
+
     Returns None wenn kein Bild im Result ist.
     """
     if not isinstance(result, dict):
@@ -63,6 +69,7 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
     if "image_base64" in result:
         fmt = result.get("format", "png")
         return _json.dumps({
+            "type": "tool_image",
             "tool_image": f"data:image/{fmt};base64,{result['image_base64']}",
             "tool_name": tool_name,
         })
@@ -79,6 +86,7 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
             url = str(a.get("download_url") or "")
             if mime.startswith("image/") and url:
                 return _json.dumps({
+                    "type": "tool_image",
                     "tool_image": url,
                     "tool_name": tool_name,
                 })
