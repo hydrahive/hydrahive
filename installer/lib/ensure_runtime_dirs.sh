@@ -27,6 +27,8 @@ _HYDRAHIVE_RUNTIME_DIRS=(
     /var/lib/hydrahive/users       # #659 per-User mutable Daten
     /var/lib/hydrahive/jobs        # #687 Async-Job-Fundament
     /var/lib/hydrahive/deleted-projects # gelöschte Projekte außerhalb /projects
+    /var/lib/hydrahive/yjs         # Fresh-Install BL-05: Yjs-Store (collab_yjs)
+    /var/log/hydrahive             # Fresh-Install BL-04: notification_service Log-DB + AMEM-Logs
 )
 
 ensure_hydrahive_runtime_dirs() {
