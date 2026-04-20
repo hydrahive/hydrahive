@@ -54,7 +54,11 @@ info "A-MEM HEAD-Commit: ${AMEM_ACTUAL_COMMIT}"
 echo "${AMEM_ACTUAL_COMMIT}" > /var/lib/hydrahive/amem/installed_commit.txt
 
 python3.12 -m venv "${AMEM_DIR}/.venv"
-"${AMEM_DIR}/.venv/bin/pip" install -q --upgrade pip setuptools wheel
+# BL-11: setuptools NICHT upgraden — A-MEMs transitive torch-Dep verlangt
+# setuptools<82 (torch 2.11). Beim Upgrade knallt sonst eine pip-Warnung
+# "requires setuptools<82" bei jedem Install/Update. pip bringt setuptools
+# selber auf eine kompatible Version als Teil der Resolution.
+"${AMEM_DIR}/.venv/bin/pip" install -q --upgrade pip wheel
 "${AMEM_DIR}/.venv/bin/pip" install -q -r "${AMEM_DIR}/requirements.txt"
 "${AMEM_DIR}/.venv/bin/pip" install -q -e "${AMEM_DIR}"
 "${AMEM_DIR}/.venv/bin/pip" install -q mcp flask requests
