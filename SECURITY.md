@@ -196,3 +196,20 @@ production deployments.
 
 *Setting this variable in a production deployment is a security
 misconfiguration.*
+
+### `HYDRAHIVE_REQUIRE_HOST_KEYS=warn`
+
+- **Risk Level**: **HIGH** — disables SSH host-key enforcement.
+- **Default since #777**: `strict` (was `warn` until 2026-04-20).
+- **Effect when `strict`** (default): `run_ssh_command` blocks SSH calls to
+  hosts whose key has not been explicitly verified by an admin. Admin can
+  approve fingerprints in the Console → Server → Host-Keys panel.
+- **Effect when `warn`**: warns in the log but allows the connection.
+  This is the pre-#777 behavior; only keep it for dev setups where the
+  host pool changes frequently.
+- **Upgrade impact**: installations upgrading from before #777 may see
+  `"Host-Key nicht vertraut"` errors for previously used servers until the
+  admin approves the fingerprints. The core logs an `AUDIT [SSH]` warning
+  at startup listing the number of unverified hosts.
+- **Recommendation**: always leave the default. Approve fingerprints via
+  the admin panel on first connection (TOFU with admin-approval).

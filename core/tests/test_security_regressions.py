@@ -719,18 +719,31 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertTrue(by_platform["discord"]["connected"])
 
     def test_wks_connected_helper_requires_real_probe_result(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            wks_keys_dir = Path(tmpdir) / "wks-keys"
-            wks_keys_dir.mkdir(parents=True, exist_ok=True)
-            (wks_keys_dir / "till").write_text("dummy-key", encoding="utf-8")
-            wks = {"ip": "192.168.1.50", "ssh_user": "till"}
+        # #777: Seit Default=strict blockt prepare_host_key_policy unverifizierte
+        # Hosts fail-closed. Dieser Test prueft _wks_connected-Probe-Verhalten
+        # (subprocess.run-Result), nicht Host-Key-Enforcement — warn-Modus
+        # explizit setzen damit der Probe-Call durchgefuehrt wird.
+        import os as _os
+        _prev = _os.environ.get("HYDRAHIVE_REQUIRE_HOST_KEYS")
+        _os.environ["HYDRAHIVE_REQUIRE_HOST_KEYS"] = "warn"
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                wks_keys_dir = Path(tmpdir) / "wks-keys"
+                wks_keys_dir.mkdir(parents=True, exist_ok=True)
+                (wks_keys_dir / "till").write_text("dummy-key", encoding="utf-8")
+                wks = {"ip": "192.168.1.50", "ssh_user": "till"}
 
-            with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=0)) as run_mock:
-                self.assertTrue(user_integrations._wks_connected("till", wks, wks_keys_dir))
-                run_mock.assert_called_once()
+                with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=0)) as run_mock:
+                    self.assertTrue(user_integrations._wks_connected("till", wks, wks_keys_dir))
+                    run_mock.assert_called_once()
 
-            with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
-                self.assertFalse(user_integrations._wks_connected("till", wks, wks_keys_dir))
+                with mock.patch("hydrahive_core.router_user_integrations._sp.run", return_value=SimpleNamespace(returncode=1)):
+                    self.assertFalse(user_integrations._wks_connected("till", wks, wks_keys_dir))
+        finally:
+            if _prev is None:
+                _os.environ.pop("HYDRAHIVE_REQUIRE_HOST_KEYS", None)
+            else:
+                _os.environ["HYDRAHIVE_REQUIRE_HOST_KEYS"] = _prev
 
     def test_wks_shell_exec_blocks_destructive_commands(self):
         from hydrahive_core.tool_registry import WksShellExecTool

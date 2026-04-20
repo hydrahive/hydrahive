@@ -683,19 +683,22 @@ class TestRemoveOrphans:
 
 
 class TestEnforcementMode:
+    # #777 (2026-04-20): Default von "warn" auf "strict" umgestellt.
+    # Opt-out fuer Dev-Setups: HYDRAHIVE_REQUIRE_HOST_KEYS=warn.
 
-    def test_default_warn(self, monkeypatch):
+    def test_default_strict(self, monkeypatch):
         monkeypatch.delenv("HYDRAHIVE_REQUIRE_HOST_KEYS", raising=False)
-        assert skh.get_enforcement_mode() == "warn"
+        assert skh.get_enforcement_mode() == "strict"
 
     def test_strict_via_env(self, monkeypatch):
         monkeypatch.setenv("HYDRAHIVE_REQUIRE_HOST_KEYS", "strict")
         assert skh.get_enforcement_mode() == "strict"
 
-    def test_strict_via_true(self, monkeypatch):
-        monkeypatch.setenv("HYDRAHIVE_REQUIRE_HOST_KEYS", "true")
-        assert skh.get_enforcement_mode() == "strict"
-
-    def test_unknown_value_defaults_warn(self, monkeypatch):
-        monkeypatch.setenv("HYDRAHIVE_REQUIRE_HOST_KEYS", "schmuh")
+    def test_warn_via_env_opts_out(self, monkeypatch):
+        monkeypatch.setenv("HYDRAHIVE_REQUIRE_HOST_KEYS", "warn")
         assert skh.get_enforcement_mode() == "warn"
+
+    def test_unknown_value_defaults_strict(self, monkeypatch):
+        """Unbekannter Wert faellt auf strict zurueck (sicherer Default)."""
+        monkeypatch.setenv("HYDRAHIVE_REQUIRE_HOST_KEYS", "schmuh")
+        assert skh.get_enforcement_mode() == "strict"

@@ -10,11 +10,14 @@ Host-Keys haben das Format <target_type>:<target_id>, z.B. "server:prod-web"
 oder "wks:till", damit Server-IDs und WKS-Usernames nicht kollidieren.
 
 Enforcement-Modus per Env HYDRAHIVE_REQUIRE_HOST_KEYS:
-  "warn"   (Default): nur diagnostizieren, nichts blocken.
-  "strict": Target-Tools (#674-B) blocken unverifizierte/geaenderte Keys.
+  "strict" (Default #777): Target-Tools blocken unverifizierte/geaenderte Keys.
+  "warn":   nur diagnostizieren, nichts blocken (Dev-Setups, explizites Opt-out).
 
-#674-A liefert nur Foundation + Discovery + Admin-API. Das tatsaechliche
-Enforcement in run_ssh_command() kommt in #674-B.
+#777 (2026-04-20): Default von "warn" auf "strict" umgestellt (Security-Audit
+Befund 4/critical). Bestehende Installs mit unverifizierten Hosts bekommen
+nach Update "Host-Key nicht vertraut"-Fehler bei SSH-Calls bis der Admin im
+Admin-Panel unter Server → Host-Keys die Fingerprints genehmigt.
+Opt-out fuer Dev-Setups: HYDRAHIVE_REQUIRE_HOST_KEYS=warn.
 """
 from __future__ import annotations
 
@@ -220,15 +223,19 @@ async def scan_host(host: str, port: int = 22, *, timeout: int = DEFAULT_KEYSCAN
 
 
 def get_enforcement_mode() -> Literal["warn", "strict"]:
-    """Liest HYDRAHIVE_REQUIRE_HOST_KEYS; Default 'warn'.
+    """Liest HYDRAHIVE_REQUIRE_HOST_KEYS; Default 'strict' (#777, vorher 'warn').
 
-    In #674-A nur diagnostisch — run_ssh_command() nutzt den Modus
-    noch nicht. #674-B schaltet ihn scharf.
+    strict (default): target_resolution.run_ssh_command blockt SSH-Calls zu
+                      Hosts ohne verified Host-Keys. Admin muss Fingerprints
+                      im Admin-Panel unter Server → Host-Keys genehmigen.
+    warn:             nur diagnostizieren, nichts blocken. Nur fuer Dev-
+                      Setups (HYDRAHIVE_REQUIRE_HOST_KEYS=warn).
     """
-    v = os.environ.get("HYDRAHIVE_REQUIRE_HOST_KEYS", "warn").strip().lower()
-    if v in ("1", "true", "yes", "strict"):
-        return "strict"
-    return "warn"
+    v = os.environ.get("HYDRAHIVE_REQUIRE_HOST_KEYS", "strict").strip().lower()
+    # Explizites Opt-out aus dem strict-Default
+    if v in ("0", "false", "no", "warn"):
+        return "warn"
+    return "strict"
 
 
 # ────────────────────────────────────────────── Status-Ableitung

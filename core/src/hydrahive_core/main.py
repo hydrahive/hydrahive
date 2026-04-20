@@ -258,6 +258,29 @@ async def lifespan(app: FastAPI):
             "NIEMALS in Prod setzen."
         )
 
+    # #777: SSH-Host-Key-Enforcement Info beim Start. Default ist seit #777
+    # 'strict' — unverifizierte Hosts blocken SSH-Calls. Wenn Admin bestehende
+    # Server noch nicht genehmigt hat, warn prominent damit der Admin es
+    # merkt und unter Server → Host-Keys Fingerprints genehmigen kann.
+    try:
+        from .ssh_known_hosts import get_enforcement_mode, load_known_hosts, _compute_host_status
+        _mode = get_enforcement_mode()
+        if _mode == "strict":
+            _kh = load_known_hosts().get("hosts", {})
+            _unverified = sum(1 for h in _kh.values()
+                              if _compute_host_status(h.get("host_keys", {})) != "verified")
+            if _unverified > 0:
+                logger.warning(
+                    "AUDIT [SSH] Host-Key-Enforcement=strict, aber %d Host(s) "
+                    "noch nicht verified. SSH-Calls zu diesen Targets werden "
+                    "blockiert bis der Admin im Admin-Panel (Server → Host-Keys) "
+                    "Fingerprints genehmigt. Opt-out fuer Dev-Setups: "
+                    "HYDRAHIVE_REQUIRE_HOST_KEYS=warn",
+                    _unverified,
+                )
+    except Exception as _ssh_check_err:
+        logger.debug("SSH host-key startup check failed: %s", _ssh_check_err)
+
     # #443: Idempotente Migrations beim Start
     from .migrations import run_migrations
     run_migrations()
