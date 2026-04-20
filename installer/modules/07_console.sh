@@ -73,12 +73,15 @@ popd > /dev/null
 success "Console gebaut: ${CONSOLE_SRC}/dist/"
 
 # --- Build nach /opt/hydrahive/console/ kopieren ---
-# BL-14 Guard: Wenn REPO_ROOT == HYDRAHIVE_DIR, dann CONSOLE_SRC == CONSOLE_DIST.
-# rm -rf wuerde das dist-Verzeichnis zerstoeren BEVOR cp es lesen kann.
-SRC_REAL=$(realpath "${CONSOLE_SRC}/dist" 2>/dev/null)
+# BL-14: Wenn REPO_ROOT == HYDRAHIVE_DIR, dann CONSOLE_SRC == CONSOLE_DIST.parent.
+# rm -rf CONSOLE_DIST/* wuerde das gerade gebaute dist/ zerstoeren.
+# Loesung: SRC==DST → nur chown (Build liegt schon am Ziel), sonst normal kopieren.
+SRC_REAL=$(realpath "${CONSOLE_SRC}" 2>/dev/null)
 DST_REAL=$(realpath "${CONSOLE_DIST}" 2>/dev/null)
 if [ "${SRC_REAL}" = "${DST_REAL}" ]; then
-    info "Installer-Dir == HYDRAHIVE_DIR — Console-Build bereits am Zielort (${SRC_REAL})"
+    info "Installer-Dir == HYDRAHIVE_DIR — dist/ liegt bereits am Zielort (${SRC_REAL})"
+    chown -R www-data:www-data "${CONSOLE_DIST}"
+    success "Console-Dateien bereits am Ziel (nur Rechte korrigiert)"
 else
     mkdir -p "${CONSOLE_DIST}"
     rm -rf "${CONSOLE_DIST:?}"/*
