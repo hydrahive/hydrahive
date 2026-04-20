@@ -113,6 +113,10 @@ async def start_telegram_bot(
         active_agent = agent_id
         _dbg("received", agent=active_agent, user=from_name, user_id=user_id, text=(msg.text or "")[:80], is_group=is_group)
 
+        # Config pro Message frisch laden — sonst greifen Updates via
+        # PUT /me/telegram/config (Admin-IDs, Filter) erst nach Bot-Restart (#771).
+        cfg = load_telegram_config(username) or {}
+
         # Gruppen-/Privat-Filter
         if is_group and not cfg.get("allow_groups", False):
             return
