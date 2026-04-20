@@ -132,6 +132,12 @@ chown "$TUWUNEL_USER:$TUWUNEL_USER" "$TUWUNEL_CONFIG"
 success "conduwuit Konfiguration geschrieben (server_name: $SERVER_NAME)"
 info "Registration-Token: $REG_TOKEN"
 
+# BL-13: matrix_server_name schreiben (Core main.py:547 sucht diese Datei vor TOML-Fallback)
+mkdir -p /etc/hydrahive
+echo -n "$SERVER_NAME" > /etc/hydrahive/matrix_server_name
+chmod 644 /etc/hydrahive/matrix_server_name
+success "matrix_server_name geschrieben (server_name: $SERVER_NAME)"
+
 # Systemd-Unit schreiben
 cat > /etc/systemd/system/hydrahive-conduwuit.service << UNIT
 [Unit]
@@ -160,6 +166,14 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable hydrahive-conduwuit
+
+# BL-07: Debian-Paket conduwuit.service deaktivieren — kollidiert mit hydrahive-conduwuit auf Port 6167
+DEB_SVC=$(systemctl is-enabled conduwuit.service 2>/dev/null || true)
+if [ "$DEB_SVC" = "enabled" ]; then
+  info "Debian-Paket conduwuit.service gefunden — deaktiviere es (nur hydrahive-conduwuit nutzen)"
+  systemctl disable conduwuit.service 2>/dev/null || true
+  systemctl stop conduwuit.service 2>/dev/null || true
+fi
 
 if systemctl is-active --quiet hydrahive-conduwuit; then
   systemctl restart hydrahive-conduwuit
