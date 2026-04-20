@@ -10,8 +10,10 @@ Nicht in Phase 1:
 - Image-to-Image / subject_reference.
 - Multi-Provider-Dispatch.
 
-Auth- und Base-URL-Handling teilen sich die Quelle mit ``orchestrator_llm._minimax_base_url`` —
-kein zweiter Config-Eintrag, kein neues UI.
+Auth teilt sich die Quelle mit dem LLM-Pfad. Base-URL läuft über den
+Media-spezifischen Resolver ``orchestrator_llm._minimax_media_base_url``
+(getrennt vom Chat-Endpoint ``/anthropic``, weil Image/Video/Music bei
+MiniMax unter ``/v1`` liegen — #773 Followup).
 """
 from __future__ import annotations
 

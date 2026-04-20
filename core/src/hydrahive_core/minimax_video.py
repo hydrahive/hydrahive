@@ -20,8 +20,9 @@ Phase 2 ist maximal konservativ:
 - Poll-Intervall: 10 s (laut offizieller MiniMax-Doku).
 
 Share pattern mit :mod:`minimax_image`: identisches Key-Lookup, identische
-Base-URL (beide nutzen ``orchestrator_llm._minimax_base_url``), kein neuer
-Config-Eintrag, kein neuer Runtime-Dir.
+Base-URL (beide nutzen ``orchestrator_llm._minimax_media_base_url`` —
+Media-Endpoint ``/v1``, getrennt vom Chat-Endpoint ``/anthropic``), kein
+neuer Config-Eintrag, kein neuer Runtime-Dir.
 """
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
-# Endpoints — base_url enthält bereits /v1 (siehe _minimax_base_url in orchestrator_llm).
+# Endpoints — base_url enthält bereits /v1 (siehe _minimax_media_base_url in orchestrator_llm).
 MINIMAX_VIDEO_CREATE_ENDPOINT   = "/video_generation"
 MINIMAX_VIDEO_STATUS_ENDPOINT   = "/query/video_generation"
 MINIMAX_FILES_RETRIEVE_ENDPOINT = "/files/retrieve"

@@ -508,6 +508,11 @@ def register_user_routes(
                 content=_user_content,
                 sender=req.sender,
                 execution_mode=execution_mode,
+                # #773 Followup: request_user durchreichen, sonst läuft der
+                # Media-Tool-Job mit created_by=None in der meta.json →
+                # /me/jobs/.../artifacts/* antwortet 403 beim <img>-Fetch,
+                # und das generierte Bild ist im Chat unsichtbar.
+                request_user=username,
             ):
                 yield chunk
 

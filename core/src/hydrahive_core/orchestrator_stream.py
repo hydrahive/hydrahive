@@ -56,10 +56,6 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
       → HTTP-URL (#773 Followup: image_generate via Jobs-Framework).
 
     Event-Shape: ``{"type": "tool_image", "tool_image": <src>, "tool_name": <id>}``.
-    Das ``type``-Feld ist Pflicht — der Frontend-SSE-Parser in
-    ``hydrahive-runtime.ts`` matched genau darauf. Ohne ``type`` geht das
-    Event verloren (alter Bug: Events wurden emittiert, aber nie im UI
-    sichtbar, weil der Parser sie nicht demultiplexen konnte).
 
     Returns None wenn kein Bild im Result ist.
     """
@@ -999,8 +995,7 @@ async def _stream_anthropic_oauth(
             result, _is_err = _oauth_block_results[block.id]
             _img_evt = _extract_tool_image(result, block.name)
             if _img_evt:
-                if _img_evt:
-                    yield f"data: {_img_evt}\n\n"
+                yield f"data: {_img_evt}\n\n"
             result_str = format_tool_result(result)
             tool_results.append({
                 "type":        "tool_result",
