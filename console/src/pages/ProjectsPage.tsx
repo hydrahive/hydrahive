@@ -502,11 +502,11 @@ function ProjectsContent() {
                     Settings
                   </button>
                   <button
-                    onClick={() => navigate(`/butler?project=${id}`)}
+                    onClick={() => navigate(`/blueprint?project=${id}`)}
                     className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
                   >
                     <Workflow className="h-3.5 w-3.5" />
-                    Butler
+                    Blueprint
                   </button>
                   <button
                     onClick={() => setAgentlinkProject((p) => (p === id ? null : id))}

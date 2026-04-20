@@ -143,15 +143,19 @@ export default function App() {
             <Route path="extensions"        element={<Navigate to="/hub?tab=extensions" replace />} />
             <Route path="plugins"           element={<Navigate to="/hub?tab=plugins" replace />} />
             <Route path="secrets"           element={<Navigate to="/usermanagement?tab=secrets" replace />} />
-            <Route path="config-hub"        element={<Navigate to="/settings" replace />} />
-            <Route path="butler"            element={<Navigate to="/blueprint" replace />} />
-            {/* Redirects für alte Bookmarks */}
-            <Route path="llm"    element={<Navigate to="/settings" replace />} />
+            {/* Legacy-Bookmark-Redirects (IA-Sprint #28 Schritt 2):
+                Tab-Parameter ergaenzt, sodass der User auf dem richtigen Tab
+                landet statt auf Settings-Overview. /users zeigt jetzt
+                korrekt auf /usermanagement statt auf /settings.
+                /butler bleibt als Redirect (Begriff ersetzt durch Blueprint).
+                /config-hub entfernt. */}
+            <Route path="llm"    element={<Navigate to="/settings?tab=llm" replace />} />
             <Route path="mcp"    element={<McpConfigPage />} />
-            <Route path="gitea"  element={<Navigate to="/settings" replace />} />
-            <Route path="vpn"    element={<Navigate to="/settings" replace />} />
-            <Route path="users"  element={<Navigate to="/settings" replace />} />
-            <Route path="backup" element={<Navigate to="/settings" replace />} />
+            <Route path="gitea"  element={<Navigate to="/settings?tab=gitea" replace />} />
+            <Route path="vpn"    element={<Navigate to="/settings?tab=vpn" replace />} />
+            <Route path="users"  element={<Navigate to="/usermanagement" replace />} />
+            <Route path="backup" element={<Navigate to="/settings?tab=backup" replace />} />
+            <Route path="butler" element={<Navigate to="/blueprint" replace />} />
           </Route>
         </Routes>
       </Suspense>
