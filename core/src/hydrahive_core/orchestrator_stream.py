@@ -1093,12 +1093,17 @@ async def _stream_litellm(
         _stream_api_key = _prov_kw_stream["api_key"]
     _is_anthropic = model.startswith(("anthropic/", "claude-"))
     _use_anthropic_wire_format = _is_anthropic and not _is_direct_minimax_model(model_name, model)
+    # P3: cache_control auch fuer MiniMax setzen (LiteLLM Messages-Handler
+    # reicht die Marker durch). to_anthropic_format() bleibt bei False,
+    # damit tool_result-Bloecke nicht in OpenAI-Chat-Messages landen.
+    # Analog zu _llm_call_single in orchestrator_llm.py.
+    _use_cache_control = _use_anthropic_wire_format or _is_direct_minimax_model(model_name, model)
     # #628-Followup: Streaming-litellm-Pfad muss auch normalisieren —
     # vorher übersprungen, daher kein konsistentes Pair-Repair/Dedupe.
     from .message_normalization import normalize_messages_for_call
     loop_messages = _apply_cache_control(
         normalize_messages_for_call(list(messages)),
-        _use_anthropic_wire_format,
+        _use_cache_control,
     )
     last_tool_signature: tuple[str, ...] | None = None
     repeated_tool_signature_count = 0
@@ -1151,6 +1156,15 @@ async def _stream_litellm(
 
         async for chunk in _stream:
             if getattr(chunk, "usage", None):
+                # ===== P3-DEBUG: komplette Usage-Felder vom Streaming-Chunk loggen =====
+                try:
+                    _u = chunk.usage
+                    _usage_dict = {k: getattr(_u, k, None) for k in dir(_u)
+                                   if not k.startswith("_") and not callable(getattr(_u, k, None))}
+                    logger.warning("[P3-DEBUG-STREAM] model=%s usage=%s", model, _usage_dict)
+                except Exception as _ex:
+                    logger.warning("[P3-DEBUG-STREAM] usage inspection failed: %s", _ex)
+                # ===== ENDE P3-DEBUG =====
                 _usage["input"]       += getattr(chunk.usage, "prompt_tokens", 0)
                 _usage["output"]      += getattr(chunk.usage, "completion_tokens", 0)
                 _usage["cache_write"] += getattr(chunk.usage, "cache_creation_input_tokens", 0)
