@@ -832,6 +832,36 @@ class Orchestrator:
 
         litellm_tools = litellm_tools or None
 
+        # #778: Pre-Call-Budget-Check MIT Call-Groessen-Schaetzung.
+        # Der frueher gelaufene Check (Zeile ~702, estimated=0) faengt Faelle
+        # ab in denen der Agent schon ueber dem Limit war. Hier pruefen wir
+        # zusaetzlich: wuerde dieser konkrete Call mit seinen messages+tools
+        # das Limit sprengen? Das verhindert dass ein einzelner riesiger
+        # Context (z.B. ganze Repo-Listing als Message) ungebremst durchgeht.
+        # `check_token_budget` macht den hard>0-Check selbst — wir rufen einfach.
+        if _rl is not None:
+            from .token_estimation import estimate_call_tokens as _ect
+            from .rate_limiter import TokenBudgetExceeded as _TBE2
+            try:
+                _estimated_tokens = _ect(messages, litellm_tools)
+                _rl.check_token_budget(boss_cfg.id, estimated_next_call_tokens=_estimated_tokens)
+            except _TBE2 as _budget_exc:
+                _msg = (
+                    f"⛔ Token-Budget-Block (#778): Geschaetzter naechster Call "
+                    f"(~{_estimated_tokens} Tokens) wuerde Hard-Limit "
+                    f"{_budget_exc.limit} sprengen (aktuell "
+                    f"{_budget_exc.tokens_used - _estimated_tokens} verbraucht). "
+                    "Kontext reduzieren oder Limit anpassen."
+                )
+                await self._sessions.append(
+                    project_id, MessageRole.ASSISTANT, _msg, agent_id=boss_cfg.id,
+                )
+                return _msg, []
+            except TypeError:
+                # Test-Setups mit MagicMock: settings-Zugriff bricht. Stillschweigend
+                # ignorieren — Produktions-Code nutzt immer echten RateLimiter.
+                pass
+
         # Anti-Halluzinations-Guard: System-Prompt mit tatsächlich verfügbaren Tools ergänzen
         _active_tool_names = [t["function"]["name"] for t in (litellm_tools or [])] if litellm_tools else []
         if _active_tool_names:

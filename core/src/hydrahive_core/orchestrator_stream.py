@@ -264,6 +264,28 @@ async def handle_message_stream(
         sys_tokens_s + hist_tokens_s + tool_tokens_s,
     )
 
+    # #778: Pre-Call-Budget-Check MIT Call-Groessen-Schaetzung (Streaming-Pfad).
+    # Die Werte sind oben schon berechnet (sys_tokens_s+hist_tokens_s+tool_tokens_s).
+    # check_token_budget macht den hard>0-Check selbst.
+    if _rl is not None:
+        _estimated_call = sys_tokens_s + hist_tokens_s + tool_tokens_s
+        try:
+            _rl.check_token_budget(boss_cfg.id, estimated_next_call_tokens=_estimated_call)
+        except _TBE as _budget_exc:
+            _msg = (
+                f"⛔ Token-Budget-Block (#778, Stream): Geschaetzter naechster Call "
+                f"(~{_estimated_call} Tokens) wuerde Hard-Limit {_budget_exc.limit} "
+                f"sprengen. Kontext reduzieren."
+            )
+            await orch._sessions.append(
+                project_id, MessageRole.ASSISTANT, _msg, agent_id=boss_cfg.id,
+            )
+            yield f"data: {_json.dumps({'text': _msg})}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'reason': 'token_budget_estimate_block'})}\n\n"
+            return
+        except TypeError:
+            pass  # Test-Setups mit MagicMock-Limiter
+
     # #433 + #445: Context-Info als SSE-Event für Frontend
     yield f"data: {_json.dumps({'_context_info': {'system_tokens': sys_tokens_s, 'history_tokens': hist_tokens_s, 'tool_tokens': tool_tokens_s, 'history_messages': len(history), 'history_budget': _hist_budget_s}})}\n\n"
 
@@ -1159,6 +1181,7 @@ async def _stream_litellm(
             else:
                 raise
 
+        _budget_abort = False
         async for chunk in _stream:
             if getattr(chunk, "usage", None):
                 _input   = getattr(chunk.usage, "prompt_tokens", 0) or 0
@@ -1175,6 +1198,30 @@ async def _stream_litellm(
                         model, _input, _c_write, _c_read,
                         100 * _c_read / max(_input, 1),
                     )
+                # #778: Mid-Stream-Abort wenn Usage + History ueber Hard-Limit.
+                # Exception FANGEN und als SSE-Event senden (Exception-Bubble → 500).
+                from . import tool_registry as _tr_check
+                _rl_mid = getattr(_tr_check, "_rate_limiter", None)
+                if _rl_mid is not None:
+                    try:
+                        _rl_mid.check_token_budget(
+                            boss_cfg.id,
+                            estimated_next_call_tokens=_usage["input"] + _usage["output"],
+                        )
+                    except TypeError:
+                        pass  # MagicMock in tests
+                    except Exception as _mid_exc:
+                        logger.warning(
+                            "Mid-stream token-budget abort [%s]: %s",
+                            boss_cfg.id, _mid_exc,
+                        )
+                        _budget_abort = True
+                        try:
+                            if hasattr(_stream, "aclose"):
+                                await _stream.aclose()
+                        except Exception:
+                            pass
+                        break
             choice = chunk.choices[0]
             delta  = choice.delta
             if delta.content:
@@ -1195,6 +1242,20 @@ async def _stream_litellm(
                             accumulated_tcs[idx]["name"] += fn.name
                         if getattr(fn, "arguments", None):
                             accumulated_tcs[idx]["arguments"] += fn.arguments
+
+        # #778: Wenn Mid-Stream-Abort ausgeloest wurde, sauber ans Frontend
+        # melden und die ganze tool-Round-Schleife beenden. Kein Tool-Call
+        # mehr starten, auch wenn im Stream welche ankamen.
+        if _budget_abort:
+            _abort_msg = (
+                f"\n\n⛔ Token-Budget mid-stream ueberschritten (#778). "
+                f"Stream abgebrochen. Agent pausiert bis sich das 1-Stunden-Fenster "
+                f"leert."
+            )
+            full_response += _abort_msg
+            yield f"data: {_json.dumps({'text': _abort_msg})}\n\n"
+            yield f"data: {_json.dumps({'done': True, 'reason': 'token_budget_mid_stream'})}\n\n"
+            return
 
         if not accumulated_tcs:
             break

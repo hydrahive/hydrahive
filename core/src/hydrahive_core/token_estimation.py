@@ -32,3 +32,37 @@ def estimate_message_tokens(message: dict) -> int:
 def estimate_messages_tokens(messages: list[dict]) -> int:
     """Token-Schätzung für eine Liste von Messages."""
     return sum(estimate_message_tokens(m) for m in messages)
+
+
+def estimate_call_tokens(messages: list[dict], tools: list[dict] | None = None) -> int:
+    """#778: Schaetzt Token-Kosten fuer einen LLM-Call inkl. multi-modal + tools.
+
+    Zaehlt:
+    - Text-Content aller Messages (auch in list[block]-Form).
+    - Images pauschal 1000 Tokens pro Block (Anthropic Vision ist teurer,
+      aber eine konservative Obergrenze ist fuer Budget-Checks erwuenscht).
+    - Tools-Array als JSON-Serialisierung (so wie es an die API geht).
+    """
+    import json as _json
+    total = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype in ("image", "image_url"):
+                    total += 1000
+                elif btype == "text":
+                    total += estimate_tokens(block.get("text", ""))
+                else:
+                    # tool_use, tool_result etc. — als JSON schaetzen
+                    total += estimate_tokens(_json.dumps(block, ensure_ascii=False))
+        else:
+            total += estimate_tokens(str(content) if content else "")
+        # JSON-Overhead pro Message
+        total += 5
+    if tools:
+        total += estimate_tokens(_json.dumps(tools, ensure_ascii=False))
+    return total

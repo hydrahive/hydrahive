@@ -278,10 +278,19 @@ class RateLimiter:
             )
             raise TokenBudgetExceeded(agent_id, total_hour, hard)
 
-    def check_token_budget(self, agent_id: str) -> None:
-        """#750: Pre-Call-Gate. Raist TokenBudgetExceeded wenn der Agent
-        bereits über dem Hard-Limit liegt. Im Orchestrator VOR dem nächsten
-        LLM-Call aufrufen, um Token-Burn zu vermeiden.
+    def check_token_budget(
+        self,
+        agent_id: str,
+        estimated_next_call_tokens: int = 0,
+    ) -> None:
+        """#750/#778: Pre-Call-Gate mit optionaler Call-Groessen-Schaetzung.
+
+        Raist TokenBudgetExceeded wenn `total + estimated_next_call_tokens > hard`.
+        Damit wird ein einzelner Call mit riesigem Kontext geblockt, bevor er
+        die Kosten verursacht — nicht erst danach wie bei track_token_usage.
+
+        Backwards-compatible: estimated_next_call_tokens=0 → altes Verhalten
+        (nur kumulierte History wird geprueft).
 
         Disabled wenn agent_token_hard_per_hour == 0.
         """
@@ -289,8 +298,9 @@ class RateLimiter:
         if hard <= 0:
             return
         total = self.get_token_usage_hour(agent_id)
-        if total > hard:
-            raise TokenBudgetExceeded(agent_id, total, hard)
+        projected = total + max(0, int(estimated_next_call_tokens))
+        if projected > hard:
+            raise TokenBudgetExceeded(agent_id, projected, hard)
 
     def get_token_usage_hour(self, agent_id: str) -> int:
         """Gibt den geschätzten Token-Verbrauch des Agents in der letzten Stunde zurück."""
