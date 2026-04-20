@@ -13,7 +13,6 @@ import asyncio
 import io
 import json
 import logging
-import struct
 import wave
 from pathlib import Path
 

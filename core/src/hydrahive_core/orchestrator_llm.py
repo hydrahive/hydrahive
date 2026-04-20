@@ -762,7 +762,6 @@ def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str,
             try:
                 # 2. Erste WKS-Config aus users.json (für WKS-Ollama Fallback)
                 import json as _j
-                from pathlib import Path as _P
                 users = _j.loads(settings.users_config.read_text())
                 for u in users.values():
                     wks = u.get("wks", {})

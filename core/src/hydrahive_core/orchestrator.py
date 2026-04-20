@@ -44,7 +44,6 @@ from .orchestrator_llm import (
     _anthropic_oauth_call,
     _openai_codex_call,
     _llm_call_single as _llm_call_single_fn,
-    _llm_call as _llm_call_fn,
     _apply_cache_control,
     check_llm_provider_available,
     _current_project_id,
@@ -58,7 +57,6 @@ from .orchestrator_context import (
     _estimate_tokens,
 )
 from .orchestrator_tools import (
-    DispatchResult,
     _truncate_tool_result,
     _tool_call_signature as _tool_call_signature_fn,
     _execute_tool as _execute_tool_fn,
