@@ -575,6 +575,11 @@ def register_user_routes(
             req,
             load_agent_config_direct=load_agent_config_direct,
         )
+        cfg = discovery.get(agent_id) if discovery else None
+        if cfg is None and load_agent_config_direct is not None:
+            cfg = load_agent_config_direct(agent_dir)
+        if cfg is not None and hasattr(runtime, "reload_agent_config"):
+            await runtime.reload_agent_config(cfg)
 
         logger.info("Persönlicher Agent konfiguriert: %s", agent_id)
         return {"updated": True, "agent_id": agent_id}
@@ -819,6 +824,11 @@ def register_user_routes(
             load_agent_config_direct(agent_dir)
             if discovery:
                 discovery._register(agent_dir)
+            cfg = discovery.get(agent_id) if discovery else None
+            if cfg is None:
+                cfg = load_agent_config_direct(agent_dir)
+            if cfg is not None and hasattr(runtime, "reload_agent_config"):
+                await runtime.reload_agent_config(cfg)
         except Exception:
             pass
 

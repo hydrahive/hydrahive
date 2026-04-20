@@ -112,6 +112,14 @@ def register_agent_admin_routes(
     logger,
     load_agent_config_direct,
 ) -> None:
+    async def _reload_runtime_agent_config(agent_id: str, agent_dir: Path):
+        cfg = discovery.get(agent_id)
+        if cfg is None:
+            cfg = load_agent_config_direct(agent_dir)
+        if cfg is not None and hasattr(runtime, "reload_agent_config"):
+            return await runtime.reload_agent_config(cfg)
+        return False
+
     @admin_router.get("/agent-templates")
     def list_agent_templates(_a: tuple = Depends(require_admin)):
         """Verfügbare Agent-Vorlagen aus installer/default-agents/."""
@@ -230,8 +238,9 @@ def register_agent_admin_routes(
         yaml_path = agent_dir / "agent.yaml"
         yaml_path.write_text(_yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         discovery._register(agent_dir)
+        reloaded = await _reload_runtime_agent_config(agent_id, agent_dir)
         logger.info("Agent aktualisiert: %s", agent_id)
-        return {"updated": True, "agent_id": agent_id}
+        return {"updated": True, "agent_id": agent_id, "runtime_reloaded": reloaded}
 
     @admin_router.patch("/agents/{agent_id}/compaction-threshold")
     async def patch_agent_compaction_threshold(
@@ -254,8 +263,9 @@ def register_agent_admin_routes(
             raw["compaction_threshold"] = int(req.threshold)
         yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         discovery._register(agent_dir)
+        reloaded = await _reload_runtime_agent_config(agent_id, agent_dir)
         logger.info("Agent compaction_threshold aktualisiert: %s -> %s", agent_id, req.threshold)
-        return {"updated": True, "agent_id": agent_id, "compaction_threshold": req.threshold}
+        return {"updated": True, "agent_id": agent_id, "compaction_threshold": req.threshold, "runtime_reloaded": reloaded}
 
     @admin_router.patch("/agents/{agent_id}/tools")
     async def patch_agent_tools(agent_id: str, req: PatchAgentToolsRequest, _a: tuple = Depends(require_admin)):
@@ -270,8 +280,9 @@ def register_agent_admin_routes(
         raw["tools"] = tools
         yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, default_flow_style=False), encoding="utf-8")
         discovery._register(agent_dir)
+        reloaded = await _reload_runtime_agent_config(agent_id, agent_dir)
         logger.info("Agent tools aktualisiert: %s -> %s", agent_id, tools)
-        return {"updated": True, "agent_id": agent_id, "tools": tools}
+        return {"updated": True, "agent_id": agent_id, "tools": tools, "runtime_reloaded": reloaded}
 
     _SAFE_ID_RE = __import__("re").compile(r"^[a-z0-9_.\-]+$")
 
@@ -408,7 +419,7 @@ def register_agent_admin_routes(
         return {"ok": True}
 
     @admin_router.patch("/agents/{agent_id}/heartbeat")
-    def patch_agent_heartbeat(agent_id: str, req: HeartbeatPatchRequest, _a: tuple = Depends(require_admin)):
+    async def patch_agent_heartbeat(agent_id: str, req: HeartbeatPatchRequest, _a: tuple = Depends(require_admin)):
         import yaml as _yaml
 
         agent_dir = Path(agents_dir) / agent_id
@@ -428,4 +439,6 @@ def register_agent_admin_routes(
             logger.error("Heartbeat-Config speichern fehlgeschlagen für %s: %s", agent_id, e)
             raise HTTPException(500, "Fehler beim Speichern der Konfiguration")
         load_agent_config_direct(agent_dir)
-        return {"ok": True, "agent_id": agent_id}
+        discovery._register(agent_dir)
+        reloaded = await _reload_runtime_agent_config(agent_id, agent_dir)
+        return {"ok": True, "agent_id": agent_id, "runtime_reloaded": reloaded}

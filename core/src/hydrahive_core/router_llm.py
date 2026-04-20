@@ -209,6 +209,8 @@ def register_llm_routes(
     load_users,
     audit_log,
     logger: logging.Logger,
+    discovery=None,
+    runtime=None,
 ) -> None:
     @admin_router.get("/llm/config")
     def get_llm_config():
@@ -261,6 +263,7 @@ def register_llm_routes(
         _save_llm_config(config)
         system_agents = ["hydrahive_support"]
         updated = []
+        reloaded = []
         for agent_id in system_agents:
             yaml_path = Path(f"/agents/{agent_id}/agent.yaml")
             if yaml_path.exists():
@@ -268,12 +271,18 @@ def register_llm_routes(
                     data = _yaml.safe_load(yaml_path.read_text())
                     data["llm"]["model"] = model
                     yaml_path.write_text(_yaml.dump(data, default_flow_style=False, allow_unicode=True))
+                    if discovery is not None:
+                        discovery._register(yaml_path.parent)
+                    cfg = discovery.get(agent_id) if discovery is not None else None
+                    if cfg is not None and runtime is not None and hasattr(runtime, "reload_agent_config"):
+                        if await runtime.reload_agent_config(cfg):
+                            reloaded.append(agent_id)
                     updated.append(agent_id)
                 except Exception as e:
                     logger.debug("Failed to update LLM model for agent '%s': %s", agent_id, e)
         logger.info("System-Standard-LLM gesetzt: %s (aktualisiert: %s)", model, updated)
-        audit_log("llm.system_default_set", details={"model": model, "updated_agents": updated})
-        return {"updated": True, "model": model, "agents_updated": updated}
+        audit_log("llm.system_default_set", details={"model": model, "updated_agents": updated, "runtime_reloaded": reloaded})
+        return {"updated": True, "model": model, "agents_updated": updated, "runtime_reloaded": reloaded}
 
     @admin_router.put("/llm/config/claude_max")
     async def set_claude_oauth_token(req: ClaudeOAuthTokenRequest):

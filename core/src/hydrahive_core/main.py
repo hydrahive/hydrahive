@@ -1638,6 +1638,8 @@ register_llm_routes(
     load_users=_load_users,
     audit_log=audit_log,
     logger=logger,
+    discovery=discovery,
+    runtime=runtime,
 )
 
 # ================================================================== MCP-Server

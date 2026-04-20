@@ -256,6 +256,12 @@ def register_core_misc_routes(
     logger: logging.Logger,
     group_service=None,
 ) -> type[IncomingMessage]:
+    async def _reload_runtime_agent_config(agent_id: str) -> bool:
+        cfg = discovery.get(agent_id)
+        if cfg is not None and hasattr(runtime, "reload_agent_config"):
+            return await runtime.reload_agent_config(cfg)
+        return False
+
     @public_router.get("/setup/status")
     def setup_status():
         import json
@@ -447,7 +453,7 @@ def register_core_misc_routes(
         }
 
     @admin_router.patch("/agents/{agent_id}/llm")
-    def patch_agent_llm(agent_id: str, req: AgentLlmPatchRequest):
+    async def patch_agent_llm(agent_id: str, req: AgentLlmPatchRequest):
         cfg = discovery.get(agent_id)
         if not cfg or not cfg.agent_dir:
             raise HTTPException(404, f"Agent '{agent_id}' nicht gefunden")
@@ -463,10 +469,12 @@ def register_core_misc_routes(
             else:
                 raw["llm"].pop("fallback_models", None)
             yaml_path.write_text(_yaml.dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            discovery._register(cfg.agent_dir)
         except Exception as e:
             logger.error("Fallback-Models speichern fehlgeschlagen für %s: %s", agent_id, e)
             raise HTTPException(500, "Fehler beim Speichern der Konfiguration")
-        return {"ok": True, "agent_id": agent_id, "fallback_models": req.fallback_models}
+        reloaded = await _reload_runtime_agent_config(agent_id)
+        return {"ok": True, "agent_id": agent_id, "fallback_models": req.fallback_models, "runtime_reloaded": reloaded}
 
     @admin_router.get("/logs/core")
     def get_core_logs(lines: int = 200):
@@ -828,7 +836,7 @@ def register_core_misc_routes(
             raise HTTPException(500, "Konfiguration konnte nicht geladen werden")
 
     @admin_router.put("/agents/{agent_id}/config/full")
-    def update_agent_full_config(agent_id: str, req: AgentFullConfigRequest):
+    async def update_agent_full_config(agent_id: str, req: AgentFullConfigRequest):
         """Komplette agent.yaml überschreiben."""
         cfg = discovery.get(agent_id)
         if not cfg or not cfg.agent_dir:
@@ -844,7 +852,8 @@ def register_core_misc_routes(
             discovery._register(cfg.agent_dir)
         except Exception as e:
             logger.warning("Failed to re-register agent '%s': %s", agent_id, e)
-        return {"ok": True, "agent_id": agent_id}
+        reloaded = await _reload_runtime_agent_config(agent_id)
+        return {"ok": True, "agent_id": agent_id, "runtime_reloaded": reloaded}
 
     @admin_router.post("/agents/{agent_id}/clone")
     def clone_agent(agent_id: str, req: CloneAgentRequest):

@@ -149,6 +149,38 @@ class AgentRuntime:
         await self._spawn(config, ttl=TASK_AGENT_TTL)
         return config.id
 
+    async def reload_agent_config(self, config: AgentConfig, *, start_if_missing: bool = False) -> bool:
+        """
+        Laufenden Core-Agenten mit frisch geladener AgentConfig aktualisieren.
+
+        Config-Schreibwege aktualisieren Discovery sofort; der Runtime-Handle
+        hält aber eine eigene AgentConfig-Instanz. Ohne diesen Reload laufen
+        Status/Heartbeat und angehängte Clients bis zum Core-Neustart mit der
+        alten Konfiguration weiter.
+        """
+        if config.type not in CORE_TYPES:
+            return False
+
+        handle = self._handles.get(config.id)
+        if handle is None:
+            if not start_if_missing:
+                return False
+            await self._spawn(config)
+            return True
+
+        await self._cancel_handle(handle)
+        handle.config = config
+        handle.heartbeat_cfg = HeartbeatConfig.from_agent_config(config)
+        handle.current_activity = None
+        handle.status = AgentStatus.STARTING
+        handle.last_heartbeat = time.monotonic()
+        handle.task = asyncio.create_task(
+            self._run_agent(handle, ttl=None), name=f"agent-{config.id}"
+        )
+        self._handles[config.id] = handle
+        logger.info("Agent-Konfiguration neu geladen: %s (%s)", config.id, config.type)
+        return True
+
     async def attach_matrix_client(self, agent_id: str, matrix_client: object) -> None:
         """
         Matrix-Client an laufenden Agenten hängen und Task neu starten.

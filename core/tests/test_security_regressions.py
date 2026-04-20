@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from hydrahive_core import main
 from hydrahive_core.agent_config import AgentConfig
+from hydrahive_core.agent_runtime import AgentRuntime
 from hydrahive_core.execution_mode_policy import resolve_request_execution_mode
 from hydrahive_core.gitea import resolve_git_target, resolve_repo_ref
 from hydrahive_core.orchestrator import Orchestrator
@@ -1170,6 +1171,37 @@ class SecurityRegressionTests(unittest.TestCase):
             self.assertTrue((agent_dir / "agent.yaml").exists())
             self.assertEqual((agent_dir / "soul.md").read_text(encoding="utf-8"), "# Soul")
             loader.assert_called_once_with(agent_dir)
+
+    def test_agent_runtime_reload_config_updates_existing_handle_model(self):
+        async def run():
+            runtime = AgentRuntime()
+            try:
+                original = AgentConfig.model_validate(
+                    {
+                        "id": "personal_till",
+                        "type": "specialist",
+                        "identity": "Till",
+                        "llm": {"model": "claude-sonnet-4-6"},
+                    }
+                )
+                updated = AgentConfig.model_validate(
+                    {
+                        "id": "personal_till",
+                        "type": "specialist",
+                        "identity": "Till",
+                        "llm": {"model": "MiniMax-M2.7"},
+                    }
+                )
+
+                self.assertTrue(await runtime.reload_agent_config(original, start_if_missing=True))
+                self.assertEqual(runtime.status_all()["personal_till"]["model"], "claude-sonnet-4-6")
+
+                self.assertTrue(await runtime.reload_agent_config(updated))
+                self.assertEqual(runtime.status_all()["personal_till"]["model"], "MiniMax-M2.7")
+            finally:
+                await runtime.stop()
+
+        asyncio.run(run())
 
     def test_admin_agent_update_persists_empty_lists(self):
         req = CreateAgentRequest(
