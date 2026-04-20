@@ -30,6 +30,10 @@ Thumbs.db
 /projects/
 *.log
 
+# Stray Screenshot/Image-Artefakte (ImageMagick-Konvertierungen etc.)
+*.ps
+/uiTarget
+
 # Lokale Deploy-Konfiguration (enthält IP + SSH-Key-Pfad)
 scripts/octopos.conf
 scripts/hydrahive.conf
