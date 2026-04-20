@@ -373,6 +373,15 @@ def register_llm_routes(
                 has_anthropic = "ANTHROPIC_API_KEY" in _env and "=" in _env
             except OSError:
                 pass
+        # #28-IA: Claude via OAuth — Token liegt als /etc/hydrahive/claude_oauth_token
+        # (reiner sk-ant-oat01-... String oder JSON mit access_token).
+        # Ohne diesen Check sieht die Model-Liste Claude-OAuth-User nicht.
+        if not has_anthropic:
+            try:
+                from .orchestrator_llm import _load_claude_oauth_token
+                has_anthropic = bool(_load_claude_oauth_token())
+            except Exception:
+                pass
         if has_anthropic:
             for model in ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6", "claude-opus-4-7"]:
                 models.append({"id": model, "label": model, "provider": "anthropic"})
