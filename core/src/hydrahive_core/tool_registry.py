@@ -2722,6 +2722,21 @@ class ImageGenerateTool(BaseTool):
     def is_read_only(self) -> bool:
         return False
 
+    # #773: Deferred — nur im <available-deferred-tools>-Block, Schema lädt
+    # via tool_search bei Bedarf. Spart Tokens für User ohne Bild-Bedarf,
+    # und vermeidet dass das Tool stumm in _V2_CORE_TOOL_IDS-Whitelist-Lücke
+    # fällt (Tool war registriert aber für den LLM unsichtbar).
+    @property
+    def always_loaded(self) -> bool:
+        return False
+
+    @property
+    def semantic_tags(self) -> list[str]:
+        return [
+            "image", "generate", "picture", "bild", "draw", "create",
+            "minimax", "image-01", "artwork", "illustration",
+        ]
+
     async def execute(
         self, agent_id: str, project_id: str,
         prompt: str = "",
@@ -2901,6 +2916,18 @@ class VideoGenerateTool(BaseTool):
     @property
     def is_read_only(self) -> bool:
         return False
+
+    # #773: Deferred — siehe ImageGenerateTool.
+    @property
+    def always_loaded(self) -> bool:
+        return False
+
+    @property
+    def semantic_tags(self) -> list[str]:
+        return [
+            "video", "generate", "clip", "film", "movie", "animation",
+            "minimax", "hailuo", "create",
+        ]
 
     async def execute(
         self, agent_id: str, project_id: str,
@@ -3084,6 +3111,18 @@ class MusicGenerateTool(BaseTool):
     @property
     def is_read_only(self) -> bool:
         return False
+
+    # #773: Deferred — siehe ImageGenerateTool.
+    @property
+    def always_loaded(self) -> bool:
+        return False
+
+    @property
+    def semantic_tags(self) -> list[str]:
+        return [
+            "music", "song", "audio", "melody", "tune", "lyrics",
+            "instrumental", "minimax", "generate", "compose",
+        ]
 
     async def execute(
         self, agent_id: str, project_id: str,

@@ -2206,3 +2206,87 @@ def test_invariant19d_cache_hash_includes_core_policy():
             "Cache-Hash reagiert nicht auf Policy-Pfad-Wechsel — Änderungen "
             "an agent_default_policy.md bleiben sonst bis TTL-Ablauf unsichtbar"
         )
+
+
+# ---------------------------------------------------------------------------
+# Invariant 29 — Media-Tools müssen für den Agent sichtbar sein (#773)
+# ---------------------------------------------------------------------------
+#
+# Ursache: `ImageGenerateTool`/`VideoGenerateTool`/`MusicGenerateTool` waren
+# in der Registry registriert (main.py:232 bootstrapt sie mit JobService),
+# aber:
+#   - nicht in `_V2_CORE_TOOL_IDS` (orchestrator.py) → kein Always-Loaded-Schema
+#   - `always_loaded=True` (Default) → nicht in `registry.deferred_tools()`
+#     → nicht im `<available-deferred-tools>`-Prompt-Block
+#
+# Ergebnis: Tool existierte, LLM erfuhr nie davon, Agent halluzinierte
+# Abwesenheit ("Ich habe keine Bildgenerierung"). Der Test unten fängt
+# Regressionen — wenn jemand ein neues Media-/Media-ähnliches Tool in
+# main.py:232 bootstrapt, aber vergisst `always_loaded=False` zu setzen,
+# schlägt der Test zu.
+
+MEDIA_TOOL_IDS = ("image_generate", "video_generate", "music_generate")
+
+
+def test_invariant29a_media_tools_registered():
+    """29a: Alle drei Media-Tools sind in der Registry."""
+    from hydrahive_core.tool_registry import registry
+    missing = [tid for tid in MEDIA_TOOL_IDS if registry.get(tid) is None]
+    assert not missing, (
+        f"Media-Tools fehlen in der Registry: {missing}. "
+        f"main.py:232 bootstrapt diese IDs mit JobService — wenn sie nicht "
+        f"registriert sind, läuft der Bootstrap ins Leere."
+    )
+
+
+def test_invariant29b_media_tools_are_deferred():
+    """29b: Media-Tools sind deferred (`always_loaded=False`), damit sie im
+    `<available-deferred-tools>`-Block auftauchen und der Agent sie via
+    ToolSearch laden kann. Alternativ dürfen sie in `_V2_CORE_TOOL_IDS`
+    stehen — aber eins von beiden MUSS der Fall sein, sonst sind sie für
+    den LLM unsichtbar (das war der Live-Bug in #773)."""
+    from hydrahive_core.tool_registry import registry
+    from hydrahive_core.orchestrator import Orchestrator
+
+    core_ids = Orchestrator._V2_CORE_TOOL_IDS
+    invisible = []
+    for tid in MEDIA_TOOL_IDS:
+        tool = registry.get(tid)
+        if tool is None:
+            continue  # 29a fängt das
+        is_core = tid in core_ids
+        is_deferred = not tool.always_loaded
+        if not (is_core or is_deferred):
+            invisible.append(tid)
+
+    assert not invisible, (
+        f"Media-Tools unsichtbar für LLM: {invisible}. "
+        f"Ein Tool muss entweder in _V2_CORE_TOOL_IDS sein (dann Always-"
+        f"Loaded-Schema) oder `always_loaded=False` haben (dann im "
+        f"Deferred-Discovery-Block). Fällt es in keine der beiden "
+        f"Kategorien, landet es in der #773-Whitelist-Lücke."
+    )
+
+
+def test_invariant29c_media_tools_have_semantic_tags():
+    """29c: Deferred Media-Tools müssen `semantic_tags` setzen, sonst findet
+    sie der Keyword-Scorer von ToolSearch nicht. Sonst wäre der Deferred-
+    Block zwar im Prompt, aber `tool_search bild` würde nichts zurückgeben."""
+    from hydrahive_core.tool_registry import registry
+
+    missing_tags = []
+    for tid in MEDIA_TOOL_IDS:
+        tool = registry.get(tid)
+        if tool is None:
+            continue
+        if tool.always_loaded:
+            continue  # nur deferred Tools brauchen semantic_tags
+        if not tool.semantic_tags:
+            missing_tags.append(tid)
+
+    assert not missing_tags, (
+        f"Deferred Media-Tools ohne semantic_tags: {missing_tags}. "
+        f"Ohne Tags findet ToolSearch das Tool via Keyword-Query nicht — "
+        f"der Agent sieht es im Discovery-Block, aber der Search-Match "
+        f"schlägt fehl."
+    )
