@@ -285,35 +285,91 @@ def format_tool_detail(tool_name: str, tool_input: dict) -> str:
 
 
 import re as _re
+import unicodedata as _unicodedata
 
-# #453: Prompt-Injection-Muster die in Tool-Outputs neutralisiert werden
+# #453/#775: Prompt-Injection-Muster die in Tool-Outputs neutralisiert werden.
+# Defense-in-Depth: Pattern-Filter greift NACH Unicode-Cleaning in
+# _sanitize_tool_output. Wichtige Grenze: prompt-injection ist systemisch
+# nicht mit Regex lösbar — dies ist nur eine Haertungs-Schicht, nicht Schutz.
 _INJECTION_PATTERNS = [
-    (_re.compile(r'ignore\s+all\s+previous\s+instructions?', _re.I), '[FILTERED]'),
+    (_re.compile(r'ignore\s+(?:all\s+)?previous\s+instructions?', _re.I), '[FILTERED]'),
     (_re.compile(r'forget\s+everything\s+(?:above|before)', _re.I), '[FILTERED]'),
-    (_re.compile(r'you\s+are\s+now\s+(?:a|an)\s+', _re.I), '[FILTERED]'),
+    (_re.compile(r'you\s+are\s+now\s+(?:a|an|in\s+role\s+of)\s+', _re.I), '[FILTERED]'),
     (_re.compile(r'new\s+instructions?:\s*', _re.I), '[FILTERED]'),
     (_re.compile(r'system\s*:\s*you\s+(?:are|must|should)', _re.I), '[FILTERED]'),
     (_re.compile(r'<\s*(?:system|instructions?|prompt)\s*>', _re.I), '[FILTERED-TAG]'),
+    # #775: Erweiterte Muster — ChatML-Markup, role-play, overrides.
+    (_re.compile(r'act\s+as\s+(?:a|an)\s+\w+', _re.I), '[FILTERED]'),
+    (_re.compile(r'remember\s+this\s+from\s+now\s+on', _re.I), '[FILTERED]'),
+    (_re.compile(r'<\|(?:system|user|assistant|model|im_start|im_end)\|>', _re.I), '[FILTERED-TAG]'),
+    (_re.compile(r'disregard\s+(?:all\s+)?(?:previous|above|earlier)\s+(?:instructions?|rules?|system)', _re.I), '[FILTERED]'),
+    (_re.compile(r'override\s+(?:your\s+)?(?:system\s+)?(?:instructions?|prompts?|rules?)', _re.I), '[FILTERED]'),
+    (_re.compile(r'supersede\s+(?:your\s+)?(?:previous|original)\s+(?:instructions?|rules?)', _re.I), '[FILTERED]'),
+    (_re.compile(r'jailbreak', _re.I), '[FILTERED-TAG]'),
+    (_re.compile(r'\bdan\s+mode\b', _re.I), '[FILTERED-TAG]'),
 ]
+
+# #775: Unsichtbare Unicode-Zeichen die vor der Regex-Pruefung entfernt werden.
+# Bi-Directional-Overrides koennen Pattern visuell aufspalten; Zero-Width-
+# Chars erlauben "i<ZWS>gnore" als Bypass. NFKC-Normalisierung (getrennt)
+# loest Ligaturen auf (z.B. "ﬁgnore" → "fignore").
+_INVISIBLE_STRIP = [
+    "\u200b", "\u200c", "\u200d", "\ufeff",                     # zero-width
+    "\u202a", "\u202b", "\u202c", "\u202d", "\u202e",            # bidi embedding/override
+    "\u2066", "\u2067", "\u2068", "\u2069",                     # bidi isolates
+    "\x00",                                                      # null-byte
+]
+
+# #775: Wrapping-Konstanten. LLM wird im System-Prompt informiert dass
+# <tool_output>-Inhalte Daten und keine Instruktionen sind.
+_TOOL_OUTPUT_OPEN          = "<tool_output>"
+_TOOL_OUTPUT_CLOSE         = "</tool_output>"
+_TOOL_OUTPUT_CLOSE_ESCAPED = "<TOOL_OUTPUT_CLOSE_ESCAPED>"
 
 
 def _sanitize_tool_output(text: str) -> str:
-    """#453: Neutralisiert bekannte Prompt-Injection-Muster in Tool-Outputs."""
+    """#453/#775: Neutralisiert Prompt-Injection-Muster + Unicode-Tricks.
+
+    Reihenfolge bewusst:
+    1. Unsichtbare Chars entfernen (Zero-Width, Bidi-Overrides, Null-Byte)
+    2. NFKC-Normalisierung (Ligaturen, lookalikes auf kanonische Form)
+    3. Regex-Pattern-Ersetzung
+    """
+    if not isinstance(text, str):
+        return text
+    for _ch in _INVISIBLE_STRIP:
+        if _ch in text:
+            text = text.replace(_ch, "")
+    text = _unicodedata.normalize("NFKC", text)
     for pattern, replacement in _INJECTION_PATTERNS:
         text = pattern.sub(replacement, text)
     return text
 
 
 def format_tool_result(result, *, ensure_str: bool = True) -> str:
-    """Ergebnis eines Tool-Calls einheitlich als truncated + sanitized String formatieren."""
+    """Ergebnis eines Tool-Calls einheitlich als truncated + sanitized String formatieren.
+
+    #775: Zusaetzlich zum Sanitize wird das Ergebnis in
+    <tool_output>...</tool_output> eingewrappt. Das LLM wird im System-Prompt
+    (orchestrator_context._TOOL_OUTPUT_POLICY) instruiert, den Inhalt der
+    Tags als Daten zu behandeln — nicht als Instruktionen. Enthaltene
+    </tool_output>-Sequenzen werden escaped (Schutz gegen Tag-Closing-
+    Injection).
+    """
     if isinstance(result, str):
-        return _sanitize_tool_output(_truncate_tool_result(result))
-    # #414: image_base64 nicht in die LLM-History serialisieren (spart Tokens)
-    if isinstance(result, dict) and "image_base64" in result:
+        sanitized = _sanitize_tool_output(_truncate_tool_result(result))
+    elif isinstance(result, dict) and "image_base64" in result:
+        # #414: image_base64 nicht in die LLM-History serialisieren (spart Tokens)
         summary = {k: v for k, v in result.items() if k != "image_base64"}
         summary["image"] = f"[screenshot {result.get('format', 'png')}, {result.get('size_bytes', '?')} bytes — an Frontend gestreamt]"
-        return _sanitize_tool_output(_json.dumps(summary, ensure_ascii=False))
-    return _sanitize_tool_output(_truncate_tool_result(_json.dumps(result, ensure_ascii=False)))
+        sanitized = _sanitize_tool_output(_json.dumps(summary, ensure_ascii=False))
+    else:
+        sanitized = _sanitize_tool_output(_truncate_tool_result(_json.dumps(result, ensure_ascii=False)))
+
+    # #775: Closing-Tag-Escape — verhindert dass Content den Wrapper
+    # vorzeitig schliessen und Instruktionen einschmuggeln kann.
+    sanitized = sanitized.replace(_TOOL_OUTPUT_CLOSE, _TOOL_OUTPUT_CLOSE_ESCAPED)
+    return f"{_TOOL_OUTPUT_OPEN}{sanitized}{_TOOL_OUTPUT_CLOSE}"
 
 
 async def execute_tool_call(
