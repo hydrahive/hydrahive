@@ -144,6 +144,19 @@ class AgentConfig(BaseModel):
         return execution_mode or self.execution_modes.default
 
 
+def persona_file(agent_dir: Path) -> Path:
+    """Effektive Persona-Datei eines Agents (#772).
+
+    Der orchestrator_context-Loader priorisiert AGENT.md (v2) vor soul.md (v1).
+    Editor/API/Export müssen dieselbe Datei anfassen wie der Loader — sonst
+    editiert der User stumm die falsche Datei und seine Änderungen landen
+    nicht im System-Prompt. Gibt bei einem frischen Agent (weder vorhanden)
+    soul.md zurück als Default-Write-Target.
+    """
+    agent_md = agent_dir / "AGENT.md"
+    return agent_md if agent_md.exists() else (agent_dir / "soul.md")
+
+
 def load_agent_config(agent_dir: Path) -> AgentConfig | None:
     """
     Liest agent.yaml aus agent_dir, validiert und gibt AgentConfig zurueck.

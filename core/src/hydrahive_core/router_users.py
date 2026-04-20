@@ -144,7 +144,8 @@ def persist_personal_agent_config(
         _yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8"
     )
     if req.soul is not None:
-        (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
+        from .agent_config import persona_file as _pf
+        _pf(agent_dir).write_text(req.soul, encoding="utf-8")
     if load_agent_config_direct is not None:
         load_agent_config_direct(agent_dir)
     return agent_data
@@ -387,8 +388,9 @@ def register_user_routes(
         except Exception as _e:
             export["sessions_error"] = str(_e)
 
-        # Soul
-        soul_file = agent_dir / "soul.md"
+        # Soul (effective persona file — AGENT.md falls vorhanden, sonst soul.md)
+        from .agent_config import persona_file as _pf
+        soul_file = _pf(agent_dir)
         if soul_file.exists():
             try:
                 export["soul"] = soul_file.read_text(encoding="utf-8")

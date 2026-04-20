@@ -127,7 +127,8 @@ def register_agent_admin_routes(
             try:
                 cfg = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
                 soul = ""
-                soul_path = agent_dir / "soul.md"
+                from .agent_config import persona_file as _pf
+                soul_path = _pf(agent_dir)
                 if soul_path.exists():
                     soul = soul_path.read_text(encoding="utf-8").strip()[:500]
                 templates.append({
@@ -223,7 +224,8 @@ def register_agent_admin_routes(
 
         agent_data = build_agent_admin_data(req, agent_id=agent_id)
         if req.soul:
-            (agent_dir / "soul.md").write_text(req.soul, encoding="utf-8")
+            from .agent_config import persona_file as _pf
+            _pf(agent_dir).write_text(req.soul, encoding="utf-8")
 
         yaml_path = agent_dir / "agent.yaml"
         yaml_path.write_text(_yaml.dump(agent_data, allow_unicode=True, default_flow_style=False), encoding="utf-8")
@@ -376,7 +378,8 @@ def register_agent_admin_routes(
     @auth_router.get("/agents/{agent_id}/soul")
     def get_agent_soul(agent_id: str, _a: tuple[str, str] = Depends(require_auth)):
         _check_agent_read(agent_id, _a)
-        soul_path = Path(agents_dir) / agent_id / "soul.md"
+        from .agent_config import persona_file as _pf
+        soul_path = _pf(Path(agents_dir) / agent_id)
         if not soul_path.exists():
             return {"soul": "", "exists": False}
         return {"soul": soul_path.read_text(encoding="utf-8"), "exists": True}
