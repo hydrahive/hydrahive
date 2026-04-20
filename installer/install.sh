@@ -225,7 +225,7 @@ else
   info "               Für Let's Encrypt: DOMAIN=mein.host.de bash install.sh"
 fi
 info "Admin-Account: @admin:$(hostname -f 2>/dev/null || hostname)"
-info "Login:         admin / ********  (siehe /etc/hydrahive/admin_credentials)"
+info "Login:         admin / ${CONSOLE_PASS}  (auch in /etc/hydrahive/admin_credentials)"
 info "Credentials:   /etc/hydrahive/admin_credentials"
 info "Projekte-Dir:  /projects"
 info "AgentLink:     http://127.0.0.1:${AGENTLINK_PORT:-8010}/docs"
