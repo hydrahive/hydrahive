@@ -73,11 +73,19 @@ popd > /dev/null
 success "Console gebaut: ${CONSOLE_SRC}/dist/"
 
 # --- Build nach /opt/hydrahive/console/ kopieren ---
-mkdir -p "${CONSOLE_DIST}"
-rm -rf "${CONSOLE_DIST:?}"/*
-cp -r "${CONSOLE_SRC}/dist/." "${CONSOLE_DIST}/"
-chown -R www-data:www-data "${CONSOLE_DIST}"
-success "Console-Dateien nach ${CONSOLE_DIST} kopiert"
+# BL-14 Guard: Wenn REPO_ROOT == HYDRAHIVE_DIR, dann CONSOLE_SRC == CONSOLE_DIST.
+# rm -rf wuerde das dist-Verzeichnis zerstoeren BEVOR cp es lesen kann.
+SRC_REAL=$(realpath "${CONSOLE_SRC}/dist" 2>/dev/null)
+DST_REAL=$(realpath "${CONSOLE_DIST}" 2>/dev/null)
+if [ "${SRC_REAL}" = "${DST_REAL}" ]; then
+    info "Installer-Dir == HYDRAHIVE_DIR — Console-Build bereits am Zielort (${SRC_REAL})"
+else
+    mkdir -p "${CONSOLE_DIST}"
+    rm -rf "${CONSOLE_DIST:?}"/*
+    cp -r "${CONSOLE_SRC}/dist/." "${CONSOLE_DIST}/"
+    chown -R www-data:www-data "${CONSOLE_DIST}"
+    success "Console-Dateien nach ${CONSOLE_DIST} kopiert"
+fi
 
 # --- nginx-Konfiguration ---
 cat > "${NGINX_CONF}" << 'NGINXCONF'
