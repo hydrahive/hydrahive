@@ -96,13 +96,33 @@ def register_mcp_server_routes(
     """Registriert den MCP-Server Endpoint."""
 
     # MCP-API-Key aus Config laden (alternativ zum JWT Bearer-Token)
+    # #780: TTL-aware — abgelaufene Keys werden als "nicht konfiguriert" behandelt.
     def _load_mcp_api_key() -> str:
         from .settings import settings
         try:
             cfg = json.loads(settings.mcp_servers_config.read_text())
-            return cfg.get("server_api_key", "")
         except (OSError, ValueError):
             return ""
+        key = cfg.get("server_api_key", "")
+        if not key:
+            return ""
+        # TTL-Check: wenn expires_at gesetzt und in der Vergangenheit → Key
+        # gilt als abgelaufen. Admin muss `POST /admin/mcp/api-key/generate`
+        # aufrufen. Best-effort — bei unparseable Timestamp wird der Key
+        # als gueltig behandelt (fail-open fuer Config-Migrations-Faelle).
+        expires_at = cfg.get("server_api_key_expires_at", "")
+        if expires_at:
+            try:
+                from datetime import datetime, timezone
+                _exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if _exp.tzinfo is None:
+                    _exp = _exp.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) > _exp:
+                    logger.warning("MCP-API-Key abgelaufen (expires_at=%s) — ignoriert", expires_at)
+                    return ""
+            except (ValueError, AttributeError):
+                pass
+        return key
 
     def _verify_mcp_auth(creds: HTTPAuthorizationCredentials | None) -> bool:
         """Prüft Auth: JWT Bearer-Token ODER MCP-API-Key."""
@@ -218,37 +238,128 @@ def register_mcp_server_routes(
 
     @admin_router.get("/api-key")
     def get_mcp_api_key(_a=Depends(require_auth)):
-        """Zeigt ob ein MCP-API-Key konfiguriert ist (nicht den Key selbst)."""
-        key = _load_mcp_api_key()
-        return {"configured": bool(key), "key_preview": f"{key[:8]}..." if key else None}
+        """Zeigt ob ein MCP-API-Key konfiguriert ist (nicht den Key selbst).
 
-    @admin_router.post("/api-key/generate")
-    def generate_mcp_api_key(_a=Depends(require_auth)):
-        """Generiert einen neuen MCP-API-Key und speichert ihn."""
-        import secrets
+        #780: liefert zusaetzlich created_at + expires_at + expired-Flag
+        damit die Admin-UI eine Rotation-Warnung anzeigen kann wenn der
+        Key alt oder ablaufend ist.
+        """
         from .settings import settings
-        new_key = f"hh-mcp-{secrets.token_urlsafe(32)}"
+        from datetime import datetime, timezone
         try:
             cfg = json.loads(settings.mcp_servers_config.read_text())
         except (OSError, ValueError):
             cfg = {}
+        key = cfg.get("server_api_key", "")
+        created_at = cfg.get("server_api_key_created_at", "")
+        expires_at = cfg.get("server_api_key_expires_at", "")
+        expired = False
+        if expires_at:
+            try:
+                _exp = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if _exp.tzinfo is None:
+                    _exp = _exp.replace(tzinfo=timezone.utc)
+                expired = datetime.now(timezone.utc) > _exp
+            except ValueError:
+                pass
+        return {
+            "configured": bool(key) and not expired,
+            "key_preview": f"{key[:8]}..." if key else None,
+            "created_at":  created_at or None,
+            "expires_at":  expires_at or None,
+            "expired":     expired,
+        }
+
+    @admin_router.post("/api-key/generate")
+    def generate_mcp_api_key(
+        ttl_days: int | None = None,
+        _a=Depends(require_auth),
+    ):
+        """Generiert einen neuen MCP-API-Key und speichert ihn.
+
+        #780: optional ttl_days fuer TTL-Binding (0 oder None = kein Ablauf).
+        created_at + expires_at werden persistiert, sodass die Admin-UI
+        den Status anzeigen und rechtzeitig warnen kann.
+        Audit-Log-Eintrag bei jeder Rotation.
+        """
+        import secrets
+        from datetime import datetime, timedelta, timezone
+        from .settings import settings
+        try:
+            from .main import audit_log as _audit
+        except Exception:
+            _audit = None
+
+        new_key = f"hh-mcp-{secrets.token_urlsafe(32)}"
+        now = datetime.now(timezone.utc)
+        now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        try:
+            cfg = json.loads(settings.mcp_servers_config.read_text())
+        except (OSError, ValueError):
+            cfg = {}
+        had_previous = bool(cfg.get("server_api_key"))
         cfg["server_api_key"] = new_key
+        cfg["server_api_key_created_at"] = now_iso
+        if ttl_days and ttl_days > 0:
+            _exp = (now + timedelta(days=int(ttl_days))).strftime("%Y-%m-%dT%H:%M:%SZ")
+            cfg["server_api_key_expires_at"] = _exp
+        else:
+            cfg.pop("server_api_key_expires_at", None)
+
         settings.mcp_servers_config.parent.mkdir(parents=True, exist_ok=True)
         settings.mcp_servers_config.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
         settings.mcp_servers_config.chmod(0o600)
-        logger.info("MCP-API-Key generiert")
-        return {"api_key": new_key}
+        logger.info(
+            "AUDIT [MCP-KEY] rotated%s (ttl_days=%s)",
+            " (previous invalidated)" if had_previous else "", ttl_days,
+        )
+        if _audit is not None:
+            try:
+                _audit(
+                    action="mcp_api_key_rotate",
+                    user="admin",
+                    target="mcp-server",
+                    details={"ttl_days": ttl_days, "previous_invalidated": had_previous},
+                )
+            except Exception as _audit_err:
+                logger.debug("audit_log for mcp_api_key_rotate failed: %s", _audit_err)
+
+        return {
+            "api_key":    new_key,
+            "created_at": now_iso,
+            "expires_at": cfg.get("server_api_key_expires_at"),
+        }
 
     @admin_router.delete("/api-key")
     def delete_mcp_api_key(_a=Depends(require_auth)):
-        """Löscht den MCP-API-Key."""
+        """Löscht den MCP-API-Key sofort (Revocation). Audit-Log-Eintrag."""
         from .settings import settings
+        try:
+            from .main import audit_log as _audit
+        except Exception:
+            _audit = None
+
         try:
             cfg = json.loads(settings.mcp_servers_config.read_text())
         except (OSError, ValueError):
             cfg = {}
+        had_key = bool(cfg.get("server_api_key"))
         cfg.pop("server_api_key", None)
+        cfg.pop("server_api_key_created_at", None)
+        cfg.pop("server_api_key_expires_at", None)
         settings.mcp_servers_config.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        logger.info("AUDIT [MCP-KEY] revoked (had_key=%s)", had_key)
+        if _audit is not None:
+            try:
+                _audit(
+                    action="mcp_api_key_revoke",
+                    user="admin",
+                    target="mcp-server",
+                    details={"had_key": had_key},
+                )
+            except Exception as _audit_err:
+                logger.debug("audit_log for mcp_api_key_revoke failed: %s", _audit_err)
         return {"deleted": True}
 
     app.include_router(admin_router)

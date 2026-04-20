@@ -161,6 +161,43 @@ curl -X POST http://localhost:8765/admin/users/<username>/password \
 
 Update `/etc/hydrahive/gitea_config.json`, then restart the service.
 
+### MCP Server API-Key (#780)
+
+The MCP endpoint accepts either a JWT Bearer token or a static API-Key stored
+in `/etc/hydrahive/mcp_servers.json` (`server_api_key`). Since #780 the key
+supports optional TTL and every rotate/revoke is written to the audit log.
+
+**Rotate (new key, no TTL — recommended default):**
+```bash
+curl -X POST http://localhost:8765/admin/mcp/api-key/generate \
+  -H "Authorization: Bearer <admin-jwt>"
+# → {"api_key": "hh-mcp-...", "created_at": "...", "expires_at": null}
+```
+
+**Rotate with TTL (key auto-expires after N days):**
+```bash
+curl -X POST "http://localhost:8765/admin/mcp/api-key/generate?ttl_days=90" \
+  -H "Authorization: Bearer <admin-jwt>"
+```
+
+**Status (includes expiry):**
+```bash
+curl http://localhost:8765/admin/mcp/api-key \
+  -H "Authorization: Bearer <admin-jwt>"
+# → {"configured": true, "key_preview": "hh-mcp-a...", "created_at": "...",
+#    "expires_at": "...", "expired": false}
+```
+
+**Revoke (immediate invalidation):**
+```bash
+curl -X DELETE http://localhost:8765/admin/mcp/api-key \
+  -H "Authorization: Bearer <admin-jwt>"
+```
+
+When the TTL has elapsed, `_load_mcp_api_key()` treats the key as unconfigured
+and `/mcp` authentication falls back to JWT-only. Audit entries (`action`:
+`mcp_api_key_rotate` / `mcp_api_key_revoke`) are written to the audit log.
+
 ### After Any Rotation
 
 1. Verify the service starts: `systemctl status hydrahive-core`
