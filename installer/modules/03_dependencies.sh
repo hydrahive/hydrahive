@@ -16,7 +16,10 @@ if [ ${#MISSING[@]} -eq 0 ]; then
   success "Alle Dependencies bereits installiert"
 else
   info "Installiere: ${MISSING[*]}"
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${MISSING[@]}"
+  # BL-09: --no-install-recommends schneidet empfohlene Pakete weg (meist
+  # GUI-Krempel wie cups, avahi etc.). Headless-Server brauchen das nicht.
+  # Harte Depends bleiben erhalten.
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${MISSING[@]}"
   success "Dependencies installiert: ${MISSING[*]}"
 fi
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # HydraHive Installer — Hauptskript
-# Usage: curl -sSL https://get.hydrahive.org | bash
+# Usage:
+#   git clone https://github.com/hydrahive/hydrahive.git /tmp/hydrahive
+#   sudo bash /tmp/hydrahive/installer/install.sh
+# (Kein curl|bash-Shortcut — der Installer kopiert das geklonte Repo
+#  selber nach /opt/hydrahive, braucht also den lokalen Source-Tree.)
 set -euo pipefail
 
 HYDRAHIVE_VERSION="0.1.0"
