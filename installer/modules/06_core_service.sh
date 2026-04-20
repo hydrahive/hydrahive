@@ -93,11 +93,14 @@ for _dir in server_keys wks_keys; do
     chmod 700 "/etc/hydrahive/${_dir}"
 done
 # #687/#704: shared Helper — identisch von update.sh vor Core-Restart genutzt.
-_RUNTIME_HELPER="${HYDRAHIVE_DIR:-/opt/hydrahive}/installer/lib/ensure_runtime_dirs.sh"
+# BL-12: Immer zuerst den Helper aus dem aktuellen Source-Tree nehmen (der
+# zusammen mit diesem Modul gepullt wurde), damit Re-Installs NEUE Fixes
+# bekommen. Der Fallback auf HYDRAHIVE_DIR greift nur wenn das Source-File
+# weg ist — bei normalem Re-Install lag dort die veraltete Kopie vom ersten
+# Install (siehe Live-Diagnose auf hydrahive-dev2 2026-04-20).
+_RUNTIME_HELPER="$(dirname "${BASH_SOURCE[0]}")/../lib/ensure_runtime_dirs.sh"
 if [ ! -f "${_RUNTIME_HELPER}" ]; then
-    # Frischer Install: Helper liegt noch im geklonten Installer-Tree, nicht
-    # unter HYDRAHIVE_DIR. Resolve relativ zum Modul.
-    _RUNTIME_HELPER="$(dirname "${BASH_SOURCE[0]}")/../lib/ensure_runtime_dirs.sh"
+    _RUNTIME_HELPER="${HYDRAHIVE_DIR:-/opt/hydrahive}/installer/lib/ensure_runtime_dirs.sh"
 fi
 # shellcheck source=../lib/ensure_runtime_dirs.sh
 HYDRAHIVE_USER="${HYDRAHIVE_USER}" HYDRAHIVE_GROUP="${HYDRAHIVE_USER}" source "${_RUNTIME_HELPER}"
