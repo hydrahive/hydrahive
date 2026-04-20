@@ -44,6 +44,21 @@ fi
 # überlebt User-Wechsel. Idempotent.
 git config --system --add safe.directory "${HYDRAHIVE_DIR}" 2>/dev/null || true
 
+# --- #776: Warnung bei gesetzem HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT --------------
+# Dev-Setups nutzen manchmal diesen Flag (wenn keine proj_<id>-User provisioniert
+# sind). Der Installer bricht NICHT ab — ist bewusste Dev-Wahl — aber die Warnung
+# muss unuebersehbar sein. Siehe SECURITY.md "Risk-Modifying Environment Variables".
+if [ "${HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT:-0}" = "1" ]; then
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  WARNUNG: HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT=1                   ║${NC}"
+    echo -e "${RED}║  shell_exec laeuft im unrestricted-Modus als ROOT,              ║${NC}"
+    echo -e "${RED}║  NICHT als proj_<id>-User (Isolation deaktiviert).              ║${NC}"
+    echo -e "${RED}║  Nur fuer lokale Dev-Setups, NIEMALS in Prod. Siehe SECURITY.md.║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+fi
+
 # --- Dangling nginx-Symlinks bereinigen (von fehlgeschlagenen Vorinstalls) ---
 for _sl in /etc/nginx/sites-enabled/*; do
     [ -L "$_sl" ] && [ ! -e "$_sl" ] && rm -f "$_sl" && warn "Veralteten nginx-Symlink entfernt: $_sl"

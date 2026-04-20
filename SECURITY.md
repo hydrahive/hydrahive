@@ -166,3 +166,33 @@ Update `/etc/hydrahive/gitea_config.json`, then restart the service.
 1. Verify the service starts: `systemctl status hydrahive-core`
 2. Check logs: `journalctl -u hydrahive-core -n 20`
 3. Test a login via the Console UI
+
+## Risk-Modifying Environment Variables
+
+The following environment variables change HydraHive's default security posture.
+They are intended for **local development setups only** and must never be set in
+production deployments.
+
+### `HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT=1`
+
+- **Risk Level**: **CRITICAL** — bypasses the `#747` project-user isolation
+  for `shell_exec` in `unrestricted` execution mode.
+- **Effect**: When set, `shell_exec` falls back to `sudo bash -c` (runs as
+  root) instead of hard-blocking the call if the `proj_<project_id>` system
+  user does not exist.
+- **Why it exists**: development environments where no system users are
+  provisioned for each project.
+- **Audit trail** (`#776`):
+  - Core startup logs `AUDIT [SECURITY]` at `ERROR` level if the flag is set.
+  - Every root-escape logs `AUDIT [SECURITY] shell_exec [agent] (UNRESTRICTED/ROOT ...)`
+    at `ERROR` level.
+  - Each root-escape writes a persistent entry to the audit log
+    (`action="shell_exec_root_override"`).
+- **How to remove**: `unset HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT`, remove from
+  any systemd unit `Environment=` directives, then restart the service.
+- **Recommended alternative**: provision project users via
+  `POST /projects/{id}/provision`, or use `execution_mode=elevated` which
+  runs commands inside a `bwrap`-sandbox.
+
+*Setting this variable in a production deployment is a security
+misconfiguration.*

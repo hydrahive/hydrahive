@@ -246,6 +246,18 @@ async def lifespan(app: FastAPI):
     global provisioner, JWT_SECRET, hb_scheduler, _INTERNAL_SECRET
     logger.info("HydraHive Core startet...")
 
+    # #776: Startup-Audit — HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT ist ein
+    # Dev-Escape-Hatch, der shell_exec unrestricted als root (statt
+    # proj_<id>-User) laufen laesst. Jeder Core-Start mit dem Flag
+    # muss sichtbar sein.
+    if os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
+        logger.error(
+            "AUDIT [SECURITY] HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT=1 — "
+            "shell_exec laeuft im unrestricted-Modus als root ohne "
+            "Projekt-User-Isolation! Nur fuer lokale Dev-Setups, "
+            "NIEMALS in Prod setzen."
+        )
+
     # #443: Idempotente Migrations beim Start
     from .migrations import run_migrations
     run_migrations()

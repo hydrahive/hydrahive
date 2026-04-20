@@ -880,11 +880,29 @@ class ShellExecTool(BaseTool):
             elif os.environ.get("HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT") == "1":
                 # Explizite Dev-Escape-Hatch. In Prod nicht setzen.
                 # #747: frueher war das der Silent-Default.
+                # #776: error-Level + persistenter Audit-Log-Eintrag. Jeder
+                # Root-Escape muss in Log + Audit-Trail landen, da Angreifer
+                # mit Zugriff auf die Env-Var (oder Systemd-Unit) den Fallback
+                # triggern kann.
                 exec_command = f"sudo bash -c {_quoted}"
-                logger.warning(
-                    "shell_exec [%s] (UNRESTRICTED/ROOT via Env-Override): %s",
+                logger.error(
+                    "AUDIT [SECURITY] shell_exec [%s] (UNRESTRICTED/ROOT via Env-Override): %s",
                     agent_id, command[:120],
                 )
+                if _audit_log_fn is not None:
+                    try:
+                        _audit_log_fn(
+                            action="shell_exec_root_override",
+                            user="system",
+                            target=f"agent/{agent_id}",
+                            project_id=project_id or "",
+                            details={
+                                "command": command[:200],
+                                "reason":  "HYDRAHIVE_UNRESTRICTED_ALLOW_ROOT=1",
+                            },
+                        )
+                    except Exception as _audit_err:
+                        logger.warning("audit_log failed for root-override: %s", _audit_err)
             else:
                 # #747: Hard-Block statt Silent-Fallback auf root.
                 # Vorher lief der Command als root via `sudo bash -c`, ohne
