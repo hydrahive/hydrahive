@@ -683,6 +683,21 @@ def _provider_call_kwargs(model_name: str, agent_cfg) -> dict:
     return kwargs
 
 
+def _is_direct_minimax_model(model_name: str, resolved_model: str | None = None) -> bool:
+    """True für MiniMax Token-Plan-Modelle.
+
+    MiniMax nutzt zwar den Anthropic-kompatiblen Endpoint, läuft in HydraHive
+    aber über LiteLLM Chat-Completions. LiteLLM erwartet dort OpenAI-Chat-
+    Messages und validiert `user.content` entsprechend; Anthropic-native
+    `tool_result`-Blöcke sind deshalb nur im direkten Anthropic-SDK/OAuth-Pfad
+    korrekt.
+    """
+    return (
+        model_name.startswith(("MiniMax-", "minimax/"))
+        or bool(resolved_model and resolved_model.startswith("anthropic/MiniMax-"))
+    )
+
+
 def _resolve_model(model: str, ollama_base_url: str | None = None) -> tuple[str, str | None]:
     """
     Gibt (litellm_model, api_base) zurück.
@@ -1281,15 +1296,17 @@ async def _llm_call_single(
 
     model, api_base = _resolve_model(model_name, agent_cfg.llm.ollama_base_url)
     is_anthropic = model.startswith(("anthropic/", "claude-"))
+    use_anthropic_wire_format = is_anthropic and not _is_direct_minimax_model(model_name, model)
     # #628: Message-Normalisierung vor Cache-Control + LLM-Call (kanonische Form)
     from .message_normalization import normalize_messages_for_call
     messages = normalize_messages_for_call(messages)
-    cached_messages = _apply_cache_control(messages, is_anthropic)
-    # #637-Followup: für Anthropic-Modelle ohne OAuth-Pfad muss die OpenAI→
-    # Anthropic-Format-Konvertierung trotzdem vor litellm passieren, sonst
-    # sieht Anthropic rohe `role: "tool"`-Messages.
+    cached_messages = _apply_cache_control(messages, use_anthropic_wire_format)
+    # #637-Followup: echte Anthropic-API-Key-Calls ohne OAuth brauchen die
+    # OpenAI→Anthropic-Konvertierung vor litellm. MiniMax ist eine Ausnahme:
+    # Token-Plan läuft über /anthropic, aber LiteLLM validiert OpenAI-Chat-
+    # Messages und darf keine `tool_result`-Content-Blöcke sehen.
     _system_for_anthropic = ""
-    if is_anthropic:
+    if use_anthropic_wire_format:
         from .message_normalization import to_anthropic_format
         _system_for_anthropic, cached_messages = to_anthropic_format(cached_messages)
 

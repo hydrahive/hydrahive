@@ -1042,7 +1042,7 @@ async def _stream_litellm(
     """litellm Streaming (Ollama / OpenAI / Anthropic API-Key / MiniMax) mit Tool-Loop."""
     import litellm
     import os as _os
-    from .orchestrator_llm import _resolve_model, _provider_call_kwargs
+    from .orchestrator_llm import _resolve_model, _provider_call_kwargs, _is_direct_minimax_model
 
     model, api_base = _resolve_model(model_name, boss_cfg.llm.ollama_base_url)
     # #616: Streaming-Pfad muss für MiniMax denselben api_base+api_key
@@ -1060,10 +1060,14 @@ async def _stream_litellm(
     if _stream_api_key is None and "api_key" in _prov_kw_stream:
         _stream_api_key = _prov_kw_stream["api_key"]
     _is_anthropic = model.startswith(("anthropic/", "claude-"))
+    _use_anthropic_wire_format = _is_anthropic and not _is_direct_minimax_model(model_name, model)
     # #628-Followup: Streaming-litellm-Pfad muss auch normalisieren —
     # vorher übersprungen, daher kein konsistentes Pair-Repair/Dedupe.
     from .message_normalization import normalize_messages_for_call
-    loop_messages = _apply_cache_control(normalize_messages_for_call(list(messages)), _is_anthropic)
+    loop_messages = _apply_cache_control(
+        normalize_messages_for_call(list(messages)),
+        _use_anthropic_wire_format,
+    )
     last_tool_signature: tuple[str, ...] | None = None
     repeated_tool_signature_count = 0
     _tools_disabled = False
@@ -1071,9 +1075,10 @@ async def _stream_litellm(
     streamed_any = False
 
     for _round in range(boss_cfg.max_tool_rounds):
-        # #637-Followup: für Anthropic-Modelle vor dem Send in Anthropic-Format
-        # konvertieren — sonst sieht die Anthropic-API rohe `role: "tool"`-Messages.
-        if _is_anthropic:
+        # #637-Followup: echte Anthropic-litellm-Calls vor dem Send in
+        # Anthropic-Format konvertieren. MiniMax bleibt trotz /anthropic-
+        # Endpoint im OpenAI-Chat-Message-Format, weil LiteLLM dort validiert.
+        if _use_anthropic_wire_format:
             from .message_normalization import to_anthropic_format
             _sys_split, _send_messages = to_anthropic_format(loop_messages)
         else:
@@ -1087,7 +1092,7 @@ async def _stream_litellm(
             "stream":      True,
             "stream_options": {"include_usage": True},
         }
-        if _is_anthropic and _sys_split:
+        if _use_anthropic_wire_format and _sys_split:
             kwargs["system"] = _sys_split
         if api_base:
             kwargs["api_base"] = api_base

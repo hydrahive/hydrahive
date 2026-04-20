@@ -268,6 +268,133 @@ class TestLlmCallSingleKwargs:
         assert captured.get("api_base") == MINIMAX_DEFAULT_BASE_URL
         assert captured.get("api_key") == "mm-secret"
 
+    async def test_minimax_litellm_call_behaelt_openai_tool_messages(self, monkeypatch):
+        """MiniMax Token-Plan nutzt /anthropic, aber LiteLLM validiert Chat-Messages.
+
+        Referenz: OpenClaw trennt Anthropic-SDK-Format (`tool_result`-Blöcke)
+        von OpenAI-Chat-Format (`role: tool`). MiniMax läuft hier über LiteLLM,
+        also darf kein Anthropic-`tool_result` in user.content landen.
+        """
+        from hydrahive_core.orchestrator_llm import _llm_call_single
+
+        monkeypatch.setenv("MINIMAX_API_KEY", "mm-secret")
+        captured: dict = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            resp = MagicMock()
+            resp.usage = None
+            return resp
+
+        cfg = MagicMock()
+        cfg.llm.provider = "minimax"
+        cfg.llm.model = "MiniMax-M2.7"
+        cfg.llm.temperature = 0.3
+        cfg.llm.max_tokens = 1024
+        cfg.llm.api_key_env = ""
+        cfg.llm.ollama_base_url = None
+        cfg.llm.thinking_budget = 0
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "file_read", "arguments": "{\"path\":\"x\"}"},
+                }],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+        ]
+
+        fake_cfg = {"providers": {"minimax": {}}, "blocked_models": []}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg), \
+             patch("hydrahive_core.orchestrator_llm._llm_with_retry", new=lambda fn: fn()), \
+             patch("hydrahive_core.orchestrator_llm.litellm") as mock_litellm:
+            mock_litellm.acompletion = AsyncMock(side_effect=fake_acompletion)
+            await _llm_call_single("MiniMax-M2.7", cfg, messages, None)
+
+        assert captured.get("model") == "anthropic/MiniMax-M2.7"
+        assert "system" not in captured
+        assert any(m.get("role") == "tool" for m in captured["messages"])
+        assert not any(
+            isinstance(m.get("content"), list)
+            and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in m["content"])
+            for m in captured["messages"]
+        )
+
+    async def test_minimax_stream_behaelt_openai_tool_messages(self, monkeypatch):
+        from types import SimpleNamespace
+        from hydrahive_core.orchestrator_stream import _stream_litellm
+
+        monkeypatch.setenv("MINIMAX_API_KEY", "mm-secret")
+        captured: dict = {}
+
+        class FakeStream:
+            def __init__(self):
+                self._done = False
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if self._done:
+                    raise StopAsyncIteration
+                self._done = True
+                delta = SimpleNamespace(content="ok", tool_calls=None)
+                choice = SimpleNamespace(delta=delta)
+                return SimpleNamespace(choices=[choice], usage=None)
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return FakeStream()
+
+        cfg = MagicMock()
+        cfg.max_tool_rounds = 2
+        cfg.llm.provider = "minimax"
+        cfg.llm.model = "MiniMax-M2.7"
+        cfg.llm.temperature = 0.3
+        cfg.llm.max_tokens = 1024
+        cfg.llm.api_key_env = ""
+        cfg.llm.ollama_base_url = None
+
+        messages = [
+            {"role": "system", "content": "sys"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "file_read", "arguments": "{\"path\":\"x\"}"},
+                }],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "result"},
+        ]
+
+        fake_cfg = {"providers": {"minimax": {}}, "blocked_models": []}
+        with patch("hydrahive_core.orchestrator_llm._load_llm_config", return_value=fake_cfg), \
+             patch("litellm.acompletion", AsyncMock(side_effect=fake_acompletion)):
+            chunks = []
+            async for chunk in _stream_litellm(
+                MagicMock(), cfg, "agent", "project", "hi",
+                messages, None, "MiniMax-M2.7", None,
+                {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0, "rounds": 0},
+            ):
+                chunks.append(chunk)
+
+        assert any(isinstance(c, str) and '"ok"' in c for c in chunks)
+        assert captured.get("model") == "anthropic/MiniMax-M2.7"
+        assert "system" not in captured
+        assert any(m.get("role") == "tool" for m in captured["messages"])
+        assert not any(
+            isinstance(m.get("content"), list)
+            and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in m["content"])
+            for m in captured["messages"]
+        )
+
 
 # ================================================================= _compact_call kwargs
 
