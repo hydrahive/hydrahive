@@ -130,7 +130,9 @@ def invalidate_prompt_cache(agent_id: str) -> None:
     for key in [k for k in _STATIC_PROMPT_CACHE if k.startswith(prefix)]:
         _STATIC_PROMPT_CACHE.pop(key, None)
 
-# Kontextfenster je Modell-Familie (Tokens)
+# Kontextfenster je Modell-Familie (Tokens).
+# Substring-Match auf lowercased model-name in _context_window_for_model().
+# Unbekannte Modelle → Fallback 8_000 (konservativ).
 _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "claude":   200_000,
     "gpt-4o":   128_000,
@@ -138,6 +140,18 @@ _MODEL_CONTEXT_TOKENS: dict[str, int] = {
     "gpt-3.5":   16_000,
     "gemini":   128_000,
     "mistral":   32_000,
+    # MiniMax-M2.7 (Token-Plan, OpenClaw-Endpoint) — 200k laut Spec.
+    "minimax":  200_000,
+    # NVIDIA NIM MiniMax-Variante — same base model.
+    "minimaxai": 200_000,
+    # DeepSeek-V3 / V3.2 (via NVIDIA oder direkt) — 128k.
+    "deepseek": 128_000,
+    # Kimi K2.5 Thinking (via NVIDIA) — 200k.
+    "kimi":     200_000,
+    # Qwen3-Coder 480B (via NVIDIA) — 262k.
+    "qwen":     262_000,
+    # Meta Llama 3.3 — 128k.
+    "llama":    128_000,
 }
 _MAX_HISTORY_SHARE = 0.30  # max 30% des Kontextfensters für History (OpenClaw-Stil)
 _RESERVE_TOKENS_FLOOR = 20_000  # Immer 20k frei für Response (OpenClaw: reserveTokensFloor)
