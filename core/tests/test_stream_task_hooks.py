@@ -113,6 +113,15 @@ def _ensure_hook_runtime_reloaded():
     reload_hook_runtime()
 
 
+@pytest.fixture(autouse=True)
+def _stub_internal_parent_project(monkeypatch):
+    """#774: TestClient sendet keine HMAC-Header. Stub liefert auth_parent_project_id
+    damit die workspace_override-Tests weiterhin die inneren Logik-Checks
+    erreichen statt am Header-Vorcheck zu scheitern."""
+    import hydrahive_core.main as _main
+    monkeypatch.setattr(_main, "get_internal_parent_project", lambda request: "p_parent")
+
+
 @pytest.fixture
 def start_spy(monkeypatch):
     calls: list[dict] = []

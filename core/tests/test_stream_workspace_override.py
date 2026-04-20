@@ -31,6 +31,18 @@ from hydrahive_core.router_agent_chat import (
 from hydrahive_core.router_core_misc import IncomingMessage, WorkspaceOverride
 
 
+@pytest.fixture(autouse=True)
+def _stub_internal_parent_project(monkeypatch):
+    """#774: Tests senden keine HMAC-Header — wir stubben get_internal_parent_project
+    auf 'p_parent' damit die bestehenden LOGIK-Tests (Regex, Path, Meta-Konsistenz)
+    weiter die jeweiligen Inner-Checks triggern koennen statt an der neuen
+    Header-Vorpruefung zu scheitern. Die Header-Vorpruefung selbst hat einen
+    eigenen dedizierten Test (test_774_cross_project_block unten).
+    """
+    import hydrahive_core.main as _main
+    monkeypatch.setattr(_main, "get_internal_parent_project", lambda request: "p_parent")
+
+
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
 def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:

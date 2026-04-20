@@ -4,7 +4,7 @@ import datetime
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from .execution_mode_policy import resolve_request_execution_mode
@@ -17,13 +17,23 @@ from .settings import settings as _hh_settings
 logger = logging.getLogger(__name__)
 
 
-def _validate_workspace_override(ov, auth_user: str):
-    """#662/#664: validiert den internal-only workspace_override.
+def _validate_workspace_override(
+    ov,
+    auth_user: str,
+    auth_parent_project_id: str | None = None,
+):
+    """#662/#664/#774: validiert den internal-only workspace_override.
 
-    Raises HTTPException(400) bei Verletzung. Rückgabe: `WorkspaceRuntimeContext`
+    Raises HTTPException bei Verletzung. Rueckgabe: `WorkspaceRuntimeContext`
     mit validiertem Path + worktree_id + isolation_mode + parent_project_id.
-    Den Context setzt der Caller via `set_workspace_override(ctx)` —
-    isolation_mode treibt das Tool-Dispatch-Enforcement (#664).
+
+    #774 FIX (Cross-Project Authorization):
+    auth_parent_project_id muss dem parent_project_id des Worktrees entsprechen.
+    Ein Angreifer mit Internal-Secret kann dann nicht mehr mit einem anderen
+    parent_project_id im Body einen fremden Worktree aktivieren — die
+    parent_project_id ist jetzt Teil der HMAC-Signatur (main.py:
+    get_internal_parent_project). Legacy-HMAC ohne Header liefert "" und
+    wird hier mit 400 abgelehnt.
     """
     import re as _re
     from .subagent_worktrees import WorktreeError, get_worktree
@@ -31,6 +41,14 @@ def _validate_workspace_override(ov, auth_user: str):
 
     if auth_user != "internal":
         raise HTTPException(400, "workspace_override requires internal auth")
+
+    # #774: Legacy-HMAC-Requests ohne parent_project_id-Header ablehnen.
+    # Ohne den Header koennen wir nicht pruefen ob der Aufrufer aus dem
+    # richtigen Projekt kommt — sicherer zu blocken.
+    if not auth_parent_project_id:
+        raise HTTPException(
+            400, "workspace_override requires updated HMAC protocol (X-Internal-Parent-Project)"
+        )
 
     # 1. Format-Checks (Path + worktree_id) zuerst, bevor wir Meta laden.
     p = Path(ov.path)
@@ -50,6 +68,14 @@ def _validate_workspace_override(ov, auth_user: str):
         raise HTTPException(400, "workspace_override: path does not match worktree metadata")
     if meta.parent_project_id != ov.parent_project_id:
         raise HTTPException(400, "workspace_override: parent_project_id mismatch")
+
+    # #774: Cross-Project-Check — das signierte parent_project_id aus dem HMAC-
+    # Header muss dem parent_project_id des Worktrees entsprechen.
+    if meta.parent_project_id != auth_parent_project_id:
+        raise HTTPException(
+            403, "workspace_override: parent_project_id not owned by calling project"
+        )
+
     if meta.status != "active":
         raise HTTPException(
             400, f"workspace_override: worktree is not active (status={meta.status})"
@@ -471,6 +497,7 @@ def register_agent_chat_routes(
     @app.post("/agents/{agent_id}/message")
     async def agent_message_sync(
         agent_id: str,
+        request: Request,
         body: dict = Body(...),
         _a: tuple[str, str] = Depends(require_auth_or_localhost),
     ):
@@ -514,7 +541,12 @@ def register_agent_chat_routes(
         _ws_override_token = None
         if req.workspace_override is not None:
             from .tool_registry import set_workspace_override as _set_ws
-            _validated_path = _validate_workspace_override(req.workspace_override, _username)
+            # #774: HMAC-signed parent_project_id als zusaetzlichen Auth-Faktor
+            from .main import get_internal_parent_project
+            _auth_ppid = get_internal_parent_project(request)
+            _validated_path = _validate_workspace_override(
+                req.workspace_override, _username, _auth_ppid,
+            )
             _ws_override_token = _set_ws(_validated_path)
 
         try:
@@ -536,6 +568,7 @@ def register_agent_chat_routes(
     @app.post("/agents/{agent_id}/message/stream")
     async def agent_message_stream(
         agent_id: str,
+        request: Request,
         body: dict = Body(...),
         _a: tuple[str, str] = Depends(require_auth_or_localhost),
     ):
@@ -554,8 +587,13 @@ def register_agent_chat_routes(
         _ws_validated_path = None
         if req.workspace_override is not None:
             _username_tmp, _ = _a
+            # #774: HMAC-signed parent_project_id als zusaetzlichen Auth-Faktor
+            from .main import get_internal_parent_project
+            _auth_ppid_stream = get_internal_parent_project(request)
             _ws_validated_path = _validate_workspace_override(
-                req.workspace_override, _username_tmp,
+                req.workspace_override,
+                _username_tmp,
+                _auth_ppid_stream,
             )
         execution_mode = resolve_request_execution_mode(
             _a,

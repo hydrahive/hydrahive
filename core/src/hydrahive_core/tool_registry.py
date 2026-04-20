@@ -1707,11 +1707,25 @@ class AskAgentTool(BaseTool):
         content = f"{context}\n\n{question}".strip() if context else question
         logger.info("ask_agent [%s] → %s: %s…", agent_id, target, question[:60])
 
+        # #774: parent_project_id sanitized fuer HMAC-Signatur + workspace_override.
+        # Gleiche Transformation wie bei create_worktree (Zeile ~1807).
+        import re as _re_shell_hdr
+        _hmac_parent_pid = _re_shell_hdr.sub(r"[^A-Za-z0-9_-]", "_", project_id or "p")[:64] or "p"
+
         headers: dict = {}
         if _internal_secret:
             ts = str(int(_time.time()))
-            sig = _hmac.new(_internal_secret.encode(), ts.encode(), "sha256").hexdigest()
-            headers = {"X-Internal-Timestamp": ts, "X-Internal-Signature": sig}
+            # #774: HMAC signiert jetzt "ts:parent_project_id" und schickt den
+            # parent_project_id in einem separaten Header mit. Der Server kann
+            # damit Cross-Project-Angriffe blocken — ein Angreifer mit Secret
+            # muss das Opfer-Projekt explizit signieren (statt nur ts).
+            signed_payload = f"{ts}:{_hmac_parent_pid}"
+            sig = _hmac.new(_internal_secret.encode(), signed_payload.encode(), "sha256").hexdigest()
+            headers = {
+                "X-Internal-Timestamp":       ts,
+                "X-Internal-Signature":       sig,
+                "X-Internal-Parent-Project":  _hmac_parent_pid,
+            }
 
         # #669: _execute_tool poppt project_id immer aus args (Security), legt
         # für ask_agent den Wert aber als _requested_project_id zurück.

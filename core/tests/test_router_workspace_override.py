@@ -59,7 +59,7 @@ def test_valid_internal_passes(valid_meta):
         worktree_id=meta.worktree_id,
         parent_project_id=meta.parent_project_id,
     )
-    ctx = _validate_workspace_override(ov, auth_user="internal")
+    ctx = _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     # #664: validator returniert WorkspaceRuntimeContext statt Path.
     from hydrahive_core.tool_registry import WorkspaceRuntimeContext
     assert isinstance(ctx, WorkspaceRuntimeContext)
@@ -89,7 +89,7 @@ def test_external_auth_rejected(valid_meta):
 def test_invalid_worktree_id_format():
     ov = WorkspaceOverride(path="/tmp/x", worktree_id="bad id", parent_project_id="p")
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "invalid worktree_id format" in exc.value.detail
 
@@ -101,7 +101,7 @@ def test_unknown_worktree_id(valid_meta):
         parent_project_id="p",
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "unknown worktree_id" in exc.value.detail
 
@@ -119,7 +119,7 @@ def test_path_mismatch(valid_meta, tmp_path):
         parent_project_id=meta.parent_project_id,
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "path does not match" in exc.value.detail
 
@@ -134,7 +134,7 @@ def test_parent_project_mismatch(valid_meta):
         parent_project_id="different_parent",
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "parent_project_id mismatch" in exc.value.detail
 
@@ -152,7 +152,7 @@ def test_released_status_rejected(valid_meta):
         parent_project_id=meta.parent_project_id,
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "not active" in exc.value.detail
 
@@ -167,7 +167,7 @@ def test_relative_path_rejected(valid_meta):
         parent_project_id=meta.parent_project_id,
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "must be absolute" in exc.value.detail
 
@@ -194,7 +194,7 @@ def test_path_outside_worktrees_dir(valid_meta, tmp_path):
         parent_project_id=meta.parent_project_id,
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "must be under" in exc.value.detail
 
@@ -213,7 +213,7 @@ def test_nonexistent_path_rejected(valid_meta):
         parent_project_id=meta.parent_project_id,
     )
     with pytest.raises(HTTPException) as exc:
-        _validate_workspace_override(ov, auth_user="internal")
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="p_parent")
     assert exc.value.status_code == 400
     assert "not an existing directory" in exc.value.detail
 
@@ -238,3 +238,57 @@ def test_incoming_message_default_none():
     from hydrahive_core.router_core_misc import IncomingMessage
     msg = IncomingMessage.model_validate({"content": "hi"})
     assert msg.workspace_override is None
+
+
+# ── #774 Cross-Project Block (neuer Auth-Faktor via HMAC-ppid) ───────────────
+
+def test_774_legacy_hmac_without_parent_project_rejected(valid_meta):
+    """Legacy-HMAC (ohne X-Internal-Parent-Project Header) liefert leeren
+    auth_parent_project_id. Ohne den Header kann der Server nicht beweisen
+    aus welchem Projekt der Aufrufer kommt → workspace_override verboten.
+    """
+    meta, _ = valid_meta
+    ov = WorkspaceOverride(
+        path=meta.worktree_path,
+        worktree_id=meta.worktree_id,
+        parent_project_id=meta.parent_project_id,
+    )
+    with pytest.raises(HTTPException) as exc:
+        _validate_workspace_override(ov, auth_user="internal", auth_parent_project_id="")
+    assert exc.value.status_code == 400
+    assert "updated HMAC protocol" in exc.value.detail
+
+
+def test_774_cross_project_block(valid_meta):
+    """Angreifer mit Internal-Secret signiert HMAC ueber sein eigenes Projekt
+    (attacker_project) und versucht einen Worktree aus p_parent zu aktivieren.
+    Der Validator muss 403 werfen, weil meta.parent_project_id ('p_parent')
+    != auth_parent_project_id ('attacker_project').
+    """
+    meta, _ = valid_meta
+    ov = WorkspaceOverride(
+        path=meta.worktree_path,
+        worktree_id=meta.worktree_id,
+        parent_project_id=meta.parent_project_id,
+    )
+    with pytest.raises(HTTPException) as exc:
+        _validate_workspace_override(
+            ov, auth_user="internal", auth_parent_project_id="attacker_project",
+        )
+    assert exc.value.status_code == 403
+    assert "not owned by calling project" in exc.value.detail
+
+
+def test_774_same_project_allowed(valid_meta):
+    """Positiv-Test: auth_parent_project_id == meta.parent_project_id → passt."""
+    meta, _ = valid_meta
+    ov = WorkspaceOverride(
+        path=meta.worktree_path,
+        worktree_id=meta.worktree_id,
+        parent_project_id=meta.parent_project_id,
+    )
+    ctx = _validate_workspace_override(
+        ov, auth_user="internal", auth_parent_project_id=meta.parent_project_id,
+    )
+    from hydrahive_core.tool_registry import WorkspaceRuntimeContext
+    assert isinstance(ctx, WorkspaceRuntimeContext)

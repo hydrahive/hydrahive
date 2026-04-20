@@ -734,11 +734,14 @@ admin_router = APIRouter(dependencies=[Depends(require_admin)])
 def _is_internal_request(request: Request) -> bool:
     """
     Prüft X-Internal-Timestamp + X-Internal-Signature (Replay-Schutz, ±30s).
-    Signatur: hmac_sha256(secret, timestamp_str). Kein IP-Bypass.
+    Signatur: hmac_sha256(secret, timestamp_str) — oder bei gesetztem
+    X-Internal-Parent-Project Header (#774): hmac_sha256(secret, "ts:ppid").
+    Kein IP-Bypass.
     """
     import time as _t
     ts_str = request.headers.get("X-Internal-Timestamp", "")
     sig    = request.headers.get("X-Internal-Signature", "")
+    ppid   = request.headers.get("X-Internal-Parent-Project", "")
     if not ts_str or not sig or not _INTERNAL_SECRET:
         return False
     try:
@@ -747,7 +750,12 @@ def _is_internal_request(request: Request) -> bool:
         return False
     if abs(_t.time() - ts) > 30:
         return False
-    expected = hmac.new(_INTERNAL_SECRET.encode(), ts_str.encode(), "sha256").hexdigest()
+    # #774: Wenn parent_project_id-Header gesetzt, muss er Teil der Signatur sein.
+    # Ohne Header: alte Signatur (nur ts). Damit beide Protokollversionen
+    # koexistieren koennen — alte Sub-Agents machen weiter ohne
+    # workspace_override, neue signieren ppid mit.
+    signed = f"{ts_str}:{ppid}" if ppid else ts_str
+    expected = hmac.new(_INTERNAL_SECRET.encode(), signed.encode(), "sha256").hexdigest()
     return hmac.compare_digest(sig, expected)
 
 
@@ -759,6 +767,39 @@ def require_auth_or_internal(
     if _is_internal_request(request):
         return ("internal", "admin")
     return require_auth(creds)
+
+
+def get_internal_parent_project(request) -> str:
+    """#774: Liest X-Internal-Parent-Project Header + validiert gegen erweiterte HMAC-Signatur.
+
+    Signatur-Format (neu): hmac_sha256(secret, "{timestamp}:{parent_project_id}")
+
+    Legacy-Requests (nur timestamp-signiert, ohne X-Internal-Parent-Project Header)
+    liefern "" zurueck — der Caller (zB _validate_workspace_override) muss
+    dann workspace_override ablehnen. Normale message-Calls ohne workspace_override
+    sind davon nicht betroffen, weil sie get_internal_parent_project nie aufrufen.
+
+    Return: parent_project_id (str) bei gueltigem HMAC + Header, sonst "".
+    """
+    import time as _t
+    ts_str = request.headers.get("X-Internal-Timestamp", "")
+    sig    = request.headers.get("X-Internal-Signature", "")
+    ppid   = request.headers.get("X-Internal-Parent-Project", "")
+    if not ts_str or not sig or not _INTERNAL_SECRET:
+        return ""
+    if not ppid:
+        return ""  # Legacy HMAC ohne parent_project — workspace_override verboten
+    try:
+        ts = float(ts_str)
+    except ValueError:
+        return ""
+    if abs(_t.time() - ts) > 30:
+        return ""
+    signed_payload = f"{ts_str}:{ppid}"
+    expected = hmac.new(_INTERNAL_SECRET.encode(), signed_payload.encode(), "sha256").hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return ""
+    return ppid
 
 
 # Alias fuer Rueckwaertskompatibilitaet (wird in router_agent_admin/chat uebergeben)
