@@ -2953,7 +2953,9 @@ class ImageGenerateTool(BaseTool):
         # data:-URI ins Tool-Result legen, dann kann das Frontend das Bild
         # direkt einbetten — kein zweiter Auth-Request noetig.
         # Greift nur bei erstem image/*-Artifact (typisch 1 Bild pro Call).
-        if final.status == "completed" and final.artifacts:
+        # Status-Check: JobService nutzt "succeeded" (nicht "completed") fuer
+        # erfolgreiche Jobs — beide Namen akzeptieren um robust zu bleiben.
+        if final.status in ("succeeded", "completed") and final.artifacts:
             first = final.artifacts[0]
             mime = first.get("mime", "image/png")
             fname = first.get("filename")
