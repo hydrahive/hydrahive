@@ -1399,6 +1399,19 @@ async def _llm_call_single(
 
     resp = await _llm_with_retry(lambda: litellm.acompletion(**kwargs, drop_params=True, timeout=300))
 
+    # ===== P3-DEBUG: komplette Usage-Response von MiniMax loggen =====
+    try:
+        u = getattr(resp, "usage", None)
+        if u:
+            # Alle Attribute von usage (inkl. nicht-standard Felder)
+            usage_dict = {k: getattr(u, k, None) for k in dir(u) if not k.startswith("_")}
+            logger.warning("[P3-DEBUG] model=%s usage=%s", model, usage_dict)
+            # Auch model_raw und model_slug falls vorhanden
+            logger.warning("[P3-DEBUG] resp.model=%s resp.model_alias=%s", getattr(resp, "model", None), getattr(resp, "model_alias", None))
+    except Exception as ex:
+        logger.warning("[P3-DEBUG] usage inspection failed: %s", ex)
+    # ===== ENDE P3-DEBUG =====
+
     # Cache-Usage loggen (#351: Anthropic + OpenAI Prompt Caching)
     try:
         u = getattr(resp, "usage", None)
