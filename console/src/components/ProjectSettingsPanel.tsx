@@ -89,34 +89,29 @@ interface ProjectTargetsResponse {
   wks: ProjectTargetWks[];
 }
 
-const PROVIDERS = ["anthropic", "openai", "minimax", "nvidia", "google", "ollama", "deepseek"];
-
+// #28-IA-Sprint Schritt 1: Provider + Model-Listen kommen seit diesem Sprint
+// dynamisch aus /api/llm/available-models (Single Source of Truth in
+// router_llm.py:get_available_models). Die untenstehenden Konstanten dienen
+// NUR noch als Fallback wenn der API-Call fehlschlaegt und als Label-Map
+// (PROVIDER_LABELS wird weiterhin fuer i18n-Ueberschriften genutzt).
 const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Anthropic",
-  openai:    "OpenAI",
-  minimax:   "MiniMax",
-  nvidia:    "NVIDIA NIM",
-  google:    "Google",
-  ollama:    "Ollama",
-  deepseek:  "DeepSeek",
+  anthropic:    "Anthropic",
+  openai:       "OpenAI",
+  openai_codex: "OpenAI Codex (OAuth)",
+  claude_max:   "Claude Max (OAuth)",
+  minimax:      "MiniMax",
+  nvidia:       "NVIDIA NIM",
+  google:       "Google",
+  ollama:       "Ollama",
+  deepseek:     "DeepSeek",
 };
 
-const MODELS: Record<string, string[]> = {
+// Fallback — nur wenn /llm/available-models nicht antwortet oder leer ist.
+const FALLBACK_PROVIDERS = ["anthropic", "openai", "minimax", "nvidia", "ollama"];
+const FALLBACK_MODELS: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6", "claude-opus-4-7"],
-  openai: ["gpt-4o", "gpt-4o-mini", "o3", "o3-mini"],
-  minimax: ["MiniMax-M2.7"],
-  nvidia: [
-    "minimaxai/minimax-m2.7",
-    "minimaxai/minimax-m2.5",
-    "meta/llama-3.3-70b-instruct",
-    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-    "deepseek-ai/deepseek-v3.2",
-    "qwen/qwen3-coder-480b-a35b-instruct",
-    "moonshotai/kimi-k2-thinking",
-  ],
-  google: ["gemini-2.0-flash", "gemini-2.5-pro"],
-  ollama: ["llama3.1", "qwen2.5:7b", "mistral"],
-  deepseek: ["deepseek-r1"],
+  openai:    ["gpt-4o-mini", "gpt-4o"],
+  minimax:   ["MiniMax-M2.7"],
 };
 
 export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPanelProps) {
@@ -184,6 +179,9 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
   const [bootstrapRunning, setBootstrapRunning] = useState(false);
   const [bootstrapResult, setBootstrapResult] = useState<string>("");
 
+  // #28-IA-Sprint: Models + Provider dynamisch aus Backend
+  const [availableByProvider, setAvailableByProvider] = useState<Record<string, { id: string; label: string }[]>>({});
+
   useEffect(() => {
     loadSettings();
     loadTargets();
@@ -194,7 +192,29 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
     api.get<Record<string, unknown>>("/users").then(d => {
       setAllUsers(Object.keys(d || {}));
     }).catch(() => {});
+    // #28-IA-Sprint: Provider-/Model-Liste aus dem Backend laden
+    api.get<{ models: { id: string; label: string; provider: string }[] }>("/llm/available-models")
+      .then(r => {
+        const grouped: Record<string, { id: string; label: string }[]> = {};
+        for (const m of r.models || []) {
+          const prov = m.provider || "unknown";
+          if (!grouped[prov]) grouped[prov] = [];
+          grouped[prov].push({ id: m.id, label: m.label || m.id });
+        }
+        setAvailableByProvider(grouped);
+      })
+      .catch(() => { /* Fallback-Listen bleiben aktiv */ });
   }, [projectId]);
+
+  // Abgeleitete Listen: dynamisch wenn verfügbar, sonst Fallback
+  const providerList = Object.keys(availableByProvider).length > 0
+    ? Object.keys(availableByProvider).sort()
+    : FALLBACK_PROVIDERS;
+  const modelsForProvider = (prov: string): { id: string; label: string }[] => {
+    const dynamic = availableByProvider[prov];
+    if (dynamic && dynamic.length > 0) return dynamic;
+    return (FALLBACK_MODELS[prov] || []).map(m => ({ id: m, label: m }));
+  };
 
   async function loadWhatsAppStatus() {
     try {
@@ -516,22 +536,31 @@ export function ProjectSettingsPanel({ projectId, onClose }: ProjectSettingsPane
             {t("projectSettings.llm.title", { defaultValue: "LLM-Konfiguration" })}
           </div>
 
-          {/* Provider */}
+          {/* Provider — dynamisch aus /llm/available-models */}
           <div>
             <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.provider", { defaultValue: "Provider" })}</label>
-            <select value={provider} onChange={e => { setProvider(e.target.value); setModel(MODELS[e.target.value]?.[0] || ""); }}
-              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-              {PROVIDERS.map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>)}
+            <select
+              value={provider}
+              onChange={e => {
+                const newProv = e.target.value;
+                setProvider(newProv);
+                const firstModel = modelsForProvider(newProv)[0];
+                setModel(firstModel ? firstModel.id : "");
+              }}
+              className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs"
+            >
+              {providerList.map(p => <option key={p} value={p}>{PROVIDER_LABELS[p] ?? p}</option>)}
+              {!providerList.includes(provider) && provider && <option value={provider}>{PROVIDER_LABELS[provider] ?? provider}</option>}
             </select>
           </div>
 
-          {/* Model */}
+          {/* Model — dynamisch aus /llm/available-models fuer gewaehlten Provider */}
           <div>
             <label className="text-[11px] text-muted-foreground">{t("projectSettings.llm.model", { defaultValue: "Modell" })}</label>
             <select value={model} onChange={e => setModel(e.target.value)}
               className="mt-0.5 w-full rounded-lg border bg-background px-2 py-1.5 text-xs">
-              {(MODELS[provider] || []).map(m => <option key={m} value={m}>{m}</option>)}
-              {!MODELS[provider]?.includes(model) && model && <option value={model}>{model}</option>}
+              {modelsForProvider(provider).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {!modelsForProvider(provider).some(m => m.id === model) && model && <option value={model}>{model}</option>}
             </select>
           </div>
 
