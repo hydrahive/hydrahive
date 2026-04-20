@@ -1105,6 +1105,11 @@ async def _stream_litellm(
         normalize_messages_for_call(list(messages)),
         _use_cache_control,
     )
+    # BL-16: Anthropic-Image-Bloecke in User-Messages zu OpenAI image_url
+    # konvertieren (nur MiniMax-Pfad, analog zu _llm_call_single).
+    if _is_direct_minimax_model(model_name, model):
+        from .message_normalization import convert_anthropic_images_to_openai
+        loop_messages = convert_anthropic_images_to_openai(loop_messages)
     last_tool_signature: tuple[str, ...] | None = None
     repeated_tool_signature_count = 0
     _tools_disabled = False

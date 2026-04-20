@@ -1336,6 +1336,16 @@ async def _llm_call_single(
     # test_minimax_litellm_call_behaelt_openai_tool_messages.
     _use_cache_control = use_anthropic_wire_format or _is_direct_minimax_model(model_name, model)
     cached_messages = _apply_cache_control(messages, _use_cache_control)
+    # BL-16: MiniMax via LiteLLM nutzt OpenAI-Chat-Completions und validiert
+    # User-Content-Bloecke gegen OpenAI's ValidUserMessageContentTypes.
+    # Anthropic-Image-Bloecke {"type":"image", "source":{...}} werden rejectet.
+    # Konvertierung zu {"type":"image_url", "image_url":{"url":"data:..."}}
+    # passiert NACH _apply_cache_control, damit cache_control auf Text-
+    # Bloecken erhalten bleibt. Nur MiniMax-Pfad — Claude nutzt separaten
+    # Anthropic-SDK-Transport (to_anthropic_format) und braucht es nicht.
+    if _is_direct_minimax_model(model_name, model):
+        from .message_normalization import convert_anthropic_images_to_openai
+        cached_messages = convert_anthropic_images_to_openai(cached_messages)
     # #637-Followup: echte Anthropic-API-Key-Calls ohne OAuth brauchen die
     # OpenAI→Anthropic-Konvertierung vor litellm. MiniMax ist eine Ausnahme:
     # Token-Plan läuft über /anthropic, aber LiteLLM validiert OpenAI-Chat-

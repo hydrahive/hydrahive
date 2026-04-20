@@ -264,3 +264,56 @@ def to_anthropic_format(messages: list[dict]) -> tuple[str, list[dict]]:
 
     system_msg = "\n\n".join(p for p in system_parts if p)
     return system_msg, repaired
+
+
+# =========================================================================
+# Anthropic → OpenAI Content-Block Converter (BL-16)
+# =========================================================================
+# MiniMax via LiteLLM nutzt OpenAI-Chat-Completions (MinimaxChatConfig).
+# LiteLLM's validate_chat_completion_user_messages() akzeptiert nur OpenAI-
+# Block-Typen (text, image_url, input_audio, ...). Anthropic-Image-Blocks
+# {"type": "image", "source": {...}} werden rejected → "invalid content
+# type=image". Konvertierung wird NUR im MiniMax-Pfad aufgerufen — Claude-
+# OAuth und Claude-API-direct laufen weiterhin ueber to_anthropic_format
+# / das Anthropic SDK und brauchen die Konvertierung nicht.
+
+def to_openai_message_content(content):
+    """Konvertiert Anthropic-Image-Blocks zu OpenAI image_url-Blocks.
+
+    Nicht-image-Blocks (text, tool_use, tool_result, ...) werden 1:1
+    durchgereicht — die Funktion ist damit idempotent bei Mehrfach-Aufruf.
+    String-Content bleibt unveraendert.
+    """
+    if not isinstance(content, list):
+        return content
+    result = []
+    for block in content:
+        if not isinstance(block, dict):
+            result.append(block)
+            continue
+        if block.get("type") == "image":
+            source = block.get("source") or {}
+            data = source.get("data", "")
+            media_type = source.get("media_type") or "image/png"
+            result.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{media_type};base64,{data}"},
+            })
+        else:
+            result.append(block)
+    return result
+
+
+def convert_anthropic_images_to_openai(messages: list[dict]) -> list[dict]:
+    """Konvertiert Anthropic-Image-Blocks in allen User-Messages zu OpenAI-Format.
+
+    Nur User-Rolle — LiteLLM's Validator prueft explizit User-Messages.
+    Assistant/System/Tool-Messages haben andere Block-Strukturen und werden
+    nicht durch die Validation gefiltert.
+    """
+    result = []
+    for m in messages:
+        if m.get("role") == "user" and isinstance(m.get("content"), list):
+            m = {**m, "content": to_openai_message_content(m["content"])}
+        result.append(m)
+    return result
