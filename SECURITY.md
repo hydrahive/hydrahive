@@ -231,3 +231,29 @@ enforcement and falls back to in-memory tracking when Redis is unavailable.
 
 The core logs `AUDIT [RATE-LIMIT]` at `WARNING` level at startup when the
 in-memory fallback is active.
+
+### `execution_mode: elevated` — Scope and Limits (#781)
+
+`elevated` runs shell commands inside a `bwrap` sandbox with scoped
+filesystem access (`/tmp`, `/home/hydrahive`). Unlike `safe`, the
+`_SHELL_BLOCKLIST` does **not** apply — agents can run `npm install`,
+`apt-get install`, `pip install`, `git` etc. to set up their work.
+
+Since `#781` a **minimal blocklist** (`_ELEVATED_BLOCKLIST`) prevents
+user- and service-management commands that make no sense in a sandboxed
+agent context and could mask attempted self-escalation:
+
+- `systemctl`, `service start/stop/restart/reload`
+- `useradd`, `usermod`, `userdel`, `groupadd`, `groupdel`, `groupmod`
+- `passwd`, `visudo`
+- `su - <user>`, `sudo -u root`, `sudo -i`
+
+**Not blocked (intentional)**: `npm`, `pip`, `cargo`, `git`, `apt-get`.
+These are legitimate workflows for agents. If an agent installs a
+malicious package, post-install scripts run inside the sandbox — host
+integrity is preserved by `bwrap`. For higher assurance, run npm/pip
+with `--ignore-scripts` (configurable per agent).
+
+**Recommendation**: only use `elevated` for trusted agents. Default for
+user-created projects remains `safe`. Admin-managed system-agents may
+opt into `elevated` per-agent in `config.yaml`.

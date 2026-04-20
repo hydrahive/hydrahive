@@ -700,6 +700,68 @@ def _check_shell_blocklist(command: str) -> str | None:
     return None
 
 
+# #781: Minimal-Blocklist fuer elevated-Mode.
+# elevated laeuft in bwrap-Sandbox (kein Host-Escape via Dateisystem),
+# aber User-/Service-Management-Commands sollten trotzdem blockiert werden:
+# - Container-Escapes ueber suid-Binaries moeglich (theoretisch)
+# - Admins erwarten nicht dass ein Agent z.B. systemctl aufruft
+# - npm/pip post-install-Scripts koennen Privilege-Escalation versuchen
+_ELEVATED_BLOCKLIST: list[tuple[str, str]] = [
+    (r"\bsystemctl\b",                              "systemctl verboten (elevated)"),
+    (r"\bservice\s+\w+\s+(start|stop|restart|reload)\b", "service-Management verboten"),
+    (r"\b(useradd|userdel|usermod|groupadd|groupdel|groupmod)\b", "User-/Group-Mgmt verboten"),
+    (r"\bpasswd\b",                                 "passwd verboten"),
+    (r"\bvisudo\b",                                 "visudo verboten"),
+    (r"\bsu\s+-\s+\w+\b",                           "su - <user> verboten"),
+    (r"\bsudo\s+-u\s+(root|0)\b",                   "sudo -u root verboten"),
+    (r"\bsudo\s+-i\b",                              "sudo -i verboten"),
+    # npm/pip/cargo ohne --ignore-scripts: post-install-Hooks koennten
+    # Escalation versuchen. Wir warnen statt zu blocken — Blocken wuerde
+    # legitime Workflows brechen. (Informativ-Regel, nicht enforceable.)
+]
+
+
+def _check_elevated_blocklist(command: str) -> str | None:
+    """#781: Minimal-Blocklist fuer elevated (bwrap). Blockt User-Mgmt,
+    systemctl und sudo-Root-Escape. Erlaubt npm/git/apt-get etc. weiterhin.
+
+    Reuse der Tokenize-Logik fuer Wrapper (bash -c, env VAR=val, etc.) —
+    gleicher Mechanismus wie _check_shell_blocklist.
+    """
+    import shlex as _shlex_blk
+
+    if "\x00" in command:
+        return "Befehl enthaelt Null-Byte"
+    try:
+        tokens = _shlex_blk.split(command)
+    except ValueError:
+        return "Befehl konnte nicht sicher geparst werden — FAIL-CLOSED"
+    if not tokens:
+        return None
+
+    # Flaches Matching auf das gesamte Kommando.
+    for pattern, reason in _ELEVATED_BLOCKLIST:
+        if _re_shell.search(pattern, command, _re_shell.I):
+            return reason
+
+    # Wrapper (bash -c "...") rekursiv prüfen.
+    exe = Path(tokens[0]).name.lower()
+    if exe in _SHELL_WRAPPERS:
+        for idx, token in enumerate(tokens[1:], start=1):
+            if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+                if idx + 1 < len(tokens):
+                    return _check_elevated_blocklist(tokens[idx + 1])
+                break
+    if exe in _EXEC_WRAPPERS:
+        rest = tokens[1:]
+        while rest and (rest[0].startswith("-") or "=" in rest[0]):
+            rest = rest[1:]
+        if rest:
+            return _check_elevated_blocklist(" ".join(rest))
+
+    return None
+
+
 _ALLOWED_CWD_PREFIXES = ("/tmp", str(settings.projects_dir), "/home", str(settings.agents_dir), "/var/tmp")
 
 
@@ -793,6 +855,21 @@ class ShellExecTool(BaseTool):
             if cwd_error:
                 logger.warning("shell_exec CWD BLOCKED [%s]: %s", agent_id, cwd_error)
                 return {"error": cwd_error, "command": command, "exit_code": -1, "blocked": True}
+
+        # #781: Minimal-Blocklist fuer elevated (bwrap-sandboxed, aber
+        # Self-Escalation via User-/Service-Management verhindern). bwrap
+        # limitiert Dateisystem-Zugriff auf /tmp + /home/hydrahive — diese
+        # Commands haetten dort zwar keinen Host-Effekt, aber die Signale
+        # an Admins (unerwarteter `passwd`- oder `systemctl`-Aufruf) und
+        # potenzielle Container-Escapes machen es sinnvoll sie zu blocken.
+        elif _mode == "elevated":
+            blocked = _check_elevated_blocklist(command)
+            if blocked:
+                logger.warning("shell_exec BLOCKED [elevated %s]: %s — %s", agent_id, command[:120], blocked)
+                return {
+                    "error": f"Befehl im elevated-Modus blockiert: {blocked}",
+                    "command": command, "exit_code": -1, "blocked": True,
+                }
 
         max_timeout = 1800 if unrestricted else 120
         timeout = min(max(timeout, 1), max_timeout)
