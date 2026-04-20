@@ -283,16 +283,14 @@ const PALETTE_ITEMS = [
   { type: "workflowOverview", label: "Workflow",     icon: Workflow,  color: "text-violet-400" },
 ];
 
-const MODELS = [
+// #28-IA Schritt 4: Model-Liste nur noch als Not-Fallback wenn
+// /api/llm/available-models nicht antwortet. Primaer-Quelle ist der
+// Backend-Endpoint, der nur Models liefert fuer die ein Key/OAuth da ist.
+const FALLBACK_MODELS = [
   "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
   "claude-opus-4-6",
   "claude-opus-4-7",
-  "claude-haiku-4-5-20251001",
-  "gpt-4.1",
-  "gpt-4.1-mini",
-  "ollama/llama3.3",
-  "ollama/qwen3",
-  "ollama/gemma3",
 ];
 
 // ── Properties Panel ──────────────────────────────────────────────────────────
@@ -308,6 +306,15 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
   viewMode?: ViewMode;
   onEditWorkflow?: () => void;
 }) {
+  // #28-IA Schritt 4: Models dynamisch aus Backend — zeigt nur was wirklich
+  // verfuegbar ist (Key/OAuth konfiguriert).
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  useEffect(() => {
+    api.get<{ models: { id: string }[] }>("/llm/available-models")
+      .then(r => setAvailableModels((r.models || []).map(m => m.id)))
+      .catch(() => { /* Fallback greift */ });
+  }, []);
+  const modelsToShow = availableModels.length > 0 ? availableModels : FALLBACK_MODELS;
   if (!node) return (
     <div className="p-4 text-xs text-white/20 space-y-4 overflow-y-auto h-full">
       {viewMode === "workflow" ? (
@@ -411,7 +418,8 @@ function PropertiesPanel({ node, onChange, onDelete, availableTools, availableMc
           <label className="block text-[0.65rem] text-white/40 mb-1">LLM Model</label>
           <select value={cfg.model || "claude-sonnet-4-6"} onChange={e => updCfg({ model: e.target.value })}
             className="w-full rounded-lg bg-zinc-800 border border-white/10 px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none">
-            {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+            {cfg.model && !modelsToShow.includes(cfg.model) && <option value={cfg.model}>{cfg.model}</option>}
+            {modelsToShow.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div>
