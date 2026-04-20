@@ -54,6 +54,12 @@ const KNOWN_MODELS = [
   "claude-haiku-4-5-20251001","claude-sonnet-4-6","claude-opus-4-6","claude-opus-4-7",
   "gpt-4o-mini","gpt-4o",
   "MiniMax-M2.7",
+  // BL-17: OpenAI Codex OAuth — Fallback-Liste wenn /llm/available-models
+  // keine Antwort liefert. Prefix "openai-codex/" triggert den OAuth-Pfad
+  // in orchestrator_llm.py:1308.
+  "openai-codex/gpt-5.1","openai-codex/gpt-5.1-codex-max","openai-codex/gpt-5.1-codex-mini",
+  "openai-codex/gpt-5.2","openai-codex/gpt-5.2-codex","openai-codex/gpt-5.3-codex",
+  "openai-codex/gpt-5.3-codex-spark","openai-codex/gpt-5.4",
   "ollama/mistral:latest","ollama/llama3.1:8b","ollama/llama3.2:3b",
 ];
 
