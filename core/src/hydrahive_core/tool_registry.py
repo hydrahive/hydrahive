@@ -2965,6 +2965,21 @@ class ImageGenerateTool(BaseTool):
                     path = self._job_service.artifact_path(final.job_id, fname)
                     data = path.read_bytes()
                     out["image_data_uri"] = f"data:{mime};base64,{_b64.b64encode(data).decode('ascii')}"
+                    # #791 Phase 1 Followup: Wenn inline angezeigt, broken
+                    # download_url aus dem Tool-Result entfernen, sonst zitiert
+                    # der Agent sie im Text und schickt den User auf eine URL
+                    # die Browser-<a>-Klicks ohne Cookies mit 403 ablehnen.
+                    # display_note hilft dem Agent zu erkennen dass das Bild
+                    # inline angezeigt wird — er soll nicht selbst eine Link-
+                    # Zeile generieren.
+                    if artifacts:
+                        artifacts[0].pop("download_url", None)
+                        artifacts[0]["display_mode"] = "inline"
+                    out["display_note"] = (
+                        "Bild wurde dem User direkt inline im Chat angezeigt. "
+                        "KEINE 'Download'-Links oder /me/jobs-URLs in deine "
+                        "Antwort schreiben — der User sieht das Bild bereits."
+                    )
                 except Exception as _data_uri_err:
                     logger.debug("image_generate: data-URI build failed: %s", _data_uri_err)
 
