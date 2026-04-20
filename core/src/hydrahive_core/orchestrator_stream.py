@@ -47,13 +47,42 @@ async def _keepalive_comment_stream():
 
 
 def _extract_tool_image(result: Any, tool_name: str) -> str | None:
-    """Wenn ein Tool-Result ein image_base64-Feld enthält, SSE-Event-JSON zurückgeben."""
-    if isinstance(result, dict) and "image_base64" in result:
+    """SSE-Event-JSON für Inline-Bild-Anzeige im Chat.
+
+    Unterstützte Tool-Result-Shapes:
+    - ``{"image_base64": "...", "format": "png"}`` → data-URI (legacy, z.B.
+      Browser-Screenshot-Tools die direkt bytes liefern).
+    - ``{"artifacts": [{"mime": "image/...", "download_url": "/me/jobs/..."}]}``
+      → HTTP-URL (#773 Followup: image_generate via Jobs-Framework).
+
+    Returns None wenn kein Bild im Result ist.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    if "image_base64" in result:
         fmt = result.get("format", "png")
         return _json.dumps({
             "tool_image": f"data:image/{fmt};base64,{result['image_base64']}",
             "tool_name": tool_name,
         })
+
+    # #773 Followup: Jobs-basierte Media-Tools (image/video/music) liefern
+    # Artifacts mit download_url. Für images das erste Artifact inline
+    # zeigen — der Browser fetcht die URL per Cookie-Auth (#748 Phase 4).
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, list):
+        for a in artifacts:
+            if not isinstance(a, dict):
+                continue
+            mime = str(a.get("mime") or "")
+            url = str(a.get("download_url") or "")
+            if mime.startswith("image/") and url:
+                return _json.dumps({
+                    "tool_image": url,
+                    "tool_name": tool_name,
+                })
+
     return None
 
 
