@@ -10,6 +10,7 @@ PUT  /admin/tailscale/config     → API-Key konfigurieren
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import urllib.error
@@ -26,6 +27,37 @@ logger = logging.getLogger(__name__)
 
 TS_CONFIG_FILE = settings.tailscale_config
 TS_API_BASE = "https://api.tailscale.com/api/v2"
+
+
+# #810 SSRF-Guard: HTTP-Probes dürfen nur Adressen treffen, die zu einem
+# Tailnet oder einem privaten LAN gehören. Ohne Guard könnte ein
+# kompromittierter Tailnet-Admin (oder ein bösartig registriertes Device)
+# beliebige public/metadata-IPs probieren lassen → interne Reconnaissance
+# + Cloud-Metadata-Access.
+_SAFE_PROBE_RANGES = (
+    ipaddress.ip_network("100.64.0.0/10"),   # Tailscale CGNAT (RFC 6598)
+    ipaddress.ip_network("10.0.0.0/8"),      # RFC 1918
+    ipaddress.ip_network("172.16.0.0/12"),   # RFC 1918
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918
+    ipaddress.ip_network("127.0.0.0/8"),     # Loopback
+    ipaddress.ip_network("fd00::/8"),        # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),       # IPv6 link-local
+)
+
+
+def _is_safe_probe_target(ip: str | None) -> bool:
+    """True, wenn ip eine CGNAT / RFC1918 / Loopback-Adresse ist.
+    Link-local IPv4 (169.254.0.0/16) → bewusst verboten (AWS-Metadata etc.)."""
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr.is_link_local and isinstance(addr, ipaddress.IPv4Address):
+        # 169.254.0.0/16 wäre link-local — blockieren (AWS/GCP/Azure Metadata).
+        return False
+    return any(addr in net for net in _SAFE_PROBE_RANGES)
 
 
 def _load_ts_config() -> dict:
@@ -58,7 +90,15 @@ def _check_hydrahive(ip: str, timeout: float = 5) -> dict | None:
 
     Probiert die wahrscheinlichsten Kombinationen zuerst:
     HTTPS:443/api/health ist Standard für nginx-Proxy-Setup.
+
+    #810: SSRF-Guard — nur Tailscale-CGNAT / RFC1918 / Loopback werden
+    geprobed. Public IPs, Metadata-Endpoints (169.254.169.254) etc.
+    werden komplett übersprungen.
     """
+    if not _is_safe_probe_target(ip):
+        logger.warning("SSRF-Guard (#810): unsichere Probe-IP verworfen: %r", ip)
+        return None
+
     import ssl
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -263,6 +303,14 @@ def register_tailscale_routes(
     @admin_router.post("/admin/tailscale/auto-peer")
     async def ts_auto_peer(req: AutoPeerRequest, _a=Depends(require_admin)):
         """Fügt eine gefundene HydraHive-Instanz als A2A-Peer hinzu."""
+        # #810: Auch hier blocken — Admin darf per API keine public IP
+        # als Peer einschmuggeln. Tailnet/RFC1918/Loopback only.
+        if not _is_safe_probe_target(req.ip):
+            raise HTTPException(
+                400,
+                f"Peer-IP {req.ip!r} ist keine Tailnet/RFC1918/Loopback-Adresse. "
+                "Out-of-Tailnet-Peers werden abgelehnt (SSRF-Guard #810).",
+            )
         peer_name = req.name or req.hostname
         peer_url = f"{req.scheme}://{req.ip}:{req.port}"
 

@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -53,6 +54,13 @@ class NotificationService:
     def __init__(self) -> None:
         self._queues: dict[str, asyncio.Queue[Notification]] = {}
         self._db: sqlite3.Connection | None = None
+        # #811: SQLite-Connection wird mit check_same_thread=False geöffnet,
+        # damit sie von asyncio-to-thread + FastAPI-Worker geteilt werden kann.
+        # sqlite3-Connections sind dann aber nicht automatisch thread-safe —
+        # Read/Write-Interleaving kann zu "Recursive use of cursors not
+        # allowed" oder Lost-Writes führen. Ein einfacher threading.Lock
+        # reicht, da alle DB-Ops kurz und nicht-blockierend sind.
+        self._db_lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
     # Lifecycle                                                            #
@@ -109,11 +117,12 @@ class NotificationService:
         # Persistieren
         if self._db:
             try:
-                self._db.execute(
-                    "INSERT INTO notifications VALUES (?,?,?,?,?,?,?,?)",
-                    (n.id, n.user, n.type, n.title, n.body, n.link, 0, n.created_at),
-                )
-                self._db.commit()
+                with self._db_lock:
+                    self._db.execute(
+                        "INSERT INTO notifications VALUES (?,?,?,?,?,?,?,?)",
+                        (n.id, n.user, n.type, n.title, n.body, n.link, 0, n.created_at),
+                    )
+                    self._db.commit()
             except Exception as e:
                 logger.warning("Notification DB-Fehler: %s", e)
 
@@ -135,29 +144,32 @@ class NotificationService:
     def get_unread(self, user: str, limit: int = 20) -> list[Notification]:
         if not self._db:
             return []
-        rows = self._db.execute(
-            "SELECT * FROM notifications WHERE user=? AND read=0 "
-            "ORDER BY created_at DESC LIMIT ?",
-            (user, limit),
-        ).fetchall()
+        with self._db_lock:
+            rows = self._db.execute(
+                "SELECT * FROM notifications WHERE user=? AND read=0 "
+                "ORDER BY created_at DESC LIMIT ?",
+                (user, limit),
+            ).fetchall()
         return [_row_to_notif(r) for r in rows]
 
     def get_all(self, user: str, limit: int = 50) -> list[Notification]:
         if not self._db:
             return []
-        rows = self._db.execute(
-            "SELECT * FROM notifications WHERE user=? "
-            "ORDER BY created_at DESC LIMIT ?",
-            (user, limit),
-        ).fetchall()
+        with self._db_lock:
+            rows = self._db.execute(
+                "SELECT * FROM notifications WHERE user=? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (user, limit),
+            ).fetchall()
         return [_row_to_notif(r) for r in rows]
 
     def unread_count(self, user: str) -> int:
         if not self._db:
             return 0
-        row = self._db.execute(
-            "SELECT COUNT(*) FROM notifications WHERE user=? AND read=0", (user,)
-        ).fetchone()
+        with self._db_lock:
+            row = self._db.execute(
+                "SELECT COUNT(*) FROM notifications WHERE user=? AND read=0", (user,)
+            ).fetchone()
         return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------ #
@@ -167,30 +179,33 @@ class NotificationService:
     def mark_read(self, notification_id: str, user: str) -> bool:
         if not self._db:
             return False
-        cur = self._db.execute(
-            "UPDATE notifications SET read=1 WHERE id=? AND user=?",
-            (notification_id, user),
-        )
-        self._db.commit()
+        with self._db_lock:
+            cur = self._db.execute(
+                "UPDATE notifications SET read=1 WHERE id=? AND user=?",
+                (notification_id, user),
+            )
+            self._db.commit()
         return cur.rowcount > 0
 
     def mark_all_read(self, user: str) -> int:
         if not self._db:
             return 0
-        cur = self._db.execute(
-            "UPDATE notifications SET read=1 WHERE user=? AND read=0", (user,)
-        )
-        self._db.commit()
+        with self._db_lock:
+            cur = self._db.execute(
+                "UPDATE notifications SET read=1 WHERE user=? AND read=0", (user,)
+            )
+            self._db.commit()
         return cur.rowcount
 
     def delete(self, notification_id: str, user: str) -> bool:
         if not self._db:
             return False
-        cur = self._db.execute(
-            "DELETE FROM notifications WHERE id=? AND user=?",
-            (notification_id, user),
-        )
-        self._db.commit()
+        with self._db_lock:
+            cur = self._db.execute(
+                "DELETE FROM notifications WHERE id=? AND user=?",
+                (notification_id, user),
+            )
+            self._db.commit()
         return cur.rowcount > 0
 
     # ------------------------------------------------------------------ #

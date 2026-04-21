@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -131,6 +132,17 @@ class SharedSessionManager:
         self._queue_user: dict[asyncio.Queue, tuple[str, str]] = {}  # queue → (project_id, username)
         # #726 K2a: Replay-Buffer für aktuell laufende Streams pro Projekt
         self._stream_buffers: dict[str, ProjectStreamBuffer] = {}
+        # #807: RLock um zusammenhängende Multi-Dict-Updates atomar zu machen.
+        # RLock, weil _broadcast_presence() aus gelockten Sektionen heraus
+        # aufgerufen wird und selbst den Lock zum online_users-Snapshot
+        # braucht. Kritische Sections: subscribe, unsubscribe, broadcast
+        # (dead-queue Cleanup), acquire_turn/release_turn, Stream-Lifecycle.
+        # Methoden bleiben synchron — ein threading.Lock in sonst sync-Code
+        # ändert keine Caller-API und schützt sowohl gegen Thread-Pool-
+        # Ausführung (FastAPI sync-Routes) als auch gegen await-Points in
+        # Aufrufern, die zwischen zwei Mutationen einen Context-Switch
+        # triggern könnten.
+        self._state_lock = threading.RLock()
 
     def subscribe(self, project_id: str, username: str) -> asyncio.Queue:
         """Client meldet sich an — bekommt eine Queue für SSE-Events.
@@ -142,53 +154,52 @@ class SharedSessionManager:
 
         Returns: asyncio.Queue die der SSE-Endpoint lesen kann.
         """
-        self._subscribers.setdefault(project_id, set())
-        self._presence.setdefault(project_id, ProjectPresence())
+        with self._state_lock:  # #807: atomar subscribers+presence+queue_user
+            self._subscribers.setdefault(project_id, set())
+            self._presence.setdefault(project_id, ProjectPresence())
 
-        # Priming aus dem Replay-Buffer
-        buf = self._stream_buffers.get(project_id)
-        primed_events: list[str] = buf.snapshot() if buf and buf.is_active() else []
-        # Queue groß genug für Priming + Headroom — live-Broadcast darf nicht
-        # sofort volllaufen weil Priming den Großteil belegt hat.
-        capacity = max(100, len(primed_events) + 50)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=capacity)
-        for ev in primed_events:
-            # put_nowait ist sicher weil capacity >= len(primed_events)
-            queue.put_nowait(ev)
+            # Priming aus dem Replay-Buffer
+            buf = self._stream_buffers.get(project_id)
+            primed_events: list[str] = buf.snapshot() if buf and buf.is_active() else []
+            capacity = max(100, len(primed_events) + 50)
+            queue: asyncio.Queue = asyncio.Queue(maxsize=capacity)
+            for ev in primed_events:
+                queue.put_nowait(ev)
 
-        # Erst NACH dem Priming in _subscribers — vermeidet dass das nächste
-        # broadcast() dieselben Events nochmal in die Queue kippt.
-        self._subscribers[project_id].add(queue)
-        self._presence[project_id].add(username)
-        self._queue_user[queue] = (project_id, username)  # #608
+            # Erst NACH dem Priming in _subscribers — vermeidet dass das nächste
+            # broadcast() dieselben Events nochmal in die Queue kippt.
+            self._subscribers[project_id].add(queue)
+            self._presence[project_id].add(username)
+            self._queue_user[queue] = (project_id, username)  # #608
 
-        # Presence-Update an alle Clients broadcasten
-        self._broadcast_presence(project_id)
+            # Presence-Update an alle Clients broadcasten (RLock — nested OK)
+            self._broadcast_presence(project_id)
 
-        logger.info(
-            "SharedSession: %s subscribed to %s (%d clients, primed=%d events)",
-            username, project_id, len(self._subscribers[project_id]), len(primed_events),
-        )
+            logger.info(
+                "SharedSession: %s subscribed to %s (%d clients, primed=%d events)",
+                username, project_id, len(self._subscribers[project_id]), len(primed_events),
+            )
         return queue
 
     def unsubscribe(self, project_id: str, queue: asyncio.Queue, username: str) -> None:
         """Client meldet sich ab."""
-        subs = self._subscribers.get(project_id)
-        if subs:
-            subs.discard(queue)
-            if not subs:
-                del self._subscribers[project_id]
-                self._turn_owner.pop(project_id, None)
-        # #608: Queue aus Mapping entfernen
-        self._queue_user.pop(queue, None)
+        with self._state_lock:  # #807: atomar subs+presence-Cleanup
+            subs = self._subscribers.get(project_id)
+            if subs:
+                subs.discard(queue)
+                if not subs:
+                    del self._subscribers[project_id]
+                    self._turn_owner.pop(project_id, None)
+            # #608: Queue aus Mapping entfernen
+            self._queue_user.pop(queue, None)
 
-        presence = self._presence.get(project_id)
-        if presence:
-            presence.remove(username)  # Refcount runter — entfernt nur wenn 0
-            if not presence.online_users():
-                del self._presence[project_id]
-            else:
-                self._broadcast_presence(project_id)
+            presence = self._presence.get(project_id)
+            if presence:
+                presence.remove(username)  # Refcount runter — entfernt nur wenn 0
+                if not presence.online_users():
+                    del self._presence[project_id]
+                else:
+                    self._broadcast_presence(project_id)
 
         logger.info("SharedSession: %s unsubscribed from %s", username, project_id)
 
@@ -198,30 +209,34 @@ class SharedSessionManager:
         orchestrator.stream_chat-Einstieg aufgerufen. Gleichzeitige Streams
         sind per Turn-Lock ausgeschlossen — wenn trotzdem einer aktiv war
         wird er überschrieben (neuer Stream-ID)."""
-        buf = self._stream_buffers.setdefault(project_id, ProjectStreamBuffer())
-        buf.start(stream_id)
+        with self._state_lock:  # #807
+            buf = self._stream_buffers.setdefault(project_id, ProjectStreamBuffer())
+            buf.start(stream_id)
 
     def end_stream(self, project_id: str) -> None:
         """Stream beendet — Buffer leeren."""
-        buf = self._stream_buffers.get(project_id)
-        if buf is not None:
-            buf.end()
-            # leeren Eintrag abräumen damit dict nicht unkontrolliert wächst
-            if not buf.is_active():
-                self._stream_buffers.pop(project_id, None)
+        with self._state_lock:  # #807
+            buf = self._stream_buffers.get(project_id)
+            if buf is not None:
+                buf.end()
+                # leeren Eintrag abräumen damit dict nicht unkontrolliert wächst
+                if not buf.is_active():
+                    self._stream_buffers.pop(project_id, None)
 
     def get_stream_snapshot(self, project_id: str) -> list[str]:
         """Schnappschuss der bisher gesendeten Events im aktuell laufenden
         Stream. Leere Liste wenn kein Stream läuft."""
-        buf = self._stream_buffers.get(project_id)
-        return buf.snapshot() if buf and buf.is_active() else []
+        with self._state_lock:  # #807: Snapshot unter Lock → Copy via snapshot()
+            buf = self._stream_buffers.get(project_id)
+            return buf.snapshot() if buf and buf.is_active() else []
 
     def touch_presence(self, project_id: str, username: str) -> None:
         """#587: Heartbeat — Timestamp aktualisieren waehrend Client verbunden ist.
         Wird vom subscribe-Endpoint bei jedem Keepalive aufgerufen."""
-        presence = self._presence.get(project_id)
-        if presence:
-            presence.refresh(username)
+        with self._state_lock:  # #807
+            presence = self._presence.get(project_id)
+            if presence:
+                presence.refresh(username)
 
     def broadcast(self, project_id: str, event_data: str) -> None:
         """Sendet ein SSE-Event an alle verbundenen Clients eines Projekts.
@@ -232,41 +247,43 @@ class SharedSessionManager:
         zusätzlich in den Replay-Buffer geschrieben — damit spät verbundene
         Subscriber den bisherigen Verlauf zugespielt bekommen können.
         """
-        # Buffer zuerst füllen — auch wenn keine Subscriber da sind, soll
-        # ein später-connectender Client noch den Verlauf bekommen.
-        buf = self._stream_buffers.get(project_id)
-        if buf is not None and buf.is_active():
-            buf.append(event_data)
+        with self._state_lock:  # #807: Snapshot von subs + Cleanup atomar
+            buf = self._stream_buffers.get(project_id)
+            if buf is not None and buf.is_active():
+                buf.append(event_data)
 
-        subs = self._subscribers.get(project_id)
-        if not subs:
-            return
+            subs = self._subscribers.get(project_id)
+            if not subs:
+                return
 
-        dead_queues = set()
-        for queue in subs:
-            try:
-                queue.put_nowait(event_data)
-            except asyncio.QueueFull:
-                # Queue voll → Client ist zu langsam, disconnecten
-                dead_queues.add(queue)
-                logger.warning("SharedSession: Queue full for %s, dropping client", project_id)
+            # Schnappschuss der Subscriber (subs-Set kann während put_nowait
+            # mutiert werden, wenn dead_queue aus derselben Schleife raus
+            # fällt — Iteration über Kopie ist sicherer).
+            queues_snapshot = tuple(subs)
+            dead_queues: set[asyncio.Queue] = set()
+            for queue in queues_snapshot:
+                try:
+                    queue.put_nowait(event_data)
+                except asyncio.QueueFull:
+                    dead_queues.add(queue)
+                    logger.warning("SharedSession: Queue full for %s, dropping client", project_id)
 
-        # Tote Queues aufräumen — #608: inkl. Presence-Cleanup
-        presence_changed = False
-        for dq in dead_queues:
-            subs.discard(dq)
-            _queue_info = self._queue_user.pop(dq, None)
-            if _queue_info:
-                _, _dead_user = _queue_info
-                presence = self._presence.get(project_id)
-                if presence:
-                    presence.remove(_dead_user)
-                    presence_changed = True
-        if presence_changed:
-            if self._presence.get(project_id) and not self._presence[project_id].online_users():
-                del self._presence[project_id]
-            else:
-                self._broadcast_presence(project_id)
+            # Tote Queues aufräumen — #608: inkl. Presence-Cleanup
+            presence_changed = False
+            for dq in dead_queues:
+                subs.discard(dq)
+                _queue_info = self._queue_user.pop(dq, None)
+                if _queue_info:
+                    _, _dead_user = _queue_info
+                    presence = self._presence.get(project_id)
+                    if presence:
+                        presence.remove(_dead_user)
+                        presence_changed = True
+            if presence_changed:
+                if self._presence.get(project_id) and not self._presence[project_id].online_users():
+                    del self._presence[project_id]
+                else:
+                    self._broadcast_presence(project_id)
 
     def subscriber_count(self, project_id: str) -> int:
         """Anzahl verbundener Clients für ein Projekt."""
@@ -279,23 +296,25 @@ class SharedSessionManager:
 
         Returns: True wenn erfolgreich, False wenn jemand anderes dran ist.
         """
-        current = self._turn_owner.get(project_id)
-        if current is not None and current != username:
-            return False
-        self._turn_owner[project_id] = username
-        # Turn-Info broadcasten
-        self.broadcast(project_id, json.dumps({
-            "_turn": {"owner": username, "status": "active"}
-        }))
-        return True
+        with self._state_lock:  # #807: atomic check-and-set
+            current = self._turn_owner.get(project_id)
+            if current is not None and current != username:
+                return False
+            self._turn_owner[project_id] = username
+            # Turn-Info broadcasten (RLock — nested OK)
+            self.broadcast(project_id, json.dumps({
+                "_turn": {"owner": username, "status": "active"}
+            }))
+            return True
 
     def release_turn(self, project_id: str, username: str) -> None:
         """Gibt den Turn frei."""
-        if self._turn_owner.get(project_id) == username:
-            self._turn_owner[project_id] = None
-            self.broadcast(project_id, json.dumps({
-                "_turn": {"owner": None, "status": "free"}
-            }))
+        with self._state_lock:  # #807: atomic check-and-clear
+            if self._turn_owner.get(project_id) == username:
+                self._turn_owner[project_id] = None
+                self.broadcast(project_id, json.dumps({
+                    "_turn": {"owner": None, "status": "free"}
+                }))
 
     def turn_owner(self, project_id: str) -> str | None:
         """Wer hat gerade den Turn?"""
