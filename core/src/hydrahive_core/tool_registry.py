@@ -2997,7 +2997,7 @@ class VideoGenerateTool(BaseTool):
     über ``GET /me/jobs/{job_id}`` abfragbar.
 
     Phase 2: nur Text-to-Video, model ``MiniMax-Hailuo-2.3``, duration=6,
-    resolution=1080P, n=1. Image-to-Video, first-and-last-frame und
+    resolution=768P, n=1. Image-to-Video, first-and-last-frame und
     subject-reference kommen in späteren Phasen."""
 
     def __init__(self, job_service=None):
@@ -3018,9 +3018,7 @@ class VideoGenerateTool(BaseTool):
             "Erzeugt ein Video aus einem Text-Prompt via MiniMax Hailuo. "
             "Asynchron — Tool returnt sofort mit job_id. Video ist "
             "typischerweise nach 5–15 Minuten fertig. Status via "
-            "GET /me/jobs/{job_id} oder /me/jobs/{job_id}/artifacts/video_0.mp4 "
-            "zum Download. Cancel via POST /me/jobs/{job_id}/cancel (lokales "
-            "Polling stoppt, MiniMax läuft ggf. zu Ende)."
+            "GET /me/jobs/{job_id} zum Download. Cancel via POST /me/jobs/{job_id}/cancel."
         )
 
     @property
@@ -3039,8 +3037,8 @@ class VideoGenerateTool(BaseTool):
                 },
                 "resolution": {
                     "type": "string",
-                    "enum": ["1080P"],
-                    "description": "Ausgabeauflösung. Phase 2: nur 1080P.",
+                    "enum": ["768P"],
+                    "description": "Ausgabeauflösung. Nur 768P wird unterstützt (Token-Plan).",
                 },
                 "model": {
                     "type": "string",
