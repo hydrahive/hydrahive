@@ -465,12 +465,18 @@ def _load_openai_codex_token() -> dict | None:
 def check_llm_provider_available(models: list[str], ollama_base_url: str | None = None) -> str | None:
     """
     Prüft ob für die übergebenen Modelle ein Provider verfügbar ist.
-    Gibt None zurück wenn OK, sonst eine nutzerfreundliche Fehlermeldung.
+    Gibt None zurück wenn OK, sonst eine nutzerfreundliche Fehlermeldung
+    mit Debug-Info (welche Modelle geprüft, welche Kategorie erkannt).
     ollama_base_url: wenn gesetzt (WKS-Ollama), wird dieser Endpunkt geprüft statt localhost.
     """
     import os
     import socket
     from urllib.parse import urlparse
+
+    # #813 Debug: für jeden gescheiterten Model-Check mitprotokollieren,
+    # damit der User im Hint sehen kann welche Klassifizierung stattfand
+    # und welche Key-Quelle erwartet wurde.
+    _trace: list[str] = []
 
     for model in models:
         if not model:
@@ -483,6 +489,14 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
             model.startswith(("ollama/", "ollama_chat/")) or (
                 not is_claude and not is_openai and "/" not in model
             )
+        )
+        category = (
+            "nvidia" if is_nvidia else
+            "minimax" if is_minimax else
+            "claude" if is_claude else
+            "openai" if is_openai else
+            "ollama" if is_ollama else
+            "unknown"
         )
 
         if is_minimax:
@@ -502,6 +516,10 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                             return None
             except OSError:
                 pass
+            _trace.append(
+                f"'{model}' [minimax] — kein Key in providers.minimax.api_key, "
+                "$MINIMAX_API_KEY oder llm_env"
+            )
             continue
 
         if is_nvidia:
@@ -521,6 +539,12 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                             return None
             except OSError:
                 pass
+            _trace.append(
+                f"'{model}' [nvidia] — kein Key in providers.nvidia.api_key, "
+                "$NVIDIA_API_KEY oder llm_env. Hinweis: Einstellungen → LLM → "
+                "NVIDIA speichert unter providers.nvidia.api_key; pruefe dass "
+                "dort wirklich ein Wert steht (nicht nur enabled:true)."
+            )
             continue
 
         if is_claude:
@@ -535,6 +559,10 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                         return None
             except Exception:
                 pass
+            _trace.append(
+                f"'{model}' [claude] — weder Claude-OAuth-Token, $ANTHROPIC_API_KEY "
+                "noch providers.anthropic/claude_max.api_key gesetzt"
+            )
 
         elif is_openai:
             if _load_openai_codex_token():
@@ -547,6 +575,10 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                     return None
             except Exception:
                 pass
+            _trace.append(
+                f"'{model}' [openai] — weder OpenAI-Codex-Token, $OPENAI_API_KEY "
+                "noch providers.openai.api_key gesetzt"
+            )
 
         elif is_ollama:
             if ollama_base_url:
@@ -559,17 +591,47 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
                         return None
                 except Exception:
                     pass
+                _trace.append(
+                    f"'{model}' [ollama] — Endpunkt {ollama_base_url} nicht erreichbar "
+                    "(Timeout/Connection refused)"
+                )
             else:
                 try:
                     with socket.create_connection(("127.0.0.1", 11434), timeout=1):
                         return None
                 except Exception:
                     pass
+                _trace.append(
+                    f"'{model}' [ollama] — lokaler Endpunkt 127.0.0.1:11434 nicht "
+                    "erreichbar. Ollama installieren oder WKS-URL in Agent-Config setzen."
+                )
+        else:
+            _trace.append(
+                f"'{model}' [unknown] — Modell-ID wurde keinem Provider zugeordnet. "
+                "Pruefe Schreibweise oder nimm ein Modell aus Einstellungen → LLM."
+            )
+
+    # Auch ins Core-Log schreiben (falls der Admin doch mal reinschaut).
+    try:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "check_llm_provider_available: kein Provider gefunden — Modelle=%s, Trace=%s",
+            models, _trace,
+        )
+    except Exception:
+        pass
+
+    trace_block = ""
+    if _trace:
+        trace_block = (
+            "\n\n---\n**Geprüft beim Aufruf:**\n"
+            + "\n".join(f"- {t}" for t in _trace)
+        )
 
     return (
         "## ⚠️ Kein LLM-Provider konfiguriert\n\n"
         "Um HydraHive zu nutzen, einen Provider unter **Einstellungen → LLM** einrichten "
-        "(und dort API-Key + `enabled: true` speichern):\n\n"
+        "(und dort API-Key speichern — `enabled:true` allein reicht nicht):\n\n"
         "**Cloud (kein GPU nötig — empfohlen zum Starten)**\n"
         "• **Anthropic Claude** — API-Key auf [console.anthropic.com](https://console.anthropic.com) → Einstellungen → LLM → Anthropic\n"
         "• **Claude Max** (Abo) — Einstellungen → LLM → Claude Max → OAuth verbinden\n"
@@ -578,6 +640,7 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
         "• **MiniMax** — API-Key auf [platform.minimax.io](https://platform.minimax.io) → Einstellungen → LLM → MiniMax\n\n"
         "**Lokal via Ollama (GPU empfohlen: NVIDIA RTX 3060+, 8 GB VRAM)**\n"
         "• `ollama pull mistral-nemo:12b` → Einstellungen → LLM → Ollama-URL eintragen"
+        + trace_block
     )
 
 
