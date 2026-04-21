@@ -198,6 +198,76 @@ class TestExecuteTool:
         )
         assert result == {"done": True}
 
+    async def test_default_timeout_greift_nach_120s(self, monkeypatch):
+        # Standard-Tool ohne Override → Default 120s. Wir patchen den Default
+        # auf 0.05 s und lassen das Tool 0.2 s schlafen.
+        import asyncio
+        from hydrahive_core import orchestrator_tools
+        monkeypatch.setattr(orchestrator_tools, "_TOOL_TIMEOUT_DEFAULT", 0.05)
+
+        async def _slow(**kwargs):
+            await asyncio.sleep(0.2)
+            return {"never": "seen"}
+
+        tool = MagicMock()
+        tool.execute = _slow
+        result = await _execute_tool(
+            tool,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="some_generic_tool",
+            tool_input={},
+        )
+        assert "error" in result
+        assert "Timeout" in result["error"]
+
+    async def test_music_generate_override_verhindert_timeout(self, monkeypatch):
+        # music_generate hat Override 300s. Wir überschreiben auf 0.2 s und
+        # lassen Default 0.01 s — Tool schläft 0.05 s → würde mit Default
+        # abbrechen, mit Override aber durchgehen.
+        import asyncio
+        from hydrahive_core import orchestrator_tools
+        monkeypatch.setattr(orchestrator_tools, "_TOOL_TIMEOUT_DEFAULT", 0.01)
+        monkeypatch.setitem(orchestrator_tools._TOOL_TIMEOUTS, "music_generate", 0.2)
+
+        async def _slow(**kwargs):
+            await asyncio.sleep(0.05)
+            return {"audio": "hex..."}
+
+        tool = MagicMock()
+        tool.execute = _slow
+        result = await _execute_tool(
+            tool,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="music_generate",
+            tool_input={},
+        )
+        assert result == {"audio": "hex..."}
+
+    async def test_music_generate_timeout_nach_override(self, monkeypatch):
+        # Tool schläft länger als der Override → Timeout-Pfad mit dem
+        # per-Tool-Wert in Message.
+        import asyncio
+        from hydrahive_core import orchestrator_tools
+        monkeypatch.setitem(orchestrator_tools._TOOL_TIMEOUTS, "music_generate", 0.05)
+
+        async def _slow(**kwargs):
+            await asyncio.sleep(0.2)
+            return {"never": "seen"}
+
+        tool = MagicMock()
+        tool.execute = _slow
+        result = await _execute_tool(
+            tool,
+            boss_cfg=self._make_boss(),
+            project_id="proj",
+            tool_name="music_generate",
+            tool_input={},
+        )
+        assert "error" in result
+        assert "music_generate" in result["error"]
+
 
 class TestExecuteToolCall:
 

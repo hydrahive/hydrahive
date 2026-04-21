@@ -27,6 +27,16 @@ _DENIAL_WINDOW    = 300        # Nur Denials der letzten 5 Minuten zählen
 _denial_state: dict[str, list[float]] = defaultdict(list)  # agent_id:tool → timestamps
 
 
+# ---------------------------------------------------------------------------
+# #431: Tool-Timeouts
+# ---------------------------------------------------------------------------
+_TOOL_TIMEOUT_DEFAULT = 120  # Default: 2 Minuten
+# Per-Tool-Overrides. Tools die länger brauchen (sync-APIs mit großen Payloads).
+_TOOL_TIMEOUTS: dict[str, int] = {
+    "music_generate": 300,  # MiniMax music-2.6 Sync-API + hex-Decode
+}
+
+
 def _record_denial(agent_id: str, tool_name: str) -> int:
     """Denial tracken, Returns: Anzahl Denials im Window."""
     key = f"{agent_id}:{tool_name}"
@@ -213,9 +223,12 @@ async def _execute_tool(
         extra["_execution_mode"] = execution_mode or boss_cfg.effective_execution_mode(execution_mode)
         if request_user and request_user != "internal":
             extra["_request_user"] = request_user
-    # #431: Tool-Timeout (Default 120s, konfigurierbar)
+    # #431: Tool-Timeout (Default 120s, per-Tool overrides in _TOOL_TIMEOUTS).
+    # music_generate: MiniMax music-2.6 Sync-API + hex-Decode kann 2–4 min dauern (10x
+    # Starter Plan live gemessen 21.04.2026). Bis music_generate async wird (wie
+    # video_generate), braucht es 300 s.
     import asyncio as _aio
-    _TOOL_TIMEOUT = 120  # Default: 2 Minuten
+    _timeout = _TOOL_TIMEOUTS.get(tool_name, _TOOL_TIMEOUT_DEFAULT)
     try:
         result = await _aio.wait_for(
             tool.execute(
@@ -224,11 +237,11 @@ async def _execute_tool(
                 **extra,
                 **args,
             ),
-            timeout=_TOOL_TIMEOUT,
+            timeout=_timeout,
         )
     except _aio.TimeoutError:
-        logger.error("Tool '%s' Timeout nach %ds", tool_name, _TOOL_TIMEOUT)
-        return {"error": f"Tool '{tool_name}' hat nach {_TOOL_TIMEOUT}s nicht geantwortet (Timeout)"}
+        logger.error("Tool '%s' Timeout nach %ds", tool_name, _timeout)
+        return {"error": f"Tool '{tool_name}' hat nach {_timeout}s nicht geantwortet (Timeout)"}
 
     # Cache nur idempotente Read-Tools
     _tool_cache_put(tool_name, args, result)
