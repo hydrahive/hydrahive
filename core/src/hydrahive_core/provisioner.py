@@ -287,11 +287,13 @@ class Provisioner:
             return None
 
         # useradd: kein Login, kein echtes Home (wir setzen das manuell)
+        # #813: --comment ohne Leerzeichen, damit sudoers-Rule ohne
+        # Escape-Fallen matched.
         cmd = ["sudo", "useradd",
                "--system",
                "--no-create-home",
                "--shell", "/usr/sbin/nologin",
-               "--comment", f"HydraHive Projekt-User",
+               "--comment", "HydraHive-Projekt-User",
                username]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:

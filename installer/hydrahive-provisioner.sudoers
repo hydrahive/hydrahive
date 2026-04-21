@@ -1,10 +1,40 @@
 # HydraHive Provisioner: Projekt-User anlegen, Verzeichnisse und Samba einrichten
-# Eingeschränkte Wildcards — nur erlaubte Argumente
-hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd -m -s /usr/sbin/nologin proj_*
+# Eingeschränkte Wildcards — nur proj_*-User und nur erwartete Patterns.
+# Jedes hier erlaubte Kommando entspricht einer konkreten Zeile im
+# Provisioner-Code (core/src/hydrahive_core/provisioner.py).
+
+# --- Linux-User lifecycle ---
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/useradd --system --no-create-home --shell /usr/sbin/nologin --comment HydraHive-Projekt-User proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/sbin/userdel proj_*
 hydrahive ALL=(root) NOPASSWD: /usr/sbin/userdel -r proj_*
+
+# --- Projekt-Verzeichnisse (/projects/<id>) ---
 hydrahive ALL=(root) NOPASSWD: /bin/mkdir -p /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chown proj_*\:hydrahive /projects/*
 hydrahive ALL=(root) NOPASSWD: /bin/chown -R proj_*\:hydrahive /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chmod [0-9][0-9][0-9] /projects/*
 hydrahive ALL=(root) NOPASSWD: /bin/chmod -R [0-9][0-9][0-9] /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chgrp -R hydrahive /projects/*
+hydrahive ALL=(root) NOPASSWD: /bin/chmod -R g+rw /projects/*
+
+# --- Samba Config (Include-Datei + smb.conf) ---
+hydrahive ALL=(root) NOPASSWD: /bin/cp /tmp/hydrahive-samba-*.conf /etc/samba/hydrahive-shares.conf
+hydrahive ALL=(root) NOPASSWD: /bin/cp /tmp/hydrahive-smb.conf /etc/samba/smb.conf
+hydrahive ALL=(root) NOPASSWD: /bin/chmod 644 /etc/samba/hydrahive-shares.conf
+hydrahive ALL=(root) NOPASSWD: /bin/cat /etc/samba/hydrahive-shares.conf
+
+# --- Samba-User + Credentials-Datei ---
+hydrahive ALL=(root) NOPASSWD: /usr/bin/pdbedit -L -u proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -s proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -s -a proj_*
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -a proj_*
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -x proj_*
+hydrahive ALL=(root) NOPASSWD: /bin/cat /etc/hydrahive/samba_credentials
+hydrahive ALL=(root) NOPASSWD: /usr/bin/grep ^proj_*\: /etc/hydrahive/samba_credentials
+hydrahive ALL=(root) NOPASSWD: /bin/cp /tmp/hh-sambacreds-*.tmp /etc/hydrahive/samba_credentials
+hydrahive ALL=(root) NOPASSWD: /bin/chmod 600 /etc/hydrahive/samba_credentials
+
+# --- Samba reload ---
+hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol smbd reload-config
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbcontrol all reload-config
 hydrahive ALL=(root) NOPASSWD: /bin/systemctl reload smbd
