@@ -389,6 +389,31 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Telegram-Setup fehlgeschlagen: %s", e)
 
+    # #813: Projekt-Reconcile (Linux-User + Samba) — non-blocking, graceful.
+    # Gleicht bestehende /projects/<id> gegen den Provisioner-Stand ab.
+    # Heilt Migrations-Lücken (fresh install + Daten-Restore ohne Re-Provisioning).
+    # Darf Core-Start NICHT blockieren (feedback_runtime_state_safety).
+    async def _reconcile_projects_startup():
+        try:
+            await asyncio.sleep(2.0)
+            report = await asyncio.to_thread(provisioner.reconcile_all_projects, projects)
+            if report.get("reconciled") or report.get("errors"):
+                logger.warning(
+                    "Reconcile-Report: %d reconciled, %d skipped, %d errors — Details: %s",
+                    len(report["reconciled"]), len(report["skipped"]),
+                    len(report["errors"]), report,
+                )
+            else:
+                logger.info(
+                    "Reconcile: alle %d Projekte OK", len(report["skipped"])
+                )
+        except Exception as e:
+            logger.warning("Reconcile beim Start fehlgeschlagen: %s", e)
+
+    reconcile_task = asyncio.create_task(
+        _reconcile_projects_startup(), name="project-reconcile-startup"
+    )
+
     # Heartbeat-Scheduler starten (#77)
     from .heartbeat import AgentHeartbeatScheduler as _HBS
     hb_scheduler = _HBS(discovery, projects, orchestrator, AGENTS_DIR)
