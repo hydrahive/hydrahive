@@ -67,16 +67,24 @@ def upgrade_personal_agent_data(agent_data: dict, agent_dir: Path | None = None,
     return agent_data, changed
 
 
+# #806: role muss Schema-seitig auf die zulässigen Werte begrenzt sein.
+# Ein zusätzlicher Runtime-Check bleibt als Defense-in-Depth (s.u.), aber
+# bereits Pydantic lehnt jetzt unbekannte Rollen mit 422 ab — der
+# Audit-Befund "Role Escalation: UpdateUserRequest.role ohne Enum-
+# Validierung" ist damit geschlossen.
+UserRole = Literal["admin", "user"]
+
+
 class CreateUserRequest(BaseModel):
     username: str
     password: str
-    role: str = "user"
+    role: UserRole = "user"
     group: str = "standard"
     allowed_projects: list[str] = []
 
 
 class UpdateUserRequest(BaseModel):
-    role: str | None = None
+    role: UserRole | None = None
     group: str | None = None
     allowed_projects: list[str] | None = None
     datasources: list[str] | None = None

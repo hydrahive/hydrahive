@@ -480,16 +480,14 @@ async def lifespan(app: FastAPI):
     )
 
     # Token-Blacklist Cleanup — abgelaufene JTIs alle 5 Minuten entfernen
+    # #809: läuft jetzt gegen SQLite-Backend via cleanup_expired()
     async def _token_blacklist_cleanup_loop():
         while True:
             try:
                 await asyncio.sleep(300)
-                now = datetime.now(timezone.utc).timestamp()
-                expired = [jti for jti, exp in _token_blacklist.items() if exp < now]
-                for jti in expired:
-                    _token_blacklist.pop(jti, None)
-                if expired:
-                    logger.debug("Token-Blacklist cleanup: %d abgelaufene JTIs entfernt", len(expired))
+                removed = _token_blacklist.cleanup_expired()
+                if removed:
+                    logger.debug("Token-Blacklist cleanup: %d abgelaufene JTIs entfernt", removed)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -706,9 +704,12 @@ def _read_admin_password() -> str:
     return values.get("console_password") or values.get("matrix_admin_password") or ""
 
 
-# In-Memory Token-Blacklist (revoked JTIs)
-# Einträge: (jti, exp_timestamp) — werden per Cleanup-Task nach Ablauf entfernt
-_token_blacklist: dict[str, float] = {}
+# #809: persistente JWT-Blacklist (SQLite). Vorher war das ein in-memory
+# dict — jeder Restart / Multi-Worker-Setup hat revokierte Tokens wieder
+# freigeschaltet. Die neue Klasse ist dict-kompatibel (``jti in bl`` +
+# ``bl[jti] = exp``), damit Bestandscode unverändert bleibt.
+from .token_blacklist import TokenBlacklist as _TokenBlacklist
+_token_blacklist = _TokenBlacklist(settings.token_blacklist_db)
 
 
 def _make_jwt(username: str, role: str = "user", group: str = "standard") -> str:
@@ -932,18 +933,41 @@ app = FastAPI(
 )
 
 
-# #760: CORS — Schutz bei Direktzugriff auf Port 8765 (bypass nginx).
+# #760 / #812: CORS — Schutz bei Direktzugriff auf Port 8765 (bypass nginx).
 # nginx macht im Standard-Deploy zusätzlich CORS; die Middleware hier
-# verhindert dass ein Dev-/Direktzugriff komplett offen ist. Leere
-# allow_origins → nur same-origin, keine CORS-Header für Cross-Origin.
-from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# verhindert dass ein Dev-/Direktzugriff komplett offen ist.
+#
+# #812: allow_credentials=True + allow_origins=* ist eine CSRF/Cookie-
+# Leakage-Falle. CORS-Spec verbietet diese Kombination sogar explizit im
+# Browser — aber besser wir fangen es im Server fail-closed ab.
+#
+# Regeln:
+#   - Leere Liste (Default)  → same-origin-only, gar keine CORS-Middleware
+#   - Enthält "*"            → beim Start LOUD loggen und allow_credentials
+#                              auf False setzen (bleibt nutzbar für public-
+#                              APIs, aber Cookies werden nicht cross-origin
+#                              gesendet)
+#   - Konkrete Origin-Liste  → credentials=True wie vorher
+_cors_origins = list(settings.cors_allowed_origins or [])
+if _cors_origins:
+    if "*" in _cors_origins:
+        logger.error(
+            "CORS [#812]: allow_origins enthaelt '*' — deaktiviere "
+            "allow_credentials zum Schutz gegen CSRF/Cookie-Leak. "
+            "Setze cors_allowed_origins auf eine konkrete Host-Liste, "
+            "wenn Cross-Origin-Auth gewollt ist."
+        )
+        _cors_credentials = False
+    else:
+        _cors_credentials = True
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=_cors_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # #365: Request-ID Middleware für Distributed Tracing

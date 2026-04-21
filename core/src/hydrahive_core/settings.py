@@ -58,6 +58,11 @@ class HydraHiveSettings(BaseSettings):
         return self.etc_dir / "users.json"
 
     @property
+    def token_blacklist_db(self) -> Path:
+        """#809: persistente JWT-Blacklist (SQLite)."""
+        return self.etc_dir / "token_blacklist.db"
+
+    @property
     def groups_config(self) -> Path:
         return self.etc_dir / "groups.json"
 
