@@ -62,6 +62,55 @@ else
     echo "A2A-Regeln bereits vorhanden"
 fi
 
+# --- 1b. /me/ + /media/ Block (#802 Phase 3a) ---
+# /me/jobs/{id}/artifacts/{file} (Cookie-Auth) + /media/{token} (no-auth,
+# HMAC-signed) — beide direkt an Core, kein /api-Prefix.
+HAS_ME=$(grep -c "location /me/" "${TARGET}" 2>/dev/null || true)
+HAS_MEDIA=$(grep -c "location /media/" "${TARGET}" 2>/dev/null || true)
+
+if [ "${HAS_ME}" -eq 0 ] || [ "${HAS_MEDIA}" -eq 0 ]; then
+    MEDIA_BLOCK='
+    # #802 Phase 3a: Jobs-Downloads (mit Cookie-Session) + Media-Tokens (HMAC)
+    location /me/ {
+        proxy_pass         http://127.0.0.1:8765/me/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+    }
+
+    location /media/ {
+        proxy_pass         http://127.0.0.1:8765/media/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+    }
+'
+    python3 - "${TARGET}" "${MEDIA_BLOCK}" << 'PYEOF'
+import sys, pathlib
+target = pathlib.Path(sys.argv[1])
+block  = sys.argv[2]
+content = target.read_text()
+idx = content.rfind("}")
+if idx == -1:
+    print("FEHLER: Kein schliessender } gefunden", file=sys.stderr); sys.exit(1)
+target.write_text(content[:idx] + block + "\n}\n")
+PYEOF
+    CHANGED=1
+    echo "/me/ + /media/ Blöcke eingefügt (#802 Phase 3a)"
+else
+    echo "/me/ + /media/ bereits vorhanden"
+fi
+
 # --- 2. /projects/ Block ---
 HAS_PROJECTS=$(grep -c "location /projects/" "${TARGET}" 2>/dev/null || true)
 

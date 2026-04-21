@@ -101,6 +101,34 @@ server {
         proxy_connect_timeout 5s;
     }
 
+    # #802 Phase 3a: Jobs-Artifact-Downloads (Cookie-Auth, Ownership).
+    location /me/ {
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
+        proxy_pass         http://127.0.0.1:8765/me/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+    }
+
+    # #802 Phase 3a: HMAC-signed Media-Tokens (no-auth, cookie-less).
+    location /media/ {
+        include /etc/nginx/snippets/hydrahive-security-headers.conf;
+        proxy_pass         http://127.0.0.1:8765/media/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   Connection        "";
+        proxy_read_timeout    300s;
+        proxy_connect_timeout 5s;
+    }
+
     location /assets/ {
         include /etc/nginx/snippets/hydrahive-security-headers.conf;
         expires 30d;
