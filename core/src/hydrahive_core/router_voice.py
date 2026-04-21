@@ -29,6 +29,17 @@ class VoiceTextRequest(BaseModel):
 class VoiceTtsRequest(BaseModel):
     text: str
 
+
+class VoicePreferencesRequest(BaseModel):
+    provider_type: str  # "stt" | "tts"
+    provider_id: str
+    voice_id: str | None = None
+
+
+class VoiceGlobalProviderRequest(BaseModel):
+    provider_type: str  # "stt" | "tts"
+    provider_id: str
+
 from .settings import settings
 
 logger = logging.getLogger(__name__)
@@ -273,11 +284,6 @@ def register_voice_routes(
         }
 
     # ── User-Preferences ──────────────────────────────────────────────
-    class VoicePreferencesRequest(BaseModel):
-        provider_type: str  # "stt" | "tts"
-        provider_id: str
-        voice_id: str | None = None
-
     @auth_router.get("/voice/preferences")
     async def voice_get_preferences(_auth: tuple[str, str] = Depends(require_auth)):
         username, _role = _auth
@@ -298,10 +304,6 @@ def register_voice_routes(
         return voice_config.get_user_preferences(username)
 
     # ── Globaler Default-Provider (Admin only) ────────────────────────
-    class VoiceGlobalProviderRequest(BaseModel):
-        provider_type: str  # "stt" | "tts"
-        provider_id: str
-
     @auth_router.put("/voice/providers/default")
     async def voice_set_global_provider(
         req: VoiceGlobalProviderRequest,
