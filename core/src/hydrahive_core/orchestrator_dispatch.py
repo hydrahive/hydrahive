@@ -260,6 +260,8 @@ async def _tool_loop(
             response = await orch._llm_call(boss_cfg, current_messages, litellm_tools)
         except Exception as e:
             logger.error("LLM-Fehler in Tool-Loop: %s", e)
-            return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", workers_used
+            # UX: echte Exception-Info durchreichen, siehe orchestrator.py
+            from .llm_errors import format_llm_error
+            return format_llm_error(e), workers_used
 
     return response.choices[0].message.content or "", workers_used

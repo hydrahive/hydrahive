@@ -934,7 +934,12 @@ class Orchestrator:
                     ), []
             else:
                 logger.error("LLM-Fehler für Boss '%s': %s", boss_cfg.id, e)
-                return "[Fehler] LLM nicht erreichbar — bitte später erneut versuchen.", []
+                # UX: echte Exception-Info (Typ + gescrubbte Message) an den
+                # User durchreichen statt generisch "nicht erreichbar" —
+                # damit Admin den Fehler ohne Core-Log-Zugriff diagnostizieren
+                # kann. Secrets (Bearer-Token, API-Keys) werden gefiltert.
+                from .llm_errors import format_llm_error
+                return format_llm_error(e), []
 
         # #512: LLM-Call Metriken erfassen
         _llm_latency = (_perf_time.monotonic() - _llm_start) * 1000
