@@ -512,6 +512,7 @@ async def lifespan(app: FastAPI):
         backups_dir=str(settings.backups_dir),
         load_users_fn=_load_users,
         notify_fn=_disk_notify,
+        job_service=job_service,  # #802 Phase 4: Workspace-Artifact-Orphans
     )
 
     # Smart Alert System (#374)

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from .settings import settings
+from .jobs_service import JobNotFoundError, JobStorageError
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ _DEFAULT_CFG: dict[str, Any] = {
     "backup_keep": 10,
     "warn_pct_yellow": 80,
     "warn_pct_red": 90,
+    "artifact_days": 30,  # #802 Phase 4
 }
 
 
@@ -173,6 +175,120 @@ def cleanup_stale_indices(memory_roots_dir: str, known_project_ids: set[str]) ->
     return deleted
 
 
+def cleanup_stale_workspace_artifacts(
+    projects_dir: str,
+    jobs_service: Any,
+    max_age_days: int = 30,
+) -> int:
+    """Löscht Workspace-Artifact-Orphans älter als max_age_days (#802 Phase 4).
+
+    Ein Orphan ist eine Datei unter
+    ``<projects_dir>/<project_id>/.hydrahive/artifacts/<type>/<YYYY-MM-DD>/``
+    für die:
+      - Job-Meta nicht existiert (``JobNotFoundError``), oder
+      - Job-Meta existiert, aber die Datei **nicht** in ``meta.artifacts`` ist.
+
+    Überspringt (kein Delete):
+      - ``JobStorageError`` (korrupte Meta)
+      - Dateien jünger als ``max_age_days``
+      - Dateien ohne ``job_<id>__`` Präfix
+
+    Räumt leere ``<date>/`` und ``<type>/`` Unter-Verzeichnisse auf.
+    """
+    cutoff = time.time() - max_age_days * 86_400
+    deleted = 0
+    projects_path = Path(projects_dir)
+
+    if not projects_path.is_dir():
+        return 0
+
+    for project_dir in projects_path.iterdir():
+        if not project_dir.is_dir():
+            continue
+
+        artifact_dir = project_dir / ".hydrahive" / "artifacts"
+        if not artifact_dir.is_dir():
+            continue
+
+        for type_dir in artifact_dir.iterdir():
+            if not type_dir.is_dir():
+                continue
+
+            for date_dir in type_dir.iterdir():
+                if not date_dir.is_dir():
+                    continue
+
+                for f in date_dir.iterdir():
+                    if not f.is_file():
+                        continue
+
+                    name = f.name
+                    if "__" not in name:
+                        continue
+                    job_id, original_filename = name.split("__", 1)
+
+                    try:
+                        if f.stat().st_mtime >= cutoff:
+                            continue
+                    except Exception:
+                        continue
+
+                    try:
+                        meta = jobs_service.get(job_id)
+                    except JobNotFoundError:
+                        try:
+                            f.unlink()
+                            deleted += 1
+                            logger.info(
+                                "Workspace-Artifact-Orphan gelöscht: %s (job %s fehlt)",
+                                f, job_id,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Artifact löschen fehlgeschlagen %s: %s", f, e,
+                            )
+                        continue
+                    except JobStorageError:
+                        logger.debug(
+                            "Artifact %s übersprungen (korrupte Meta für %s)",
+                            f, job_id,
+                        )
+                        continue
+                    except Exception:
+                        continue
+
+                    artifact_filenames = {
+                        a.get("filename") for a in (meta.artifacts or [])
+                    }
+                    if original_filename not in artifact_filenames:
+                        try:
+                            f.unlink()
+                            deleted += 1
+                            logger.info(
+                                "Workspace-Artifact-Orphan gelöscht: %s "
+                                "(job %s kennt datei nicht)",
+                                f, job_id,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Artifact löschen fehlgeschlagen %s: %s", f, e,
+                            )
+
+                try:
+                    if not any(date_dir.iterdir()):
+                        date_dir.rmdir()
+                except Exception:
+                    pass
+
+            try:
+                if not any(type_dir.iterdir()):
+                    type_dir.rmdir()
+            except Exception:
+                pass
+
+    return deleted
+
+
 # ---------------------------------------------------------------------------
 # Disk-Usage
 # ---------------------------------------------------------------------------
@@ -206,6 +322,7 @@ class CleanupService:
         self._backups_dir   = str(settings.backups_dir)
         self._load_users_fn = None
         self._notify_fn     = None
+        self._job_service: Any = None  # #802 Phase 4: für Artifact-Cleanup
         self._last_result: dict | None = None
 
     def start(
@@ -215,12 +332,14 @@ class CleanupService:
         backups_dir: str,
         load_users_fn,
         notify_fn=None,
+        job_service: Any = None,
     ) -> None:
         self._agents_dir   = agents_dir
         self._projects_dir = projects_dir
         self._backups_dir  = backups_dir
         self._load_users_fn = load_users_fn
         self._notify_fn    = notify_fn
+        self._job_service  = job_service
         self._task = asyncio.create_task(self._loop(), name="disk-cleanup")
         logger.info("CleanupService gestartet")
 
@@ -252,6 +371,15 @@ class CleanupService:
         backups       = cleanup_old_backups(self._backups_dir, cfg["backup_keep"])
         orphans       = cleanup_orphaned_personal_projects(self._projects_dir, users)
         stale_idx     = cleanup_stale_indices(self._projects_dir, known_projects)
+        # #802 Phase 4: Workspace-Artifact-Orphans. Kein Lauf ohne jobs_service
+        # (Backwards-Compat mit alten Startup-Pfaden).
+        if self._job_service is not None:
+            stale_artifacts = cleanup_stale_workspace_artifacts(
+                self._projects_dir, self._job_service,
+                cfg.get("artifact_days", 30),
+            )
+        else:
+            stale_artifacts = 0
         memory_pruned = prune_weak_memory_chunks(self._projects_dir)
         disk          = get_disk_usage("/")
         elapsed_ms    = round((time.time() - t0) * 1000)
@@ -263,13 +391,14 @@ class CleanupService:
             "deleted_backups": backups,
             "deleted_orphan_projects": orphans,
             "deleted_stale_indices": stale_idx,
+            "deleted_stale_artifacts": stale_artifacts,
             "pruned_memory_chunks": memory_pruned,
             "disk": disk,
         }
         self._last_result = result
         logger.info(
-            "Disk-Cleanup: transcripts=%d backups=%d orphans=%d idx=%d disk=%.1f%%",
-            transcripts, backups, orphans, stale_idx, disk["percent"],
+            "Disk-Cleanup: transcripts=%d backups=%d orphans=%d idx=%d artifacts=%d disk=%.1f%%",
+            transcripts, backups, orphans, stale_idx, stale_artifacts, disk["percent"],
         )
         return result
 
