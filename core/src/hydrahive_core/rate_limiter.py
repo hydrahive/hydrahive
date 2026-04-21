@@ -93,10 +93,41 @@ class RateLimiter:
 
     @classmethod
     def from_env(cls, logger: logging.Logger | None = None) -> "RateLimiter":
-        backend = os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", "auto")).strip().lower()
-        redis_url = os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", "")).strip()
-        redis_timeout_s = float(os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5")))
+        backend = os.environ.get("HYDRAHIVE_RATE_LIMIT_BACKEND", "auto").strip().lower()
+        redis_url = os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_URL", "").strip()
+        redis_timeout_s = float(os.environ.get("HYDRAHIVE_RATE_LIMIT_REDIS_TIMEOUT_S", "0.5"))
+
+        # Token-Budget Override per Env (vorher hardcoded in RateLimitSettings).
+        # Hard=0 disabled das Limit komplett. Negative Werte werden als 0 behandelt.
+        def _env_int(name: str, default: int) -> int:
+            raw = os.environ.get(name, "").strip()
+            if not raw:
+                return default
+            try:
+                v = int(raw)
+                return v if v >= 0 else 0
+            except ValueError:
+                if logger:
+                    logger.warning("Ungueltiger Wert fuer %s='%s' — nutze Default %d", name, raw, default)
+                return default
+
+        rl_settings = RateLimitSettings(
+            agent_token_warn_per_hour=_env_int(
+                "HYDRAHIVE_TOKEN_WARN_PER_HOUR", RateLimitSettings.agent_token_warn_per_hour
+            ),
+            agent_token_hard_per_hour=_env_int(
+                "HYDRAHIVE_TOKEN_HARD_PER_HOUR", RateLimitSettings.agent_token_hard_per_hour
+            ),
+        )
+        if logger:
+            logger.info(
+                "RateLimit Token-Budget: warn=%s/h hard=%s/h (override-able via HYDRAHIVE_TOKEN_WARN_PER_HOUR / HYDRAHIVE_TOKEN_HARD_PER_HOUR; 0=disabled)",
+                rl_settings.agent_token_warn_per_hour,
+                rl_settings.agent_token_hard_per_hour,
+            )
+
         return cls(
+            settings=rl_settings,
             backend=backend,
             redis_url=redis_url,
             redis_timeout_s=redis_timeout_s,
