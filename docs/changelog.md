@@ -1,5 +1,16 @@
 # HydraHive Changelog
 
+## 2026-04-21
+
+### Added
+
+- **#813 — Projekt-Reconcile (self-healing Samba + Linux-User).** Nach Server-Neuinstallation mit Daten-Restore lagen `/projects/<id>/` zwar im FS, aber `proj_<id>` Linux-User + Samba-Share fehlten (Provisioner lief nur im `create_project`-Pfad). Neu:
+  - `provisioner.reprovision(cfg)` stellt Linux-User + Samba-Share für ein bestehendes Projekt idempotent sicher (Matrix bleibt unberührt).
+  - `provisioner.reconcile_all_projects(loader)` iteriert alle Projekte, isoliert Fehler pro Projekt.
+  - **Boot-Hook** im Core-Lifespan (non-blocking `asyncio.create_task`, graceful — darf Core-Start nicht blockieren, `feedback_runtime_state_safety`).
+  - Admin-Endpoint `POST /admin/projects/reprovision-all` für manuellen Trigger.
+  - **Doctor-Checks** „Projekte: Linux-User" und „Projekte: Samba-Share" + Fix-Button `reconcile_projects`.
+
 ## 2026-04-14
 
 ### Added

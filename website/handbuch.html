@@ -1030,6 +1030,7 @@ sudo systemctl start hydrahive-selfupdate</code></pre>
 
     <h3>Doctor</h3>
     <p>Prüft automatisch die wichtigsten Systemkomponenten: Core, Matrix, Samba, Speicher, Agent-Konfiguration, VPN.</p>
+    <p>Zusätzlich prüft der Doctor pro Projekt, ob der Linux-User <code>proj_&lt;id&gt;</code> und der Samba-Share vorhanden sind. Fehlt einer davon (z.&nbsp;B. nach Server-Neuinstallation mit Daten-Restore), zeigt der Doctor einen <strong>„Reconcile"</strong>-Button, der beides nachzieht. Derselbe Abgleich läuft automatisch bei jedem Core-Start im Hintergrund.</p>
 
     <h3>Unit-Tests</h3>
     <p>Führt die integrierten Unit-Tests (22+ Tests) direkt aus der Konsole aus — Orchestrator, Sicherheit, Tool-Registry. Nur für Admins sichtbar.</p>

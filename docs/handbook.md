@@ -1382,6 +1382,7 @@ Prüft automatisch die wichtigsten Systemkomponenten:
 - Core-Erreichbarkeit und Response-Time
 - Matrix/conduwuit-Verbindung
 - Samba-Status und Share-Konfiguration
+- **Projekte: Linux-User + Samba-Share** — prüft pro Projekt, ob `proj_<id>` angelegt ist und ein `[<project_id>]` Block in `/etc/samba/hydrahive-shares.conf` existiert. Fehlende Einträge lösen einen **„Reconcile"**-Button aus, der Linux-User + Samba-Share self-healing nachzieht (Fix-ID `reconcile_projects`, Endpoint `POST /admin/projects/reprovision-all`). Läuft zusätzlich automatisch bei jedem Core-Start — deckt u. a. Migrations-/Restore-Szenarien ab, bei denen `/projects/` kopiert wurde, aber Samba-User nicht.
 - Freier Speicher auf allen Partitionen
 - Agent-Konfigurationsfehler
 - VPN-Verbindungsstatus
