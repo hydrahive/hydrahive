@@ -19,10 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 MINIMAX_T2A_ENDPOINT = "/t2a_v2"
-# Default-Modell: speech-02-hd. speech-02-turbo ist im Token-Plan NICHT enthalten
-# (MiniMax-Fehler: "your current token plan not support model, speech-02-turbo").
-# Übersteuerbar via voice.json → "minimax_tts_model".
-DEFAULT_MODEL = "speech-02-hd"
+# Default-Modell: speech-2.8-hd (im Token-Plan enthalten, live getestet 2026-04-21).
+# speech-02-*, speech-2.6-*, speech-2.8-turbo sind im Token-Plan NICHT enthalten.
+DEFAULT_MODEL = "speech-2.8-hd"
 DEFAULT_VOICE_ID = "male-qn-qingse"
 DEFAULT_TIMEOUT_SECONDS = 30
 
