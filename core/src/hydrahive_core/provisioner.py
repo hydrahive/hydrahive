@@ -206,6 +206,71 @@ class Provisioner:
 
         return warnings
 
+    # ----------------------------------------------------------------- Reconcile (#813)
+
+    def reprovision(self, cfg: ProjectConfig) -> list[str]:
+        """
+        Synchroner Teil-Reprovisioner: stellt Linux-User + Samba-Share für
+        ein bestehendes Projekt sicher. Matrix wird nicht angefasst.
+
+        Idempotent: existierende Ressourcen werden nicht überschrieben, nur
+        fehlende ergänzt. Lazy-tolerant: fehlendes smbd oder fehlende sudoers
+        erzeugen nur Warnungen, keine Exceptions.
+        """
+        warnings: list[str] = []
+        project_id = cfg.id
+        linux_user = cfg.effective_system_user()
+        files_dir  = f"{PROJECTS_DIR}/{project_id}"
+
+        user_warn = self._create_linux_user(linux_user, files_dir)
+        if user_warn:
+            warnings.append(user_warn)
+
+        user_exists = subprocess.run(["id", linux_user], capture_output=True).returncode == 0
+        if not user_exists:
+            warnings.append(
+                f"Reconcile '{project_id}': Linux-User '{linux_user}' fehlt weiterhin — Samba übersprungen"
+            )
+            return warnings
+
+        samba_warn = self._setup_samba(project_id, linux_user, files_dir)
+        if samba_warn:
+            warnings.append(samba_warn)
+
+        return warnings
+
+    def reconcile_all_projects(self, project_loader) -> dict:
+        """
+        Iteriert alle geladenen Projekte und ruft reprovision() pro Projekt.
+        Gibt einen Report mit reconciled/skipped/errors zurück.
+
+        Darf nie eine Exception werfen — self-healing im Boot-Pfad.
+        """
+        report: dict = {"reconciled": [], "skipped": [], "errors": []}
+        try:
+            projects = project_loader.projects
+        except Exception as e:
+            logger.warning("Reconcile: ProjectLoader nicht verfügbar: %s", e)
+            report["errors"].append(f"project_loader: {e}")
+            return report
+
+        for project_id, cfg in projects.items():
+            try:
+                warnings = self.reprovision(cfg)
+                if warnings:
+                    report["reconciled"].append({"id": project_id, "warnings": warnings})
+                else:
+                    report["skipped"].append(project_id)
+            except Exception as e:
+                logger.warning("Reconcile '%s' fehlgeschlagen: %s", project_id, e)
+                report["errors"].append({"id": project_id, "error": str(e)})
+
+        logger.info(
+            "Reconcile abgeschlossen: %d reconciled, %d skipped, %d errors",
+            len(report["reconciled"]), len(report["skipped"]), len(report["errors"]),
+        )
+        return report
+
     # ----------------------------------------------------------------- Schritt 1: Linux-User (#9)
 
     def _create_linux_user(self, username: str, files_dir: str) -> str | None:
