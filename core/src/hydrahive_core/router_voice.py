@@ -244,8 +244,24 @@ def register_voice_routes(
         current_tts = voice_config.get_tts_provider_for_user(username)
         current_voice = voice_config.get_voice_for_user(username, current_tts.provider_id)
 
+        # Legacy-Keys fuer bestehende VoicePage.tsx (bis #797 den Umbau macht):
+        stt_host = cfg.get("stt_host", STT_HOST)
+        stt_port = cfg.get("stt_port", STT_PORT)
+        tts_host = cfg.get("tts_host", TTS_HOST)
+        tts_port = cfg.get("tts_port", TTS_PORT)
+        legacy_stt_available = any(
+            p["id"] == "wyoming-stt" and p["available"] for p in stt_providers
+        )
+        legacy_tts_available = any(
+            p["id"] == "wyoming-tts" and p["available"] for p in tts_providers
+        )
+
         return {
             "installed": settings.voice_install_dir.exists(),
+            # Legacy (VoicePage.tsx v1) — entfernt in #797:
+            "stt": {"host": stt_host, "port": stt_port, "available": legacy_stt_available},
+            "tts": {"host": tts_host, "port": tts_port, "available": legacy_tts_available},
+            # Neu (ab Commit B):
             "stt_providers": stt_providers,
             "tts_providers": tts_providers,
             "current_stt": {"provider": current_stt.provider_id},
