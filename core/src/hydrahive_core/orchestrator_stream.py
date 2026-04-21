@@ -32,6 +32,7 @@ from .orchestrator_tools import (
     format_tool_detail, format_tool_result,
 )
 from .jobs_service import _artifact_signed_url as _artifact_signer
+from .minimax_invoke_parser import parse_invoke_markup, text_without_invokes
 
 logger = logging.getLogger(__name__)
 
@@ -981,6 +982,25 @@ async def _stream_anthropic_oauth(
             _usage["cache_read"]  += getattr(final_msg.usage, "cache_read_input_tokens", 0)
 
         tool_use_blocks = [b for b in final_msg.content if b.type == "tool_use"]
+
+        # #792: MiniMax XML-invoke Workaround — wenn keine strukturierten
+        # tool_use-Blöcke emittiert wurden, aber der Text <invoke>-Markup
+        # enthält, als synthetische Blöcke interpretieren. Nur für
+        # MiniMax-direkte Modelle (Claude-Original bekommt NIE Parser
+        # aktiviert, damit Doku-/Erklär-Texte mit XML-Beispielen nicht
+        # fälschlich dispatched werden).
+        if not tool_use_blocks:
+            from .orchestrator_llm import _is_direct_minimax_model as _is_mm
+            if _is_mm(model_name, None) and "<invoke" in (_round_text or ""):
+                _synthetic = parse_invoke_markup(_round_text)
+                if _synthetic:
+                    logger.info(
+                        "MiniMax XML-invoke gefangen (oauth-pfad): %d synthetische Blöcke",
+                        len(_synthetic),
+                    )
+                    tool_use_blocks = _synthetic  # type: ignore[assignment]
+                    _round_text = text_without_invokes(_round_text)
+
         if not tool_use_blocks:
             break
         # Zwischentext persistent speichern (vor Tool-Ausführung)
@@ -1391,6 +1411,23 @@ async def _stream_litellm(
             yield f"data: {_json.dumps({'text': _abort_msg})}\n\n"
             yield f"data: {_json.dumps({'done': True, 'reason': 'token_budget_mid_stream'})}\n\n"
             return
+
+        # #792: MiniMax XML-invoke Workaround (litellm-Pfad). Wenn keine
+        # strukturierten tool_calls in den Deltas waren, aber round_text
+        # <invoke>-Markup enthält, synthetische accumulated_tcs-Einträge
+        # bauen. Nur aktiv wenn _is_direct_minimax_model.
+        if not accumulated_tcs and "<invoke" in (round_text or "") and _is_direct_minimax_model(model_name, model):
+            _synthetic = parse_invoke_markup(round_text)
+            if _synthetic:
+                logger.info(
+                    "MiniMax XML-invoke gefangen (litellm-pfad): %d synthetische Blöcke",
+                    len(_synthetic),
+                )
+                accumulated_tcs = {
+                    i: {"id": b.id, "name": b.name, "arguments": _json.dumps(b.input)}
+                    for i, b in enumerate(_synthetic)
+                }
+                round_text = text_without_invokes(round_text)
 
         if not accumulated_tcs:
             break

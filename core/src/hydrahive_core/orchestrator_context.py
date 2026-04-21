@@ -636,6 +636,24 @@ async def build_system_prompt(
             f"{_provider_line}- Modell: `{_runtime_model}`"
         )
 
+        # #792: MiniMax emittiert gelegentlich Tool-Calls als XML-Markup statt
+        # strukturierte function_calls. System-Prompt-Hinweis als erste
+        # Verteidigung (zusätzlich zum Parser-Workaround in orchestrator_stream).
+        try:
+            from .orchestrator_llm import _is_direct_minimax_model as _is_mm
+            if _is_mm(_runtime_model, None):
+                _minimax_policy = (
+                    "\n\nIMPORTANT: Call tools exclusively via the structured "
+                    "function_call mechanism. NEVER write tool invocations as XML "
+                    "markup (e.g. `<invoke name=\"...\">`) in your assistant text — "
+                    "that will NOT execute the tool. Use the structured tool_call "
+                    "format provided by the system."
+                )
+                channels.policies = (channels.policies or "") + _minimax_policy
+        except Exception:
+            # Policy-Append scheitert nicht am Prompt-Build
+            pass
+
     if boss_cfg.agent_dir:
         # #659/#668: Multi-Layer-Resolver (agent > project > user).
         # System/Catalog ist bewusst KEIN automatischer Prompt-Layer —
