@@ -1,22 +1,76 @@
 /**
  * OAuthUsageBar — Kompakte OAuth-Usage-Anzeige für Chat-Header
  *
- * Pollt /api/admin/system/oauth-usage alle 3s und zeigt 5h + 7d Balken.
- * Zeigt optional auch OpenAI Codex Token-Status wenn konfiguriert.
- * Designed für den Header-Bereich über Chat-Fenstern.
+ * Pollt /api/admin/system/oauth-usage alle 3s und zeigt 5h + 7d Balken
+ * für Anthropic Claude. Zeigt optional OpenAI Codex Token-Status.
+ * #805: Zeigt zusätzlich MiniMax Token-Plan Usage (Text/TTS/Music/Video).
  */
 import { useEffect, useState } from "react";
-import { Activity, Cpu } from "lucide-react";
+import { Activity, Cpu, Sparkles } from "lucide-react";
 import { api } from "../lib/api";
+
+type MinimaxModel = {
+  name: string;
+  label: string;
+  interval_total: number;
+  interval_used: number;
+  interval_pct: number;
+  interval_reset_in_s: number;
+  weekly_total: number;
+  weekly_used: number;
+  weekly_pct: number;
+};
+
+type MinimaxUsage = {
+  available: boolean;
+  reason?: string;
+  fetched_at?: string;
+  models?: MinimaxModel[];
+};
+
+// Welche MiniMax-Kategorien werden in der Bar angezeigt + in welcher Reihenfolge.
+// Innerhalb einer Kategorie: nur das Modell mit der höchsten interval_pct zeigen
+// (z.B. music-2.5 voll + music-2.6 leer → music-2.5 anzeigen).
+const MINIMAX_CATEGORIES: Array<{ key: string; label: string }> = [
+  { key: "text",  label: "Text" },
+  { key: "video", label: "Video" },
+  { key: "music", label: "Music" },
+  { key: "tts",   label: "TTS" },
+];
+
+function pickTopPerCategory(models: MinimaxModel[]): MinimaxModel[] {
+  const byKey: Record<string, MinimaxModel> = {};
+  for (const m of models) {
+    if (!byKey[m.name] || m.interval_pct > byKey[m.name].interval_pct) {
+      byKey[m.name] = m;
+    }
+  }
+  return MINIMAX_CATEGORIES
+    .map(c => byKey[c.key])
+    .filter((m): m is MinimaxModel => Boolean(m));
+}
+
+function pctColor(pct: number): string {
+  if (pct >= 90) return "bg-red-500";
+  if (pct >= 70) return "bg-orange-500";
+  if (pct >= 40) return "bg-yellow-500";
+  return "bg-green-500";
+}
+
+function categoryLabel(name: string): string {
+  return MINIMAX_CATEGORIES.find(c => c.key === name)?.label ?? name;
+}
 
 export default function OAuthUsageBar() {
   const [data, setData] = useState<Record<string, any> | null>(null);
   const [codex, setCodex] = useState<{ configured: boolean; account_id: string | null; models?: string[] } | null>(null);
+  const [minimax, setMinimax] = useState<MinimaxUsage | null>(null);
 
   useEffect(() => {
     let alive = true;
     const poll = () => {
       api.oauthUsage().then(d => { if (alive) setData(d as Record<string, any>); }).catch(() => {});
+      api.minimaxUsage().then(d => { if (alive) setMinimax(d); }).catch(() => {});
     };
     poll();
     const t = setInterval(poll, 3000);
@@ -35,7 +89,9 @@ export default function OAuthUsageBar() {
 
   const showClaude = data.available;
   const showCodex = codex?.configured;
-  if (!showClaude && !showCodex) return null;
+  const showMinimax = minimax?.available && (minimax?.models?.length ?? 0) > 0;
+  const minimaxTop = showMinimax ? pickTopPerCategory(minimax!.models!) : [];
+  if (!showClaude && !showCodex && !showMinimax) return null;
 
   return (
     <div className="flex flex-col border-b bg-muted/30">
@@ -100,6 +156,38 @@ export default function OAuthUsageBar() {
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none bg-blue-500/15 text-blue-400`}>
             {(codex as any)?.rate_limits?.["x-codex-plan-type"] || "plus"}
           </span>
+        </div>
+      )}
+      {/* MiniMax Token-Plan (#805) */}
+      {showMinimax && (
+        <div className={`flex items-center gap-2 px-3 py-1 text-xs flex-wrap ${(showClaude || showCodex) ? "border-t border-border/30" : ""}`}>
+          <Sparkles className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          <span className="text-muted-foreground font-medium hidden sm:inline">MiniMax</span>
+          {minimaxTop.map(m => {
+            const color = pctColor(m.interval_pct);
+            const cat = categoryLabel(m.name);
+            const textColor = m.interval_pct >= 90
+              ? "text-red-500 font-medium"
+              : "text-muted-foreground/70";
+            return (
+              <div
+                key={m.label}
+                className="flex items-center gap-1.5"
+                title={`${m.label} — ${m.interval_used}/${m.interval_total} im Fenster, ${m.weekly_used}/${m.weekly_total} diese Woche`}
+              >
+                <span className="text-muted-foreground/70 whitespace-nowrap">{cat}:</span>
+                <div className="h-1.5 w-14 sm:w-16 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${color}`}
+                    style={{ width: `${Math.min(100, m.interval_pct)}%` }}
+                  />
+                </div>
+                <span className={`w-8 text-right tabular-nums ${textColor}`}>
+                  {m.interval_pct < 10 ? m.interval_pct.toFixed(0) : Math.round(m.interval_pct)}%
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -105,6 +105,22 @@ export const api = {
   sessionMetrics: ()          => api.get<Record<string,any>>("/admin/session-metrics"),
   oauthUsage:    ()           => api.get<Record<string,unknown>>("/admin/system/oauth-usage"),
   oauthUsageFetch: ()         => api.get<Record<string,unknown>>("/admin/system/oauth-usage/fetch"),
+  minimaxUsage:  ()           => api.get<{
+    available: boolean;
+    reason?: string;
+    fetched_at?: string;
+    models?: Array<{
+      name: string;
+      label: string;
+      interval_total: number;
+      interval_used: number;
+      interval_pct: number;
+      interval_reset_in_s: number;
+      weekly_total: number;
+      weekly_used: number;
+      weekly_pct: number;
+    }>;
+  }>("/admin/system/minimax-usage"),
   heartbeatTasks: ()          => api.get<{tasks: HeartbeatTaskStatus[]}>("/system/heartbeat-tasks"),
   agents:        ()           => api.get<Record<string,unknown>>("/agents"),
   projects:      ()           => api.get<Record<string,unknown>>("/projects"),
