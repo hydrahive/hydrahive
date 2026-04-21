@@ -568,11 +568,14 @@ def check_llm_provider_available(models: list[str], ollama_base_url: str | None 
 
     return (
         "## ⚠️ Kein LLM-Provider konfiguriert\n\n"
-        "Um HydraHive zu nutzen, einen Provider unter **Einstellungen → LLM** einrichten:\n\n"
+        "Um HydraHive zu nutzen, einen Provider unter **Einstellungen → LLM** einrichten "
+        "(und dort API-Key + `enabled: true` speichern):\n\n"
         "**Cloud (kein GPU nötig — empfohlen zum Starten)**\n"
         "• **Anthropic Claude** — API-Key auf [console.anthropic.com](https://console.anthropic.com) → Einstellungen → LLM → Anthropic\n"
+        "• **Claude Max** (Abo) — Einstellungen → LLM → Claude Max → OAuth verbinden\n"
         "• **OpenAI GPT-4** — API-Key auf [platform.openai.com](https://platform.openai.com) → Einstellungen → LLM → OpenAI\n"
-        "• **Claude Max** (Abo) — Einstellungen → LLM → Claude Max → OAuth verbinden\n\n"
+        "• **NVIDIA NIM** — API-Key auf [build.nvidia.com](https://build.nvidia.com) → Einstellungen → LLM → NVIDIA\n"
+        "• **MiniMax** — API-Key auf [platform.minimax.io](https://platform.minimax.io) → Einstellungen → LLM → MiniMax\n\n"
         "**Lokal via Ollama (GPU empfohlen: NVIDIA RTX 3060+, 8 GB VRAM)**\n"
         "• `ollama pull mistral-nemo:12b` → Einstellungen → LLM → Ollama-URL eintragen"
     )
