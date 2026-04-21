@@ -97,6 +97,10 @@ class JobMeta:
     progress_percent: int | None = None
     progress_message: str | None = None
     artifacts: list[dict] = field(default_factory=list)
+    # #802 Phase 1: wo liegt der Artifact-Speicher für diesen Job.
+    # None = noch nicht entschieden, "workspace" = im Projekt-Workspace,
+    # "legacy" = im jobs_dir (Fallback für Jobs ohne project_id).
+    artifact_storage: Literal["workspace", "legacy"] | None = None
     error: str | None = None
 
 
@@ -146,10 +150,71 @@ def _meta_from_dict(data: dict) -> JobMeta:
         "job_id", "type", "provider", "status", "created_at", "updated_at",
         "started_at", "finished_at", "created_by", "project_id", "agent_id",
         "input_summary", "progress_percent", "progress_message",
-        "artifacts", "error",
+        "artifacts", "error", "artifact_storage",
     }
     kwargs = {k: v for k, v in data.items() if k in allowed}
+    if kwargs.get("artifact_storage") not in (None, "workspace", "legacy"):
+        raise ValueError(
+            f"artifact_storage muss workspace|legacy|None sein, got "
+            f"{kwargs['artifact_storage']!r}"
+        )
     return JobMeta(**kwargs)
+
+
+def _mime_to_type(mime: str) -> str:
+    """Leitet den Artifact-Typ aus dem MIME-Prefix ab (#802 Phase 1)."""
+    if not mime:
+        return "other"
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("video/"):
+        return "video"
+    if mime.startswith("audio/"):
+        return "music"
+    if mime.startswith("text/"):
+        return "text"
+    return "other"
+
+
+def _artifact_workspace_path(
+    jobs_service: "JobService",
+    meta: JobMeta,
+    filename: str,
+    mime: str,
+) -> Path | None:
+    """Berechnet den Workspace-Zielpfad für ein Artifact (#802 Phase 1).
+
+    Gibt None zurück wenn:
+      - meta.artifact_storage == "legacy" (kein Rückschaltversuch)
+      - meta.project_id fehlt UND noch keine Entscheidung
+      - workspace_root() eine Exception wirft
+
+    Wirft JobError wenn:
+      - meta.artifact_storage == "workspace" aber meta.project_id fehlt
+        (Daten-Inkonsistenz — soll gemeldet statt still gefixt werden).
+    """
+    if meta.artifact_storage == "legacy":
+        return None
+
+    if meta.artifact_storage == "workspace":
+        if not meta.project_id:
+            raise JobError(
+                f"artifact_storage=workspace aber project_id fehlt in JobMeta {meta.job_id}"
+            )
+    else:
+        if not meta.project_id:
+            return None
+
+    try:
+        from .tool_registry import workspace_root
+        ws = workspace_root(meta.project_id)
+    except Exception:
+        return None
+
+    type_ = _mime_to_type(mime or "")
+    date = (meta.created_at or _now_iso())[:10]
+    unique_prefix = f"{meta.job_id}__{filename}"
+    return ws / ".hydrahive" / "artifacts" / type_ / date / unique_prefix
 
 
 # ────────────────────────────────────────────── JobContext (Runner-API)
@@ -445,7 +510,12 @@ class JobService:
         filename: str,
         mime: str,
     ) -> dict:
-        dest = self._artifact_path(job_id, filename)
+        # #802 Phase 1: Workspace-first wenn project_id + Resolver OK.
+        # Flag-Update erst NACH erfolgreichem Write → bei Write-Exception
+        # bleibt artifact_storage unverändert, nächster Retry entscheidet neu.
+        meta = self.get(job_id)
+        ws_path = _artifact_workspace_path(self, meta, filename, mime or "")
+        dest = ws_path if ws_path is not None else self._artifact_path(job_id, filename)
         dest.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(data, (bytes, bytearray)):
@@ -465,8 +535,9 @@ class JobService:
             "mime": str(mime or "application/octet-stream"),
             "created_at": _now_iso(),
         }
-        meta = self.get(job_id)
         meta.artifacts = list(meta.artifacts) + [entry]
+        if ws_path is not None and meta.artifact_storage != "workspace":
+            meta.artifact_storage = "workspace"
         self._write_meta(meta)
         return entry
 

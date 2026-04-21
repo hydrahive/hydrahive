@@ -18,11 +18,16 @@ from hydrahive_core.jobs_service import (
     JobCancelled,
     JobContext,
     JobError,
+    JobMeta,
     JobNotFoundError,
     JobService,
     JobStorageError,
     _noop_runner,
     _RESTART_ERROR,
+)
+from hydrahive_core.tool_registry import (
+    set_workspace_override,
+    reset_workspace_override,
 )
 
 
@@ -465,3 +470,182 @@ class TestCorruptMetaHandling:
         jobs = svc.list()
         assert len(jobs) == 1
         assert jobs[0].job_id == meta.job_id
+
+
+# ============================================================================
+# #802 Phase 1 — Artifact-Storage im Project-Workspace
+# ============================================================================
+
+
+def test_mime_to_type_mapping():
+    from hydrahive_core.jobs_service import _mime_to_type
+    assert _mime_to_type("image/png") == "image"
+    assert _mime_to_type("image/jpeg") == "image"
+    assert _mime_to_type("video/mp4") == "video"
+    assert _mime_to_type("video/webm") == "video"
+    assert _mime_to_type("audio/mpeg") == "music"
+    assert _mime_to_type("audio/ogg") == "music"
+    assert _mime_to_type("text/plain") == "text"
+    assert _mime_to_type("application/json") == "other"
+    assert _mime_to_type("") == "other"
+    assert _mime_to_type("video/quicktime") == "video"
+
+
+def test_meta_from_dict_rejects_invalid_artifact_storage_value():
+    from hydrahive_core.jobs_service import _meta_from_dict
+    with pytest.raises(ValueError):
+        _meta_from_dict({
+            "job_id": "job_1234567890abcdef",
+            "type": "noop", "provider": "internal", "status": "queued",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "artifact_storage": "definitely_not_valid",
+        })
+
+
+def test_get_rejects_meta_with_invalid_artifact_storage(tmp_path):
+    """get() liest Meta mit ungültigem artifact_storage → JobStorageError
+    (ValueError aus _meta_from_dict wird in get() zu JobStorageError)."""
+    svc = JobService(root=tmp_path / "jobs")
+    meta_file = tmp_path / "jobs" / "meta" / "job_abcdef1234567890.json"
+    meta_file.parent.mkdir(parents=True, exist_ok=True)
+    meta_file.write_text(
+        json.dumps({
+            "job_id": "job_abcdef1234567890",
+            "type": "noop", "provider": "internal", "status": "queued",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "artifact_storage": "not_a_valid_value",
+        }),
+        encoding="utf-8",
+    )
+    with pytest.raises(JobStorageError):
+        svc.get("job_abcdef1234567890")
+
+
+def test_artifact_workspace_path_raises_when_workspace_decided_but_project_missing(tmp_path):
+    """artifact_storage=workspace aber project_id=None → JobError (Inkonsistenz-Signal)."""
+    from hydrahive_core.jobs_service import _artifact_workspace_path
+    svc = JobService(root=tmp_path / "jobs")
+    meta = JobMeta(
+        job_id="job_abcd1234567890ef",
+        type="noop", provider="internal", status="running",
+        created_at="2026-01-01T00:00:00Z", updated_at="2026-01-01T00:00:00Z",
+        artifact_storage="workspace",
+        project_id=None,
+    )
+    with pytest.raises(JobError):
+        _artifact_workspace_path(svc, meta, "file.png", "image/png")
+
+
+@pytest.mark.asyncio
+async def test_record_artifact_writes_to_workspace_when_project_id(tmp_path):
+    """Job MIT project_id → Artifact landet im Workspace + Flag persistiert."""
+    # Workspace-Override: /tmp/.../projects/proj_A → realer Pfad
+    ws_root = tmp_path / "projects" / "proj_A"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        svc = JobService(root=tmp_path / "jobs")
+
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"PNG_DATA", "test.png", "image/png")
+
+        meta = svc.submit(
+            type="image", provider="minimax", runner=runner, project_id="proj_A",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        final = svc.get(meta.job_id)
+
+        assert final.status == "succeeded"
+        assert final.artifact_storage == "workspace"
+        assert len(final.artifacts) == 1
+        assert final.artifacts[0]["filename"] == "test.png"
+        # Physisch muss die Datei im Workspace-Layout liegen
+        image_dir = ws_root / ".hydrahive" / "artifacts" / "image"
+        assert image_dir.exists()
+        # Datum-Partition + job_id-Präfix
+        found = list(image_dir.rglob(f"{meta.job_id}__test.png"))
+        assert len(found) == 1, f"expected 1 file, got {found}"
+        assert found[0].read_bytes() == b"PNG_DATA"
+    finally:
+        reset_workspace_override(token)
+
+
+@pytest.mark.asyncio
+async def test_record_artifact_falls_back_to_legacy_without_project_id(tmp_path):
+    """Job OHNE project_id → Legacy-Pfad (jobs_dir), Flag bleibt None."""
+    svc = JobService(root=tmp_path / "jobs")
+
+    async def runner(ctx: JobContext):
+        ctx.record_artifact(b"PNG_DATA", "fallback.png", "image/png")
+
+    meta = svc.submit(type="image", provider="minimax", runner=runner, project_id=None)
+    await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+    final = svc.get(meta.job_id)
+
+    assert final.status == "succeeded"
+    assert final.artifact_storage is None
+    assert len(final.artifacts) == 1
+    legacy_path = tmp_path / "jobs" / "artifacts" / meta.job_id / "fallback.png"
+    assert legacy_path.exists()
+    assert legacy_path.read_bytes() == b"PNG_DATA"
+
+
+@pytest.mark.asyncio
+async def test_record_artifact_storage_flag_persists_across_calls(tmp_path):
+    """Erster record_artifact setzt Flag, zweiter bleibt bei workspace."""
+    ws_root = tmp_path / "projects" / "proj_persist"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        svc = JobService(root=tmp_path / "jobs")
+
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"MP3_DATA", "song.mp3", "audio/mpeg")
+            ctx.record_artifact(b"TEXT_DATA", "lyrics.txt", "text/plain")
+
+        meta = svc.submit(
+            type="music", provider="minimax", runner=runner, project_id="proj_persist",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        final = svc.get(meta.job_id)
+
+        assert final.artifact_storage == "workspace"
+        assert len(final.artifacts) == 2
+        # Beide in Workspace, unterschiedliche type-Ordner
+        assert (ws_root / ".hydrahive" / "artifacts" / "music").exists()
+        assert (ws_root / ".hydrahive" / "artifacts" / "text").exists()
+    finally:
+        reset_workspace_override(token)
+
+
+@pytest.mark.asyncio
+async def test_artifact_workspace_path_resolves_symlink_override(tmp_path):
+    """Workspace-Override mit Symlink → Artifact landet im aufgelösten realen Pfad."""
+    real_ws = tmp_path / "real_project"
+    real_ws.mkdir(parents=True)
+    link_ws = tmp_path / "link_project"
+    link_ws.symlink_to(real_ws, target_is_directory=True)
+
+    token = set_workspace_override(link_ws)
+    try:
+        svc = JobService(root=tmp_path / "jobs")
+
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"PNG_DATA", "symlink_test.png", "image/png")
+
+        meta = svc.submit(
+            type="image", provider="test", runner=runner, project_id="link_project",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        final = svc.get(meta.job_id)
+
+        assert final.artifact_storage == "workspace"
+        # Datei muss im echten Pfad liegen (real_ws), nicht im Symlink-Namen
+        real_image_dir = real_ws / ".hydrahive" / "artifacts" / "image"
+        assert real_image_dir.exists()
+        files = list(real_image_dir.rglob(f"{meta.job_id}__symlink_test.png"))
+        assert len(files) == 1
+    finally:
+        reset_workspace_override(token)
