@@ -445,15 +445,26 @@ def register_core_misc_routes(
         if not creds:
             # Kein Token zum Revoken — Cookie ist aber geclearnt, Logout okay.
             return {"logged_out": True}
+        # #809: JWT_SECRET/JWT_ALG/_token_blacklist liegen in main.py — die
+        # vorherige Version griff auf Modul-Globals zu, die nie importiert
+        # wurden (NameError) und durch das catch-all except silent
+        # geschluckt wurden. Folge: Blacklist wurde nie befüllt, Logout
+        # hatte gar keine Wirkung. Hier explizit lazy-importieren und nur
+        # JWT-Decode-Fehler abfangen.
+        from .main import JWT_SECRET as _jwt_secret, JWT_ALG as _jwt_alg
+        from .main import _token_blacklist as _bl
         from jose import JWTError, jwt as jose_jwt
         try:
-            payload = jose_jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
-            jti = payload.get("jti")
-            exp = payload.get("exp", 0)
-            if jti:
-                _token_blacklist[jti] = float(exp)
-        except (JWTError, Exception):
-            pass  # Abgelaufene Token trotzdem als "logout" akzeptieren
+            payload = jose_jwt.decode(creds.credentials, _jwt_secret, algorithms=[_jwt_alg])
+        except JWTError:
+            # Token nicht mehr decodierbar (abgelaufen / Secret rotiert) —
+            # Logout trotzdem als erfolgreich melden, Cookie ist gecleart.
+            return {"logged_out": True}
+        jti = payload.get("jti")
+        exp = payload.get("exp", 0)
+        if jti:
+            _bl[jti] = float(exp)
+            logger.info("Token revokiert: jti=%s", jti)
         return {"logged_out": True}
 
     @auth_router.get("/auth/me")
