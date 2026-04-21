@@ -1086,18 +1086,17 @@ def register_user_integration_routes(
     @auth_router.post("/me/whatsapp/voice-preview")
     async def whatsapp_voice_preview(req: VoicePreviewRequest, auth: tuple = Depends(require_auth)):
         """Spielt eine TTS-Stimme als Preview ab."""
+        username = _username_from_auth(auth)
         voice = req.voice
         text = req.text
         if len(text) > 200:
             text = text[:200]
         try:
-            from .whatsapp_tts import text_to_ogg_b64
-            audio_b64 = await text_to_ogg_b64(text, voice=voice)
-            if audio_b64:
-                import base64
-                audio_bytes = base64.b64decode(audio_b64)
-                return Response(content=audio_bytes, media_type="audio/ogg")
-            return Response(content=b"", status_code=500)
+            from .voice_providers.config import voice_config
+            result = await voice_config.synthesize_for_user(username, text, voice=voice, integration="whatsapp")
+            import base64
+            b64 = base64.b64encode(result.audio).decode()
+            return Response(content=base64.b64decode(b64), media_type="audio/ogg")
         except Exception as e:
             logger.error("TTS Preview fehlgeschlagen: %s", e)
             raise HTTPException(500, "TTS Preview fehlgeschlagen")
@@ -1329,11 +1328,15 @@ def register_user_integration_routes(
                     _send_voice = (_voice_mode == "echo" and is_audio) or (_voice_mode == "always")
                     if _send_voice and _voice_mode != "never":
                         try:
-                            from .whatsapp_tts import text_to_ogg_b64 as _tts
+                            from .voice_providers.config import voice_config
                             from .whatsapp_agent import bridge_send_voice as _bsv
-                            _audio = await _tts(_fixed_text, voice=_voice_name)
-                            if _audio:
-                                await _bsv(agent_id, from_jid, _audio)
+                            _result = await voice_config.synthesize_for_user(
+                                username, _fixed_text, voice=_voice_name, integration="whatsapp"
+                            )
+                            import base64 as _b64
+                            _audio_b64 = _b64.b64encode(_result.audio).decode()
+                            if _audio_b64:
+                                await _bsv(agent_id, from_jid, _audio_b64)
                             else:
                                 from .whatsapp_agent import bridge_send as _bsend
                                 await _bsend(agent_id, from_jid, _fixed_text)
@@ -1463,11 +1466,15 @@ def register_user_integration_routes(
             if send_voice and voice_mode != "never":
                 # Voice-Antwort: TTS → OGG → senden
                 try:
-                    from .whatsapp_tts import text_to_ogg_b64
+                    from .voice_providers.config import voice_config
                     from .whatsapp_agent import bridge_send_voice
-                    audio_b64 = await text_to_ogg_b64(response_text, voice=voice_name)
-                    if audio_b64:
-                        await bridge_send_voice(wa_session_id, from_jid, audio_b64)
+                    _result = await voice_config.synthesize_for_user(
+                        username, response_text, voice=voice_name, integration="whatsapp"
+                    )
+                    import base64 as _b64
+                    _audio_b64 = _b64.b64encode(_result.audio).decode()
+                    if _audio_b64:
+                        await bridge_send_voice(wa_session_id, from_jid, _audio_b64)
                     else:
                         from .whatsapp_agent import bridge_send
                         await bridge_send(wa_session_id, from_jid, response_text)

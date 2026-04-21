@@ -18,6 +18,7 @@ from pathlib import Path
 from ..settings import settings
 from . import registry
 from .base import STTProvider, TTSProvider
+from .types import AudioFormat, TTSResult
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,29 @@ class VoiceConfigLayer:
             (username, provider_type),
         ).fetchone()
         return row["provider_id"] if row else None
+
+    # ── synthesize_for_user (für Integrationen) ───────────────────────
+
+    async def synthesize_for_user(
+        self,
+        username: str,
+        text: str,
+        *,
+        integration: str = "web",
+        voice: str | None = None,
+    ) -> TTSResult:
+        """Lookup: Provider + Stimme für User → synthesize → AudioFormat normalisieren."""
+        from .types import AudioTarget
+
+        provider = self.get_tts_provider_for_user(username)
+        _voice = voice or self.get_voice_for_user(username, provider.provider_id)
+        result = await provider.synthesize(text, voice=_voice)
+
+        target: AudioTarget = "web"
+        if integration in ("whatsapp", "telegram", "web"):
+            target = integration  # type: ignore[assignment]
+        normalized = AudioFormat.normalize(result.audio, result.format, target=target)
+        return normalized
 
 
 voice_config = VoiceConfigLayer()

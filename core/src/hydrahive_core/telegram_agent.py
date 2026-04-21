@@ -327,14 +327,12 @@ async def start_telegram_bot(
 
             if is_audio:
                 try:
-                    from .whatsapp_tts import text_to_ogg_b64 as _tts
-                    audio_b64 = await _tts(response)
-                    if audio_b64:
-                        import base64 as _b64
-                        import io
-                        audio_bytes = _b64.b64decode(audio_b64)
-                        await context.bot.send_voice(chat_id=chat_id, voice=io.BytesIO(audio_bytes))
-                        return
+                    from .voice_providers.config import voice_config
+                    _result = await voice_config.synthesize_for_user(username, response, integration="telegram")
+                    import base64 as _b64
+                    import io
+                    await context.bot.send_voice(chat_id=chat_id, voice=io.BytesIO(_result.audio))
+                    return
                 except Exception as e:
                     logger.warning("Telegram TTS fehlgeschlagen: %s — sende als Text", e)
 

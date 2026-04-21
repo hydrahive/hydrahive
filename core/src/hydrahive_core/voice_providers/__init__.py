@@ -101,8 +101,10 @@ def setup_voice_registry() -> VoiceProviderRegistry:
             return registry
         from .wyoming_stt import WyomingSTTProvider
         from .wyoming_tts import WyomingTTSProvider
+        from .edge_tts import EdgeTTSProvider
         registry.register(WyomingSTTProvider())
         registry.register(WyomingTTSProvider())
+        registry.register(EdgeTTSProvider())
 
         # MiniMax T2A als zweiter TTS-Provider wenn Key verfügbar.
         # Wyoming bleibt Default (Till steuert Provider-Wahl bewusst via
