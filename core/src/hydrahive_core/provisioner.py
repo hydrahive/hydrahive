@@ -417,14 +417,23 @@ class Provisioner:
         return None, password
 
     def _read_samba_password(self, username: str) -> str | None:
-        """Liest aktuelles Samba-Passwort aus SAMBA_CREDS_FILE (via sudo grep)."""
+        """
+        Liest aktuelles Samba-Passwort aus SAMBA_CREDS_FILE.
+        #813: `sudo cat` + Python-Filter statt `sudo grep`, weil die grep-
+        sudoers-Regel mit `^proj_*\\:` eine "unterminated regular expression"-
+        Warnung wirft und von sudo ignoriert wird. `cat` ist eh erlaubt.
+        """
         try:
             r = subprocess.run(
-                ["sudo", "grep", f"^{username}:", SAMBA_CREDS_FILE],
+                ["sudo", "cat", SAMBA_CREDS_FILE],
                 capture_output=True, text=True
             )
-            if r.returncode == 0 and ":" in r.stdout.strip():
-                return r.stdout.strip().split(":", 1)[1]
+            if r.returncode != 0:
+                return None
+            prefix = f"{username}:"
+            for line in r.stdout.splitlines():
+                if line.startswith(prefix):
+                    return line.split(":", 1)[1]
         except Exception:
             pass
         return None

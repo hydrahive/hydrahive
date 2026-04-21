@@ -539,6 +539,15 @@ MIGRATE_EOF
     # bestehende Installationen den Admin-Hash in users.json synchron halten
     # mit dem console_password in admin_credentials. Idempotent — bei
     # passendem Hash wird nichts geschrieben.
+    # #813: admin_credentials muss für hydrahive-User lesbar sein.
+    # 06_core_service.sh setzt chown hydrahive:hydrahive 600 beim Install —
+    # bei ältere Installationen liegt die Datei aber mitunter root:root 600
+    # (Core-Child kann nicht lesen → Matrix-Token + Gitea-Credentials scheitern).
+    if [ -f /etc/hydrahive/admin_credentials ]; then
+        chown hydrahive:hydrahive /etc/hydrahive/admin_credentials 2>/dev/null || true
+        chmod 600 /etc/hydrahive/admin_credentials 2>/dev/null || true
+    fi
+
     if [ -f /etc/hydrahive/admin_credentials ] && [ -f /etc/hydrahive/users.json ]; then
         info "BL-15: Admin-Hash/Passwort-Sync pruefen..."
         CONSOLE_PASS=$(grep -E '^console_password=' /etc/hydrahive/admin_credentials | cut -d= -f2-) || CONSOLE_PASS=""

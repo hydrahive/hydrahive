@@ -30,7 +30,6 @@ hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -s -a proj_*
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -a proj_*
 hydrahive ALL=(root) NOPASSWD: /usr/bin/smbpasswd -x proj_*
 hydrahive ALL=(root) NOPASSWD: /bin/cat /etc/hydrahive/samba_credentials
-hydrahive ALL=(root) NOPASSWD: /usr/bin/grep ^proj_*\: /etc/hydrahive/samba_credentials
 hydrahive ALL=(root) NOPASSWD: /bin/cp /tmp/hh-sambacreds-*.tmp /etc/hydrahive/samba_credentials
 hydrahive ALL=(root) NOPASSWD: /bin/chmod 600 /etc/hydrahive/samba_credentials
 

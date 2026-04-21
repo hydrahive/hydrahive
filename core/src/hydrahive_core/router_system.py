@@ -878,13 +878,24 @@ def register_system_routes(
         username = cfg.get("org", "hydrahive")
         token = cfg.get("token", "")
         # Passwort aus /etc/hydrahive/admin_credentials (console_password=...)
+        # #813: Datei ist root:root 600. Wenn der Core als hydrahive-User
+        # keinen Zugriff hat (Permission denied), nicht crashen — leeres
+        # Passwort zurückgeben, damit die UI "nicht verfügbar" anzeigen
+        # kann statt eines 500ers.
         password = ""
         cred_file = settings.admin_credentials
         if cred_file.exists():
-            for line in cred_file.read_text(encoding="utf-8").splitlines():
-                if line.startswith("console_password="):
-                    password = line.split("=", 1)[1].strip()
-                    break
+            try:
+                for line in cred_file.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("console_password="):
+                        password = line.split("=", 1)[1].strip()
+                        break
+            except PermissionError:
+                logger.warning(
+                    "get_gitea_credentials: %s nicht lesbar (Permission) — "
+                    "passwort wird leer gesetzt. Fix: chgrp hydrahive + chmod 640.",
+                    cred_file,
+                )
         return {
             "url": external_url,
             "username": username,
