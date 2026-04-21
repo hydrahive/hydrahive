@@ -82,6 +82,28 @@ def _username_from_auth(auth: Any) -> str:
     raise HTTPException(500, "auth payload ungültig")
 
 
+def _meta_public_with_signed_urls(meta: JobMeta, username: str | None) -> dict:
+    """Like _meta_public but replaces /me/jobs/* artifact URLs with signed
+    media-token URLs so browsers can fetch them without auth cookies."""
+    base = _meta_public(meta)
+    if not username or not meta.artifacts:
+        return base
+
+    from .jobs_service import _artifact_signed_url as _signer
+
+    signed_artifacts = []
+    for a in meta.artifacts:
+        fname = a.get("filename") or ""
+        plain = f"/me/jobs/{meta.job_id}/artifacts/{fname}"
+        if fname:
+            signed = _signer(meta.job_id, fname, username, ttl_seconds=300) if username else None
+            a = dict(a)
+            a["download_url"] = signed if signed else plain
+        signed_artifacts.append(a)
+    base["artifacts"] = signed_artifacts
+    return base
+
+
 def register_jobs_routes(
     auth_router: APIRouter,
     admin_router: APIRouter,
@@ -190,13 +212,13 @@ def register_jobs_routes(
     ):
         username = _username_from_auth(auth)
         items = job_service.list(created_by=username, status=status, type=type)
-        return {"jobs": [_meta_public(m) for m in items]}
+        return {"jobs": [_meta_public_with_signed_urls(m, username) for m in items]}
 
     @auth_router.get("/me/jobs/{job_id}")
     def me_get_job(job_id: str, auth: tuple[str, str] = Depends(require_auth)):
         username = _username_from_auth(auth)
         meta = _load_owned_job_or_403(job_service, job_id, username)
-        return _meta_public(meta)
+        return _meta_public_with_signed_urls(meta, username)
 
     @auth_router.post("/me/jobs/{job_id}/cancel")
     def me_cancel_job(job_id: str, auth: tuple[str, str] = Depends(require_auth)):
@@ -272,12 +294,29 @@ def register_jobs_routes(
             except ValueError:
                 raise HTTPException(403, "invalid or expired media token")
 
+            # Special case: poll_status file → serve job meta as JSON proxy
+            if filename == "poll_status":
+                try:
+                    meta = job_service.get(job_id)
+                except JobNotFoundError:
+                    raise HTTPException(403, "invalid or expired media token")
+                except JobStorageError:
+                    raise HTTPException(503, "job storage unavailable")
+                except JobError:
+                    raise HTTPException(403, "invalid or expired media token")
+                if meta.created_by != username:
+                    raise HTTPException(403, "invalid or expired media token")
+                from fastapi.responses import JSONResponse
+                return JSONResponse(_meta_public(meta))
+
             try:
                 meta = job_service.get(job_id)
             except JobNotFoundError:
                 raise HTTPException(403, "invalid or expired media token")
             except JobStorageError:
                 raise HTTPException(503, "job storage unavailable")
+            except JobError:
+                raise HTTPException(403, "invalid or expired media token")
 
             if meta.created_by != username:
                 raise HTTPException(403, "invalid or expired media token")

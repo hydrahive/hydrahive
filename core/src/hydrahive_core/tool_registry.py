@@ -3162,12 +3162,19 @@ class VideoGenerateTool(BaseTool):
         except JobStorageError:
             return {"error": "jobs storage unavailable"}
 
+        from .jobs_service import _artifact_signed_url as _signer
+
         # SUBMIT-AND-RETURN: nicht auf den Task warten. Der Runner läuft
         # im Hintergrund und schreibt Progress/Artifacts ins Jobs-Store.
+        poll_url = f"/me/jobs/{meta.job_id}"
+        if request_user:
+            signed_poll = _signer(meta.job_id, "poll_status", request_user, ttl_seconds=300)
+            if signed_poll:
+                poll_url = signed_poll
         return {
             "job_id":   meta.job_id,
             "status":   meta.status,
-            "poll_url": f"/me/jobs/{meta.job_id}",
+            "poll_url": poll_url,
             "message": (
                 "Video generation started. Poll the job status for progress "
                 "(expected 5–15 min). Use GET /me/jobs/<job_id> to check."
@@ -3418,15 +3425,28 @@ class MusicGenerateTool(BaseTool):
                 pass
 
         final = self._job_service.get(meta.job_id)
-        artifacts = [
-            {
-                "filename":     a.get("filename"),
-                "size":         a.get("size"),
-                "mime":         a.get("mime"),
-                "download_url": f"/me/jobs/{final.job_id}/artifacts/{a.get('filename')}",
-            }
-            for a in (final.artifacts or [])
-        ]
+
+        # #802 Phase 3a: signed URL für audio/video sind im Browser ohne
+        # Auth-Cookie abrufbar. Wenn request_user vorhanden, signieren wir
+        # die URL, sonst fallback auf plain /me/jobs/-URL.
+        from .jobs_service import _artifact_signed_url as _signer
+
+        artifacts = []
+        for a in (final.artifacts or []):
+            fname = a.get("filename") or ""
+            mime = a.get("mime") or ""
+            url = f"/me/jobs/{final.job_id}/artifacts/{fname}"
+            if request_user and fname:
+                signed = _signer(final.job_id, fname, request_user, ttl_seconds=300)
+                if signed:
+                    url = signed
+            artifacts.append({
+                "filename":    fname,
+                "size":       a.get("size"),
+                "mime":       mime,
+                "download_url": url,
+            })
+
         out: dict = {
             "job_id":    final.job_id,
             "status":    final.status,
