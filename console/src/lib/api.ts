@@ -308,8 +308,23 @@ export const api = {
   testDiscord:        () => api.post<{ok:boolean;bot_name?:string;bot_id?:string;error?:string}>("/me/discord/test", {}),
   sambaCreds:         (id: string) => api.get<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-credentials`),
   sambaResetPassword: (id: string) => api.post<{project_id:string;username:string;password:string}>(`/projects/${id}/samba-reset-password`, {}),
-  // Voice Interface (#131)
-  voiceStatus:    () => api.get<{installed:boolean;stt:{host:string;port:number;available:boolean};tts:{host:string;port:number;available:boolean};default_agent:string}>("/voice/status"),
+  // Voice Interface (#131 + Provider-Registry #794)
+  voiceStatus:    () => api.get<{
+    installed: boolean;
+    stt: { host: string; port: number; available: boolean };
+    tts: { host: string; port: number; available: boolean };
+    stt_providers: { id: string; name: string; available: boolean; languages: string[] }[];
+    tts_providers: { id: string; name: string; available: boolean; voices: { id: string; name: string; language: string; gender: string | null }[] }[];
+    current_stt: { provider: string };
+    current_tts: { provider: string; voice: string | null };
+    global_stt_provider: string | null;
+    global_tts_provider: string | null;
+    user_preferences: { stt_provider: string | null; stt_voice: string | null; tts_provider: string | null; tts_voice: string | null };
+    default_agent: string;
+  }>("/voice/status"),
+  voicePreferences:    () => api.get<{stt_provider:string|null;stt_voice:string|null;tts_provider:string|null;tts_voice:string|null}>("/voice/preferences"),
+  setVoicePreference:  (provider_type: "stt" | "tts", provider_id: string, voice_id: string | null) => api.put<{stt_provider:string|null;stt_voice:string|null;tts_provider:string|null;tts_voice:string|null}>("/voice/preferences", { provider_type, provider_id, voice_id }),
+  setVoiceGlobalProvider: (provider_type: "stt" | "tts", provider_id: string) => api.put<{global_stt_provider:string|null;global_tts_provider:string|null}>("/voice/providers/default", { provider_type, provider_id }),
   voiceText:      (text: string, agent_id?: string) => api.post<{text:string;agent_id:string}>("/voice", { text, agent_id }),
   voiceTts:       async (text: string) => { const token = getToken(); const res = await fetch("/api/voice/tts", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }); if (!res.ok) { if (res.status === 401 && token && token === getToken()) notifyAuthExpired("/voice/tts"); throw new Error(`TTS error: ${res.status}`); } return res.blob(); },
   voiceStt:       async (audioBlob: Blob) => { const token = getToken(); const fd = new FormData(); fd.append("audio", audioBlob, "recording.wav"); const res = await fetch("/api/voice/stt", { method: "POST", credentials: "include", body: fd }); if (!res.ok) { if (res.status === 401 && token && token === getToken()) notifyAuthExpired("/voice/stt"); throw new Error(`STT error: ${res.status}`); } return res.json() as Promise<{text: string}>; },
