@@ -56,7 +56,7 @@ DEFAULT_RESOLUTION = "768P"
 # undefined MiniMax-400er durchreichen.
 ALLOWED_MODELS:      frozenset[str] = frozenset({DEFAULT_MODEL})
 ALLOWED_DURATIONS:   frozenset[int] = frozenset({6})
-ALLOWED_RESOLUTIONS: frozenset[str] = frozenset({"768P", "1080P"})
+ALLOWED_RESOLUTIONS: frozenset[str] = frozenset({"768P"})
 
 POLL_INTERVAL_SECONDS = 10.0
 MAX_POLL_SECONDS      = 15 * 60   # 15 min hard cap

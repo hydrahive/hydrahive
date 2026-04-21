@@ -3108,10 +3108,7 @@ class VideoGenerateTool(BaseTool):
 
         chosen_resolution = (resolution or "").strip() or DEFAULT_RESOLUTION
         if chosen_resolution not in ALLOWED_RESOLUTIONS:
-            return {
-                "error":   f"resolution '{chosen_resolution}' in Phase 2 nicht unterstützt",
-                "allowed": sorted(ALLOWED_RESOLUTIONS),
-            }
+            chosen_resolution = DEFAULT_RESOLUTION
 
         chosen_model = (model or "").strip() or DEFAULT_MODEL
         if chosen_model not in ALLOWED_MODELS:
