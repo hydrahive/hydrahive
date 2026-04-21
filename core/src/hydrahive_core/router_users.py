@@ -443,6 +443,15 @@ def register_user_routes(
             raise HTTPException(404, f"User '{username}' nicht gefunden")
         users[username]["password_hash"] = hash_password(new_password)
         save_users(users)
+        # #814: Wenn der "admin"-User sein Passwort ändert, muss
+        # admin_credentials.console_password mitgezogen werden — sonst
+        # überschreibt BL-15 den frischen Hash beim nächsten update.sh
+        # wieder mit dem alten console_password. BL-15 syncronisiert
+        # explizit nur den "admin"-User, daher der Name-Check hier.
+        if username == "admin":
+            from .router_core_misc import _sync_admin_credential_console_password
+            import logging as _logging
+            _sync_admin_credential_console_password(new_password, _logging.getLogger(__name__))
         return {"updated": True, "username": username}
 
     @auth_router.get("/me/agent")

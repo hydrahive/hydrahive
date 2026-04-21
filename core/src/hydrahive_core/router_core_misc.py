@@ -19,6 +19,46 @@ from .settings import settings
 _bearer = HTTPBearer(auto_error=False)
 
 
+def _sync_admin_credential_console_password(new_password: str, logger: logging.Logger) -> bool:
+    """
+    #814: console_password in /etc/hydrahive/admin_credentials auf
+    `new_password` setzen. admin_credentials ist die Source-of-Truth für
+    BL-15 (update.sh / 06_core_service.sh). Ohne diesen Sync überlebt ein
+    im Wizard / Passwort-Reset gesetztes Passwort kein update.sh.
+
+    Idempotent: bestehende andere Keys (matrix_admin_password etc.) bleiben
+    unberührt. Schreibt atomar über Temp-File + replace. Schlägt niemals
+    durch — bei Permission-Fehlern wird gewarnt, der Setup/Change-Flow
+    läuft weiter (users.json ist ja bereits aktualisiert).
+    """
+    cred_path = settings.admin_credentials
+    try:
+        existing_lines: list[str] = []
+        if cred_path.exists():
+            for line in cred_path.read_text(encoding="utf-8").splitlines():
+                if not line.startswith("console_password="):
+                    existing_lines.append(line)
+        existing_lines.append(f"console_password={new_password}")
+        tmp = cred_path.with_suffix(cred_path.suffix + ".tmp")
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text("\n".join(existing_lines) + "\n", encoding="utf-8")
+        tmp.chmod(0o600)
+        tmp.replace(cred_path)
+        logger.info("admin_credentials.console_password synchronisiert (#814)")
+        return True
+    except PermissionError as e:
+        logger.warning(
+            "admin_credentials (#814) konnte nicht geschrieben werden (%s). "
+            "Fix: chown hydrahive:hydrahive /etc/hydrahive/admin_credentials && chmod 600. "
+            "Bis dahin überlebt das neue Passwort kein update.sh.",
+            e,
+        )
+        return False
+    except OSError as e:
+        logger.warning("admin_credentials (#814) Schreibfehler: %s", e)
+        return False
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -330,6 +370,13 @@ def register_core_misc_routes(
                 "created_at": datetime.now().isoformat(),
             }
             save_users(users)
+            # #814: console_password in admin_credentials synchron halten.
+            # BL-15 (in update.sh / 06_core_service.sh) schreibt bei jedem
+            # Update den users.json-Hash aus admin_credentials.console_password
+            # neu. Ohne diesen Upsert bliebe dort der Installer-Random-String
+            # aus 06_core_service.sh, und der Wizard-Login wird beim ersten
+            # update.sh wieder ungültig.
+            _sync_admin_credential_console_password(req.password, logger)
             logger.info("Setup abgeschlossen: erster Admin-User '%s' angelegt", req.username)
             return {"created": True, "username": req.username, "role": "admin"}
 
