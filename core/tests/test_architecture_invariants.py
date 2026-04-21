@@ -2290,3 +2290,38 @@ def test_invariant29c_media_tools_have_semantic_tags():
         f"der Agent sieht es im Discovery-Block, aber der Search-Match "
         f"schlägt fehl."
     )
+
+
+# Invariante 30 — Projekt-Reconcile bleibt verdrahtet (#813)
+#
+# Reconcile heilt Migrations-Lücken (fresh install + Daten-Restore ohne
+# proj_<id> + Samba-Share). Drei Einhängepunkte müssen bestehen bleiben:
+#   1. provisioner.Provisioner hat reconcile_all_projects + reprovision
+#   2. main.lifespan schedult einen project-reconcile-startup Task
+#   3. router_doctor kennt den reconcile_projects Fix-Handler
+#
+# Fällt einer der drei weg, verliert der Server stillschweigend die Self-
+# Healing-Eigenschaft — und Symptome zeigen sich erst beim nächsten
+# Server-Umzug.
+def test_invariant30_project_reconcile_wired():
+    from pathlib import Path as _P
+
+    core_src = _P(__file__).parent.parent / "src" / "hydrahive_core"
+
+    prov = (core_src / "provisioner.py").read_text(encoding="utf-8")
+    assert "def reconcile_all_projects(" in prov, \
+        "provisioner.reconcile_all_projects() fehlt — #813 Reconcile nicht mehr abrufbar"
+    assert "def reprovision(" in prov, \
+        "provisioner.reprovision() fehlt — per-project Reconcile verschwunden"
+
+    main = (core_src / "main.py").read_text(encoding="utf-8")
+    assert "project-reconcile-startup" in main, \
+        "Boot-Hook project-reconcile-startup nicht mehr im lifespan registriert"
+    assert "reconcile_all_projects" in main, \
+        "lifespan ruft reconcile_all_projects nicht mehr auf"
+
+    doctor = (core_src / "router_doctor.py").read_text(encoding="utf-8")
+    assert '"reconcile_projects"' in doctor or "'reconcile_projects'" in doctor, \
+        "Doctor-Fix-ID reconcile_projects entfernt — UI-Button funktioniert nicht mehr"
+    assert "_check_projects_reconcile" in doctor, \
+        "Doctor-Check _check_projects_reconcile entfernt — fehlende Shares werden nicht mehr gemeldet"
