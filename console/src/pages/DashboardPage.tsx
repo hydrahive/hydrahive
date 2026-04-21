@@ -11,6 +11,14 @@ import { AuditPage } from "@/pages/AuditPage";
 
 type BuiltinTab = "overview" | "activity" | "usage" | "audit";
 
+type CodexStatus = { configured: boolean; account_id: string | null; models?: string[]; rate_limits?: Record<string,string> };
+type MinimaxModel = {
+  name: string; label: string;
+  interval_total: number; interval_used: number; interval_pct: number; interval_reset_in_s: number;
+  weekly_total: number; weekly_used: number; weekly_pct: number;
+};
+type MinimaxUsage = { available: boolean; reason?: string; fetched_at?: string; models?: MinimaxModel[] };
+
 interface CustomTab {
   id: string;
   label: string;
@@ -281,6 +289,8 @@ const WIDGET_DEFS = [
   { id: "gpu",        label: "GPU",            icon: "Cpu" },
   { id: "update",     label: "Update-Status",  icon: "RefreshCw" },
   { id: "audit",      label: "Audit-Log",      icon: "ShieldCheck" },
+  { id: "codex",      label: "Codex",          icon: "Cpu" },
+  { id: "minimax",    label: "MiniMax",        icon: "Zap" },
 ];
 
 function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig; onConfigChange: (c: DashboardConfig) => void }) {
@@ -308,6 +318,8 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sessionMetrics, setSessionMetrics] = useState<Record<string, any>>({});
+  const [codex, setCodex] = useState<CodexStatus | null>(null);
+  const [minimax, setMinimax] = useState<MinimaxUsage | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     let alive = true;
@@ -323,9 +335,11 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       api.agents(),
       api.oauthUsage(),
       api.sessionMetrics(),
+      api.openaiCodexStatus(),
+      api.minimaxUsage(),
     ]).then((results) => {
       if (!alive) return;
-      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes, oauthRes, smRes] = results;
+      const [healthRes, statusRes, gpuRes, hbRes, updateRes, auditRes, projectsRes, agentsRes, oauthRes, smRes, codexRes, minimaxRes] = results;
       setHealthy(healthRes.status === "fulfilled");
       if (statusRes.status === "fulfilled") setStatus(statusRes.value);
       if (gpuRes.status === "fulfilled") setGpu(gpuRes.value);
@@ -336,6 +350,8 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
       if (agentsRes.status === "fulfilled") setAgentMap(agentsRes.value as Record<string, any>);
       if (oauthRes.status === "fulfilled") setOauthUsage(oauthRes.value as Record<string, unknown>);
       if (smRes.status === "fulfilled") setSessionMetrics(smRes.value as Record<string, any>);
+      if (codexRes.status === "fulfilled") setCodex(codexRes.value as CodexStatus);
+      if (minimaxRes.status === "fulfilled") setMinimax(minimaxRes.value as MinimaxUsage);
       setLastUpdated(new Date());
       setIsRefreshing(false);
     });
@@ -347,6 +363,20 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
     let alive = true;
     const poll = () => {
       api.oauthUsage().then(d => { if (alive) setOauthUsage(d as Record<string,unknown>); }).catch(() => {});
+    };
+    const t = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // Fast Codex + MiniMax polling (3s)
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      Promise.allSettled([api.openaiCodexStatus(), api.minimaxUsage()]).then(([cx, mu]) => {
+        if (!alive) return;
+        if (cx.status === "fulfilled") setCodex(cx.value as CodexStatus);
+        if (mu.status === "fulfilled") setMinimax(mu.value as MinimaxUsage);
+      });
     };
     const t = setInterval(poll, 3000);
     return () => { alive = false; clearInterval(t); };
@@ -699,6 +729,88 @@ function DashboardOverview({ config, onConfigChange }: { config: DashboardConfig
                 }`}>{String(oauthUsage.status || "")}</span>
               </div>
             )}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Codex Usage Widget */}
+      {isVisible("codex") && codex && codex.configured ? (
+        <section className="section-card">
+          <div className="flex items-center gap-3">
+            <Cpu className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium">Codex — Nutzungslimits</span>
+            <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+              {codex.rate_limits?.["x-codex-plan-type"] || "plus"}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {(() => {
+              const rl = codex.rate_limits || {};
+              const primary = parseInt(rl["x-codex-primary-used-percent"] ?? "", 10);
+              const secondary = parseInt(rl["x-codex-secondary-used-percent"] ?? "", 10);
+              const bars = [
+                { key: "5h", label: "Session (5h)", pct: isNaN(primary) ? 0 : primary },
+                { key: "7d", label: "Woche (7d)", pct: isNaN(secondary) ? 0 : secondary },
+              ];
+              return bars.map(b => {
+                const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+                return (
+                  <div key={b.key} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-28">{b.label}</span>
+                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, b.pct)}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground w-10 text-right">{b.pct}%</span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </section>
+      ) : null}
+
+      {/* MiniMax Token-Plan Widget */}
+      {isVisible("minimax") && minimax && minimax.available ? (
+        <section className="section-card">
+          <div className="flex items-center gap-3 mb-3">
+            <Zap className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium">MiniMax — Token-Plan</span>
+          </div>
+          <div className="space-y-3">
+            {(minimax.models ?? []).map(m => {
+              const iColor = m.interval_pct >= 90 ? "bg-red-500" : m.interval_pct >= 70 ? "bg-orange-500" : m.interval_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+              const wColor = m.weekly_pct >= 90 ? "bg-red-500" : m.weekly_pct >= 70 ? "bg-orange-500" : m.weekly_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+              const fmtReset = (s: number) => {
+                if (s <= 0) return "jetzt";
+                const h = Math.floor(s / 3600);
+                const m2 = Math.floor((s % 3600) / 60);
+                return h > 0 ? `${h}h ${m2}m` : `${m2}m`;
+              };
+              return (
+                <div key={m.name} className="border-b border-border/40 last:border-0 pb-2 last:pb-0">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-medium">{m.label}</span>
+                    <span className="text-muted-foreground">Reset in {fmtReset(m.interval_reset_in_s)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">5h</span>
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${iColor}`} style={{ width: `${Math.min(100, m.interval_pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8">{m.interval_pct}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">7d</span>
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${wColor}`} style={{ width: `${Math.min(100, m.weekly_pct)}%` }} />
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-8">{m.weekly_pct}%</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}
