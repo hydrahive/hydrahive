@@ -10,15 +10,15 @@ GET  /voice/status       — STT/TTS Service-Status
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
-import wave
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+from .voice_providers import registry as voice_registry
 
 
 class VoiceTextRequest(BaseModel):
@@ -67,121 +67,8 @@ def _load_voice_config() -> dict:
     return cfg
 
 
-# ── Wyoming Protocol Helpers ─────────────────────────────────────────
-# Wyoming is a simple line-based protocol: JSON event header + optional binary payload.
-
-async def _wyoming_send_event(writer: asyncio.StreamWriter, etype: str, data: dict | None = None, payload: bytes = b""):
-    """Send a Wyoming event: header line + optional data JSON + optional binary payload."""
-    header: dict = {"type": etype}
-    data_bytes = b""
-    if data:
-        data_bytes = json.dumps(data, separators=(",", ":")).encode("utf-8")
-        header["data_length"] = len(data_bytes)
-    if payload:
-        header["payload_length"] = len(payload)
-    writer.write(json.dumps(header, separators=(",", ":")).encode("utf-8") + b"\n")
-    if data_bytes:
-        writer.write(data_bytes)
-    if payload:
-        writer.write(payload)
-    await writer.drain()
-
-
-async def _wyoming_recv_event(reader: asyncio.StreamReader) -> tuple[str, dict, bytes]:
-    """Receive a Wyoming event. Returns (type, data_dict, payload_bytes)."""
-    line = await asyncio.wait_for(reader.readline(), timeout=60)
-    if not line:
-        raise ConnectionError("Wyoming connection closed")
-    header = json.loads(line.decode("utf-8"))
-    etype = header.get("type", "")
-    data = {}
-    data_length = header.get("data_length", 0)
-    if data_length > 0:
-        data_raw = await asyncio.wait_for(reader.readexactly(data_length), timeout=30)
-        data = json.loads(data_raw)
-    payload = b""
-    payload_length = header.get("payload_length", 0)
-    if payload_length > 0:
-        payload = await asyncio.wait_for(reader.readexactly(payload_length), timeout=30)
-    return etype, data, payload
-
-
-async def _wyoming_stt(audio_bytes: bytes, host: str, port: int) -> str:
-    """Send audio to Wyoming STT server, return transcribed text."""
-    reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(host, port), timeout=10
-    )
-    try:
-        def _read_wav():
-            with wave.open(io.BytesIO(audio_bytes), "rb") as wf:
-                return wf.getframerate(), wf.getsampwidth(), wf.getnchannels(), wf.readframes(wf.getnframes())
-        rate, width, channels, frames = await asyncio.to_thread(_read_wav)
-
-        await _wyoming_send_event(writer, "transcribe", {"language": "de"})
-        await _wyoming_send_event(writer, "audio-start", {
-            "rate": rate, "width": width, "channels": channels,
-        })
-
-        chunk_size = rate * width * channels
-        for i in range(0, len(frames), chunk_size):
-            chunk = frames[i:i + chunk_size]
-            await _wyoming_send_event(writer, "audio-chunk", {
-                "rate": rate, "width": width, "channels": channels,
-            }, chunk)
-
-        await _wyoming_send_event(writer, "audio-stop")
-
-        while True:
-            etype, data, _ = await _wyoming_recv_event(reader)
-            if etype == "transcript":
-                return data.get("text", "")
-            if etype == "error":
-                raise RuntimeError(data.get("text", "STT error"))
-    finally:
-        writer.close()
-        await writer.wait_closed()
-
-
-async def _wyoming_tts(text: str, host: str, port: int) -> bytes:
-    """Send text to Wyoming TTS server, return WAV audio bytes."""
-    reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(host, port), timeout=10
-    )
-    try:
-        await _wyoming_send_event(writer, "synthesize", {"text": text})
-
-        audio_chunks: list[bytes] = []
-        rate = 22050
-        width = 2
-        channels = 1
-
-        while True:
-            etype, data, payload = await _wyoming_recv_event(reader)
-
-            if etype == "audio-start":
-                rate = data.get("rate", rate)
-                width = data.get("width", width)
-                channels = data.get("channels", channels)
-            elif etype == "audio-chunk":
-                audio_chunks.append(payload)
-            elif etype == "audio-stop":
-                break
-            elif etype == "error":
-                raise RuntimeError(data.get("text", "TTS error"))
-
-        pcm = b"".join(audio_chunks)
-        def _write_wav():
-            buf = io.BytesIO()
-            with wave.open(buf, "wb") as wf:
-                wf.setnchannels(channels)
-                wf.setsampwidth(width)
-                wf.setframerate(rate)
-                wf.writeframes(pcm)
-            return buf.getvalue()
-        return await asyncio.to_thread(_write_wav)
-    finally:
-        writer.close()
-        await writer.wait_closed()
+# Wyoming-Logik lebt ab Commit A von #794 in voice_providers/wyoming_*.py.
+# Der Router ruft nur noch die Provider-Registry auf.
 
 
 # ── Routes ───────────────────────────────────────────────────────────
@@ -240,17 +127,13 @@ def register_voice_routes(
         audio: UploadFile = File(...),
         _auth: tuple[str, str] = Depends(require_auth),
     ):
-        cfg = _load_voice_config()
         audio_bytes = await audio.read()
         if not audio_bytes:
             raise HTTPException(400, "Leere Audio-Datei")
         try:
-            text = await _wyoming_stt(
-                audio_bytes,
-                cfg.get("stt_host", STT_HOST),
-                cfg.get("stt_port", STT_PORT),
-            )
-            return {"text": text}
+            stt = voice_registry.get_stt("wyoming-stt")
+            result = await stt.recognize(audio_bytes, language="de")
+            return {"text": result.text}
         except (ConnectionRefusedError, OSError):
             raise HTTPException(503, "STT-Service nicht erreichbar — ist die Voice-Extension installiert?")
 
@@ -263,14 +146,10 @@ def register_voice_routes(
         text = req.text.strip()
         if not text:
             raise HTTPException(400, "text erforderlich")
-        cfg = _load_voice_config()
         try:
-            wav = await _wyoming_tts(
-                text,
-                cfg.get("tts_host", TTS_HOST),
-                cfg.get("tts_port", TTS_PORT),
-            )
-            return Response(content=wav, media_type="audio/wav",
+            tts = voice_registry.get_tts("wyoming-tts")
+            result = await tts.synthesize(text)
+            return Response(content=result.audio, media_type=result.format.mime,
                             headers={"Content-Disposition": "inline; filename=voice.wav"})
         except (ConnectionRefusedError, OSError):
             raise HTTPException(503, "TTS-Service nicht erreichbar — ist die Voice-Extension installiert?")
@@ -291,11 +170,9 @@ def register_voice_routes(
 
         # 1. STT
         try:
-            user_text = await _wyoming_stt(
-                audio_bytes,
-                cfg.get("stt_host", STT_HOST),
-                cfg.get("stt_port", STT_PORT),
-            )
+            stt = voice_registry.get_stt("wyoming-stt")
+            stt_result = await stt.recognize(audio_bytes, language="de")
+            user_text = stt_result.text
         except (ConnectionRefusedError, OSError):
             raise HTTPException(503, "STT-Service nicht erreichbar")
         if not user_text:
@@ -306,11 +183,9 @@ def register_voice_routes(
 
         # 3. TTS
         try:
-            wav = await _wyoming_tts(
-                response,
-                cfg.get("tts_host", TTS_HOST),
-                cfg.get("tts_port", TTS_PORT),
-            )
+            tts = voice_registry.get_tts("wyoming-tts")
+            tts_result = await tts.synthesize(response)
+            wav = tts_result.audio
         except (ConnectionRefusedError, OSError):
             raise HTTPException(503, "TTS-Service nicht erreichbar")
 
