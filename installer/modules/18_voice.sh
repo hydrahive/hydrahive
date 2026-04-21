@@ -13,21 +13,41 @@ VOICE_DIR="/opt/hydrahive-voice"
 VOICE_CONFIG="/etc/hydrahive/voice.json"
 HYDRAHIVE_USER="${HYDRAHIVE_USER:-hydrahive}"
 
-# Fallback-Funktionen falls Script standalone läuft
-if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1"; }; fi
-if ! declare -f success &>/dev/null; then success() { echo "[OK] $1"; }; fi
-if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1"; }; fi
-if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1"; exit 1; }; fi
+# Fallback-Funktionen falls Script standalone läuft.
+# WICHTIG: Alles auf stderr schreiben — Funktionen wie choose_provider
+# kapseln ihren einzigen stdout-Output ($(func)), und info/warn-Output
+# würde sonst das Ergebnis verschmutzen (case-Match schlägt dann fehl).
+# Der Extension-Stream leitet stderr ohnehin auf stdout um.
+if ! declare -f info    &>/dev/null; then info()    { echo "[INFO] $1" >&2; }; fi
+if ! declare -f success &>/dev/null; then success() { echo "[OK] $1" >&2; }; fi
+if ! declare -f warn    &>/dev/null; then warn()    { echo "[WARN] $1" >&2; }; fi
+if ! declare -f error   &>/dev/null; then error()   { echo "[ERROR] $1" >&2; exit 1; }; fi
+# #813 Follow-up: ask() darf bei non-TTY (Extension-Manager, CI) nicht auf
+# `read` blockieren — das Script wird vom Backend ohne stdin via
+# subprocess gestartet, EOF + `set -e` hat es vorher stumm abbrechen
+# lassen. Bei non-TTY einfach Default zurückgeben, ohne Blockieren.
 if ! declare -f ask     &>/dev/null; then
     ask() {
         local prompt="$1"
         local default="${2:-}"
-        read -rp "$prompt [$default]: " reply
+        if [ ! -t 0 ]; then
+            # Non-interactive — Default ohne Prompt nehmen.
+            info "Non-interactive: '${prompt}' → Default '${default}'"
+            echo "${default}"
+            return 0
+        fi
+        local reply=""
+        read -rp "$prompt [$default]: " reply || reply=""
         echo "${reply:-$default}"
     }
 fi
 
 info "=== Voice Interface Setup (STT + TTS) ==="
+
+# #813 Follow-up: Provider per Env überschreibbar (HYDRAHIVE_VOICE_PROVIDER=
+# wyoming|minimax|both). Ohne Env und ohne TTY → wyoming (lokal, kein API-
+# Key nötig — sicherster Default).
+VOICE_PROVIDER_ENV="${HYDRAHIVE_VOICE_PROVIDER:-}"
 
 # ── Legacy-Format erkennen ──────────────────────────────────────────────────
 _read_existing_config() {
@@ -46,6 +66,20 @@ _read_existing_config() {
 
 # ── Provider wählen ────────────────────────────────────────────────────────
 choose_provider() {
+    # Env-Override hat Vorrang (Extension-Manager kann so die Wahl setzen)
+    if [ -n "${VOICE_PROVIDER_ENV}" ]; then
+        case "${VOICE_PROVIDER_ENV}" in
+            wyoming|minimax|both)
+                info "HYDRAHIVE_VOICE_PROVIDER=${VOICE_PROVIDER_ENV} — überspringe Auswahl."
+                echo "${VOICE_PROVIDER_ENV}"
+                return
+                ;;
+            *)
+                warn "Unbekannter HYDRAHIVE_VOICE_PROVIDER='${VOICE_PROVIDER_ENV}' — ignoriert."
+                ;;
+        esac
+    fi
+
     local existing
     existing=$(_read_existing_config)
 
@@ -57,13 +91,19 @@ choose_provider() {
 
     if [ "$existing" = "new" ]; then
         info "Erkannte bestehende Config — überspringe Provider-Wahl."
-        # Bestehende Config auslesen und Provider ermitteln
         local current_tts
         current_tts=$(grep -o '"tts_provider": *"[^"]*"' "${VOICE_CONFIG}" 2>/dev/null | cut -d'"' -f4 || echo "")
         if [ -n "$current_tts" ]; then
             info "Bestehender TTS-Provider: $current_tts"
         fi
-        # Admin muss manuell wählen — hier nur Wyoming als Default
+        echo "wyoming"
+        return
+    fi
+
+    # Non-interactive (Extension-Manager / CI)? → Default Wyoming direkt.
+    if [ ! -t 0 ]; then
+        info "Non-interactive Install (kein TTY) — nutze Default 'wyoming' (lokaler STT+TTS via Docker)."
+        info "Für MiniMax/beides: via UI später umstellen oder HYDRAHIVE_VOICE_PROVIDER=minimax/both setzen."
         echo "wyoming"
         return
     fi
