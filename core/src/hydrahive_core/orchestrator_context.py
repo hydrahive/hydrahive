@@ -1303,7 +1303,7 @@ async def _compact_if_needed(
         token_threshold = boss_cfg.compaction_threshold
     else:
         model = boss_cfg.llm.model.lower()
-        if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5")):
+        if any(x in model for x in ("claude", "gpt-4", "gpt-3.5", "gemini", "mistral-large", "openai-codex", "gpt-5", "minimax")):
             token_threshold = 40_000  # 40k estimated ≈ 100k real — Claude hat 200k, viel Spielraum
         else:
             token_threshold = 8_000
