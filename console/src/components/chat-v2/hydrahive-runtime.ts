@@ -438,6 +438,10 @@ export function useHydraHiveRuntime(target: ChatV2Target, options?: HydraHiveRun
             updateAssistant((msg) => appendDataPart(msg, "tool_result", evt));
           } else if (evt.type === "tool_image") {
             updateAssistant((msg) => appendDataPart(msg, "tool_image", evt));
+          } else if (evt.type === "tool_audio") {
+            updateAssistant((msg) => appendDataPart(msg, "tool_audio", evt));
+          } else if (evt.type === "tool_video") {
+            updateAssistant((msg) => appendDataPart(msg, "tool_video", evt));
           } else if (evt.type === "tool_warning") {
             updateAssistant((msg) => appendDataPart(msg, "tool_warning", evt));
           } else if (evt.type === "tool_confirm_required") {

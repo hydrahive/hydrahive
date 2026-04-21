@@ -95,6 +95,60 @@ function ToolDataPart({ part }: { part: DataPart }) {
       </div>
     );
   }
+  if (part.name === "tool_audio") {
+    // #803: Audio-Artifact-Renderer. Signed URLs aus #802 Phase 3a erlauben
+    // cookie-less <audio src=...>-Laden, data-URIs sind ebenfalls möglich.
+    const src = String(data.tool_audio ?? "");
+    const toolName = String(data.tool_name ?? "tool-audio");
+    const ext = src.includes("audio/mpeg") || src.includes(".mp3") ? ".mp3"
+      : src.includes("audio/wav") ? ".wav"
+      : src.includes("audio/ogg") ? ".ogg"
+      : ".audio";
+    const downloadName = toolName.replace(/[^a-z0-9._-]+/gi, "_") + ext;
+    return (
+      <div className="rounded-xl border border-border/60 bg-card/70 p-2 space-y-1">
+        {src ? (
+          <>
+            <audio src={src} controls preload="metadata" className="w-full max-w-md" />
+            <a
+              href={src}
+              download={downloadName}
+              className="block text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+              title="Audio speichern"
+            >
+              ⬇ {downloadName}
+            </a>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+  if (part.name === "tool_video") {
+    // #803: Video-Artifact-Renderer. Signed URLs aus #802 Phase 3a.
+    const src = String(data.tool_video ?? "");
+    const toolName = String(data.tool_name ?? "tool-video");
+    const ext = src.includes("video/mp4") || src.includes(".mp4") ? ".mp4"
+      : src.includes("video/webm") ? ".webm"
+      : ".video";
+    const downloadName = toolName.replace(/[^a-z0-9._-]+/gi, "_") + ext;
+    return (
+      <div className="rounded-xl border border-border/60 bg-card/70 p-2 space-y-1">
+        {src ? (
+          <>
+            <video src={src} controls preload="metadata" className="max-h-80 w-full max-w-lg rounded-lg" />
+            <a
+              href={src}
+              download={downloadName}
+              className="block text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+              title="Video speichern"
+            >
+              ⬇ {downloadName}
+            </a>
+          </>
+        ) : null}
+      </div>
+    );
+  }
   if (part.name === "tool_warning") {
     return (
       <div className="badge-candy-warn rounded-lg border px-3 py-2 text-sm">
