@@ -39,6 +39,8 @@
 | 8010  | AgentLink Hub        | 127.0.0.1    |
 | 80    | nginx (HTTP → HTTPS) | 0.0.0.0      |
 | 443   | nginx (HTTPS)        | 0.0.0.0      |
+| 10200 | Piper TTS (Wyoming)  | 127.0.0.1    |
+| 10300 | Whisper STT (Wyoming)| 127.0.0.1    |
 
 ### Netzwerk-Ports (extern, Firewall-Regeln)
 
@@ -114,6 +116,7 @@ Der Installer läuft vollständig durch und gibt am Ende eine Zusammenfassung au
 **Optional:**
 
 - `13_whatsapp_bridge.sh` — WhatsApp-Bridge (wird interaktiv abgefragt)
+- `18_voice.sh` — Voice-Interface (STT + TTS, wird interaktiv abgefragt: Wyoming Docker oder MiniMax Cloud)
 
 ### 2.4 Ergebnis prüfen
 
@@ -688,6 +691,62 @@ systemctl restart hydrahive-whatsapp
 journalctl -u hydrahive-whatsapp -f
 # QR-Code erscheint in den Logs
 ```
+
+### Voice-Interface
+
+Das Voice-Interface wird durch Modul `18_voice.sh` installiert und bietet STT + TTS.
+
+**Provider-Optionen:**
+
+| Option | STT | TTS | Docker nötig |
+|--------|-----|-----|-------------|
+| Wyoming | faster-whisper (lokal) | Piper (lokal) | Ja |
+| MiniMax | faster-whisper (lokal) | MiniMax Cloud | Nein |
+| Beides | faster-whisper | Piper + MiniMax | Ja |
+
+**Ports:**
+
+| Port | Service | Beschreibung |
+|------|---------|--------------|
+| 10200 | Piper TTS | Wyoming-Protokoll |
+| 10300 | Whisper STT | Wyoming-Protokoll |
+
+**Voice-Config:** `/etc/hydrahive/voice.json`
+
+```json
+{
+  "voice": {
+    "tts_provider": "minimax-t2a",
+    "stt_provider": "wyoming-stt"
+  },
+  "default_agent": "personal_admin"
+}
+```
+
+**Provider wechseln:**
+
+1. VoicePage (`/voice`) öffnen
+2. TTS/STT-Dropdown wählen
+3. Speichern
+
+**Oder per Admin-API:**
+
+```bash
+curl -X PUT http://127.0.0.1:8765/voice/providers/default \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"provider_type": "tts", "provider_id": "minimax-t2a"}'
+```
+
+**Docker-Status prüfen:**
+
+```bash
+docker ps | grep hydrahive
+docker logs hydrahive-stt
+docker logs hydrahive-tts
+```
+
+**Siehe auch:** [Voice Provider Architektur](docs/voice-providers.md), [Voice User Guide](docs/voice-user-guide.md)
 
 ### Shell-Tool blockiert (shell_exec Blocklist)
 
