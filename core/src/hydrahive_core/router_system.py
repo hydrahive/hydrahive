@@ -516,6 +516,18 @@ def register_system_routes(
         result["updated_at"] = limits.get("updated_at")
         return result
 
+    @auth_router.get("/admin/system/minimax-usage")
+    async def get_minimax_usage():
+        """MiniMax Token-Plan Usage (#805 Phase A).
+
+        Ruft ``GET /v1/token_plan/remains`` auf und normalisiert für das
+        Frontend. 30 s Cache im Backend — mehrere Calls innerhalb 30 s
+        schlagen keinen extra HTTP-Request. Fehler oder fehlender Key:
+        ``{"available": false, "reason": ...}`` (kein Error-Leak, 200).
+        """
+        from .minimax_usage import fetch_minimax_token_remains
+        return await fetch_minimax_token_remains()
+
     @auth_router.get("/admin/system/oauth-usage/fetch")
     async def fetch_oauth_usage():
         """Frische Usage-Daten direkt von der Anthropic API abrufen.
