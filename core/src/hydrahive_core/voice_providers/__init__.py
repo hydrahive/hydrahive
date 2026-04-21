@@ -103,6 +103,20 @@ def setup_voice_registry() -> VoiceProviderRegistry:
         from .wyoming_tts import WyomingTTSProvider
         registry.register(WyomingSTTProvider())
         registry.register(WyomingTTSProvider())
+
+        # MiniMax T2A als zweiter TTS-Provider wenn Key verfügbar.
+        # Wyoming bleibt als optionale Extension parallel registriert.
+        try:
+            from .minimax_tts import MinimaxTTSProvider
+            mmtts = MinimaxTTSProvider()
+            if mmtts._api_key():
+                registry.register(mmtts)
+                # Bei verfügbarem MiniMax-Key zum Default machen
+                # (Wyoming-Default wurde oben schon gesetzt — explizit überschreiben).
+                registry.set_default("tts", mmtts.provider_id)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.debug("MiniMax TTS registration skipped: %s", exc)
+
         _setup_done = True
     return registry
 
