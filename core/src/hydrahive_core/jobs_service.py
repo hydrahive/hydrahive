@@ -230,6 +230,41 @@ def _mime_for_artifact(meta: "JobMeta", filename: str) -> str:
     return "application/octet-stream"
 
 
+def _artifact_signed_url(
+    job_id: str,
+    filename: str,
+    username: str,
+    ttl_seconds: int = 300,
+) -> str | None:
+    """HMAC-signierte zeitbegrenzte URL für Artifact-Download (#802 Phase 3a).
+
+    Format: ``/media/{b64url_payload}.{hmac_sig}``
+    Payload: ``{job_id}:{filename}:{username}:{exp}``
+
+    Nutzt ``_internal_secret`` aus ``tool_registry`` als HMAC-Key (bereits
+    Shared-Secret zwischen Worker + Core für Sub-Agent-Signaturen, siehe
+    tool_registry.py:1811). Kein zusätzliches Secret-Management.
+
+    Returnt None wenn kein ``_internal_secret`` konfiguriert ist. Caller
+    (Stream-Extractor) muss dann auf plain download_url fallen.
+    """
+    import base64 as _b64
+    import hmac as _hmac
+    import time as _time
+
+    from .tool_registry import _internal_secret
+
+    if not _internal_secret:
+        return None
+
+    exp = int(_time.time()) + ttl_seconds
+    payload = f"{job_id}:{filename}:{username}:{exp}"
+    payload_bytes = payload.encode("utf-8")
+    sig = _hmac.new(_internal_secret.encode("utf-8"), payload_bytes, "sha256").hexdigest()
+    b64payload = _b64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+    return f"/media/{b64payload}.{sig}"
+
+
 # ────────────────────────────────────────────── JobContext (Runner-API)
 
 

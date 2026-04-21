@@ -31,6 +31,7 @@ from .orchestrator_tools import (
     _truncate_tool_result, check_repeated_signature, execute_tool_call,
     format_tool_detail, format_tool_result,
 )
+from .jobs_service import _artifact_signed_url as _artifact_signer
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,46 @@ async def _keepalive_comment_stream():
         yield ": keepalive\n\n"
 
 
-def _extract_tool_image(result: Any, tool_name: str) -> str | None:
+def _url_to_job_id(url: str) -> str:
+    """Extrahiert job_id aus /me/jobs/{job_id}/artifacts/{filename}. Leer bei mismatch."""
+    parts = url.strip("/").split("/")
+    if len(parts) >= 5 and parts[0] == "me" and parts[1] == "jobs" and parts[3] == "artifacts":
+        return parts[2]
+    return ""
+
+
+def _url_to_filename(url: str) -> str:
+    """Extrahiert filename aus /me/jobs/{job_id}/artifacts/{filename}. Leer bei mismatch."""
+    parts = url.strip("/").split("/")
+    if len(parts) >= 5 and parts[0] == "me" and parts[1] == "jobs" and parts[3] == "artifacts":
+        return parts[4]
+    return ""
+
+
+def _maybe_signed_url(
+    plain_url: str, request_user: str | None, signer
+) -> str:
+    """Wenn signer + request_user vorhanden UND URL parsebar, liefere signed URL.
+    Sonst plain_url (Fallback)."""
+    if signer is None or not request_user:
+        return plain_url
+    jid = _url_to_job_id(plain_url)
+    fname = _url_to_filename(plain_url)
+    if not jid or not fname:
+        return plain_url
+    try:
+        signed = signer(jid, fname, request_user, ttl_seconds=300)
+    except Exception:
+        return plain_url
+    return signed or plain_url
+
+
+def _extract_tool_image(
+    result: Any,
+    tool_name: str,
+    request_user: str | None = None,
+    signer=None,
+) -> str | None:
     """SSE-Event-JSON für Inline-Bild-Anzeige im Chat.
 
     Unterstützte Tool-Result-Shapes (Priorität absteigend):
@@ -54,9 +94,7 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
       (#791 Phase 1: image_generate legt das zusaetzlich ins Result).
     - ``{"image_base64": "...", "format": "png"}`` → data-URI (legacy).
     - ``{"artifacts": [{"mime": "image/...", "download_url": "/me/jobs/..."}]}``
-      → HTTP-URL (nur als letzter Fallback — <img>-Tag schickt keine Cookies
-      mit, darum 403 auf /me/jobs/*/artifacts/*; die data_uri-Variante ist
-      der robuste Pfad).
+      → signed URL wenn signer verfügbar (#802 Phase 3a), sonst plain URL.
 
     Event-Shape: ``{"type": "tool_image", "tool_image": <src>, "tool_name": <id>}``.
 
@@ -82,8 +120,9 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
             "tool_name": tool_name,
         })
 
-    # #773 Followup: Jobs-basierte Media-Tools (image/video/music) liefern
-    # Artifacts mit download_url. Als Fallback wenn image_data_uri fehlt.
+    # #773/#802: Jobs-basierte Media-Tools liefern Artifacts mit download_url.
+    # Phase 3a: signed URL (HMAC, 5 min TTL) cookie-less — löst das
+    # <img>-Cookie-Problem. Fallback plain URL wenn signer fehlt.
     artifacts = result.get("artifacts")
     if isinstance(artifacts, list):
         for a in artifacts:
@@ -94,10 +133,69 @@ def _extract_tool_image(result: Any, tool_name: str) -> str | None:
             if mime.startswith("image/") and url:
                 return _json.dumps({
                     "type": "tool_image",
-                    "tool_image": url,
+                    "tool_image": _maybe_signed_url(url, request_user, signer),
                     "tool_name": tool_name,
                 })
 
+    return None
+
+
+def _extract_tool_audio(
+    result: Any,
+    tool_name: str,
+    request_user: str | None = None,
+    signer=None,
+) -> str | None:
+    """SSE-Event-JSON für Audio-Inline-Wiedergabe (#802 Phase 3a).
+
+    Event-Shape: ``{"type": "tool_audio", "tool_audio": <src>, "tool_name": <id>}``.
+    Signed URL wenn signer verfügbar, sonst plain download_url.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, list):
+        for a in artifacts:
+            if not isinstance(a, dict):
+                continue
+            mime = str(a.get("mime") or "")
+            url = str(a.get("download_url") or "")
+            if mime.startswith("audio/") and url:
+                return _json.dumps({
+                    "type": "tool_audio",
+                    "tool_audio": _maybe_signed_url(url, request_user, signer),
+                    "tool_name": tool_name,
+                })
+    return None
+
+
+def _extract_tool_video(
+    result: Any,
+    tool_name: str,
+    request_user: str | None = None,
+    signer=None,
+) -> str | None:
+    """SSE-Event-JSON für Video-Inline-Wiedergabe (#802 Phase 3a).
+
+    Event-Shape: ``{"type": "tool_video", "tool_video": <src>, "tool_name": <id>}``.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, list):
+        for a in artifacts:
+            if not isinstance(a, dict):
+                continue
+            mime = str(a.get("mime") or "")
+            url = str(a.get("download_url") or "")
+            if mime.startswith("video/") and url:
+                return _json.dumps({
+                    "type": "tool_video",
+                    "tool_video": _maybe_signed_url(url, request_user, signer),
+                    "tool_name": tool_name,
+                })
     return None
 
 
@@ -664,10 +762,23 @@ async def _stream_codex(
                         mark_extracted(boss_id)
             except Exception as _sm_err:
                 logger.debug("Session memory: %s", _sm_err)
-            # #414: Bild-Event senden bevor Result formatiert wird
-            _img_evt = _extract_tool_image(result, tc.function.name)
+            # #414 + #802 Phase 3a: Media-Events (Bild/Audio/Video)
+            # mit signed URLs für cookie-less <img>/<audio>/<video>
+            _img_evt = _extract_tool_image(
+                result, tc.function.name, request_user, _artifact_signer
+            )
             if _img_evt:
                 yield f"data: {_img_evt}\n\n"
+            _audio_evt = _extract_tool_audio(
+                result, tc.function.name, request_user, _artifact_signer
+            )
+            if _audio_evt:
+                yield f"data: {_audio_evt}\n\n"
+            _video_evt = _extract_tool_video(
+                result, tc.function.name, request_user, _artifact_signer
+            )
+            if _video_evt:
+                yield f"data: {_video_evt}\n\n"
             result_str = format_tool_result(result)
             cur_messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_str})
             # #612: Tool-Output ans Frontend senden (max 3000 Zeichen für Anzeige)
@@ -1026,9 +1137,22 @@ async def _stream_anthropic_oauth(
         # Phase 4: Ergebnisse in Original-Reihenfolge sammeln
         for block in tool_use_blocks:
             result, _is_err = _oauth_block_results[block.id]
-            _img_evt = _extract_tool_image(result, block.name)
+            # #802 Phase 3a: Media-Events mit signed URLs
+            _img_evt = _extract_tool_image(
+                result, block.name, request_user, _artifact_signer
+            )
             if _img_evt:
                 yield f"data: {_img_evt}\n\n"
+            _audio_evt = _extract_tool_audio(
+                result, block.name, request_user, _artifact_signer
+            )
+            if _audio_evt:
+                yield f"data: {_audio_evt}\n\n"
+            _video_evt = _extract_tool_video(
+                result, block.name, request_user, _artifact_signer
+            )
+            if _video_evt:
+                yield f"data: {_video_evt}\n\n"
             result_str = format_tool_result(result)
             tool_results.append({
                 "type":        "tool_result",
@@ -1405,9 +1529,22 @@ async def _stream_litellm(
         _tc_results_for_session: list[tuple[str, str, str]] = []  # (tc_id, tc_name, result_str)
         for tc in tc_list:
             result = _lm_results[tc["id"]]
-            _img_evt = _extract_tool_image(result, tc["name"])
+            # #802 Phase 3a: Media-Events mit signed URLs
+            _img_evt = _extract_tool_image(
+                result, tc["name"], request_user, _artifact_signer
+            )
             if _img_evt:
                 yield f"data: {_img_evt}\n\n"
+            _audio_evt = _extract_tool_audio(
+                result, tc["name"], request_user, _artifact_signer
+            )
+            if _audio_evt:
+                yield f"data: {_audio_evt}\n\n"
+            _video_evt = _extract_tool_video(
+                result, tc["name"], request_user, _artifact_signer
+            )
+            if _video_evt:
+                yield f"data: {_video_evt}\n\n"
             result_str = format_tool_result(result)
             _tc_results_for_session.append((tc["id"], tc["name"], result_str))
 

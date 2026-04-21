@@ -625,6 +625,46 @@ async def test_record_artifact_storage_flag_persists_across_calls(tmp_path):
 # ----------------------------------------------------------------------
 
 
+# ----------------------------------------------------------------------
+# #802 Phase 3a — HMAC-signed URL helper
+# ----------------------------------------------------------------------
+
+
+def test_artifact_signed_url_generates_valid_token(monkeypatch):
+    """monkeypatch setzt _internal_secret → Token-Generierung funktioniert."""
+    import base64 as _b64
+    import time as _time
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "test-secret-deadbeef",
+    )
+    from hydrahive_core.jobs_service import _artifact_signed_url
+    url = _artifact_signed_url("job_abc123", "song.mp3", "alice", ttl_seconds=300)
+    assert url is not None
+    assert url.startswith("/media/")
+    b64part, sig = url[len("/media/"):].rsplit(".", 1)
+    payload_bytes = _b64.urlsafe_b64decode(b64part + "==")
+    payload = payload_bytes.decode("utf-8")
+    parts = payload.split(":")
+    assert parts[0] == "job_abc123"
+    assert parts[1] == "song.mp3"
+    assert parts[2] == "alice"
+    assert int(parts[3]) > int(_time.time())
+    # Signatur ist 64 hex-chars (sha256)
+    assert len(sig) == 64
+    assert all(c in "0123456789abcdef" for c in sig)
+
+
+def test_artifact_signed_url_returns_none_when_secret_empty(monkeypatch):
+    """Wenn _internal_secret leer ist → returnt None (kein Token generiert)."""
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "",
+    )
+    from hydrahive_core.jobs_service import _artifact_signed_url
+    assert _artifact_signed_url("job_test", "file.mp3", "alice", ttl_seconds=300) is None
+
+
 def test_mime_for_artifact_lookup():
     """_mime_for_artifact findet gespeicherten MIME in meta.artifacts."""
     from hydrahive_core.jobs_service import _mime_for_artifact

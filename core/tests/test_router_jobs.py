@@ -394,6 +394,182 @@ def test_me_artifact_download_from_legacy(svc, client):
     assert r.content == b"LEGACY_BIN"
 
 
+def test_media_token_valid_download(svc, monkeypatch):
+    """#802 Phase 3a: GET /media/{token} mit gültigem Token → 200 + bytes."""
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "test-secret-deadbeef",
+    )
+    from hydrahive_core.jobs_service import _artifact_signed_url
+
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"AUDIO_DATA_MP3", "track.mp3", "audio/mpeg")
+        meta = svc.submit(
+            type="noop", provider="internal", runner=runner,
+            created_by="charlie", project_id=None,
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        return meta.job_id
+    job_id = asyncio.run(_run())
+
+    token = _artifact_signed_url(job_id, "track.mp3", "charlie", ttl_seconds=300)
+    assert token is not None and token.startswith("/media/")
+
+    app = FastAPI()
+    public_router = APIRouter()
+    register_jobs_routes(
+        APIRouter(), APIRouter(),
+        require_auth=lambda: ("charlie", "user"),
+        job_service=svc,
+        public_router=public_router,
+    )
+    app.include_router(public_router)
+    c = TestClient(app)
+
+    r = c.get(token)  # token startet mit /media/...
+    assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text}"
+    assert r.content == b"AUDIO_DATA_MP3"
+
+
+def test_media_token_expired_is_403(svc, monkeypatch):
+    """#802 Phase 3a: Token mit exp in Vergangenheit → 403."""
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "test-secret-deadbeef",
+    )
+    import base64 as _b64
+    import hmac as _hmac
+
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"DATA", "f.bin", "application/octet-stream")
+        meta = svc.submit(
+            type="noop", provider="internal", runner=runner, created_by="dave",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        return meta.job_id
+    job_id = asyncio.run(_run())
+
+    payload = f"{job_id}:f.bin:dave:0"  # exp=0 → längst abgelaufen
+    payload_bytes = payload.encode("utf-8")
+    sig = _hmac.new(
+        b"test-secret-deadbeef", payload_bytes, "sha256",
+    ).hexdigest()
+    b64payload = _b64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode("ascii")
+    expired_token = f"/media/{b64payload}.{sig}"
+
+    app = FastAPI()
+    public_router = APIRouter()
+    register_jobs_routes(
+        APIRouter(), APIRouter(),
+        require_auth=lambda: ("dave", "user"),
+        job_service=svc,
+        public_router=public_router,
+    )
+    app.include_router(public_router)
+    c = TestClient(app)
+
+    r = c.get(expired_token)
+    assert r.status_code == 403
+
+
+def test_media_token_wrong_owner_is_403(svc, monkeypatch):
+    """#802 Phase 3a: Token enthält username, der nicht meta.created_by ist → 403."""
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "test-secret-deadbeef",
+    )
+    from hydrahive_core.jobs_service import _artifact_signed_url
+
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"BOB_DATA", "secret.bin", "application/octet-stream")
+        meta = svc.submit(
+            type="noop", provider="internal", runner=runner, created_by="bob",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        return meta.job_id
+    job_id = asyncio.run(_run())
+
+    # Token für "alice" auf Bobs Job → Ownership-Check schlägt fehl
+    token = _artifact_signed_url(job_id, "secret.bin", "alice", ttl_seconds=300)
+    assert token is not None
+
+    app = FastAPI()
+    public_router = APIRouter()
+    register_jobs_routes(
+        APIRouter(), APIRouter(),
+        require_auth=lambda: ("bob", "user"),
+        job_service=svc,
+        public_router=public_router,
+    )
+    app.include_router(public_router)
+    c = TestClient(app)
+
+    r = c.get(token)
+    assert r.status_code == 403
+
+
+def test_media_token_tampered_signature_is_403(svc, monkeypatch):
+    """#802 Phase 3a: Token mit manipulierter Signatur → 403."""
+    monkeypatch.setattr(
+        "hydrahive_core.tool_registry._internal_secret",
+        "test-secret-deadbeef",
+    )
+    from hydrahive_core.jobs_service import _artifact_signed_url
+
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"DATA", "f.bin", "application/octet-stream")
+        meta = svc.submit(
+            type="noop", provider="internal", runner=runner, created_by="eve",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        return meta.job_id
+    job_id = asyncio.run(_run())
+
+    token = _artifact_signed_url(job_id, "f.bin", "eve", ttl_seconds=300)
+    assert token is not None
+    # Signatur am Ende um 1 Zeichen kippen
+    b64part, sig = token.rsplit(".", 1)
+    bad_sig = "0" * len(sig) if sig[0] != "0" else "1" * len(sig)
+    tampered = f"{b64part}.{bad_sig}"
+
+    app = FastAPI()
+    public_router = APIRouter()
+    register_jobs_routes(
+        APIRouter(), APIRouter(),
+        require_auth=lambda: ("eve", "user"),
+        job_service=svc,
+        public_router=public_router,
+    )
+    app.include_router(public_router)
+    c = TestClient(app)
+
+    r = c.get(tampered)
+    assert r.status_code == 403
+
+
+def test_media_token_route_503_when_no_internal_secret(svc, monkeypatch):
+    """#802 Phase 3a: Ohne _internal_secret liefert Route 503 (kein Auth-Setup)."""
+    monkeypatch.setattr("hydrahive_core.tool_registry._internal_secret", "")
+
+    app = FastAPI()
+    public_router = APIRouter()
+    register_jobs_routes(
+        APIRouter(), APIRouter(),
+        require_auth=lambda: ("anyone", "user"),
+        job_service=svc,
+        public_router=public_router,
+    )
+    app.include_router(public_router)
+    c = TestClient(app)
+
+    r = c.get("/media/any.thing")
+    assert r.status_code == 503
+
+
 def test_me_artifact_download_returns_404_when_workspace_file_missing(svc, tmp_path, client):
     """storage=workspace + File gelöscht → 404 (Router prüft .exists())."""
     ws_root = tmp_path / "projects" / "proj_missing_file"

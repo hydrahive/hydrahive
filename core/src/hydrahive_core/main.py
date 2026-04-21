@@ -1655,6 +1655,7 @@ register_jobs_routes(
     admin_router,
     require_auth=require_auth,
     job_service=job_service,
+    public_router=public_router,
 )
 
 

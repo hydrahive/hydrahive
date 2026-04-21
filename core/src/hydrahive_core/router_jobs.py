@@ -88,10 +88,16 @@ def register_jobs_routes(
     *,
     require_auth,
     job_service: JobService,
+    public_router: APIRouter | None = None,
 ) -> None:
     """Hängt Jobs-Routen an auth_router + admin_router. Admin-Router bringt
     require_admin via Gruppendekorator bereits mit (siehe main.py Pattern),
-    daher hier kein separater require_admin nötig."""
+    daher hier kein separater require_admin nötig.
+
+    ``public_router`` (optional, #802 Phase 3a): wenn gesetzt, wird die
+    ``/media/{token}`` Route dort registriert — no-auth, nur HMAC-Token
+    verifiziert. Für cookie-less Media-Serving (``<img>``/``<audio>``/
+    ``<video>`` src-Attribute)."""
 
     # ── Admin-Scope ──────────────────────────────────────────────────────
 
@@ -222,6 +228,70 @@ def register_jobs_routes(
             raise HTTPException(404, "artifact nicht gefunden")
         mime = _mime_for(meta, filename)
         return FileResponse(path, media_type=mime, filename=filename)
+
+    # ── Media-Token-Endpoint (#802 Phase 3a) ────────────────────────────
+    # No-Auth-Route mit HMAC-verifiziertem Token. Erlaubt cookie-less
+    # Zugriff aus <img>/<audio>/<video>-src-Attributen im Chat. Token
+    # bindet (job_id, filename, username, exp) via HMAC an _internal_secret.
+    if public_router is not None:
+
+        @public_router.get("/media/{token}")
+        def media_token_download(token: str):
+            import base64 as _b64
+            import hmac as _hmac
+            import time as _time
+
+            from .tool_registry import _internal_secret
+
+            if not _internal_secret:
+                raise HTTPException(503, "media token auth not configured")
+
+            try:
+                b64part, sig = token.rsplit(".", 1)
+                payload_bytes = _b64.urlsafe_b64decode(b64part + "==")
+            except Exception:
+                raise HTTPException(403, "invalid or expired media token")
+
+            expected_sig = _hmac.new(
+                _internal_secret.encode("utf-8"),
+                payload_bytes,
+                "sha256",
+            ).hexdigest()
+            if not _hmac.compare_digest(sig, expected_sig):
+                raise HTTPException(403, "invalid or expired media token")
+
+            try:
+                payload = payload_bytes.decode("utf-8")
+                job_id, filename, username, exp_str = payload.split(":")
+            except Exception:
+                raise HTTPException(403, "invalid or expired media token")
+
+            try:
+                if int(exp_str) < int(_time.time()):
+                    raise HTTPException(403, "invalid or expired media token")
+            except ValueError:
+                raise HTTPException(403, "invalid or expired media token")
+
+            try:
+                meta = job_service.get(job_id)
+            except JobNotFoundError:
+                raise HTTPException(403, "invalid or expired media token")
+            except JobStorageError:
+                raise HTTPException(503, "job storage unavailable")
+
+            if meta.created_by != username:
+                raise HTTPException(403, "invalid or expired media token")
+
+            try:
+                path = job_service.artifact_path(job_id, filename)
+            except JobError:
+                raise HTTPException(403, "invalid or expired media token")
+
+            if not path.exists() or not path.is_file():
+                raise HTTPException(404, "artifact nicht gefunden")
+
+            mime = _mime_for(meta, filename)
+            return FileResponse(path, media_type=mime, filename=filename)
 
 
 # ────────────────────────────────────────────── Helpers (modul-level für Tests)
