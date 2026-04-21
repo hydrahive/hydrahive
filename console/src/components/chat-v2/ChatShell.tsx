@@ -929,6 +929,21 @@ function ChatShellInner({ runtime, hideHeader, headerLabel, target, typingUsers,
                         : `${typingUsers.join(", ")} tippen …`}
                     </div>
                   ) : null}
+                  {/* Bug-Fix: im Collab-Composer wurden pendingConfirms nicht gerendert
+                      → kritische Tool-Bestätigungen (shell_exec, git_push …) kamen
+                      nicht hoch im Projektchat. Banner identisch zum normalen Composer. */}
+                  {runtime.pendingConfirms.length > 0 ? (
+                    <div className="mx-auto mb-3 max-w-4xl space-y-2">
+                      {runtime.pendingConfirms.map((item) => (
+                        <ConfirmBanner
+                          key={item.tool_call_id}
+                          item={item}
+                          disabled={runtime.confirmingIds.has(item.tool_call_id)}
+                          onConfirm={runtime.confirmTool}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                   <CollabComposer yjs={yjs} runtime={runtime} />
                 </ThreadPrimitive.ViewportFooter>
               ) : (
