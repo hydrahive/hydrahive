@@ -527,6 +527,123 @@ function OAuthUsageCard({ data }: { data: Record<string,unknown> | null }) {
   );
 }
 
+type CodexStatus = { configured: boolean; account_id: string | null; models?: string[]; rate_limits?: Record<string,string> };
+type MinimaxModel = {
+  name: string; label: string;
+  interval_total: number; interval_used: number; interval_pct: number; interval_reset_in_s: number;
+  weekly_total: number; weekly_used: number; weekly_pct: number;
+};
+type MinimaxUsage = { available: boolean; reason?: string; fetched_at?: string; models?: MinimaxModel[] };
+
+function CodexUsageCard({ codex }: { codex: CodexStatus | null }) {
+  if (!codex || !codex.configured) return null;
+  const rl = codex.rate_limits || {};
+  const primary = parseInt(rl["x-codex-primary-used-percent"] ?? "", 10);
+  const secondary = parseInt(rl["x-codex-secondary-used-percent"] ?? "", 10);
+  const plan = rl["x-codex-plan-type"] || "plus";
+  const bars = [
+    { key: "5h", label: "Session (5h)", icon: "🕐", pct: isNaN(primary) ? 0 : primary },
+    { key: "7d", label: "Woche (7d)",   icon: "📅", pct: isNaN(secondary) ? 0 : secondary },
+  ];
+  return (
+    <div className="bg-card border rounded-lg p-4">
+      <h2 className="text-sm font-medium flex items-center gap-2 mb-3">
+        <Activity className="h-4 w-4 text-muted-foreground" /> Codex — Nutzungslimits
+        <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">{plan}</span>
+      </h2>
+      <div className="space-y-3">
+        {bars.map(b => {
+          const color = b.pct >= 90 ? "bg-red-500" : b.pct >= 70 ? "bg-orange-500" : b.pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+          return (
+            <div key={b.key} className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span>{b.icon} {b.label}</span>
+                <span className="text-muted-foreground">{b.pct}% verwendet</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, b.pct)}%` }} />
+              </div>
+            </div>
+          );
+        })}
+        {codex.models && codex.models.length > 0 ? (
+          <div className="text-[10px] text-muted-foreground">
+            Modelle: {codex.models.join(", ")}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MinimaxUsageCard({ usage }: { usage: MinimaxUsage | null }) {
+  if (!usage) return null;
+  if (!usage.available) return (
+    <div className="bg-card border rounded-lg p-4">
+      <h2 className="text-sm font-medium flex items-center gap-2 mb-2">
+        <Activity className="h-4 w-4 text-muted-foreground" /> MiniMax — Token-Plan
+      </h2>
+      <p className="text-xs text-muted-foreground">{usage.reason === "no_api_key" ? "Kein API-Key konfiguriert" : `Nicht verfügbar (${usage.reason ?? "unknown"})`}</p>
+    </div>
+  );
+  const models = usage.models ?? [];
+  const fmtReset = (s: number) => {
+    if (s <= 0) return "jetzt";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+  return (
+    <div className="bg-card border rounded-lg p-4">
+      <h2 className="text-sm font-medium flex items-center gap-2 mb-3">
+        <Activity className="h-4 w-4 text-muted-foreground" /> MiniMax — Token-Plan ({models.length} Modelle)
+      </h2>
+      <div className="space-y-3">
+        {models.map((m) => {
+          const iColor = m.interval_pct >= 90 ? "bg-red-500" : m.interval_pct >= 70 ? "bg-orange-500" : m.interval_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+          const wColor = m.weekly_pct >= 90 ? "bg-red-500" : m.weekly_pct >= 70 ? "bg-orange-500" : m.weekly_pct >= 40 ? "bg-yellow-500" : "bg-green-500";
+          return (
+            <div key={m.label} className="space-y-1 pb-2 border-b last:border-b-0">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground mr-2">{m.name}</span>
+                  {m.label}
+                </span>
+                <span className="text-muted-foreground text-[10px]">Reset in {fmtReset(m.interval_reset_in_s)}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Interval</span>
+                    <span className="tabular-nums">{m.interval_used}/{m.interval_total} · {m.interval_pct < 10 ? m.interval_pct.toFixed(1) : Math.round(m.interval_pct)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${iColor}`} style={{ width: `${Math.min(100, m.interval_pct)}%` }} />
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Weekly</span>
+                    <span className="tabular-nums">{m.weekly_used}/{m.weekly_total} · {m.weekly_pct < 10 ? m.weekly_pct.toFixed(1) : Math.round(m.weekly_pct)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${wColor}`} style={{ width: `${Math.min(100, m.weekly_pct)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {usage.fetched_at ? (
+          <div className="text-[10px] text-muted-foreground text-right">
+            Aktualisiert: {new Date(usage.fetched_at).toLocaleTimeString("de-DE")}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function SystemPage() {
   const { t } = useTranslation();
   const [status,    setStatus]    = useState<SystemStatus | null>(null);
@@ -538,18 +655,24 @@ export function SystemPage() {
   const [restartConfirm, setRestartConfirm] = useState(false);
   const [restarting,     setRestarting]     = useState(false);
   const [oauthUsage, setOauthUsage] = useState<Record<string,unknown> | null>(null);
+  const [codex,        setCodex]        = useState<CodexStatus | null>(null);
+  const [minimaxUsage, setMinimaxUsage] = useState<MinimaxUsage | null>(null);
 
   async function load() {
-    const [h, s, g, r, ou] = await Promise.allSettled([
+    const [h, s, g, r, ou, cx, mu] = await Promise.allSettled([
       api.health(), api.status(), api.gpuInfo(),
       api.get("/admin/resources"),
       api.oauthUsage(),
+      api.openaiCodexStatus(),
+      api.minimaxUsage(),
     ]);
     setHealthy(h.status === "fulfilled");
     if (s.status === "fulfilled") setStatus(s.value as SystemStatus);
     if (g.status === "fulfilled") setGpu(g.value);
     if (r.status === "fulfilled") setResources(r.value as ResourceData);
     if (ou.status === "fulfilled") setOauthUsage(ou.value as Record<string,unknown>);
+    if (cx.status === "fulfilled") setCodex(cx.value as CodexStatus);
+    if (mu.status === "fulfilled") setMinimaxUsage(mu.value as MinimaxUsage);
     setLoading(false);
     setRefreshing(false);
   }
@@ -679,6 +802,12 @@ export function SystemPage() {
 
       {/* OAuth Usage / Rate Limits */}
       <OAuthUsageCard data={oauthUsage} />
+
+      {/* Codex Usage (#805 SystemPage-Parität) */}
+      <CodexUsageCard codex={codex} />
+
+      {/* MiniMax Token-Plan (#805 SystemPage-Parität) */}
+      <MinimaxUsageCard usage={minimaxUsage} />
 
       <div className="grid grid-cols-2 gap-6">
         <div className="bg-card border rounded-lg p-4 space-y-1">
