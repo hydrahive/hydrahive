@@ -507,6 +507,13 @@ async def handle_message_stream(
                 **_stream_meta,
             )
             orch._clear_forced_abort_handoff_if_unchanged(boss_cfg, _handoff_mtime_at_prompt)
+        elif not _usage.get("output", 0):
+            # LLM-Call lief technisch durch, aber Modell hat 0 Tokens
+            # geliefert. Vorher: leere Bubble im Frontend, kein Hinweis.
+            # Jetzt: sichtbarer Marker damit Admin merkt was los ist
+            # (typisch bei Tool-Loop der nur Tool-Calls ohne Final-Text
+            # zurückgibt, oder Provider der einen leeren Stream sendet).
+            yield f"data: {_json.dumps({'text': '[Modell lieferte keine Antwort — ggf. Tool-Loop ohne Final-Message oder Provider-Stream leer. Modell: ' + str(_model_name) + ']'})}\n\n"
         total_tokens = _usage.get("input", 0) + _usage.get("output", 0)
         if total_tokens > 0 and _tool_reg._rate_limiter is not None:
             _tool_reg._rate_limiter.track_token_usage(boss_cfg.id, total_tokens)
@@ -592,7 +599,10 @@ async def handle_message_stream(
             logger.error("Streaming-Fehler: %s", e)
             if user_msg_saved:
                 await orch._sessions.pop_last(project_id)
-            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
+            # Strukturierte LLM-Fehler-Meldung an den User (Secrets gefiltert,
+            # Typ + Klassifikation enthalten — siehe llm_errors.format_llm_error).
+            from .llm_errors import format_llm_error
+            yield f"data: {_json.dumps({'error': format_llm_error(e)})}\n\n"
 
 
 # ---------------------------------------------------------------------------

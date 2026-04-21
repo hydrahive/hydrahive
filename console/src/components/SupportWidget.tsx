@@ -77,6 +77,14 @@ export function SupportWidget() {
                   m.id === asstMsg.id ? { ...m, content: m.content + evt.text } : m
                 ));
               } else if (evt.done) {
+                // Fallback: wenn der Stream ohne sichtbaren Text endet,
+                // zeige sichtbaren Marker statt leerer Bubble — sonst
+                // wirkt der Support-Agent stumm.
+                setMessages(ms => ms.map(m =>
+                  m.id === asstMsg.id && !m.content
+                    ? { ...m, content: "[Keine Antwort vom Agent — siehe Server-Log oder Konsole]" }
+                    : m
+                ));
                 break outer;
               } else if (evt.error) {
                 throw new Error(evt.error);
