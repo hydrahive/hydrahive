@@ -620,6 +620,124 @@ async def test_record_artifact_storage_flag_persists_across_calls(tmp_path):
         reset_workspace_override(token)
 
 
+# ----------------------------------------------------------------------
+# #802 Phase 2 — artifact_path() als Workspace-First-Proxy
+# ----------------------------------------------------------------------
+
+
+def test_mime_for_artifact_lookup():
+    """_mime_for_artifact findet gespeicherten MIME in meta.artifacts."""
+    from hydrahive_core.jobs_service import _mime_for_artifact
+    meta = JobMeta(
+        job_id="job_testmime", type="noop", provider="test",
+        status="succeeded",
+        created_at="2026-01-01T00:00:00Z", updated_at="2026-01-01T00:00:00Z",
+        artifacts=[
+            {"filename": "a.png", "size": 100, "mime": "image/png",
+             "created_at": "2026-01-01T00:00:00Z"},
+            {"filename": "b.mp4", "size": 200, "mime": "video/mp4",
+             "created_at": "2026-01-01T00:00:00Z"},
+        ],
+    )
+    assert _mime_for_artifact(meta, "a.png") == "image/png"
+    assert _mime_for_artifact(meta, "b.mp4") == "video/mp4"
+    assert _mime_for_artifact(meta, "c.txt") == "application/octet-stream"
+
+
+@pytest.mark.asyncio
+async def test_artifact_path_returns_workspace_when_storage_is_workspace(tmp_path):
+    """storage==workspace → artifact_path gibt Workspace-Pfad zurück."""
+    ws_root = tmp_path / "projects" / "proj_ws_read"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        svc = JobService(root=tmp_path / "jobs")
+
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"PNG_DATA", "img.png", "image/png")
+
+        meta = svc.submit(
+            type="image", provider="minimax", runner=runner,
+            project_id="proj_ws_read",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        final = svc.get(meta.job_id)
+        assert final.artifact_storage == "workspace"
+
+        path = svc.artifact_path(meta.job_id, "img.png")
+        assert path.exists()
+        assert str(path).startswith(str(ws_root))
+    finally:
+        reset_workspace_override(token)
+
+
+@pytest.mark.asyncio
+async def test_artifact_path_falls_back_to_legacy_when_storage_is_none(tmp_path):
+    """storage=None (kein project_id) → artifact_path gibt Legacy-Pfad zurück."""
+    svc = JobService(root=tmp_path / "jobs")
+
+    async def runner(ctx: JobContext):
+        ctx.record_artifact(b"DATA", "doc.txt", "text/plain")
+
+    meta = svc.submit(type="noop", provider="internal", runner=runner, project_id=None)
+    await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+    final = svc.get(meta.job_id)
+    assert final.artifact_storage is None
+
+    path = svc.artifact_path(meta.job_id, "doc.txt")
+    assert path.exists()
+    assert str(path).startswith(str(tmp_path / "jobs" / "artifacts"))
+
+
+@pytest.mark.asyncio
+async def test_artifact_path_workspace_pfad_auch_wenn_datei_weg(tmp_path):
+    """storage=workspace aber Workspace-File physisch weg → Workspace-Pfad
+    zurückgeben (nicht Legacy-Fallback); Router entscheidet via .exists() → 404."""
+    ws_root = tmp_path / "projects" / "proj_ws_missing"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        svc = JobService(root=tmp_path / "jobs")
+
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"PNG_DATA", "lost.png", "image/png")
+
+        meta = svc.submit(
+            type="image", provider="minimax", runner=runner,
+            project_id="proj_ws_missing",
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        assert svc.get(meta.job_id).artifact_storage == "workspace"
+
+        # Workspace-Artifact physisch löschen
+        ws_artifact = svc.artifact_path(meta.job_id, "lost.png")
+        ws_artifact.unlink()
+
+        # artifact_path liefert trotzdem Workspace-Pfad (Meta sagt workspace)
+        path = svc.artifact_path(meta.job_id, "lost.png")
+        assert str(path).startswith(str(ws_root))
+        assert not path.exists()
+    finally:
+        reset_workspace_override(token)
+
+
+def test_artifact_path_rejects_traversal_after_proxy(tmp_path):
+    """artifact_path() validiert filename auch im Workspace-First-Modus."""
+    svc = JobService(root=tmp_path / "jobs")
+
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(b"x", "real.txt", "text/plain")
+        m = svc.submit(type="noop", provider="internal", runner=runner)
+        await asyncio.wait_for(svc._tasks[m.job_id], timeout=2)
+        return m.job_id
+
+    job_id = asyncio.run(_run())
+
+    with pytest.raises(JobError):
+        svc.artifact_path(job_id, "../etc/passwd")
+
+
 @pytest.mark.asyncio
 async def test_artifact_workspace_path_resolves_symlink_override(tmp_path):
     """Workspace-Override mit Symlink → Artifact landet im aufgelösten realen Pfad."""

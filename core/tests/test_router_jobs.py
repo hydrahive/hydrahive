@@ -21,7 +21,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from hydrahive_core.jobs_service import JobService, _noop_runner
+from hydrahive_core.jobs_service import JobContext, JobService, _noop_runner
+from hydrahive_core.tool_registry import (
+    set_workspace_override,
+    reset_workspace_override,
+)
 from hydrahive_core.router_jobs import (
     _load_owned_job_or_403,
     _meta_public,
@@ -333,3 +337,87 @@ def test_http_admin_get_corrupt_meta_is_503(svc):
     assert "unavailable" in body["detail"].lower()
     assert jid not in body["detail"]
     assert "/var/lib" not in body["detail"]
+
+
+# ----------------------------------------------------------------------
+# #802 Phase 2 — Workspace-First-Download transparent via /me + /admin
+# ----------------------------------------------------------------------
+
+
+def test_admin_artifact_download_from_workspace(svc, tmp_path, client):
+    """Admin GET /admin/jobs/{id}/artifacts/{file} liefert Workspace-Artifacts."""
+    ws_root = tmp_path / "projects" / "proj_integration_ws"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        async def _run() -> str:
+            async def runner(ctx: JobContext):
+                ctx.record_artifact(
+                    b"WORKSPACE_BIN", "artifact.bin", "application/octet-stream",
+                )
+            meta = svc.submit(
+                type="noop", provider="internal", runner=runner,
+                created_by="alice", project_id="proj_integration_ws",
+            )
+            await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+            return meta.job_id
+        job_id = asyncio.run(_run())
+
+        c, set_user = client
+        set_user("admin")
+        r = c.get(f"/admin/jobs/{job_id}/artifacts/artifact.bin")
+        assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text}"
+        assert r.content == b"WORKSPACE_BIN"
+    finally:
+        reset_workspace_override(token)
+
+
+def test_me_artifact_download_from_legacy(svc, client):
+    """GET /me/jobs/{id}/artifacts/{file} liefert Legacy-Artifacts (project_id=None)."""
+    async def _run() -> str:
+        async def runner(ctx: JobContext):
+            ctx.record_artifact(
+                b"LEGACY_BIN", "legacy.bin", "application/octet-stream",
+            )
+        meta = svc.submit(
+            type="noop", provider="internal", runner=runner,
+            created_by="bob", project_id=None,
+        )
+        await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+        return meta.job_id
+    job_id = asyncio.run(_run())
+
+    c, set_user = client
+    set_user("bob")
+    r = c.get(f"/me/jobs/{job_id}/artifacts/legacy.bin")
+    assert r.status_code == 200
+    assert r.content == b"LEGACY_BIN"
+
+
+def test_me_artifact_download_returns_404_when_workspace_file_missing(svc, tmp_path, client):
+    """storage=workspace + File gelöscht → 404 (Router prüft .exists())."""
+    ws_root = tmp_path / "projects" / "proj_missing_file"
+    ws_root.mkdir(parents=True, exist_ok=True)
+    token = set_workspace_override(ws_root)
+    try:
+        async def _run() -> str:
+            async def runner(ctx: JobContext):
+                ctx.record_artifact(b"DATA", "lost.bin", "application/octet-stream")
+            meta = svc.submit(
+                type="noop", provider="internal", runner=runner,
+                created_by="carol", project_id="proj_missing_file",
+            )
+            await asyncio.wait_for(svc._tasks[meta.job_id], timeout=2)
+            return meta.job_id
+        job_id = asyncio.run(_run())
+
+        # Workspace-Datei physisch löschen (simuliert Migrations-Verlust)
+        ws_artifact = svc.artifact_path(job_id, "lost.bin")
+        ws_artifact.unlink()
+
+        c, set_user = client
+        set_user("carol")
+        r = c.get(f"/me/jobs/{job_id}/artifacts/lost.bin")
+        assert r.status_code == 404
+    finally:
+        reset_workspace_override(token)

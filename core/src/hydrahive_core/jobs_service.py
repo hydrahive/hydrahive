@@ -217,6 +217,19 @@ def _artifact_workspace_path(
     return ws / ".hydrahive" / "artifacts" / type_ / date / unique_prefix
 
 
+def _mime_for_artifact(meta: "JobMeta", filename: str) -> str:
+    """MIME-Lookup aus meta.artifacts (#802 Phase 2).
+
+    Used für Workspace-Pfad-Bau beim Download, wo wir nur den
+    Filename kennen. Duplikation zu router_jobs._mime_for() bewusst —
+    jobs_service ist das tiefere Modul (keine Zyklen).
+    """
+    for entry in meta.artifacts or []:
+        if entry.get("filename") == filename and entry.get("mime"):
+            return str(entry["mime"])
+    return "application/octet-stream"
+
+
 # ────────────────────────────────────────────── JobContext (Runner-API)
 
 
@@ -353,8 +366,45 @@ class JobService:
         return out
 
     def artifact_path(self, job_id: str, filename: str) -> Path:
-        """Resolved + validated Dateipfad für Download-Route. Wirft JobError
-        bei Traversal/ungültigem Namen; Caller prüft ``.exists()``."""
+        """Workspace-First-Proxy für Download-Route (#802 Phase 2).
+
+        Verhalten abhängig von meta.artifact_storage:
+          - "workspace"  → Workspace-Pfad; JobError bei fehlendem
+            project_id oder wenn Resolver None liefert (Inkonsistenz)
+          - "legacy"     → Legacy-Pfad (unverändert)
+          - None         → Workspace probieren (wenn project_id + file
+            existiert), sonst Legacy-Fallback — für Pre-Phase-1-Jobs
+
+        Traversal-Validierung in beiden Fällen in :func:`_artifact_path`
+        bzw. :func:`_artifact_workspace_path` eingebettet (Path-Resolve).
+        Caller prüft ``.exists()`` und gibt 404 wenn nötig.
+        """
+        meta = self.get(job_id)
+
+        if meta.artifact_storage == "legacy":
+            return self._artifact_path(job_id, filename)
+
+        if meta.artifact_storage == "workspace":
+            if not meta.project_id:
+                raise JobError(
+                    f"artifact_storage=workspace aber project_id fehlt für {job_id}"
+                )
+            mime = _mime_for_artifact(meta, filename)
+            ws_path = _artifact_workspace_path(self, meta, filename, mime)
+            if ws_path is None:
+                raise JobError(
+                    f"artifact_storage=workspace aber workspace_root() gab None für {job_id}"
+                )
+            return ws_path
+
+        # artifact_storage is None — Pre-Phase-1 oder noch kein Write.
+        if meta.project_id:
+            mime = _mime_for_artifact(meta, filename)
+            ws_path = _artifact_workspace_path(self, meta, filename, mime)
+            if ws_path is not None and ws_path.exists():
+                return ws_path
+            # ws_path existiert nicht → Legacy-Fallback (ohne early return)
+
         return self._artifact_path(job_id, filename)
 
     # ── Write ────────────────────────────────────────────────────────────
